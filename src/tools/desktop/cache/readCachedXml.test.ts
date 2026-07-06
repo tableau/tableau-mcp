@@ -18,7 +18,7 @@ const CACHE_DIR = resolve('/tmp/test-cache');
 const CACHED_FILE = `${CACHE_DIR}/worksheet-session-1.xml`;
 const SAMPLE_XML = '<worksheet name="Sheet1"><table/></worksheet>';
 
-function setupCacheMock() {
+function setupCacheMock(): void {
   vi.mocked(DesktopCache).mockImplementation(
     () =>
       ({
@@ -33,7 +33,7 @@ describe('readCachedXmlTool', () => {
     vi.clearAllMocks();
     setupCacheMock();
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFileSync).mockReturnValue(SAMPLE_XML as unknown as Buffer);
+    vi.mocked(readFileSync).mockReturnValue(SAMPLE_XML);
   });
 
   it('should create a tool instance with correct properties', () => {

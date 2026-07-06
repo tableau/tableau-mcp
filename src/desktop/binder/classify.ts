@@ -1,0 +1,836 @@
+// src/binder/classify.ts
+//
+// Tier-1 fast-path binder — no-LLM classification + LLM-input construction
+// (design doc §3.3, §3.5).
+//
+// `classifyNoLlm` is the zero-latency path: it picks a single clearly-winning
+// `fast_path_eligible` template by keyword match, then does role-greedy field
+// assignment (measures → quantitative slots, dimensions → categorical/temporal
+// slots) from the ask, producing a `{template, bindings}` the gate can verify.
+// It fails CLOSED — a tie, a zero-score ask, or any unfilled required slot
+// returns `null`, so the orchestrator falls through to the LLM propose path.
+//
+// `buildLlmInput` assembles the compact, constrained-JSON contract for the
+// small-LLM call: only the fast-path candidates that survived keyword ranking
+// (Fuse over intent_keywords when no exact hit), each with its BINDABLE slots
+// only, plus the field schema. Everything the model could get wrong (derivation,
+// aggregation, instance syntax) is outside its output surface.
+
+import Fuse from 'fuse.js';
+
+import { calcForcedSlotIds } from './calc-derivation.js';
+import type { Derivation, SlotKind, TemplateManifest } from './manifest-types.js';
+import { bareName, type SchemaField, type SchemaSummary } from './schema-summary.js';
+
+export interface LlmProposeInput {
+  ask: string;
+  candidate_templates: Array<{
+    template: string;
+    description: string;
+    intent_keywords: string[];
+    // Negative routing guidance (chart-selection anti-patterns) so the proposing
+    // model can WEIGH the caution before committing to this template. Absent ⇒ no
+    // encoded caution. Never a blocker — purely advisory context for the model.
+    avoid_when?: string[];
+    // bindable only; `derivation` is the template's DEFAULT for the slot, exposed
+    // so the model overrides in its output ONLY when the ask asks for something
+    // different (see PROPOSAL_OUTPUT_SCHEMA's derivation instruction line).
+    slots: Array<{
+      slot_id: string;
+      role: string[];
+      kind: SlotKind;
+      required: boolean;
+      derivation?: Derivation;
+    }>;
+  }>;
+  fields: Array<{ name: string; role: 'dimension' | 'measure'; type: string; datatype: string }>;
+  /**
+   * FIELD-NARROWING signal (stage 2B, adjudicated attack 1): present ONLY when
+   * `fields` was capped — `count` is how many relevant-but-lower-ranked fields
+   * were withheld, and `note` tells the caller to re-query with a field-name hint
+   * if the field it needs is not in `fields`. Absent ⇒ every schema field is here.
+   */
+  more_available?: { count: number; note: string };
+}
+
+/** Default field cap for the propose prompt (stage 2B). See buildLlmInput opts. */
+export const DEFAULT_MAX_FIELDS = 20;
+
+/**
+ * Hard cap on the schema size the no-LLM classifier / propose-payload builder will
+ * process (M10 Finding 3). `maskFieldNames` + `matchFieldsInAsk` (classifyNoLlm) and
+ * `narrowFields` (buildLlmInput) each run ONE regex PER schema field; a synthetic
+ * ~50,000-field datasource costs ~2.9s of synchronous event-loop block per call — an
+ * unbounded per-call CPU DoS. Over this cap the classifier FAILS CLOSED (returns null —
+ * never a truncated subset, which would be a silent wrong answer), and bindTemplate
+ * escalates `schema-too-large`. 5000 is comfortably above any real Tableau datasource
+ * (hundreds of fields) yet bounds the worst-case loop to well under ~0.3s.
+ */
+export const MAX_CLASSIFIABLE_FIELDS = 5000;
+
+/**
+ * Explicit aggregation words → canonical short forms, longest/most-specific
+ * phrases first so "distinct count" wins over "count". Kept deliberately small
+ * and conservative: only words that unambiguously name an aggregation.
+ */
+const AGGREGATION_WORDS: ReadonlyArray<{ phrase: string; deriv: Derivation }> = [
+  { phrase: 'distinct count', deriv: 'cntd' },
+  { phrase: 'count distinct', deriv: 'cntd' },
+  { phrase: 'average', deriv: 'avg' },
+  { phrase: 'avg', deriv: 'avg' },
+  { phrase: 'median', deriv: 'median' },
+  { phrase: 'minimum', deriv: 'min' },
+  { phrase: 'min', deriv: 'min' },
+  { phrase: 'maximum', deriv: 'max' },
+  { phrase: 'max', deriv: 'max' },
+  { phrase: 'count', deriv: 'cnt' },
+];
+
+/**
+ * Detect a single explicit aggregation word in the ask → its short form, else
+ * null. The earliest-occurring phrase wins; ties keep the more specific phrase
+ * (listed first), so "distinct count" resolves to cntd rather than cnt. Fails
+ * closed: no recognized word → null (no override).
+ */
+function detectAggregationOverride(ask: string): Derivation | null {
+  let best: { deriv: Derivation; index: number } | null = null;
+  for (const { phrase, deriv } of AGGREGATION_WORDS) {
+    const idx = phraseIndexInAsk(ask, phrase);
+    if (idx < 0) continue;
+    if (best === null || idx < best.index) best = { deriv, index: idx };
+  }
+  return best ? best.deriv : null;
+}
+
+const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Index of the first whole-token occurrence of `phrase` in `ask`, else -1.
+ * Boundaries are non-alphanumeric so "bar" matches "bar chart" but not "sidebar".
+ * A HYPHEN in a keyword matches a hyphen OR whitespace in the ask, so a compound
+ * keyword written with hyphens ("stacked-bar", "over-time", "vertical-bar") also
+ * matches the natural spaced form a user types ("stacked bar", "over time"). This
+ * lets a distinctive multi-token chart noun keep its keyword-match specificity when
+ * the ask spells it with a space — the classifier stays no-LLM and deterministic.
+ */
+function phraseIndexInAsk(ask: string, phrase: string): number {
+  const p = phrase.toLowerCase().trim();
+  if (!p) return -1;
+  const body = escapeRegex(p).replace(/-/g, '[\\s-]+');
+  const re = new RegExp(`(^|[^a-z0-9])${body}([^a-z0-9]|$)`);
+  const match = re.exec(ask.toLowerCase());
+  return match ? match.index : -1;
+}
+
+/** Count of a template's intent_keywords that appear as whole tokens in the ask. */
+function keywordScore(ask: string, keywords: string[]): number {
+  let score = 0;
+  for (const kw of keywords) if (phraseIndexInAsk(ask, kw) >= 0) score++;
+  return score;
+}
+
+/**
+ * High-frequency filler dropped before avoid_when token overlap so a caution
+ * never fires on generic connective/qualifier words. Deliberately conservative:
+ * it must NOT contain any word that carries the anti-pattern signal itself
+ * (e.g. "precise", "comparison", "time", "angle").
+ */
+const AVOID_WHEN_STOPWORDS: ReadonlySet<string> = new Set([
+  'when',
+  'with',
+  'that',
+  'this',
+  'from',
+  'into',
+  'than',
+  'then',
+  'have',
+  'will',
+  'would',
+  'should',
+  'could',
+  'must',
+  'them',
+  'they',
+  'their',
+  'there',
+  'here',
+  'what',
+  'which',
+  'while',
+  'where',
+  'also',
+  'only',
+  'just',
+  'very',
+  'much',
+  'many',
+  'more',
+  'most',
+  'less',
+  'some',
+  'each',
+  'both',
+  'either',
+  'other',
+  'onto',
+  'over',
+  'under',
+  'about',
+  'instead',
+  'prefer',
+  'avoid',
+  'usually',
+  'never',
+  'always',
+  'being',
+  'because',
+  'context',
+  'chart',
+  'charts',
+  'data',
+  'using',
+  'used',
+  'uses',
+  'make',
+  'makes',
+  'made',
+  'reads',
+  'read',
+  'render',
+  'renders',
+  'become',
+  'becomes',
+]);
+
+/**
+ * Light inflectional normalizer for whole-token overlap: lowercases and strips
+ * one common suffix so morphological variants collapse (precisely→precise,
+ * compared→compar, sorted→sort). Not a real stemmer — just enough for the
+ * "simple token overlap" the avoid_when caution needs.
+ */
+function normalizeToken(raw: string): string {
+  let s = raw.toLowerCase();
+  if (s.endsWith('ly') && s.length > 4) s = s.slice(0, -2);
+  if (s.endsWith('ing') && s.length > 5) s = s.slice(0, -3);
+  else if (s.endsWith('ed') && s.length > 4) s = s.slice(0, -2);
+  else if (s.endsWith('es') && s.length > 5) s = s.slice(0, -2);
+  else if (s.endsWith('s') && s.length > 4) s = s.slice(0, -1);
+  return s;
+}
+
+/** Normalized content tokens (len>=4, non-stopword) of a phrase, for overlap. */
+function contentTokens(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const raw of text.toLowerCase().split(/[^a-z0-9]+/)) {
+    if (raw.length < 4 || AVOID_WHEN_STOPWORDS.has(raw)) continue;
+    const n = normalizeToken(raw);
+    if (n.length >= 3) out.add(n);
+  }
+  return out;
+}
+
+/**
+ * Return the avoid_when ENTRIES whose content terms overlap the ask (simple
+ * whole-token overlap after light normalization). Terms that positively SELECT
+ * the template — its intent_keywords — are excluded so the chart's own name
+ * (e.g. "pie") can never trip its own caution. Empty when avoid_when is absent
+ * or no scenario term appears in the ask.
+ *
+ * Advisory only: a non-empty result DEMOTES the no-LLM shortcut (classifyNoLlm)
+ * or attaches WARNINGS on a bound result (validateBinding) — it never blocks.
+ */
+export function matchAvoidWhen(
+  ask: string,
+  avoidWhen: string[] | undefined,
+  intentKeywords: string[] = [],
+): string[] {
+  if (!avoidWhen || avoidWhen.length === 0) return [];
+  const askTerms = contentTokens(ask);
+  if (askTerms.size === 0) return [];
+  const excluded = new Set<string>();
+  for (const kw of intentKeywords) for (const t of contentTokens(kw)) excluded.add(t);
+  const matched: string[] = [];
+  for (const entry of avoidWhen) {
+    for (const t of contentTokens(entry)) {
+      if (!excluded.has(t) && askTerms.has(t)) {
+        matched.push(entry);
+        break;
+      }
+    }
+  }
+  return matched;
+}
+
+/** The intent_keywords (original case) that appear as whole tokens in `ask`. */
+function matchedKeywords(ask: string, keywords: string[]): string[] {
+  return keywords.filter((kw) => phraseIndexInAsk(ask, kw) >= 0);
+}
+
+/**
+ * Keyword-match SPECIFICITY for the intra-family tiebreak: a multi-token /
+ * hyphenated keyword ("over-time", "column-bar") is more specific than a single
+ * generic token ("bar"), so a candidate matched on a longer/compound keyword
+ * outranks one matched only on a bare token. Score = (max whole-word token count
+ * among the matched keywords) with the matched keyword's char length as the
+ * within-count tiebreak. 0 when nothing matched.
+ */
+function keywordSpecificity(ask: string, keywords: string[]): number {
+  let best = 0;
+  for (const kw of matchedKeywords(ask, keywords)) {
+    const tokens = kw.split(/[^a-z0-9]+/i).filter(Boolean).length;
+    const s = tokens * 1000 + kw.length;
+    if (s > best) best = s;
+  }
+  return best;
+}
+
+/**
+ * DISTINCTIVE CHART-SHAPE / ORIENTATION nouns (lowercased intent_keyword tokens).
+ * Each names a specific chart TYPE, so a match is a DETERMINISTIC type selector —
+ * never a "borrowed" cross-family keyword. Two uses in selectWithinFamily:
+ *
+ *  (1) LONE-WINNER EXEMPTION — a lone keyword winner that won on a chart noun binds
+ *      even when that noun is not family-native by strict majority. This is the
+ *      sibling-scaling fix: stamping an eligible sibling (a second "ranking" bar/
+ *      column, a second "part-to-whole" stacked-bar/treemap/pie) drops a distinctive
+ *      noun like "bar"/"column"/"pie" BELOW the majority threshold, which must NOT
+ *      demote an otherwise clear one-shot ask to propose.
+ *
+ *  (2) CROSS-FAMILY TIE-BREAK — a keyword tie that spans families resolves to the
+ *      strictly-most-specific chart noun ("stacked bar" beats a generic "bar" →
+ *      part-to-whole, not ranking); with no unique chart-noun winner it stays
+ *      fail-closed (propose), so genuinely ambiguous asks are unaffected.
+ *
+ * A keyword NOT in this table (e.g. a family name a template merely borrowed) is
+ * still governed by the family-native guard / fail-closed rules — the guard is not
+ * weakened. Grow this table as new distinct-shape templates are stamped eligible.
+ */
+const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
+  'bar',
+  'sorted-bar',
+  'column',
+  'sorted-column',
+  'vertical-bar',
+  'stacked-bar',
+  'treemap',
+  'pie',
+  'donut',
+]);
+
+/** True when at least one ask-matched keyword is a distinctive chart noun. */
+function wonChartNoun(ask: string, keywords: string[]): boolean {
+  return matchedKeywords(ask, keywords).some((kw) => CHART_NOUN_KEYWORDS.has(kw.toLowerCase()));
+}
+
+/**
+ * Max keyword specificity among the ask-matched keywords that are CHART NOUNS (0
+ * when none matched). Same specificity scale as `keywordSpecificity` (token count
+ * dominates, char length breaks within-count ties) but restricted to chart nouns,
+ * so the cross-family tie-break can only ever fire on a deterministic chart-type
+ * token — a borrowed non-chart keyword scores 0 here and stays fail-closed.
+ */
+function chartNounSpecificity(ask: string, keywords: string[]): number {
+  let best = 0;
+  for (const kw of matchedKeywords(ask, keywords)) {
+    if (!CHART_NOUN_KEYWORDS.has(kw.toLowerCase())) continue;
+    const tokens = kw.split(/[^a-z0-9]+/i).filter(Boolean).length;
+    const s = tokens * 1000 + kw.length;
+    if (s > best) best = s;
+  }
+  return best;
+}
+
+/**
+ * FAMILY-NATIVE vocabulary (stage 2b sole-wrong-matcher guard). Derived from the
+ * family's OWN fast-path-eligible manifests: a keyword is native to `family` when
+ * it is carried by a STRICT MAJORITY of that family's eligible templates (for a
+ * single-template family that is all of its keywords). This separates a family's
+ * shared, defining vocabulary (its primary + consistent secondaries, present in
+ * most/all members) from a keyword only ONE member carries — e.g. a cross-family
+ * keyword a single template BORROWED. Lowercased for whole-token comparison.
+ *
+ * The majority rule is deliberately conservative: a genuinely distinctive keyword
+ * carried by only one of several same-family fast-path templates is also treated
+ * as non-native (it cannot be told apart from a borrowed one from manifests
+ * alone), so the guard demotes such a lone match to propose rather than risk an
+ * out-of-family bind — safe (propose), never wrong.
+ */
+function familyNativeKeywords(
+  family: string,
+  manifests: Map<string, TemplateManifest>,
+): Set<string> {
+  const memberKeywordSets: Set<string>[] = [];
+  for (const m of manifests.values()) {
+    if (!m.fast_path_eligible || m.family !== family) continue;
+    memberKeywordSets.push(new Set(m.intent_keywords.map((k) => k.toLowerCase())));
+  }
+  const counts = new Map<string, number>();
+  for (const s of memberKeywordSets) for (const k of s) counts.set(k, (counts.get(k) ?? 0) + 1);
+  const threshold = memberKeywordSets.length / 2;
+  const native = new Set<string>();
+  for (const [k, c] of counts) if (c > threshold) native.add(k);
+  return native;
+}
+
+/**
+ * Blank out whole-token occurrences of every field name/caption/bare column name
+ * in the ask (replaced by spaces so token boundaries are preserved). Used for
+ * TEMPLATE SELECTION and aggregation-word detection so a field NAME can never
+ * drive chart-type choice or a spurious aggregation — e.g. a measure literally
+ * named "O/U Line" must not score the trend-LINE template, and a field named
+ * "Max Temp" must not read as a MAX aggregation. Field↔slot matching still runs
+ * against the raw ask.
+ */
+function maskFieldNames(ask: string, s: SchemaSummary): string {
+  let masked = ask;
+  for (const f of s.fields) {
+    const names = [bareName(f.columnName), f.caption, f.name].filter(
+      (n): n is string => !!n && n.length > 0,
+    );
+    for (const n of names) {
+      const re = new RegExp(`(^|[^a-z0-9])(${escapeRegex(n.toLowerCase())})([^a-z0-9]|$)`, 'gi');
+      masked = masked.replace(
+        re,
+        (_whole, pre: string, mid: string, post: string) => pre + ' '.repeat(mid.length) + post,
+      );
+    }
+  }
+  return masked;
+}
+
+/** Fields whose name/caption/bare column name appear in the ask, earliest-first. */
+function matchFieldsInAsk(ask: string, s: SchemaSummary): SchemaField[] {
+  const hits: Array<{ field: SchemaField; index: number }> = [];
+  for (const f of s.fields) {
+    const names = [bareName(f.columnName), f.caption, f.name].filter(
+      (n): n is string => !!n && n.length > 0,
+    );
+    let best = -1;
+    for (const n of names) {
+      const idx = phraseIndexInAsk(ask, n);
+      if (idx >= 0 && (best < 0 || idx < best)) best = idx;
+    }
+    if (best >= 0) hits.push({ field: f, index: best });
+  }
+  hits.sort((a, b) => a.index - b.index);
+  return hits.map((h) => h.field);
+}
+
+/** Whole-phrase test: does the ask NAME this field (by name, caption, or bare column)? */
+function askNamesField(ask: string, f: SchemaField): boolean {
+  const names = [bareName(f.columnName), f.caption, f.name].filter(
+    (n): n is string => !!n && n.length > 0,
+  );
+  return names.some((n) => phraseIndexInAsk(ask, n) >= 0);
+}
+
+/** Normalized content tokens of a field's name/caption/bare column name (for ask overlap). */
+function fieldContentTokens(f: SchemaField): Set<string> {
+  const out = new Set<string>();
+  for (const n of [f.name, f.caption ?? '', bareName(f.columnName)]) {
+    for (const t of contentTokens(n)) out.add(t);
+  }
+  return out;
+}
+
+/**
+ * Bindable+required slot kinds across the shortlisted candidates (stage 2B
+ * rank-2). A field is "kind-compatible" for narrowing if it fits ANY of these.
+ */
+function requiredSlotKinds(candidates: TemplateManifest[]): Set<SlotKind> {
+  const kinds = new Set<SlotKind>();
+  for (const m of candidates) {
+    for (const slot of m.slots) {
+      if (slot.bindable && slot.required) kinds.add(slot.kind);
+    }
+  }
+  return kinds;
+}
+
+/**
+ * Narrowing kind-fit (stage 2B): quantitative fields for quantitative slots,
+ * date/datetime for temporal, dimensions for categorical/geo. Intentionally
+ * broader than validate.ts's gate-3 `kindCompatible` (which the deterministic
+ * gate still enforces later) — narrowing must not prematurely drop a field a
+ * candidate could bind, only rank it.
+ */
+function fieldFitsSlotKind(kind: SlotKind, f: SchemaField): boolean {
+  switch (kind) {
+    case 'quantitative':
+      return isMeasure(f);
+    case 'temporal':
+      return TEMPORAL_DATATYPES.has(f.datatype);
+    case 'categorical':
+    case 'geo':
+      return f.role === 'dimension';
+    default:
+      return false; // calc/generated/pseudo/parameter are never user-bindable
+  }
+}
+
+/**
+ * Field-narrowing for the propose prompt (stage 2B, adjudicated attack 1). A wide
+ * schema (300–1000 fields) would blow the prompt, so rank and cap:
+ *   rank 1 — fields whose name/caption tokens overlap the ask (a field the ask
+ *            NAMES is guaranteed rank-1, so it survives the cap);
+ *   rank 2 — fields kind-compatible with any required slot of any candidate;
+ *   rank 3 — everything else (fills headroom only).
+ * Deterministic: stable sort keyed tier → named → overlap → name → original index.
+ * A pass-through (≤ cap) returns the fields UNCHANGED with no withholding.
+ */
+function narrowFields(
+  ask: string,
+  fields: SchemaField[],
+  kinds: Set<SlotKind>,
+  maxFields: number,
+): { fields: SchemaField[]; withheld: number } {
+  if (fields.length <= maxFields) return { fields, withheld: 0 };
+
+  const askTokens = contentTokens(ask);
+  const ranked = fields.map((f, index) => {
+    const named = askNamesField(ask, f);
+    let overlap = 0;
+    if (askTokens.size > 0) {
+      for (const t of fieldContentTokens(f)) if (askTokens.has(t)) overlap++;
+    }
+    const relevant = named || overlap > 0;
+    const compatible = !relevant && [...kinds].some((k) => fieldFitsSlotKind(k, f));
+    const tier = relevant ? 2 : compatible ? 1 : 0;
+    return { f, index, tier, named, overlap };
+  });
+
+  ranked.sort(
+    (a, b) =>
+      b.tier - a.tier ||
+      Number(b.named) - Number(a.named) ||
+      b.overlap - a.overlap ||
+      a.f.name.localeCompare(b.f.name) ||
+      a.index - b.index,
+  );
+
+  const kept = ranked.slice(0, maxFields).map((r) => r.f);
+  return { fields: kept, withheld: fields.length - kept.length };
+}
+
+function isTemporal(f: SchemaField): boolean {
+  return f.role === 'dimension' && TEMPORAL_DATATYPES.has(f.datatype);
+}
+function isMeasure(f: SchemaField): boolean {
+  return f.role === 'measure' || f.isAggregated;
+}
+function isCategorical(f: SchemaField): boolean {
+  return f.role === 'dimension' && !isTemporal(f) && (f.type === 'nominal' || f.type === 'ordinal');
+}
+
+/**
+ * Role-greedy field assignment (design §3.5 step 2): fill each required, bindable
+ * slot with the first still-unused matched field of the compatible role/kind —
+ * measures → quantitative, dimensions → categorical/temporal/geo. Returns the
+ * bindings, or null if any required slot is left unfilled (fail-closed). An
+ * explicit aggregation override applies only to quantitative slots.
+ *
+ * Shared machinery: classifyNoLlm emits with it, and the intra-family tiebreak's
+ * slot-fit test calls it to answer "do the ask's fields satisfy this candidate?"
+ * with the exact assignment that would be emitted — no separate approximation.
+ */
+function roleGreedyBind(
+  m: TemplateManifest,
+  matched: SchemaField[],
+  aggOverride: Derivation | null,
+): Array<{ slot_id: string; field: string; derivation?: Derivation }> | null {
+  const used = new Set<SchemaField>();
+  const bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }> = [];
+  // A REQUIRED calc forces its bindable input slots to bind even when the slot is
+  // authored optional (H3) — otherwise the calc's formula ref would dangle and the
+  // no-LLM path would needlessly escalate.
+  const forced = calcForcedSlotIds(m);
+
+  const take = (pred: (f: SchemaField) => boolean): SchemaField | null => {
+    for (const f of matched) {
+      if (!used.has(f) && pred(f)) {
+        used.add(f);
+        return f;
+      }
+    }
+    return null;
+  };
+
+  for (const slot of m.slots) {
+    if (!slot.bindable || !(slot.required || forced.has(slot.slot_id))) continue;
+    let chosen: SchemaField | null = null;
+    switch (slot.kind) {
+      case 'quantitative':
+        chosen = take(isMeasure);
+        break;
+      case 'categorical':
+        chosen = take(isCategorical);
+        break;
+      case 'temporal':
+        chosen = take(isTemporal);
+        break;
+      case 'geo':
+        chosen = take((f) => f.role === 'dimension');
+        break;
+      default:
+        chosen = null;
+    }
+    if (!chosen) return null; // required slot unfilled → fail closed
+    const binding: { slot_id: string; field: string; derivation?: Derivation } = {
+      slot_id: slot.slot_id,
+      field: chosen.name,
+    };
+    if (slot.kind === 'quantitative' && aggOverride) binding.derivation = aggOverride;
+    bindings.push(binding);
+  }
+
+  return bindings;
+}
+
+/**
+ * WITHIN-FAMILY template selection (stage 2b). Given the keyword-argmax `top`
+ * (all sharing the max keyword score) plus the ask's recognizable fields, pick a
+ * single template to auto-bind or return null to fall through to the propose leg.
+ * Two regimes, driven by the measured scale breakpoints:
+ *
+ *  • SINGLE keyword winner (top.length === 1) — SOLE-WRONG-MATCHER GUARD. A lone
+ *    matcher may auto-bind only if at least one keyword it matched is FAMILY-NATIVE
+ *    (`familyNativeKeywords`) OR is a distinctive CHART NOUN (`CHART_NOUN_KEYWORDS`).
+ *    The family-native rule kills the ramp-up wrong-family bind where a template is
+ *    the SOLE matcher of another family's keyword it merely borrowed (that borrowed
+ *    keyword is not native → demote). The chart-noun exemption is the sibling-scaling
+ *    fix: adding an eligible sibling drops a distinctive noun like "bar"/"column"/
+ *    "pie" below the majority threshold, but a chart noun deterministically names a
+ *    type, so a lone chart-noun winner must still one-shot rather than escalate.
+ *
+ *  • TIE (top.length > 1) — INTRA- or CROSS-FAMILY TIEBREAK.
+ *    A tie WITHIN one family has an unambiguous family, so rather than fail closed
+ *    we bind: among the candidates whose required slots the ask's fields satisfy,
+ *    rank by keyword specificity (longer/multi-token first), break remaining ties by
+ *    template name, take the top. If NO tied candidate is slot-satisfiable, propose.
+ *    A tie SPANNING families is genuinely ambiguous EXCEPT when a single candidate's
+ *    most-specific matched CHART NOUN strictly outranks every other's ("stacked bar"
+ *    → part-to-whole beats a generic ranking "bar"): that deterministic chart-type
+ *    winner binds if slot-satisfiable. No unique chart-noun winner → fail closed
+ *    (propose), preserving the ambiguous-ask contract. Whatever is picked is a chart
+ *    the ask explicitly named, so this never introduces a wrong bind.
+ */
+function selectWithinFamily(
+  top: Array<{ m: TemplateManifest }>,
+  maskedAsk: string,
+  matched: SchemaField[],
+  aggOverride: Derivation | null,
+  manifests: Map<string, TemplateManifest>,
+): TemplateManifest | null {
+  if (top.length === 1) {
+    const m = top[0].m;
+    const native = familyNativeKeywords(m.family, manifests);
+    const won = matchedKeywords(maskedAsk, m.intent_keywords);
+    const decisive =
+      won.some((kw) => native.has(kw.toLowerCase())) || wonChartNoun(maskedAsk, m.intent_keywords);
+    return decisive ? m : null;
+  }
+
+  const families = new Set(top.map((t) => t.m.family));
+  if (families.size > 1) {
+    // CROSS-family tie: fail closed UNLESS one candidate's most-specific matched
+    // chart noun strictly outranks the rest. Rank slot-satisfiable chart-noun
+    // matchers by chart-noun specificity, break ties by template name; a strict
+    // #1 binds, a #1/#2 specificity tie (or no chart-noun matcher) stays null.
+    const byNoun = top
+      .map((t) => ({ m: t.m, spec: chartNounSpecificity(maskedAsk, t.m.intent_keywords) }))
+      .filter((c) => c.spec > 0 && roleGreedyBind(c.m, matched, aggOverride) !== null)
+      .sort((a, b) => b.spec - a.spec || a.m.template.localeCompare(b.m.template));
+    if (byNoun.length === 0) return null;
+    if (byNoun.length > 1 && byNoun[0].spec === byNoun[1].spec) return null;
+    return byNoun[0].m;
+  }
+
+  const bindable = top
+    .map((t) => ({ m: t.m, spec: keywordSpecificity(maskedAsk, t.m.intent_keywords) }))
+    .filter((c) => roleGreedyBind(c.m, matched, aggOverride) !== null);
+  if (bindable.length === 0) return null; // none bindable → propose
+  bindable.sort((a, b) => b.spec - a.spec || a.m.template.localeCompare(b.m.template));
+  return bindable[0].m;
+}
+
+/**
+ * No-LLM classification (design §3.5 + stage 2b within-family disambiguation).
+ * Keyword-scores the eligible fast-path templates, selects a single template via
+ * `selectWithinFamily` (sole-wrong-matcher guard for a lone winner; intra-family
+ * tiebreak for a same-family tie; fail-closed for a cross-family tie), then
+ * role-greedily assigns matched fields to its required bindable slots by kind.
+ * Returns null (fall through to the LLM propose path) whenever no template is
+ * selected, avoid_when demotes, or a required slot is left unfilled.
+ *
+ * `summary` is required to assign by kind (the design's §3.2 signature omitted it,
+ * but §3.5 step 2 needs the field roles to map measures→quantitative etc.).
+ */
+export function classifyNoLlm(
+  ask: string,
+  manifests: Map<string, TemplateManifest>,
+  summary: SchemaSummary,
+): {
+  template: string;
+  bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>;
+} | null {
+  // FAIL-CLOSED cost guard (M10 Finding 3): over the field cap, do NOT run the per-field
+  // hot loop (maskFieldNames / matchFieldsInAsk) and do NOT classify a truncated subset —
+  // return null so the orchestrator escalates rather than risk a silent wrong bind on a
+  // partial view. Checked at the TOP, before any field is touched, so cost stays bounded.
+  if (summary.fields.length > MAX_CLASSIFIABLE_FIELDS) return null;
+
+  // Mask field names before scoring so a field NAME can't select a template or
+  // read as an aggregation word; field↔slot matching still uses the raw ask.
+  const maskedAsk = maskFieldNames(ask, summary);
+  const aggOverride = detectAggregationOverride(maskedAsk);
+  const matched = matchFieldsInAsk(ask, summary);
+
+  // Keyword-score the eligible fast-path templates against the masked ask.
+  const scored: Array<{ m: TemplateManifest; score: number }> = [];
+  for (const m of manifests.values()) {
+    if (!m.fast_path_eligible) continue;
+    const score = keywordScore(maskedAsk, m.intent_keywords);
+    if (score > 0) scored.push({ m, score });
+  }
+  if (scored.length === 0) return null;
+
+  const maxScore = scored.reduce((mx, s) => Math.max(mx, s.score), 0);
+  const top = scored.filter((s) => s.score === maxScore);
+
+  const chosen = selectWithinFamily(top, maskedAsk, matched, aggOverride, manifests);
+  if (!chosen) return null;
+
+  // DEMOTE (never hard-block): when the selected winner carries avoid_when
+  // guidance whose terms appear in the ask, fall through to the propose leg so
+  // the model can WEIGH the caution rather than the zero-latency path committing
+  // silently (the retrieval-without-adherence failure). Field names are masked
+  // so a field literally named after a caution term can't force the demotion.
+  if (matchAvoidWhen(maskedAsk, chosen.avoid_when, chosen.intent_keywords).length > 0) return null;
+
+  const bindings = roleGreedyBind(chosen, matched, aggOverride);
+  if (!bindings) return null; // required slot unfilled → fail closed
+  return { template: chosen.template, bindings };
+}
+
+/**
+ * Build the compact LLM input (design §3.3): keyword-ranked fast-path candidates
+ * (Fuse fallback when no exact hit), each with its BINDABLE slots only, plus the
+ * field schema. The model only picks a template + maps slot_id→field name.
+ */
+export function buildLlmInput(
+  ask: string,
+  manifests: Map<string, TemplateManifest>,
+  summary: SchemaSummary,
+  opts?: { maxFields?: number },
+): LlmProposeInput {
+  const maxFields = opts?.maxFields ?? DEFAULT_MAX_FIELDS;
+  // ROUTABLE pool = fast-path-eligible templates PLUS side-loaded LOCAL templates
+  // (W2-C1). Local templates arrive UNSTAMPED (fast_path_eligible false), so they
+  // never enter classifyNoLlm's auto-bind, but they MUST be visible to the propose
+  // shortlist by family/keyword so the model can route to them. When no local set
+  // is side-loaded this is byte-identical to the eligible-only pool.
+  const routable = [...manifests.values()].filter(
+    (m) => m.fast_path_eligible || m.source === 'local',
+  );
+
+  let candidates = routable
+    .map((m) => ({ m, score: keywordScore(ask, m.intent_keywords) }))
+    .filter((x) => x.score > 0);
+
+  if (candidates.length === 0) {
+    // No exact keyword hit: use Fuse over keywords/description to surface the
+    // nearest templates; if even that is empty, offer all routable templates.
+    const fuse = new Fuse(routable, {
+      keys: ['intent_keywords', 'description'],
+      threshold: 0.5,
+    });
+    const hits = fuse.search(ask).map((r) => r.item);
+    const chosen = hits.length > 0 ? hits : routable;
+    candidates = chosen.map((m) => ({ m, score: 0 }));
+  }
+
+  candidates.sort((a, b) => b.score - a.score || a.m.template.localeCompare(b.m.template));
+
+  // Family-aware truncation (attack 2): cap at K total, but NEVER silently drop a
+  // whole matching family. Seed the best candidate of each matching family first
+  // (so if >K families match, the shortlist over-caps to one-per-family — that IS
+  // the propose leg), then fill any remaining headroom up to K with the next-best
+  // candidates. A naive slice(0,K) could truncate an entire family below K.
+  const K = 5;
+  const pickedTemplates = new Set<string>();
+  const seededFamilies = new Set<string>();
+  const top: typeof candidates = [];
+  for (const c of candidates) {
+    if (seededFamilies.has(c.m.family)) continue;
+    seededFamilies.add(c.m.family);
+    top.push(c);
+    pickedTemplates.add(c.m.template);
+  }
+  for (const c of candidates) {
+    if (top.length >= K) break;
+    if (pickedTemplates.has(c.m.template)) continue;
+    top.push(c);
+    pickedTemplates.add(c.m.template);
+  }
+  top.sort((a, b) => b.score - a.score || a.m.template.localeCompare(b.m.template));
+
+  // FIELD-NARROWING (stage 2B): rank the schema against the shortlisted
+  // candidates' required slot kinds + the ask, and cap at maxFields so a wide
+  // schema can't blow the propose prompt. classifyNoLlm is untouched — it still
+  // resolves against the full schema.
+  const kinds = requiredSlotKinds(top.map((c) => c.m));
+  // FAIL-CLOSED cost guard (M10 Finding 3): narrowFields runs one regex per field
+  // (askNamesField) — the same unbounded hot loop classifyNoLlm caps. Over the cap, rank
+  // only a bounded prefix so a pathological wide schema can't block the event loop for
+  // seconds; `withheld` below is computed against the TRUE total so more_available stays
+  // honest and the caller is told to re-query with a field-name hint.
+  const rankPool =
+    summary.fields.length > MAX_CLASSIFIABLE_FIELDS
+      ? summary.fields.slice(0, MAX_CLASSIFIABLE_FIELDS)
+      : summary.fields;
+  const { fields: narrowed } = narrowFields(ask, rankPool, kinds, maxFields);
+  const withheld = summary.fields.length - narrowed.length;
+
+  const result: LlmProposeInput = {
+    ask,
+    candidate_templates: top.map(({ m }) => ({
+      template: m.template,
+      description: m.description,
+      intent_keywords: m.intent_keywords,
+      // Surface the negative guidance so the proposing model sees the cautions.
+      ...(m.avoid_when && m.avoid_when.length > 0 ? { avoid_when: m.avoid_when } : {}),
+      slots: m.slots
+        .filter((slot) => slot.bindable)
+        .map((slot) => ({
+          slot_id: slot.slot_id,
+          role: slot.role,
+          kind: slot.kind,
+          required: slot.required,
+          derivation: slot.derivation, // template default; override only if the ask differs
+        })),
+    })),
+    fields: narrowed.map((f) => ({
+      name: f.name,
+      role: f.role,
+      type: f.type,
+      datatype: f.datatype,
+    })),
+  };
+
+  if (withheld > 0) {
+    result.more_available = {
+      count: withheld,
+      note:
+        `Narrowed to the top ${narrowed.length} of ${summary.fields.length} fields most ` +
+        `relevant to the ask; ${withheld} withheld. Re-query with a field-name hint ` +
+        '(name the field you need) to surface others.',
+    };
+  }
+
+  return result;
+}

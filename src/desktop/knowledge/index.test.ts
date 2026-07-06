@@ -24,10 +24,10 @@ function makeDirent(name: string, isDir: boolean): Dirent {
   } as unknown as Dirent;
 }
 
-function setupFsMock(files: Record<string, string>) {
+function setupFsMock(files: Record<string, string>): void {
   vi.mocked(getDirname).mockReturnValue(MOCK_ROOT);
   vi.mocked(existsSync).mockImplementation((p) => String(p) === KNOWLEDGE_DIR);
-  vi.mocked(readdirSync).mockImplementation((dir) => {
+  vi.mocked(readdirSync).mockImplementation(((dir: unknown) => {
     const prefix = String(dir);
     const children = new Set<string>();
     for (const absPath of Object.keys(files)) {
@@ -36,16 +36,18 @@ function setupFsMock(files: Record<string, string>) {
         children.add(first);
       }
     }
-    return Array.from(children).sort().map((name) => {
-      const fullPath = join(prefix, name);
-      const isDir = Object.keys(files).some((k) => k.startsWith(fullPath + sep));
-      return makeDirent(name, isDir);
-    });
-  });
+    return Array.from(children)
+      .sort()
+      .map((name) => {
+        const fullPath = join(prefix, name);
+        const isDir = Object.keys(files).some((k) => k.startsWith(fullPath + sep));
+        return makeDirent(name, isDir);
+      });
+  }) as any);
   vi.mocked(readFileSync).mockImplementation((p) => {
     const content = files[String(p)];
     if (content === undefined) throw new Error(`ENOENT: ${p}`);
-    return content as unknown as Buffer;
+    return content;
   });
 }
 
@@ -112,8 +114,7 @@ describe('knowledge/index', () => {
   describe('readKnowledgeResource', () => {
     it('returns content for a valid URI', () => {
       setupFsMock({
-        [join(KNOWLEDGE_DIR, 'viz-design', 'chart-selection.md')]:
-          '# Chart Selection\nContent.',
+        [join(KNOWLEDGE_DIR, 'viz-design', 'chart-selection.md')]: '# Chart Selection\nContent.',
       });
 
       const result = readKnowledgeResource('expertise://tableau/viz-design/chart-selection');

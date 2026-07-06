@@ -1,0 +1,25 @@
+{
+  "template": "trend-line-chart",
+  "family": "time-series",
+  "readiness": "GREEN",
+  "fast_path_eligible": true,
+  "fast_path_blockers": [],
+  "portability_evidence": { "fixture_bind": true, "render_verified": "live-2026-07-04" },
+  "datasource_placeholder": true,
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["trend", "over-time", "line", "time-series", "timeline", "by-month", "sales-over-time"],
+  "description": "A line of an aggregated measure over a truncated date on the x-axis; shows trend across time.",
+  "slots": [
+    { "slot_id": "order_date", "template_field": "Order Date", "derivation": "tmn",
+      "role": ["cols"], "kind": "temporal", "bindable": true, "required": true,
+      "notes": "XML instance is [tmn:Order Date:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim (no normalization). templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'." },
+    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
+      "role": ["rows"], "kind": "quantitative", "bindable": true, "required": true }
+  ],
+  "calcs": [],
+  "hazards": [
+    { "code": "month-trunc-short-form-ruling",
+      "detail": "RULING (H3.2 tmn/tmo reconciliation): 'tmn' is the REAL Month-Trunc short-form live Tableau writes — confirmed in this template XML (derivation='Month-Trunc' name='[tmn:Order Date:qk]'), in real Tableau Public workbooks (data/twb-example-index.json: [sqlserver…].[tmn:Order Date:qk], [dataengine…].[tmn:DateTime (Days):ok]), in src/metadata/fields.ts:434, and in tactics/tree/column-instance-prefixes.md. The binder/manifests standardize on canonical 'tmn'; templates.ts derivationMap accepts BOTH 'tmn' and legacy 'tmo' as aliases → 'Month-Trunc'. XML is ground truth; no derivation normalization is applied.",
+      "xml": "trend-line-chart.xml:13" }
+  ]
+}

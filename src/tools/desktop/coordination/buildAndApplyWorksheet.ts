@@ -90,7 +90,7 @@ export const getBuildAndApplyWorksheetTool = (
           const templatePath = getTemplatePath(template);
           if (!existsSync(templatePath)) {
             return new ArgsValidationError(
-              `Template not found: "${template}". Check available templates with list-templates.`,
+              `Template not found: "${template}". Check available templates with list-xml-templates.`,
             ).toErr();
           }
 

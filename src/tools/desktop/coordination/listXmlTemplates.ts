@@ -9,12 +9,12 @@ import { DesktopTool } from '../tool.js';
 const paramsSchema = {};
 
 const toolTitle = 'List Available XML Templates';
-export const getListTemplatesTool = (
+export const getListXmlTemplatesTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
   const tool = new DesktopTool({
     server,
-    name: 'list-templates',
+    name: 'list-xml-templates',
     title: toolTitle,
     description:
       'List all available XML visualization templates. Use template names with build-and-apply-worksheet.',

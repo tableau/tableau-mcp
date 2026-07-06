@@ -1,0 +1,1936 @@
+{
+  "_generated": true,
+  "_generator": "src/scripts/buildTemplateManifests.ts",
+  "_warning": "GENERATED FILE — do not hand-edit. Edit data/template-manifests/*.manifest.json and re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
+  "_source": "data/template-manifests/*.manifest.json",
+  "count": 17,
+  "fast_path_templates": [
+    "distribution-bar-code-chart",
+    "kpi-text",
+    "part-to-whole-stacked-bar-chart",
+    "part-to-whole-treemap-chart",
+    "ranking-ordered-bar",
+    "ranking-ordered-column",
+    "trend-line-chart",
+    "ww-ou-arrow"
+  ],
+  "templates": [
+    {
+      "template": "change-over-time-area-chart",
+      "family": "time-series",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "area",
+        "over-time",
+        "change-over-time",
+        "trend",
+        "time-series",
+        "filled-line"
+      ],
+      "description": "A filled area of an aggregated measure over a truncated date; a color dimension splits the area into bands.",
+      "slots": [
+        {
+          "slot_id": "order_date",
+          "template_field": "Order Date",
+          "derivation": "tqr",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "XML instance [tqr:Order Date:qk] derivation='Quarter-Trunc'; short-form 'tqr' IS a derivationMap key (long form differs: 'TruncQuarter'). Kept verbatim."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "rows"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "template column has aggregate-role-from='[State/Province]'; a cosmetic secondary-role hint carried onto the target, not rewritten (verification-report correction: GREEN -> YELLOW)."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "hidden-aggregate-role-from",
+          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten by replaceFieldReferences; the target field inherits the template's secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding (cosmetic), so fast_path_eligible stays true.",
+          "xml": "change-over-time-area-chart.xml:11"
+        }
+      ]
+    },
+    {
+      "template": "change-over-time-stacked-area-chart",
+      "family": "time-series",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "stacked-area",
+        "area",
+        "over-time",
+        "change-over-time",
+        "composition-over-time",
+        "time-series"
+      ],
+      "description": "Stacked filled areas of an aggregated measure over a truncated date; a color dimension stacks the bands.",
+      "slots": [
+        {
+          "slot_id": "order_date",
+          "template_field": "Order Date",
+          "derivation": "tqr",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "XML instance [tqr:Order Date:qk] derivation='Quarter-Trunc'; short-form 'tqr' IS a derivationMap key. Kept verbatim."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "rows"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "template column has aggregate-role-from='[State/Province]'; cosmetic secondary-role hint carried onto the target (verification-report correction: GREEN -> YELLOW)."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "hidden-aggregate-role-from",
+          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
+          "xml": "change-over-time-stacked-area-chart.xml:11"
+        }
+      ]
+    },
+    {
+      "template": "control-chart-xmr",
+      "family": "deviation",
+      "readiness": "GREEN",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "control-chart",
+        "xmr",
+        "process-control",
+        "reference-line",
+        "spc"
+      ],
+      "description": "An aggregated measure over an exact date with template-owned average and +/-3-sigma reference lines/bands.",
+      "slots": [
+        {
+          "slot_id": "order_date",
+          "template_field": "Order Date",
+          "derivation": "tdy",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "XML instance is [md:Order Date:ok] derivation='MDY' (exact date, discrete/ordinal). 'md'/'MDY' is NOT a derivationMap key nor a §2.2 Derivation member. Normalized to the closest canonical token 'tdy' (TruncDay = day-level date). See non-canonical-template-derivation hazard for the fidelity caveat."
+        },
+        {
+          "slot_id": "profit",
+          "template_field": "Profit",
+          "derivation": "sum",
+          "role": [
+            "rows",
+            "color"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "same [sum:Profit:qk] instance drives rows, color, and the average/stdev reference lines (template-owned analytics)."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "non-canonical-template-derivation",
+          "detail": "Template date instance uses derivation short-form 'md' (long 'MDY', an exact discrete date), absent from templates.ts derivationMap and the §2.2 Derivation union. Manifest records the closest canonical 'tdy' (TruncDay). RESIDUAL RISK: TruncDay (continuous day) differs from MDY (discrete exact date) at runtime; the fast-path date binding may render continuous rather than discrete. XML trusted for slot/field structure; derivation token normalized.",
+          "xml": "control-chart-xmr.xml:13"
+        },
+        {
+          "code": "template-owned-reference-lines",
+          "detail": "average and sample-stdev (+/-3 factor) reference lines/bands are bound to [sum:Profit:qk] and repaired only because Profit is a bound slot; no dataset-specific calc IDs are referenced, so this is not a DATASET_SPECIFIC_FORMULA blocker.",
+          "xml": "control-chart-xmr.xml:47-51"
+        }
+      ]
+    },
+    {
+      "template": "correlation-bubble-chart",
+      "family": "correlation",
+      "readiness": "GREEN",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "bubble",
+        "correlation",
+        "scatter",
+        "relationship",
+        "three-measures",
+        "sized-scatter"
+      ],
+      "description": "One bubble per detail-grain member; X and Y are two measures, bubble size is a third measure.",
+      "slots": [
+        {
+          "slot_id": "discount",
+          "template_field": "Discount",
+          "derivation": "avg",
+          "role": [
+            "rows"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "profit",
+          "template_field": "Profit",
+          "derivation": "sum",
+          "role": [
+            "cols"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "size"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "order_id",
+          "template_field": "Order ID",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "detail/grain dimension: one bubble per member."
+        }
+      ],
+      "calcs": [],
+      "hazards": []
+    },
+    {
+      "template": "correlation-dual-axis-chart",
+      "family": "correlation",
+      "readiness": "GREEN",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "dual-axis",
+        "combo",
+        "two-measures",
+        "correlation",
+        "combined-axes"
+      ],
+      "description": "Two measures on a shared/combined axis over a truncated date; Measure Names colors the two series (template-owned).",
+      "avoid_when": [
+        "The two measures share the same scale - use a single shared axis instead of a dual axis",
+        "Axes are not synchronized or have different zero points - unsynchronized dual axes imply a false correlation",
+        "More than two measures are involved - use separate charts",
+        "The measures are unrelated - never overlay unrelated measures on a dual axis to manufacture a pattern"
+      ],
+      "slots": [
+        {
+          "slot_id": "profit",
+          "template_field": "Profit",
+          "derivation": "sum",
+          "role": [
+            "rows",
+            "dual-axis-measure"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "discount",
+          "template_field": "Discount",
+          "derivation": "avg",
+          "role": [
+            "rows",
+            "dual-axis-measure"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "order_date",
+          "template_field": "Order Date",
+          "derivation": "tmn",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "XML instance is [tmn:Order Date:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim. templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'."
+        },
+        {
+          "slot_id": "measure_names",
+          "template_field": "Measure Names",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "pseudo",
+          "bindable": false,
+          "required": true,
+          "notes": "Tableau pseudo-field [:Measure Names]; template owns it fully. Not a <column> declaration, so it is exempt from the column-existence check. Never user-bindable."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "month-trunc-short-form-ruling",
+          "detail": "RULING (H3.2 tmn/tmo reconciliation): 'tmn' is the REAL Month-Trunc short-form live Tableau writes — confirmed in this template XML (derivation='Month-Trunc' name='[tmn:Order Date:qk]'), in real Tableau Public workbooks (data/twb-example-index.json), in src/metadata/fields.ts:434, and in tactics/tree/column-instance-prefixes.md. The binder/manifests standardize on canonical 'tmn'; templates.ts derivationMap accepts BOTH 'tmn' and legacy 'tmo' as aliases → 'Month-Trunc'. XML is ground truth; no derivation normalization is applied.",
+          "xml": "correlation-dual-axis-chart.xml:15"
+        },
+        {
+          "code": "pseudo-field-template-owned",
+          "detail": "color encoding uses the [:Measure Names] pseudo-field. It is template-owned and non-bindable; PSEUDO_FIELD_REQUIRED is NOT a blocker here (readiness stays GREEN).",
+          "xml": "correlation-dual-axis-chart.xml:34"
+        },
+        {
+          "code": "dual-axis-combined-measures",
+          "detail": "rows shelf is a combined-axis expression ([sum:Profit:qk] + [avg:Discount:qk]); both measure slots must bind or the combined axis dangles (both required, satisfied by coverage).",
+          "xml": "correlation-dual-axis-chart.xml:57"
+        }
+      ]
+    },
+    {
+      "template": "correlation-scatter-plot-chart",
+      "family": "correlation",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "scatter",
+        "correlation",
+        "relationship",
+        "vs",
+        "versus",
+        "against"
+      ],
+      "description": "One point per detail-grain member; X and Y are two measures; color is a template calc; a second dimension adds detail.",
+      "slots": [
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "cols",
+            "formula-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "profit",
+          "template_field": "Profit",
+          "derivation": "sum",
+          "role": [
+            "rows",
+            "formula-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "customer_name",
+          "template_field": "Customer Name",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "template column has aggregate-role-from='[State/Province]'; NOT rewritten by replaceFieldReferences (cosmetic secondary-role hint carried onto the target)."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "profit_ratio_calc",
+          "template_field": "Calculation_1368249927221915648",
+          "derivation": "usr",
+          "role": [
+            "color"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "SUM([Profit])/SUM([Sales])",
+          "formula_refs": [
+            "Profit",
+            "Sales"
+          ],
+          "depends_on_slots": [
+            "profit",
+            "sales"
+          ],
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Profit",
+              "slot_id": "profit",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            },
+            {
+              "ref": "Sales",
+              "slot_id": "sales",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ],
+          "prereqs": [
+            "raw-formula-refs"
+          ]
+        }
+      ],
+      "hazards": [
+        {
+          "code": "raw-formula-refs",
+          "detail": "Calc formula references bare [Profit]/[Sales]; rewriteFormulaFieldRefs repairs them ONLY because Profit & Sales are bindable bare-key slots. Gate #6 asserts both are bound.",
+          "xml": "correlation-scatter-plot-chart.xml:10-11"
+        },
+        {
+          "code": "hidden-aggregate-role-from",
+          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target field inherits the template's secondary-role hint (verification-report correction).",
+          "xml": "correlation-scatter-plot-chart.xml:15"
+        }
+      ]
+    },
+    {
+      "template": "distribution-bar-code-chart",
+      "family": "distribution",
+      "readiness": "GREEN",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-05"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "bar-code",
+        "strip-plot",
+        "distribution",
+        "spread",
+        "jitter",
+        "gantt-strip",
+        "dot-strip"
+      ],
+      "description": "A strip/bar-code plot: one tick per detail-grain member along an aggregated measure axis, grouped by a category on rows.",
+      "slots": [
+        {
+          "slot_id": "sub_category",
+          "template_field": "Sub-Category",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "avg",
+          "role": [
+            "cols"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "template aggregates Sales with Avg (not Sum): [avg:Sales:qk]."
+        },
+        {
+          "slot_id": "country_region",
+          "template_field": "Country/Region",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "geo",
+          "bindable": true,
+          "required": true,
+          "notes": "detail/grain dimension carrying semantic-role='[Country].[ISO3166_2]'; the geo semantic-role is a cosmetic hint carried onto the target."
+        },
+        {
+          "slot_id": "state_province",
+          "template_field": "State/Province",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "geo",
+          "bindable": true,
+          "required": true,
+          "notes": "detail/grain dimension carrying semantic-role='[State].[Name]'; cosmetic hint carried onto the target."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "geo-semantic-role",
+          "detail": "[Country/Region] and [State/Province] carry semantic-role attributes; these are not rewritten by replaceFieldReferences and are carried onto the target fields. They define mark grain, not a geographic map. Verification report agrees the readiness is GREEN (contrast spatial-filled-map which stays YELLOW).",
+          "xml": "distribution-bar-code-chart.xml:10,12"
+        }
+      ]
+    },
+    {
+      "template": "kpi-text",
+      "family": "kpi",
+      "readiness": "GREEN",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-04"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "kpi",
+        "metric",
+        "big-number",
+        "single-value",
+        "total",
+        "text",
+        "scorecard"
+      ],
+      "description": "A single big-number text card: one measure aggregated and shown as label text.",
+      "slots": [
+        {
+          "slot_id": "value",
+          "template_field": "Value",
+          "derivation": "sum",
+          "role": [
+            "text"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "template field is the generic name 'Value'; binds a single quantitative measure. Portability is 'across the committed fixture classes + render-verified' (see portability_evidence), not a blanket 'any dataset'."
+        }
+      ],
+      "calcs": [],
+      "hazards": []
+    },
+    {
+      "template": "part-to-whole-pie-chart",
+      "family": "part-to-whole",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "pie",
+        "part-to-whole",
+        "composition",
+        "proportion",
+        "share",
+        "percentage",
+        "donut"
+      ],
+      "description": "A pie whose wedge angles are an aggregated measure, one wedge per category (color).",
+      "avoid_when": [
+        "More than ~3-5 categories - humans compare angles poorly; a sorted horizontal bar reads more precisely and scales to any count",
+        "Slice sizes are close in value - the differences become impossible to judge by angle",
+        "Showing change over time - use a line or stacked area instead",
+        "Any analytical context where parts must be compared precisely - prefer a stacked bar or treemap (pie is usually the wrong choice)",
+        "Never render as a 3D pie - perspective distorts the proportions"
+      ],
+      "slots": [
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "template column has aggregate-role-from='[State/Province]'; cosmetic secondary-role hint carried onto the target (verification-report correction: GREEN -> YELLOW)."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "wedge-size"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "hidden-aggregate-role-from",
+          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
+          "xml": "part-to-whole-pie-chart.xml:10"
+        }
+      ]
+    },
+    {
+      "template": "part-to-whole-stacked-bar-chart",
+      "family": "part-to-whole",
+      "readiness": "GREEN",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-05",
+        "render_evidence": {
+          "basis": "hand-stamp: live render + structural parity + human review",
+          "lane": "W2-R008 live-verify 2026-07-05",
+          "structural": 0.97297,
+          "critical_pass": "5/5",
+          "high_pass": "3/3",
+          "pixel_oracle": "none (anchor-only comparison is circular; not credited)",
+          "gate_composite": null
+        }
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "stacked-bar",
+        "part-to-whole",
+        "composition",
+        "proportion",
+        "share",
+        "breakdown"
+      ],
+      "description": "Horizontal bars per category (rows) whose length is a measure, segmented by a second dimension (color); sorted by the measure.",
+      "slots": [
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "rows",
+            "sort-dimension"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "template column has aggregate-role-from='[State/Province]'; cosmetic secondary-role hint carried onto the target (verification-report correction: GREEN -> YELLOW)."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "cols",
+            "sort-measure"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "category",
+          "template_field": "Category",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "shelf-sort-pill-coupling",
+          "detail": "shelf-sort-v2 sorts [none:Region:nk] by measure [sum:Sales:qk]; both slots must bind or the sort dangles (both required, satisfied by coverage).",
+          "xml": "part-to-whole-stacked-bar-chart.xml:18"
+        },
+        {
+          "code": "hidden-aggregate-role-from",
+          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
+          "xml": "part-to-whole-stacked-bar-chart.xml:11"
+        }
+      ]
+    },
+    {
+      "template": "part-to-whole-treemap-chart",
+      "family": "part-to-whole",
+      "readiness": "GREEN",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-04"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "treemap",
+        "part-to-whole",
+        "composition",
+        "proportion",
+        "share",
+        "nested"
+      ],
+      "description": "Nested rectangles sized by a measure and colored by a category; a second dimension adds detail grain.",
+      "slots": [
+        {
+          "slot_id": "category",
+          "template_field": "Category",
+          "derivation": "none",
+          "role": [
+            "color",
+            "text"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "size",
+            "text"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "sub_category",
+          "template_field": "Sub-Category",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "detail/grain dimension: defines the rectangle-per-member grain."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "shared-instance-multi-encoding",
+          "detail": "Category's [none:Category:nk] instance appears on both color and text; Sales' [sum:Sales:qk] on both size and text. Single instance reused across encodings (same derivation) — no qualified key needed.",
+          "xml": "part-to-whole-treemap-chart.xml:27-31"
+        }
+      ]
+    },
+    {
+      "template": "ranking-ordered-bar",
+      "family": "ranking",
+      "readiness": "GREEN",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-04"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "ranking",
+        "sorted-bar",
+        "bar",
+        "top",
+        "highest",
+        "lowest"
+      ],
+      "description": "Horizontal bars, one per category; bar length = measure; sorted descending by the measure.",
+      "slots": [
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "rows",
+            "sort-dimension"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "cols",
+            "sort-measure"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "computed-sort-pill-coupling",
+          "detail": "computed-sort binds the dimension instance to the measure instance; both slots must bind or the sort dangles (both are required, so this is satisfied by coverage).",
+          "xml": "ranking-ordered-bar.xml:24"
+        }
+      ]
+    },
+    {
+      "template": "ranking-ordered-column",
+      "family": "ranking",
+      "readiness": "GREEN",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-05",
+        "render_evidence": {
+          "basis": "hand-stamp: live render + structural parity + human review",
+          "lane": "W2-R008 live-verify 2026-07-05",
+          "structural": 0.97297,
+          "critical_pass": "5/5",
+          "high_pass": "3/3",
+          "pixel_oracle": "none (anchor-only comparison is circular; not credited)",
+          "gate_composite": null
+        }
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "ranking",
+        "sorted-column",
+        "column",
+        "vertical-bar",
+        "top",
+        "highest",
+        "lowest"
+      ],
+      "description": "Vertical columns, one per category; column height = measure; sorted descending by the measure.",
+      "slots": [
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "cols",
+            "sort-dimension"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "rows",
+            "sort-measure"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "computed-sort-pill-coupling",
+          "detail": "computed-sort sorts [none:Region:nk] using [sum:Sales:qk]; both slots must bind or the sort dangles (both are required, so coverage satisfies this). [Region] has NO aggregate-role-from here, so GREEN stands (verification: AGREE).",
+          "xml": "ranking-ordered-column.xml:24"
+        }
+      ]
+    },
+    {
+      "template": "trend-line-chart",
+      "family": "time-series",
+      "readiness": "GREEN",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-04"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "trend",
+        "over-time",
+        "line",
+        "time-series",
+        "timeline",
+        "by-month",
+        "sales-over-time"
+      ],
+      "description": "A line of an aggregated measure over a truncated date on the x-axis; shows trend across time.",
+      "slots": [
+        {
+          "slot_id": "order_date",
+          "template_field": "Order Date",
+          "derivation": "tmn",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "XML instance is [tmn:Order Date:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim (no normalization). templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "rows"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "month-trunc-short-form-ruling",
+          "detail": "RULING (H3.2 tmn/tmo reconciliation): 'tmn' is the REAL Month-Trunc short-form live Tableau writes — confirmed in this template XML (derivation='Month-Trunc' name='[tmn:Order Date:qk]'), in real Tableau Public workbooks (data/twb-example-index.json: [sqlserver…].[tmn:Order Date:qk], [dataengine…].[tmn:DateTime (Days):ok]), in src/metadata/fields.ts:434, and in tactics/tree/column-instance-prefixes.md. The binder/manifests standardize on canonical 'tmn'; templates.ts derivationMap accepts BOTH 'tmn' and legacy 'tmo' as aliases → 'Month-Trunc'. XML is ground truth; no derivation normalization is applied.",
+          "xml": "trend-line-chart.xml:13"
+        }
+      ]
+    },
+    {
+      "template": "ww-floating-bars",
+      "family": "deviation",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "floating-bar",
+        "gantt",
+        "over-under",
+        "betting-line",
+        "final-vs-line",
+        "actual-vs-line"
+      ],
+      "description": "One floating (gantt) bar per category: the bar starts at a reference-line measure and its length is a template calc = parsed actual value − reference line. Deviation of an actual from a reference, per member.",
+      "avoid_when": [
+        "the actual/score field is not a leading-numeric string — INT() parses only a leading integer, so compound strings like '35-31' or non-numeric text produce the wrong bar length",
+        "both endpoints are already numeric measures — bind a simpler dual-measure or reference-line deviation chart instead of the string-parse calc"
+      ],
+      "slots": [
+        {
+          "slot_id": "row_dimension",
+          "template_field": "Category",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The row/category each floating bar is drawn for (one mark per member)."
+        },
+        {
+          "slot_id": "line_measure",
+          "template_field": "Reference Value",
+          "derivation": "min",
+          "role": [
+            "cols",
+            "formula-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The reference-line endpoint on columns AND a formula input to the size calc. Derivation 'min' is authored fidelity from the checkpoint — correct only at one-row-per-category grain (see min-derivation-per-row hazard)."
+        },
+        {
+          "slot_id": "actual_input",
+          "template_field": "Actual Input",
+          "derivation": "none",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "Compound-score STRING parsed by INT() inside the size calc. Bindable + required so templates.ts rewriteFormulaFieldRefs repairs the bare [Actual Input] token and Gate 6 can prove the dependency is bound. Never placed on a shelf (no column-instance)."
+        },
+        {
+          "slot_id": "color_dimension",
+          "template_field": "Segment",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "FIDELITY from the final 'format' rung (absent in rung-1 floating-bars.xml): the over/under COLOR split (teal=over/right, red=under/left). A plain categorical color column-instance [none:Segment:nk]; parameterized like any bindable dimension so replaceFieldReferences substitutes it — never hardcoded to the Super Bowl O/U Winner field. Required so computeFixtureBind proves a full 4-field bind and the color encoding is never left dangling on an unbound field."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "bar_size_calc",
+          "template_field": "Calculation_GanttSize",
+          "derivation": "min",
+          "role": [
+            "size"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "INT([Actual Input]) - [Reference Value]",
+          "formula_refs": [
+            "Actual Input",
+            "Reference Value"
+          ],
+          "depends_on_slots": [
+            "actual_input",
+            "line_measure"
+          ],
+          "notes": "Bar length = parsed actual − reference. formula_refs are the template_field names of the two bindable dependency slots; rewriteFormulaFieldRefs repairs them on bind (same mechanism as correlation-scatter's Profit Ratio)."
+        }
+      ],
+      "hazards": [
+        {
+          "code": "dataset-specific-formula",
+          "detail": "INT([Actual Input]) parses a leading integer out of a compound score string; the parse is dataset-shape-specific (yields NULL/garbage on non-numeric or embedded-format text). Advisory only — surfaced via avoid_when and gated by render_verified, not a hard fast_path_blocker.",
+          "xml": "ww-floating-bars.xml:11"
+        },
+        {
+          "code": "raw-formula-refs",
+          "detail": "The size calc references bare [Actual Input]/[Reference Value]; templates.ts rewriteFormulaFieldRefs repairs them ONLY because both are bindable bare-key slots. Gate 6 asserts both are bound before injection.",
+          "xml": "ww-floating-bars.xml:11"
+        },
+        {
+          "code": "min-derivation-per-row",
+          "detail": "The size calc and the reference line use derivation 'min' (authored fidelity from the checkpoint). Min equals the row value only when there is exactly one mark per Category; a category with multiple rows collapses to the minimum. Bind at one-row-per-category grain or override the derivation.",
+          "xml": "ww-floating-bars.xml:17"
+        }
+      ],
+      "golden": {
+        "checkpoint_render": "evals/checkpoints/ww-2026-23-gantt-superbowl/best/format.xml"
+      }
+    },
+    {
+      "template": "ww-ou-arrow",
+      "family": "deviation",
+      "readiness": "GREEN",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-05"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "arrow-chart",
+        "over-under-arrow",
+        "points-vs-line",
+        "dual-mark-arrow",
+        "super-bowl-ou",
+        "newest-first-arrow"
+      ],
+      "description": "Dual-mark arrow chart (Line shaft + Shape arrowhead) comparing an actual combined score to a betting/reference line per member, newest-first, with text label columns (season / id / line) and an inline O/U-diff spine. Arrows point right/teal when the actual finished OVER the line and left/red when UNDER, colored by a SIGN(actual - line) calc. Faithful compile of the Super Bowl 'O/U Line' golden worksheet.",
+      "avoid_when": [
+        "the actual field is not a compound '<prefix> <winner>-<loser>' score string — the nested SPLIT/TRIM parse assumes a single-token prefix, a space, then a hyphen-separated winner-loser pair (e.g. 'PHI 40-22'); a different shape parses the wrong combined score",
+        "the row identifier is not a '<name> (<year>)' pattern — the season/id split parses the parenthetical year out of the member label",
+        "distinct teal/red over/under hue and the left/right arrowhead glyphs are required on first render — that palette+shape mapping is datasource-level style in the golden and is NOT carried by this worksheet-only template (see hazards datasource-style-dropped)"
+      ],
+      "slots": [
+        {
+          "slot_id": "member_label",
+          "template_field": "Super Bowl",
+          "derivation": "none",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The compound member label '<name> (<year>)' (e.g. 'Super Bowl LIX (2024)'). SPLIT-parsed by the season and id calcs into the row header text columns. Never shelved raw."
+        },
+        {
+          "slot_id": "actual_input",
+          "template_field": "Final",
+          "derivation": "none",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "Compound-score STRING (e.g. 'KC 25-22') SPLIT-parsed into winning + losing scores that sum to the actual combined score. Never shelved raw."
+        },
+        {
+          "slot_id": "line_measure",
+          "template_field": "Total Score Bet",
+          "derivation": "sum",
+          "role": [
+            "rows",
+            "cols",
+            "formula-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The O/U betting line. Shown as a discrete text label column on rows ([sum:Total Score Bet:ok]), as an endpoint of the arrow's shared measure axis ([sum:Total Score Bet:qk]), and as the subtrahend of the over/under sign and O/U-diff calcs."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "member_id_calc",
+          "template_field": "Super Bowl - Split 1",
+          "derivation": "none",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "TRIM( SPLIT( [Super Bowl], \"(\", 1 ) )",
+          "formula_refs": [
+            "Super Bowl"
+          ],
+          "depends_on_slots": [
+            "member_label"
+          ],
+          "notes": "TRIM(SPLIT([Super Bowl],'(',1)) — the member name/id before the parenthetical year; feeds the SB # roman-numeral label calc.",
+          "result_role": "dimension",
+          "inputs": [
+            {
+              "ref": "Super Bowl",
+              "slot_id": "member_label",
+              "slot_kind": "categorical",
+              "required": true,
+              "template_internal": false
+            }
+          ]
+        },
+        {
+          "slot_id": "season_calc",
+          "template_field": "Super Bowl - Split 2",
+          "derivation": "none",
+          "role": [
+            "rows",
+            "sort-dimension"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "int(TRIM( SPLIT( SPLIT( [Super Bowl], \"(\", 2 ), \")\", 1 ) ))-1",
+          "formula_refs": [
+            "Super Bowl"
+          ],
+          "depends_on_slots": [
+            "member_label"
+          ],
+          "notes": "int(TRIM(SPLIT(SPLIT([Super Bowl],'(',2),')',1)))-1 — the season year parsed from the parenthetical. The outermost rows dimension and the DESC (newest-first) sort key.",
+          "result_role": "dimension",
+          "inputs": [
+            {
+              "ref": "Super Bowl",
+              "slot_id": "member_label",
+              "slot_kind": "categorical",
+              "required": true,
+              "template_internal": false
+            }
+          ]
+        },
+        {
+          "slot_id": "member_roman_calc",
+          "template_field": "Calculation_3985421141106695",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "\"SB \"+CASE int([Super Bowl - Split 1])&#10;    WHEN 2 THEN \"II\"&#10;    WHEN 3 THEN \"III\"&#10;    WHEN 4 THEN \"IV\"&#10;    WHEN 5 THEN \"V\"&#10;    WHEN 6 THEN \"VI\"&#10;    WHEN 7 THEN \"VII\"&#10;    WHEN 8 THEN \"VIII\"&#10;    WHEN 9 THEN \"IX\"&#10;    WHEN 10 THEN \"X\"&#10;    WHEN 11 THEN \"XI\"&#10;    WHEN 12 THEN \"XII\"&#10;    WHEN 13 THEN \"XIII\"&#10;    WHEN 14 THEN \"XIV\"&#10;    WHEN 15 THEN \"XV\"&#10;    WHEN 16 THEN \"XVI\"&#10;    WHEN 17 THEN \"XVII\"&#10;    WHEN 18 THEN \"XVIII\"&#10;    WHEN 19 THEN \"XIX\"&#10;    WHEN 20 THEN \"XX\"&#10;    WHEN 21 THEN \"XXI\"&#10;    WHEN 22 THEN \"XXII\"&#10;    WHEN 23 THEN \"XXIII\"&#10;    WHEN 24 THEN \"XXIV\"&#10;    WHEN 25 THEN \"XXV\"&#10;    WHEN 26 THEN \"XXVI\"&#10;    WHEN 27 THEN \"XXVII\"&#10;    WHEN 28 THEN \"XXVIII\"&#10;    WHEN 29 THEN \"XXIX\"&#10;    WHEN 30 THEN \"XXX\"&#10;    WHEN 31 THEN \"XXXI\"&#10;    WHEN 32 THEN \"XXXII\"&#10;    WHEN 33 THEN \"XXXIII\"&#10;    WHEN 34 THEN \"XXXIV\"&#10;    WHEN 35 THEN \"XXXV\"&#10;    WHEN 36 THEN \"XXXVI\"&#10;    WHEN 37 THEN \"XXXVII\"&#10;    WHEN 38 THEN \"XXXVIII\"&#10;    WHEN 39 THEN \"XXXIX\"&#10;    WHEN 40 THEN \"XL\"&#10;    WHEN 41 THEN \"XLI\"&#10;    WHEN 42 THEN \"XLII\"&#10;    WHEN 43 THEN \"XLIII\"&#10;    WHEN 44 THEN \"XLIV\"&#10;    WHEN 45 THEN \"XLV\"&#10;    WHEN 46 THEN \"XLVI\"&#10;    WHEN 47 THEN \"XLVII\"&#10;    WHEN 48 THEN \"XLVIII\"&#10;    WHEN 49 THEN \"XLIX\"&#10;    WHEN 50 THEN \"L\"&#10;    WHEN 51 THEN \"LI\"&#10;    WHEN 52 THEN \"LII\"&#10;    WHEN 53 THEN \"LIII\"&#10;    WHEN 54 THEN \"LIV\"&#10;    WHEN 55 THEN \"LV\"&#10;    WHEN 56 THEN \"LVI\"&#10;    WHEN 57 THEN \"LVII\"&#10;    WHEN 58 THEN \"LVIII\"&#10;    WHEN 59 THEN \"LIX\"&#10;    &#10;END",
+          "formula_refs": [
+            "Super Bowl - Split 1"
+          ],
+          "depends_on_slots": [],
+          "notes": "'SB '+CASE int([Super Bowl - Split 1]) WHEN ... — the roman-numeral member label text column (a template-INTERNAL calc consuming the id calc).",
+          "result_role": "dimension",
+          "inputs": [
+            {
+              "ref": "Super Bowl - Split 1",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true,
+              "coercion": "INT"
+            }
+          ]
+        },
+        {
+          "slot_id": "final_split1_calc",
+          "template_field": "Final - Split 1",
+          "derivation": "none",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "TRIM( SPLIT( [Final], \"-\", 1 ) )",
+          "formula_refs": [
+            "Final"
+          ],
+          "depends_on_slots": [
+            "actual_input"
+          ],
+          "notes": "TRIM(SPLIT([Final],'-',1)) — the winner-side token ('KC 25') of the compound score; feeds the winning-score parse.",
+          "result_role": "dimension",
+          "inputs": [
+            {
+              "ref": "Final",
+              "slot_id": "actual_input",
+              "slot_kind": "categorical",
+              "required": true,
+              "template_internal": false
+            }
+          ]
+        },
+        {
+          "slot_id": "winning_score_calc",
+          "template_field": "Final - Split 1 - Split 2",
+          "derivation": "none",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "INT( SPLIT( [Final - Split 1], \" \", 2 ) )",
+          "formula_refs": [
+            "Final - Split 1"
+          ],
+          "depends_on_slots": [],
+          "notes": "INT(SPLIT([Final - Split 1],' ',2)) — the winning team's points (template-INTERNAL: consumes Final - Split 1).",
+          "result_role": "dimension",
+          "inputs": [
+            {
+              "ref": "Final - Split 1",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            }
+          ]
+        },
+        {
+          "slot_id": "losing_score_calc",
+          "template_field": "Final - Split 2",
+          "derivation": "none",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "int(TRIM( SPLIT( [Final], \"-\", 2 ) ))",
+          "formula_refs": [
+            "Final"
+          ],
+          "depends_on_slots": [
+            "actual_input"
+          ],
+          "notes": "int(TRIM(SPLIT([Final],'-',2))) — the losing team's points.",
+          "result_role": "dimension",
+          "inputs": [
+            {
+              "ref": "Final",
+              "slot_id": "actual_input",
+              "slot_kind": "categorical",
+              "required": true,
+              "template_internal": false
+            }
+          ]
+        },
+        {
+          "slot_id": "actual_score_calc",
+          "template_field": "Calculation_3985421010944000",
+          "derivation": "sum",
+          "role": [
+            "cols"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "[Final - Split 1 - Split 2]+[Final - Split 2]",
+          "formula_refs": [
+            "Final - Split 1 - Split 2",
+            "Final - Split 2"
+          ],
+          "depends_on_slots": [],
+          "notes": "[Final - Split 1 - Split 2]+[Final - Split 2] — the actual combined score (winning + losing). The far endpoint of the arrow ([sum:...:qk] on cols) and a template-INTERNAL input to the sign and O/U-diff calcs.",
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Final - Split 1 - Split 2",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            },
+            {
+              "ref": "Final - Split 2",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            }
+          ]
+        },
+        {
+          "slot_id": "over_under_calc",
+          "template_field": "Calculation_3985421012422657",
+          "derivation": "sum",
+          "role": [
+            "color",
+            "shape"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "sign(([Calculation_3985421010944000])-([Total Score Bet]))",
+          "formula_refs": [
+            "Calculation_3985421010944000",
+            "Total Score Bet"
+          ],
+          "depends_on_slots": [
+            "line_measure"
+          ],
+          "notes": "sign(([Calculation_3985421010944000])-([Total Score Bet])) — +1 over / -1 under. Drives BOTH the arrow color and the arrowhead shape encoding. NOTE: the discrete teal/red hue and left/right-triangle glyph MAP is datasource-level style in the golden (dropped by extractWorksheet); this calc only supplies the driving field.",
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Calculation_3985421010944000",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            },
+            {
+              "ref": "Total Score Bet",
+              "slot_id": "line_measure",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ]
+        },
+        {
+          "slot_id": "ou_diff_calc",
+          "template_field": "Over/Under Binary (copy)_3985421014155269",
+          "derivation": "sum",
+          "role": [
+            "cols"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "([Calculation_3985421010944000])-([Total Score Bet])",
+          "formula_refs": [
+            "Calculation_3985421010944000",
+            "Total Score Bet"
+          ],
+          "depends_on_slots": [
+            "line_measure"
+          ],
+          "notes": "([Calculation_3985421010944000])-([Total Score Bet]) — the signed variance from the line. Drives the inline O/U-diff spine (pane 6 Bar + pane 7 Circle) and its +/-43 reference band.",
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Calculation_3985421010944000",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            },
+            {
+              "ref": "Total Score Bet",
+              "slot_id": "line_measure",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ]
+        }
+      ],
+      "hazards": [
+        {
+          "code": "datasource-style-carried",
+          "detail": "CARRIED (fidelity fix): the golden's datasource-level <style-rule element='mark'> value→hue (color palette) + value→glyph (shape) maps (2 color + 2 shape) AND the 1 datasource-scope column-instance declaration(s) they require are captured into manifest.datasource_style and re-spliced on apply (evals/lib/tier1-fastpath.mjs spliceDatasourceStyle) at the proven anchors — column-instance before <layout>, <style> before <semantic-values> — with calc refs namespaced per-apply identically to the worksheet fragment. Previously dropped by extractWorksheet (worksheet-only). Original loss detail: The golden's discrete over/under color palette (teal #76b7b2 over, red #e15759 under) AND the arrowhead shape mapping (:filled/right-triangle over, :filled/left-triangle under) are declared in the DATASOURCE-level <style><style-rule element='mark'> block (golden twb lines 441-460), NOT inside the <worksheet>. scripts/compile-checkpoint-template.mjs extractWorksheet extracts only the <worksheet> element, so this value->hue / value->glyph map is dropped at compile time. The template carries the color/shape ENCODINGS (which field drives them) but the marks fall back to the default palette + default shape on apply. Faithful hue+glyph requires re-injecting the datasource-level mark style; not expressible in the worksheet-only slot-spec.",
+          "xml": "ww-ou-arrow.xml:13"
+        },
+        {
+          "code": "compound-string-parse",
+          "detail": "The actual-score and season/id calcs parse combined tokens out of compound strings via nested SPLIT/TRIM (golden semantics): 'Final' as '<prefix> <winner>-<loser>' and 'Super Bowl' as '<name> (<year>)'. Dataset-shape-specific — a different string shape yields NULL/garbage. Advisory (surfaced via avoid_when + render_verified gate), not a hard fast_path_blocker.",
+          "xml": "ww-ou-arrow.xml:20"
+        },
+        {
+          "code": "raw-formula-refs",
+          "detail": "Calcs reference bare bindable [Super Bowl]/[Final]/[Total Score Bet]; templates.ts rewriteFormulaFieldRefs repairs them on bind because each is a bindable bare-key slot. Template-internal calc-to-calc refs (e.g. [Calculation_3985421010944000]) are intentionally left unmapped.",
+          "xml": "ww-ou-arrow.xml:14"
+        }
+      ],
+      "golden": {
+        "checkpoint_render": "evals/cases/ww-2026-23-gantt-superbowl/golden/Super Bowl by the Numbers.twbx"
+      },
+      "datasource_style": {
+        "style_rule": "<style-rule element='mark'>\n          <encoding attr='color' field='[sum:Calculation_3985421012422657:ok]' type='palette'>\n            <map to='#76b7b2'>\n              <bucket>1</bucket>\n            </map>\n            <map to='#e15759'>\n              <bucket>-1</bucket>\n            </map>\n          </encoding>\n          <encoding attr='shape' field='[sum:Calculation_3985421012422657:ok]' type='shape'>\n            <map to=':filled/left-triangle'>\n              <bucket>-1</bucket>\n            </map>\n            <map to=':filled/right-triangle'>\n              <bucket>1</bucket>\n            </map>\n          </encoding>\n        </style-rule>",
+        "column_instances": [
+          "<column-instance column='[Calculation_3985421012422657]' derivation='Sum' name='[sum:Calculation_3985421012422657:ok]' pivot='key' type='ordinal' />"
+        ],
+        "maps": {
+          "color": 2,
+          "shape": 2
+        }
+      }
+    },
+    {
+      "template": "ww-ou-diff",
+      "family": "deviation",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "ou-diff-spine",
+        "over-under-diff",
+        "spine-diff",
+        "variance-from-line",
+        "diff-lollipop",
+        "super-bowl-diff"
+      ],
+      "description": "O/U-difference spine chart: one gray Bar-from-zero + Circle-dot lollipop per member showing the signed variance of the actual combined score from the betting/reference line, newest-first, with a +/-43 reference band and the same season/id/line label columns. The companion 'diff' view to the ww-ou-arrow chart, isolated from the Super Bowl 'O/U Line' golden worksheet.",
+      "avoid_when": [
+        "the actual field is not a compound '<prefix> <winner>-<loser>' score string — the nested SPLIT/TRIM parse assumes a single-token prefix, a space, then a hyphen-separated winner-loser pair (e.g. 'PHI 40-22')",
+        "the member label is not a '<name> (<year>)' pattern — the season/id split parses the parenthetical year out of it",
+        "you want the over/under direction encoded by hue on this view — the spine marks are intentionally gray; over/under teal/red belongs to the arrow chart"
+      ],
+      "slots": [
+        {
+          "slot_id": "member_label",
+          "template_field": "Super Bowl",
+          "derivation": "none",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "Compound member label '<name> (<year>)'. SPLIT-parsed by the season and id calcs into the row header text columns. Never shelved raw."
+        },
+        {
+          "slot_id": "actual_input",
+          "template_field": "Final",
+          "derivation": "none",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "Compound-score STRING SPLIT-parsed into winning + losing scores that sum to the actual combined score feeding the O/U-diff. Never shelved raw."
+        },
+        {
+          "slot_id": "line_measure",
+          "template_field": "Total Score Bet",
+          "derivation": "sum",
+          "role": [
+            "rows",
+            "formula-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The O/U betting line. Shown as a discrete text label column on rows ([sum:Total Score Bet:ok]) and used as the subtrahend of the O/U-diff calc."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "member_id_calc",
+          "template_field": "Super Bowl - Split 1",
+          "derivation": "none",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "TRIM( SPLIT( [Super Bowl], \"(\", 1 ) )",
+          "formula_refs": [
+            "Super Bowl"
+          ],
+          "depends_on_slots": [
+            "member_label"
+          ],
+          "notes": "TRIM(SPLIT([Super Bowl],'(',1)) — member name/id before the parenthetical year; feeds the SB # roman-numeral label calc.",
+          "result_role": "dimension",
+          "inputs": [
+            {
+              "ref": "Super Bowl",
+              "slot_id": "member_label",
+              "slot_kind": "categorical",
+              "required": true,
+              "template_internal": false
+            }
+          ]
+        },
+        {
+          "slot_id": "season_calc",
+          "template_field": "Super Bowl - Split 2",
+          "derivation": "none",
+          "role": [
+            "rows",
+            "sort-dimension"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "int(TRIM( SPLIT( SPLIT( [Super Bowl], \"(\", 2 ), \")\", 1 ) ))-1",
+          "formula_refs": [
+            "Super Bowl"
+          ],
+          "depends_on_slots": [
+            "member_label"
+          ],
+          "notes": "int(TRIM(SPLIT(SPLIT([Super Bowl],'(',2),')',1)))-1 — the season year. Outermost rows dimension and the DESC (newest-first) sort key.",
+          "result_role": "dimension",
+          "inputs": [
+            {
+              "ref": "Super Bowl",
+              "slot_id": "member_label",
+              "slot_kind": "categorical",
+              "required": true,
+              "template_internal": false
+            }
+          ]
+        },
+        {
+          "slot_id": "member_roman_calc",
+          "template_field": "Calculation_3985421141106695",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "\"SB \"+CASE int([Super Bowl - Split 1])&#10;    WHEN 2 THEN \"II\"&#10;    WHEN 3 THEN \"III\"&#10;    WHEN 4 THEN \"IV\"&#10;    WHEN 5 THEN \"V\"&#10;    WHEN 6 THEN \"VI\"&#10;    WHEN 7 THEN \"VII\"&#10;    WHEN 8 THEN \"VIII\"&#10;    WHEN 9 THEN \"IX\"&#10;    WHEN 10 THEN \"X\"&#10;    WHEN 11 THEN \"XI\"&#10;    WHEN 12 THEN \"XII\"&#10;    WHEN 13 THEN \"XIII\"&#10;    WHEN 14 THEN \"XIV\"&#10;    WHEN 15 THEN \"XV\"&#10;    WHEN 16 THEN \"XVI\"&#10;    WHEN 17 THEN \"XVII\"&#10;    WHEN 18 THEN \"XVIII\"&#10;    WHEN 19 THEN \"XIX\"&#10;    WHEN 20 THEN \"XX\"&#10;    WHEN 21 THEN \"XXI\"&#10;    WHEN 22 THEN \"XXII\"&#10;    WHEN 23 THEN \"XXIII\"&#10;    WHEN 24 THEN \"XXIV\"&#10;    WHEN 25 THEN \"XXV\"&#10;    WHEN 26 THEN \"XXVI\"&#10;    WHEN 27 THEN \"XXVII\"&#10;    WHEN 28 THEN \"XXVIII\"&#10;    WHEN 29 THEN \"XXIX\"&#10;    WHEN 30 THEN \"XXX\"&#10;    WHEN 31 THEN \"XXXI\"&#10;    WHEN 32 THEN \"XXXII\"&#10;    WHEN 33 THEN \"XXXIII\"&#10;    WHEN 34 THEN \"XXXIV\"&#10;    WHEN 35 THEN \"XXXV\"&#10;    WHEN 36 THEN \"XXXVI\"&#10;    WHEN 37 THEN \"XXXVII\"&#10;    WHEN 38 THEN \"XXXVIII\"&#10;    WHEN 39 THEN \"XXXIX\"&#10;    WHEN 40 THEN \"XL\"&#10;    WHEN 41 THEN \"XLI\"&#10;    WHEN 42 THEN \"XLII\"&#10;    WHEN 43 THEN \"XLIII\"&#10;    WHEN 44 THEN \"XLIV\"&#10;    WHEN 45 THEN \"XLV\"&#10;    WHEN 46 THEN \"XLVI\"&#10;    WHEN 47 THEN \"XLVII\"&#10;    WHEN 48 THEN \"XLVIII\"&#10;    WHEN 49 THEN \"XLIX\"&#10;    WHEN 50 THEN \"L\"&#10;    WHEN 51 THEN \"LI\"&#10;    WHEN 52 THEN \"LII\"&#10;    WHEN 53 THEN \"LIII\"&#10;    WHEN 54 THEN \"LIV\"&#10;    WHEN 55 THEN \"LV\"&#10;    WHEN 56 THEN \"LVI\"&#10;    WHEN 57 THEN \"LVII\"&#10;    WHEN 58 THEN \"LVIII\"&#10;    WHEN 59 THEN \"LIX\"&#10;    &#10;END",
+          "formula_refs": [
+            "Super Bowl - Split 1"
+          ],
+          "depends_on_slots": [],
+          "notes": "'SB '+CASE int([Super Bowl - Split 1]) WHEN ... — the roman-numeral member label text column (template-INTERNAL: consumes the id calc).",
+          "result_role": "dimension",
+          "inputs": [
+            {
+              "ref": "Super Bowl - Split 1",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true,
+              "coercion": "INT"
+            }
+          ]
+        },
+        {
+          "slot_id": "final_split1_calc",
+          "template_field": "Final - Split 1",
+          "derivation": "none",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "TRIM( SPLIT( [Final], \"-\", 1 ) )",
+          "formula_refs": [
+            "Final"
+          ],
+          "depends_on_slots": [
+            "actual_input"
+          ],
+          "notes": "TRIM(SPLIT([Final],'-',1)) — the winner-side token of the compound score.",
+          "result_role": "dimension",
+          "inputs": [
+            {
+              "ref": "Final",
+              "slot_id": "actual_input",
+              "slot_kind": "categorical",
+              "required": true,
+              "template_internal": false
+            }
+          ]
+        },
+        {
+          "slot_id": "winning_score_calc",
+          "template_field": "Final - Split 1 - Split 2",
+          "derivation": "none",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "INT( SPLIT( [Final - Split 1], \" \", 2 ) )",
+          "formula_refs": [
+            "Final - Split 1"
+          ],
+          "depends_on_slots": [],
+          "notes": "INT(SPLIT([Final - Split 1],' ',2)) — the winning team's points (template-INTERNAL).",
+          "result_role": "dimension",
+          "inputs": [
+            {
+              "ref": "Final - Split 1",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            }
+          ]
+        },
+        {
+          "slot_id": "losing_score_calc",
+          "template_field": "Final - Split 2",
+          "derivation": "none",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "int(TRIM( SPLIT( [Final], \"-\", 2 ) ))",
+          "formula_refs": [
+            "Final"
+          ],
+          "depends_on_slots": [
+            "actual_input"
+          ],
+          "notes": "int(TRIM(SPLIT([Final],'-',2))) — the losing team's points.",
+          "result_role": "dimension",
+          "inputs": [
+            {
+              "ref": "Final",
+              "slot_id": "actual_input",
+              "slot_kind": "categorical",
+              "required": true,
+              "template_internal": false
+            }
+          ]
+        },
+        {
+          "slot_id": "actual_score_calc",
+          "template_field": "Calculation_3985421010944000",
+          "derivation": "sum",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "[Final - Split 1 - Split 2]+[Final - Split 2]",
+          "formula_refs": [
+            "Final - Split 1 - Split 2",
+            "Final - Split 2"
+          ],
+          "depends_on_slots": [],
+          "notes": "[Final - Split 1 - Split 2]+[Final - Split 2] — the actual combined score (template-INTERNAL input to the O/U-diff calc; not shelved directly in the diff view).",
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Final - Split 1 - Split 2",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            },
+            {
+              "ref": "Final - Split 2",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            }
+          ]
+        },
+        {
+          "slot_id": "over_under_calc",
+          "template_field": "Calculation_3985421012422657",
+          "derivation": "sum",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "sign(([Calculation_3985421010944000])-([Total Score Bet]))",
+          "formula_refs": [
+            "Calculation_3985421010944000",
+            "Total Score Bet"
+          ],
+          "depends_on_slots": [
+            "line_measure"
+          ],
+          "notes": "sign(([Calculation_3985421010944000])-([Total Score Bet])) — RESIDUAL datasource calc (present in the golden datasource) but NOT shelved in the diff view (the spine is gray). Kept so the diff and arrow share one datasource calc set.",
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Calculation_3985421010944000",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            },
+            {
+              "ref": "Total Score Bet",
+              "slot_id": "line_measure",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ]
+        },
+        {
+          "slot_id": "ou_diff_calc",
+          "template_field": "Over/Under Binary (copy)_3985421014155269",
+          "derivation": "sum",
+          "role": [
+            "cols"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "([Calculation_3985421010944000])-([Total Score Bet])",
+          "formula_refs": [
+            "Calculation_3985421010944000",
+            "Total Score Bet"
+          ],
+          "depends_on_slots": [
+            "line_measure"
+          ],
+          "notes": "([Calculation_3985421010944000])-([Total Score Bet]) — the signed variance from the line. The spine axis: pane 6 Bar-from-zero + pane 7 Circle dot, with the +/-43 reference band.",
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Calculation_3985421010944000",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            },
+            {
+              "ref": "Total Score Bet",
+              "slot_id": "line_measure",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ]
+        }
+      ],
+      "hazards": [
+        {
+          "code": "derived-from-combined-worksheet",
+          "detail": "The golden has ONE combined worksheet; this diff-only view is a documented derivation of it (cols restricted to the O/U-diff spine, arrow panes 3/4/5 removed, +/-43 reference lines relocated into the Bar pane). It could NOT be live-render-verified in this environment (no MCP apply tools), so render_verified stays 'none'. Renderability of the isolated spine is a residual risk until a live golden-match.",
+          "xml": "ww-ou-diff.xml:29"
+        },
+        {
+          "code": "compound-string-parse",
+          "detail": "The actual-score and season/id calcs parse combined tokens out of compound strings via nested SPLIT/TRIM (golden semantics). Dataset-shape-specific — a different string shape yields NULL/garbage. Advisory, not a hard fast_path_blocker.",
+          "xml": "ww-ou-diff.xml:20"
+        },
+        {
+          "code": "raw-formula-refs",
+          "detail": "Calcs reference bare bindable [Super Bowl]/[Final]/[Total Score Bet]; templates.ts rewriteFormulaFieldRefs repairs them on bind. Template-internal calc-to-calc refs are left unmapped.",
+          "xml": "ww-ou-diff.xml:14"
+        }
+      ],
+      "golden": {
+        "checkpoint_render": "evals/cases/ww-2026-23-gantt-superbowl/golden/Super Bowl by the Numbers.twbx"
+      }
+    }
+  ]
+}

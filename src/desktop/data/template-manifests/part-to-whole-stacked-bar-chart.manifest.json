@@ -1,0 +1,42 @@
+{
+  "template": "part-to-whole-stacked-bar-chart",
+  "family": "part-to-whole",
+  "readiness": "GREEN",
+  "fast_path_eligible": true,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "live-2026-07-05",
+    "render_evidence": {
+      "basis": "hand-stamp: live render + structural parity + human review",
+      "lane": "W2-R008 live-verify 2026-07-05",
+      "structural": 0.97297,
+      "critical_pass": "5/5",
+      "high_pass": "3/3",
+      "pixel_oracle": "none (anchor-only comparison is circular; not credited)",
+      "gate_composite": null
+    }
+  },
+  "datasource_placeholder": true,
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["stacked-bar", "part-to-whole", "composition", "proportion", "share", "breakdown"],
+  "description": "Horizontal bars per category (rows) whose length is a measure, segmented by a second dimension (color); sorted by the measure.",
+  "slots": [
+    { "slot_id": "region", "template_field": "Region", "derivation": "none",
+      "role": ["rows", "sort-dimension"], "kind": "categorical", "bindable": true, "required": true,
+      "notes": "template column has aggregate-role-from='[State/Province]'; cosmetic secondary-role hint carried onto the target (verification-report correction: GREEN -> YELLOW)." },
+    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
+      "role": ["cols", "sort-measure"], "kind": "quantitative", "bindable": true, "required": true },
+    { "slot_id": "category", "template_field": "Category", "derivation": "none",
+      "role": ["color"], "kind": "categorical", "bindable": true, "required": true }
+  ],
+  "calcs": [],
+  "hazards": [
+    { "code": "shelf-sort-pill-coupling",
+      "detail": "shelf-sort-v2 sorts [none:Region:nk] by measure [sum:Sales:qk]; both slots must bind or the sort dangles (both required, satisfied by coverage).",
+      "xml": "part-to-whole-stacked-bar-chart.xml:18" },
+    { "code": "hidden-aggregate-role-from",
+      "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
+      "xml": "part-to-whole-stacked-bar-chart.xml:11" }
+  ]
+}

@@ -1,0 +1,384 @@
+{
+  "template": "ww-ou-arrow",
+  "family": "deviation",
+  "readiness": "GREEN",
+  "fast_path_eligible": true,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "live-2026-07-05"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "arrow-chart",
+    "over-under-arrow",
+    "points-vs-line",
+    "dual-mark-arrow",
+    "super-bowl-ou",
+    "newest-first-arrow"
+  ],
+  "description": "Dual-mark arrow chart (Line shaft + Shape arrowhead) comparing an actual combined score to a betting/reference line per member, newest-first, with text label columns (season / id / line) and an inline O/U-diff spine. Arrows point right/teal when the actual finished OVER the line and left/red when UNDER, colored by a SIGN(actual - line) calc. Faithful compile of the Super Bowl 'O/U Line' golden worksheet.",
+  "avoid_when": [
+    "the actual field is not a compound '<prefix> <winner>-<loser>' score string \u2014 the nested SPLIT/TRIM parse assumes a single-token prefix, a space, then a hyphen-separated winner-loser pair (e.g. 'PHI 40-22'); a different shape parses the wrong combined score",
+    "the row identifier is not a '<name> (<year>)' pattern \u2014 the season/id split parses the parenthetical year out of the member label",
+    "distinct teal/red over/under hue and the left/right arrowhead glyphs are required on first render \u2014 that palette+shape mapping is datasource-level style in the golden and is NOT carried by this worksheet-only template (see hazards datasource-style-dropped)"
+  ],
+  "slots": [
+    {
+      "slot_id": "member_label",
+      "template_field": "Super Bowl",
+      "derivation": "none",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "The compound member label '<name> (<year>)' (e.g. 'Super Bowl LIX (2024)'). SPLIT-parsed by the season and id calcs into the row header text columns. Never shelved raw."
+    },
+    {
+      "slot_id": "actual_input",
+      "template_field": "Final",
+      "derivation": "none",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "Compound-score STRING (e.g. 'KC 25-22') SPLIT-parsed into winning + losing scores that sum to the actual combined score. Never shelved raw."
+    },
+    {
+      "slot_id": "line_measure",
+      "template_field": "Total Score Bet",
+      "derivation": "sum",
+      "role": [
+        "rows",
+        "cols",
+        "formula-input"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "The O/U betting line. Shown as a discrete text label column on rows ([sum:Total Score Bet:ok]), as an endpoint of the arrow's shared measure axis ([sum:Total Score Bet:qk]), and as the subtrahend of the over/under sign and O/U-diff calcs."
+    }
+  ],
+  "calcs": [
+    {
+      "slot_id": "member_id_calc",
+      "template_field": "Super Bowl - Split 1",
+      "derivation": "none",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "TRIM( SPLIT( [Super Bowl], \"(\", 1 ) )",
+      "formula_refs": [
+        "Super Bowl"
+      ],
+      "depends_on_slots": [
+        "member_label"
+      ],
+      "notes": "TRIM(SPLIT([Super Bowl],'(',1)) \u2014 the member name/id before the parenthetical year; feeds the SB # roman-numeral label calc.",
+      "result_role": "dimension",
+      "inputs": [
+        {
+          "ref": "Super Bowl",
+          "slot_id": "member_label",
+          "slot_kind": "categorical",
+          "required": true,
+          "template_internal": false
+        }
+      ]
+    },
+    {
+      "slot_id": "season_calc",
+      "template_field": "Super Bowl - Split 2",
+      "derivation": "none",
+      "role": [
+        "rows",
+        "sort-dimension"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "int(TRIM( SPLIT( SPLIT( [Super Bowl], \"(\", 2 ), \")\", 1 ) ))-1",
+      "formula_refs": [
+        "Super Bowl"
+      ],
+      "depends_on_slots": [
+        "member_label"
+      ],
+      "notes": "int(TRIM(SPLIT(SPLIT([Super Bowl],'(',2),')',1)))-1 \u2014 the season year parsed from the parenthetical. The outermost rows dimension and the DESC (newest-first) sort key.",
+      "result_role": "dimension",
+      "inputs": [
+        {
+          "ref": "Super Bowl",
+          "slot_id": "member_label",
+          "slot_kind": "categorical",
+          "required": true,
+          "template_internal": false
+        }
+      ]
+    },
+    {
+      "slot_id": "member_roman_calc",
+      "template_field": "Calculation_3985421141106695",
+      "derivation": "none",
+      "role": [
+        "rows"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "\"SB \"+CASE int([Super Bowl - Split 1])&#10;    WHEN 2 THEN \"II\"&#10;    WHEN 3 THEN \"III\"&#10;    WHEN 4 THEN \"IV\"&#10;    WHEN 5 THEN \"V\"&#10;    WHEN 6 THEN \"VI\"&#10;    WHEN 7 THEN \"VII\"&#10;    WHEN 8 THEN \"VIII\"&#10;    WHEN 9 THEN \"IX\"&#10;    WHEN 10 THEN \"X\"&#10;    WHEN 11 THEN \"XI\"&#10;    WHEN 12 THEN \"XII\"&#10;    WHEN 13 THEN \"XIII\"&#10;    WHEN 14 THEN \"XIV\"&#10;    WHEN 15 THEN \"XV\"&#10;    WHEN 16 THEN \"XVI\"&#10;    WHEN 17 THEN \"XVII\"&#10;    WHEN 18 THEN \"XVIII\"&#10;    WHEN 19 THEN \"XIX\"&#10;    WHEN 20 THEN \"XX\"&#10;    WHEN 21 THEN \"XXI\"&#10;    WHEN 22 THEN \"XXII\"&#10;    WHEN 23 THEN \"XXIII\"&#10;    WHEN 24 THEN \"XXIV\"&#10;    WHEN 25 THEN \"XXV\"&#10;    WHEN 26 THEN \"XXVI\"&#10;    WHEN 27 THEN \"XXVII\"&#10;    WHEN 28 THEN \"XXVIII\"&#10;    WHEN 29 THEN \"XXIX\"&#10;    WHEN 30 THEN \"XXX\"&#10;    WHEN 31 THEN \"XXXI\"&#10;    WHEN 32 THEN \"XXXII\"&#10;    WHEN 33 THEN \"XXXIII\"&#10;    WHEN 34 THEN \"XXXIV\"&#10;    WHEN 35 THEN \"XXXV\"&#10;    WHEN 36 THEN \"XXXVI\"&#10;    WHEN 37 THEN \"XXXVII\"&#10;    WHEN 38 THEN \"XXXVIII\"&#10;    WHEN 39 THEN \"XXXIX\"&#10;    WHEN 40 THEN \"XL\"&#10;    WHEN 41 THEN \"XLI\"&#10;    WHEN 42 THEN \"XLII\"&#10;    WHEN 43 THEN \"XLIII\"&#10;    WHEN 44 THEN \"XLIV\"&#10;    WHEN 45 THEN \"XLV\"&#10;    WHEN 46 THEN \"XLVI\"&#10;    WHEN 47 THEN \"XLVII\"&#10;    WHEN 48 THEN \"XLVIII\"&#10;    WHEN 49 THEN \"XLIX\"&#10;    WHEN 50 THEN \"L\"&#10;    WHEN 51 THEN \"LI\"&#10;    WHEN 52 THEN \"LII\"&#10;    WHEN 53 THEN \"LIII\"&#10;    WHEN 54 THEN \"LIV\"&#10;    WHEN 55 THEN \"LV\"&#10;    WHEN 56 THEN \"LVI\"&#10;    WHEN 57 THEN \"LVII\"&#10;    WHEN 58 THEN \"LVIII\"&#10;    WHEN 59 THEN \"LIX\"&#10;    &#10;END",
+      "formula_refs": [
+        "Super Bowl - Split 1"
+      ],
+      "depends_on_slots": [],
+      "notes": "'SB '+CASE int([Super Bowl - Split 1]) WHEN ... \u2014 the roman-numeral member label text column (a template-INTERNAL calc consuming the id calc).",
+      "result_role": "dimension",
+      "inputs": [
+        {
+          "ref": "Super Bowl - Split 1",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true,
+          "coercion": "INT"
+        }
+      ]
+    },
+    {
+      "slot_id": "final_split1_calc",
+      "template_field": "Final - Split 1",
+      "derivation": "none",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "TRIM( SPLIT( [Final], \"-\", 1 ) )",
+      "formula_refs": [
+        "Final"
+      ],
+      "depends_on_slots": [
+        "actual_input"
+      ],
+      "notes": "TRIM(SPLIT([Final],'-',1)) \u2014 the winner-side token ('KC 25') of the compound score; feeds the winning-score parse.",
+      "result_role": "dimension",
+      "inputs": [
+        {
+          "ref": "Final",
+          "slot_id": "actual_input",
+          "slot_kind": "categorical",
+          "required": true,
+          "template_internal": false
+        }
+      ]
+    },
+    {
+      "slot_id": "winning_score_calc",
+      "template_field": "Final - Split 1 - Split 2",
+      "derivation": "none",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "INT( SPLIT( [Final - Split 1], \" \", 2 ) )",
+      "formula_refs": [
+        "Final - Split 1"
+      ],
+      "depends_on_slots": [],
+      "notes": "INT(SPLIT([Final - Split 1],' ',2)) \u2014 the winning team's points (template-INTERNAL: consumes Final - Split 1).",
+      "result_role": "dimension",
+      "inputs": [
+        {
+          "ref": "Final - Split 1",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        }
+      ]
+    },
+    {
+      "slot_id": "losing_score_calc",
+      "template_field": "Final - Split 2",
+      "derivation": "none",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "int(TRIM( SPLIT( [Final], \"-\", 2 ) ))",
+      "formula_refs": [
+        "Final"
+      ],
+      "depends_on_slots": [
+        "actual_input"
+      ],
+      "notes": "int(TRIM(SPLIT([Final],'-',2))) \u2014 the losing team's points.",
+      "result_role": "dimension",
+      "inputs": [
+        {
+          "ref": "Final",
+          "slot_id": "actual_input",
+          "slot_kind": "categorical",
+          "required": true,
+          "template_internal": false
+        }
+      ]
+    },
+    {
+      "slot_id": "actual_score_calc",
+      "template_field": "Calculation_3985421010944000",
+      "derivation": "sum",
+      "role": [
+        "cols"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "[Final - Split 1 - Split 2]+[Final - Split 2]",
+      "formula_refs": [
+        "Final - Split 1 - Split 2",
+        "Final - Split 2"
+      ],
+      "depends_on_slots": [],
+      "notes": "[Final - Split 1 - Split 2]+[Final - Split 2] \u2014 the actual combined score (winning + losing). The far endpoint of the arrow ([sum:...:qk] on cols) and a template-INTERNAL input to the sign and O/U-diff calcs.",
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Final - Split 1 - Split 2",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        },
+        {
+          "ref": "Final - Split 2",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        }
+      ]
+    },
+    {
+      "slot_id": "over_under_calc",
+      "template_field": "Calculation_3985421012422657",
+      "derivation": "sum",
+      "role": [
+        "color",
+        "shape"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "sign(([Calculation_3985421010944000])-([Total Score Bet]))",
+      "formula_refs": [
+        "Calculation_3985421010944000",
+        "Total Score Bet"
+      ],
+      "depends_on_slots": [
+        "line_measure"
+      ],
+      "notes": "sign(([Calculation_3985421010944000])-([Total Score Bet])) \u2014 +1 over / -1 under. Drives BOTH the arrow color and the arrowhead shape encoding. NOTE: the discrete teal/red hue and left/right-triangle glyph MAP is datasource-level style in the golden (dropped by extractWorksheet); this calc only supplies the driving field.",
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Calculation_3985421010944000",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        },
+        {
+          "ref": "Total Score Bet",
+          "slot_id": "line_measure",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        }
+      ]
+    },
+    {
+      "slot_id": "ou_diff_calc",
+      "template_field": "Over/Under Binary (copy)_3985421014155269",
+      "derivation": "sum",
+      "role": [
+        "cols"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "([Calculation_3985421010944000])-([Total Score Bet])",
+      "formula_refs": [
+        "Calculation_3985421010944000",
+        "Total Score Bet"
+      ],
+      "depends_on_slots": [
+        "line_measure"
+      ],
+      "notes": "([Calculation_3985421010944000])-([Total Score Bet]) \u2014 the signed variance from the line. Drives the inline O/U-diff spine (pane 6 Bar + pane 7 Circle) and its +/-43 reference band.",
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Calculation_3985421010944000",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        },
+        {
+          "ref": "Total Score Bet",
+          "slot_id": "line_measure",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        }
+      ]
+    }
+  ],
+  "hazards": [
+    {
+      "code": "datasource-style-carried",
+      "detail": "CARRIED (fidelity fix): the golden's datasource-level <style-rule element='mark'> value\u2192hue (color palette) + value\u2192glyph (shape) maps (2 color + 2 shape) AND the 1 datasource-scope column-instance declaration(s) they require are captured into manifest.datasource_style and re-spliced on apply (evals/lib/tier1-fastpath.mjs spliceDatasourceStyle) at the proven anchors \u2014 column-instance before <layout>, <style> before <semantic-values> \u2014 with calc refs namespaced per-apply identically to the worksheet fragment. Previously dropped by extractWorksheet (worksheet-only). Original loss detail: The golden's discrete over/under color palette (teal #76b7b2 over, red #e15759 under) AND the arrowhead shape mapping (:filled/right-triangle over, :filled/left-triangle under) are declared in the DATASOURCE-level <style><style-rule element='mark'> block (golden twb lines 441-460), NOT inside the <worksheet>. scripts/compile-checkpoint-template.mjs extractWorksheet extracts only the <worksheet> element, so this value->hue / value->glyph map is dropped at compile time. The template carries the color/shape ENCODINGS (which field drives them) but the marks fall back to the default palette + default shape on apply. Faithful hue+glyph requires re-injecting the datasource-level mark style; not expressible in the worksheet-only slot-spec.",
+      "xml": "ww-ou-arrow.xml:13"
+    },
+    {
+      "code": "compound-string-parse",
+      "detail": "The actual-score and season/id calcs parse combined tokens out of compound strings via nested SPLIT/TRIM (golden semantics): 'Final' as '<prefix> <winner>-<loser>' and 'Super Bowl' as '<name> (<year>)'. Dataset-shape-specific \u2014 a different string shape yields NULL/garbage. Advisory (surfaced via avoid_when + render_verified gate), not a hard fast_path_blocker.",
+      "xml": "ww-ou-arrow.xml:20"
+    },
+    {
+      "code": "raw-formula-refs",
+      "detail": "Calcs reference bare bindable [Super Bowl]/[Final]/[Total Score Bet]; templates.ts rewriteFormulaFieldRefs repairs them on bind because each is a bindable bare-key slot. Template-internal calc-to-calc refs (e.g. [Calculation_3985421010944000]) are intentionally left unmapped.",
+      "xml": "ww-ou-arrow.xml:14"
+    }
+  ],
+  "golden": {
+    "checkpoint_render": "evals/cases/ww-2026-23-gantt-superbowl/golden/Super Bowl by the Numbers.twbx"
+  },
+  "datasource_style": {
+    "style_rule": "<style-rule element='mark'>\n          <encoding attr='color' field='[sum:Calculation_3985421012422657:ok]' type='palette'>\n            <map to='#76b7b2'>\n              <bucket>1</bucket>\n            </map>\n            <map to='#e15759'>\n              <bucket>-1</bucket>\n            </map>\n          </encoding>\n          <encoding attr='shape' field='[sum:Calculation_3985421012422657:ok]' type='shape'>\n            <map to=':filled/left-triangle'>\n              <bucket>-1</bucket>\n            </map>\n            <map to=':filled/right-triangle'>\n              <bucket>1</bucket>\n            </map>\n          </encoding>\n        </style-rule>",
+    "column_instances": [
+      "<column-instance column='[Calculation_3985421012422657]' derivation='Sum' name='[sum:Calculation_3985421012422657:ok]' pivot='key' type='ordinal' />"
+    ],
+    "maps": {
+      "color": 2,
+      "shape": 2
+    }
+  }
+}

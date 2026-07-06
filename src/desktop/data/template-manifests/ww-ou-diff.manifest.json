@@ -1,0 +1,372 @@
+{
+  "template": "ww-ou-diff",
+  "family": "deviation",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "ou-diff-spine",
+    "over-under-diff",
+    "spine-diff",
+    "variance-from-line",
+    "diff-lollipop",
+    "super-bowl-diff"
+  ],
+  "description": "O/U-difference spine chart: one gray Bar-from-zero + Circle-dot lollipop per member showing the signed variance of the actual combined score from the betting/reference line, newest-first, with a +/-43 reference band and the same season/id/line label columns. The companion 'diff' view to the ww-ou-arrow chart, isolated from the Super Bowl 'O/U Line' golden worksheet.",
+  "avoid_when": [
+    "the actual field is not a compound '<prefix> <winner>-<loser>' score string — the nested SPLIT/TRIM parse assumes a single-token prefix, a space, then a hyphen-separated winner-loser pair (e.g. 'PHI 40-22')",
+    "the member label is not a '<name> (<year>)' pattern — the season/id split parses the parenthetical year out of it",
+    "you want the over/under direction encoded by hue on this view — the spine marks are intentionally gray; over/under teal/red belongs to the arrow chart"
+  ],
+  "slots": [
+    {
+      "slot_id": "member_label",
+      "template_field": "Super Bowl",
+      "derivation": "none",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "Compound member label '<name> (<year>)'. SPLIT-parsed by the season and id calcs into the row header text columns. Never shelved raw."
+    },
+    {
+      "slot_id": "actual_input",
+      "template_field": "Final",
+      "derivation": "none",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "Compound-score STRING SPLIT-parsed into winning + losing scores that sum to the actual combined score feeding the O/U-diff. Never shelved raw."
+    },
+    {
+      "slot_id": "line_measure",
+      "template_field": "Total Score Bet",
+      "derivation": "sum",
+      "role": [
+        "rows",
+        "formula-input"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "The O/U betting line. Shown as a discrete text label column on rows ([sum:Total Score Bet:ok]) and used as the subtrahend of the O/U-diff calc."
+    }
+  ],
+  "calcs": [
+    {
+      "slot_id": "member_id_calc",
+      "template_field": "Super Bowl - Split 1",
+      "derivation": "none",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "TRIM( SPLIT( [Super Bowl], \"(\", 1 ) )",
+      "formula_refs": [
+        "Super Bowl"
+      ],
+      "depends_on_slots": [
+        "member_label"
+      ],
+      "notes": "TRIM(SPLIT([Super Bowl],'(',1)) — member name/id before the parenthetical year; feeds the SB # roman-numeral label calc.",
+      "result_role": "dimension",
+      "inputs": [
+        {
+          "ref": "Super Bowl",
+          "slot_id": "member_label",
+          "slot_kind": "categorical",
+          "required": true,
+          "template_internal": false
+        }
+      ]
+    },
+    {
+      "slot_id": "season_calc",
+      "template_field": "Super Bowl - Split 2",
+      "derivation": "none",
+      "role": [
+        "rows",
+        "sort-dimension"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "int(TRIM( SPLIT( SPLIT( [Super Bowl], \"(\", 2 ), \")\", 1 ) ))-1",
+      "formula_refs": [
+        "Super Bowl"
+      ],
+      "depends_on_slots": [
+        "member_label"
+      ],
+      "notes": "int(TRIM(SPLIT(SPLIT([Super Bowl],'(',2),')',1)))-1 — the season year. Outermost rows dimension and the DESC (newest-first) sort key.",
+      "result_role": "dimension",
+      "inputs": [
+        {
+          "ref": "Super Bowl",
+          "slot_id": "member_label",
+          "slot_kind": "categorical",
+          "required": true,
+          "template_internal": false
+        }
+      ]
+    },
+    {
+      "slot_id": "member_roman_calc",
+      "template_field": "Calculation_3985421141106695",
+      "derivation": "none",
+      "role": [
+        "rows"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "\"SB \"+CASE int([Super Bowl - Split 1])&#10;    WHEN 2 THEN \"II\"&#10;    WHEN 3 THEN \"III\"&#10;    WHEN 4 THEN \"IV\"&#10;    WHEN 5 THEN \"V\"&#10;    WHEN 6 THEN \"VI\"&#10;    WHEN 7 THEN \"VII\"&#10;    WHEN 8 THEN \"VIII\"&#10;    WHEN 9 THEN \"IX\"&#10;    WHEN 10 THEN \"X\"&#10;    WHEN 11 THEN \"XI\"&#10;    WHEN 12 THEN \"XII\"&#10;    WHEN 13 THEN \"XIII\"&#10;    WHEN 14 THEN \"XIV\"&#10;    WHEN 15 THEN \"XV\"&#10;    WHEN 16 THEN \"XVI\"&#10;    WHEN 17 THEN \"XVII\"&#10;    WHEN 18 THEN \"XVIII\"&#10;    WHEN 19 THEN \"XIX\"&#10;    WHEN 20 THEN \"XX\"&#10;    WHEN 21 THEN \"XXI\"&#10;    WHEN 22 THEN \"XXII\"&#10;    WHEN 23 THEN \"XXIII\"&#10;    WHEN 24 THEN \"XXIV\"&#10;    WHEN 25 THEN \"XXV\"&#10;    WHEN 26 THEN \"XXVI\"&#10;    WHEN 27 THEN \"XXVII\"&#10;    WHEN 28 THEN \"XXVIII\"&#10;    WHEN 29 THEN \"XXIX\"&#10;    WHEN 30 THEN \"XXX\"&#10;    WHEN 31 THEN \"XXXI\"&#10;    WHEN 32 THEN \"XXXII\"&#10;    WHEN 33 THEN \"XXXIII\"&#10;    WHEN 34 THEN \"XXXIV\"&#10;    WHEN 35 THEN \"XXXV\"&#10;    WHEN 36 THEN \"XXXVI\"&#10;    WHEN 37 THEN \"XXXVII\"&#10;    WHEN 38 THEN \"XXXVIII\"&#10;    WHEN 39 THEN \"XXXIX\"&#10;    WHEN 40 THEN \"XL\"&#10;    WHEN 41 THEN \"XLI\"&#10;    WHEN 42 THEN \"XLII\"&#10;    WHEN 43 THEN \"XLIII\"&#10;    WHEN 44 THEN \"XLIV\"&#10;    WHEN 45 THEN \"XLV\"&#10;    WHEN 46 THEN \"XLVI\"&#10;    WHEN 47 THEN \"XLVII\"&#10;    WHEN 48 THEN \"XLVIII\"&#10;    WHEN 49 THEN \"XLIX\"&#10;    WHEN 50 THEN \"L\"&#10;    WHEN 51 THEN \"LI\"&#10;    WHEN 52 THEN \"LII\"&#10;    WHEN 53 THEN \"LIII\"&#10;    WHEN 54 THEN \"LIV\"&#10;    WHEN 55 THEN \"LV\"&#10;    WHEN 56 THEN \"LVI\"&#10;    WHEN 57 THEN \"LVII\"&#10;    WHEN 58 THEN \"LVIII\"&#10;    WHEN 59 THEN \"LIX\"&#10;    &#10;END",
+      "formula_refs": [
+        "Super Bowl - Split 1"
+      ],
+      "depends_on_slots": [],
+      "notes": "'SB '+CASE int([Super Bowl - Split 1]) WHEN ... — the roman-numeral member label text column (template-INTERNAL: consumes the id calc).",
+      "result_role": "dimension",
+      "inputs": [
+        {
+          "ref": "Super Bowl - Split 1",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true,
+          "coercion": "INT"
+        }
+      ]
+    },
+    {
+      "slot_id": "final_split1_calc",
+      "template_field": "Final - Split 1",
+      "derivation": "none",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "TRIM( SPLIT( [Final], \"-\", 1 ) )",
+      "formula_refs": [
+        "Final"
+      ],
+      "depends_on_slots": [
+        "actual_input"
+      ],
+      "notes": "TRIM(SPLIT([Final],'-',1)) — the winner-side token of the compound score.",
+      "result_role": "dimension",
+      "inputs": [
+        {
+          "ref": "Final",
+          "slot_id": "actual_input",
+          "slot_kind": "categorical",
+          "required": true,
+          "template_internal": false
+        }
+      ]
+    },
+    {
+      "slot_id": "winning_score_calc",
+      "template_field": "Final - Split 1 - Split 2",
+      "derivation": "none",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "INT( SPLIT( [Final - Split 1], \" \", 2 ) )",
+      "formula_refs": [
+        "Final - Split 1"
+      ],
+      "depends_on_slots": [],
+      "notes": "INT(SPLIT([Final - Split 1],' ',2)) — the winning team's points (template-INTERNAL).",
+      "result_role": "dimension",
+      "inputs": [
+        {
+          "ref": "Final - Split 1",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        }
+      ]
+    },
+    {
+      "slot_id": "losing_score_calc",
+      "template_field": "Final - Split 2",
+      "derivation": "none",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "int(TRIM( SPLIT( [Final], \"-\", 2 ) ))",
+      "formula_refs": [
+        "Final"
+      ],
+      "depends_on_slots": [
+        "actual_input"
+      ],
+      "notes": "int(TRIM(SPLIT([Final],'-',2))) — the losing team's points.",
+      "result_role": "dimension",
+      "inputs": [
+        {
+          "ref": "Final",
+          "slot_id": "actual_input",
+          "slot_kind": "categorical",
+          "required": true,
+          "template_internal": false
+        }
+      ]
+    },
+    {
+      "slot_id": "actual_score_calc",
+      "template_field": "Calculation_3985421010944000",
+      "derivation": "sum",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "[Final - Split 1 - Split 2]+[Final - Split 2]",
+      "formula_refs": [
+        "Final - Split 1 - Split 2",
+        "Final - Split 2"
+      ],
+      "depends_on_slots": [],
+      "notes": "[Final - Split 1 - Split 2]+[Final - Split 2] — the actual combined score (template-INTERNAL input to the O/U-diff calc; not shelved directly in the diff view).",
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Final - Split 1 - Split 2",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        },
+        {
+          "ref": "Final - Split 2",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        }
+      ]
+    },
+    {
+      "slot_id": "over_under_calc",
+      "template_field": "Calculation_3985421012422657",
+      "derivation": "sum",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "sign(([Calculation_3985421010944000])-([Total Score Bet]))",
+      "formula_refs": [
+        "Calculation_3985421010944000",
+        "Total Score Bet"
+      ],
+      "depends_on_slots": [
+        "line_measure"
+      ],
+      "notes": "sign(([Calculation_3985421010944000])-([Total Score Bet])) — RESIDUAL datasource calc (present in the golden datasource) but NOT shelved in the diff view (the spine is gray). Kept so the diff and arrow share one datasource calc set.",
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Calculation_3985421010944000",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        },
+        {
+          "ref": "Total Score Bet",
+          "slot_id": "line_measure",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        }
+      ]
+    },
+    {
+      "slot_id": "ou_diff_calc",
+      "template_field": "Over/Under Binary (copy)_3985421014155269",
+      "derivation": "sum",
+      "role": [
+        "cols"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "([Calculation_3985421010944000])-([Total Score Bet])",
+      "formula_refs": [
+        "Calculation_3985421010944000",
+        "Total Score Bet"
+      ],
+      "depends_on_slots": [
+        "line_measure"
+      ],
+      "notes": "([Calculation_3985421010944000])-([Total Score Bet]) — the signed variance from the line. The spine axis: pane 6 Bar-from-zero + pane 7 Circle dot, with the +/-43 reference band.",
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Calculation_3985421010944000",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        },
+        {
+          "ref": "Total Score Bet",
+          "slot_id": "line_measure",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        }
+      ]
+    }
+  ],
+  "hazards": [
+    {
+      "code": "derived-from-combined-worksheet",
+      "detail": "The golden has ONE combined worksheet; this diff-only view is a documented derivation of it (cols restricted to the O/U-diff spine, arrow panes 3/4/5 removed, +/-43 reference lines relocated into the Bar pane). It could NOT be live-render-verified in this environment (no MCP apply tools), so render_verified stays 'none'. Renderability of the isolated spine is a residual risk until a live golden-match.",
+      "xml": "ww-ou-diff.xml:29"
+    },
+    {
+      "code": "compound-string-parse",
+      "detail": "The actual-score and season/id calcs parse combined tokens out of compound strings via nested SPLIT/TRIM (golden semantics). Dataset-shape-specific — a different string shape yields NULL/garbage. Advisory, not a hard fast_path_blocker.",
+      "xml": "ww-ou-diff.xml:20"
+    },
+    {
+      "code": "raw-formula-refs",
+      "detail": "Calcs reference bare bindable [Super Bowl]/[Final]/[Total Score Bet]; templates.ts rewriteFormulaFieldRefs repairs them on bind. Template-internal calc-to-calc refs are left unmapped.",
+      "xml": "ww-ou-diff.xml:14"
+    }
+  ],
+  "golden": {
+    "checkpoint_render": "evals/cases/ww-2026-23-gantt-superbowl/golden/Super Bowl by the Numbers.twbx"
+  }
+}

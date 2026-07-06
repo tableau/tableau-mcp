@@ -26,7 +26,11 @@ describe('getDashboardXml', () => {
       ),
     } as unknown as LocalExecutor;
 
-    const result = await getDashboardXml({ dashboardName, executor: mockExecutor, signal: mockSignal });
+    const result = await getDashboardXml({
+      dashboardName,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
 
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
@@ -51,7 +55,11 @@ describe('getDashboardXml', () => {
       executeCommand: vi.fn().mockResolvedValue(Err(error)),
     } as unknown as LocalExecutor;
 
-    const result = await getDashboardXml({ dashboardName, executor: mockExecutor, signal: mockSignal });
+    const result = await getDashboardXml({
+      dashboardName,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
@@ -71,7 +79,11 @@ describe('getDashboardXml', () => {
       ),
     } as unknown as LocalExecutor;
 
-    const result = await getDashboardXml({ dashboardName, executor: mockExecutor, signal: mockSignal });
+    const result = await getDashboardXml({
+      dashboardName,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
@@ -82,8 +94,7 @@ describe('getDashboardXml', () => {
   });
 
   it('should return multiple-dashboards-found error when response contains more than one dashboard', async () => {
-    const mockXml =
-      '<workbook><dashboard name="D1"/><dashboard name="D2"/></workbook>';
+    const mockXml = '<workbook><dashboard name="D1"/><dashboard name="D2"/></workbook>';
     const mockExecutor = {
       executeCommand: vi.fn().mockResolvedValue(
         Ok({
@@ -94,7 +105,11 @@ describe('getDashboardXml', () => {
       ),
     } as unknown as LocalExecutor;
 
-    const result = await getDashboardXml({ dashboardName, executor: mockExecutor, signal: mockSignal });
+    const result = await getDashboardXml({
+      dashboardName,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {

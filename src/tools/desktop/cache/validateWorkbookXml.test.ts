@@ -15,9 +15,7 @@ describe('validateWorkbookXmlTool', () => {
   });
 
   it('should return success for well-formed XML', async () => {
-    const result = await getResult(
-      '<?xml version="1.0"?><workbook><worksheets/></workbook>',
-    );
+    const result = await getResult('<?xml version="1.0"?><workbook><worksheets/></workbook>');
 
     expect(result.isError).toBeFalsy();
     invariant(result.content[0].type === 'text');

@@ -1,0 +1,19 @@
+{
+  "template": "kpi-text",
+  "family": "kpi",
+  "readiness": "GREEN",
+  "fast_path_eligible": true,
+  "fast_path_blockers": [],
+  "portability_evidence": { "fixture_bind": true, "render_verified": "live-2026-07-04" },
+  "datasource_placeholder": true,
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["kpi", "metric", "big-number", "single-value", "total", "text", "scorecard"],
+  "description": "A single big-number text card: one measure aggregated and shown as label text.",
+  "slots": [
+    { "slot_id": "value", "template_field": "Value", "derivation": "sum",
+      "role": ["text"], "kind": "quantitative", "bindable": true, "required": true,
+      "notes": "template field is the generic name 'Value'; binds a single quantitative measure. Portability is 'across the committed fixture classes + render-verified' (see portability_evidence), not a blanket 'any dataset'." }
+  ],
+  "calcs": [],
+  "hazards": []
+}

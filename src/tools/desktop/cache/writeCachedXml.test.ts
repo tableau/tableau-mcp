@@ -19,7 +19,7 @@ const CACHED_FILE = `${CACHE_DIR}/worksheet-session-1.xml`;
 const VALID_XML = '<worksheet name="Sheet1"><table/></worksheet>';
 const MALFORMED_XML = '<worksheet name="Sheet1"><table></worksheet>';
 
-function setupCacheMock() {
+function setupCacheMock(): void {
   vi.mocked(DesktopCache).mockImplementation(
     () =>
       ({

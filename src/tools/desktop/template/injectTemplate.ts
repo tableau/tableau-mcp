@@ -23,7 +23,7 @@ const paramsSchema = {
     .describe('Path to workbook cache file (from get-workbook-xml with mode=file).'),
   templateName: z
     .string()
-    .describe('Template name without .xml extension (use list-templates to see options).'),
+    .describe('Template name without .xml extension (use list-xml-templates to see options).'),
   title: z.string().describe('Name for the new sheet — replaces {{TITLE}} in the template.'),
   sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe('Type of sheet being injected.'),
   templateParameters: z
@@ -67,7 +67,7 @@ export const getInjectTemplateTool = (
     title: toolTitle,
     description: [
       'Inject a pre-built worksheet, dashboard, or story from a template file into a cached workbook XML file.',
-      'Templates are TWB-format XML files; use list-templates to see available names.',
+      'Templates are TWB-format XML files; use list-xml-templates to see available names.',
       'Supports {{PLACEHOLDER}} substitution — {{TITLE}} is always replaced with the title argument.',
       'Workflow: get-workbook-xml (mode=file) → inject-template → apply-workbook.',
     ].join(' '),
@@ -118,7 +118,7 @@ export const getInjectTemplateTool = (
               available = files.length > 0 ? files.join(', ') : 'none';
             }
             return new ArgsValidationError(
-              `Template "${templateName}" not found.\n\nAvailable templates: ${available}\n\nUse list-templates to see all options.`,
+              `Template "${templateName}" not found.\n\nAvailable templates: ${available}\n\nUse list-xml-templates to see all options.`,
             ).toErr();
           }
 

@@ -1,0 +1,123 @@
+{
+  "template": "ww-floating-bars",
+  "family": "deviation",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "floating-bar",
+    "gantt",
+    "over-under",
+    "betting-line",
+    "final-vs-line",
+    "actual-vs-line"
+  ],
+  "description": "One floating (gantt) bar per category: the bar starts at a reference-line measure and its length is a template calc = parsed actual value − reference line. Deviation of an actual from a reference, per member.",
+  "avoid_when": [
+    "the actual/score field is not a leading-numeric string — INT() parses only a leading integer, so compound strings like '35-31' or non-numeric text produce the wrong bar length",
+    "both endpoints are already numeric measures — bind a simpler dual-measure or reference-line deviation chart instead of the string-parse calc"
+  ],
+  "slots": [
+    {
+      "slot_id": "row_dimension",
+      "template_field": "Category",
+      "derivation": "none",
+      "role": [
+        "rows"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "The row/category each floating bar is drawn for (one mark per member)."
+    },
+    {
+      "slot_id": "line_measure",
+      "template_field": "Reference Value",
+      "derivation": "min",
+      "role": [
+        "cols",
+        "formula-input"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "The reference-line endpoint on columns AND a formula input to the size calc. Derivation 'min' is authored fidelity from the checkpoint — correct only at one-row-per-category grain (see min-derivation-per-row hazard)."
+    },
+    {
+      "slot_id": "actual_input",
+      "template_field": "Actual Input",
+      "derivation": "none",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "Compound-score STRING parsed by INT() inside the size calc. Bindable + required so templates.ts rewriteFormulaFieldRefs repairs the bare [Actual Input] token and Gate 6 can prove the dependency is bound. Never placed on a shelf (no column-instance)."
+    },
+    {
+      "slot_id": "color_dimension",
+      "template_field": "Segment",
+      "derivation": "none",
+      "role": [
+        "color"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "FIDELITY from the final 'format' rung (absent in rung-1 floating-bars.xml): the over/under COLOR split (teal=over/right, red=under/left). A plain categorical color column-instance [none:Segment:nk]; parameterized like any bindable dimension so replaceFieldReferences substitutes it — never hardcoded to the Super Bowl O/U Winner field. Required so computeFixtureBind proves a full 4-field bind and the color encoding is never left dangling on an unbound field."
+    }
+  ],
+  "calcs": [
+    {
+      "slot_id": "bar_size_calc",
+      "template_field": "Calculation_GanttSize",
+      "derivation": "min",
+      "role": [
+        "size"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "INT([Actual Input]) - [Reference Value]",
+      "formula_refs": [
+        "Actual Input",
+        "Reference Value"
+      ],
+      "depends_on_slots": [
+        "actual_input",
+        "line_measure"
+      ],
+      "notes": "Bar length = parsed actual − reference. formula_refs are the template_field names of the two bindable dependency slots; rewriteFormulaFieldRefs repairs them on bind (same mechanism as correlation-scatter's Profit Ratio)."
+    }
+  ],
+  "hazards": [
+    {
+      "code": "dataset-specific-formula",
+      "detail": "INT([Actual Input]) parses a leading integer out of a compound score string; the parse is dataset-shape-specific (yields NULL/garbage on non-numeric or embedded-format text). Advisory only — surfaced via avoid_when and gated by render_verified, not a hard fast_path_blocker.",
+      "xml": "ww-floating-bars.xml:11"
+    },
+    {
+      "code": "raw-formula-refs",
+      "detail": "The size calc references bare [Actual Input]/[Reference Value]; templates.ts rewriteFormulaFieldRefs repairs them ONLY because both are bindable bare-key slots. Gate 6 asserts both are bound before injection.",
+      "xml": "ww-floating-bars.xml:11"
+    },
+    {
+      "code": "min-derivation-per-row",
+      "detail": "The size calc and the reference line use derivation 'min' (authored fidelity from the checkpoint). Min equals the row value only when there is exactly one mark per Category; a category with multiple rows collapses to the minimum. Bind at one-row-per-category grain or override the derivation.",
+      "xml": "ww-floating-bars.xml:17"
+    }
+  ],
+  "golden": {
+    "checkpoint_render": "evals/checkpoints/ww-2026-23-gantt-superbowl/best/format.xml"
+  }
+}

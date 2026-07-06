@@ -1,3 +1,7 @@
+import { getBindTemplateTool } from './binder/bindTemplate.js';
+import { getListTemplatesTool } from './binder/listTemplates.js';
+import { getProposeTemplateTool } from './binder/proposeTemplate.js';
+import { getValidateProposalTool } from './binder/validateProposal.js';
 import { getReadCachedXmlTool } from './cache/readCachedXml.js';
 import { getValidateWorkbookXmlTool } from './cache/validateWorkbookXml.js';
 import { getValidateWorksheetXmlTool } from './cache/validateWorksheetXml.js';
@@ -5,7 +9,7 @@ import { getWriteCachedXmlTool } from './cache/writeCachedXml.js';
 import { getExecuteTableauCommandTool } from './commands/executeTableauCommand.js';
 import { getBatchCreateAndCacheSheetsTool } from './coordination/batchCreateAndCacheSheets.js';
 import { getBuildAndApplyWorksheetTool } from './coordination/buildAndApplyWorksheet.js';
-import { getListTemplatesTool } from './coordination/listTemplates.js';
+import { getListXmlTemplatesTool } from './coordination/listXmlTemplates.js';
 import { getPlanDashboardCreationTool } from './coordination/planDashboardCreation.js';
 import { getApplyDashboardTool } from './dashboard/applyDashboard.js';
 import { getApplyDashboardWithViewpointsTool } from './dashboard/applyDashboardWithViewpoints.js';
@@ -64,10 +68,14 @@ export const desktopToolFactories = [
   getLookupWorkbookSchemaTool,
   getSearchWorkbookExamplesTool,
   getExecuteTableauCommandTool,
+  getBindTemplateTool,
+  getListTemplatesTool,
+  getProposeTemplateTool,
+  getValidateProposalTool,
   getPlanDashboardCreationTool,
   getBatchCreateAndCacheSheetsTool,
   getBuildAndApplyWorksheetTool,
-  getListTemplatesTool,
+  getListXmlTemplatesTool,
   getValidateWorksheetXmlTool,
   getValidateWorkbookXmlTool,
   getReadCachedXmlTool,

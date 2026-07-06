@@ -114,5 +114,8 @@ async function getResult({
 }): Promise<CallToolResult> {
   const tool = getLookupWorkbookSchemaTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
-  return await callback({ enumType, elementType, keywords, expandRefs }, getMockRequestHandlerExtra());
+  return await callback(
+    { enumType, elementType, keywords, expandRefs },
+    getMockRequestHandlerExtra(),
+  );
 }

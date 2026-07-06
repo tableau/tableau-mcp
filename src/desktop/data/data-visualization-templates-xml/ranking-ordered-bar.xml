@@ -1,0 +1,66 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run>&lt;Sheet Name&gt;
+</run>
+        <run fontname='Tableau Light' fontsize='9'>Standard bar charts display the ranks of values much more easily when sorted into order.</run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='{{DATASOURCE}}' name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column datatype='string' name='[Region]' role='dimension' type='nominal' />
+        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <computed-sort column='[{{DATASOURCE}}].[none:Region:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:Sales:qk]' />
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='line-visibility' value='off' />
+        <format attr='title' class='0' field='[{{DATASOURCE}}].[sum:Sales:qk]' scope='cols' value='' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='rows' value='false' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <style>
+          <style-rule element='mark'>
+            <format attr='mark-color' value='#666666' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[{{DATASOURCE}}].[none:Region:nk]</rows>
+    <cols>[{{DATASOURCE}}].[sum:Sales:qk]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

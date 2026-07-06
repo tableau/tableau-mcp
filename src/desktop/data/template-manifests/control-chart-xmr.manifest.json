@@ -1,0 +1,29 @@
+{
+  "template": "control-chart-xmr",
+  "family": "deviation",
+  "readiness": "GREEN",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": { "fixture_bind": true, "render_verified": "none" },
+  "datasource_placeholder": true,
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["control-chart", "xmr", "process-control", "reference-line", "spc"],
+  "description": "An aggregated measure over an exact date with template-owned average and +/-3-sigma reference lines/bands.",
+  "slots": [
+    { "slot_id": "order_date", "template_field": "Order Date", "derivation": "tdy",
+      "role": ["cols"], "kind": "temporal", "bindable": true, "required": true,
+      "notes": "XML instance is [md:Order Date:ok] derivation='MDY' (exact date, discrete/ordinal). 'md'/'MDY' is NOT a derivationMap key nor a §2.2 Derivation member. Normalized to the closest canonical token 'tdy' (TruncDay = day-level date). See non-canonical-template-derivation hazard for the fidelity caveat." },
+    { "slot_id": "profit", "template_field": "Profit", "derivation": "sum",
+      "role": ["rows", "color"], "kind": "quantitative", "bindable": true, "required": true,
+      "notes": "same [sum:Profit:qk] instance drives rows, color, and the average/stdev reference lines (template-owned analytics)." }
+  ],
+  "calcs": [],
+  "hazards": [
+    { "code": "non-canonical-template-derivation",
+      "detail": "Template date instance uses derivation short-form 'md' (long 'MDY', an exact discrete date), absent from templates.ts derivationMap and the §2.2 Derivation union. Manifest records the closest canonical 'tdy' (TruncDay). RESIDUAL RISK: TruncDay (continuous day) differs from MDY (discrete exact date) at runtime; the fast-path date binding may render continuous rather than discrete. XML trusted for slot/field structure; derivation token normalized.",
+      "xml": "control-chart-xmr.xml:13" },
+    { "code": "template-owned-reference-lines",
+      "detail": "average and sample-stdev (+/-3 factor) reference lines/bands are bound to [sum:Profit:qk] and repaired only because Profit is a bound slot; no dataset-specific calc IDs are referenced, so this is not a DATASET_SPECIFIC_FORMULA blocker.",
+      "xml": "control-chart-xmr.xml:47-51" }
+  ]
+}

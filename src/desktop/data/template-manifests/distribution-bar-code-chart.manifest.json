@@ -1,0 +1,31 @@
+{
+  "template": "distribution-bar-code-chart",
+  "family": "distribution",
+  "readiness": "GREEN",
+  "fast_path_eligible": true,
+  "fast_path_blockers": [],
+  "portability_evidence": { "fixture_bind": true, "render_verified": "live-2026-07-05" },
+  "datasource_placeholder": true,
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["bar-code", "strip-plot", "distribution", "spread", "jitter", "gantt-strip", "dot-strip"],
+  "description": "A strip/bar-code plot: one tick per detail-grain member along an aggregated measure axis, grouped by a category on rows.",
+  "slots": [
+    { "slot_id": "sub_category", "template_field": "Sub-Category", "derivation": "none",
+      "role": ["rows"], "kind": "categorical", "bindable": true, "required": true },
+    { "slot_id": "sales", "template_field": "Sales", "derivation": "avg",
+      "role": ["cols"], "kind": "quantitative", "bindable": true, "required": true,
+      "notes": "template aggregates Sales with Avg (not Sum): [avg:Sales:qk]." },
+    { "slot_id": "country_region", "template_field": "Country/Region", "derivation": "none",
+      "role": ["detail"], "kind": "geo", "bindable": true, "required": true,
+      "notes": "detail/grain dimension carrying semantic-role='[Country].[ISO3166_2]'; the geo semantic-role is a cosmetic hint carried onto the target." },
+    { "slot_id": "state_province", "template_field": "State/Province", "derivation": "none",
+      "role": ["detail"], "kind": "geo", "bindable": true, "required": true,
+      "notes": "detail/grain dimension carrying semantic-role='[State].[Name]'; cosmetic hint carried onto the target." }
+  ],
+  "calcs": [],
+  "hazards": [
+    { "code": "geo-semantic-role",
+      "detail": "[Country/Region] and [State/Province] carry semantic-role attributes; these are not rewritten by replaceFieldReferences and are carried onto the target fields. They define mark grain, not a geographic map. Verification report agrees the readiness is GREEN (contrast spatial-filled-map which stays YELLOW).",
+      "xml": "distribution-bar-code-chart.xml:10,12" }
+  ]
+}

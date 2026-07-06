@@ -2,7 +2,7 @@
 
 import { build, BuildOptions } from 'esbuild';
 import { cpSync } from 'fs';
-import { chmod, copyFile, mkdir, rm } from 'fs/promises';
+import { chmod, copyFile, cp, mkdir, rm } from 'fs/promises';
 import { resolve } from 'path';
 import { build as viteBuild } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
@@ -90,6 +90,60 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   }
 
   await chmod(buildOptions.outfile, '755');
+
+  // Stage the bundled authoring data into the build output. esbuild bundles CODE
+  // only — these files are read at runtime via fs, so a published / npm-installed
+  // server has no data unless we copy them. The target `build/desktop/data` is the
+  // path manifest.ts resolveDataDir() probes as candidate 2 (`__dirname/desktop/data`,
+  // where __dirname === build/ in the bundle).
+  //
+  // EXPLICIT ALLOWLIST, not a blocklist (Lane M5 day-5 tarball scoping): copy only
+  // the inputs a shipped tool reads THROUGH this package-relative path, so a large
+  // asset can never silently ride into the npm tarball again. Every entry below is
+  // resolved package-relative by manifest.ts (DATA_DIR) and feeds the binder core or
+  // the BundledIntelligenceProvider — the surfaces behind bind-template / list-templates.
+  //
+  // DELIBERATELY EXCLUDED (verified day-5): twb-example-index.json (10.3 MB),
+  // tableau-desktop-commands-reference.json (969 kB), workbook-schema-reference.json
+  // (212 kB), corpus.json (178 kB), and examples/. Each IS read by a shipped search
+  // tool (search-workbook-examples/search-examples/search-commands/lookup-workbook-schema),
+  // but ONLY via a process.cwd()-relative path (searchLibrary.ts dataPath();
+  // searchExamples/searchWorkbookExamples CORPUS_PATH) — NEVER __dirname/desktop/data.
+  // A copy here is therefore consulted by no consumer: pure tarball weight. (Their
+  // cwd-relative resolution also means they aren't reachable from a published install
+  // at all — a separate resolution gap, tracked for a later lane, not fixed by staging.)
+  // VARIANT-GATED: only the desktop tool surface (the `desktop` and `combined` variants)
+  // ever resolves `build/desktop/data` at runtime (manifest.ts resolveDataDir candidate 2).
+  // The `default` variant's server (src/index.ts) never reads it — and `default` is the
+  // ONLY variant the publish pipeline builds — so staging it there is pure orphaned tarball
+  // weight (~173 KB per install). Gate the staging on the variant so the default package
+  // stays lean; desktop/combined still stage the full allowlist below.
+  if (variant === 'desktop' || variant === 'combined') {
+    console.log('🏗️ Staging desktop data (allowlist)...');
+    const desktopDataSrc = './src/desktop/data';
+    const desktopDataOut = './build/desktop/data';
+    // LOCKSTEP: this allowlist is mirrored in
+    // src/desktop/intelligence/content-manifest-staging.test.ts (STAGED_DESKTOP_DATA).
+    // build.ts runs an IIFE at import (can't be imported without side effects), so the
+    // test duplicates the list; keep the two in sync. That test also PROVES every
+    // content-manifest.json resource lands under one of these roots.
+    const stagedDesktopData = [
+      'template-manifests', // MANIFESTS_DIR — loadManifests() (binder + provider)
+      'template-manifests.index.json', // MANIFEST_INDEX_PATH — loadManifests()
+      'template-manifests.fixture.json', // BINDER_FIXTURE_PATH — eligibility gate
+      'content-manifest.json', // CONTENT_MANIFEST_PATH — provider.getStatus/getContentManifest
+      'data-visualization-templates-xml', // TEMPLATE_XML_DIR — provider.getTemplateXmlFragment + content-manifest hashes
+    ];
+    await mkdir(desktopDataOut, { recursive: true });
+    for (const entry of stagedDesktopData) {
+      await cp(`${desktopDataSrc}/${entry}`, `${desktopDataOut}/${entry}`, { recursive: true });
+    }
+    console.log(
+      `✅ Desktop data staged to ${desktopDataOut} (${stagedDesktopData.length} entries)`,
+    );
+  } else {
+    console.log(`⏭️ Skipping desktop data staging for the '${variant}' variant (not read by it).`);
+  }
 
   console.log('🏗️ Building MCP Apps...');
   try {
