@@ -23,9 +23,9 @@ Tableau MCP is available as a managed service at **`https://mcp.tableau.com`**. 
 
 Point any MCP-compatible client at `https://mcp.tableau.com` and complete the OAuth sign-in flow when prompted.
 
-See [Popular Client Integrations](https://tableau.github.io/tableau-mcp/hosted-tableau-mcp/client-integrations) for step-by-step setup instructions for Slack, Claude, ChatGPT, and other common AI clients.
+See [Popular Client Integrations](https://tableau.github.io/tableau-mcp/docs/hosted-tableau-mcp/client-integrations) for step-by-step setup instructions for Slack, Claude, ChatGPT, and other common AI clients.
 
-> **Tableau Server customers** and Cloud customers who require self-hosted infrastructure should see the [Enterprise Deployment](https://tableau.github.io/tableau-mcp/enterprise/) and [Self-Hosted Getting Started](https://tableau.github.io/tableau-mcp/getting-started/) guides.
+> **Tableau Server customers** and Cloud customers who require self-hosted infrastructure should see the [Enterprise Deployment](https://tableau.github.io/tableau-mcp/docs/enterprise) and [Self-Hosted Getting Started](https://tableau.github.io/tableau-mcp/docs/getting-started) guides.
 
 ### Self-Hosted / Local (npx)
 
@@ -48,7 +48,7 @@ The quickest way to run Tableau MCP locally. Requires [Node.js](https://nodejs.o
 }
 ```
 
-For Docker, building from source, and other self-hosted options, see the [Getting Started guide](https://tableau.github.io/tableau-mcp/getting-started/).
+For Docker, building from source, and other self-hosted options, see the [Getting Started guide](https://tableau.github.io/tableau-mcp/docs/getting-started).
 
 ## Deploy to Heroku
 
