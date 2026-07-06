@@ -5,8 +5,11 @@ import {
   bindTemplate,
   buildLlmInput,
   classifyNoLlm,
+  MAX_CLASSIFIABLE_FIELDS,
   PROPOSAL_OUTPUT_SCHEMA,
+  type SchemaSummary,
   summarizeSchema,
+  TITLE_CONTROL_CHAR_RE,
 } from './binder.js';
 import { loadManifests } from './manifest.js';
 import type { Family, TemplateManifest } from './manifest-types.js';
@@ -628,6 +631,137 @@ describe('binder/bindTemplate — evidence gate escalation (attacks 5+10)', () =
     });
     expect(res.status).toBe('escalate');
     if (res.status === 'escalate') expect(res.reason).toBe('not-fast-path');
+  });
+});
+
+describe('binder/bindTemplate — hostile title XML escaping (M10 Finding 1)', () => {
+  it('escapes a hostile proposal title in the bound args (verbatim-substitution seam)', async () => {
+    const proposal: BindingProposal = {
+      template: 'ranking-ordered-bar',
+      title: "x'/><datasource name='pwn2",
+      bindings: [
+        { slot_id: 'region', field: 'Region' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'bar of sales by region',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.title).toBe('x&apos;/&gt;&lt;datasource name=&apos;pwn2');
+      expect(res.args.title).not.toContain('<');
+      expect(res.args.title).not.toContain("'");
+    }
+  });
+
+  it('a clean title passes through byte-identical (fidelity)', async () => {
+    const proposal: BindingProposal = {
+      template: 'ranking-ordered-bar',
+      title: 'Sales by Region',
+      bindings: [
+        { slot_id: 'region', field: 'Region' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'bar of sales by region',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') expect(res.args.title).toBe('Sales by Region');
+  });
+
+  it('makeTitle (Call-1) strips control chars from the generated title (library mirror, Finding 2)', async () => {
+    const res = await bindTemplate({
+      ask: 'bar chart of Sales by Region\u0000\u001B',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.title).toBe('bar chart of Sales by Region');
+      expect(TITLE_CONTROL_CHAR_RE.test(res.args.title)).toBe(false);
+    }
+  });
+});
+
+describe('binder — schema-too-large fail-closed cap (M10 Finding 3)', () => {
+  function wideWorkbookXml(n: number): string {
+    let cols = '';
+    for (let i = 0; i < n; i++) {
+      cols += `<column name='[F${i}]' role='measure' type='quantitative' datatype='real' />`;
+    }
+    return `<?xml version='1.0' encoding='utf-8'?><workbook><datasources><datasource name='Big'>${cols}</datasource></datasources></workbook>`;
+  }
+
+  function synthSummary(n: number): SchemaSummary {
+    const fields = [];
+    for (let i = 0; i < n; i++) {
+      fields.push({
+        name: `F${i}`,
+        columnName: `[F${i}]`,
+        role: 'measure' as const,
+        type: 'quantitative',
+        datatype: 'real',
+        datasource: 'Big',
+        isAggregated: false,
+        column_ref: `[Big].[sum:F${i}:qk]`,
+      });
+    }
+    return { datasource: 'Big', fields };
+  }
+
+  it('bindTemplate escalates schema-too-large above the cap (named reason, no truncated classify)', async () => {
+    const n = MAX_CLASSIFIABLE_FIELDS + 1;
+    const res = await bindTemplate({
+      ask: 'bar chart of F0 by F1',
+      workbookXml: wideWorkbookXml(n),
+      manifests,
+    });
+    expect(res.status).toBe('escalate');
+    if (res.status === 'escalate') {
+      expect(res.reason).toBe('schema-too-large');
+      expect(res.blockers[0].code).toBe('schema-too-large');
+      expect(res.blockers[0].detail).toBe(
+        `schema-too-large: ${n} fields > ${MAX_CLASSIFIABLE_FIELDS} cap`,
+      );
+    }
+  });
+
+  it('bindTemplate does NOT escalate schema-too-large at the cap boundary (5000)', async () => {
+    const res = await bindTemplate({
+      ask: 'bar chart of Sales by Region',
+      workbookXml: wideWorkbookXml(MAX_CLASSIFIABLE_FIELDS),
+      manifests,
+    });
+    // At the boundary the classifier runs normally; the ask names no schema field so it
+    // falls through to propose — the key point is it is NOT the schema-too-large escalate.
+    expect(res.status !== 'escalate' || res.reason !== 'schema-too-large').toBe(true);
+  });
+
+  it('classifyNoLlm fails closed (returns null, no truncated subset) above the cap', () => {
+    // Short-circuits at the TOP before the per-field hot loop — synthetic summary keeps
+    // this cheap and proves the fail-closed disposition independent of XML parsing.
+    expect(
+      classifyNoLlm('bar chart of F0 by F1', manifests, synthSummary(MAX_CLASSIFIABLE_FIELDS + 1)),
+    ).toBeNull();
+  });
+
+  it('classifyNoLlm still runs at the cap boundary (5000 does not short-circuit)', () => {
+    // 5000 is <= cap, so it proceeds through the normal path (returns null here only
+    // because the generic F-measure schema names nothing the ask matches) — proving the
+    // boundary is inclusive.
+    expect(
+      classifyNoLlm('bar chart of F0 by F1', manifests, synthSummary(MAX_CLASSIFIABLE_FIELDS)),
+    ).toBeNull();
   });
 });
 

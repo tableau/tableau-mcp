@@ -149,6 +149,33 @@ no new command layer (AGENTS.md); the only Agent-API call reuses the existing `g
 
 ---
 
+## 5b. Bind-pipeline security hardening — new in this port (Lane M10)
+
+An adversarial security review of the bind output pipeline landed four fail-closed
+hardenings that are **new in this port and not present in the source implementation** — they
+are additive safety, not a sync:
+
+- **XML output escaping.** `bindTemplate` returns a `title`, `template_parameters.DATASOURCE`,
+  and `field_mapping` values that the apply instruction tells the consumer to substitute
+  verbatim into template XML attributes. A new `escapeXml` utility (`src/desktop/binder/escape.ts`)
+  escapes the five XML metacharacters exactly once at production (field values + datasource in
+  `validate.ts` gate 7; title in `binder.ts`), so a workbook- or proposal-controlled value can no
+  longer break out of the attribute and inject XML structure. Tableau field-reference brackets are
+  intentionally left intact, so clean names round-trip byte-identical. The apply instruction now
+  documents the "escaped once — do not double-escape" contract.
+- **Title control-char rejection.** The shared proposal schema now rejects C0 control
+  characters and DEL in `title` (illegal in XML 1.0 even when escaped), and the no-LLM title
+  generator strips them, from one shared definition so the tool boundary and library agree.
+- **Field-count cap.** No-LLM classification runs one regex per schema field; a pathological
+  wide schema is a per-call CPU DoS. A named cap (`MAX_CLASSIFIABLE_FIELDS`) makes the classifier
+  fail closed (never a truncated subset) and escalate a new `schema-too-large` reason instead.
+- **Loud dev-fallback.** Resolving binder data to the cwd-relative dev fallback now emits a
+  one-line warning (resolution order unchanged) so a broken/partial packaged install is no longer
+  silent about serving cwd-relative content.
+
+These changes touch only the ported binder library + its tools; none depends on unshippable source
+assets, so all four are covered by colocated unit tests in this package.
+
 ## 6. Rebase verification (pre-push, day-7)
 
 This lane's changes must be rebased by the orchestrator (git operations are out of scope for the

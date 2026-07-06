@@ -32,6 +32,7 @@
 import Fuse from 'fuse.js';
 
 import { matchAvoidWhen } from './classify.js';
+import { escapeXml } from './escape.js';
 import type {
   BlockerCode,
   CalcSlot,
@@ -71,7 +72,11 @@ export type EscalateReason =
   | 'base-column-conflict'
   | 'cross-datasource-binding'
   | 'calc-dependency-unmet'
-  | 'low-confidence';
+  | 'low-confidence'
+  // M10 Finding 3: the ask's schema exceeds MAX_CLASSIFIABLE_FIELDS, so the no-LLM
+  // classifier fails closed (never classifies a truncated subset) and escalates to
+  // the general authoring flow rather than risk a silent wrong bind.
+  | 'schema-too-large';
 
 export interface Blocker {
   code: EscalateReason | BlockerCode;
@@ -440,7 +445,14 @@ export function validateBinding(
     const key = slot.qualified_key_required
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;
-    field_mapping[key] = `[${f.datasource}].[${deriv}:${bareName(f.columnName)}:${suffix}]`;
+    // SECURITY (M10 Finding 1): the VALUE is substituted verbatim into a template XML
+    // attribute, and both datasource + column name are workbook-controlled — escape the
+    // five XML metachars EXACTLY ONCE, here at production. The KEY is the manifest's
+    // template_field (trusted, shape-validated) and is NOT escaped. Tableau field-ref
+    // brackets carry no metachars, so a clean value stays byte-identical.
+    field_mapping[key] = escapeXml(
+      `[${f.datasource}].[${deriv}:${bareName(f.columnName)}:${suffix}]`,
+    );
     if (first) {
       datasource = f.datasource;
       first = false;
@@ -452,7 +464,11 @@ export function validateBinding(
   // no-LLM path that reached here) has already committed to this template; the
   // warning rides along so the caller sees the anti-pattern it chose.
   const warnings = ask ? matchAvoidWhen(ask, m.avoid_when, m.intent_keywords) : [];
+  // The datasource is workbook-controlled and flows verbatim into {{DATASOURCE}} (an XML
+  // attribute), so escape it here at production alongside the field_mapping values —
+  // escaped exactly once (validateAndBuild consumes this value as-is, no re-escape).
+  const escapedDatasource = escapeXml(datasource);
   return warnings.length > 0
-    ? { ok: true, datasource, field_mapping, warnings }
-    : { ok: true, datasource, field_mapping };
+    ? { ok: true, datasource: escapedDatasource, field_mapping, warnings }
+    : { ok: true, datasource: escapedDatasource, field_mapping };
 }

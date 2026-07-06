@@ -3,6 +3,8 @@ import { z } from 'zod';
 import {
   DERIVATION_OVERRIDE_INSTRUCTION,
   DERIVATION_SHORT_FORMS,
+  TITLE_CONTROL_CHAR_MESSAGE,
+  TITLE_CONTROL_CHAR_RE,
 } from '../../../desktop/binder/binder.js';
 
 // SHARED binder proposal contract. bind-template (Call-2 validate) and validate-proposal
@@ -45,11 +47,19 @@ export const proposalSchema = z
   .object({
     template: z.string().describe('The chosen template name (from llm_input.candidate_templates).'),
     // WATCH-CLASS (length): the library copies proposal.title VERBATIM on the validate path
-    // (validateAndBuild -> InjectTemplateArgs.title) with NO truncation — only the no-LLM
-    // Call-1 title is capped (makeTitle). The library's own declared contract
+    // (validateAndBuild -> InjectTemplateArgs.title, escaped-only) with NO truncation — only
+    // the no-LLM Call-1 title is capped (makeTitle). The library's own declared contract
     // (PROPOSAL_OUTPUT_SCHEMA.title.maxLength = 80) is the sole enforcer, so mirror it at the
     // tool boundary or a filled proposal slips an over-long title straight past the gate.
-    title: z.string().max(80).describe('Worksheet title (<= 80 chars).'),
+    // WATCH-CLASS (control chars, M10 Finding 2): the title is substituted verbatim into
+    // XML; C0 controls / DEL are illegal in XML 1.0 even when escaped (NUL cannot appear at
+    // all), so reject them here. The regex + message are shared with the library's makeTitle
+    // strip (TITLE_CONTROL_CHAR_RE) so the tool boundary and the Call-1 generator agree.
+    title: z
+      .string()
+      .max(80)
+      .refine((t) => !TITLE_CONTROL_CHAR_RE.test(t), { message: TITLE_CONTROL_CHAR_MESSAGE })
+      .describe('Worksheet title (<= 80 chars, no control characters).'),
     bindings: z
       .array(bindingSchema)
       .describe('One entry per bindable slot: slot_id -> field name.'),

@@ -968,3 +968,126 @@ describe('binder/validate — gate 7: full scatter emission', () => {
     }
   });
 });
+
+describe('binder/validate — XML escaping in the emitted payload (M10 Finding 1)', () => {
+  const HOSTILE_DS = "Evil'/><datasource name='pwn";
+  const ESCAPED_DS = 'Evil&apos;/&gt;&lt;datasource name=&apos;pwn';
+
+  it('(a) escapes a hostile datasource name in datasource AND every field_mapping value', () => {
+    const hostile: SchemaSummary = {
+      datasource: HOSTILE_DS,
+      fields: [
+        field({
+          columnName: '[Region]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+          datasource: HOSTILE_DS,
+        }),
+        field({
+          columnName: '[Sales]',
+          role: 'measure',
+          type: 'quantitative',
+          datatype: 'real',
+          datasource: HOSTILE_DS,
+        }),
+      ],
+    };
+    const m = manifests.get('ranking-ordered-bar')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'region', field: 'Region' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+    };
+    const r = validateBinding(m, p, hostile);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.datasource).toBe(ESCAPED_DS);
+      const values = Object.values(r.field_mapping);
+      expect(values.length).toBeGreaterThan(0);
+      for (const v of values) {
+        expect(v).toContain(ESCAPED_DS);
+        // The XML-structure-injection payload is neutralized in every value.
+        expect(v).not.toContain('<datasource');
+        expect(v).not.toContain("'");
+        expect(v).not.toContain('>');
+      }
+    }
+  });
+
+  it('(c) fidelity pin: a clean schema passes through byte-identical (brackets/hyphens/slashes NOT escaped)', () => {
+    // Sub-Category, State/Province and the bracketed ref syntax contain NO XML metachars.
+    const clean: SchemaSummary = {
+      datasource: 'Superstore',
+      fields: [
+        field({
+          columnName: '[Sub-Category]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+        }),
+        field({
+          columnName: '[State/Province]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+        }),
+        field({ columnName: '[Sales]', role: 'measure', type: 'quantitative', datatype: 'real' }),
+      ],
+    };
+    const m = manifests.get('ranking-ordered-bar')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'region', field: 'Sub-Category' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+    };
+    const r = validateBinding(m, p, clean);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.datasource).toBe('Superstore');
+      const values = Object.values(r.field_mapping);
+      // Byte-identical: the pre-fix expectation (brackets + hyphen intact, no entities).
+      expect(values).toContain('[Superstore].[none:Sub-Category:nk]');
+      expect(values).toContain('[Superstore].[sum:Sales:qk]');
+      for (const v of values) expect(v).not.toContain('&');
+    }
+  });
+
+  it("(d) apostrophe-bearing real-world-ish name (O'Brien Sales) escapes the quote only", () => {
+    const s: SchemaSummary = {
+      datasource: 'Superstore',
+      fields: [
+        field({ columnName: '[Region]', role: 'dimension', type: 'nominal', datatype: 'string' }),
+        field({
+          columnName: "[O'Brien Sales]",
+          role: 'measure',
+          type: 'quantitative',
+          datatype: 'real',
+        }),
+      ],
+    };
+    const m = manifests.get('ranking-ordered-bar')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'region', field: 'Region' },
+        { slot_id: 'sales', field: "O'Brien Sales" },
+      ],
+    };
+    const r = validateBinding(m, p, s);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const values = Object.values(r.field_mapping);
+      expect(values).toContain('[Superstore].[sum:O&apos;Brien Sales:qk]');
+      // Only the apostrophe changed; the clean Region value is untouched.
+      expect(values).toContain('[Superstore].[none:Region:nk]');
+    }
+  });
+});

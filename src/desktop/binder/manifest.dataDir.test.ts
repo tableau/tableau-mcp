@@ -64,3 +64,42 @@ describe('binder/manifest — DATA_DIR resolution', () => {
     expect(pickDataDir(candidates)).toBe(candidates[0]);
   });
 });
+
+describe('binder/manifest — cwd-fallback warning (M10 Finding 4)', () => {
+  // Fake existence probes so the candidate selection is exercised without touching the
+  // real fs, proving the warning fires ONLY when resolution lands on the cwd dev fallback.
+  const CANDIDATES = [
+    path.join('/pkg', 'data'),
+    path.join('/pkg', 'build', 'desktop', 'data'),
+    path.join('/repo', 'src', 'desktop', 'data'), // cwd-relative dev fallback (last)
+  ];
+
+  it('warns (one line naming the path) when resolution falls through to the cwd fallback', () => {
+    const warnings: string[] = [];
+    const picked = pickDataDir(CANDIDATES, {
+      exists: (p) => p === path.join(CANDIDATES[2], INDEX),
+      warn: (m) => warnings.push(m),
+    });
+    expect(picked).toBe(CANDIDATES[2]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(CANDIDATES[2]);
+    expect(warnings[0]).toMatch(/fallback/i);
+  });
+
+  it('does NOT warn when a packaged candidate resolves', () => {
+    const warnings: string[] = [];
+    const picked = pickDataDir(CANDIDATES, {
+      exists: (p) => p === path.join(CANDIDATES[1], INDEX),
+      warn: (m) => warnings.push(m),
+    });
+    expect(picked).toBe(CANDIDATES[1]);
+    expect(warnings).toHaveLength(0);
+  });
+
+  it('does NOT warn on the no-match fallthrough to the first (source) candidate', () => {
+    const warnings: string[] = [];
+    const picked = pickDataDir(CANDIDATES, { exists: () => false, warn: (m) => warnings.push(m) });
+    expect(picked).toBe(CANDIDATES[0]);
+    expect(warnings).toHaveLength(0);
+  });
+});

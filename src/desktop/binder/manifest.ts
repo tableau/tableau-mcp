@@ -55,10 +55,41 @@ export function dataDirCandidates(moduleDir: string, cwd: string): string[] {
   ];
 }
 
-/** First candidate that actually contains the manifest index, else the first candidate. */
-export function pickDataDir(candidates: string[]): string {
-  for (const dir of candidates) {
-    if (fs.existsSync(path.join(dir, 'template-manifests.index.json'))) {
+/** Injectable dependencies for `pickDataDir` — defaults hit the real fs + console. */
+export interface PickDataDirDeps {
+  /** Existence probe (defaults to fs.existsSync). Injected in tests. */
+  exists?: (p: string) => boolean;
+  /** One-line warning sink (defaults to console.error — the repo's warn idiom). */
+  warn?: (message: string) => void;
+}
+
+/**
+ * First candidate that actually contains the manifest index, else the first candidate.
+ *
+ * SECURITY SIGNAL (M10 Finding 4): the LAST candidate is the `<cwd>/src/desktop/data`
+ * dev fallback. Resolving to it in a packaged install means the packaged candidates were
+ * absent (a broken/partial install), so the server would silently serve attacker-plantable
+ * cwd content. Resolution ORDER is unchanged (dev workflows rely on the cwd path), but
+ * falling through to it now emits a one-line warning naming the resolved path — a broken
+ * install is loud, not silent.
+ */
+export function pickDataDir(candidates: string[], deps: PickDataDirDeps = {}): string {
+  const exists = deps.exists ?? ((p: string): boolean => fs.existsSync(p));
+  const warn = deps.warn ?? ((m: string): void => console.error(m));
+  const cwdFallbackIndex = candidates.length - 1;
+  for (let i = 0; i < candidates.length; i++) {
+    const dir = candidates[i];
+    if (exists(path.join(dir, 'template-manifests.index.json'))) {
+      // Only the cwd fallback (the LAST candidate, never the primary) is a security
+      // signal; the packaged/source candidates resolving is the normal, silent path.
+      if (i === cwdFallbackIndex && cwdFallbackIndex > 0) {
+        warn(
+          `[tableau-mcp] binder template data resolved to the cwd-relative dev fallback '${dir}'. ` +
+            'This path is only expected in a repo-root development run; in a packaged install it ' +
+            'indicates a broken/partial package (the packaged data candidates were absent) and the ' +
+            'served content is cwd-relative — reinstall the package if this is not a dev environment.',
+        );
+      }
       return dir;
     }
   }

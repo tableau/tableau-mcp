@@ -18,7 +18,13 @@
 // in-process, so the eval harness can exercise the with-LLM path deterministically
 // without the two-call round trip. The MCP tool never passes `llmPropose`.
 
-import { buildLlmInput, classifyNoLlm, type LlmProposeInput } from './classify.js';
+import {
+  buildLlmInput,
+  classifyNoLlm,
+  type LlmProposeInput,
+  MAX_CLASSIFIABLE_FIELDS,
+} from './classify.js';
+import { escapeXml } from './escape.js';
 import type { BlockerCode, Derivation, TemplateManifest } from './manifest-types.js';
 import { type SchemaField, type SchemaSummary, summarizeSchema } from './schema-summary.js';
 import {
@@ -31,7 +37,7 @@ import {
 // Re-exported as the binder's public surface. Bare (source-less) re-exports of the
 // locally-imported bindings — a single `export ... from './x.js'` alongside the
 // import above would trip the target's `no-duplicate-imports` (includeExports).
-export { buildLlmInput, classifyNoLlm, summarizeSchema, validateBinding };
+export { buildLlmInput, classifyNoLlm, MAX_CLASSIFIABLE_FIELDS, summarizeSchema, validateBinding };
 export type {
   BindingProposal,
   Blocker,
@@ -66,7 +72,7 @@ export type LlmProposeFn = (input: LlmProposeInput) => Promise<BindingProposal>;
 export type ApplyHint = 'worksheet-path';
 export const APPLY_HINT: ApplyHint = 'worksheet-path';
 export const APPLY_INSTRUCTION =
-  'Worksheet-path (tier-1 default): create a sheet with tabdoc:new-worksheet, substitute the template worksheet fragment using template_parameters + field_mapping, then tableau-apply-worksheet (no whole-workbook round-trip). The same args also drive the tableau-inject-template + tableau-apply-workbook chain.';
+  'Worksheet-path (tier-1 default): create a sheet with tabdoc:new-worksheet, substitute the template worksheet fragment using template_parameters + field_mapping, then tableau-apply-worksheet (no whole-workbook round-trip). The same args also drive the tableau-inject-template + tableau-apply-workbook chain. NOTE: title, template_parameters.DATASOURCE, and every field_mapping value are already XML-escaped for verbatim substitution into (single- or double-quoted) XML attributes — substitute them as-is; do NOT escape them again.';
 
 export type BinderResult =
   | {
@@ -154,8 +160,33 @@ export const PROPOSAL_OUTPUT_SCHEMA: Record<string, unknown> = {
 
 const DEFAULT_MIN_CONFIDENCE = 0.6;
 
+/**
+ * Characters illegal in an XML 1.0 document even when escaped: the C0 control block
+ * (U+0000–U+001F) and DEL (U+007F). A title carrying one — NUL especially, which cannot
+ * appear in XML at all — would make the substituted worksheet fragment unparseable
+ * downstream. The tool boundary (proposalSchema) REJECTS these and the Call-1 generator
+ * (makeTitle) STRIPS them; one shared definition so the two surfaces cannot drift
+ * (M10 Finding 2). NON-global so `.test()` is stateless (no lastIndex hazard).
+ *
+ * The character class is assembled at runtime (String.fromCharCode) rather than written
+ * as a regex literal so the intentional control chars do not trip eslint no-control-regex
+ * — and so this adds NO lint suppression.
+ */
+const XML_ILLEGAL_TITLE_CHARS =
+  Array.from({ length: 0x20 }, (_, i) => String.fromCharCode(i)).join('') +
+  String.fromCharCode(0x7f);
+export const TITLE_CONTROL_CHAR_RE = new RegExp(`[${XML_ILLEGAL_TITLE_CHARS}]`);
+export const TITLE_CONTROL_CHAR_MESSAGE =
+  'title must not contain control characters (C0 block U+0000–U+001F or DEL U+007F), which are illegal in XML 1.0 even when escaped';
+
 function makeTitle(ask: string): string {
-  const trimmed = ask.trim().replace(/\s+/g, ' ');
+  // Collapse whitespace FIRST so the XML-legal whitespace controls (TAB/LF/CR/FF/VT ∈ \s)
+  // become a single space, THEN strip any remaining C0/DEL control chars (NUL etc.) — so
+  // the Call-1 generated title is always XML-safe and agrees with proposalSchema's reject.
+  const trimmed = ask
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(new RegExp(TITLE_CONTROL_CHAR_RE.source, 'g'), '');
   if (!trimmed) return 'Untitled';
   return trimmed.length > 80 ? trimmed.slice(0, 80) : trimmed;
 }
@@ -219,7 +250,11 @@ function validateAndBuild(
 
   const args: InjectTemplateArgs = {
     template_name: m.template,
-    title: proposal.title,
+    // SECURITY (M10 Finding 1): the title is proposal/caller-controlled and substituted
+    // verbatim into an XML attribute — escape it here, at the single point it enters the
+    // returned payload. datasource + field_mapping arrive PRE-escaped from validateBinding
+    // (escaped exactly once at their production), so they are NOT re-escaped here.
+    title: escapeXml(proposal.title),
     sheet_type: 'worksheet',
     template_parameters: { DATASOURCE: v.datasource },
     field_mapping: v.field_mapping,
@@ -253,6 +288,27 @@ export async function bindTemplate(args: {
   // ── Call 2: validate the agent-produced proposal ─────────────────
   if (args.proposal) {
     return validateAndBuild(args.proposal, args.manifests, summary, minConfidence, true, args.ask);
+  }
+
+  // ── FAIL-CLOSED cost guard (M10 Finding 3) ───────────────────────
+  // classifyNoLlm + buildLlmInput run one regex PER schema field (maskFieldNames /
+  // matchFieldsInAsk / narrowFields), uncapped — a pathological wide schema (~50k fields
+  // ≈ 2.9s of synchronous event-loop block) is a per-call DoS. Over the cap we do NOT
+  // classify a truncated subset (which would risk a silent wrong bind); we escalate
+  // honestly (bounded time — this returns BEFORE the per-field hot loop) so the caller
+  // routes to the general authoring flow. Call-2 above is intentionally NOT capped: a
+  // filled proposal resolves only its handful of bound fields and never hits the loop.
+  if (summary.fields.length > MAX_CLASSIFIABLE_FIELDS) {
+    return {
+      status: 'escalate',
+      reason: 'schema-too-large',
+      blockers: [
+        {
+          code: 'schema-too-large',
+          detail: `schema-too-large: ${summary.fields.length} fields > ${MAX_CLASSIFIABLE_FIELDS} cap`,
+        },
+      ],
+    };
   }
 
   // ── Call 1: no-LLM fast path ─────────────────────────────────────

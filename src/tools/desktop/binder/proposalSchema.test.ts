@@ -24,6 +24,33 @@ describe('proposalSchema — strict object contract', () => {
   });
 });
 
+describe('proposalSchema — title control-char rejection (M10 Finding 2)', () => {
+  const base = {
+    template: 'ranking-ordered-bar',
+    bindings: [{ slot_id: 'cat', field: 'Region' }],
+    confidence: 0.9,
+  };
+
+  it.each([
+    ['NUL', 'ab\u0000cd'],
+    ['ESC', 'ab\u001Bcd'],
+    ['newline', 'line1\nline2'],
+    ['DEL', 'ab\u007Fcd'],
+  ])('rejects a title containing %s, naming the control-char rule', (_label, title) => {
+    const result = proposalSchema.safeParse({ ...base, title });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const msg = result.error.issues.map((i) => i.message).join(' ');
+      expect(msg).toMatch(/control characters/i);
+    }
+  });
+
+  it('accepts a normal accented / emoji title (only C0 + DEL are illegal)', () => {
+    expect(proposalSchema.safeParse({ ...base, title: 'Café Ventas €' }).success).toBe(true);
+    expect(proposalSchema.safeParse({ ...base, title: 'Sales 📊 by Region' }).success).toBe(true);
+  });
+});
+
 describe('bindingSchema — strict object contract', () => {
   const valid = { slot_id: 'cat', field: 'Region' };
 

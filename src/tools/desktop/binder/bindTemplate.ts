@@ -53,6 +53,9 @@ const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
   'derivation-illegal',
   'base-column-conflict',
   'cross-datasource-binding',
+  // Schema exceeds the classifier's field cap (M10 Finding 3): not a fast-path bind —
+  // route to the general authoring flow.
+  'schema-too-large',
 ]);
 
 function renderBlockers(blockers: Blocker[]): string {

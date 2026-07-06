@@ -57,6 +57,18 @@ export interface LlmProposeInput {
 export const DEFAULT_MAX_FIELDS = 20;
 
 /**
+ * Hard cap on the schema size the no-LLM classifier / propose-payload builder will
+ * process (M10 Finding 3). `maskFieldNames` + `matchFieldsInAsk` (classifyNoLlm) and
+ * `narrowFields` (buildLlmInput) each run ONE regex PER schema field; a synthetic
+ * ~50,000-field datasource costs ~2.9s of synchronous event-loop block per call — an
+ * unbounded per-call CPU DoS. Over this cap the classifier FAILS CLOSED (returns null —
+ * never a truncated subset, which would be a silent wrong answer), and bindTemplate
+ * escalates `schema-too-large`. 5000 is comfortably above any real Tableau datasource
+ * (hundreds of fields) yet bounds the worst-case loop to well under ~0.3s.
+ */
+export const MAX_CLASSIFIABLE_FIELDS = 5000;
+
+/**
  * Explicit aggregation words → canonical short forms, longest/most-specific
  * phrases first so "distinct count" wins over "count". Kept deliberately small
  * and conservative: only words that unambiguously name an aggregation.
@@ -666,6 +678,12 @@ export function classifyNoLlm(
   template: string;
   bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>;
 } | null {
+  // FAIL-CLOSED cost guard (M10 Finding 3): over the field cap, do NOT run the per-field
+  // hot loop (maskFieldNames / matchFieldsInAsk) and do NOT classify a truncated subset —
+  // return null so the orchestrator escalates rather than risk a silent wrong bind on a
+  // partial view. Checked at the TOP, before any field is touched, so cost stays bounded.
+  if (summary.fields.length > MAX_CLASSIFIABLE_FIELDS) return null;
+
   // Mask field names before scoring so a field NAME can't select a template or
   // read as an aggregation word; field↔slot matching still uses the raw ask.
   const maskedAsk = maskFieldNames(ask, summary);
@@ -766,7 +784,17 @@ export function buildLlmInput(
   // schema can't blow the propose prompt. classifyNoLlm is untouched — it still
   // resolves against the full schema.
   const kinds = requiredSlotKinds(top.map((c) => c.m));
-  const { fields: narrowed, withheld } = narrowFields(ask, summary.fields, kinds, maxFields);
+  // FAIL-CLOSED cost guard (M10 Finding 3): narrowFields runs one regex per field
+  // (askNamesField) — the same unbounded hot loop classifyNoLlm caps. Over the cap, rank
+  // only a bounded prefix so a pathological wide schema can't block the event loop for
+  // seconds; `withheld` below is computed against the TRUE total so more_available stays
+  // honest and the caller is told to re-query with a field-name hint.
+  const rankPool =
+    summary.fields.length > MAX_CLASSIFIABLE_FIELDS
+      ? summary.fields.slice(0, MAX_CLASSIFIABLE_FIELDS)
+      : summary.fields;
+  const { fields: narrowed } = narrowFields(ask, rankPool, kinds, maxFields);
+  const withheld = summary.fields.length - narrowed.length;
 
   const result: LlmProposeInput = {
     ask,
