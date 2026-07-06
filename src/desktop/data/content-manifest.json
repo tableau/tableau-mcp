@@ -162,8 +162,8 @@
     },
     {
       "path": "data-visualization-templates-xml/ranking-ordered-bar.xml",
-      "sha256": "0f9a70bfdca9171d40022364a94d0ee7fe036dc792f741ab104fc38dc6a28c4e",
-      "bytes": 2430
+      "sha256": "63040f0d4b4ee0f84f995a82ea0a7845453e078708e1cd55aa13f878ffc00d0e",
+      "bytes": 2514
     },
     {
       "path": "data-visualization-templates-xml/ranking-ordered-column.xml",
@@ -187,8 +187,8 @@
     },
     {
       "path": "data-visualization-templates-xml/trend-line-chart.xml",
-      "sha256": "a7b05cae4d0271b7459ab80b7120a4e8a474aa1483944cb0449e0fff7a138d11",
-      "bytes": 2020
+      "sha256": "fe35111190516e789d2db3666a7f4f86899e149839b203079a4e42f297c80f44",
+      "bytes": 2104
     },
     {
       "path": "data-visualization-templates-xml/ww-floating-bars.xml",
@@ -202,8 +202,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "fe7fc0eb310ff22ba364b25dbf08511291f9dad97a4c46a89b042ca09a2b217c",
-      "bytes": 188962
+      "sha256": "28bf5505ca4ae09cf665c57429192d6cce58442ce360cd3fa07065a16f240456",
+      "bytes": 193330
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -357,8 +357,8 @@
     },
     {
       "path": "template-manifests/ranking-ordered-bar.manifest.json",
-      "sha256": "d1880b8a047d8e169b267e16d0e52a9f1b22a1f1684edf093df30ef230306575",
-      "bytes": 1186
+      "sha256": "ba1931651c6fa8f9871eba46af855d14a656e40671266c2f499aef05b2be7bb8",
+      "bytes": 3214
     },
     {
       "path": "template-manifests/ranking-ordered-column.manifest.json",
@@ -382,8 +382,8 @@
     },
     {
       "path": "template-manifests/trend-line-chart.manifest.json",
-      "sha256": "808d75660cdbaee08c9b34fc2f37467ac5e29433dd4d6eebafc1fb46f88e192c",
-      "bytes": 1924
+      "sha256": "a3f76e50ba83cc1a85656149de632bf29ec17b14b0eed601f70effabf050f6eb",
+      "bytes": 3908
     },
     {
       "path": "template-manifests/ww-floating-bars.manifest.json",
