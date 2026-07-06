@@ -556,5 +556,59 @@ export function validateManifest(m: unknown): string[] {
     }
   }
 
+  // derivation is OPTIONAL (Lane G1 / H2.6): the anchored-derivation contract. When present it
+  // must be an object with EXACTLY {parent_template, removed_facets, changed_facets} — an unknown
+  // key fails loud (closed-vocabulary discipline). parent_template is a non-empty string; the two
+  // facet lists are string[] of non-empty strings, DISJOINT, and their union non-empty (an
+  // exemption-free contract is a no-op — omit it). The facet NAMES are cross-checked against the
+  // gate's structural vocabulary by a test (the loader stays decoupled from evals/); an unknown
+  // facet name still fails CLOSED at the gate (DerivationContractError).
+  if (m.derivation !== undefined) {
+    if (!isRecord(m.derivation)) {
+      errors.push(
+        'derivation must be an object { parent_template, removed_facets, changed_facets } when present',
+      );
+    } else {
+      const d = m.derivation;
+      const DERIVATION_KEYS: ReadonlySet<string> = new Set([
+        'parent_template',
+        'removed_facets',
+        'changed_facets',
+      ]);
+      for (const k of Object.keys(d)) {
+        if (!DERIVATION_KEYS.has(k)) {
+          errors.push(
+            `derivation: unknown key '${k}' (allowed: parent_template, removed_facets, changed_facets)`,
+          );
+        }
+      }
+      if (typeof d.parent_template !== 'string' || d.parent_template.trim().length === 0) {
+        errors.push('derivation.parent_template must be a non-empty string');
+      }
+      const facetListOk = (key: string): string[] => {
+        const v = d[key];
+        if (!isStringArray(v) || v.some((s) => s.trim().length === 0)) {
+          errors.push(`derivation.${key} must be a string[] of non-empty facet names`);
+          return [];
+        }
+        return v;
+      };
+      const removed = facetListOk('removed_facets');
+      const changed = facetListOk('changed_facets');
+      const removedSet = new Set(removed);
+      const overlap = changed.filter((f) => removedSet.has(f));
+      if (overlap.length > 0) {
+        errors.push(
+          `derivation: facet(s) [${overlap.join(', ')}] appear in BOTH removed_facets and changed_facets (must be disjoint)`,
+        );
+      }
+      if (removed.length + changed.length === 0) {
+        errors.push(
+          'derivation declares no exempt facets — omit the derivation block for an ordinary (non-derivation) template',
+        );
+      }
+    }
+  }
+
   return errors;
 }

@@ -253,10 +253,11 @@ export interface GoldenSpec {
  * The facet names in `removed_facets` / `changed_facets` MUST be members of the golden-parity
  * gate's structural facet vocabulary; an unknown facet fails loud AT THE GATE.
  *
- * PORT NOTE (superset ported from A for A↔B manifest-shape convergence): B's `validateManifest`
- * treats a present `derivation` as PASS-THROUGH (unknown-but-typed), exactly like
- * `render_evidence` — the object-shape / closed-key-set / facet-vocabulary / parent-existence
- * cross-checks live at the golden-parity gate, not in this repo's shape validator.
+ * PORT NOTE (superset ported from A for A↔B manifest-shape convergence): `validateManifest`
+ * ENFORCES this shape — object-ness, the CLOSED key set {parent_template, removed_facets,
+ * changed_facets}, a non-empty `parent_template`, string[] facet lists of non-empty names,
+ * DISJOINT removed/changed sets, and a non-empty exemption union. The facet-vocabulary and
+ * parent-existence cross-checks still live at the golden-parity gate, not in this shape validator.
  */
 export interface DerivationContract {
   /** The template whose golden worksheet anchor this template derives from (e.g. `ww-ou-arrow`). */
