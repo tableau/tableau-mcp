@@ -20,7 +20,38 @@ import Fuse from 'fuse.js';
 
 import { calcForcedSlotIds } from './calc-derivation.js';
 import type { Derivation, SlotKind, TemplateManifest } from './manifest-types.js';
-import { bareName, type SchemaField, type SchemaSummary } from './schema-summary.js';
+
+/**
+ * SCHEMA SHAPES + `bareName`, inlined so this file stays import-pure — it severs the
+ * divergent `./schema-summary.js` edge (the same convergence move calc-derivation.ts
+ * makes) so the classifier depends only on `./manifest-types.js` + `./calc-derivation.js`
+ * and a byte-identical copy resolves entirely within the shared lockstep-core set.
+ * These MIRROR the schema module's exported `SchemaField`/`SchemaSummary` structurally;
+ * the PRODUCER (`summarizeSchema`) still lives there — only the read-only shapes the
+ * classifier consumes are declared here.
+ */
+interface SchemaField {
+  name: string; // friendly name: caption ?? bare column name
+  caption?: string;
+  columnName: string; // bracketed local name, e.g. "[Region]"
+  role: 'dimension' | 'measure';
+  type: string; // "quantitative" | "nominal" | "ordinal" | ...
+  datatype: string; // "string" | "real" | "integer" | "date" | "datetime" | ...
+  datasource: string;
+  isAggregated: boolean;
+  column_ref: string; // straight from listAvailableFields, e.g. "[Superstore].[sum:Sales:qk]"
+}
+
+interface SchemaSummary {
+  /** The primary datasource — substituted for {{DATASOURCE}} and the expected home of every bound field. */
+  datasource: string;
+  fields: SchemaField[];
+}
+
+/** Strip surrounding brackets from a Tableau field name: "[Region]" -> "Region". */
+function bareName(name: string): string {
+  return name.replace(/^\[|\]$/g, '');
+}
 
 export interface LlmProposeInput {
   ask: string;
