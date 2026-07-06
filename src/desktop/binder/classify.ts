@@ -388,7 +388,14 @@ function familyNativeKeywords(
  */
 function maskFieldNames(ask: string, s: SchemaSummary): string {
   let masked = ask;
-  for (const f of s.fields) {
+  // LONGEST FIELD NAME FIRST. Schema-order masking fragments a compound field:
+  // masking "Region" before "Country/Region" turns it into "Country/      " so the
+  // compound's own regex no longer matches, and the surviving "Country" token trips
+  // spatial-choropleth-map's avoid_when → a spatial ask wrongly demotes to propose.
+  // Masking the longest name first consumes the whole compound token before any of
+  // its sub-names can fragment it.
+  const fields = [...s.fields].sort((a, b) => b.name.length - a.name.length);
+  for (const f of fields) {
     const names = [bareName(f.columnName), f.caption, f.name].filter(
       (n): n is string => !!n && n.length > 0,
     );
@@ -528,11 +535,109 @@ function isCategorical(f: SchemaField): boolean {
 }
 
 /**
+ * GEO SLOT ↔ FIELD NAME AFFINITY (fail-closed geo binding). A geo slot must not
+ * take "the first unused dimension" (that silently SWAPS country↔state — worse than
+ * proposing); it binds only a field whose name carries the slot's geographic concept.
+ *
+ * Each geo concept has a synonym set; a compound slot_id ("country_region",
+ * "state_province") resolves to the concept of its FIRST recognized token (so
+ * "country_region" → country, NOT the union country∪state which would over-match).
+ */
+const GEO_CONCEPT_SYNONYMS: Readonly<Record<string, readonly string[]>> = {
+  country: ['country', 'nation'],
+  state: ['state', 'province', 'region', 'admin'],
+};
+/** Reverse index: a token → its geographic concept (drives slot_id → affinity). */
+const GEO_TOKEN_CONCEPT: Readonly<Record<string, string>> = {
+  country: 'country',
+  nation: 'country',
+  state: 'state',
+  province: 'state',
+  region: 'state',
+  admin: 'state',
+};
+
+/** Split a name/slot_id into lowercased whole tokens (non-alphanumeric boundaries). */
+function nameTokens(s: string): string[] {
+  return s
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+/**
+ * Affinity token set for a geo slot: the synonym set of the concept named by the
+ * slot_id's FIRST recognized geo token, else the slot_id's own literal tokens (an
+ * exotic geo slot still matches fields sharing its name). "country_region" → the
+ * country synonyms {country,nation}; "state_province" → {state,province,region,admin}.
+ */
+function geoAffinityTokens(slotId: string): Set<string> {
+  for (const t of nameTokens(slotId)) {
+    const concept = GEO_TOKEN_CONCEPT[t];
+    if (concept) return new Set(GEO_CONCEPT_SYNONYMS[concept]);
+  }
+  return new Set(nameTokens(slotId));
+}
+
+/** Count of a geo slot's affinity tokens that appear as whole tokens in the field's names. */
+function geoAffinityOverlap(f: SchemaField, aff: Set<string>): number {
+  const ft = new Set<string>();
+  for (const n of [f.name, f.caption ?? '', bareName(f.columnName)]) {
+    for (const t of nameTokens(n)) ft.add(t);
+  }
+  let n = 0;
+  for (const t of aff) if (ft.has(t)) n++;
+  return n;
+}
+
+/**
+ * Resolve every required geo slot to a distinct field by NAME AFFINITY, over the
+ * pool of still-unused matched dimensions. Fail-closed (returns null → the caller
+ * proposes) when any geo slot is not UNAMBIGUOUS: it binds the field with the
+ * strictly-greatest affinity overlap, but only when that maximum is unique and > 0
+ * (zero candidates, or 2+ tied at the max, → null). A final distinctness check
+ * rejects two geo slots resolving to the SAME field. Computing every slot's overlap
+ * over the SAME pool (not a shrinking one) is load-bearing: it lets a coarse phantom
+ * like "Region" (a sub-token of "Country/Region") tie the state slot against
+ * "Country/Region" and fail closed, rather than being silently mis-bound.
+ */
+function resolveGeoSlots(
+  geoSlots: TemplateManifest['slots'],
+  pool: SchemaField[],
+): Map<string, SchemaField> | null {
+  const picks = new Map<string, SchemaField>();
+  for (const slot of geoSlots) {
+    const aff = geoAffinityTokens(slot.slot_id);
+    let best: SchemaField | null = null;
+    let bestOverlap = 0;
+    let tie = false;
+    for (const f of pool) {
+      const ov = geoAffinityOverlap(f, aff);
+      if (ov > bestOverlap) {
+        best = f;
+        bestOverlap = ov;
+        tie = false;
+      } else if (ov === bestOverlap && ov > 0) {
+        tie = true;
+      }
+    }
+    if (!best || bestOverlap === 0 || tie) return null; // zero or 2+ candidates
+    picks.set(slot.slot_id, best);
+  }
+  const chosen = [...picks.values()];
+  if (new Set(chosen).size !== chosen.length) return null; // two slots, one field
+  return picks;
+}
+
+/**
  * Role-greedy field assignment (design §3.5 step 2): fill each required, bindable
  * slot with the first still-unused matched field of the compatible role/kind —
- * measures → quantitative, dimensions → categorical/temporal/geo. Returns the
- * bindings, or null if any required slot is left unfilled (fail-closed). An
- * explicit aggregation override applies only to quantitative slots.
+ * measures → quantitative, dimensions → categorical/temporal. GEO slots are the
+ * exception: they do NOT take "the first unused dimension" (that silently swaps
+ * country↔state); they resolve as a group by slot↔field NAME AFFINITY
+ * (`resolveGeoSlots`), fail-closed on any ambiguity. Returns the bindings, or null
+ * if any required slot is left unfilled (fail-closed). An explicit aggregation
+ * override applies only to quantitative slots.
  *
  * Shared machinery: classifyNoLlm emits with it, and the intra-family tiebreak's
  * slot-fit test calls it to answer "do the ask's fields satisfy this candidate?"
@@ -560,8 +665,14 @@ function roleGreedyBind(
     return null;
   };
 
+  const isActive = (slot: TemplateManifest['slots'][number]): boolean =>
+    slot.bindable && (slot.required || forced.has(slot.slot_id));
+  const geoSlots = m.slots.filter((s) => isActive(s) && s.kind === 'geo');
+  let geoPicks: Map<string, SchemaField> | null = null;
+  let geoResolved = false;
+
   for (const slot of m.slots) {
-    if (!slot.bindable || !(slot.required || forced.has(slot.slot_id))) continue;
+    if (!isActive(slot)) continue;
     let chosen: SchemaField | null = null;
     switch (slot.kind) {
       case 'quantitative':
@@ -573,13 +684,24 @@ function roleGreedyBind(
       case 'temporal':
         chosen = take(isTemporal);
         break;
-      case 'geo':
-        chosen = take((f) => f.role === 'dimension');
+      case 'geo': {
+        // Resolve ALL geo slots together on first encounter, over the dimensions not
+        // already consumed by the non-geo slots (which precede geo in every eligible
+        // template). Name affinity replaces "first unused dimension", so a geo slot
+        // binds only a name-matching field or fails closed — never a silent swap.
+        if (!geoResolved) {
+          const pool = matched.filter((f) => !used.has(f) && f.role === 'dimension');
+          geoPicks = resolveGeoSlots(geoSlots, pool);
+          if (geoPicks) for (const f of geoPicks.values()) used.add(f);
+          geoResolved = true;
+        }
+        chosen = geoPicks ? (geoPicks.get(slot.slot_id) ?? null) : null;
         break;
+      }
       default:
         chosen = null;
     }
-    if (!chosen) return null; // required slot unfilled → fail closed
+    if (!chosen) return null; // required slot unfilled / geo affinity ambiguous → fail closed
     const binding: { slot_id: string; field: string; derivation?: Derivation } = {
       slot_id: slot.slot_id,
       field: chosen.name,

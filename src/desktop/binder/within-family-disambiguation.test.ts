@@ -211,6 +211,109 @@ describe('classifyNoLlm — sole-wrong-matcher guard', () => {
   });
 });
 
+// ── (3) LONGEST-FIRST FIELD MASKING (compound-name fragmentation) ─────────────
+// SUMMARY lists "Region" BEFORE "Country/Region". Schema-order masking would mask
+// "Region" first, fragmenting "Country/Region" -> "Country/      " and leaking a
+// "Country" token; longest-first masking consumes the whole compound token first.
+describe('classifyNoLlm — longest-first field masking', () => {
+  it("fully masks a compound field so a sub-token can't score a template by field NAME", () => {
+    // Template selected purely on a "country" keyword. The ask carries NO chart
+    // keyword — only the FIELD "Country/Region". Under the schema-order bug the
+    // leaked "Country" token would score this template (a field name driving
+    // selection); longest-first masking removes the whole field name -> no match.
+    const m = mapOf(synth('geo-kw', 'spatial', ['country'], catVal()));
+    expect(classifyNoLlm('chart of Sales by Country/Region', m, SUMMARY)).toBeNull();
+  });
+
+  it('still selects on a genuine chart keyword after masking (masking removed only the field-name leak)', () => {
+    const m = mapOf(synth('choropleth', 'spatial', ['choropleth'], catVal()));
+    const res = classifyNoLlm('choropleth of Sales by Country/Region', m, SUMMARY);
+    expect(res).not.toBeNull();
+    expect(res!.template).toBe('choropleth');
+  });
+});
+
+// ── (4) GEO SLOT ↔ FIELD NAME AFFINITY (fail-closed geo binding) ──────────────
+const geoTriple = (): SlotSpec[] => [
+  slot('country', 'geo'),
+  slot('state', 'geo'),
+  slot('val', 'quantitative'),
+];
+
+describe('classifyNoLlm — geo slot name affinity', () => {
+  it('binds country->Country/Region, state->State/Province, val->Profit (correct, not swapped)', () => {
+    const m = mapOf(synth('choropleth', 'spatial', ['choropleth'], geoTriple()));
+    const res = classifyNoLlm(
+      'choropleth of Profit by State/Province within Country/Region',
+      m,
+      SUMMARY,
+    );
+    expect(res).not.toBeNull();
+    expect(res!.bindings).toEqual([
+      { slot_id: 'country', field: 'Country/Region' },
+      { slot_id: 'state', field: 'State/Province' },
+      { slot_id: 'val', field: 'Profit' },
+    ]);
+  });
+
+  it('SWAP REFUSAL: binds by name regardless of field order in the ask', () => {
+    // State/Province is named BEFORE Country/Region; the OLD first-unused-dimension
+    // geo rule would bind country<-State/Province (a silent swap). Affinity binds
+    // by name, so the mapping is correct no matter the order.
+    const m = mapOf(synth('choropleth', 'spatial', ['choropleth'], geoTriple()));
+    const res = classifyNoLlm(
+      'choropleth of Sales by State/Province and Country/Region',
+      m,
+      SUMMARY,
+    );
+    expect(res).not.toBeNull();
+    expect(res!.bindings.find((b) => b.slot_id === 'country')!.field).toBe('Country/Region');
+    expect(res!.bindings.find((b) => b.slot_id === 'state')!.field).toBe('State/Province');
+  });
+
+  it('AMBIGUOUS -> propose: a geo slot with 2+ affinity candidates fails closed', () => {
+    // Only Country/Region is named; the state slot's affinity (state/province/region)
+    // ties Country/Region (via 'region') against the phantom 'Region' sub-token ->
+    // no unique max -> null (propose) rather than a guessed bind.
+    const m = mapOf(synth('choropleth', 'spatial', ['choropleth'], geoTriple()));
+    expect(classifyNoLlm('choropleth of Profit across Country/Region', m, SUMMARY)).toBeNull();
+  });
+
+  it('ZERO candidates -> propose: a geo slot with no name-affinity field fails closed', () => {
+    const m = mapOf(synth('choropleth', 'spatial', ['choropleth'], geoTriple()));
+    // 'Category' carries no country/state token -> country slot has 0 candidates.
+    expect(classifyNoLlm('choropleth of Sales by Category', m, SUMMARY)).toBeNull();
+  });
+
+  it('resolves COMPOUND geo slot_ids by primary concept (country_region -> country, not country∪state)', () => {
+    // The distribution-bar-code-chart shape: geo slot_ids 'country_region' /
+    // 'state_province'. Naively unioning both tokens' synonyms would make
+    // State/Province tie country_region; primary-concept resolution keeps it clean.
+    const m = mapOf(
+      synth(
+        'strip',
+        'distribution',
+        ['strip-plot'],
+        [
+          slot('cat', 'categorical'),
+          slot('val', 'quantitative'),
+          slot('country_region', 'geo'),
+          slot('state_province', 'geo'),
+        ],
+      ),
+    );
+    const res = classifyNoLlm(
+      'strip-plot of Sales by Sub-Category, one tick per State/Province and Country/Region',
+      m,
+      SUMMARY,
+    );
+    expect(res).not.toBeNull();
+    const byId = Object.fromEntries(res!.bindings.map((b) => [b.slot_id, b.field]));
+    expect(byId.country_region).toBe('Country/Region');
+    expect(byId.state_province).toBe('State/Province');
+  });
+});
+
 // ── determinism ───────────────────────────────────────────────────────────────
 describe('classifyNoLlm — determinism', () => {
   it('same inputs produce identical selection + bindings', () => {
