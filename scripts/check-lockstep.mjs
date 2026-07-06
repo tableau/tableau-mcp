@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable no-console */
 // scripts/check-lockstep.mjs
 //
 // LOCKSTEP-CORE HASH GATE (W14-LS1 mirror). This repo is the CANONICAL home of the
@@ -21,6 +22,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const HASHES_REL = 'lockstep.hashes.json';
 
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- plain .mjs, no TS annotations
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 
 const hashesPath = join(REPO_ROOT, HASHES_REL);
@@ -36,7 +38,9 @@ if (process.argv.includes('--update')) {
     Object.keys(manifest).map((rel) => [rel, sha256(readFileSync(join(REPO_ROOT, rel)))]),
   );
   writeFileSync(hashesPath, JSON.stringify(updated, null, 2) + '\n');
-  console.log(`[check-lockstep] regenerated ${HASHES_REL} (${entries.length} files). Re-sync consumer repos.`);
+  console.log(
+    `[check-lockstep] regenerated ${HASHES_REL} (${entries.length} files). Re-sync consumer repos.`,
+  );
   process.exit(0);
 }
 
@@ -58,9 +62,9 @@ if (drift.length > 0) {
   console.error(`[check-lockstep] FAIL: lockstep-core drift (${drift.length}/${entries.length}):`);
   console.error(drift.join('\n'));
   console.error(
-    `\n  These files are byte-locked with consumer repos. If this change is an intentional\n` +
-      `  engine update: \`node scripts/check-lockstep.mjs --update\`, commit the manifest with\n` +
-      `  the change, and re-sync consumers so both manifests carry identical hashes.`,
+    '\n  These files are byte-locked with consumer repos. If this change is an intentional\n' +
+      '  engine update: `node scripts/check-lockstep.mjs --update`, commit the manifest with\n' +
+      '  the change, and re-sync consumers so both manifests carry identical hashes.',
   );
   process.exit(1);
 }
