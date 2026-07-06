@@ -384,16 +384,18 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
     }
   });
 
-  it('the render-verified set is exactly the eight live-proven templates', () => {
-    // The W2-R008 wave3 floor-raise (live-verify 2026-07-05) hand-stamped four MORE
-    // templates fast_path_eligible after a live render + structural-parity + human
-    // review — their provenance rides in portability_evidence.render_evidence (the three
-    // shipped-XML siblings) and golden.checkpoint_render (the golden-only ww-ou-arrow):
-    //   distribution-bar-code-chart, part-to-whole-stacked-bar-chart, ranking-ordered-column,
-    //   ww-ou-arrow.
-    // Still UNSTAMPED (render_verified none): ww-ou-diff (a documented derivation that
-    // could not be live-render-verified here), ww-floating-bars (recompiled from the final
-    // 'format' rung but not yet re-golden-matched), and control-chart-xmr.
+  it('the render-verified set is exactly the ten live-proven factory templates', () => {
+    // W26-B re-snapshot: the bundled supply was resynced to the factory's full 39 manifests.
+    // fast_path_eligible / render_verified TRAVEL UNCHANGED from the factory (no stamps minted
+    // in transit): the factory stamps exactly TEN templates render-verified, so the shipped
+    // eligible set is exactly ten. The two additions vs the prior shipped eight are NEW
+    // templates that arrive already factory render-verified (render_verified live-2026-07-06):
+    //   part-to-whole-waterfall, spatial-choropleth-map.
+    // The prior eight (unchanged): distribution-bar-code-chart, kpi-text,
+    //   part-to-whole-stacked-bar-chart, part-to-whole-treemap-chart, ranking-ordered-bar,
+    //   ranking-ordered-column, trend-line-chart, ww-ou-arrow.
+    // Everything else in the 39 ships propose-only (render_verified none) and honestly surfaces
+    // the not-live-render-verified blocker via deriveFastPathBlockers.
     const eligible = [...manifests.values()]
       .filter((m) => m.fast_path_eligible)
       .map((m) => m.template)
@@ -404,8 +406,10 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
         'kpi-text',
         'part-to-whole-stacked-bar-chart',
         'part-to-whole-treemap-chart',
+        'part-to-whole-waterfall',
         'ranking-ordered-bar',
         'ranking-ordered-column',
+        'spatial-choropleth-map',
         'trend-line-chart',
         'ww-ou-arrow',
       ].sort(),

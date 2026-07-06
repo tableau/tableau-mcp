@@ -1,0 +1,69 @@
+{
+  "template": "ranking-dot-strip-plot",
+  "family": "ranking",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "dot-strip-plot",
+    "dot-plot",
+    "strip-plot",
+    "ranking"
+  ],
+  "description": "A dot strip plot: one Circle mark per detail-grain member placed along an aggregated-measure axis, grouped by a category on rows, with a per-cell average reference line — a space-efficient way to rank/compare members within each row. Lane W11-F2: the source month filter was PARAMETERIZED (collapsed to level-members) so the date stays a data-driven Filters pill with no source literals.",
+  "slots": [
+    {
+      "slot_id": "order_date_month",
+      "template_field": "Order Date",
+      "derivation": "mn",
+      "role": [
+        "rows"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "notes": "Month of the bound date on the rows axis — one strip per month. Used at a single derivation (mn), so no qualified key is required."
+    },
+    {
+      "slot_id": "sales",
+      "template_field": "Sales",
+      "derivation": "sum",
+      "role": [
+        "cols"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "Aggregated measure on the cols axis — the value each dot is placed at; also the per-cell average reference line."
+    },
+    {
+      "slot_id": "sub_category",
+      "template_field": "Sub-Category",
+      "derivation": "none",
+      "role": [
+        "detail"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "Level-of-detail dimension — one Circle mark per member within each row's strip."
+    }
+  ],
+  "calcs": [],
+  "hazards": [
+    {
+      "code": "hardcoded-filter-parameterized",
+      "detail": "The source workbook pinned Month of Order Date to a 1..6 (Jan–Jun) member list — a source-calendar window that would render empty/partial on a differently-shaped date. Lane F2's compile-time filter policy PARAMETERIZED it: the six-member union was collapsed to the neutral all-members form (<groupfilter function='level-members' level='[mn:Order Date:ok]'/>), so Month stays a data-driven Filters-shelf pill (its <slices> entry is preserved) with the source literals removed. This is the same neutral form the apply-path 3c neutralizer writes, so compile + apply agree (idempotent).",
+      "xml": "ranking-dot-strip-plot.xml:26-28"
+    }
+  ]
+}

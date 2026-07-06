@@ -3,18 +3,203 @@
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Edit data/template-manifests/*.manifest.json and re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
   "_source": "data/template-manifests/*.manifest.json",
-  "count": 17,
+  "count": 39,
   "fast_path_templates": [
     "distribution-bar-code-chart",
     "kpi-text",
     "part-to-whole-stacked-bar-chart",
     "part-to-whole-treemap-chart",
+    "part-to-whole-waterfall",
     "ranking-ordered-bar",
     "ranking-ordered-column",
+    "spatial-choropleth-map",
     "trend-line-chart",
     "ww-ou-arrow"
   ],
   "templates": [
+    {
+      "template": "box-plot-chart",
+      "family": "distribution",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "box-plot",
+        "boxplot",
+        "box-and-whisker",
+        "whisker",
+        "quartile",
+        "distribution"
+      ],
+      "description": "A box-and-whisker plot showing the DISTRIBUTION of a measure: Circle marks at one point per grain member (the level dimension on the level-of-detail shelf), a continuous measure axis on rows ([sum:Measure:qk]), and a per-cell box-plot reference line (boxplot-whisker-type='standard') that draws the median / IQR box + whiskers over those points; an OPTIONAL facet dimension on cols splits the distribution into side-by-side boxes. Serves UC7 (distribution analysis) and the UC4 ranged/uncertainty view. Generalized from the repo distribution-bar-code-chart (a live-stamped strip plot: detail-grain dim on lod + aggregated measure axis) plus the distribution-box-whisker catalog exemplar's box-plot reference-line + Circle marks. Structurally compiled hermetically, NOT live render-verified.",
+      "avoid_when": [
+        "You want the frequency SHAPE across equal-width buckets (how many records fall in each range) — that is a histogram (distribution-histogram); a box plot summarizes to quartiles and hides the multi-modal shape a histogram reveals.",
+        "The grain (level) dimension is coarse — a box drawn over only a handful of points is statistical noise (quartiles/whiskers are unstable); bind a fine-grained entity (deal/ticket/order) as the level (see hazard sparse-extremes).",
+        "The ask is a single headline number or a trend over time — a box plot answers 'how is it spread / where are the outliers', not 'what is it now' or 'is it rising'."
+      ],
+      "slots": [
+        {
+          "slot_id": "measure",
+          "template_field": "Measure",
+          "derivation": "sum",
+          "role": [
+            "rows"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The distributed measure — the continuous axis on rows, SUM([Measure]) per grain member → [sum:Measure:qk]. It is BOTH the axis-column and value-column of the box-plot reference line (the box + whiskers summarize this measure's values across the level members)."
+        },
+        {
+          "slot_id": "level",
+          "template_field": "Level",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The GRAIN dimension on the level-of-detail (lod/detail) shelf — one Circle mark per member, and the population the box summarizes. REQUIRED because a box plot needs multiple marks per cell to have a distribution; an aggregated measure with no grain dim collapses to one point per cell (degenerate). Mirrors the bar-code chart's detail dim. XML column-instance [none:Level:nk]."
+        },
+        {
+          "slot_id": "facet",
+          "template_field": "Facet",
+          "derivation": "none",
+          "role": [
+            "cols"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": false,
+          "notes": "OPTIONAL grouping dimension on cols — splits the distribution into side-by-side boxes (e.g. resolution-time distribution PER team). Because it is optional it is NOT counted in the required-bindable fixture_bind set (only {measure, level} are). When present it partitions the per-cell box plots; when absent the chart is a single box over the level members. XML column-instance [none:Facet:nk]."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "outlier-domination",
+          "detail": "A few extreme values stretch the measure axis so the IQR box compresses to a sliver and the median/quartile story is lost — the exact 'outliers swamp' condition the product use case calls out. The template applies no outlier handling (boxplot-mark-exclusion='false' keeps outlier marks in the axis scaling). Filter or exclude extreme points, or use a log axis, when a long tail dominates.",
+          "xml": "box-plot-chart.xml:29"
+        },
+        {
+          "code": "sparse-extremes",
+          "detail": "With few points per box (a coarse level dim, or a facet member with only a handful of grain members) the quartiles and whiskers are statistically meaningless — a box over 2–3 points is noise dressed as a summary. The template cannot know the per-cell count; bind a fine-grained level and confirm each box has enough members before reading the spread.",
+          "xml": "box-plot-chart.xml:24"
+        },
+        {
+          "code": "grain-dimension-required",
+          "detail": "The box summarizes the measure ACROSS the level (grain) dimension's members. This is why 'level' is a REQUIRED slot even though the product sketch listed only {measure, optional facet}: with aggregation on and no grain dim, each cell has a single aggregated mark and the box is degenerate (one point). Bind the entity whose values you want distributed (deal/ticket/order) to 'level'; the facet is the optional grouping on top.",
+          "xml": "box-plot-chart.xml:20"
+        },
+        {
+          "code": "not-live-render-verified",
+          "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop). portability_evidence.render_verified='none' and fast_path_eligible=false: the template binds the committed fixture (fixture_bind computed true — the measure + the grain dim; the optional facet is excluded) but has NO live render-readback proof. A live-YYYY-MM-DD stamp is EARNED later by the golden-parity gate / a hand-stamp with render_evidence, never granted at compile time.",
+          "xml": "box-plot-chart.xml:1"
+        }
+      ]
+    },
+    {
+      "template": "bullet-variance-chart",
+      "family": "deviation",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "bullet",
+        "variance",
+        "actual-vs-target",
+        "attainment",
+        "quota-attainment",
+        "target-line"
+      ],
+      "description": "A bullet/variance chart for actual-vs-target comparison: one Bar per category member (rep/region/segment on rows) whose length is the ACTUAL measure on cols ([sum:Actual:qk]), with a per-cell TARGET reference line (SUM([Target]) drawn as refline0) so the gap between the bar and the line reads as attainment/variance at a glance. Serves UC1 (sales performance & quota attainment). Generalized from the repo ranking-bullet-chart exemplar (bar + per-cell sum reference line); the Profit-Ratio color calc was dropped so the slot vocabulary is exactly {category, actual, target}. Structurally compiled hermetically, NOT live render-verified.",
+      "avoid_when": [
+        "The ask is a running cumulative build-up to a total (revenue minus costs, contribution to a whole) — that is a waterfall; this bullet compares each member's actual against its own target independently, not a cumulative path.",
+        "There is no meaningful target/goal/benchmark measure to compare against — without the target reference line this collapses to a plain ranked bar (use ranking-ordered-bar).",
+        "The target is a rate/ratio or an already-period-total that is not additive at the category grain — the reference line SUMs the target per cell (formula='sum'), so a non-additive target double-counts (see hazard target-summed-per-cell)."
+      ],
+      "slots": [
+        {
+          "slot_id": "category",
+          "template_field": "Category",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The comparison dimension on rows — one bullet row per member (rep / region / segment). XML column-instance [none:Category:nk]."
+        },
+        {
+          "slot_id": "actual",
+          "template_field": "Actual",
+          "derivation": "sum",
+          "role": [
+            "cols"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The ACTUAL/attained measure — the bar length on cols, SUM([Actual]) → [sum:Actual:qk]. This is also the reference line's axis-column (the target line is drawn on the same axis as the actual bar)."
+        },
+        {
+          "slot_id": "target",
+          "template_field": "Target",
+          "derivation": "sum",
+          "role": [
+            "lod",
+            "reference-line"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The TARGET/quota/goal measure. Carried on the level-of-detail (lod) shelf as SUM([Target]) → [sum:Target:qk] so it is in the view, and referenced by refline0 (value-column) as the per-cell target line. replaceFieldReferences rewrites [Target] in BOTH the lod instance and the reference-line on bind. See hazard target-summed-per-cell."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "partial-period-attainment",
+          "detail": "A mid-period ACTUAL compared against a FULL-period target overstates the shortfall — the bar sits far below the target line simply because the quarter is not over, not because the member is behind. The template has no as-of/period-elapsed awareness: pro-rate the target to the elapsed period, scale the actual to a run-rate, or label the as-of date before reading the gap as risk.",
+          "xml": "bullet-variance-chart.xml:31"
+        },
+        {
+          "code": "zero-activity-members",
+          "detail": "A category member with no rows in the bound data produces NO bar (an inner-join / no-mark), so a zero-attainment rep/region silently disappears rather than showing a visible 0 bar beneath its target line — exactly the at-risk member the ask (“which reps are at risk of missing”) wants surfaced. Bind against data that carries every member (or densify/pad), or the chart hides its most important marks.",
+          "xml": "bullet-variance-chart.xml:29"
+        },
+        {
+          "code": "target-summed-per-cell",
+          "detail": "The target line is a per-cell reference line with formula='sum' (SUM([Target])), so it aggregates the target additively within each category cell. If the bound target is a rate/ratio, an average goal, or an already-rolled-up period total, SUM double-counts across the cell's rows and the line lands in the wrong place. Bind a target that is additive at the category grain, or switch the reference line's formula to average/median.",
+          "xml": "bullet-variance-chart.xml:31"
+        },
+        {
+          "code": "not-live-render-verified",
+          "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop). portability_evidence.render_verified='none' and fast_path_eligible=false: the template binds the committed fixture (fixture_bind computed true — a dim + two distinct measures) but has NO live render-readback proof. A live-YYYY-MM-DD stamp is EARNED later by the golden-parity gate / a hand-stamp with render_evidence, never granted at compile time.",
+          "xml": "bullet-variance-chart.xml:1"
+        }
+      ]
+    },
     {
       "template": "change-over-time-area-chart",
       "family": "time-series",
@@ -86,6 +271,84 @@
       ]
     },
     {
+      "template": "change-over-time-calendar-heatmap",
+      "family": "time-series",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": false,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "calendar-heatmap",
+        "calendar",
+        "heatmap",
+        "seasonality",
+        "month-over-year",
+        "time-series"
+      ],
+      "description": "A calendar heatmap: one date field split into Year (columns) and Month (rows), color-shaded by an aggregated measure to reveal seasonality / month-over-year patterns.",
+      "slots": [
+        {
+          "slot_id": "order_month",
+          "template_field": "Order Date",
+          "derivation": "mn",
+          "role": [
+            "rows"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "qualified_key_required": true,
+          "notes": "Month part of the SAME bound date field (rows axis / calendar cell height)."
+        },
+        {
+          "slot_id": "order_year",
+          "template_field": "Order Date",
+          "derivation": "yr",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "qualified_key_required": true,
+          "notes": "Year part of the SAME bound date field (cols axis). Reuses Order Date at a second derivation — see hazard single-date-two-derivations."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "color"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "aggregated measure driving the cell color gradient."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "single-date-two-derivations",
+          "detail": "The one [Order Date] field is used at BOTH Month (rows) and Year (cols). Against the single-date committed fixture the second temporal slot cannot bind a DISTINCT field, so fixture_bind=false — a valid, honest state. On a real dataset both slots bind the same date field via qualified keys; the false reflects the fixture's one-date shape, not a template defect.",
+          "xml": "change-over-time-calendar-heatmap.xml:12,14"
+        },
+        {
+          "code": "keyed-cell-style",
+          "detail": "A <style-rule element='cell'> sets fixed height keyed by name to [mn:Order Date:ok] (calendar squares). Cosmetic; it references the month instance by qualified name and rides along verbatim.",
+          "xml": "change-over-time-calendar-heatmap.xml:20"
+        }
+      ]
+    },
+    {
       "template": "change-over-time-stacked-area-chart",
       "family": "time-series",
       "readiness": "YELLOW",
@@ -152,6 +415,135 @@
           "code": "hidden-aggregate-role-from",
           "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
           "xml": "change-over-time-stacked-area-chart.xml:11"
+        }
+      ]
+    },
+    {
+      "template": "connected-scatterplot",
+      "family": "correlation",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "connected-scatterplot",
+        "connected-scatter",
+        "scatter",
+        "trajectory",
+        "path",
+        "relationship"
+      ],
+      "description": "A connected scatterplot: X is a measure, Y is a template calc (Profit Ratio), Line marks connect the per-member points into a path; color by a dimension, detail by a second dimension.",
+      "slots": [
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "cols",
+            "formula-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "X axis measure; also a denominator input to the Profit Ratio calc."
+        },
+        {
+          "slot_id": "profit",
+          "template_field": "Profit",
+          "derivation": "sum",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "numerator input to the Profit Ratio calc (Y axis is the calc, not Profit directly)."
+        },
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "customer_name",
+          "template_field": "Customer Name",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "detail grain — one point per member; the mark path connects points within a color group."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "profit_ratio_calc",
+          "template_field": "Calculation_1368249927221915648",
+          "derivation": "usr",
+          "role": [
+            "rows"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "SUM([Profit])/SUM([Sales])",
+          "formula_refs": [
+            "Profit",
+            "Sales"
+          ],
+          "depends_on_slots": [
+            "profit",
+            "sales"
+          ],
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Profit",
+              "slot_id": "profit",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            },
+            {
+              "ref": "Sales",
+              "slot_id": "sales",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ],
+          "prereqs": [
+            "raw-formula-refs"
+          ]
+        }
+      ],
+      "hazards": [
+        {
+          "code": "raw-formula-refs",
+          "detail": "Calc formula references bare [Profit]/[Sales]; rewriteFormulaFieldRefs repairs them ONLY because Profit & Sales are bindable bare-key slots. Gate #6 asserts both are bound.",
+          "xml": "connected-scatterplot.xml:14-15"
+        },
+        {
+          "code": "implicit-path-order",
+          "detail": "mark='Line' draws a path through the per-member points; the connect order follows the mark/LOD ordering, NOT an explicit sort field. Binding a categorical with no meaningful order yields an arbitrary path.",
+          "xml": "connected-scatterplot.xml:30-33"
         }
       ]
     },
@@ -392,6 +784,157 @@
       ]
     },
     {
+      "template": "correlation-highlight-table",
+      "family": "correlation",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [
+        "HARDCODED_FILTER_MEMBERS"
+      ],
+      "portability_evidence": {
+        "fixture_bind": false,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "highlight-table",
+        "heat-table",
+        "heatmap-table",
+        "colored-table",
+        "matrix"
+      ],
+      "description": "A highlight table: Square marks in a Segment x Year (cols) by Month (rows) matrix, each cell shaded AND labelled by a Profit-Ratio template calc (SUM([Profit])/SUM([Sales])) on a diverging color ramp. Reads a two-way categorical/temporal grid where the ratio's magnitude is the color. Structurally compiled, not render-verified; the source Sub-Category inclusion filter rides along verbatim (HARDCODED_FILTER_MEMBERS).",
+      "slots": [
+        {
+          "slot_id": "order_date_month",
+          "template_field": "Order Date",
+          "derivation": "mn",
+          "role": [
+            "rows"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "qualified_key_required": true,
+          "notes": "Month part of the SAME bound date field (rows axis / one cell row per month). Reuses Order Date at a second derivation — see hazard single-date-two-derivations."
+        },
+        {
+          "slot_id": "segment",
+          "template_field": "Segment",
+          "derivation": "none",
+          "role": [
+            "cols"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The outer categorical column dimension; cols is the nested expression ([none:Segment:nk] / [yr:Order Date:ok]) — Segment crossed with Year."
+        },
+        {
+          "slot_id": "order_date_year",
+          "template_field": "Order Date",
+          "derivation": "yr",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "qualified_key_required": true,
+          "notes": "Year part of the SAME bound date field (inner cols axis, nested under Segment)."
+        },
+        {
+          "slot_id": "profit",
+          "template_field": "Profit",
+          "derivation": "sum",
+          "role": [
+            "calc-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "Not on a shelf directly — feeds the Profit-Ratio template calc (numerator). replaceFieldReferences rewrites [Profit] inside the formula on bind."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "calc-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "Not on a shelf directly — feeds the Profit-Ratio template calc (denominator). replaceFieldReferences rewrites [Sales] inside the formula on bind."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "profit_ratio_calc",
+          "template_field": "Calculation_1368249927221915648",
+          "derivation": "usr",
+          "role": [
+            "color",
+            "text"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "SUM([Profit])/SUM([Sales])",
+          "formula_refs": [
+            "Profit",
+            "Sales"
+          ],
+          "depends_on_slots": [
+            "profit",
+            "sales"
+          ],
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Profit",
+              "slot_id": "profit",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            },
+            {
+              "ref": "Sales",
+              "slot_id": "sales",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ],
+          "prereqs": [
+            "raw-formula-refs"
+          ],
+          "notes": "The cell color AND text: SUM([Profit])/SUM([Sales]) on a diverging ramp. A self-closing <calculation>, so parseTemplateCalcs sees it — a declared calc slot. Its two inputs are the bindable profit/sales slots; replaceFieldReferences rewrites both bare refs on bind."
+        }
+      ],
+      "hazards": [
+        {
+          "code": "single-date-two-derivations",
+          "detail": "The one [Order Date] field is used at BOTH Month (rows) and Year (cols). Against the single-date committed fixture the second temporal slot cannot bind a DISTINCT field, so fixture_bind=false — a valid, honest state (same as change-over-time-calendar-heatmap / ranking-bump-chart). On a real dataset both slots bind the same date field via qualified keys; the false reflects the fixture's one-date shape, not a template defect.",
+          "xml": "correlation-highlight-table.xml:18,22"
+        },
+        {
+          "code": "hardcoded-filter-blocking",
+          "detail": "The source workbook pins Sub-Category to an INCLUSION set (function='union' of member='\"Accessories\"'..'\"Copiers\"') — seven source-calendar member literals kept on the Filters shelf (<slices>). This lane does NOT run the compile-time filter neutralizer (no XML edits), so the members ride along VERBATIM and are flagged HARDCODED_FILTER_MEMBERS: on a differently-membered dimension the inclusion matches nothing and the table renders empty. A follow-up can PARAMETERIZE it (collapse to level-members) to unblock — a conscious decision, not an accident.",
+          "xml": "correlation-highlight-table.xml:24-34"
+        },
+        {
+          "code": "raw-formula-refs",
+          "detail": "The Profit-Ratio calc references the bare bindable [Profit]/[Sales]; templates.ts rewriteFormulaFieldRefs repairs them on bind ONLY because both are bindable bare-key slots (same pattern as correlation-scatter-plot-chart). Gate #6 asserts both are bound.",
+          "xml": "correlation-highlight-table.xml:10-11"
+        }
+      ]
+    },
+    {
       "template": "correlation-scatter-plot-chart",
       "family": "correlation",
       "readiness": "YELLOW",
@@ -520,6 +1063,394 @@
       ]
     },
     {
+      "template": "deviation-diverging-bar",
+      "family": "deviation",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [
+        "HARDCODED_FILTER_MEMBERS"
+      ],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "diverging-bar",
+        "diverging",
+        "deviation",
+        "above-below",
+        "positive-negative"
+      ],
+      "description": "A diverging bar chart: one Automatic bar per category (Sub-Category on rows) whose length is a signed Profit-Ratio template calc (SUM([Profit])/SUM([Sales])) on cols, so bars extend left/right of zero and are colored on a diverging orange-blue ramp; sorted DESC by the ratio. Shows deviation above/below a zero baseline. Structurally compiled, not render-verified; the source Region='Central' filter rides along verbatim (HARDCODED_FILTER_MEMBERS).",
+      "slots": [
+        {
+          "slot_id": "sub_category",
+          "template_field": "Sub-Category",
+          "derivation": "none",
+          "role": [
+            "rows",
+            "sort-dimension"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "One bar per member on rows; computed-sort orders these DESC by the Profit-Ratio calc."
+        },
+        {
+          "slot_id": "profit",
+          "template_field": "Profit",
+          "derivation": "sum",
+          "role": [
+            "calc-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "Not on a shelf directly — feeds the Profit-Ratio template calc (numerator). replaceFieldReferences rewrites [Profit] inside the formula on bind."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "calc-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "Not on a shelf directly — feeds the Profit-Ratio template calc (denominator). replaceFieldReferences rewrites [Sales] inside the formula on bind."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "profit_ratio_calc",
+          "template_field": "Calculation_1368249927221915648",
+          "derivation": "usr",
+          "role": [
+            "cols",
+            "color",
+            "sort-measure"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "SUM([Profit])/SUM([Sales])",
+          "formula_refs": [
+            "Profit",
+            "Sales"
+          ],
+          "depends_on_slots": [
+            "profit",
+            "sales"
+          ],
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Profit",
+              "slot_id": "profit",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            },
+            {
+              "ref": "Sales",
+              "slot_id": "sales",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ],
+          "prereqs": [
+            "raw-formula-refs"
+          ],
+          "notes": "The signed diverging measure: SUM([Profit])/SUM([Sales]) drives the bar length (cols), the diverging color, AND the computed-sort. A self-closing <calculation>, so parseTemplateCalcs sees it — a declared calc slot; both bare refs rewrite on bind."
+        }
+      ],
+      "hazards": [
+        {
+          "code": "signed-diverging-measure",
+          "detail": "Deviation family: the bar-length measure (Profit Ratio) can be NEGATIVE, so bars diverge left/right of a zero baseline and the color is a symmetric-around-zero diverging ramp. Bind a genuinely signed measure (a ratio, a variance, a delta) — a strictly-positive measure collapses to a one-sided ordinary bar and the diverging encoding wastes its palette.",
+          "xml": "deviation-diverging-bar.xml:68"
+        },
+        {
+          "code": "hardcoded-filter-blocking",
+          "detail": "The source workbook pins Region to a single INCLUSION member (function='member' Region='\"Central\"') kept on the Filters shelf (<slices>). This lane does NOT run the compile-time filter neutralizer (no XML edits), so the member rides along VERBATIM and is flagged HARDCODED_FILTER_MEMBERS: a bound dataset without a 'Central' region member renders empty. A follow-up can PARAMETERIZE it to unblock.",
+          "xml": "deviation-diverging-bar.xml:30-32"
+        },
+        {
+          "code": "raw-formula-refs",
+          "detail": "The Profit-Ratio calc references the bare bindable [Profit]/[Sales]; templates.ts rewriteFormulaFieldRefs repairs them on bind ONLY because both are bindable bare-key slots (same pattern as correlation-scatter-plot-chart). Gate #6 asserts both are bound.",
+          "xml": "deviation-diverging-bar.xml:19-20"
+        }
+      ]
+    },
+    {
+      "template": "deviation-gain-loss-chart",
+      "family": "deviation",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": false,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "gain-loss",
+        "gains-and-losses",
+        "improvement-decline",
+        "winners-losers",
+        "deviation"
+      ],
+      "description": "A gain/loss deviation chart: one custom Shape per member (Sub-Category on detail) placed on a signed y-axis where positive = rank-of-improvement and negative = rank-of-decline, over a Month/Year date on cols, colored by the period-over-period Sales difference. Every measure is a nested table-calc chain (difference-from-prior, if-positive/if-negative, rank, signed y-axis) that rides along verbatim. Structurally compiled, not render-verified.",
+      "slots": [
+        {
+          "slot_id": "sub_category",
+          "template_field": "Sub-Category",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The member grain on level-of-detail — one shape mark per member; also the addressing dimension the shelf table-calc instances partition/order by."
+        },
+        {
+          "slot_id": "order_date_month",
+          "template_field": "Order Date",
+          "derivation": "mn",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "qualified_key_required": true,
+          "notes": "Month part of the SAME bound date field (inner cols axis). Reuses Order Date at a second derivation — see hazard single-date-two-derivations."
+        },
+        {
+          "slot_id": "order_date_year",
+          "template_field": "Order Date",
+          "derivation": "yr",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "qualified_key_required": true,
+          "notes": "Year part of the SAME bound date field (outer cols axis, nested with Month) — also the ordering key of the difference/rank table calcs."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "calc-input",
+            "tooltip"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The base measure the gain/loss is computed from: ZN(SUM([Sales])) - LOOKUP(..., -1). It rides along inside the table-calc chain (not a declared calc slot); replaceFieldReferences rewrites [Sales] inside each formula on bind. Also on tooltip as [sum:Sales:qk]."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "single-date-two-derivations",
+          "detail": "The one [Order Date] field is used at BOTH Month and Year on cols. Against the single-date committed fixture the second temporal slot cannot bind a DISTINCT field, so fixture_bind=false — a valid, honest state (same as change-over-time-calendar-heatmap). On a real dataset both slots bind the same date field via qualified keys.",
+          "xml": "deviation-gain-loss-chart.xml:151,61,95"
+        },
+        {
+          "code": "table-calc-chain-rides-along",
+          "detail": "Every measure is a table calc: Calculation_44402728363008000 (ZN(SUM([Sales])) - LOOKUP(..., -1), the diff-from-prior), if-negative / if-positive splits, RANK_UNIQUE of each, and the signed y-axis. Each <calculation> nests a <table-calc>, so it is NON-self-closing and parseTemplateCalcs (self-closing only) does NOT see it — NONE are declared calc slots; they ride along verbatim (same class as ranking-bump-chart table-calc-rank-rides-along). The bindable bare refs ([Sales]) rewrite on bind; the calc-to-calc references (Calculation_X -> Calculation_Y) are template-internal and stable.",
+          "xml": "deviation-gain-loss-chart.xml:18-96"
+        },
+        {
+          "code": "table-calc-addressing-refs-source-fields",
+          "detail": "The table-calc ordering/compute-using addresses reference source fields by name — <order field='[Category]'> and ordering-field='[Category]' inside the difference/rank calcs. [Category] is NOT a declared bindable slot (it is not on any shelf), so replaceFieldReferences does not rewrite it: the addressing rides along referencing a literal 'Category' the bound dataset may not carry, which can reset the table-calc partition/ordering. The shelf instances re-address by [Sub-Category]+[yr:Order Date:ok], so the primary grain is covered, but the vestigial [Category] ordering is a residual portability risk.",
+          "xml": "deviation-gain-loss-chart.xml:21,38,43"
+        },
+        {
+          "code": "custom-shape-asset",
+          "detail": "The Shape mark uses a workbook-local custom shape image (<format attr='shape' value='Custom/noun_585136.png'/>). That asset is not part of the template/worksheet fragment and is absent on apply, so marks fall back to the default shape — cosmetic fidelity loss, not a binding break.",
+          "xml": "deviation-gain-loss-chart.xml:144"
+        },
+        {
+          "code": "signed-diverging-yaxis",
+          "detail": "Deviation family: the y-axis is a SIGNED rank (positive = rank-of-improvement, negative = -rank-of-decline), so members split above/below a zero baseline (declining <- | -> improving). The read depends on the difference being meaningfully signed across the bound members; a strictly-positive series collapses the diverging axis.",
+          "xml": "deviation-gain-loss-chart.xml:46-56,150"
+        }
+      ]
+    },
+    {
+      "template": "deviation-spine-chart",
+      "family": "deviation",
+      "readiness": "RED",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [
+        "NO_DATASOURCE_PLACEHOLDER",
+        "DATASET_SPECIFIC_FORMULA"
+      ],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": false,
+      "placeholders": [
+        "TITLE"
+      ],
+      "intent_keywords": [
+        "spine-chart",
+        "spine",
+        "split-bar",
+        "two-component-split",
+        "deviation"
+      ],
+      "description": "A spine chart: one row per category (Nationality) split into two contrasting components that diverge left/right of a center line (e.g. Women | Men), each component a signed share-of-total template calc so the pair reads as a two-sided deviation. RED: the source worksheet has NO {{DATASOURCE}} placeholder (bound to a federated datasource id) and its component calcs bake dataset-specific member literals ([Gender]='Men'/'Women') — not injectable as-is.",
+      "slots": [
+        {
+          "slot_id": "nationality",
+          "template_field": "Nationality",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The comparison dimension on rows — one spine row per member. The only genuinely bindable structural field; the two component measures are template-owned baked calcs."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "component_positive",
+          "template_field": "Calculation_2084392578408062979",
+          "derivation": "usr",
+          "role": [
+            "measure-values"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "SUM(if [Gender]='Men' THEN [Value]\nEND)/SUM([Value])",
+          "formula_refs": [
+            "Gender",
+            "Value"
+          ],
+          "depends_on_slots": [],
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Gender",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            },
+            {
+              "ref": "Value",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            }
+          ],
+          "notes": "The right-side (positive) component: share of total contributed by the 'Men' member. BAKES the member literal [Gender]='Men' and references bare [Value]/[Gender] as template-INTERNAL (not declared slots), so it cannot be generically bound — the dataset must literally carry Gender/Value with a 'Men' member (see hazard baked-member-literals / blocker DATASET_SPECIFIC_FORMULA)."
+        },
+        {
+          "slot_id": "spine_label",
+          "template_field": "Calculation_2084392578409873414",
+          "derivation": "none",
+          "role": [
+            "label"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": false,
+          "formula": "\"Women     |     Men\"",
+          "formula_refs": [],
+          "depends_on_slots": [],
+          "result_role": "dimension",
+          "inputs": [],
+          "notes": "A constant nominal center-divider label ('Women | Men'). Template-owned decorative dimension; carries no bindable inputs."
+        },
+        {
+          "slot_id": "component_negative",
+          "template_field": "Men (copy)",
+          "derivation": "usr",
+          "role": [
+            "measure-values"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "-SUM(if [Gender]='Women' THEN [Value]\nEND)/SUM([Value])",
+          "formula_refs": [
+            "Gender",
+            "Value"
+          ],
+          "depends_on_slots": [],
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Gender",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            },
+            {
+              "ref": "Value",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            }
+          ],
+          "notes": "The left-side (NEGATIVE) component: share of total contributed by the 'Women' member, NEGATED so it extends left of the center line — the signed measure that makes this a deviation spine. Same baked-literal non-portability as component_positive."
+        }
+      ],
+      "hazards": [
+        {
+          "code": "no-datasource-placeholder",
+          "detail": "The worksheet has NO {{DATASOURCE}} placeholder: <datasources> and every field reference are bound to the literal federated datasource id 'federated.1ko0q9z0cybhx212227b819gayqi'. The inject/apply path fills {{DATASOURCE}} to retarget a template onto a new datasource — with none present the template cannot be retargeted and would carry the source datasource id verbatim. Flagged NO_DATASOURCE_PLACEHOLDER; a follow-up must re-parameterize the datasource id to make this template injectable.",
+          "xml": "deviation-spine-chart.xml:16-18"
+        },
+        {
+          "code": "baked-member-literals",
+          "detail": "The two component measures bake dataset-specific member literals into their formulas — SUM(if [Gender]='Men' ...) and -SUM(if [Gender]='Women' ...) — and reference bare [Value]/[Gender] that are NOT declared bindable slots (template-internal inputs). replaceFieldReferences cannot rewrite a string literal member ('Men'/'Women') and does not touch template-internal refs, so the calcs only compute on a dataset that literally carries Gender/Value with those members. Flagged DATASET_SPECIFIC_FORMULA (fail-closed): a portable spine would parameterize the split dimension + its two member values.",
+          "xml": "deviation-spine-chart.xml:19-31"
+        },
+        {
+          "code": "signed-measure",
+          "detail": "Deviation family: the 'Women' component is a NEGATED share (-SUM(...)/SUM([Value])) so the two components diverge left/right of a zero/center line — the defining signed-measure structure of a spine chart. The read requires exactly two complementary components whose signed shares oppose across the divider.",
+          "xml": "deviation-spine-chart.xml:29-30"
+        },
+        {
+          "code": "hardcoded-filter-members",
+          "detail": "Three categorical filters pin source members verbatim: Measure='\"Weighted Sample\"', a Measure-Names filter enumerating the two component measures, and the spine-label filter member='\"Women     |     Men\"'. These are source-specific pins kept on the Filters shelf (<slices>); on any other dataset they match nothing. Not separately blocked because the NO_DATASOURCE_PLACEHOLDER + DATASET_SPECIFIC_FORMULA blockers already gate this template far below fast-path.",
+          "xml": "deviation-spine-chart.xml:40-57"
+        },
+        {
+          "code": "measure-names-values-pseudo",
+          "detail": "cols is [Multiple Values] (Measure Values) carrying the two component calcs, and color is [:Measure Names] — Tableau pseudo fields generated by the two-measure layout, not bindable fields, so they ride along and need no slot.",
+          "xml": "deviation-spine-chart.xml:81,86"
+        }
+      ]
+    },
+    {
       "template": "distribution-bar-code-chart",
       "family": "distribution",
       "readiness": "GREEN",
@@ -603,6 +1534,477 @@
       ]
     },
     {
+      "template": "distribution-histogram",
+      "family": "distribution",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [
+        "DATASET_SPECIFIC_FORMULA"
+      ],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "histogram",
+        "distribution",
+        "frequency",
+        "binned",
+        "bins",
+        "spread"
+      ],
+      "description": "A histogram: one CONTINUOUS measure is binned into equal-width buckets on the X axis (cols) and the COUNT of records per bucket sets the bar heights on the Y axis (rows). The bin is a template-owned calc column ([Profit (bin)], class='bin') derived from the same measure that is counted. Factory-compiled hermetically from the repo distribution-histogram exemplar (Superstore Profit); structurally compiled, NOT render-verified.",
+      "avoid_when": [
+        "The field is categorical / discrete — a histogram bins a CONTINUOUS measure; for counts per named category use a bar chart, not a histogram.",
+        "The ask is to compare a metric across named categories or over time — a histogram shows the distribution SHAPE of one measure, not cross-category magnitude or a trend.",
+        "The bound measure's range differs greatly from the source measure's — the template's hardcoded bin width (size=283) does not auto-recompute on bind and must be reviewed, or the viz over/under-bins (one giant bar or thousands of slivers)."
+      ],
+      "slots": [
+        {
+          "slot_id": "measure",
+          "template_field": "Profit",
+          "derivation": "cnt",
+          "role": [
+            "rows"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The single bindable measure. It is COUNTed on rows (Y axis) as [cnt:Profit:qk] AND is the input the bin calc [Profit (bin)] buckets on cols — the classic Tableau histogram default (one field, binned + counted). Binds to any measure; base column [Profit], shelf instance [cnt:Profit:qk]."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "measure_bin",
+          "template_field": "Profit (bin)",
+          "derivation": "none",
+          "role": [
+            "cols"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "[Profit]",
+          "formula_refs": [
+            "Profit"
+          ],
+          "depends_on_slots": [
+            "measure"
+          ],
+          "result_role": "dimension",
+          "inputs": [
+            {
+              "ref": "Profit",
+              "slot_id": "measure",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ],
+          "notes": "The DEFINING distribution slot: a template-owned bin column (<calculation class='bin' size='283' peg='0' decimals='2' formula='[Profit]'/>) placed on cols as [none:Profit (bin):qk] (with a show-full-range). It is treated as a first-class calc — its formula ref [Profit] is rewritten to the bound measure on apply (forcing the 'measure' slot to bind) — but its bin WIDTH (size) is a dataset-derived parameter that does NOT recompute on bind (see the bin-size-dataset-specific hazard / DATASET_SPECIFIC_FORMULA blocker)."
+        }
+      ],
+      "hazards": [
+        {
+          "code": "bin-size-dataset-specific",
+          "detail": "The bin column carries size='283' / peg='0' baked from the source measure's (Profit's) value range. On bind the bin's formula ref [Profit] is rewritten to the bound measure, but the bin WIDTH attribute is NOT recomputed — a measure with a much smaller range collapses to one bar, a much larger range explodes into thousands of slivers. The bin width is the histogram's defining parameter, so this is a load-bearing, dataset-specific formula parameter (fast_path_blocker DATASET_SPECIFIC_FORMULA) that a human/data-aware step must retune after binding, not a cosmetic note. PRODUCT EVIDENCE (UC7 distribution analysis): bin width is STORY-CHANGING, not merely cosmetic — too few bins hide the shape, too many shatter it into noise, and the right count is dataset-dependent, so the retune is an analytical decision the author must own. Separately, OUTLIERS can SWAMP the chart: a long tail forces a wide domain so the bulk of the distribution crushes into the first bin or two; exclude/cap extremes or use a log axis when a few extreme values dominate the range.",
+          "xml": "distribution-histogram.xml:11"
+        },
+        {
+          "code": "bin-caption-not-rewritten",
+          "detail": "The bin column ([Profit (bin)], kind=calc, bindable=false) and its instance [none:Profit (bin):qk] are template-owned and are NOT rewritten on bind — only the bin's formula ref [Profit] is. So after binding to e.g. Sales the X-axis caption still reads 'Profit (bin)'. Cosmetic (the viz renders correctly); relabel the bin field/axis on the bound sheet if the source-measure name must not leak.",
+          "xml": "distribution-histogram.xml:10"
+        },
+        {
+          "code": "not-live-render-verified",
+          "detail": "render_verified='none': this template was compiled HERMETICALLY via the factory route (no live Tableau Desktop, no stamp). fixture_bind=true proves the required measure slot binds against the committed schema fixture, but that is necessary-not-sufficient. The render_verified stamp is EARNED later by a live golden-parity render-readback leg, never granted at compile time.",
+          "xml": "distribution-histogram.xml"
+        }
+      ]
+    },
+    {
+      "template": "funnel-chart",
+      "family": "specialized",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "funnel",
+        "pipeline",
+        "conversion",
+        "stage",
+        "deal-flow",
+        "drop-off"
+      ],
+      "description": "A funnel/conversion chart for staged pipeline drop-off: an ORDERED stage dimension on rows ([none:Stage:nk], data/ordinal order preserved — deliberately NO computed sort) and the amount measure as a Bar on cols ([sum:Amount:qk]), also on the size encoding so the bars taper toward the narrow end of the funnel. Reading top-to-bottom the shrinking bars show stage-to-stage conversion / drop-off. Serves UC6 (pipeline health & deal flow). Tableau has no native funnel mark, so this is authored as creative Bar usage generalized from the proven ranking-ordered-bar structure (NO usable funnel exemplar exists in the twb corpus — grep 'funnel' returns nothing). Structurally compiled hermetically, NOT live render-verified.",
+      "avoid_when": [
+        "The stages have no inherent sequence and you want members ranked by value — use ranking-ordered-bar (which sorts DESC by the measure); a funnel encodes a fixed conversion ORDER, not a value ranking.",
+        "You need proportional multi-path flow between many source/target nodes — that is a sankey, not a single-path funnel.",
+        "The amount is not monotonically non-increasing across the stages (a later stage can carry more than an earlier one) — the funnel silhouette assumes drop-off and inverts when a stage rises (see hazard stage-skipping)."
+      ],
+      "slots": [
+        {
+          "slot_id": "stage",
+          "template_field": "Stage",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The ORDERED pipeline-stage dimension on rows — one funnel band per stage. The template applies NO computed sort, so stages render in the bound field's member order; bind an ordinal/ordered stage field (or set a manual member sort) so the conversion sequence is correct. See hazard stage-order-dependence. XML column-instance [none:Stage:nk]."
+        },
+        {
+          "slot_id": "amount",
+          "template_field": "Amount",
+          "derivation": "sum",
+          "role": [
+            "cols",
+            "size"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The stage amount (deal value / count) — SUM([Amount]) → [sum:Amount:qk], the SAME instance on cols (bar length) AND on the size encoding (bar taper). One derivation, so no qualified key. replaceFieldReferences rewrites [Amount] in both places on bind."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "stage-order-dependence",
+          "detail": "The template plots stages in the BOUND dimension's native member order (there is deliberately NO computed-sort element — sorting DESC by amount would reorder stages and destroy the sequence). A funnel's whole story is the fixed stage order (Lead → Qualified → Proposal → Closed); binding an unordered nominal stage field yields an arbitrary, meaningless funnel. Bind an ordinal/ordered stage field or set a manual member sort before trusting the silhouette.",
+          "xml": "funnel-chart.xml:34"
+        },
+        {
+          "code": "stage-skipping",
+          "detail": "Deals that skip stages, or are counted at more than one stage, break the monotonic drop-off the funnel assumes: a later stage can exceed an earlier one, so the silhouette inverts and the implied conversion rates mislead. The template cannot detect non-monotonic stages — validate the data is a clean single-count-per-stage funnel (or model conversion explicitly) before reading drop-off from the bars.",
+          "xml": "funnel-chart.xml:29"
+        },
+        {
+          "code": "funnel-is-creative-bar-usage",
+          "detail": "Tableau has no native funnel mark; this is an ordered Bar with amount on both length and size (taper) — a left-aligned conversion bar, NOT a centered/symmetric funnel. A true mirrored funnel needs a dual-axis with a negated companion measure, which the {stage, amount} slot vocabulary does not express. The chart communicates stage drop-off honestly but is not a geometrically symmetric funnel; do not claim symmetry.",
+          "xml": "funnel-chart.xml:24"
+        },
+        {
+          "code": "not-live-render-verified",
+          "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop). portability_evidence.render_verified='none' and fast_path_eligible=false: the template binds the committed fixture (fixture_bind computed true — a dim + a measure) but has NO live render-readback proof. A live-YYYY-MM-DD stamp is EARNED later by the golden-parity gate / a hand-stamp with render_evidence, never granted at compile time.",
+          "xml": "funnel-chart.xml:1"
+        }
+      ]
+    },
+    {
+      "template": "gantt-chart",
+      "family": "time-series",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": false,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "gantt",
+        "gantt-chart",
+        "schedule",
+        "task-timeline",
+        "time-series"
+      ],
+      "description": "A Gantt chart: one GanttBar per row-hierarchy member (Category > Sub-Category > Product Name > Order ID) laid out over a Year/Month date on cols, its length sized by a duration calc (Ship Lag = DATEDIFF of two dates) and colored by a status calc (Ship Lag Indicator) — a schedule/duration view over time. Lane W11-F2: the three source filter pins (product-name list, sub-category, year) were PARAMETERIZED (collapsed to level-members) so those fields stay data-driven Filters pills with no source literals.",
+      "slots": [
+        {
+          "slot_id": "category",
+          "template_field": "Category",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "Outermost row grouping of the schedule hierarchy."
+        },
+        {
+          "slot_id": "sub_category",
+          "template_field": "Sub-Category",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "Second row grouping, nested under Category."
+        },
+        {
+          "slot_id": "product_name",
+          "template_field": "Product Name",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "Third row grouping, nested under Sub-Category."
+        },
+        {
+          "slot_id": "order_id",
+          "template_field": "Order ID",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "Leaf row grain — one Gantt bar per member (the individual task)."
+        },
+        {
+          "slot_id": "order_date_year",
+          "template_field": "Order Date",
+          "derivation": "yr",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "qualified_key_required": true,
+          "notes": "Year part of the SAME bound start-date field (outer cols axis). Reuses Order Date at a second derivation — see hazard single-date-two-derivations."
+        },
+        {
+          "slot_id": "order_date_month",
+          "template_field": "Order Date",
+          "derivation": "mn",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "qualified_key_required": true,
+          "notes": "Month part of the SAME bound start-date field (inner cols axis)."
+        },
+        {
+          "slot_id": "ship_date",
+          "template_field": "Ship Date",
+          "derivation": "none",
+          "role": [
+            "calc-input"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "The END date. Not on a shelf; it feeds the Ship Lag duration calc (DATEDIFF of Order Date -> Ship Date). A DISTINCT second date field is required — with the single-date fixture only one date exists, so fixture_bind=false (see hazard single-date-two-derivations)."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "ship_lag",
+          "template_field": "Calculation_291608117815463936",
+          "derivation": "sum",
+          "role": [
+            "size"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "DATEDIFF('day',[Order Date],[Ship Date])",
+          "formula_refs": [
+            "Order Date",
+            "Ship Date"
+          ],
+          "depends_on_slots": [
+            "order_date_year",
+            "ship_date"
+          ],
+          "notes": "Ship Lag — the duration (bar length/size) between the start (Order Date) and end (Ship Date). Requires both bindable date slots.",
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Order Date",
+              "slot_id": "order_date_year",
+              "slot_kind": "temporal",
+              "required": true,
+              "template_internal": false
+            },
+            {
+              "ref": "Ship Date",
+              "slot_id": "ship_date",
+              "slot_kind": "temporal",
+              "required": true,
+              "template_internal": false
+            }
+          ]
+        },
+        {
+          "slot_id": "ship_lag_indicator",
+          "template_field": "Calculation_291608117815988225",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "If [Calculation_291608117815463936] >= 5 then \"Late\"\nElseIf [Calculation_291608117815463936] >=2 Then \"On-Time\"\nElse \"Early\"\nEND",
+          "formula_refs": [
+            "Calculation_291608117815463936"
+          ],
+          "depends_on_slots": [],
+          "notes": "Ship Lag Indicator — buckets the duration into Late/On-Time/Early for the bar color. Template-internal: its only input is the Ship Lag calc, not a bindable slot.",
+          "result_role": "dimension",
+          "inputs": [
+            {
+              "ref": "Calculation_291608117815463936",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            }
+          ]
+        }
+      ],
+      "hazards": [
+        {
+          "code": "hardcoded-filter-parameterized",
+          "detail": "The source workbook pinned Product Name to a nine-member product list. Lane F2's compile-time filter policy PARAMETERIZED it: the member union was collapsed to the neutral all-members form (<groupfilter function='level-members' level='[none:Product Name:nk]'/>), so Product Name stays a data-driven Filters-shelf pill (its <slices> entry preserved) with the source literals removed.",
+          "xml": "gantt-chart.xml:34-36"
+        },
+        {
+          "code": "hardcoded-filter-parameterized",
+          "detail": "The source workbook pinned Sub-Category to member='\"Chairs\"'. PARAMETERIZED: collapsed to <groupfilter function='level-members' level='[none:Sub-Category:nk]'/>, so Sub-Category stays a data-driven Filters-shelf pill with the source literal removed.",
+          "xml": "gantt-chart.xml:37-39"
+        },
+        {
+          "code": "hardcoded-filter-parameterized",
+          "detail": "The source workbook pinned Year of Order Date to a {2016, 2026} member list. PARAMETERIZED: collapsed to <groupfilter function='level-members' level='[yr:Order Date:ok]'/>, so Year stays a data-driven Filters-shelf pill with the source literals removed — the same neutral form the apply-path 3c neutralizer writes (idempotent).",
+          "xml": "gantt-chart.xml:40-42"
+        },
+        {
+          "code": "single-date-two-derivations",
+          "detail": "The start date [Order Date] is used at BOTH Year and Month on cols, AND the Ship Lag duration calc needs a DISTINCT second date [Ship Date]. Against the single-date committed fixture these extra temporal slots cannot bind distinct fields, so fixture_bind=false — a valid, honest state (same convention as change-over-time-calendar-heatmap). On a real dataset the Order Date derivations bind the same field via qualified keys and Ship Date binds a second date; the false reflects the fixture's one-date shape, not a template defect.",
+          "xml": "gantt-chart.xml:20,23"
+        }
+      ]
+    },
+    {
+      "template": "gantt-timeline-chart",
+      "family": "time-series",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "gantt-timeline",
+        "timeline",
+        "project-timeline",
+        "gantt",
+        "schedule-timeline"
+      ],
+      "description": "A project timeline (Gantt): one GanttBar per task/activity on rows, positioned along a CONTINUOUS truncated-day date axis on cols (the timeline), sized by a duration measure (bar length) and colored by a phase/status dimension. Distinct from gantt-chart, whose schedule matrix uses DISCRETE Year/Month date parts and two DATEDIFF calcs across a start AND an end date (so it cannot bind a single-date schema); this single-start-date timeline binds the committed fixture. Factory-route template, generalized to placeholders + generic field names; structurally compiled, NOT live render-verified.",
+      "avoid_when": [
+        "The ask needs a schedule MATRIX broken out by discrete Year/Month columns with a computed ship/lead lag and Late/On-Time/Early status across a start AND an end date — that is gantt-chart; this timeline plots one continuous start-date axis and a plain duration measure.",
+        "The dataset has no numeric duration/length measure to size the bars — a GanttBar with no size collapses to zero-length ticks; bind a duration (days/periods) measure to the size slot or choose a dot/strip timeline instead."
+      ],
+      "slots": [
+        {
+          "slot_id": "task",
+          "template_field": "Task",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The activity/task/phase label on rows — one GanttBar row per member. XML column-instance [none:Task:nk]."
+        },
+        {
+          "slot_id": "start_date",
+          "template_field": "Start Date",
+          "derivation": "tdy",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "The bar's START position on the CONTINUOUS date axis (Day-Trunc, green [tdy:Start Date:qk]) — the timeline. A single date field; only one derivation, so no qualified key is required (contrast gantt-chart's two-date shape). See hazard continuous-date-axis-required."
+        },
+        {
+          "slot_id": "duration",
+          "template_field": "Duration",
+          "derivation": "sum",
+          "role": [
+            "size"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The bar LENGTH (task duration in days/periods) on the size encoding — SUM([Duration]) → [sum:Duration:qk]. A plain measure, NOT a DATEDIFF calc, so the template binds a single-date schema. See hazard gantt-size-generic-measure."
+        },
+        {
+          "slot_id": "phase",
+          "template_field": "Phase",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The phase/status dimension on color — one hue per member. XML column-instance [none:Phase:nk]."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "not-live-render-verified",
+          "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop). portability_evidence.render_verified='none' and fast_path_eligible=false: the template binds the committed fixture (fixture_bind computed true) but has NO live render-readback proof. A live-YYYY-MM-DD stamp is EARNED later by the golden-parity gate / a hand-stamp with render_evidence, never granted at compile time.",
+          "xml": "gantt-timeline-chart.xml:1"
+        },
+        {
+          "code": "gantt-size-generic-measure",
+          "detail": "The GanttBar length is driven by SUM([Duration]), a plain quantitative measure, not a DATEDIFF(end,start) duration calc (contrast gantt-chart's Ship Lag). This is what lets the template bind a single-date schema, but the size slot must bind a real duration/length-in-days measure — binding an unrelated measure sizes the bars by that measure instead of task duration.",
+          "xml": "gantt-timeline-chart.xml:26"
+        },
+        {
+          "code": "continuous-date-axis-required",
+          "detail": "cols carries a CONTINUOUS truncated-day date [tdy:Start Date:qk] (green pill) — the timeline axis. The start_date slot must bind a real date/datetime field; binding a non-date field (or a discrete date part) collapses the timeline to categorical headers and the GanttBars lose their time positions.",
+          "xml": "gantt-timeline-chart.xml:31"
+        }
+      ]
+    },
+    {
       "template": "kpi-text",
       "family": "kpi",
       "readiness": "GREEN",
@@ -643,6 +2045,252 @@
       ],
       "calcs": [],
       "hazards": []
+    },
+    {
+      "template": "magnitude-paired-bar",
+      "family": "magnitude",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [
+        "HARDCODED_FILTER_MEMBERS"
+      ],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "paired-bar",
+        "paired-bars",
+        "grouped-bar",
+        "side-by-side-bars",
+        "magnitude"
+      ],
+      "description": "A paired (grouped) bar chart: bars for a measure, grouped by a period (Year) nested under a category on rows, colored by the period — a side-by-side magnitude comparison across two-plus periods per category. Lane W10-F1: this template is BLOCKED (fast_path_blockers HARDCODED_FILTER_MEMBERS) because its year filter is a load-bearing EXCLUSION, not an incidental scope — see hazard hardcoded-filter-blocking.",
+      "slots": [
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "Category on rows — one group of paired bars per member. Template column carries aggregate-role-from='[State/Province]' (cosmetic — see hazard hidden-aggregate-role-from)."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "cols"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "Bar length — the magnitude being compared across periods."
+        },
+        {
+          "slot_id": "order_date",
+          "template_field": "Order Date",
+          "derivation": "yr",
+          "role": [
+            "rows",
+            "color"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "Year on rows (inner group) AND color — the period that pairs the bars within each category. Used at a single derivation (yr), so no qualified key is required."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "hardcoded-filter-blocking",
+          "detail": "The source workbook filters Year of Order Date with an EXCLUSION (function='except') that removes {2024, 2025} — almost certainly a partial/incomplete-recent-year guard (a paired-bar magnitude read would be distorted by short partial-year bars). The factory filter policy fails CLOSED on exclusions: dropping or neutralizing an exclusion WIDENS the data (re-includes the removed years) in a potentially result-corrupting direction, and the excluded years are source-calendar literals. It is kept VERBATIM and flagged HARDCODED_FILTER_MEMBERS — the template is not fast-path eligible until a follow-up re-expresses the exclusion as a declared 'exclude incomplete periods' slot. (The apply-path 3c neutralizer would collapse it to all-members if Year is remapped, silently defeating the guard — the blocker documents that this must be a conscious decision, not an accident.)",
+          "xml": "magnitude-paired-bar.xml:17"
+        },
+        {
+          "code": "hidden-aggregate-role-from",
+          "detail": "[Region] carries aggregate-role-from='[State/Province]', a cosmetic secondary-role hint that is not rewritten onto the bound field (same behavior as slope-chart / correlation-scatter-plot-chart). No binding impact.",
+          "xml": "magnitude-paired-bar.xml:11"
+        }
+      ]
+    },
+    {
+      "template": "magnitude-paired-column-chart",
+      "family": "magnitude",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [
+        "HARDCODED_FILTER_MEMBERS"
+      ],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "paired-column",
+        "paired-columns",
+        "grouped-column",
+        "side-by-side-columns",
+        "magnitude"
+      ],
+      "description": "A paired (grouped) column chart: vertical bars for a measure, grouped by a category and paired by a period (Year) on the column axis, colored by the period — the vertical sibling of the paired-bar magnitude comparison. Lane W10-F1: BLOCKED (fast_path_blockers HARDCODED_FILTER_MEMBERS) because its year filter is a load-bearing EXCLUSION — see hazard hardcoded-filter-blocking.",
+      "slots": [
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "rows"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "Column height — the magnitude being compared across periods."
+        },
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "cols"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "Outer group on the column axis (nested as Region / Year) — one cluster of paired columns per member. Template column carries aggregate-role-from='[State/Province]' (cosmetic — see hazard hidden-aggregate-role-from)."
+        },
+        {
+          "slot_id": "order_date",
+          "template_field": "Order Date",
+          "derivation": "yr",
+          "role": [
+            "cols",
+            "color"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "Year — the inner pairing dimension on the column axis AND color. Used at a single derivation (yr), so no qualified key is required."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "hardcoded-filter-blocking",
+          "detail": "The source workbook filters Year of Order Date with an EXCLUSION (function='except') that removes {2024, 2025} — a partial/incomplete-recent-year guard (short partial-year columns would distort the paired-column magnitude read). The factory filter policy fails CLOSED on exclusions: dropping or neutralizing an exclusion WIDENS the data (re-includes the removed years) in a potentially result-corrupting direction, and the excluded years are source-calendar literals. Kept VERBATIM and flagged HARDCODED_FILTER_MEMBERS — not fast-path eligible until a follow-up re-expresses the exclusion as a declared 'exclude incomplete periods' slot.",
+          "xml": "magnitude-paired-column-chart.xml:17"
+        },
+        {
+          "code": "hidden-aggregate-role-from",
+          "detail": "[Region] carries aggregate-role-from='[State/Province]', a cosmetic secondary-role hint that is not rewritten onto the bound field (same behavior as magnitude-paired-bar / slope-chart). No binding impact.",
+          "xml": "magnitude-paired-column-chart.xml:11"
+        }
+      ]
+    },
+    {
+      "template": "pareto-chart",
+      "family": "specialized",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [
+        "PARAMETER_REQUIRED"
+      ],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "pareto",
+        "pareto-chart",
+        "80-20",
+        "cumulative-percent",
+        "vital-few"
+      ],
+      "description": "A Pareto chart: Sales bars per category (Sub-Category on cols, sorted DESC by Sales) layered with a cumulative-percent-of-total line (a compound CumTotal+PctTotal table calc), plus two 80% reference lines driven by a Parameter to spotlight the 'vital few'. A Measure-Names combo (bar + line) on rows. Structurally compiled, not render-verified; the 80% threshold parameter lives in a separate Parameters datasource (PARAMETER_REQUIRED).",
+      "slots": [
+        {
+          "slot_id": "sub_category",
+          "template_field": "Sub-Category",
+          "derivation": "none",
+          "role": [
+            "cols",
+            "sort-dimension"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The ranked category on cols — one bar per member; computed-sort orders these DESC by SUM(Sales) so the cumulative line climbs from the largest contributors."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "rows",
+            "sort-measure"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The measure: SUM([Sales]) is the bar height AND the base of the cumulative-percent line ([pcto:cum:sum:Sales:qk]). Used at a single base derivation (Sum) in both, so no qualified key is required; also the computed-sort key."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "pareto_threshold",
+          "template_field": "Parameter 3",
+          "derivation": "none",
+          "role": [
+            "reference-line"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "0.80000000000000004",
+          "formula_refs": [],
+          "depends_on_slots": [],
+          "result_role": "measure",
+          "inputs": [],
+          "notes": "The 80% Pareto threshold. In the XML it is a <column><calculation> (a constant 0.8) inside a SEPARATE <datasource name='Parameters'>, so parseTemplateCalcs classifies it as a calc slot — but it is really a PARAMETER: both reference lines take value-column='[Parameters].[Parameter 3]'. Non-bindable and template-owned; the Parameters datasource + this parameter must exist on apply (see hazard parameter-threshold-required / blocker PARAMETER_REQUIRED)."
+        }
+      ],
+      "hazards": [
+        {
+          "code": "compound-table-calc-rides-along",
+          "detail": "The cumulative line rides on [pcto:cum:sum:Sales:qk], a <column-instance> of base [Sales] carrying TWO nested <table-calc> elements composed together — CumTotal (running sum) THEN PctTotal (percent of total) — i.e. a compound running-percent-of-total. Because it is a column-INSTANCE with nested table-calcs (not a <column><calculation>), parseTemplateCalcs (self-closing only) never sees it: it is NOT a declared calc slot and rides along verbatim. Its base is the bindable 'sales' slot; replaceFieldReferences rewrites [Sales] inside the instance on bind. The compound order (cumulate, then normalize) is load-bearing — both table-calc addressings must survive the bind for the Pareto curve to be correct.",
+          "xml": "pareto-chart.xml:19-22"
+        },
+        {
+          "code": "parameter-threshold-required",
+          "detail": "The two 80% reference lines take value-column='[Parameters].[Parameter 3]' — a parameter in a SEPARATE <datasource name='Parameters'> declared alongside {{DATASOURCE}}. That datasource + parameter are NOT covered by the {{DATASOURCE}} placeholder, so on apply the Parameters datasource and Parameter 3 must already exist or the reference lines dangle. Flagged PARAMETER_REQUIRED (fail-closed): a follow-up can re-express the threshold as a template-owned constant or a declared parameter slot to unblock.",
+          "xml": "pareto-chart.xml:8-14,56-57"
+        },
+        {
+          "code": "measure-names-combo",
+          "detail": "rows is a Measure-Values expression ([sum:Sales:qk] + [pcto:cum:sum:Sales:qk]) rendered across three panes — Bar (Sales), Bar, and Line (cumulative %) — colored by [:Measure Names]. The bar/line combo IS the Pareto shape; Measure Names is a Tableau pseudo field generated by the two-measure rows expression, not a bindable field, so it rides along and needs no slot.",
+          "xml": "pareto-chart.xml:47-85"
+        }
+      ]
     },
     {
       "template": "part-to-whole-pie-chart",
@@ -707,6 +2355,135 @@
           "code": "hidden-aggregate-role-from",
           "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
           "xml": "part-to-whole-pie-chart.xml:10"
+        }
+      ]
+    },
+    {
+      "template": "part-to-whole-proportional-stacked-bar",
+      "family": "part-to-whole",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "proportional-stacked-bar",
+        "proportional-bar",
+        "percent-of-total-bar",
+        "100-percent-stacked-bar",
+        "part-to-whole"
+      ],
+      "description": "A proportional (100%) stacked bar: one full-width bar per category (Region on rows) whose axis is percent-of-total Sales (a PctTotal table calc on cols), segmented by a second dimension (Category on color) and with mark size driven by a FIXED [Region] LOD of SUM([Sales]) so each region's absolute magnitude reads through its bar thickness. Shows each category's composition normalized to 100%. Structurally compiled, not render-verified.",
+      "slots": [
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "rows",
+            "calc-input"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The category on rows — one proportional bar per member; also the FIXED-LOD grain ({ FIXED [Region]: SUM([Sales]) }). Template column carries aggregate-role-from='[State/Province]' (cosmetic secondary-role hint). replaceFieldReferences rewrites [Region] on the shelf AND inside the LOD formula on bind."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "cols",
+            "calc-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The measure on cols as a percent-of-total ([pcto:sum:Sales:qk:3], a PctTotal table calc that rides along) AND the FIXED-LOD numerator. Used at a single base derivation (Sum) in both, so no qualified key is required."
+        },
+        {
+          "slot_id": "category",
+          "template_field": "Category",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The stacking dimension on color — the segments composing each region's 100% bar."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "regional_sales_lod",
+          "template_field": "Calculation_3630088501878784",
+          "derivation": "sum",
+          "role": [
+            "size"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "{ FIXED [Region]: SUM([Sales]) }",
+          "formula_refs": [
+            "Region",
+            "Sales"
+          ],
+          "depends_on_slots": [
+            "region",
+            "sales"
+          ],
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Region",
+              "slot_id": "region",
+              "slot_kind": "categorical",
+              "required": true,
+              "template_internal": false
+            },
+            {
+              "ref": "Sales",
+              "slot_id": "sales",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ],
+          "prereqs": [
+            "raw-formula-refs"
+          ],
+          "notes": "The 'Regional Sales' FIXED LOD sizing each region's bar by its absolute total ({ FIXED [Region]: SUM([Sales]) }). A self-closing <calculation>, so parseTemplateCalcs sees it — a declared calc slot. Both refs are bindable slots (region, sales); replaceFieldReferences rewrites them on bind. The LOD grain assumes the bound row dimension IS the aggregation grain (see hazard fixed-lod-grain)."
+        }
+      ],
+      "hazards": [
+        {
+          "code": "fixed-lod-grain",
+          "detail": "The size measure is a FIXED [Region] LOD ({ FIXED [Region]: SUM([Sales]) }). replaceFieldReferences rewrites [Region] to the bound row dimension, so the LOD grain follows the binding — but the design ASSUMES the bound row dimension is the correct aggregation grain. Binding a row dimension finer/coarser than the intended magnitude grain makes the FIXED value (and thus the bar thickness) mismatch the visible bar's grain.",
+          "xml": "part-to-whole-proportional-stacked-bar.xml:10-11"
+        },
+        {
+          "code": "pct-of-total-table-calc-rides-along",
+          "detail": "The cols axis [pcto:sum:Sales:qk:3] is a <column-instance> of base [Sales] carrying a nested <table-calc type='PctTotal'> (Percent of Total). Because it is a column-INSTANCE with a nested table-calc (not a <column><calculation>), parseTemplateCalcs (self-closing <calculation> only) never sees it — it is NOT a declared calc slot and rides along verbatim on cols. Its base is the bindable 'sales' slot; replaceFieldReferences rewrites [Sales] inside the instance on bind. The PctTotal normalizes each bar to 100% across the addressed partition.",
+          "xml": "part-to-whole-proportional-stacked-bar.xml:18-20"
+        },
+        {
+          "code": "manual-sort-member-dictionary",
+          "detail": "Region carries a <manual-sort> whose <dictionary> lists source members ('South','Central','East','West'). The buckets are source-calendar literals; on a differently-membered bound dimension they do not match and the manual sort silently resets to default order (cosmetic — no binding break, no data change).",
+          "xml": "part-to-whole-proportional-stacked-bar.xml:23-30"
+        },
+        {
+          "code": "raw-formula-refs",
+          "detail": "The FIXED LOD references the bare bindable [Region]/[Sales]; templates.ts rewriteFormulaFieldRefs repairs them on bind ONLY because both are bindable bare-key slots. Gate #6 asserts both are bound.",
+          "xml": "part-to-whole-proportional-stacked-bar.xml:11"
         }
       ]
     },
@@ -867,6 +2644,290 @@
       ]
     },
     {
+      "template": "part-to-whole-waterfall",
+      "family": "part-to-whole",
+      "readiness": "YELLOW",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-06",
+        "render_evidence": {
+          "method": "gate-composite",
+          "basis": "golden-parity gate run 2026-07-06 (source-anchor replay): structural 0.97297 (5/5 critical), pixel 1.0 (4 ROIs: whole-chart ink-colors + hue, left/right staircase clusters; same-geometry back-to-back captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 17=17 (Superstore Sub-Category) on source and applied renders; running total verified live (status bar Running Sum of SUM(Profit) 4,117,943)",
+          "lane": "fable-direct overnight stamp factory 2026-07-06 (orchestrator live gate run)",
+          "date": "2026-07-06",
+          "structural": 0.97297,
+          "critical_pass": "5/5",
+          "high_pass": "3/3",
+          "pixel": 1,
+          "pixel_regions": 4,
+          "gate_composite": 98,
+          "sanity": "sane",
+          "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; source and applied are two INDEPENDENT renders of the same data)",
+          "run": "hidden source sheet surfaced via unhide+activate .twb bypass; bind gate honestly escalated not-fast-path pre-stamp; apply via direct placeholder fill (native zero-substitution bindings); one transient 'Operation cancelled' transport failure re-issued per classifier guidance",
+          "artifacts": "local-only under ~/TableauGoldens/lab/waterfall-*"
+        }
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "waterfall",
+        "part-to-whole",
+        "cumulative",
+        "running-total",
+        "bridge",
+        "contribution"
+      ],
+      "description": "A waterfall (bridge) chart: GanttBar floating bars whose tops sit on a running total ([cum:sum:Profit:qk] on rows) and whose lengths are the negative per-category measure (-SUM([Profit]) on size), so each category shows its incremental contribution to a cumulative whole across an ordered categorical axis (Sub-Category on cols, sorted DESC by SUM(Profit)). Color is a continuous SUM(Profit) encoding. Factory-compiled from the CookBook 'Waterfall Viz' worksheet; structurally compiled, not yet render-verified.",
+      "avoid_when": [
+        "The ask is about a smooth trend or trajectory over continuous time — a line/area chart shows the running trajectory better than a waterfall's discrete running-total bars.",
+        "The bound categorical has no meaningful order and you do not sort it by the measure — the running total is order-dependent, so an arbitrary member order yields an arbitrary cumulative path (this template sorts Sub-Category DESC by SUM(Profit); binding an unordered dimension without that sort breaks the bridge).",
+        "You only want to compare per-category magnitudes (not their cumulative build-up) — a ranked bar chart compares values more directly than a running-total waterfall."
+      ],
+      "slots": [
+        {
+          "slot_id": "profit",
+          "template_field": "Profit",
+          "derivation": "sum",
+          "role": [
+            "rows",
+            "color",
+            "formula-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The measure whose per-category contributions build the waterfall. Bound as SUM on color ([sum:Profit:qk]); the SAME base [Profit] also feeds the running-total [cum:sum:Profit:qk] on rows (a CumTotal table calc that rides along — hazard running-total-table-calc-rides-along) and the -SUM([Profit]) bar-length calc (calcs[0]). replaceFieldReferences rewrites every [Profit] instance on bind."
+        },
+        {
+          "slot_id": "sub_category",
+          "template_field": "Sub-Category",
+          "derivation": "none",
+          "role": [
+            "cols"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "Categorical axis on cols — one floating bar per member, ordered by the computed-sort (DESC by SUM(Profit)); the running total accumulates left-to-right across these members. XML column-instance [none:Sub-Category:nk]."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "profit_bar_length_calc",
+          "template_field": "Calculation_767019348535836686",
+          "derivation": "usr",
+          "role": [
+            "size"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "-SUM([Profit])",
+          "formula_refs": [
+            "Profit"
+          ],
+          "depends_on_slots": [
+            "profit"
+          ],
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Profit",
+              "slot_id": "profit",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ],
+          "notes": "Template-owned GanttBar length: -SUM([Profit]) sizes each floating bar downward from its running-total row anchor so the bar spans this category's delta. A self-closing <calculation>, so parseTemplateCalcs sees it — a declared calc slot. Its one input is the bindable 'profit' slot; replaceFieldReferences rewrites [Profit] on bind."
+        }
+      ],
+      "hazards": [
+        {
+          "code": "running-total-table-calc-rides-along",
+          "detail": "The rows axis [cum:sum:Profit:qk] is a <column-instance> of base [Profit] carrying a nested <table-calc type='CumTotal'> (Running Total). Because it is a column-INSTANCE with a nested table-calc (not a <column><calculation>), parseTemplateCalcs (self-closing <calculation> only) never sees it — it is NOT a declared calc slot and rides along verbatim on rows. Its base is the bindable 'profit' slot; replaceFieldReferences rewrites [Profit] inside the instance on bind. The running total is ORDER-DEPENDENT (accumulates across Sub-Category in the computed-sort order), so an unordered bound dimension yields an arbitrary cumulative path. Same class as ranking-bump-chart table-calc-rank-rides-along and slope-chart slope-filter-table-calc.",
+          "xml": "part-to-whole-waterfall.xml:15-17"
+        },
+        {
+          "code": "datasource-style-dropped",
+          "detail": "The source workbook carries a datasource-level <style-rule element='mark'> value->hue/glyph map (3 color / 4 shape maps, factory-detected) referencing Sub-Category and other workbook-shared fields. It is NOT carried into this template (no datasource_style sidecar) because it is irrelevant to this waterfall: the color that matters is the continuous SUM(Profit) encoding fully contained in the worksheet (<color column='[sum:Profit:qk]'>), NOT a categorical Sub-Category hue. Carrying it would also splice customer member values + federated datasource IDs into the repo (licensing/sensitive-data wall) — the same decision L1 made for spatial-choropleth-map. No fidelity loss for this template; on apply only the in-worksheet encoding is applied.",
+          "xml": "part-to-whole-waterfall.xml:73"
+        },
+        {
+          "code": "subtotals-mid-chain",
+          "detail": "Product evidence (P&L waterfalls): real revenue/margin waterfalls carry MID-CHAIN SUBTOTAL members — e.g. 'Gross Profit' after the revenue/COGS block, then opex steps, then 'Operating Income'. This template treats EVERY member of the bound dimension as an independent step, adding its -SUM([Profit]) delta to the running total. A subtotal row is not an increment — it restates the running total to date — so if it is present as a member it DOUBLE-COUNTS: the cumulative path jumps by the subtotal's full value and every step after it is offset. The template cannot distinguish a subtotal member from a step member. Detection/guidance: bind a dimension of INCREMENTAL line items only (exclude subtotal/total members via a filter before binding), or model subtotals as reference lines / separate annotation rather than as steps. A tell-tale is a running total that ends at roughly 2x the true total, or a member whose delta equals the sum of the preceding steps.",
+          "xml": "part-to-whole-waterfall.xml:15-17"
+        }
+      ]
+    },
+    {
+      "template": "ranking-bump-chart",
+      "family": "ranking",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": false,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "bump",
+        "bump-chart",
+        "rank-over-time",
+        "ranking"
+      ],
+      "description": "A bump chart: rank (a table calc of an aggregated measure) plotted over a Year/Month date on cols, one Line per category (color), with a Circle dot and rank label at each period — shows how members' rankings rise and fall across time. Lane W11-F2: the source year pin was PARAMETERIZED (collapsed to level-members) so the date stays a data-driven Filters pill with no source literals.",
+      "slots": [
+        {
+          "slot_id": "order_date_year",
+          "template_field": "Order Date",
+          "derivation": "yr",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "qualified_key_required": true,
+          "notes": "Year part of the SAME bound date field (outer cols axis). Reuses Order Date at a second derivation — see hazard single-date-two-derivations."
+        },
+        {
+          "slot_id": "order_date_month",
+          "template_field": "Order Date",
+          "derivation": "mn",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "qualified_key_required": true,
+          "notes": "Month part of the SAME bound date field (inner cols axis) — the period the rank is recomputed at."
+        },
+        {
+          "slot_id": "sub_category",
+          "template_field": "Sub-Category",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "One ranked line/color per member — the entities whose ranks bump over time."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "calc-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The measure that is ranked. It is not on a shelf directly; it feeds the template-owned Rank(Sum([Sales])) table calc (see hazard table-calc-rank-rides-along). replaceFieldReferences rewrites [Sales] inside that formula on bind."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "hardcoded-filter-parameterized",
+          "detail": "The source workbook pinned Year of Order Date to member='2016' — a source-calendar literal that would render empty on a differently-shaped date. Lane F2's compile-time filter policy PARAMETERIZED it: the member pin was collapsed to the neutral all-members form (<groupfilter function='level-members' level='[yr:Order Date:ok]'/>), so Year stays a data-driven Filters-shelf pill (its <slices> entry preserved) with the source literal removed — the same neutral form the apply-path 3c neutralizer writes (idempotent).",
+          "xml": "ranking-bump-chart.xml:26-28"
+        },
+        {
+          "code": "single-date-two-derivations",
+          "detail": "The one [Order Date] field is used at BOTH Year and Month on cols. Against the single-date committed fixture the second temporal slot cannot bind a DISTINCT field, so fixture_bind=false — a valid, honest state (same as change-over-time-calendar-heatmap). On a real dataset both slots bind the same date field via qualified keys; the false reflects the fixture's one-date shape, not a template defect.",
+          "xml": "ranking-bump-chart.xml:24,19"
+        },
+        {
+          "code": "table-calc-rank-rides-along",
+          "detail": "The Rank measure [Calculation_508343847073411072] is a table calc 'Rank(Sum([Sales]))' with a nested <table-calc>. Its <calculation> is NON-self-closing, so parseTemplateCalcs (self-closing only) does NOT see it — it is NOT a declared calc slot and rides along verbatim. Its one bindable input is Sales (the 'sales' slot); replaceFieldReferences rewrites [Sales] inside the formula on bind. The ranking assumes the bound measure is meaningfully rankable across the categories.",
+          "xml": "ranking-bump-chart.xml:11-15"
+        }
+      ]
+    },
+    {
+      "template": "ranking-dot-strip-plot",
+      "family": "ranking",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "dot-strip-plot",
+        "dot-plot",
+        "strip-plot",
+        "ranking"
+      ],
+      "description": "A dot strip plot: one Circle mark per detail-grain member placed along an aggregated-measure axis, grouped by a category on rows, with a per-cell average reference line — a space-efficient way to rank/compare members within each row. Lane W11-F2: the source month filter was PARAMETERIZED (collapsed to level-members) so the date stays a data-driven Filters pill with no source literals.",
+      "slots": [
+        {
+          "slot_id": "order_date_month",
+          "template_field": "Order Date",
+          "derivation": "mn",
+          "role": [
+            "rows"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "Month of the bound date on the rows axis — one strip per month. Used at a single derivation (mn), so no qualified key is required."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "cols"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "Aggregated measure on the cols axis — the value each dot is placed at; also the per-cell average reference line."
+        },
+        {
+          "slot_id": "sub_category",
+          "template_field": "Sub-Category",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "Level-of-detail dimension — one Circle mark per member within each row's strip."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "hardcoded-filter-parameterized",
+          "detail": "The source workbook pinned Month of Order Date to a 1..6 (Jan–Jun) member list — a source-calendar window that would render empty/partial on a differently-shaped date. Lane F2's compile-time filter policy PARAMETERIZED it: the six-member union was collapsed to the neutral all-members form (<groupfilter function='level-members' level='[mn:Order Date:ok]'/>), so Month stays a data-driven Filters-shelf pill (its <slices> entry is preserved) with the source literals removed. This is the same neutral form the apply-path 3c neutralizer writes, so compile + apply agree (idempotent).",
+          "xml": "ranking-dot-strip-plot.xml:26-28"
+        }
+      ]
+    },
+    {
       "template": "ranking-ordered-bar",
       "family": "ranking",
       "readiness": "GREEN",
@@ -991,6 +3052,273 @@
           "code": "computed-sort-pill-coupling",
           "detail": "computed-sort sorts [none:Region:nk] using [sum:Sales:qk]; both slots must bind or the sort dangles (both are required, so coverage satisfies this). [Region] has NO aggregate-role-from here, so GREEN stands (verification: AGREE).",
           "xml": "ranking-ordered-column.xml:24"
+        }
+      ]
+    },
+    {
+      "template": "slope-chart",
+      "family": "time-series",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "slope",
+        "slope-chart",
+        "slope-graph",
+        "before-after",
+        "two-period",
+        "change"
+      ],
+      "description": "A slope chart: a measure plotted against a truncated-quarter date, with a template-internal FIRST/LAST filter keeping only the two endpoint periods; one line per category shows the direction/magnitude of change between the two periods.",
+      "slots": [
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "color",
+            "text"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "one slope line per member; also the line-end label. Template column carries aggregate-role-from='[State/Province]' — see hazard hidden-aggregate-role-from."
+        },
+        {
+          "slot_id": "profit",
+          "template_field": "Profit",
+          "derivation": "sum",
+          "role": [
+            "rows",
+            "text"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "the measure whose endpoint values define each slope; also the value label."
+        },
+        {
+          "slot_id": "order_date",
+          "template_field": "Order Date",
+          "derivation": "tqr",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "truncated-quarter date on the columns axis; the FIRST/LAST filter reduces it to the two endpoint periods."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "slope-filter-table-calc",
+          "detail": "A template-internal boolean table calc 'FIRST()==0 or LAST()==0' filters to the two endpoint periods. It is NON-self-closing (nested <table-calc>), so parseTemplateCalcs (self-closing only) does NOT see it — it is NOT a declared calc slot and rides along verbatim. It has NO bindable inputs (FIRST/LAST are positional), so it is portable, but it assumes the bound temporal spans ≥2 periods; a single-period bind degenerates to one endpoint.",
+          "xml": "slope-chart.xml:10-13,25-27"
+        },
+        {
+          "code": "hidden-aggregate-role-from",
+          "detail": "[Region] aggregate-role-from='[State/Province]' is a cosmetic secondary-role hint that is not rewritten onto the bound field (same behavior as correlation-scatter-plot-chart).",
+          "xml": "slope-chart.xml:17"
+        }
+      ]
+    },
+    {
+      "template": "spatial-choropleth-map",
+      "family": "spatial",
+      "readiness": "YELLOW",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-06",
+        "render_evidence": {
+          "method": "gate-composite",
+          "date": "2026-07-06",
+          "structural": 0.97297,
+          "critical_pass": "5/5",
+          "pixel": 1,
+          "pixel_regions": 5,
+          "sanity": "sane",
+          "sanity_signals": [
+            "mark-count=pass reconciled=true (49=49, Worksheet>Copy>Data on source and applied sheets)",
+            "caption-leak=pass"
+          ],
+          "run": "source-anchor replay on the source workbook's Superstore datasource; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via direct placeholder fill; hidden source worksheet surfaced via unhide+activate .twb bypass",
+          "artifacts": "local-only under ~/TableauGoldens/lab/choropleth-* (renders, worksheet XMLs, workbook cache)",
+          "basis": "golden-parity gate run 2026-07-06 (source-anchor replay): structural 0.97297 (5/5 critical), pixel 1.0 (5 ROIs, same-geometry captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 49=49 on source and applied renders",
+          "lane": "fable-direct stamp day 2026-07-06 (orchestrator live gate run)",
+          "high_pass": "3/3",
+          "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 5 ROIs: whole-map ink-colors + hue, west/east/south clusters — all 1.0). Anchor-only in the hand-stamp sense is NOT the case here: source and applied are two INDEPENDENT renders of the same data.",
+          "gate_composite": 98
+        }
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "choropleth",
+        "filled-map",
+        "region-map",
+        "geographic-map",
+        "spatial",
+        "map"
+      ],
+      "description": "Filled (choropleth) map: one Multipolygon per geographic region, shaded by a continuous color measure. Standard geo dimensions (Country + State) on level-of-detail with generated Latitude/Longitude on rows/cols; SUM(measure) on color as a custom-interpolated diverging gradient. Factory-compiled from the CookBook 'Choropleth Map Viz' worksheet; structurally compiled, not yet render-verified.",
+      "avoid_when": [
+        "The ask is 'which region ranks highest/lowest' or needs precise cross-region value comparison — filled-area color is hard to compare quantitatively; prefer a ranked bar chart.",
+        "Regions differ wildly in physical size — large, low-value areas visually dominate (area is not magnitude); consider a symbol/bubble map sized by the measure instead.",
+        "The dimension has no geographic semantic-role (not a Country/State/etc.) — a choropleth needs fields Tableau can resolve to a filled geometry."
+      ],
+      "slots": [
+        {
+          "slot_id": "country",
+          "template_field": "Country",
+          "derivation": "none",
+          "role": [
+            "lod"
+          ],
+          "kind": "geo",
+          "bindable": true,
+          "required": true,
+          "notes": "Geographic dimension on level-of-detail (outer region). Binds to a Country/Region-class field; XML column-instance [none:Country:nk]."
+        },
+        {
+          "slot_id": "state",
+          "template_field": "State",
+          "derivation": "none",
+          "role": [
+            "lod"
+          ],
+          "kind": "geo",
+          "bindable": true,
+          "required": true,
+          "notes": "Geographic dimension on level-of-detail (the shaded unit). Binds to a State/Province-class field; XML column-instance [none:State:nk]."
+        },
+        {
+          "slot_id": "profit",
+          "template_field": "Profit",
+          "derivation": "sum",
+          "role": [
+            "color"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "Continuous color measure driving the diverging gradient (custom-interpolated). Binds to any measure; XML column-instance [sum:Profit:qk]."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "datasource-style-dropped",
+          "detail": "The source workbook carries a datasource-level <style-rule element='mark'> with categorical value->hue / value->glyph maps for OTHER fields (State, Sub-Category, Region, Ship Mode, Segment, Measure Names, flag-icon shapes) shared across the workbook's sheets. It is NOT carried into this template (unlike the factory golden's datasource_style sidecar) because it is irrelevant to this choropleth — the color that matters is a continuous SUM(measure) diverging gradient fully contained in the worksheet XML (custom-interpolated color encoding). Carrying it would also splice customer member values and federated datasource IDs into the repo (licensing/sensitive-data wall). No fidelity loss for this template; on apply, only the in-worksheet gradient is applied.",
+          "xml": "spatial-choropleth-map.xml:31"
+        },
+        {
+          "code": "generated-geo-required",
+          "detail": "The template plots generated [Latitude (generated)]/[Longitude (generated)] on rows/cols and a generated [Geometry (generated)] on the geometry encoding. These are Tableau-generated fields that exist only when the bound dimensions carry a geographic semantic-role — the binder must map the two geo slots to fields Tableau geocodes (e.g. Country/Region, State/Province), or the map will not render filled areas.",
+          "xml": "spatial-choropleth-map.xml:181"
+        }
+      ]
+    },
+    {
+      "template": "spatial-symbol-map",
+      "family": "spatial",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "symbol-map",
+        "proportional-symbol-map",
+        "bubble-map",
+        "point-map",
+        "spatial",
+        "map"
+      ],
+      "description": "A point (symbol) map: one Circle mark per geographic member, placed on generated Lat/Long, sized by a measure. Distinct from a choropleth (which fills regions); use when magnitude is encoded by symbol size rather than region shading.",
+      "slots": [
+        {
+          "slot_id": "country",
+          "template_field": "Country/Region",
+          "derivation": "none",
+          "role": [
+            "lod"
+          ],
+          "kind": "geo",
+          "bindable": true,
+          "required": true,
+          "notes": "template column carries semantic-role='[Country].[ISO3166_2]'; the LOD level drives generated Lat/Long. Portability is 'across the committed fixture classes + render-verified', not a blanket 'any dataset'."
+        },
+        {
+          "slot_id": "state",
+          "template_field": "State/Province",
+          "derivation": "none",
+          "role": [
+            "lod"
+          ],
+          "kind": "geo",
+          "bindable": true,
+          "required": true,
+          "notes": "template column carries semantic-role='[State].[Name]'."
+        },
+        {
+          "slot_id": "city",
+          "template_field": "City",
+          "derivation": "none",
+          "role": [
+            "lod"
+          ],
+          "kind": "geo",
+          "bindable": true,
+          "required": true,
+          "notes": "template column carries semantic-role='[City].[Name]'; finest geographic grain — one symbol per city."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "size"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "aggregated measure driving symbol size (proportional-symbol encoding)."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "generated-geo-required",
+          "detail": "Rows/Cols are [Latitude (generated)]/[Longitude (generated)] — Tableau auto-generates these ONLY when the bound LOD fields carry a recognized geographic semantic-role. Binding non-geo dimensions produces no map (empty generated coordinates).",
+          "xml": "spatial-symbol-map.xml:53-54"
+        },
+        {
+          "code": "geo-bind-not-geocodable",
+          "detail": "A geo-slot bind proves role==dimension, NOT that the bound field geocodes; the sanity/render leg is the backstop (same residual as spatial-choropleth-map).",
+          "xml": "spatial-symbol-map.xml:13-19"
         }
       ]
     },

@@ -55,8 +55,11 @@ describe('binder/manifest-validation — pure module surface', () => {
 describe('binder/manifest-validation — superset is backward-compatible with the bundled manifests', () => {
   const bundled = readBundledManifestFiles();
 
-  it('there are 17 bundled manifests to check', () => {
-    expect(bundled.length).toBe(17);
+  it('there are 39 bundled manifests to check', () => {
+    // W26-B re-snapshot: the shipped supply was resynced to the factory's full 39-template
+    // set (17 → 39; +22 new manifests copied verbatim, trust fields unchanged). Pinned in
+    // lockstep with the on-disk count so a silent add/drop of a bundled manifest fails here.
+    expect(bundled.length).toBe(39);
   });
 
   it('every bundled manifest validates through the new types’ validator (no errors)', () => {
