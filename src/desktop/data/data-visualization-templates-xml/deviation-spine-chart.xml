@@ -1,0 +1,99 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run>&lt;Sheet Name&gt;
+</run>
+        <run fontname='Tableau Light' fontsize='9'>Splits a single value into 2 contrasting components (e.g., Male/Female)</run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <table>
+    <view>
+      <datasources>
+        <datasource caption='Looks vs Personality' name='federated.1ko0q9z0cybhx212227b819gayqi' />
+      </datasources>
+      <datasource-dependencies datasource='federated.1ko0q9z0cybhx212227b819gayqi'>
+        <column caption='Men' datatype='real' name='[Calculation_2084392578408062979]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='SUM(if [Gender]=&apos;Men&apos; THEN [Value]
+END)/SUM([Value])' />
+        </column>
+        <column caption='"Women     |     Men"' datatype='string' name='[Calculation_2084392578409873414]' role='dimension' type='nominal' user:unnamed='Spine Chart'>
+          <calculation class='tableau' formula='"Women     |     Men"' />
+        </column>
+        <column datatype='string' name='[Gender]' role='dimension' type='nominal' />
+        <column datatype='string' name='[Measure]' role='dimension' type='nominal' />
+        <column caption='Women' datatype='real' default-format='*#,##0;#,##0' name='[Men (copy)]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='-SUM(if [Gender]=&apos;Women&apos; THEN [Value]
+END)/SUM([Value])' />
+        </column>
+        <column datatype='string' name='[Nationality]' role='dimension' type='nominal' />
+        <column caption='Response Rate' datatype='integer' name='[Value]' role='measure' type='quantitative' />
+        <column-instance column='[Calculation_2084392578409873414]' derivation='None' name='[none:Calculation_2084392578409873414:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Measure]' derivation='None' name='[none:Measure:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Nationality]' derivation='None' name='[none:Nationality:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Calculation_2084392578408062979]' derivation='User' name='[usr:Calculation_2084392578408062979:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Men (copy)]' derivation='User' name='[usr:Men (copy):qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <filter class='categorical' column='[federated.1ko0q9z0cybhx212227b819gayqi].[:Measure Names]'>
+        <groupfilter function='union' user:op='manual'>
+          <groupfilter function='member' level='[:Measure Names]' member='"[federated.1ko0q9z0cybhx212227b819gayqi].[usr:Calculation_2084392578408062979:qk]"' />
+          <groupfilter function='member' level='[:Measure Names]' member='"[federated.1ko0q9z0cybhx212227b819gayqi].[usr:Men (copy):qk]"' />
+        </groupfilter>
+      </filter>
+      <filter class='categorical' column='[federated.1ko0q9z0cybhx212227b819gayqi].[none:Calculation_2084392578409873414:nk]'>
+        <groupfilter function='member' level='[none:Calculation_2084392578409873414:nk]' member='"Women     |     Men"' user:ui-domain='relevant' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
+      </filter>
+      <filter class='categorical' column='[federated.1ko0q9z0cybhx212227b819gayqi].[none:Measure:nk]'>
+        <groupfilter function='member' level='[none:Measure:nk]' member='"Weighted Sample"' user:ui-domain='relevant' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
+      </filter>
+      <computed-sort column='[federated.1ko0q9z0cybhx212227b819gayqi].[none:Nationality:nk]' direction='ASC' using='[federated.1ko0q9z0cybhx212227b819gayqi].[usr:Men (copy):qk]' />
+      <slices>
+        <column>[federated.1ko0q9z0cybhx212227b819gayqi].[none:Measure:nk]</column>
+        <column>[federated.1ko0q9z0cybhx212227b819gayqi].[:Measure Names]</column>
+        <column>[federated.1ko0q9z0cybhx212227b819gayqi].[none:Calculation_2084392578409873414:nk]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='title' class='0' field='[federated.1ko0q9z0cybhx212227b819gayqi].[Multiple Values]' scope='cols' value='Response Rate' />
+      </style-rule>
+      <style-rule element='label'>
+        <format attr='text-format' field='[federated.1ko0q9z0cybhx212227b819gayqi].[Multiple Values]' value='*#,##0%;#,##0%' />
+        <format attr='font-family' field='[federated.1ko0q9z0cybhx212227b819gayqi].[none:Calculation_2084392578409873414:nk]' value='Tableau Medium' />
+        <format attr='color' field='[federated.1ko0q9z0cybhx212227b819gayqi].[none:Calculation_2084392578409873414:nk]' value='#1b1b1b' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='cols' value='false' />
+        <format attr='display-field-labels' scope='rows' value='false' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane id='1' selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <color column='[federated.1ko0q9z0cybhx212227b819gayqi].[:Measure Names]' />
+        </encodings>
+      </pane>
+    </panes>
+    <rows>[federated.1ko0q9z0cybhx212227b819gayqi].[none:Nationality:nk]</rows>
+    <cols>[federated.1ko0q9z0cybhx212227b819gayqi].[Multiple Values]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

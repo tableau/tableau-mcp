@@ -1,0 +1,201 @@
+{
+  "template": "gantt-chart",
+  "family": "time-series",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": false,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "gantt",
+    "gantt-chart",
+    "schedule",
+    "task-timeline",
+    "time-series"
+  ],
+  "description": "A Gantt chart: one GanttBar per row-hierarchy member (Category > Sub-Category > Product Name > Order ID) laid out over a Year/Month date on cols, its length sized by a duration calc (Ship Lag = DATEDIFF of two dates) and colored by a status calc (Ship Lag Indicator) — a schedule/duration view over time. Lane W11-F2: the three source filter pins (product-name list, sub-category, year) were PARAMETERIZED (collapsed to level-members) so those fields stay data-driven Filters pills with no source literals.",
+  "slots": [
+    {
+      "slot_id": "category",
+      "template_field": "Category",
+      "derivation": "none",
+      "role": [
+        "rows"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "Outermost row grouping of the schedule hierarchy."
+    },
+    {
+      "slot_id": "sub_category",
+      "template_field": "Sub-Category",
+      "derivation": "none",
+      "role": [
+        "rows"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "Second row grouping, nested under Category."
+    },
+    {
+      "slot_id": "product_name",
+      "template_field": "Product Name",
+      "derivation": "none",
+      "role": [
+        "rows"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "Third row grouping, nested under Sub-Category."
+    },
+    {
+      "slot_id": "order_id",
+      "template_field": "Order ID",
+      "derivation": "none",
+      "role": [
+        "rows"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "Leaf row grain — one Gantt bar per member (the individual task)."
+    },
+    {
+      "slot_id": "order_date_year",
+      "template_field": "Order Date",
+      "derivation": "yr",
+      "role": [
+        "cols"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "qualified_key_required": true,
+      "notes": "Year part of the SAME bound start-date field (outer cols axis). Reuses Order Date at a second derivation — see hazard single-date-two-derivations."
+    },
+    {
+      "slot_id": "order_date_month",
+      "template_field": "Order Date",
+      "derivation": "mn",
+      "role": [
+        "cols"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "qualified_key_required": true,
+      "notes": "Month part of the SAME bound start-date field (inner cols axis)."
+    },
+    {
+      "slot_id": "ship_date",
+      "template_field": "Ship Date",
+      "derivation": "none",
+      "role": [
+        "calc-input"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "notes": "The END date. Not on a shelf; it feeds the Ship Lag duration calc (DATEDIFF of Order Date -> Ship Date). A DISTINCT second date field is required — with the single-date fixture only one date exists, so fixture_bind=false (see hazard single-date-two-derivations)."
+    }
+  ],
+  "calcs": [
+    {
+      "slot_id": "ship_lag",
+      "template_field": "Calculation_291608117815463936",
+      "derivation": "sum",
+      "role": [
+        "size"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "DATEDIFF('day',[Order Date],[Ship Date])",
+      "formula_refs": [
+        "Order Date",
+        "Ship Date"
+      ],
+      "depends_on_slots": [
+        "order_date_year",
+        "ship_date"
+      ],
+      "notes": "Ship Lag — the duration (bar length/size) between the start (Order Date) and end (Ship Date). Requires both bindable date slots.",
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Order Date",
+          "slot_id": "order_date_year",
+          "slot_kind": "temporal",
+          "required": true,
+          "template_internal": false
+        },
+        {
+          "ref": "Ship Date",
+          "slot_id": "ship_date",
+          "slot_kind": "temporal",
+          "required": true,
+          "template_internal": false
+        }
+      ]
+    },
+    {
+      "slot_id": "ship_lag_indicator",
+      "template_field": "Calculation_291608117815988225",
+      "derivation": "none",
+      "role": [
+        "color"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "If [Calculation_291608117815463936] >= 5 then \"Late\"\nElseIf [Calculation_291608117815463936] >=2 Then \"On-Time\"\nElse \"Early\"\nEND",
+      "formula_refs": [
+        "Calculation_291608117815463936"
+      ],
+      "depends_on_slots": [],
+      "notes": "Ship Lag Indicator — buckets the duration into Late/On-Time/Early for the bar color. Template-internal: its only input is the Ship Lag calc, not a bindable slot.",
+      "result_role": "dimension",
+      "inputs": [
+        {
+          "ref": "Calculation_291608117815463936",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        }
+      ]
+    }
+  ],
+  "hazards": [
+    {
+      "code": "hardcoded-filter-parameterized",
+      "detail": "The source workbook pinned Product Name to a nine-member product list. Lane F2's compile-time filter policy PARAMETERIZED it: the member union was collapsed to the neutral all-members form (<groupfilter function='level-members' level='[none:Product Name:nk]'/>), so Product Name stays a data-driven Filters-shelf pill (its <slices> entry preserved) with the source literals removed.",
+      "xml": "gantt-chart.xml:34-36"
+    },
+    {
+      "code": "hardcoded-filter-parameterized",
+      "detail": "The source workbook pinned Sub-Category to member='\"Chairs\"'. PARAMETERIZED: collapsed to <groupfilter function='level-members' level='[none:Sub-Category:nk]'/>, so Sub-Category stays a data-driven Filters-shelf pill with the source literal removed.",
+      "xml": "gantt-chart.xml:37-39"
+    },
+    {
+      "code": "hardcoded-filter-parameterized",
+      "detail": "The source workbook pinned Year of Order Date to a {2016, 2026} member list. PARAMETERIZED: collapsed to <groupfilter function='level-members' level='[yr:Order Date:ok]'/>, so Year stays a data-driven Filters-shelf pill with the source literals removed — the same neutral form the apply-path 3c neutralizer writes (idempotent).",
+      "xml": "gantt-chart.xml:40-42"
+    },
+    {
+      "code": "single-date-two-derivations",
+      "detail": "The start date [Order Date] is used at BOTH Year and Month on cols, AND the Ship Lag duration calc needs a DISTINCT second date [Ship Date]. Against the single-date committed fixture these extra temporal slots cannot bind distinct fields, so fixture_bind=false — a valid, honest state (same convention as change-over-time-calendar-heatmap). On a real dataset the Order Date derivations bind the same field via qualified keys and Ship Date binds a second date; the false reflects the fixture's one-date shape, not a template defect.",
+      "xml": "gantt-chart.xml:20,23"
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column datatype='date' name='[Order Date]' role='dimension' type='ordinal' />
+        <column aggregate-role-from='[State/Province]' datatype='string' name='[Region]' role='dimension' type='nominal' />
+        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Order Date]' derivation='Year' name='[yr:Order Date:ok]' pivot='key' type='ordinal' />
+      </datasource-dependencies>
+      <filter class='categorical' column='[{{DATASOURCE}}].[yr:Order Date:ok]'>
+        <groupfilter function='except' user:ui-domain='relevant' user:ui-enumeration='exclusive' user:ui-marker='enumerate'>
+          <groupfilter function='level-members' level='[yr:Order Date:ok]' />
+          <groupfilter function='union'>
+            <groupfilter function='member' level='[yr:Order Date:ok]' member='2024' />
+            <groupfilter function='member' level='[yr:Order Date:ok]' member='2025' />
+          </groupfilter>
+        </groupfilter>
+      </filter>
+      <slices>
+        <column>[{{DATASOURCE}}].[yr:Order Date:ok]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style />
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Bar' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[yr:Order Date:ok]' />
+        </encodings>
+      </pane>
+    </panes>
+    <rows>([{{DATASOURCE}}].[none:Region:nk] / [{{DATASOURCE}}].[yr:Order Date:ok])</rows>
+    <cols>[{{DATASOURCE}}].[sum:Sales:qk]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

@@ -1,0 +1,80 @@
+{
+  "template": "funnel-chart",
+  "family": "specialized",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "funnel",
+    "pipeline",
+    "conversion",
+    "stage",
+    "deal-flow",
+    "drop-off"
+  ],
+  "description": "A funnel/conversion chart for staged pipeline drop-off: an ORDERED stage dimension on rows ([none:Stage:nk], data/ordinal order preserved \u2014 deliberately NO computed sort) and the amount measure as a Bar on cols ([sum:Amount:qk]), also on the size encoding so the bars taper toward the narrow end of the funnel. Reading top-to-bottom the shrinking bars show stage-to-stage conversion / drop-off. Serves UC6 (pipeline health & deal flow). Tableau has no native funnel mark, so this is authored as creative Bar usage generalized from the proven ranking-ordered-bar structure (NO usable funnel exemplar exists in the twb corpus \u2014 grep 'funnel' returns nothing). Structurally compiled hermetically, NOT live render-verified.",
+  "avoid_when": [
+    "The stages have no inherent sequence and you want members ranked by value \u2014 use ranking-ordered-bar (which sorts DESC by the measure); a funnel encodes a fixed conversion ORDER, not a value ranking.",
+    "You need proportional multi-path flow between many source/target nodes \u2014 that is a sankey, not a single-path funnel.",
+    "The amount is not monotonically non-increasing across the stages (a later stage can carry more than an earlier one) \u2014 the funnel silhouette assumes drop-off and inverts when a stage rises (see hazard stage-skipping)."
+  ],
+  "slots": [
+    {
+      "slot_id": "stage",
+      "template_field": "Stage",
+      "derivation": "none",
+      "role": [
+        "rows"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "The ORDERED pipeline-stage dimension on rows \u2014 one funnel band per stage. The template applies NO computed sort, so stages render in the bound field's member order; bind an ordinal/ordered stage field (or set a manual member sort) so the conversion sequence is correct. See hazard stage-order-dependence. XML column-instance [none:Stage:nk]."
+    },
+    {
+      "slot_id": "amount",
+      "template_field": "Amount",
+      "derivation": "sum",
+      "role": [
+        "cols",
+        "size"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "The stage amount (deal value / count) \u2014 SUM([Amount]) \u2192 [sum:Amount:qk], the SAME instance on cols (bar length) AND on the size encoding (bar taper). One derivation, so no qualified key. replaceFieldReferences rewrites [Amount] in both places on bind."
+    }
+  ],
+  "calcs": [],
+  "hazards": [
+    {
+      "code": "stage-order-dependence",
+      "detail": "The template plots stages in the BOUND dimension's native member order (there is deliberately NO computed-sort element \u2014 sorting DESC by amount would reorder stages and destroy the sequence). A funnel's whole story is the fixed stage order (Lead \u2192 Qualified \u2192 Proposal \u2192 Closed); binding an unordered nominal stage field yields an arbitrary, meaningless funnel. Bind an ordinal/ordered stage field or set a manual member sort before trusting the silhouette.",
+      "xml": "funnel-chart.xml:34"
+    },
+    {
+      "code": "stage-skipping",
+      "detail": "Deals that skip stages, or are counted at more than one stage, break the monotonic drop-off the funnel assumes: a later stage can exceed an earlier one, so the silhouette inverts and the implied conversion rates mislead. The template cannot detect non-monotonic stages \u2014 validate the data is a clean single-count-per-stage funnel (or model conversion explicitly) before reading drop-off from the bars.",
+      "xml": "funnel-chart.xml:29"
+    },
+    {
+      "code": "funnel-is-creative-bar-usage",
+      "detail": "Tableau has no native funnel mark; this is an ordered Bar with amount on both length and size (taper) \u2014 a left-aligned conversion bar, NOT a centered/symmetric funnel. A true mirrored funnel needs a dual-axis with a negated companion measure, which the {stage, amount} slot vocabulary does not express. The chart communicates stage drop-off honestly but is not a geometrically symmetric funnel; do not claim symmetry.",
+      "xml": "funnel-chart.xml:24"
+    },
+    {
+      "code": "not-live-render-verified",
+      "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop). portability_evidence.render_verified='none' and fast_path_eligible=false: the template binds the committed fixture (fixture_bind computed true \u2014 a dim + a measure) but has NO live render-readback proof. A live-YYYY-MM-DD stamp is EARNED later by the golden-parity gate / a hand-stamp with render_evidence, never granted at compile time.",
+      "xml": "funnel-chart.xml:1"
+    }
+  ]
+}

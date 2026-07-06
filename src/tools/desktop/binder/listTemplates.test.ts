@@ -125,6 +125,34 @@ describe('listTemplatesTool', () => {
     expect(deriveFastPathBlockers(eligible)).toEqual([]);
   });
 
+  it('every bundled ineligible template surfaces a non-empty honest blocker (W26-B re-snapshot set)', () => {
+    // W26-B closed the 17 → 39 gap. Every one of the 29 ineligible templates must surface a
+    // non-empty, honest fast_path_blocker through the EXISTING deriveFastPathBlockers mechanism —
+    // no ineligible template may be a zero-signal dead end. Two honest branches, both covered:
+    //   - render_verified 'none' with no explicit factory blocker → the derived not-live-render-
+    //     verified string (the bulk of the newly-added propose-only templates), and
+    //   - explicit factory BlockerCodes (e.g. HARDCODED_FILTER_MEMBERS, PARAMETER_REQUIRED) →
+    //     passed through untouched.
+    const ineligible = allManifests.filter((m) => !m.fast_path_eligible);
+    expect(ineligible.length).toBeGreaterThan(0);
+    for (const m of ineligible) {
+      const blockers = deriveFastPathBlockers(m);
+      expect(blockers.length, `${m.template} must surface a blocker`).toBeGreaterThan(0);
+      if (m.fast_path_blockers.length === 0) {
+        // The derived blocker is only honest when the manifest truly carries no live stamp.
+        expect(m.portability_evidence.render_verified, `${m.template} render_verified`).toBe(
+          'none',
+        );
+        expect(blockers, `${m.template} derived blocker`).toEqual([
+          'not-live-render-verified: this template has no live render verification stamp',
+        ]);
+      } else {
+        // Explicit factory blocker codes travel through unchanged (no derivation).
+        expect(blockers, `${m.template} explicit blockers`).toEqual(m.fast_path_blockers);
+      }
+    }
+  });
+
   it('rejects an out-of-taxonomy family at the schema layer (fail-open watch-class guard)', async () => {
     // A bare-string family filter would parse a typo and silently return an empty
     // list; the closed z.enum(FAMILY_VALUES) rejects it so the mistake fails closed.
