@@ -5,6 +5,7 @@ import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { spliceBoundFacet } from '../../../desktop/templates/facetSplice.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
 import { getTemplatePath, getTemplatesDir } from '../../../desktop/templates/templatePath.js';
@@ -147,6 +148,10 @@ export const getInjectTemplateTool = (
               // nonces => distinct calc-name suffixes => repeated injects into one
               // workbook can't shadow each other's template calcs.
               const applyNonce = `${workbookFile}:${Date.now()}:${randomUUID()}`;
+              // W28-C: splice a BOUND facet pill onto the trellis shelf BEFORE the
+              // frozen core rewrite (identity no-op when no facet is bound, so un-faceted
+              // applies stay byte-identical). The core then maps [Facet] → the bound field.
+              templateXml = spliceBoundFacet(templateXml, fieldMapping ?? {});
               templateXml = rewriteFieldReferences(
                 templateXml,
                 fieldMapping ?? {},
