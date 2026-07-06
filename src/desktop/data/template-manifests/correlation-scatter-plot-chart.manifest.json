@@ -24,7 +24,13 @@
     { "slot_id": "profit_ratio_calc", "template_field": "Calculation_1368249927221915648", "derivation": "usr",
       "role": ["color"], "kind": "calc", "bindable": false, "required": true,
       "formula": "SUM([Profit])/SUM([Sales])", "formula_refs": ["Profit", "Sales"],
-      "depends_on_slots": ["profit", "sales"] }
+      "depends_on_slots": ["profit", "sales"],
+      "result_role": "measure",
+      "inputs": [
+        { "ref": "Profit", "slot_id": "profit", "slot_kind": "quantitative", "required": true, "template_internal": false },
+        { "ref": "Sales", "slot_id": "sales", "slot_kind": "quantitative", "required": true, "template_internal": false }
+      ],
+      "prereqs": ["raw-formula-refs"] }
   ],
   "hazards": [
     { "code": "raw-formula-refs",

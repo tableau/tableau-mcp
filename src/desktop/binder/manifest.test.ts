@@ -384,24 +384,31 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
     }
   });
 
-  it('the render-verified set is exactly the four live-proven templates', () => {
-    // Back to FOUR: ww-floating-bars was unstamped (render_verified none, fast_path_eligible
-    // false) in the fidelity regression fix. Its live render was accepted under the old
-    // non-blank-only bar ("59 marks visible"), but the marks were thin/unsized — it was
-    // render-verified against the Super Bowl "35-31" score dataset, exactly the compound-string
-    // case its OWN avoid_when says to avoid (INT() of "35-31" → wrong/negative bar length). The
-    // template has since been RECOMPILED from the final 'format' rung (golden checkpoint
-    // format.xml, gate structure[looks_polished]:true) so it now carries the over/under color +
-    // axis-format fidelity the rung-1 compile stripped. But the raised standard requires a live
-    // GOLDEN MATCH against that graded render (vision/human), not merely non-blank, and
-    // ww-floating-bars has not earned that yet. It re-enters this set only after an orchestrator
-    // golden-match re-stamps render_verified.
+  it('the render-verified set is exactly the eight live-proven templates', () => {
+    // The W2-R008 wave3 floor-raise (live-verify 2026-07-05) hand-stamped four MORE
+    // templates fast_path_eligible after a live render + structural-parity + human
+    // review — their provenance rides in portability_evidence.render_evidence (the three
+    // shipped-XML siblings) and golden.checkpoint_render (the golden-only ww-ou-arrow):
+    //   distribution-bar-code-chart, part-to-whole-stacked-bar-chart, ranking-ordered-column,
+    //   ww-ou-arrow.
+    // Still UNSTAMPED (render_verified none): ww-ou-diff (a documented derivation that
+    // could not be live-render-verified here), ww-floating-bars (recompiled from the final
+    // 'format' rung but not yet re-golden-matched), and control-chart-xmr.
     const eligible = [...manifests.values()]
       .filter((m) => m.fast_path_eligible)
       .map((m) => m.template)
       .sort();
     expect(eligible).toEqual(
-      ['kpi-text', 'part-to-whole-treemap-chart', 'ranking-ordered-bar', 'trend-line-chart'].sort(),
+      [
+        'distribution-bar-code-chart',
+        'kpi-text',
+        'part-to-whole-stacked-bar-chart',
+        'part-to-whole-treemap-chart',
+        'ranking-ordered-bar',
+        'ranking-ordered-column',
+        'trend-line-chart',
+        'ww-ou-arrow',
+      ].sort(),
     );
   });
 });
@@ -438,14 +445,31 @@ describe('binder/manifest — avoid_when (optional negative-guidance field)', ()
 });
 
 describe('binder/manifest — XML cross-checks (XML is ground truth)', () => {
-  it('every template has a matching XML file', () => {
-    for (const name of manifests.keys()) {
-      expect(fs.existsSync(xmlPath(name)), `${name}.xml exists`).toBe(true);
+  // GOLDEN-ONLY templates (ww-ou-arrow, ww-ou-diff) are faithfully compiled from a
+  // golden .twbx (golden.checkpoint_render) whose worksheet XML is NOT shipped in this
+  // package — the ~/TableauGoldens corpus never ships here (see authoring-migration-drift.md).
+  // Their gate-earned stamps' provenance rides in golden.checkpoint_render instead. The
+  // XML-ground-truth cross-checks below apply only to templates whose .xml SHIPS; golden-only
+  // templates get a checkpoint_render provenance assertion (below) in its place. This narrows
+  // each check to the ground truth that exists here — it does NOT weaken the assertion logic.
+  function hasShippedXml(name: string): boolean {
+    return fs.existsSync(xmlPath(name));
+  }
+
+  it('every template either ships a matching XML file OR is golden-only with checkpoint_render provenance', () => {
+    for (const [name, m] of manifests) {
+      if (hasShippedXml(name)) continue;
+      expect(
+        typeof m.golden?.checkpoint_render === 'string' &&
+          m.golden.checkpoint_render.trim().length > 0,
+        `${name}: no shipped XML → must declare golden.checkpoint_render provenance`,
+      ).toBe(true);
     }
   });
 
   it('every bindable/calc template_field is declared as a <column> in the XML', () => {
     for (const [name, m] of manifests) {
+      if (!hasShippedXml(name)) continue; // golden-only: no shipped XML to cross-check against
       const xml = fs.readFileSync(xmlPath(name), 'utf8');
       const specs: SlotSpec[] = [...m.slots, ...m.calcs];
       for (const spec of specs) {
@@ -461,6 +485,7 @@ describe('binder/manifest — XML cross-checks (XML is ground truth)', () => {
 
   it('declared placeholders are present in the XML', () => {
     for (const [name, m] of manifests) {
+      if (!hasShippedXml(name)) continue; // golden-only: no shipped XML to cross-check against
       const xml = fs.readFileSync(xmlPath(name), 'utf8');
       for (const ph of m.placeholders) {
         expect(xml.includes(`{{${ph}}}`), `${name}: {{${ph}}} present`).toBe(true);
@@ -470,6 +495,7 @@ describe('binder/manifest — XML cross-checks (XML is ground truth)', () => {
 
   it('datasource_placeholder reflects {{DATASOURCE}} presence in the XML', () => {
     for (const [name, m] of manifests) {
+      if (!hasShippedXml(name)) continue; // golden-only: no shipped XML to cross-check against
       const xml = fs.readFileSync(xmlPath(name), 'utf8');
       expect(m.datasource_placeholder, `${name}`).toBe(xml.includes('{{DATASOURCE}}'));
     }
@@ -521,10 +547,10 @@ describe('binder/manifest — derivation contract', () => {
 });
 
 describe('binder/manifest — generated index', () => {
-  it('data/template-manifests.index.json exists (run scripts/build-template-manifests.js first)', () => {
+  it('data/template-manifests.index.json exists (run the generator first)', () => {
     expect(
       fs.existsSync(MANIFEST_INDEX_PATH),
-      'index missing — run `node scripts/build-template-manifests.js`',
+      'index missing — run `npx tsx src/scripts/buildTemplateManifests.ts`',
     ).toBe(true);
   });
 

@@ -40,7 +40,12 @@ const bindingSchema = z.object({
 
 const proposalSchema = z.object({
   template: z.string().describe('The chosen template name (from llm_input.candidate_templates).'),
-  title: z.string().describe('Worksheet title (<= 80 chars).'),
+  // The library uses proposal.title VERBATIM on the Call-2 path (validateAndBuild →
+  // InjectTemplateArgs.title); only the no-LLM Call-1 title is truncated (makeTitle).
+  // The library's own declared contract (PROPOSAL_OUTPUT_SCHEMA.title.maxLength = 80)
+  // is the enforcer here — mirror it at the tool boundary so a Call-2 proposal cannot
+  // slip an over-long title past the gate. Tool-layer only; library behavior unchanged.
+  title: z.string().max(80).describe('Worksheet title (<= 80 chars).'),
   bindings: z.array(bindingSchema).describe('One entry per bindable slot: slot_id -> field name.'),
   // Required, matching the binder's PROPOSAL_OUTPUT_SCHEMA: the library's floor check
   // skips an undefined confidence, so an optional field here would let a proposal

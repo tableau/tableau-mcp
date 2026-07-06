@@ -197,6 +197,22 @@ describe('bindTemplateTool', () => {
       schema.safeParse({ session: '1', ask: 'bar chart', proposal: sampleProposal }).success,
     ).toBe(true);
   });
+
+  it('rejects a proposal whose title exceeds 80 chars at the schema layer (library uses it verbatim)', async () => {
+    // validateAndBuild copies proposal.title straight into InjectTemplateArgs on the
+    // Call-2 path (no truncation), so the tool schema must enforce the library's
+    // declared PROPOSAL_OUTPUT_SCHEMA.title.maxLength = 80.
+    const tool = getBindTemplateTool(new DesktopMcpServer());
+    const schema = z.object(await Provider.from(tool.paramsSchema));
+    const longTitle = { ...sampleProposal, title: 'x'.repeat(81) };
+    expect(schema.safeParse({ session: '1', ask: 'bar chart', proposal: longTitle }).success).toBe(
+      false,
+    );
+    const maxTitle = { ...sampleProposal, title: 'x'.repeat(80) };
+    expect(schema.safeParse({ session: '1', ask: 'bar chart', proposal: maxTitle }).success).toBe(
+      true,
+    );
+  });
 });
 
 async function getToolResult({

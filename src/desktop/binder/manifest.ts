@@ -26,19 +26,46 @@ import type {
   TemplateManifest,
 } from './manifest-types.js';
 
-// PORT ADAPTATION (a2td ESM → tableau-mcp CommonJS + packaged data path):
-// The source resolved these paths from `fileURLToPath(import.meta.url)` (ESM-only,
-// unavailable under the target's `type: commonjs` + esbuild single-file bundle).
-// The target's established packaged-data idiom resolves from `process.cwd()`
-// (see src/tools/desktop/search/searchExamples.ts `CORPUS_PATH`), which works
-// both under vitest (cwd = repo root) and at runtime — unlike a getDirname()-
-// relative path, which would misresolve once esbuild bundles to build/index.js.
-const DATA_DIR = path.join(process.cwd(), 'src', 'desktop', 'data');
+// PORT ADAPTATION + cwd-hazard fix (Lane M3 day 3):
+// The a2td source resolved these paths from `fileURLToPath(import.meta.url)`
+// (ESM-only, unavailable under this repo's `type: commonjs`). The first port used
+// `process.cwd()`, which is correct only when the process starts at the repo root
+// (dev / vitest) and BREAKS for an npm-installed server launched from an arbitrary
+// cwd. This repo is CommonJS and esbuild-bundles to `build/index.js`, so `__dirname`
+// is available in BOTH the unbundled source (`src/desktop/binder`) and the bundle
+// (`build/`). We resolve PACKAGE-RELATIVE first, then fall back to cwd for back-compat.
+// Candidates are probed for the index file; the first that exists wins.
+//
+// PUBLISH GAP (recorded for day-4): the esbuild build does NOT copy `src/desktop/data`
+// into `build/`, and `.npmignore` ships only `build/**/*`, so an npm-installed bundle
+// has NO data at all. Fixing the cwd hazard is necessary but not sufficient for a
+// published server — the build must also stage `src/desktop/data` → `build/desktop/data`
+// (the second candidate below already anticipates that layout). Until then only the
+// source / tsx runtime (repo root) is supported.
+function resolveDataDir(): string {
+  const candidates = [
+    path.join(__dirname, '..', 'data'), // unbundled source: src/desktop/binder → src/desktop/data
+    path.join(__dirname, 'desktop', 'data'), // future bundled layout: build/ → build/desktop/data
+    path.join(process.cwd(), 'src', 'desktop', 'data'), // legacy cwd fallback (repo root)
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, 'template-manifests.index.json'))) {
+      return dir;
+    }
+  }
+  return candidates[0];
+}
+
+const DATA_DIR = resolveDataDir();
 
 export const MANIFESTS_DIR = path.join(DATA_DIR, 'template-manifests');
 export const MANIFEST_INDEX_PATH = path.join(DATA_DIR, 'template-manifests.index.json');
 /** Committed schema fixture the eligibility gate binds against (attacks 5+10). */
 export const BINDER_FIXTURE_PATH = path.join(DATA_DIR, 'template-manifests.fixture.json');
+/** Generated content manifest (content_version, schema_version, per-resource sha256). */
+export const CONTENT_MANIFEST_PATH = path.join(DATA_DIR, 'content-manifest.json');
+/** Shipped worksheet-fragment XML for templates whose golden XML ships in-package. */
+export const TEMPLATE_XML_DIR = path.join(DATA_DIR, 'data-visualization-templates-xml');
 const MANIFEST_SUFFIX = '.manifest.json';
 
 // Enum members kept in sync with manifest-types.ts. A change to a union there

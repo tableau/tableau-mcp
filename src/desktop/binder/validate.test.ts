@@ -614,6 +614,142 @@ describe('binder/validate — gate 6: calc dependency closure', () => {
   });
 });
 
+describe('binder/validate — gate 6: first-class calc inputs (H3)', () => {
+  // A required calc whose first-class `inputs` reference m1 (required) and m2
+  // (OPTIONAL). With m2 unbound the calc would dangle; the blocker must name the
+  // offending formula REF, not just the slot id (ref-level diagnostics).
+  const calcInputs: TemplateManifest = {
+    template: 'x-calc-inputs',
+    family: 'specialized',
+    readiness: 'GREEN',
+    fast_path_eligible: true,
+    fast_path_blockers: [],
+    portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
+    datasource_placeholder: true,
+    placeholders: ['TITLE', 'DATASOURCE'],
+    intent_keywords: ['x'],
+    description: 'test',
+    slots: [
+      {
+        slot_id: 'm1',
+        template_field: 'M1',
+        derivation: 'sum',
+        role: ['cols'],
+        kind: 'quantitative',
+        bindable: true,
+        required: true,
+      },
+      {
+        slot_id: 'm2',
+        template_field: 'M2',
+        derivation: 'sum',
+        role: ['rows'],
+        kind: 'quantitative',
+        bindable: true,
+        required: false,
+      },
+    ],
+    calcs: [
+      {
+        slot_id: 'ratio',
+        template_field: 'Calculation_1',
+        derivation: 'usr',
+        role: ['color'],
+        kind: 'calc',
+        bindable: false,
+        required: true,
+        formula: 'SUM([M1])/SUM([M2])',
+        formula_refs: ['M1', 'M2'],
+        depends_on_slots: ['m1', 'm2'],
+        result_role: 'measure',
+        inputs: [
+          {
+            ref: 'M1',
+            slot_id: 'm1',
+            slot_kind: 'quantitative',
+            required: true,
+            template_internal: false,
+          },
+          {
+            ref: 'M2',
+            slot_id: 'm2',
+            slot_kind: 'quantitative',
+            required: true,
+            template_internal: false,
+          },
+        ],
+      },
+    ],
+    hazards: [],
+  };
+
+  it('fire: a required calc input whose slot is unbound → calc-dependency-unmet naming the ref', () => {
+    const p: BindingProposal = {
+      template: calcInputs.template,
+      title: 't',
+      bindings: [{ slot_id: 'm1', field: 'Sales' }],
+    };
+    const r = validateBinding(calcInputs, p, SUMMARY);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const b = r.blockers.find((x) => x.code === 'calc-dependency-unmet' && x.slot_id === 'ratio');
+      expect(b).toBeDefined();
+      expect(b!.detail).toContain('[M2]');
+    }
+  });
+
+  it('no-fire: a required template-internal input is NOT treated as a missing binding', () => {
+    // The calc references a field the template OWNS ([Const]); the binder must not
+    // demand a binding for it. Only the real slot input (M1) must bind.
+    const internal: TemplateManifest = {
+      ...calcInputs,
+      calcs: [
+        {
+          ...calcInputs.calcs[0],
+          formula: 'SUM([M1]) + [Const]',
+          formula_refs: ['M1', 'Const'],
+          depends_on_slots: ['m1'],
+          inputs: [
+            {
+              ref: 'M1',
+              slot_id: 'm1',
+              slot_kind: 'quantitative',
+              required: true,
+              template_internal: false,
+            },
+            {
+              ref: 'Const',
+              slot_id: null,
+              slot_kind: 'calc',
+              required: true,
+              template_internal: true,
+            },
+          ],
+        },
+      ],
+    };
+    const p: BindingProposal = {
+      template: internal.template,
+      title: 't',
+      bindings: [{ slot_id: 'm1', field: 'Sales' }],
+    };
+    const r = validateBinding(internal, p, SUMMARY);
+    expect(r.ok).toBe(true);
+  });
+
+  it('no-fire: all first-class inputs bound → ok', () => {
+    const p: BindingProposal = {
+      template: calcInputs.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'm1', field: 'Sales' },
+        { slot_id: 'm2', field: 'Profit' },
+      ],
+    };
+    expect(validateBinding(calcInputs, p, SUMMARY).ok).toBe(true);
+  });
+});
+
 describe('binder/validate — gate 7: temporal suffix', () => {
   // P1-3: the column-instance pivot suffix for a TRUNCATED date slot must be the
   // continuous ':qk' the template authored, not derived from the field's `type`.
@@ -722,6 +858,87 @@ describe('binder/validate — avoid_when warnings (H3.2)', () => {
     const r = validateBinding(m, p, SUMMARY, 'pie chart of Sales by Region');
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.warnings).toBeUndefined();
+  });
+});
+
+describe('binder/validate — field_mapping covers calc inputs (H3, item 4)', () => {
+  // The bare field-name part of a field_mapping KEY (strip a `@deriv` qualifier).
+  // This is exactly what templates.ts derives baseTarget from, so rewriteFormulaFieldRefs
+  // can resolve a bare [ref] token iff its ref appears here.
+  function keyFieldParts(fm: Record<string, string>): Set<string> {
+    const out = new Set<string>();
+    for (const k of Object.keys(fm)) {
+      const at = k.lastIndexOf('@');
+      out.add(at > 0 ? k.slice(0, at) : k);
+    }
+    return out;
+  }
+
+  it('scatter: every slot-referencing calc input ref is a field_mapping key (engine can rewrite the formula)', () => {
+    const m = manifests.get('correlation-scatter-plot-chart')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 'Scatter',
+      bindings: [
+        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'profit', field: 'Profit' },
+        { slot_id: 'customer_name', field: 'Customer Name' },
+        { slot_id: 'region', field: 'Region' },
+      ],
+    };
+    const r = validateBinding(m, p, SUMMARY);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const covered = keyFieldParts(r.field_mapping);
+      for (const calc of m.calcs) {
+        for (const input of calc.inputs ?? []) {
+          if (input.template_internal) continue;
+          expect(
+            covered.has(input.ref),
+            `calc '${calc.slot_id}' input [${input.ref}] must be a field_mapping key`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('floating-bars: every slot-referencing calc input ref is covered by the emitted field_mapping', () => {
+    // PORT ADAPTATION (documented in authoring-migration-drift.md): the snapshot's
+    // ww-floating-bars was post-fidelity-grafted into a THREE-calc variant (a SPLIT
+    // actual-score calc, the span/size calc, and a SIGN over/under COLOR calc) with NO
+    // bound color_dimension slot — color became a template-owned calc. That variant needs
+    // the unshipped golden 'O_U Line' render XML, so it is part of the DEFERRED structural
+    // sync. This repo ships the rung-1+format 4-BINDABLE-SLOT variant (color_dimension is
+    // a bound Segment slot, not a template-owned over/under calc), so we bind all FOUR
+    // required slots. The coverage LOGIC below is identical to the scatter sibling; on this
+    // repo's single inputs-less bar_size_calc it currently iterates zero inputs (the H3
+    // `inputs` annotation rides with the deferred structural sync) and is proven live by the
+    // scatter case above. It will strengthen automatically once floating-bars is fully synced.
+    const m = manifests.get('ww-floating-bars')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 'Gantt',
+      bindings: [
+        { slot_id: 'row_dimension', field: 'Region' },
+        { slot_id: 'line_measure', field: 'Sales' },
+        { slot_id: 'actual_input', field: 'Category' },
+        { slot_id: 'color_dimension', field: 'Customer Name' },
+      ],
+    };
+    const r = validateBinding(m, p, SUMMARY);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const covered = keyFieldParts(r.field_mapping);
+      for (const calc of m.calcs) {
+        for (const input of calc.inputs ?? []) {
+          if (input.template_internal) continue;
+          expect(
+            covered.has(input.ref),
+            `calc '${calc.slot_id}' input [${input.ref}] covered`,
+          ).toBe(true);
+        }
+      }
+    }
   });
 });
 

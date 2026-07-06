@@ -84,6 +84,128 @@ describe('binder/classifyNoLlm', () => {
     const s = summarizeSchema(WORKBOOK_XML);
     expect(classifyNoLlm('hello there', manifests, s)).toBeNull();
   });
+
+  // ── W2-CT sibling-stamp tie-break regressions ──────────────────────────────
+  // ranking-ordered-column and part-to-whole-stacked-bar-chart are now BOTH
+  // fast_path_eligible siblings of ranking-ordered-bar / part-to-whole-treemap
+  // (wave3 floor-raise stamps, synced as data this lane). The distinctive chart-noun
+  // keywords ('bar'/'column'/'stacked-bar') fall below the family-native majority;
+  // without a deterministic chart-noun tie-break these clear one-shot asks would
+  // fail-closed to propose. These run against bare `manifests` (native eligibility).
+  it('picks ranking-ordered-column for a clear column ask (distinct-noun sibling)', () => {
+    const s = summarizeSchema(WORKBOOK_XML);
+    const cls = classifyNoLlm('column chart of Sales by Region', manifests, s);
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('ranking-ordered-column');
+    expect(cls!.bindings).toEqual([
+      { slot_id: 'region', field: 'Region' },
+      { slot_id: 'sales', field: 'Sales' },
+    ]);
+  });
+
+  it("picks part-to-whole-stacked-bar-chart for a 'stacked bar' ask (specific noun beats generic 'bar')", () => {
+    const s = summarizeSchema(WORKBOOK_XML);
+    const cls = classifyNoLlm('stacked bar of Sales by Region and Category', manifests, s);
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('part-to-whole-stacked-bar-chart');
+    expect(cls!.bindings.map((b) => b.slot_id).sort()).toEqual(['category', 'region', 'sales']);
+  });
+
+  it('sibling eligibility does NOT flip a previously-bound bar ask (regression pin)', () => {
+    const s = summarizeSchema(WORKBOOK_XML);
+    const cls = classifyNoLlm('bar chart of Sales by Region', manifests, s);
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('ranking-ordered-bar');
+  });
+
+  it('still fails closed on a genuinely ambiguous cross-family ask (no chart noun to break the tie)', () => {
+    // 'top' (ranking) + 'share' (part-to-whole) tie across families; neither is a
+    // chart noun → no deterministic winner → must stay null (fail-closed preserved).
+    const s = summarizeSchema(WORKBOOK_XML);
+    expect(classifyNoLlm('top share of Sales by Region', manifests, s)).toBeNull();
+  });
+});
+
+describe('binder/classifyNoLlm — binds calc-forced optional inputs (H3)', () => {
+  // A single eligible template whose REQUIRED calc depends on an OPTIONAL slot m2.
+  // The no-LLM role-greedy binder must still fill m2 (a required calc forces it),
+  // otherwise the calc would dangle and the fast path would needlessly escalate.
+  const forced: TemplateManifest = {
+    template: 'x-calc-force',
+    family: 'specialized',
+    readiness: 'GREEN',
+    fast_path_eligible: true,
+    fast_path_blockers: [],
+    portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
+    datasource_placeholder: true,
+    placeholders: ['TITLE', 'DATASOURCE'],
+    intent_keywords: ['calcforce'],
+    description: 'test template forcing an optional calc input',
+    slots: [
+      {
+        slot_id: 'm1',
+        template_field: 'M1',
+        derivation: 'sum',
+        role: ['cols'],
+        kind: 'quantitative',
+        bindable: true,
+        required: true,
+      },
+      {
+        slot_id: 'm2',
+        template_field: 'M2',
+        derivation: 'sum',
+        role: ['rows'],
+        kind: 'quantitative',
+        bindable: true,
+        required: false,
+      },
+    ],
+    calcs: [
+      {
+        slot_id: 'ratio',
+        template_field: 'Calculation_1',
+        derivation: 'usr',
+        role: ['color'],
+        kind: 'calc',
+        bindable: false,
+        required: true,
+        formula: 'SUM([M1])/SUM([M2])',
+        formula_refs: ['M1', 'M2'],
+        depends_on_slots: ['m1', 'm2'],
+        result_role: 'measure',
+        inputs: [
+          {
+            ref: 'M1',
+            slot_id: 'm1',
+            slot_kind: 'quantitative',
+            required: true,
+            template_internal: false,
+          },
+          {
+            ref: 'M2',
+            slot_id: 'm2',
+            slot_kind: 'quantitative',
+            required: true,
+            template_internal: false,
+          },
+        ],
+      },
+    ],
+    hazards: [],
+  };
+
+  it('role-greedy binds the optional slot a required calc forces', () => {
+    const s = summarizeSchema(WORKBOOK_XML);
+    const cls = classifyNoLlm(
+      'calcforce of Sales and Profit',
+      new Map([['x-calc-force', forced]]),
+      s,
+    );
+    expect(cls).not.toBeNull();
+    const slotIds = cls!.bindings.map((b) => b.slot_id).sort();
+    expect(slotIds).toEqual(['m1', 'm2']);
+  });
 });
 
 describe('binder/bindTemplate — Call 1 no-LLM (bound)', () => {
@@ -190,6 +312,35 @@ describe('binder/bindTemplate — Call 2 (agent proposal)', () => {
         'Customer Name': '[Superstore].[none:Customer Name:nk]',
         Region: '[Superstore].[none:Region:nk]',
       });
+    }
+  });
+
+  it("bound InjectTemplateArgs.field_mapping covers the calc's inputs so the engine rewrite resolves them", async () => {
+    const proposal: BindingProposal = {
+      template: 'correlation-scatter-plot-chart',
+      title: 'Profit vs Sales',
+      bindings: [
+        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'profit', field: 'Profit' },
+        { slot_id: 'customer_name', field: 'Customer Name' },
+        { slot_id: 'region', field: 'Region' },
+      ],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'scatter of Profit vs Sales',
+      workbookXml: WORKBOOK_XML,
+      manifests: withForcedEligible(['correlation-scatter-plot-chart']),
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      const m = manifests.get('correlation-scatter-plot-chart')!;
+      const keys = new Set(Object.keys(res.args.field_mapping));
+      for (const input of m.calcs[0].inputs ?? []) {
+        if (input.template_internal) continue;
+        expect(keys.has(input.ref), `field_mapping key for calc input [${input.ref}]`).toBe(true);
+      }
     }
   });
 
