@@ -42,7 +42,7 @@ export const proposalSchema = z.object({
   bindings: z.array(bindingSchema).describe('One entry per bindable slot: slot_id -> field name.'),
   // WATCH-CLASS (required): required, matching PROPOSAL_OUTPUT_SCHEMA. The binder's floor
   // check SKIPS an undefined confidence, so an optional field here would let a proposal
-  // bypass the low-confidence escalation entirely (fail-open). a2td's own tool schema left
+  // bypass the low-confidence escalation entirely (fail-open). The source implementation's own tool schema left
   // this optional; the repo hardens it to required.
   confidence: z.number().min(0).max(1).describe('0..1 self-rated confidence.'),
 });

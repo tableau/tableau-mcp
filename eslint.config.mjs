@@ -60,8 +60,8 @@ export default [
       'build/**',
       'docs/.docusaurus/**',
       'docs/build/**',
-      // Untracked, read-only migration snapshot of the a2td source repo (reference
-      // material only — never built or shipped). See .a2td-snapshot/SNAPSHOT-PROVENANCE.txt.
+      // Migration snapshot workspace (local-only, git-excluded) — reference material
+      // only, never built or shipped.
       '.a2td-snapshot/**',
     ],
   },

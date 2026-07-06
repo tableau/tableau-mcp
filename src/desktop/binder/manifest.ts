@@ -27,7 +27,7 @@ import type {
 } from './manifest-types.js';
 
 // PORT ADAPTATION + cwd-hazard fix (Lane M3 day 3):
-// The a2td source resolved these paths from `fileURLToPath(import.meta.url)`
+// The source implementation resolved these paths from `fileURLToPath(import.meta.url)`
 // (ESM-only, unavailable under this repo's `type: commonjs`). The first port used
 // `process.cwd()`, which is correct only when the process starts at the repo root
 // (dev / vitest) and BREAKS for an npm-installed server launched from an arbitrary

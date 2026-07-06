@@ -4,7 +4,7 @@ Status: **design + skeleton only — NO network I/O.** This document defines the
 contract and the caching/verification state machine that milestone 2 will run behind the existing
 `AuthoringIntelligenceProvider` seam (`src/desktop/intelligence/provider.ts`). The real fetch
 transport, the signing scheme, and the hosting endpoint are **deliberately not implemented here** —
-they land once the hosting decision (Matt/Kyler, still open) exists. Everything in this lane is
+they land once the hosting decision (maintainers — decision pending) exists. Everything in this lane is
 exercised against in-memory fixtures.
 
 ## 1. Why a content pack
@@ -168,7 +168,7 @@ field (so JSON serialization is unchanged), and still returns `kind: 'bundled'`,
   `CacheState = { absent } | { fresh, pack } | { stale, pack } | { rejected, reason }`. Pure over an
   injected store snapshot + injected `now` — no I/O, fully fixture-testable.
 
-## 7. Open questions (Matt / Kyler)
+## 7. Open questions (maintainers — decision pending)
 
 1. **Signing scheme — UNDECIDED.** This lane does **not** pick or vendor a crypto scheme. It defines
    the `SignatureVerifier` interface (`verify({ payload, signature, algorithm }) → Result`) and a test

@@ -4,7 +4,9 @@ import { z } from 'zod';
 
 import type { BinderResult, BindingProposal } from '../../../desktop/binder/binder.js';
 import * as binderModule from '../../../desktop/binder/binder.js';
+import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
+import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -15,16 +17,14 @@ import { getBindTemplateTool } from './bindTemplate.js';
 
 // Auto-mock the live-read command. Partial-mock the binder core so the pure
 // DERIVATION_* exports used to build the zod schema stay intact while only
-// bindTemplate is stubbed. Stub loadManifests so the tool test is independent of
-// the bundled manifest data (the binder library has its own coverage for both).
+// bindTemplate is stubbed. The bundled provider is exercised for REAL (data ships
+// in-repo, hermetic) — matching propose-template / validate-proposal; the "provider
+// seam" test spies on listTemplateManifests to prove the tool sources manifests
+// through the seam rather than a raw loader.
 vi.mock('../../../desktop/commands/workbook/getWorkbookXml.js');
 vi.mock('../../../desktop/binder/binder.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../desktop/binder/binder.js')>();
   return { ...actual, bindTemplate: vi.fn() };
-});
-vi.mock('../../../desktop/binder/manifest.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../desktop/binder/manifest.js')>();
-  return { ...actual, loadManifests: vi.fn(() => new Map()) };
 });
 
 const XML = '<?xml version="1.0"?><workbook></workbook>';
@@ -129,7 +129,7 @@ describe('bindTemplateTool', () => {
       proposal: sampleProposal,
     });
 
-    // Escalate is a business outcome, NOT a tool error (a2td set isError=true;
+    // Escalate is a business outcome, NOT a tool error (the source set isError=true;
     // this repo reserves isError for the McpToolError funnel).
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -211,6 +211,28 @@ describe('bindTemplateTool', () => {
     const maxTitle = { ...sampleProposal, title: 'x'.repeat(80) };
     expect(schema.safeParse({ session: '1', ask: 'bar chart', proposal: maxTitle }).success).toBe(
       true,
+    );
+  });
+
+  it('sources template manifests through the intelligence provider seam, not raw loadManifests', async () => {
+    // All four binder tools obtain manifests through bundledIntelligenceProvider so a
+    // milestone-2 remote content-pack provider swaps in without editing any tool. The Map
+    // handed to the binder must stay byte-identical to loadManifests(): re-keyed by
+    // manifest.template (listTemplateManifests() is exactly [...loadManifests().values()]).
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(boundResult);
+    const fakeManifest = { template: 'seam-probe' } as unknown as TemplateManifest;
+    const listSpy = vi
+      .spyOn(bundledIntelligenceProvider, 'listTemplateManifests')
+      .mockReturnValue([fakeManifest]);
+
+    await getToolResult({ session: '1', ask: 'bar chart of Sales by Region' });
+
+    expect(listSpy).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manifests: new Map([['seam-probe', fakeManifest]]),
+      }),
     );
   });
 });

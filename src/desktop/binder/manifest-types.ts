@@ -272,7 +272,7 @@ export interface DatasourceStyleSidecar {
  * pass), so a disk manifest never needs to carry them.
  *   - `'repo'`  — loaded from `data/template-manifests/` (the committed set).
  *   - `'local'` — side-loaded from the local compiled store pointed at by
- *                 `A2TD_LOCAL_TEMPLATE_DIR`. Local templates arrive UNSTAMPED
+ *                 the source's local-template-dir env var. Local templates arrive UNSTAMPED
  *                 (readiness YELLOW, render_verified 'none', fast_path_eligible
  *                 false) and can only be stamped by the golden-parity gate.
  * Absent ⇒ treat as a repo manifest (back-compat with synthetic fixtures).

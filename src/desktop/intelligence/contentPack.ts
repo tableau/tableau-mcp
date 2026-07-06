@@ -38,7 +38,7 @@ export interface SignedPackManifest {
   manifest: PackManifest;
   /** Detached signature over `canonicalizePackManifest(manifest)`. */
   signature: string;
-  /** The signing scheme identifier. Non-empty; the concrete scheme is TBD (Matt/Kyler). */
+  /** The signing scheme identifier. Non-empty; the concrete scheme is TBD (maintainers — decision pending). */
   signature_algorithm: string;
 }
 

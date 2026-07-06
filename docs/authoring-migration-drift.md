@@ -1,18 +1,18 @@
 # Authoring migration — binder drift sync + canonical tool exemplar (Lane M2, day 2)
 
-Migration source of truth: `.a2td-snapshot/` — a2td `claude/wave3-floor-raise @ d7e1803`, snapshot
-2026-07-05 (see `.a2td-snapshot/SNAPSHOT-PROVENANCE.txt`). The snapshot is untracked, read-only, and
-**never** imported at build time. Day-1 port baseline = `src/desktop/binder/` @ commit `ecc843cf`.
+Migration source of truth: the source implementation (**snapshot S1**) — a read-only, local-only
+snapshot workspace (git-excluded), taken 2026-07-05. It is untracked and **never** imported at build
+time. Day-1 port baseline = `src/desktop/binder/` @ commit `ecc843cf`.
 
 This document records (1) the file-by-file drift inventory, (2) the port decisions (what was brought to
 parity, what was stubbed/excluded and why), and (3) the `bind-template` tool exemplar.
 
 ---
 
-## 1. Drift inventory — `src/desktop/binder/` vs `.a2td-snapshot/src/binder/`
+## 1. Drift inventory — `src/desktop/binder/` vs snapshot S1's `src/binder/`
 
-Raw whitespace-insensitive `diff` line-counts are **not** used to classify drift: the snapshot uses a2td
-house style (double quotes, ESM `import.meta.url`), while this repo enforces single quotes + `process.cwd()`
+Raw whitespace-insensitive `diff` line-counts are **not** used to classify drift: the snapshot uses the
+source implementation's house style (double quotes, ESM `import.meta.url`), while this repo enforces single quotes + `process.cwd()`
 data paths, so nearly every string line differs cosmetically. Classification below is by *behavior* /
 *test-case count*, corroborated by `git status`.
 
@@ -39,7 +39,7 @@ data paths, so nearly every string line differs cosmetically. Classification bel
 (9 cases) are functionally identical to the snapshot (confirmed: unmodified vs `HEAD` after sync, and all
 their tests pass alongside the ported `classify.ts`/`validate.ts`).
 
-### DEFERRED — drift NOT ported (blocked on unshippable a2td assets or generated artifacts)
+### DEFERRED — drift NOT ported (blocked on unshippable source-implementation assets or generated artifacts)
 
 | Snapshot file / drift | Cases | Why deferred |
 |---|---|---|
@@ -47,21 +47,21 @@ their tests pass alongside the ported `classify.ts`/`validate.ts`).
 | `validate.test.ts` extra cases | +5 vs repo (31→26) | New gate-6 `inputs`-contract cases exercised on manifests not present in the bundled set. (The `inputs` gate itself **is** ported in `validate.ts` and is covered end-to-end by `memo.test.ts`'s calc manifest.) |
 | `manifest.test.ts` | 30 (count parity) | Kept the day-1 version; the day-1 30 cases pass against the synced `manifest.ts` (incl. the new `datasource_style` block, inert for current data). |
 | `ww-ou-arrow.manifest.json`, `ww-ou-diff.manifest.json` | 2 data files | Adding them requires regenerating the **generated** `template-manifests.index.json` + `template-manifests.fixture.json` (AGENTS.md: generated — fix the generator, don't hand-edit) and would need `ww-ou` golden render XML. `manifest.test.ts` couples every manifest's `fixture_bind` stamp to `fixture.json` fields and requires a live `render_verified` stamp, so a partial add would fail existing (un-weakenable) tests. Repo bundles **15** manifests + index + fixture — sufficient for the binder + tool. |
-| `ww-ou-fidelity.test.ts` (10), `ww-floating-bars-fidelity.test.ts` (6), `control-chart-xmr-fidelity.test.ts` (6), `golden-parity.test.ts` (16), `compile-checkpoint-template.test.ts` (21), `datasource-style-splice.test.ts` (7), `calc-slots-contract.test.ts` (5) | 71 cases | Golden/fidelity suites that read live-render golden assets (the `~/TableauGoldens` corpus) which **never ship here**. Out of scope per the task. |
-| `worksheet-analyzer.test.ts` (15) | 15 cases | Its source module `worksheet-analyzer.ts` is **not in the snapshot** (`find .a2td-snapshot -name worksheet-analyzer.ts` → none) — cannot port the test without the implementation; out of scope. |
-| `local-sideload.test.ts` (10) | 10 cases | The `A2TD_LOCAL_TEMPLATE_DIR` env-dir sideload + stamp-trust feature. Only the **OFF** state is ported (see below); the ON-state tests are excluded. |
+| `ww-ou-fidelity.test.ts` (10), `ww-floating-bars-fidelity.test.ts` (6), `control-chart-xmr-fidelity.test.ts` (6), `golden-parity.test.ts` (16), `compile-checkpoint-template.test.ts` (21), `datasource-style-splice.test.ts` (7), `calc-slots-contract.test.ts` (5) | 71 cases | Golden/fidelity suites that read live-render golden assets (the `<local golden-corpus root>` corpus) which **never ship here**. Out of scope per the task. |
+| `worksheet-analyzer.test.ts` (15) | 15 cases | Its source module `worksheet-analyzer.ts` is **not present in snapshot S1** — cannot port the test without the implementation; out of scope. |
+| `local-sideload.test.ts` (10) | 10 cases | The source's local-template-dir env-dir sideload + stamp-trust feature. Only the **OFF** state is ported (see below); the ON-state tests are excluded. |
 
-### a2td-environment assumptions that were adapted or excluded (never ship here)
+### Source-environment assumptions that were adapted or excluded (never ship here)
 
 - **`import.meta.url` data paths** → adapted to `process.cwd()` in `memo.ts` (matching `manifest.ts`'s
   existing idiom). No runtime `import.meta` usage remains in the binder (the 4 grep hits are explanatory
   comments only).
-- **`A2TD_LOCAL_TEMPLATE_DIR` local-sideload + stamp-trust** → **OFF state only**. No `process.env` read
+- **Local-template-dir sideload + stamp-trust** (the source's env-dir feature) → **OFF state only**. No `process.env` read
   exists anywhere in `src/desktop/binder/` (grep-proven), so with the env unset behavior is byte-identical
   to the snapshot. The `source` field + `source==='local'` branch remain in the types/classifier but are
   inert (no loader, no manifest sets `source`). The feature is effectively stubbed out; `local-sideload.test.ts`
   is excluded.
-- **`~/TableauGoldens` golden corpus** → never referenced (grep-proven). All golden/fidelity suites deferred.
+- **`<local golden-corpus root>` golden corpus** → never referenced (grep-proven). All golden/fidelity suites deferred.
 
 ---
 
@@ -77,7 +77,7 @@ in behind `loadManifests()` without touching callers. No new manifest data was a
 
 ## 3. Canonical tool exemplar — `bind-template`
 
-Behavior reference: `.a2td-snapshot/src/server/tools/binder.ts` (`tableau-bind-template`). Shape conforms to
+Behavior reference: snapshot S1's `src/server/tools/binder.ts` (`tableau-bind-template`). Shape conforms to
 this repo's #347/#370 Desktop-tool pattern — **not** copied verbatim (source uses `_session`, `ctx.log`,
 emoji text, hand-built `isError`).
 
@@ -99,7 +99,7 @@ no new command layer (AGENTS.md); the only Agent-API call reuses the existing `g
 **Two-call protocol** (server is model-free): Call 1 `{ session, ask }` → `bound` | `propose`; Call 2
 `{ session, ask, proposal }` → `bound` | `escalate`.
 
-**Key adaptations vs a2td**
+**Key adaptations vs the source implementation**
 
 - Top-level params are camelCase (`session`, `ask`, `proposal`, `minConfidence`) — no `_session`, no
   `min_confidence`. The **nested `proposal`** mirrors the binder library's public `BindingProposal` /
@@ -107,12 +107,12 @@ no new command layer (AGENTS.md); the only Agent-API call reuses the existing `g
   round-trips into a Call-2 `proposal` unchanged — this is a serialized library data contract, not
   tool-ergonomics naming.
 - `escalate` is returned as a **normal `Ok` outcome** (with plain-text `guidance`), **not** `isError: true`.
-  a2td set `isError` for escalate; this repo reserves `CallToolResult.isError` for the `McpToolError` funnel.
+  the source set `isError` for escalate; this repo reserves `CallToolResult.isError` for the `McpToolError` funnel.
   Only a workbook-read failure or a thrown exception funnels through `DesktopCommandExecutionError` /
   `logAndExecute`'s catch (→ `isError: true`).
 - No emoji in any tool string (AGENTS.md ban). Escalation `guidance` routes by reason and references only
   tools that exist in this repo (`resolve-field`); it speaks generically for tier-2 rather than naming
-  a2td-only tools.
+  source-only tools.
 
 ---
 
@@ -121,27 +121,57 @@ no new command layer (AGENTS.md); the only Agent-API call reuses the existing `g
 - `scripts/agent-check` → **ALL GREEN (3 checks)**: `npm run lint`, `npx tsc --noEmit`,
   `npx vitest run --config ./vitest.config.ts` = **2052 tests / 155 files** passed.
 - Binder library: **141 tests / 8 files** pass (incl. ported `calc-derivation`, `memo`, `prewarm`).
-- Hermeticity: `grep -rn "TableauGoldens\|homedir" src/desktop/binder src/tools/desktop` → **no matches**.
-  No `process.env` reads in the binder. `import.meta`/`A2TD_LOCAL` appear only in explanatory comments.
+- Hermeticity: grepping `src/desktop/binder` + `src/tools/desktop` for the `<local golden-corpus root>` path (and `homedir`) → **no matches**.
+  No `process.env` reads in the binder. `import.meta` appears only in explanatory comments; the
+  local-sideload env var is not referenced anywhere (no runtime read, and its name is not recorded).
 - Pre-existing lint debt (unrelated to this migration, unmodified vs `HEAD`):
   `getDashboardXml.test.ts` and `lookupWorkbookSchema.test.ts` had committed prettier violations that made
   the baseline `agent-check` red. Fixed with `prettier --write` (formatting only — trailing commas +
-  line-wrapping; zero logic/assertion change). `eslint.config.mjs` now ignores `.a2td-snapshot/**`.
+  line-wrapping; zero logic/assertion change). `eslint.config.mjs` now ignores the migration snapshot workspace.
 
 ---
 
 ## 5. Residual risk & day-3
 
 - **Manifest data drift (highest priority).** Sync `ww-ou-arrow` + `ww-ou-diff` manifests, then regenerate
-  `template-manifests.index.json` + `template-manifests.fixture.json` via the a2td generator (do not
+  `template-manifests.index.json` + `template-manifests.fixture.json` via the source generator (do not
   hand-edit generated files), and either bring the `ww-ou` golden XML or explicitly drop the golden/fidelity
   suites for this package. Only then can `binder.test.ts` (+6) and `validate.test.ts` (+5) reach snapshot
   parity without weakening tests.
 - **Golden/fidelity suites** (`ww-ou`, `ww-floating-bars`, `control-chart-xmr`, `golden-parity`,
-  `compile-checkpoint`, `datasource-style-splice`) depend on the `~/TableauGoldens` corpus and are out of
+  `compile-checkpoint`, `datasource-style-splice`) depend on the `<local golden-corpus root>` corpus and are out of
   scope until a shippable, hermetic fixture strategy exists.
 - **`worksheet-analyzer`**: source not in the snapshot — obtain the implementation before porting its test.
 - **Local-sideload feature**: currently OFF-state-only (types present, no loader). A hermetic design (bundled
-  vs provider seam) is being handled separately; do not wire `A2TD_LOCAL_TEMPLATE_DIR` here.
+  vs provider seam) is being handled separately; do not wire the source's local-template-dir env var here.
 - **`datasource_style` validation** is ported but inert (no bundled manifest uses it) — exercised only once
   data lands.
+
+---
+
+## 6. Rebase verification (pre-push, day-7)
+
+This lane's changes must be rebased by the orchestrator (git operations are out of scope for the
+implementing agent — **no rebase was performed here**). After the rebase onto the long-lived migration
+base, verify:
+
+- **Provider seam is intact.** `bind-template` now sources manifests through
+  `bundledIntelligenceProvider.listTemplateManifests()` (like propose/validate/list), not raw
+  `loadManifests()`. Confirm `src/desktop/intelligence/provider.ts` still exports
+  `listTemplateManifests()` returning exactly `[...loadManifests().values()]` (manifests keyed by
+  `manifest.template`). If a milestone-2 provider landed on the base, re-confirm the re-keyed Map stays
+  byte-identical; the seam test (`bindTemplate.test.ts` › "provider seam") is the guard.
+- **No shared-registry drift.** This lane did **not** touch the coordinated files
+  (`src/tools/desktop/toolName.ts`, `tools.ts`, `src/errors/mcpToolError.ts`,
+  `src/server.desktop.test.ts`). The rebase should confirm they are unchanged by this lane and resolve any
+  incoming edits from the active author cleanly.
+- **Public-hygiene scrub holds.** Re-run the tracked-file provenance scan after rebase over the marker set
+  used by this lane (the source repo's short name/full name, its migration branch name, its snapshot commit
+  SHA, `/Users/…` home paths, and maintainer personal names) via
+  `git ls-files -z | xargs -0 grep -niE '<markers>'`, and confirm the **only** remaining hit is the
+  sanctioned functional ignore entry for the local migration-snapshot dir (git-excluded) in `eslint.config.mjs`. Incoming commits must not
+  reintroduce repo/branch/SHA or personal-name provenance.
+- **Local ignore still needed.** Confirm the local, git-excluded snapshot workspace still exists; if the
+  base branch dropped it, remove the now-dead ignore entry for the local migration-snapshot dir (git-excluded) too.
+- **Green gate.** Re-run `scripts/agent-check` (lint + `tsc --noEmit` + `vitest run`) post-rebase; the four
+  binder tools (`bind-template`, `propose-template`, `validate-proposal`, `list-templates`) must all pass.

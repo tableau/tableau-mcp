@@ -48,7 +48,7 @@ import {
 } from './binder.js';
 import type { TemplateManifest } from './manifest-types.js';
 
-// PORT ADAPTATION (a2td ESM → tableau-mcp CommonJS): the source resolved this from
+// PORT ADAPTATION (source ESM → tableau-mcp CommonJS): the source resolved this from
 // `fileURLToPath(import.meta.url)`, which is unavailable under the target's
 // `type: commonjs` + esbuild bundle (and would require a banned `@ts-expect-error`).
 // The sidecar is OPT-IN (default OFF — see getDefaultSchemaCache), so this constant is

@@ -11,8 +11,9 @@ import {
   DERIVATION_OVERRIDE_INSTRUCTION,
   type EscalateReason,
 } from '../../../desktop/binder/binder.js';
-import { loadManifests } from '../../../desktop/binder/manifest.js';
+import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
+import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
@@ -136,7 +137,18 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new DesktopCommandExecutionError(xmlResult.error).toErr();
           }
 
-          const manifests = loadManifests();
+          // SEAM: source manifests through bundledIntelligenceProvider (never raw
+          // loadManifests) so a milestone-2 remote content-pack provider swaps in without
+          // editing this tool — matching propose-template / validate-proposal, so all four
+          // binder tools follow the same seam. The reconstructed Map is byte-identical to
+          // loadManifests(): it keys by manifest.template (== filename, enforced there) and
+          // listTemplateManifests() is exactly [...loadManifests().values()], so re-keying
+          // by m.template reproduces it.
+          const manifests = new Map(
+            bundledIntelligenceProvider
+              .listTemplateManifests()
+              .map((m): [string, TemplateManifest] => [m.template, m]),
+          );
           const res = await bindTemplate({
             ask,
             workbookXml: xmlResult.value,

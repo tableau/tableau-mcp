@@ -15,7 +15,7 @@ import {
 } from './manifest.js';
 import type { SlotSpec, TemplateManifest } from './manifest-types.js';
 
-// PORT ADAPTATION (a2td ESM → tableau-mcp CommonJS + packaged data path):
+// PORT ADAPTATION (source ESM → tableau-mcp CommonJS + packaged data path):
 // Source computed XML_DIR from `fileURLToPath(import.meta.url)` (ESM-only). The
 // template XML is staged into the target's packaged data dir and resolved from
 // `process.cwd()`, matching manifest.ts (see its DATA_DIR note).
@@ -447,7 +447,7 @@ describe('binder/manifest — avoid_when (optional negative-guidance field)', ()
 describe('binder/manifest — XML cross-checks (XML is ground truth)', () => {
   // GOLDEN-ONLY templates (ww-ou-arrow, ww-ou-diff) are faithfully compiled from a
   // golden .twbx (golden.checkpoint_render) whose worksheet XML is NOT shipped in this
-  // package — the ~/TableauGoldens corpus never ships here (see authoring-migration-drift.md).
+  // package — the <local golden-corpus root> corpus never ships here (see authoring-migration-drift.md).
   // Their gate-earned stamps' provenance rides in golden.checkpoint_render instead. The
   // XML-ground-truth cross-checks below apply only to templates whose .xml SHIPS; golden-only
   // templates get a checkpoint_render provenance assertion (below) in its place. This narrows
