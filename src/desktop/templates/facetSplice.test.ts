@@ -4,6 +4,7 @@ import { join } from 'path';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import { spliceBoundFacet } from './facetSplice.js';
 import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
+import { getTemplatePath } from './templatePath.js';
 
 // W28-C — apply-path facet splice ported from a2td (server/tools/facet-splice.test.ts):
 // a BOUND optional facet slot must RENDER (land a pill on the trellis shelf), while
@@ -22,6 +23,13 @@ import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
 
 const XML_DIR = join(process.cwd(), 'src', 'desktop', 'data', 'data-visualization-templates-xml');
 const read = (name: string): string => readFileSync(join(XML_DIR, `${name}.xml`), 'utf-8');
+
+// The apply tools resolve template XML via getTemplatePath → getTemplatesDir, which honors
+// the TEMPLATES_DIR override. Under vitest getDirname()/DATA_ROOT does NOT resolve to the
+// source tree (see src/testSetup.ts), so point TEMPLATES_DIR at the committed apply-copy dir
+// and load through the SAME getTemplatePath the tools call — exercising the real loader on the
+// real shipped file, not a fixture and not the reference library above.
+process.env['TEMPLATES_DIR'] = join(process.cwd(), 'src', 'desktop', 'data', 'templates');
 
 const trendXml = read('trend-line-chart');
 const rankingXml = read('ranking-ordered-bar');
@@ -237,6 +245,90 @@ describe('desktop/templates/facetSplice', () => {
       // Splicing then rewriting an un-faceted apply must equal rewriting WITHOUT the
       // splice — the glue adds zero bytes when nothing is faceted.
       expect(apply(trendXml, mapping, DS)).toBe(rewriteFieldReferences(trendXml, mapping, DS));
+    });
+  });
+
+  // ── END-TO-END product apply-path: the REAL apply copies the TOOLS load ────
+  // The blocks above read the binder's reference library (TEMPLATE_XML_DIR =
+  // data-visualization-templates-xml). But inject-template and build-and-apply-worksheet
+  // load a SEPARATE copy set — src/desktop/data/templates/*.xml — via getTemplatePath →
+  // getTemplatesDir → DATA_ROOT/templates. That is the only XML the apply chokepoints ever
+  // splice+rewrite, so it is the only place a bound facet actually renders in the product.
+  // W29-C arms those apply copies with the [Facet] base column; this suite pins the
+  // end-to-end render through the SAME loader path the tools use (not a fixture, not the
+  // reference dir), for BOTH facet templates, plus the un-faceted identity-by-reference pin.
+  describe('product apply-path — REAL apply copies loaded via getTemplatePath', () => {
+    // Same loader the tools call: readFileSync(getTemplatePath(name)).
+    const readApplyCopy = (name: string): string => readFileSync(getTemplatePath(name), 'utf-8');
+    const trendApplyXml = readApplyCopy('trend-line-chart');
+    const rankingApplyXml = readApplyCopy('ranking-ordered-bar');
+
+    describe('trend-line-chart apply copy — facet_col (cols shelf)', () => {
+      const faceted = {
+        'Order Date': `[${DS}].[tmn:Order Date:qk]`,
+        Sales: `[${DS}].[sum:Sales:qk]`,
+        Facet: `[${DS}].[none:Region:nk]`,
+      };
+
+      it('lands the facet pill on <cols> ahead of the date pill (renders in the shipped apply XML)', () => {
+        const out = apply(trendApplyXml, faceted, DS);
+        expect(out).toContain(
+          `<cols>[${DS}].[none:Region:nk] / [${DS}].[tmn:Order Date:qk]</cols>`,
+        );
+      });
+
+      it('adds the facet column-instance declaration mapped to the bound field and leaves <rows> untouched', () => {
+        const out = apply(trendApplyXml, faceted, DS);
+        expect(out).toMatch(
+          /<column-instance[^>]*column="\[Region\]"[^>]*name="\[none:Region:nk\]"/,
+        );
+        expect(out).toContain(`<rows>[${DS}].[sum:Sales:qk]</rows>`);
+      });
+    });
+
+    describe('ranking-ordered-bar apply copy — facet_row (rows shelf)', () => {
+      const faceted = {
+        Region: `[${DS}].[none:Region:nk]`,
+        Sales: `[${DS}].[sum:Sales:qk]`,
+        Facet: `[${DS}].[none:Category:nk]`,
+      };
+
+      it('lands the facet pill on <rows> ahead of the ranked category pill (renders in the shipped apply XML)', () => {
+        const out = apply(rankingApplyXml, faceted, DS);
+        expect(out).toContain(`<rows>[${DS}].[none:Category:nk] / [${DS}].[none:Region:nk]</rows>`);
+      });
+
+      it('adds the facet column-instance declaration mapped to the bound field and leaves <cols> untouched', () => {
+        const out = apply(rankingApplyXml, faceted, DS);
+        expect(out).toMatch(
+          /<column-instance[^>]*column="\[Category\]"[^>]*name="\[none:Category:nk\]"/,
+        );
+        expect(out).toContain(`<cols>[${DS}].[sum:Sales:qk]</cols>`);
+      });
+    });
+
+    describe('un-faceted apply of the REAL apply copies stays identity-by-reference (unarmed behavior)', () => {
+      it('trend-line-chart: no facet → splice returns the SAME reference; apply == core alone', () => {
+        const mapping = {
+          'Order Date': `[${DS}].[tmn:Order Date:qk]`,
+          Sales: `[${DS}].[sum:Sales:qk]`,
+        };
+        expect(spliceBoundFacet(trendApplyXml, mapping)).toBe(trendApplyXml);
+        expect(apply(trendApplyXml, mapping, DS)).toBe(
+          rewriteFieldReferences(trendApplyXml, mapping, DS),
+        );
+      });
+
+      it('ranking-ordered-bar: no facet → splice returns the SAME reference; apply == core alone', () => {
+        const mapping = {
+          Region: `[${DS}].[none:Region:nk]`,
+          Sales: `[${DS}].[sum:Sales:qk]`,
+        };
+        expect(spliceBoundFacet(rankingApplyXml, mapping)).toBe(rankingApplyXml);
+        expect(apply(rankingApplyXml, mapping, DS)).toBe(
+          rewriteFieldReferences(rankingApplyXml, mapping, DS),
+        );
+      });
     });
   });
 });
