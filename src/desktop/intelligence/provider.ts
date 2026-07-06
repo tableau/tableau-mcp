@@ -6,6 +6,11 @@
 // generated content manifest. Milestone 2 (remote content-pack fetch) can later
 // implement the SAME interface without touching binder callers.
 //
+// MILESTONE 2 (Lane M6): the remote content-pack provider is skeletoned in
+// remoteProvider.ts / contentPack.ts / packVerification.ts / packCache.ts / factory.ts,
+// implementing THIS interface behind an injected transport + clock (no network I/O yet).
+// See docs/authoring-content-pack.md for the pack contract and fallback ladder.
+//
 // SEAM CHOICE (documented): the provider WRAPS the existing `loadManifests()`
 // loader rather than the reverse. `loadManifests()` has many callers (binder,
 // classify, memo, prewarm, the bind-template tool, tests); making it depend on a
@@ -26,26 +31,60 @@ import path from 'path';
 import { CONTENT_MANIFEST_PATH, loadManifests, TEMPLATE_XML_DIR } from '../binder/manifest.js';
 import type { TemplateManifest } from '../binder/manifest-types.js';
 
-/** How this provider serves content today. Only 'bundled' exists at milestone 1. */
-export type ProviderKind = 'bundled';
+/**
+ * How this provider serves content. `'bundled'` = the in-package snapshot;
+ * `'remote-pack'` = a verified milestone-2 content pack (see remoteProvider.ts).
+ * Widened for milestone 2 — the bundled provider still only ever reports `'bundled'`.
+ */
+export type ProviderKind = 'bundled' | 'remote-pack';
 
-/** Freshness posture of the served content. */
-export type Freshness = 'bundled-snapshot';
+/**
+ * Freshness posture of the served content. `'remote-pack-fresh'` = a verified pack
+ * within its TTL (the only state that satisfies exec freshness); `'remote-pack-stale'`
+ * = a verified pack past its TTL served with an honest stale flag.
+ */
+export type Freshness = 'bundled-snapshot' | 'remote-pack-fresh' | 'remote-pack-stale';
+
+/**
+ * Why a remote provider fell back to the bundled snapshot (surfaced honestly in status).
+ * Documented in docs/authoring-content-pack.md §5. Only set by RemotePackIntelligenceProvider.
+ */
+export type RemoteFallbackReason =
+  | 'not-configured'
+  | 'transport-unavailable'
+  | 'no-cache'
+  | 'tampered-cache'
+  | 'bad-signature'
+  | 'schema-too-new'
+  | 'pack-format-too-new'
+  | 'incompatible-engine'
+  | 'malformed-pack';
 
 /** Honest status of the content source (surfaced to callers/telemetry). */
 export interface ProviderStatus {
   kind: ProviderKind;
   content_version: string;
   schema_version: string;
-  /** Date-only (YYYY-MM-DD) the bundled content was generated. */
+  /** Date-only (YYYY-MM-DD) the content was generated. */
   generated: string;
   freshness: Freshness;
   /**
-   * A bundled snapshot does NOT satisfy the executive freshness requirement yet
-   * (that needs milestone-2 remote content-pack fetch). Always false for 'bundled'.
+   * TRUE only when a verified content pack within its TTL is the active source
+   * (milestone 2). A bundled snapshot and a stale pack are both `false`.
    */
-  satisfies_exec_freshness: false;
+  satisfies_exec_freshness: boolean;
   note: string;
+  /**
+   * Remote-only: present when a content pack is the active source. `true` when the
+   * pack is past its TTL (served as an honest stale fallback). Omitted by the
+   * bundled provider so its serialized status is byte-identical to milestone 1.
+   */
+  stale?: boolean;
+  /**
+   * Remote-provider-only: present when the remote provider fell back to the bundled
+   * snapshot, naming why. Omitted by the bundled provider.
+   */
+  fallback?: RemoteFallbackReason;
 }
 
 /** One hashed bundled resource. */
