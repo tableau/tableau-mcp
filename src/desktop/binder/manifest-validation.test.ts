@@ -96,17 +96,6 @@ describe('binder/manifest-validation — the new superset fields are additive/pa
     expect(validateManifest(m)).toEqual([]);
   });
 
-  it('accepts an optional DerivationContract on the manifest (pass-through, not re-derived)', () => {
-    const m = baseManifest();
-    const derivation: DerivationContract = {
-      parent_template: 'ww-ou-arrow',
-      removed_facets: ['color-encoding-presence'],
-      changed_facets: ['diff-calc-on-cols'],
-    };
-    m.derivation = derivation;
-    expect(validateManifest(m)).toEqual([]);
-  });
-
   it('types a RenderStampLedgerEntry as an all-optional, fail-closed record', () => {
     // Not part of the on-disk manifest schema — a purely additive convergence type.
     // A partial line must still type-check (every field optional).
@@ -114,5 +103,82 @@ describe('binder/manifest-validation — the new superset fields are additive/pa
     const empty: RenderStampLedgerEntry = {};
     expect(partial.composite).toBe(91);
     expect(Object.keys(empty)).toHaveLength(0);
+  });
+});
+
+describe('binder/manifest-validation — validateManifest ENFORCES the DerivationContract shape (LR2-3)', () => {
+  // Attach a derivation block to a known-valid bundled manifest to exercise the ported shape gate
+  // (superset from A's manifest.ts). The facet-vocabulary / parent-existence cross-checks still
+  // live at the golden-parity gate — this validator only enforces object shape + closed vocab.
+  function withDerivation(d: unknown): unknown {
+    const base = structuredClone(loadManifests().get('ranking-ordered-bar')!) as unknown as Record<
+      string,
+      unknown
+    >;
+    base.derivation = d;
+    return base;
+  }
+
+  it('accepts a well-formed derivation block (disjoint, non-empty union)', () => {
+    const derivation: DerivationContract = {
+      parent_template: 'ww-ou-arrow',
+      removed_facets: ['color-encoding-presence'],
+      changed_facets: ['diff-calc-on-cols'],
+    };
+    expect(validateManifest(withDerivation(derivation))).toEqual([]);
+  });
+
+  it('rejects an UNKNOWN derivation key (closed-vocabulary discipline)', () => {
+    expect(
+      validateManifest(
+        withDerivation({
+          parent_template: 'p',
+          removed_facets: [],
+          changed_facets: ['mark-classes-per-pane'],
+          bogus: 1,
+        }),
+      ).join(' '),
+    ).toMatch(/unknown key 'bogus'/);
+  });
+
+  it('rejects a facet appearing in BOTH removed_facets and changed_facets (must be disjoint)', () => {
+    expect(
+      validateManifest(
+        withDerivation({
+          parent_template: 'p',
+          removed_facets: ['mark-classes-per-pane'],
+          changed_facets: ['mark-classes-per-pane'],
+        }),
+      ).join(' '),
+    ).toMatch(/disjoint/);
+  });
+
+  it('rejects an exemption-free derivation (omit the block for a non-derivation template)', () => {
+    expect(
+      validateManifest(
+        withDerivation({ parent_template: 'p', removed_facets: [], changed_facets: [] }),
+      ).join(' '),
+    ).toMatch(/no exempt facets/);
+  });
+
+  it('rejects a missing/empty parent_template and a non-string-array facet list', () => {
+    expect(
+      validateManifest(
+        withDerivation({
+          parent_template: '',
+          removed_facets: [],
+          changed_facets: ['mark-classes-per-pane'],
+        }),
+      ).join(' '),
+    ).toMatch(/parent_template/);
+    expect(
+      validateManifest(
+        withDerivation({
+          parent_template: 'p',
+          removed_facets: 'not-an-array',
+          changed_facets: ['mark-classes-per-pane'],
+        }),
+      ).join(' '),
+    ).toMatch(/removed_facets/);
   });
 });

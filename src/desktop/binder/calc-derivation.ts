@@ -17,7 +17,6 @@
 // so the two can never silently drift (the same sync pattern as computeFixtureBind).
 
 import type { CalcInput, CalcResultRole, CalcSlot, SlotKind, SlotSpec } from './manifest-types.js';
-import { bareName } from './schema-summary.js';
 
 /** A calc column parsed from template XML. */
 export interface ParsedCalc {
@@ -73,7 +72,9 @@ export function parseTemplateCalcs(xml: string): ParsedCalc[] {
     const colAttrs = m[1];
     const nameAttr = attr(colAttrs, 'name');
     if (!nameAttr) continue;
-    const template_field = bareName(nameAttr);
+    // bareName inlined to keep this lockstep-core file import-pure (severs the divergent
+    // schema-summary edge): strip surrounding brackets, "[Region]" → "Region".
+    const template_field = nameAttr.replace(/^\[|\]$/g, '');
     if (seen.has(template_field)) continue;
     seen.add(template_field);
     const result_role: CalcResultRole =
