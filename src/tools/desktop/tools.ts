@@ -1,4 +1,5 @@
 import { getBindTemplateTool } from './binder/bindTemplate.js';
+import { getListTemplatesTool } from './binder/listTemplates.js';
 import { getExecuteTableauCommandTool } from './commands/executeTableauCommand.js';
 import { getApplyDashboardTool } from './dashboard/applyDashboard.js';
 import { getApplyDashboardWithViewpointsTool } from './dashboard/applyDashboardWithViewpoints.js';
@@ -54,4 +55,5 @@ export const desktopToolFactories = [
   getSearchWorkbookExamplesTool,
   getExecuteTableauCommandTool,
   getBindTemplateTool,
+  getListTemplatesTool,
 ];

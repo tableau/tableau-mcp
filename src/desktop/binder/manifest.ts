@@ -36,24 +36,37 @@ import type {
 // (`build/`). We resolve PACKAGE-RELATIVE first, then fall back to cwd for back-compat.
 // Candidates are probed for the index file; the first that exists wins.
 //
-// PUBLISH GAP (recorded for day-4): the esbuild build does NOT copy `src/desktop/data`
-// into `build/`, and `.npmignore` ships only `build/**/*`, so an npm-installed bundle
-// has NO data at all. Fixing the cwd hazard is necessary but not sufficient for a
-// published server — the build must also stage `src/desktop/data` → `build/desktop/data`
-// (the second candidate below already anticipates that layout). Until then only the
-// source / tsx runtime (repo root) is supported.
-function resolveDataDir(): string {
-  const candidates = [
-    path.join(__dirname, '..', 'data'), // unbundled source: src/desktop/binder → src/desktop/data
-    path.join(__dirname, 'desktop', 'data'), // future bundled layout: build/ → build/desktop/data
-    path.join(process.cwd(), 'src', 'desktop', 'data'), // legacy cwd fallback (repo root)
+// PUBLISH STORY (closed Lane M4 day-4): the esbuild build now stages
+// `src/desktop/data` → `build/desktop/data` (see `src/scripts/build.ts`
+// "Staging desktop data") and `.npmignore` ships `build/**/*`, so an npm-installed
+// bundle DOES carry the data. Candidate 2 below (`__dirname/desktop/data`, where
+// `__dirname === build/` in the bundle) is now the real published resolution path;
+// `npm pack --dry-run` shows `build/desktop/data/**` in the tarball. Candidate 1
+// serves the unbundled source / tsx-from-repo-root runtime; candidate 3 is the legacy
+// cwd fallback. `dataDirCandidates`/`pickDataDir` are split out so the candidate-2
+// resolution is unit-tested against faked `__dirname` layouts (manifest.dataDir.test.ts).
+
+/** The ordered DATA_DIR candidates for a given module dir + cwd. Exported for tests. */
+export function dataDirCandidates(moduleDir: string, cwd: string): string[] {
+  return [
+    path.join(moduleDir, '..', 'data'), // unbundled source: src/desktop/binder → src/desktop/data
+    path.join(moduleDir, 'desktop', 'data'), // published bundle: build/ → build/desktop/data
+    path.join(cwd, 'src', 'desktop', 'data'), // legacy cwd fallback (repo root)
   ];
+}
+
+/** First candidate that actually contains the manifest index, else the first candidate. */
+export function pickDataDir(candidates: string[]): string {
   for (const dir of candidates) {
     if (fs.existsSync(path.join(dir, 'template-manifests.index.json'))) {
       return dir;
     }
   }
   return candidates[0];
+}
+
+function resolveDataDir(): string {
+  return pickDataDir(dataDirCandidates(__dirname, process.cwd()));
 }
 
 const DATA_DIR = resolveDataDir();
@@ -72,8 +85,13 @@ const MANIFEST_SUFFIX = '.manifest.json';
 // must be mirrored here (validateManifest is the runtime gate for those types).
 const READINESS: ReadonlySet<Readiness> = new Set<Readiness>(['GREEN', 'YELLOW', 'RED']);
 
-/** Closed chart-intent taxonomy (attack 2). Mirrors the `Family` union in manifest-types.ts. */
-const FAMILIES: ReadonlySet<Family> = new Set<Family>([
+/**
+ * Closed chart-intent taxonomy (attack 2). The single runtime source for the
+ * `Family` union in manifest-types.ts, used both by the validator's `FAMILIES` set
+ * and by tool-layer schemas that must reject an out-of-taxonomy family (e.g. the
+ * list-templates family filter) instead of silently returning nothing.
+ */
+export const FAMILY_VALUES = [
   'time-series',
   'ranking',
   'part-to-whole',
@@ -84,7 +102,9 @@ const FAMILIES: ReadonlySet<Family> = new Set<Family>([
   'spatial',
   'kpi',
   'specialized',
-]);
+] as const satisfies readonly Family[];
+
+const FAMILIES: ReadonlySet<Family> = new Set<Family>(FAMILY_VALUES);
 
 /** render_verified format: `'none'` or a `live-YYYY-MM-DD` stamp. */
 const RENDER_VERIFIED_RE = /^(none|live-\d{4}-\d{2}-\d{2})$/;

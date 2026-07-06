@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 
 import { build, BuildOptions } from 'esbuild';
-import { chmod, copyFile, mkdir, rm } from 'fs/promises';
+import { chmod, copyFile, cp, mkdir, rm } from 'fs/promises';
 import { resolve } from 'path';
 import { build as viteBuild } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
@@ -84,6 +84,16 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   }
 
   await chmod(buildOptions.outfile, '755');
+
+  // Stage the bundled authoring data (template manifests + generated index/content
+  // manifest, template XML, and the desktop reference corpora) into the build output.
+  // esbuild bundles CODE only — these are read at runtime via fs, so a published /
+  // npm-installed server has no data unless we copy them. The target path matches the
+  // package-relative `build/desktop/data` layout that manifest.ts resolveDataDir()
+  // probes as candidate 2 (`__dirname/desktop/data`, where __dirname === build/).
+  console.log('🏗️ Staging desktop data...');
+  await cp('./src/desktop/data', './build/desktop/data', { recursive: true });
+  console.log('✅ Desktop data staged to build/desktop/data');
 
   console.log('🏗️ Building MCP Apps...');
   try {
