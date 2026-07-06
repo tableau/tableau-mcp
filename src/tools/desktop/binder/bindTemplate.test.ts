@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import type { BinderResult, BindingProposal } from '../../../desktop/binder/binder.js';
 import * as binderModule from '../../../desktop/binder/binder.js';
@@ -58,7 +59,7 @@ const escalateResult: BinderResult = {
   blockers: [{ code: 'field-not-found', slot_id: 'val', detail: 'No field named "Revenue".' }],
 };
 
-const sampleProposal: BindingProposal = {
+const sampleProposal: BindingProposal & { confidence: number } = {
   template: 'bar-basic',
   title: 'Sales by Region',
   bindings: [
@@ -181,6 +182,21 @@ describe('bindTemplateTool', () => {
 
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ signal: customSignal }));
   });
+
+  it('rejects a proposal without confidence at the schema layer (floor bypass guard)', async () => {
+    // The binder library skips its low-confidence floor when confidence is undefined,
+    // so the TOOL schema must require it (matching PROPOSAL_OUTPUT_SCHEMA) or a
+    // proposal could bypass the escalation entirely.
+    const tool = getBindTemplateTool(new DesktopMcpServer());
+    const schema = z.object(await Provider.from(tool.paramsSchema));
+    const { confidence: _omitted, ...noConfidence } = sampleProposal;
+    expect(
+      schema.safeParse({ session: '1', ask: 'bar chart', proposal: noConfidence }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({ session: '1', ask: 'bar chart', proposal: sampleProposal }).success,
+    ).toBe(true);
+  });
 });
 
 async function getToolResult({
@@ -192,7 +208,8 @@ async function getToolResult({
 }: {
   session: string;
   ask: string;
-  proposal?: BindingProposal;
+  // The tool schema requires confidence even though the library type leaves it optional.
+  proposal?: BindingProposal & { confidence: number };
   minConfidence?: number;
   customSignal?: AbortSignal;
 }): Promise<CallToolResult> {

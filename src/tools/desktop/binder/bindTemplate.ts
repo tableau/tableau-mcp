@@ -42,7 +42,10 @@ const proposalSchema = z.object({
   template: z.string().describe('The chosen template name (from llm_input.candidate_templates).'),
   title: z.string().describe('Worksheet title (<= 80 chars).'),
   bindings: z.array(bindingSchema).describe('One entry per bindable slot: slot_id -> field name.'),
-  confidence: z.number().min(0).max(1).optional().describe('0..1 self-rated confidence.'),
+  // Required, matching the binder's PROPOSAL_OUTPUT_SCHEMA: the library's floor check
+  // skips an undefined confidence, so an optional field here would let a proposal
+  // bypass the low-confidence escalation entirely (fail-open).
+  confidence: z.number().min(0).max(1).describe('0..1 self-rated confidence.'),
 });
 
 const paramsSchema = {
