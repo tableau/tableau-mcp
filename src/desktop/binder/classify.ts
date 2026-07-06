@@ -810,6 +810,73 @@ function selectWithinFamily(
 }
 
 /**
+ * SMALL-MULTIPLES FACET CUES (W23-SM1). Explicit facet/trellis vocabulary a user
+ * types when they want one chart PER member (side-by-side panes), NOT a color/detail
+ * grouping. Deliberately tight: a bare "by <dim>" is ambiguous (could be a color
+ * encoding) and is EXCLUDED — only these unambiguous cues (plus "per", which the spec
+ * names for per-category facets) arm a facet bind. Matched as WHOLE tokens against the
+ * MASKED ask (field names blanked) so a field literally named "per…"/"facet…" can't
+ * arm it, and so faceting is a phrasing decision, never a field-name accident.
+ */
+const FACET_CUES: readonly string[] = [
+  'small multiple',
+  'small multiples',
+  'trellis',
+  'facet',
+  'faceted',
+  'facets',
+  'faceting',
+  'for each',
+  'one per',
+  'per',
+];
+
+/** True when the (masked) ask carries explicit small-multiples / facet intent. */
+function askImpliesFacet(maskedAsk: string): boolean {
+  return FACET_CUES.some((cue) => phraseIndexInAsk(maskedAsk, cue) >= 0);
+}
+
+/**
+ * A manifest's OPTIONAL trellis facet slot: bindable + optional + categorical, on
+ * rows or cols, with a `facet*` slot_id (facet / facet_row / facet_col). This is the
+ * single dimension placed AHEAD of the existing pill for a simple one-dim trellis.
+ */
+function isFacetSlot(s: TemplateManifest['slots'][number]): boolean {
+  return (
+    s.bindable &&
+    !s.required &&
+    s.kind === 'categorical' &&
+    s.slot_id.startsWith('facet') &&
+    (s.role.includes('rows') || s.role.includes('cols'))
+  );
+}
+
+/**
+ * FAIL-CLOSED optional-facet augmentation (W23-SM1). Purely ADDITIVE: called only
+ * AFTER the required slots have bound, it appends ONE categorical facet binding when
+ * (a) the ask names/implies a facet, (b) the template declares an optional facet slot
+ * not already bound, and (c) a spare categorical the ask NAMED remains after the
+ * required slots. Any miss ⇒ null (no facet). It never changes template selection, the
+ * required-slot bindings, or the bound/unbound decision, and never steals a slot-bound
+ * dim (excluded via `boundFields`) — so a no-cue / no-spare ask is byte-unchanged.
+ */
+function facetBinding(
+  m: TemplateManifest,
+  bound: Array<{ slot_id: string; field: string; derivation?: Derivation }>,
+  matched: SchemaField[],
+  maskedAsk: string,
+): { slot_id: string; field: string } | null {
+  if (!askImpliesFacet(maskedAsk)) return null;
+  const boundIds = new Set(bound.map((b) => b.slot_id));
+  const facetSlot = m.slots.find((s) => isFacetSlot(s) && !boundIds.has(s.slot_id));
+  if (!facetSlot) return null;
+  const boundFields = new Set(bound.map((b) => b.field));
+  const spare = matched.find((f) => isCategorical(f) && !boundFields.has(f.name));
+  if (!spare) return null;
+  return { slot_id: facetSlot.slot_id, field: spare.name };
+}
+
+/**
  * No-LLM classification (design §3.5 + stage 2b within-family disambiguation).
  * Keyword-scores the eligible fast-path templates, selects a single template via
  * `selectWithinFamily` (sole-wrong-matcher guard for a lone winner; intra-family
@@ -865,6 +932,13 @@ export function classifyNoLlm(
 
   const bindings = roleGreedyBind(chosen, matched, aggOverride);
   if (!bindings) return null; // required slot unfilled → fail closed
+  // OPTIONAL small-multiples facet (W23-SM1): additively bind a simple-trellis facet
+  // dim (a spare categorical placed AHEAD of the existing pill) ONLY when the ask
+  // names/implies a by-<dim> facet AND a spare categorical remains. This never flips
+  // the bound decision, the chosen template, or the required bindings — a no-cue /
+  // no-spare ask returns the exact same {template, bindings} as before.
+  const facet = facetBinding(chosen, bindings, matched, maskedAsk);
+  if (facet) bindings.push(facet);
   return { template: chosen.template, bindings };
 }
 
