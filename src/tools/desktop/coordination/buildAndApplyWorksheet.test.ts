@@ -9,7 +9,8 @@ import { getBuildAndApplyWorksheetTool } from './buildAndApplyWorksheet.js';
 
 vi.mock('../../../desktop/commands/workbook/loadWorksheetXml.js');
 vi.mock('../../../desktop/metadata/index.js');
-vi.mock('../../../desktop/templates/replaceFieldReferences.js');
+vi.mock('../../../desktop/templates/fieldReferenceRewriter.js');
+vi.mock('../../../desktop/templates/templateColumnRequirements.js');
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('fs');
 
@@ -17,10 +18,8 @@ import { existsSync, readFileSync } from 'fs';
 
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
-import {
-  getTemplateColumnRequirements,
-  replaceFieldReferences,
-} from '../../../desktop/templates/replaceFieldReferences.js';
+import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
+import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 
@@ -61,7 +60,7 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(getTemplateColumnRequirements).mockReturnValue([
     { name: 'Sales', role: 'measure', datatype: 'integer', type: 'quantitative' },
   ]);
-  vi.mocked(replaceFieldReferences).mockReturnValue(TEMPLATE_XML);
+  vi.mocked(rewriteFieldReferences).mockReturnValue(TEMPLATE_XML);
   vi.mocked(loadWorksheetXml).mockResolvedValue(new Ok(undefined));
   return extra;
 }
@@ -146,20 +145,26 @@ describe('buildAndApplyWorksheetTool', () => {
     expect(result.isError).toBe(true);
   });
 
-  it('should call replaceFieldReferences with template, fieldMapping, and datasource name', async () => {
+  it('should call rewriteFieldReferences with template, fieldMapping, datasource name, and namespacing options', async () => {
     await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE });
 
-    expect(replaceFieldReferences).toHaveBeenCalledWith(
+    // CONVERGENCE: build-and-apply now calls the shared core (rewriteFieldReferences)
+    // directly instead of the deleted replaceFieldReferences wrapper, so the call
+    // gains a 5th arg: the per-apply options object wiring calc namespacing ON with a
+    // caller-minted nonce. The first four args (template, mapping, datasource,
+    // metadata) are unchanged.
+    expect(rewriteFieldReferences).toHaveBeenCalledWith(
       TEMPLATE_XML,
       expect.any(Object),
       expect.stringMatching(/Sample/),
       expect.any(Object),
+      { namespaceCalcs: true, applyNonce: expect.any(String) },
     );
   });
 
   it('should return error when extracted worksheet element is missing from template', async () => {
     const extra = makeExtra();
-    vi.mocked(replaceFieldReferences).mockReturnValue('<workbook>no worksheet here</workbook>');
+    vi.mocked(rewriteFieldReferences).mockReturnValue('<workbook>no worksheet here</workbook>');
 
     const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
     expect(result.isError).toBe(true);

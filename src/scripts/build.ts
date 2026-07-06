@@ -65,7 +65,9 @@ const globalValues: Record<GlobalIdentifierName, string> = {
 
   if (variant === 'desktop' || variant === 'combined') {
     copyDirectory('./resources/desktop', './build/resources/desktop');
-    copyDirectory('./src/desktop/data', './build/desktop/data');
+    // NOTE: desktop data is NOT copied here. It is staged below through the AUTHORITATIVE
+    // allowlist (`stagedDesktopData`). A blanket copy of src/desktop/data used to run here
+    // and silently defeated that allowlist (TR1) — do not reintroduce it.
   }
 
   console.log('🏗️ Building telemetry/tracing.js...');
@@ -94,30 +96,25 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   // Stage the bundled authoring data into the build output. esbuild bundles CODE
   // only — these files are read at runtime via fs, so a published / npm-installed
   // server has no data unless we copy them. The target `build/desktop/data` is the
-  // path manifest.ts resolveDataDir() probes as candidate 2 (`__dirname/desktop/data`,
-  // where __dirname === build/ in the bundle).
+  // path server.desktop.ts resolves package-relative as DATA_ROOT (`__dirname/desktop/data`,
+  // where __dirname === build/ in the bundle); the binder, the BundledIntelligenceProvider,
+  // and the search library all read their inputs through it.
   //
-  // EXPLICIT ALLOWLIST, not a blocklist (Lane M5 day-5 tarball scoping): copy only
-  // the inputs a shipped tool reads THROUGH this package-relative path, so a large
-  // asset can never silently ride into the npm tarball again. Every entry below is
-  // resolved package-relative by manifest.ts (DATA_DIR) and feeds the binder core or
-  // the BundledIntelligenceProvider — the surfaces behind bind-template / list-templates.
+  // AUTHORITATIVE ALLOWLIST, not a blanket copy (Lane M5 tarball scoping + TR1 fix): stage
+  // ONLY the entries below, so a large asset can never silently ride into the npm tarball.
+  // The earlier blanket `copyDirectory('./src/desktop/data', ...)` defeated this list and was
+  // removed. Every entry is resolved package-relative via DATA_ROOT and feeds either the
+  // binder core / BundledIntelligenceProvider (bind-template / list-templates) or a shipped
+  // search tool: tableau-desktop-commands-reference.json (search-commands),
+  // workbook-schema-reference.json (lookup-workbook-schema), corpus.json + examples/
+  // (search-examples / search-workbook-examples), and twb-example-index.json — the committed
+  // TRIMMED index (~920 KB). Its ~10 MB ungzipped source lives OUTSIDE this dir at
+  // src/desktop/data-source/ and is never staged.
   //
-  // DELIBERATELY EXCLUDED (verified day-5): twb-example-index.json (10.3 MB),
-  // tableau-desktop-commands-reference.json (969 kB), workbook-schema-reference.json
-  // (212 kB), corpus.json (178 kB), and examples/. Each IS read by a shipped search
-  // tool (search-workbook-examples/search-examples/search-commands/lookup-workbook-schema),
-  // but ONLY via a process.cwd()-relative path (searchLibrary.ts dataPath();
-  // searchExamples/searchWorkbookExamples CORPUS_PATH) — NEVER __dirname/desktop/data.
-  // A copy here is therefore consulted by no consumer: pure tarball weight. (Their
-  // cwd-relative resolution also means they aren't reachable from a published install
-  // at all — a separate resolution gap, tracked for a later lane, not fixed by staging.)
   // VARIANT-GATED: only the desktop tool surface (the `desktop` and `combined` variants)
-  // ever resolves `build/desktop/data` at runtime (manifest.ts resolveDataDir candidate 2).
-  // The `default` variant's server (src/index.ts) never reads it — and `default` is the
-  // ONLY variant the publish pipeline builds — so staging it there is pure orphaned tarball
-  // weight (~173 KB per install). Gate the staging on the variant so the default package
-  // stays lean; desktop/combined still stage the full allowlist below.
+  // ever resolves `build/desktop/data` at runtime. The `default` variant's server
+  // (src/index.ts) never reads it — and `default` is the ONLY variant the publish pipeline
+  // builds via `npm run build` — so staging is skipped there to keep the default package lean.
   if (variant === 'desktop' || variant === 'combined') {
     console.log('🏗️ Staging desktop data (allowlist)...');
     const desktopDataSrc = './src/desktop/data';
@@ -125,14 +122,21 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     // LOCKSTEP: this allowlist is mirrored in
     // src/desktop/intelligence/content-manifest-staging.test.ts (STAGED_DESKTOP_DATA).
     // build.ts runs an IIFE at import (can't be imported without side effects), so the
-    // test duplicates the list; keep the two in sync. That test also PROVES every
-    // content-manifest.json resource lands under one of these roots.
+    // test parses this array out of build.ts and fails if the two diverge. That test also
+    // PROVES every content-manifest.json resource lands under one of these roots and that
+    // the src/desktop/data-source/ trim source can never be staged.
     const stagedDesktopData = [
       'template-manifests', // MANIFESTS_DIR — loadManifests() (binder + provider)
       'template-manifests.index.json', // MANIFEST_INDEX_PATH — loadManifests()
       'template-manifests.fixture.json', // BINDER_FIXTURE_PATH — eligibility gate
       'content-manifest.json', // CONTENT_MANIFEST_PATH — provider.getStatus/getContentManifest
       'data-visualization-templates-xml', // TEMPLATE_XML_DIR — provider.getTemplateXmlFragment + content-manifest hashes
+      'templates', // legacy XML templates read via DATA_ROOT
+      'tableau-desktop-commands-reference.json', // searchLibrary COMMANDS_REFERENCE_PATH — search-commands
+      'workbook-schema-reference.json', // searchLibrary SCHEMA_REFERENCE_PATH — lookup-workbook-schema
+      'corpus.json', // searchExamples/searchWorkbookExamples CORPUS_PATH
+      'twb-example-index.json', // searchLibrary TWB_INDEX_PATH — committed trimmed index (~920 KB)
+      'examples', // searchLibrary EXAMPLES_DIR — search-examples
     ];
     await mkdir(desktopDataOut, { recursive: true });
     for (const entry of stagedDesktopData) {

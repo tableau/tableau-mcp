@@ -67,11 +67,16 @@ export interface RenderEvidence {
   basis: string;
   /** The lane/session that measured and applied the stamp. */
   lane: string;
-  /** Live structural-parity score 0..1 (golden-parity structuralParity leg). */
-  structural: number;
-  /** CRITICAL (salience-5) pass-list ratio, e.g. "5/5". */
+  /**
+   * Live structural-parity score 0..1 (golden-parity structuralParity leg) when a
+   * numeric score was actually measured and retained; `null` for a legacy hand-stamp
+   * where the stamp was earned by live render + human review but NO numeric score was
+   * recorded (never invent one — an unmeasured score is `null`, not a guess).
+   */
+  structural: number | null;
+  /** CRITICAL (salience-5) pass-list ratio, e.g. "5/5"; an honest note when not recorded. */
   critical_pass: string;
-  /** HIGH (salience-4) pass-list ratio, e.g. "3/3". */
+  /** HIGH (salience-4) pass-list ratio, e.g. "3/3"; an honest note when not recorded. */
   high_pass: string;
   /** Pixel-oracle status; a `none (…)` note when no credible oracle exists. */
   pixel_oracle: string;
@@ -232,6 +237,44 @@ export interface GoldenSpec {
 }
 
 /**
+ * DERIVATION CONTRACT (Lane G1 / H2.6) — declares that this template is a documented
+ * DERIVATION of another template's worksheet, so the golden-parity gate can grade it in
+ * ANCHORED-DERIVATION mode: score the derived worksheet against its PARENT's golden anchor
+ * while EXEMPTING the structural facets the derivation intentionally changes.
+ *
+ * Present ⇒ the gate exempts exactly the DECLARED facets (auditable, labeled
+ * `exempt-derivation`, excluded from both the structural numerator AND denominator — they
+ * NEVER count as passes). An UNDECLARED mismatch is still a full/critical fail; the exemption
+ * set is a CLOSED, hand-authored allow-list, never inferred from the live diff. The gate also
+ * enforces a surviving-critical-facet FLOOR (it REFUSES to grade rather than stamp on air when
+ * a derivation would exempt too many critical facets). Absent ⇒ ordinary golden-vs-live grading
+ * (zero behavior change for non-derivation templates).
+ *
+ * The facet names in `removed_facets` / `changed_facets` MUST be members of the golden-parity
+ * gate's structural facet vocabulary; an unknown facet fails loud AT THE GATE.
+ *
+ * PORT NOTE (superset ported from A for A↔B manifest-shape convergence): B's `validateManifest`
+ * treats a present `derivation` as PASS-THROUGH (unknown-but-typed), exactly like
+ * `render_evidence` — the object-shape / closed-key-set / facet-vocabulary / parent-existence
+ * cross-checks live at the golden-parity gate, not in this repo's shape validator.
+ */
+export interface DerivationContract {
+  /** The template whose golden worksheet anchor this template derives from (e.g. `ww-ou-arrow`). */
+  parent_template: string;
+  /**
+   * Facets the derivation REMOVES (present in the parent, intentionally absent in the derivation
+   * — e.g. `color-encoding-presence`). Excluded from grading, labeled `exempt-derivation`.
+   */
+  removed_facets: string[];
+  /**
+   * Facets the derivation CHANGES (present in both but with an intentionally different value —
+   * e.g. `mark-classes-per-pane`, `diff-calc-on-cols`). Excluded from grading, labeled
+   * `exempt-derivation`. Must be DISJOINT from `removed_facets`.
+   */
+  changed_facets: string[];
+}
+
+/**
  * Datasource-level MARK STYLE sidecar (the fidelity fix, productized 2026-07-05).
  *
  * Golden workbooks carry value→hex/glyph maps at DATASOURCE scope, OUTSIDE the
@@ -261,6 +304,54 @@ export interface DatasourceStyleSidecar {
   column_instances: string[];
   /** Convenience counts of the value maps carried per encoding attr (audit, not load-bearing). */
   maps: { color: number; shape: number };
+}
+
+/**
+ * One append-only LOCAL render-stamp ledger entry (W3 local-stamp flow). Superset type
+ * ported from A for A↔B manifest-shape convergence: it describes the ledger the golden-parity
+ * gate write path appends and a local-side-load loader reads to decide whether a side-loaded
+ * LOCAL template's on-disk `render_verified` stamp is TRUSTED.
+ *
+ * A stamp is honored ONLY when a ledger entry matches the CURRENT on-disk package by all three
+ * machine hashes + the slug tuple + a passing gate verdict (composite >= 85, no critical fail,
+ * sanity `sane`). No HMAC — the threat model is a careless hand edit, not adversarial tampering,
+ * so a hash-bound ledger is the right bar.
+ *
+ * NOT part of the on-disk manifest schema (so `validateManifest` never sees it) and NOT yet
+ * consumed by B's bundled loader — it is an additive convergence type. All fields are OPTIONAL
+ * at the type level so a malformed/partial line never crashes a reader; a trust check treats any
+ * missing/mismatching field as fail-closed (untrusted ⇒ the stamp is neutralized in memory, the
+ * template stays propose-routable).
+ */
+export interface RenderStampLedgerEntry {
+  /** sha256 of the raw template XML bytes (`<template>.xml`). */
+  template_xml_sha256?: string;
+  /** sha256 of the manifest with stamp fields excluded, canonicalized (key-sorted). */
+  manifest_unstamped_sha256?: string;
+  /** The source/golden anchor hash, copied from `provenance.json.source_sha256`. */
+  anchor_sha256?: string;
+  /** The template / workbook / sheet slug tuple this stamp was earned for. */
+  slug?: { template?: string; workbook?: string; sheet?: string };
+  /** golden-parity composite 0..100 measured at stamp time (>= 85 to trust). */
+  composite?: number;
+  /** golden-parity structural leg 0..1. */
+  structural?: number;
+  /** golden-parity pixel leg 0..1 (source-workbook render oracle). */
+  pixel?: number;
+  /** CRITICAL (salience-5) pass-list ratio, e.g. "5/5" — a full ratio means no critical fail. */
+  critical_pass?: string;
+  /** HIGH (salience-4/3) pass-list ratio, e.g. "3/3" (audit; not load-bearing for trust). */
+  high_pass?: string;
+  /** Independent binding-sanity verdict — must be `sane` to trust (fail-closed). */
+  sanity?: string;
+  /** The `live-YYYY-MM-DD` stamp written to the manifest (audit; not matched). */
+  render_verified?: string;
+  /** ISO timestamp the stamp was written (audit). */
+  timestamp?: string;
+  /** Package version at stamp time (audit). */
+  package_version?: string;
+  /** The lane/session that measured + applied the stamp (audit). */
+  lane?: string;
 }
 
 /**
@@ -340,4 +431,11 @@ export interface TemplateManifest {
    * proven datasource anchors. Absent ⇒ the template carries no datasource-scope style.
    */
   datasource_style?: DatasourceStyleSidecar;
+  /**
+   * Optional DERIVATION CONTRACT (Lane G1 / H2.6). Present ⇒ this template is a documented
+   * derivation of `derivation.parent_template`'s worksheet; the golden-parity gate grades it in
+   * ANCHORED-DERIVATION mode, exempting the declared facets against the parent's golden anchor.
+   * Absent ⇒ ordinary golden-vs-live grading (no behavior change for non-derivation templates).
+   */
+  derivation?: DerivationContract;
 }
