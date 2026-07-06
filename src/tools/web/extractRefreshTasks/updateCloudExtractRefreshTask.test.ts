@@ -50,7 +50,6 @@ vi.mock('../../../config.js', () => ({
 }));
 
 const validTaskId = 'a1b2c3d4-e5f6-4789-9abc-ef1234567890';
-const validToken = computeConfirmationToken('test-site-id', validTaskId);
 
 const validSchedule: UpdateCloudExtractRefreshSchedule = {
   frequency: 'Weekly',
@@ -61,6 +60,8 @@ const validSchedule: UpdateCloudExtractRefreshSchedule = {
     },
   },
 };
+
+const validToken = computeConfirmationToken('test-site-id', validTaskId, validSchedule);
 
 const updatedTask: ExtractRefreshTask = {
   id: validTaskId,
@@ -507,6 +508,52 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       expect(first.content[0].text).toContain(validToken);
       expect(second.content[0].text).toContain(validToken);
     });
+
+    it('binds the schedule payload into the token so preview A and apply B do not match', async () => {
+      // Preview schedule A — returns token bound to A.
+      const scheduleA: UpdateCloudExtractRefreshSchedule = validSchedule;
+      const scheduleB: UpdateCloudExtractRefreshSchedule = {
+        frequency: 'Daily',
+        frequencyDetails: {
+          start: '06:00:00',
+          intervals: { interval: [{ weekDay: 'Monday' }] },
+        },
+      };
+      const tokenA = computeConfirmationToken('test-site-id', validTaskId, scheduleA);
+      const tokenB = computeConfirmationToken('test-site-id', validTaskId, scheduleB);
+      expect(tokenA).not.toBe(tokenB);
+
+      // Applying schedule B with A's token must be rejected — closes the swap-after-preview vector
+      // where a caller previews a benign schedule to obtain a token and then swaps to a more
+      // aggressive one on the confirmed call.
+      const result = await getToolResult({
+        taskId: validTaskId,
+        schedule: scheduleB,
+        confirm: true,
+        confirmationToken: tokenA,
+      });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('taskId + schedule pair');
+      expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    it('hashes semantically equal schedules the same regardless of object key order', async () => {
+      // Object.keys iteration would otherwise depend on insertion order; the stable-stringify
+      // sorts keys so a caller who constructs the schedule with reordered top-level or nested
+      // keys still gets a preview→apply match.
+      const permuted: UpdateCloudExtractRefreshSchedule = {
+        // Reversed top-level order
+        frequencyDetails: {
+          intervals: { interval: [{ weekDay: 'Sunday' }] },
+          start: '06:00:00',
+        },
+        frequency: 'Weekly',
+      };
+      const canonicalToken = computeConfirmationToken('test-site-id', validTaskId, validSchedule);
+      const permutedToken = computeConfirmationToken('test-site-id', validTaskId, permuted);
+      expect(permutedToken).toBe(canonicalToken);
+    });
   });
 });
 
@@ -529,7 +576,7 @@ async function getToolResult(args: {
     confirmationToken:
       'confirmationToken' in args
         ? args.confirmationToken
-        : computeConfirmationToken('test-site-id', args.taskId),
+        : computeConfirmationToken('test-site-id', args.taskId, args.schedule),
   };
   return await callback(resolved, getMockRequestHandlerExtra());
 }

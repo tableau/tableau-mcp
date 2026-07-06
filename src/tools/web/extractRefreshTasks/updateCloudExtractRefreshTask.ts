@@ -6,24 +6,60 @@ import { z } from 'zod';
 import { getConfig } from '../../../config.js';
 import { AdminOnlyError, ArgsValidationError, UnknownError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { updateCloudExtractRefreshScheduleSchema } from '../../../sdks/tableau/types/extractRefreshTask.js';
+import {
+  UpdateCloudExtractRefreshSchedule,
+  updateCloudExtractRefreshScheduleSchema,
+} from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { assertAdmin } from '../adminGate.js';
 import { WebTool } from '../tool.js';
 
 /**
- * Deterministic confirmation token derived from the site + task. The preview phase returns it; the
- * apply phase requires a matching value. This forces an explicit, deliberate second call with a
- * task-specific token rather than a blind one-shot update.
+ * Canonical JSON serialization: object keys sorted so { a: 1, b: 2 } and { b: 2, a: 1 } hash
+ * identically. Used to bind the schedule payload into the confirmation token — preview of
+ * schedule A and confirmed apply of schedule B must produce different tokens even if the two
+ * objects happen to serialize differently under the default (insertion-order) stringify.
+ */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const keys = Object.keys(record).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * Deterministic confirmation token derived from the site + task (+ schedule, when applicable). The
+ * preview phase returns it; the apply phase requires a matching value. This forces an explicit,
+ * deliberate second call with a task-specific (and, for updates, payload-specific) token rather
+ * than a blind one-shot update.
+ *
+ * For the update tool, the caller-supplied `schedule` is folded into the hash via a canonical
+ * stringify. This binds the token to the exact schedule the preview validated — a caller cannot
+ * preview `A` and then apply `B` with the preview's token, because the hash would not match.
+ *
+ * For the delete tool, `schedule` is omitted and the token reduces to `sha256(siteId:taskId)`.
  *
  * NOTE: this is a friction/correctness gate, NOT proof that a preview actually ran. The token is a
- * pure sha256(siteId:taskId) — both inputs are known to any caller (siteId from the connected site,
- * taskId from the tool arg), so a caller can compute it without previewing. Guaranteeing a preview
- * ran would require server-side state. Stateless by design so it works across instances and
- * restarts. Matches the pattern in delete-datasource / delete-workbook.
+ * hash of caller-known inputs (siteId from the connected site, taskId + schedule from the tool
+ * args), so a caller can compute it without previewing. Guaranteeing a preview ran would require
+ * server-side state. Stateless by design so it works across instances and restarts. Matches the
+ * pattern in delete-datasource / delete-workbook.
  */
-export function computeConfirmationToken(siteId: string, taskId: string): string {
-  return createHash('sha256').update(`${siteId}:${taskId}`).digest('hex').slice(0, 12);
+export function computeConfirmationToken(
+  siteId: string,
+  taskId: string,
+  schedule?: UpdateCloudExtractRefreshSchedule,
+): string {
+  const payload =
+    schedule === undefined
+      ? `${siteId}:${taskId}`
+      : `${siteId}:${taskId}:${stableStringify(schedule)}`;
+  return createHash('sha256').update(payload).digest('hex').slice(0, 12);
 }
 
 const paramsSchema = {
@@ -68,7 +104,7 @@ export const getUpdateCloudExtractRefreshTaskTool = (
   This tool is **two-phase** to keep the destructive action safe:
 
   1. **Preview (default — \`confirm\` omitted or false):** validates the proposed schedule, echoes the change that would be applied, returns a \`confirmationToken\`, and does **not** call the Tableau update endpoint.
-  2. **Apply (\`confirm: true\` + \`confirmationToken\`):** applies the schedule change. The token from step 1 is required — the update is rejected without it, a friction gate requiring a deliberate second call rather than a blind one-shot update (the token is a deterministic hash of caller-known inputs, so it adds deliberation but does not by itself prove a preview ran).
+  2. **Apply (\`confirm: true\` + \`confirmationToken\`):** applies the schedule change. The token from step 1 is required — the update is rejected without it, a friction gate requiring a deliberate second call rather than a blind one-shot update. The token is bound to the exact \`taskId\` + \`schedule\` pair that was previewed, so editing the schedule after previewing invalidates the token and the caller must re-preview. The token is a deterministic hash of caller-known inputs, so it adds deliberation but does not by itself prove a preview ran.
 
   **Required human confirmation:** After preview, present the proposed change (task ID + frequency + time window) to the user and get explicit approval before applying. Do not auto-confirm or compute the \`confirmationToken\` yourself — use the exact value the preview returned.
 
@@ -129,7 +165,7 @@ export const getUpdateCloudExtractRefreshTaskTool = (
               }
 
               const siteId = restApi.siteId;
-              const expectedToken = computeConfirmationToken(siteId, args.taskId);
+              const expectedToken = computeConfirmationToken(siteId, args.taskId, args.schedule);
 
               // Gate the destructive path on the confirmation token BEFORE any write, so a missing
               // or mismatched token is rejected with zero side effects. Forces a deliberate
@@ -137,10 +173,12 @@ export const getUpdateCloudExtractRefreshTaskTool = (
               // caller-known inputs — see computeConfirmationToken).
               if (args.confirm && args.confirmationToken !== expectedToken) {
                 return new ArgsValidationError(
-                  'Update requires the confirmationToken returned by the preview step. ' +
-                    'Run update-cloud-extract-refresh-task with confirm omitted (or false) for this ' +
-                    'taskId first, then call again with confirm: true and the confirmationToken from ' +
-                    'that response.',
+                  'Update requires the confirmationToken returned by the preview step for this ' +
+                    'exact taskId + schedule pair. Run update-cloud-extract-refresh-task with ' +
+                    'confirm omitted (or false) using the SAME taskId and schedule, then call ' +
+                    'again with confirm: true and the confirmationToken from that response. ' +
+                    'Editing the schedule after previewing invalidates the token — re-preview to ' +
+                    'get a fresh one.',
                 ).toErr();
               }
 
