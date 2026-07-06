@@ -10,7 +10,10 @@ describe('replaceFieldReferences', () => {
   it('rewrites a {{DATASOURCE}} field reference in text nodes', () => {
     const xml = template('<rows>[{{DATASOURCE}}].[none:TemplateField:nk]</rows>');
     const out = replaceFieldReferences(xml, { TemplateField: '[DS].[sum:Sales:qk]' }, 'My Data');
-    expect(out).toContain('[My Data].[Sum:Sales:qk]');
+    // CONVERGENCE: the rebuilt instance NAME keeps the lowercase derivation short
+    // code (`[sum:...]`) — the prior `[Sum:...]` assertion pinned the old
+    // capitalize-into-the-name bug that fails to bind in live Desktop.
+    expect(out).toContain('[My Data].[sum:Sales:qk]');
   });
 
   it('does not expand $-sequences in field names ($1, $&, $$)', () => {
@@ -21,7 +24,9 @@ describe('replaceFieldReferences', () => {
       { TemplateField: '[DS].[sum:Net $1 $$ Total:qk]' },
       'My Data',
     );
-    expect(out).toContain('[My Data].[Sum:Net $1 $$ Total:qk]');
+    // CONVERGENCE: lowercase short code (`sum`), same as above; the $-literal
+    // guarantee (the point of this test) is unchanged.
+    expect(out).toContain('[My Data].[sum:Net $1 $$ Total:qk]');
   });
 
   it('does not expand $-sequences in the datasource name', () => {
@@ -31,7 +36,8 @@ describe('replaceFieldReferences', () => {
       { TemplateField: '[DS].[sum:Sales:qk]' },
       'Sales $$ Co $1',
     );
-    expect(out).toContain('[Sales $$ Co $1].[Sum:Sales:qk]');
+    // CONVERGENCE: lowercase short code (`sum`); $-literal datasource unchanged.
+    expect(out).toContain('[Sales $$ Co $1].[sum:Sales:qk]');
   });
 
   it('does not expand $-sequences when filling bare {{DATASOURCE}} placeholders', () => {

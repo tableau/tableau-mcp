@@ -16,8 +16,11 @@ import { replaceFieldReferences } from './replaceFieldReferences.js';
 // attribute quoting/ordering) — @xmldom/xmldom re-quotes and may reorder, so we
 // pin the semantics of the rewrite, not the serializer's byte formatting.
 //
-// Tests tagged `// CHARACTERIZATION:` document current (NOT desired) behavior and
-// are expected to be the reviewable diffs when the shared rewriter lands.
+// Tests tagged `// CHARACTERIZATION:` document behavior that is UNCHANGED by the
+// shared DOM-structural rewriter. Pins whose behavior intentionally IMPROVED when
+// the shared rewriter (`fieldReferenceRewriter.ts`) landed are re-tagged
+// `// CONVERGENCE:` with a one-line note naming the improvement — those flips are
+// the review artifact for this change.
 
 const TEMPLATES_DIR = join(process.cwd(), 'src', 'desktop', 'data', 'templates');
 
@@ -51,21 +54,23 @@ describe('replaceFieldReferences — kpi-text (aggregated measure)', () => {
   });
 
   it('rewrites the aggregated instance ref, filling {{DATASOURCE}} and the field', () => {
+    // CONVERGENCE: the qualified ref now carries the lowercase short code
+    // (`[sum:Revenue:qk]`), not the old capitalized `[Sum:Revenue:qk]`.
     const out = replaceFieldReferences(kpiText, mapping, datasource);
-    expect(out).toContain('[Sales Data].[Sum:Revenue:qk]');
+    expect(out).toContain('[Sales Data].[sum:Revenue:qk]');
     expect(out).not.toContain('{{DATASOURCE}}');
     expect(out).not.toContain('sum:Value');
   });
 
-  it('CHARACTERIZATION: capitalizes the derivation in the column-instance name (Sum, not sum)', () => {
-    // CHARACTERIZATION: current behavior — the column-instance `name` attribute is
-    // rebuilt from the friendly DERIVATION_MAP value, so `[sum:Value:qk]` becomes
-    // `[Sum:Revenue:qk]`. Real Tableau instance names use the lowercase short code
-    // (`[sum:Revenue:qk]`) while only the separate `derivation="Sum"` attribute is
-    // capitalized. A correct rewriter should preserve the lowercase short code.
+  it('CONVERGENCE: keeps the lowercase short code in the column-instance name (sum, not Sum)', () => {
+    // CONVERGENCE: the shared rewriter writes the lowercase short code into the
+    // instance `name` (`[sum:Revenue:qk]`) and capitalizes only the separate
+    // `derivation="Sum"` attribute — the live-Desktop-correct form. The old
+    // rewriter capitalized the name itself (`[Sum:Revenue:qk]`), which fails to
+    // bind (red pills / blank viz); that regression is now fixed.
     const out = replaceFieldReferences(kpiText, mapping, datasource);
-    expect(out).toContain('[Sum:Revenue:qk]');
-    expect(out).not.toContain('[sum:Revenue:qk]');
+    expect(out).toContain('[sum:Revenue:qk]');
+    expect(out).not.toContain('[Sum:Revenue:qk]');
   });
 });
 
@@ -86,10 +91,12 @@ describe('replaceFieldReferences — ranking-ordered-bar (computed sort)', () =>
 
   it('rewrites the <computed-sort> column= and using= refs (dimension + measure)', () => {
     const out = replaceFieldReferences(rankingOrderedBar, mapping, datasource);
+    // CONVERGENCE: refs now carry the lowercase short code (none/sum), not the old
+    // capitalized None/Sum.
     // computed-sort column='[{{DATASOURCE}}].[none:Region:nk]'
-    expect(out).toContain('[Superstore].[None:Category:nk]');
+    expect(out).toContain('[Superstore].[none:Category:nk]');
     // computed-sort using='[{{DATASOURCE}}].[sum:Sales:qk]'
-    expect(out).toContain('[Superstore].[Sum:Profit:qk]');
+    expect(out).toContain('[Superstore].[sum:Profit:qk]');
   });
 
   it('rewrites the rows/cols text-node refs and leaves no {{DATASOURCE}} or old field tokens', () => {
@@ -99,12 +106,13 @@ describe('replaceFieldReferences — ranking-ordered-bar (computed sort)', () =>
     expect(out).not.toContain(':Sales:');
   });
 
-  it('CHARACTERIZATION: capitalizes the derivation for the dimension instance too (None, not none)', () => {
-    // CHARACTERIZATION: same capitalization behavior as kpi-text — `[none:Region:nk]`
-    // becomes `[None:Category:nk]` in every rewritten ref.
+  it('CONVERGENCE: keeps the lowercase short code for the dimension instance too (none, not None)', () => {
+    // CONVERGENCE: same lowercase-short-code fix as kpi-text — `[none:Region:nk]`
+    // becomes `[none:Category:nk]` (not the old `[None:Category:nk]`) in every
+    // rewritten ref.
     const out = replaceFieldReferences(rankingOrderedBar, mapping, datasource);
-    expect(out).toContain('[None:Category:nk]');
-    expect(out).not.toContain('[none:Category:nk]');
+    expect(out).toContain('[none:Category:nk]');
+    expect(out).not.toContain('[None:Category:nk]');
   });
 });
 
@@ -116,30 +124,33 @@ describe('replaceFieldReferences — pareto-chart (compound derivation / Paramet
   const datasource = 'Superstore';
 
   it('rewrites the simple aggregated ref', () => {
+    // CONVERGENCE: lowercase short code (`sum`), not the old capitalized `Sum`.
     const out = replaceFieldReferences(pareto, mapping, datasource);
-    expect(out).toContain('[Superstore].[Sum:Profit:qk]');
+    expect(out).toContain('[Superstore].[sum:Profit:qk]');
     expect(out).not.toContain('{{DATASOURCE}}');
     expect(out).not.toContain('Sub-Category');
   });
 
-  it('CHARACTERIZATION: does NOT remap the field inside a compound-derivation ref', () => {
-    // CHARACTERIZATION: current behavior — `[{{DATASOURCE}}].[pcto:cum:sum:Sales:qk]`
-    // only gets {{DATASOURCE}} filled; the field name `Sales` is NOT remapped to
-    // `Profit` and the derivation is NOT normalized, because C's regex only matches
-    // a single-segment derivation (`[<one>:<field>:<role>]`). The nested table-calc
-    // ref survives untouched alongside the correctly-rewritten simple ref.
+  it('CONVERGENCE: DOES remap the field inside a compound-derivation ref (Sales→Profit)', () => {
+    // CONVERGENCE: the shared rewriter parses COMPOUND (table-calc) derivations
+    // colon-tolerantly, so `[{{DATASOURCE}}].[pcto:cum:sum:Sales:qk]` now remaps
+    // its field `Sales`→`Profit` while PRESERVING the `pcto:cum` wrapper — the
+    // W10-E8 gap the old single-segment regex left behind is closed.
     const out = replaceFieldReferences(pareto, mapping, datasource);
-    expect(out).toContain('[Superstore].[pcto:cum:sum:Sales:qk]');
-    // Side-by-side proof in the <rows> formula: simple ref remapped, compound ref not.
-    expect(out).toContain('([Superstore].[Sum:Profit:qk] + [Superstore].[pcto:cum:sum:Sales:qk])');
+    expect(out).toContain('[Superstore].[pcto:cum:sum:Profit:qk]');
+    expect(out).not.toContain('[pcto:cum:sum:Sales:qk]');
+    // Side-by-side proof in the <rows> formula: BOTH the simple ref and the
+    // compound ref are now remapped.
+    expect(out).toContain('([Superstore].[sum:Profit:qk] + [Superstore].[pcto:cum:sum:Profit:qk])');
   });
 
-  it('CHARACTERIZATION: leaves the column-instance name of the compound ref unchanged', () => {
-    // CHARACTERIZATION: the `<column-instance name='[pcto:cum:sum:Sales:qk]'>` is not
-    // rewritten (its field segment is misparsed by the single-segment regex), so the
-    // instance name still reads `Sales`, not `Profit`.
+  it('CONVERGENCE: rewrites the column-instance name of the compound ref (Sales→Profit)', () => {
+    // CONVERGENCE: the `<column-instance name='[pcto:cum:sum:Sales:qk]'>` field
+    // segment is now parsed correctly, so the rebuilt instance name reads
+    // `Profit`, not `Sales`.
     const out = replaceFieldReferences(pareto, mapping, datasource);
-    expect(out).toContain('[pcto:cum:sum:Sales:qk]');
+    expect(out).toContain('[pcto:cum:sum:Profit:qk]');
+    expect(out).not.toContain('[pcto:cum:sum:Sales:qk]');
   });
 
   it('CHARACTERIZATION: does not rewrite the [:Measure Names] pseudo-field ref (only fills datasource)', () => {
