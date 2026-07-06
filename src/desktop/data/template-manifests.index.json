@@ -2935,7 +2935,16 @@
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "live-2026-07-04"
+        "render_verified": "live-2026-07-04",
+        "render_evidence": {
+          "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
+          "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
+          "structural": null,
+          "critical_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
+          "high_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
+          "pixel_oracle": "none (generic template has no golden anchor; an anchor-only comparison is circular and is not credited)",
+          "gate_composite": null
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [
@@ -2951,6 +2960,9 @@
         "lowest"
       ],
       "description": "Horizontal bars, one per category; bar length = measure; sorted descending by the measure.",
+      "avoid_when": [
+        "The 'top' here is positional layering — marks drawn on top of a reference line or another chart layer — not a top-N ranking; a positional or annotation placement is not a sorted bar chart."
+      ],
       "slots": [
         {
           "slot_id": "region",
@@ -2975,6 +2987,18 @@
           "kind": "quantitative",
           "bindable": true,
           "required": true
+        },
+        {
+          "slot_id": "facet_row",
+          "template_field": "Facet",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": false,
+          "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on rows AHEAD of the ranked category pill, trellising the ranking into stacked panes (one ranked bar set per member). Optional → EXCLUDED from the required-bindable fixture_bind set (only {region, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots — it never steals the ranked (region) dim, and a bare 'by <dim>' never facets (fail-closed). XML declares [Facet] as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the default sorted-bar render is byte-unchanged). Modeled on box-plot-chart's required:false facet."
         }
       ],
       "calcs": [],
@@ -3330,7 +3354,16 @@
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "live-2026-07-04"
+        "render_verified": "live-2026-07-04",
+        "render_evidence": {
+          "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
+          "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
+          "structural": null,
+          "critical_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
+          "high_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
+          "pixel_oracle": "none (generic template has no golden anchor; an anchor-only comparison is circular and is not credited)",
+          "gate_composite": null
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [
@@ -3344,7 +3377,19 @@
         "time-series",
         "timeline",
         "by-month",
-        "sales-over-time"
+        "sales-over-time",
+        "year-over-year",
+        "yoy",
+        "prior-year",
+        "current-year",
+        "rolling",
+        "moving-average",
+        "moving-sum",
+        "running-total",
+        "month-over-month",
+        "period-over-period",
+        "forecast",
+        "change-over-time"
       ],
       "description": "A line of an aggregated measure over a truncated date on the x-axis; shows trend across time.",
       "slots": [
@@ -3370,6 +3415,18 @@
           "kind": "quantitative",
           "bindable": true,
           "required": true
+        },
+        {
+          "slot_id": "facet_col",
+          "template_field": "Facet",
+          "derivation": "none",
+          "role": [
+            "cols"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": false,
+          "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on cols AHEAD of the truncated date pill, trellising the trend into side-by-side panes (one line per member). Optional → EXCLUDED from the required-bindable fixture_bind set (only {order_date, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots — a bare 'by <dim>' never facets (fail-closed), and it never steals a slot-bound dim. XML declares [Facet] as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the un-faceted default render is byte-unchanged). Modeled on box-plot-chart's required:false facet."
         }
       ],
       "calcs": [],

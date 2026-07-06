@@ -10,14 +10,16 @@
 // no-cue / no-spare ask binds byte-identically to before. Fail-closed cues: a bare
 // "by <dim>" is ambiguous (could be a color encoding) and is EXCLUDED.
 //
-// tmcp's BUNDLED manifests do not (yet) carry facet slots — the re-snapshot lane
-// adds them via the factory manifests. So every test here uses an INLINE manifest
-// fixture carrying a facet slot, proving the classify.ts feature independent of the
-// bundled data state (see the "independent of bundled data" test below).
+// The inline-fixture tests below prove the classify.ts feature INDEPENDENT of the
+// bundled data state (see the "independent of bundled data" test). As of W27-B the
+// bundled trend-line-chart / ranking-ordered-bar manifests DO carry the optional facet
+// slot (facet_col / facet_row) — copied verbatim from the factory — so a final describe
+// block additionally proves the SHIPPED data end-to-end via loadManifests().
 
 import { describe, expect, it } from 'vitest';
 
 import { classifyNoLlm } from './classify.js';
+import { loadManifests } from './manifest.js';
 import type { Family, SlotKind, SlotSpec, TemplateManifest } from './manifest-types.js';
 import type { SchemaField, SchemaSummary } from './schema-summary.js';
 
@@ -212,5 +214,58 @@ describe('classifyNoLlm — optional small-multiples facet (W23-SM1)', () => {
     // { slot_id, field } (no `derivation`), which the resolver renders [none:…:nk].
     expect(facet).toEqual({ slot_id: 'facet_col', field: 'Region' });
     expect(facet).not.toHaveProperty('derivation');
+  });
+});
+
+// ── PRODUCT PATH: the SHIPPED bundled data (W27-B) ───────────────────────────
+// The inline-fixture tests above prove the classify.ts facet CODE. This block proves
+// the shipped DATA: W27-B copied the factory trend-line-chart / ranking-ordered-bar
+// manifests verbatim (each carrying the optional facet_col / facet_row slot + an
+// off-shelf [Facet] column decl). Loading the REAL bundled manifests (loadManifests())
+// and running a trellis ask exercises the exact path a caller hits — proving the W26-D
+// facet feature is now armed by the actual shipped data, not just inline fixtures.
+describe('classifyNoLlm — optional facet on the SHIPPED bundled manifests (W27-B product path)', () => {
+  const bundled = loadManifests();
+
+  it('the shipped trend-line-chart / ranking-ordered-bar manifests carry the optional facet slot', () => {
+    const facetCol = bundled.get('trend-line-chart')!.slots.find((s) => s.slot_id === 'facet_col');
+    expect(facetCol, 'shipped trend-line-chart carries facet_col').toBeDefined();
+    expect(facetCol!.required).toBe(false);
+    const facetRow = bundled
+      .get('ranking-ordered-bar')!
+      .slots.find((s) => s.slot_id === 'facet_row');
+    expect(facetRow, 'shipped ranking-ordered-bar carries facet_row').toBeDefined();
+    expect(facetRow!.required).toBe(false);
+  });
+
+  it('a trellis ask binds bundled trend-line-chart WITH facet_col from the spare named categorical', () => {
+    // Same trellis ask as the inline-fixture test, but against the FULL 39-manifest
+    // bundled load: 'line' selects the sole fast-path-eligible time-series template
+    // (trend-line-chart), the required slots take Order Date + Sales, and the explicit
+    // trellis cue appends the spare NAMED categorical (Region) to the optional facet_col.
+    const cls = classifyNoLlm(
+      'trellis line chart of Sales over Order Date by Region',
+      bundled,
+      SUMMARY,
+    );
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('trend-line-chart');
+    expect(cls!.bindings).toEqual([
+      { slot_id: 'order_date', field: 'Order Date' },
+      { slot_id: 'sales', field: 'Sales' },
+      { slot_id: 'facet_col', field: 'Region' },
+    ]);
+  });
+
+  it("FAIL-CLOSED on shipped data: a bare 'by <dim>' (no trellis cue) binds trend-line-chart WITHOUT a facet", () => {
+    // Invariant guard: the optional facet must not fire without an explicit cue, so the
+    // un-faceted default render stays byte-unchanged on the shipped manifests too.
+    const cls = classifyNoLlm('line chart of Sales over Order Date by Region', bundled, SUMMARY);
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('trend-line-chart');
+    expect(cls!.bindings).toEqual([
+      { slot_id: 'order_date', field: 'Order Date' },
+      { slot_id: 'sales', field: 'Sales' },
+    ]);
   });
 });
