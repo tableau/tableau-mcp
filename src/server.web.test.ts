@@ -26,7 +26,7 @@ vi.mock('@modelcontextprotocol/ext-apps/server', () => ({
   RESOURCE_MIME_TYPE: 'text/html',
 }));
 
-vi.mock('./features/featureGate.js', () => ({
+vi.mock('./features/init.js', () => ({
   getFeatureGate: vi.fn(() => mocks.mockFeatureGate),
 }));
 

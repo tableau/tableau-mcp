@@ -2,6 +2,11 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
+import {
+  FeatureGateConfig,
+  isFeatureGateProvider,
+  providerConfigSchema as featureGateProviderConfigSchema,
+} from './features/types.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport } from './transports.js';
 import invariant from './utils/invariant.js';
@@ -67,6 +72,7 @@ export class Config extends BaseConfig {
   productTelemetryEndpoint: string;
   productTelemetryEnabled: boolean;
   isHyperforce: boolean;
+  featureGate: FeatureGateConfig;
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
   cspAllowedDomains: string[];
@@ -126,6 +132,8 @@ export class Config extends BaseConfig {
       OAUTH_DISABLE_SCOPES: oauthDisableScopes,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
+      FEATURE_GATE_PROVIDER: featureGateProvider,
+      FEATURE_GATE_PROVIDER_CONFIG: featureGateProviderConfig,
       LATENCY_METRIC_NAME: latencyMetricName,
       PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
       PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
@@ -269,6 +277,26 @@ export class Config extends BaseConfig {
       productTelemetryEndpoint || 'https://prod.telemetry.tableausoftware.com';
     this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
     this.isHyperforce = isHyperforce === 'true';
+
+    // Feature gate provider configuration (similar to telemetry provider)
+    if (isFeatureGateProvider(featureGateProvider) && featureGateProvider === 'custom') {
+      if (!featureGateProviderConfig) {
+        throw new Error(
+          'FEATURE_GATE_PROVIDER_CONFIG is required when FEATURE_GATE_PROVIDER is "custom"',
+        );
+      }
+      this.featureGate = {
+        provider: 'custom',
+        providerConfig: featureGateProviderConfigSchema.parse(
+          JSON.parse(featureGateProviderConfig),
+        ),
+      };
+    } else {
+      this.featureGate = {
+        provider: 'server',
+      };
+    }
+
     this.breakGlassDisableGlobally = breakGlassDisableGlobally === 'true';
     this.adminToolsEnabled = adminToolsEnabled === 'true';
 

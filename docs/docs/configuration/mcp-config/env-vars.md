@@ -376,6 +376,49 @@ implements the [`TelemetryProvider`](https://github.com/tableau/tableau-mcp/blob
 
 <hr />
 
+## `FEATURE_GATE_PROVIDER`
+
+The feature gate provider to use for feature flag management.
+
+- Default: `server`
+- Possible values:
+  - `server` - File-based feature gate using `features.json` (default, for on-premise Tableau Server)
+  - `custom` - Load a custom feature gate provider from a user-specified module
+
+:::tip Custom Provider
+
+To use a custom feature gate provider, set `FEATURE_GATE_PROVIDER=custom` and provide the module path via `FEATURE_GATE_PROVIDER_CONFIG`:
+
+```bash
+FEATURE_GATE_PROVIDER=custom
+FEATURE_GATE_PROVIDER_CONFIG='{"module":"./my-feature-gate.js"}'
+```
+
+The custom provider module should export a default class or named export `FeatureGateProvider` that implements the `FeatureGateProvider` interface.
+
+:::
+
+<hr />
+
+## `FEATURE_GATE_PROVIDER_CONFIG`
+
+Configuration for custom feature gate providers (JSON string).
+
+- Required when: `FEATURE_GATE_PROVIDER` is `custom`
+- Format: `{"module": "<path-to-module>", ...additional-config}`
+
+The `module` field can be:
+- A relative file path (e.g., `./my-provider.js`) - resolved from process working directory
+- An absolute file path (e.g., `/path/to/provider.js`)
+- An npm package name (e.g., `@company/feature-gate-provider`)
+
+**Example:**
+```bash
+FEATURE_GATE_PROVIDER_CONFIG='{"module":"./providers/cloud-feature-gate.js"}'
+```
+
+<hr />
+
 ## `LATENCY_METRIC_NAME`
 
 The name of the histogram metric used to record HTTP request latency for tool calls.

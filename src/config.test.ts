@@ -876,4 +876,44 @@ describe('Config', () => {
       ]);
     });
   });
+
+  describe('Feature gate provider configuration', () => {
+    it('should default to "server" when FEATURE_GATE_PROVIDER is not set', () => {
+      const config = new Config();
+      expect(config.featureGate.provider).toBe('server');
+    });
+
+    it('should use "server" when FEATURE_GATE_PROVIDER is "server"', () => {
+      vi.stubEnv('FEATURE_GATE_PROVIDER', 'server');
+
+      const config = new Config();
+      expect(config.featureGate.provider).toBe('server');
+    });
+
+    it('should use "custom" when FEATURE_GATE_PROVIDER is "custom" with valid config', () => {
+      vi.stubEnv('FEATURE_GATE_PROVIDER', 'custom');
+      vi.stubEnv('FEATURE_GATE_PROVIDER_CONFIG', '{"module":"./my-feature-gate.js"}');
+
+      const config = new Config();
+      expect(config.featureGate.provider).toBe('custom');
+      if (config.featureGate.provider === 'custom') {
+        expect(config.featureGate.providerConfig.module).toBe('./my-feature-gate.js');
+      }
+    });
+
+    it('should throw error when FEATURE_GATE_PROVIDER is "custom" without config', () => {
+      vi.stubEnv('FEATURE_GATE_PROVIDER', 'custom');
+
+      expect(() => new Config()).toThrow(
+        'FEATURE_GATE_PROVIDER_CONFIG is required when FEATURE_GATE_PROVIDER is "custom"',
+      );
+    });
+
+    it('should fall back to "server" when FEATURE_GATE_PROVIDER is invalid', () => {
+      vi.stubEnv('FEATURE_GATE_PROVIDER', 'invalid');
+
+      const config = new Config();
+      expect(config.featureGate.provider).toBe('server');
+    });
+  });
 });

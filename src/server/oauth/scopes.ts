@@ -6,7 +6,7 @@
  */
 
 import { getConfig } from '../../config.js';
-import { getFeatureGate } from '../../features/featureGate.js';
+import { getFeatureGate } from '../../features/init.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
 
 /**
