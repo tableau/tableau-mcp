@@ -109,6 +109,26 @@ function escapeRegex(s: string): string {
 }
 
 /**
+ * PLURALIZABLE CHART-NOUN TOKENS (FS4b token-class guard). Singular chart-type
+ * nouns whose natural English plural (`bar`→`bars`, `column`→`columns`, `map`→
+ * `maps`) an ask commonly uses ("Stacked bars", "Maps"). A keyword phrase earns a
+ * trailing-`s` tolerance in `phraseIndexInAsk` ONLY when its FINAL token is in this
+ * set, so the tolerance stays scoped to deterministic chart-type nouns and never
+ * broadens matching for a non-noun keyword (e.g. "trend"→"trends" stays a miss).
+ * A multi-token compound ("stacked-bar") pluralizes on its final token only. Kept
+ * as bare tokens (not the phrase set CHART_NOUN_KEYWORDS) because the plural sits on
+ * the final token — "stacked-bar"/"sorted-bar"/"vertical-bar" all pluralize via "bar".
+ */
+const PLURALIZABLE_CHART_NOUNS: ReadonlySet<string> = new Set([
+  'bar',
+  'column',
+  'map',
+  'treemap',
+  'pie',
+  'donut',
+]);
+
+/**
  * Index of the first whole-token occurrence of `phrase` in `ask`, else -1.
  * Boundaries are non-alphanumeric so "bar" matches "bar chart" but not "sidebar".
  * A HYPHEN in a keyword matches a hyphen OR whitespace in the ask, so a compound
@@ -116,12 +136,21 @@ function escapeRegex(s: string): string {
  * matches the natural spaced form a user types ("stacked bar", "over time"). This
  * lets a distinctive multi-token chart noun keep its keyword-match specificity when
  * the ask spells it with a space — the classifier stays no-LLM and deterministic.
+ *
+ * PLURAL TOLERANCE (FS4b): when the phrase's FINAL token is a chart noun
+ * (`PLURALIZABLE_CHART_NOUNS`), an optional trailing `s` is allowed on that token so
+ * "bars"/"columns"/"maps"/"stacked bars" match "bar"/"column"/"map"/"stacked-bar".
+ * Scoped to chart nouns only — no stemming, no mid-token change, no broadening of
+ * non-noun keywords; the singular still matches unchanged.
  */
 function phraseIndexInAsk(ask: string, phrase: string): number {
   const p = phrase.toLowerCase().trim();
   if (!p) return -1;
   const body = escapeRegex(p).replace(/-/g, '[\\s-]+');
-  const re = new RegExp(`(^|[^a-z0-9])${body}([^a-z0-9]|$)`);
+  const tokens = p.split(/[^a-z0-9]+/).filter(Boolean);
+  const finalToken = tokens[tokens.length - 1];
+  const pluralSuffix = finalToken && PLURALIZABLE_CHART_NOUNS.has(finalToken) ? 's?' : '';
+  const re = new RegExp(`(^|[^a-z0-9])${body}${pluralSuffix}([^a-z0-9]|$)`);
   const match = re.exec(ask.toLowerCase());
   return match ? match.index : -1;
 }
