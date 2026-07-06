@@ -1,11 +1,12 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { randomUUID } from 'crypto';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
-import { replaceFieldReferences } from '../../../desktop/templates/replaceFieldReferences.js';
 import { getTemplatePath, getTemplatesDir } from '../../../desktop/templates/templatePath.js';
 import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
 import {
@@ -138,10 +139,20 @@ export const getInjectTemplateTool = (
             }
 
             if (templateParameters?.['DATASOURCE']) {
-              templateXml = replaceFieldReferences(
+              // Per-apply calc namespacing at the tool boundary: the shared core
+              // defaults namespacing OFF and never mints its own nonce, so the
+              // caller supplies one. inject-template has no session, so the
+              // per-apply identity is the target workbook file + apply timestamp;
+              // a randomUUID guards against same-millisecond collisions. Distinct
+              // nonces => distinct calc-name suffixes => repeated injects into one
+              // workbook can't shadow each other's template calcs.
+              const applyNonce = `${workbookFile}:${Date.now()}:${randomUUID()}`;
+              templateXml = rewriteFieldReferences(
                 templateXml,
                 fieldMapping ?? {},
                 templateParameters['DATASOURCE'],
+                undefined,
+                { namespaceCalcs: true, applyNonce },
               );
             }
 

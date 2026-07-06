@@ -8,14 +8,14 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getInjectTemplateTool } from './injectTemplate.js';
 
 vi.mock('../../../desktop/templates/injectTemplate.js');
-vi.mock('../../../desktop/templates/replaceFieldReferences.js');
+vi.mock('../../../desktop/templates/fieldReferenceRewriter.js');
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('fs');
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 
+import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
-import { replaceFieldReferences } from '../../../desktop/templates/replaceFieldReferences.js';
 import { getTemplatePath, getTemplatesDir } from '../../../desktop/templates/templatePath.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 
@@ -46,7 +46,7 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(getTemplatePath).mockReturnValue('/templates/ranking-ordered-bar.xml');
   vi.mocked(getTemplatesDir).mockReturnValue('/templates');
   vi.mocked(readdirSync).mockReturnValue(['ranking-ordered-bar.xml', 'kpi-text.xml'] as any);
-  vi.mocked(replaceFieldReferences).mockReturnValue(TEMPLATE_XML);
+  vi.mocked(rewriteFieldReferences).mockReturnValue(TEMPLATE_XML);
   vi.mocked(injectTemplate).mockReturnValue(INJECTED_XML);
   return extra;
 }
@@ -125,24 +125,30 @@ describe('injectTemplateTool', () => {
     expect(capturedTemplate).not.toContain('{{TITLE}}');
   });
 
-  it('should call replaceFieldReferences when DATASOURCE is in templateParameters', async () => {
+  it('should call rewriteFieldReferences when DATASOURCE is in templateParameters', async () => {
     await getResult({
       ...BASE_PARAMS,
       templateParameters: { DATASOURCE: 'Sample Superstore' },
       fieldMapping: { Sales: '[sum:Sales:qk]' },
     });
 
-    expect(replaceFieldReferences).toHaveBeenCalledWith(
+    // CONVERGENCE: inject-template now calls the shared core (rewriteFieldReferences)
+    // directly instead of the deleted replaceFieldReferences wrapper. The call gains
+    // two trailing args over the wrapper's 3-arg form: fieldMetadata (undefined here)
+    // and the per-apply options object that wires calc namespacing on with a nonce.
+    expect(rewriteFieldReferences).toHaveBeenCalledWith(
       expect.any(String),
       { Sales: '[sum:Sales:qk]' },
       'Sample Superstore',
+      undefined,
+      { namespaceCalcs: true, applyNonce: expect.any(String) },
     );
   });
 
-  it('should not call replaceFieldReferences when no DATASOURCE is given', async () => {
+  it('should not call rewriteFieldReferences when no DATASOURCE is given', async () => {
     await getResult(BASE_PARAMS);
 
-    expect(replaceFieldReferences).not.toHaveBeenCalled();
+    expect(rewriteFieldReferences).not.toHaveBeenCalled();
   });
 
   it('should return error when injectTemplate throws', async () => {

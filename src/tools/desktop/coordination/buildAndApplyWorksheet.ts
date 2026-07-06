@@ -1,14 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { randomUUID } from 'crypto';
 import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
-import {
-  getTemplateColumnRequirements,
-  replaceFieldReferences,
-} from '../../../desktop/templates/replaceFieldReferences.js';
+import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
+import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
 import {
   ArgsValidationError,
@@ -115,6 +114,12 @@ export const getBuildAndApplyWorksheetTool = (
           // Get available fields for role detection
           const availableFields = listAvailableFields(workbookXml);
 
+          // Fields dropped here (no role match, or beyond the template's slot count)
+          // used to vanish silently (pinned by X1). Collect a non-breaking warning
+          // naming each dropped field; the index-based slot assignment below is
+          // intentionally UNCHANGED (a bigger redesign, not this lane).
+          const warnings: string[] = [];
+
           // Group provided fields by role
           const dimensionFields: string[] = [];
           const measureFields: string[] = [];
@@ -122,6 +127,10 @@ export const getBuildAndApplyWorksheetTool = (
             const field = availableFields.find((f) => f.column_ref === columnRef);
             if (field?.role === 'dimension') dimensionFields.push(columnRef);
             else if (field?.role === 'measure') measureFields.push(columnRef);
+            else
+              warnings.push(
+                `Field "${columnRef}" was dropped: it has no known dimension/measure role in the workbook's available fields.`,
+              );
           }
 
           // Map template requirements to provided fields
@@ -156,13 +165,32 @@ export const getBuildAndApplyWorksheetTool = (
             }
           }
 
-          // Inject title and replace field references
+          // Role-matched fields that overflowed the template's slot count are
+          // dropped by the index-bounded loops above; name each one.
+          for (const dropped of dimensionFields.slice(templateDimensions.length)) {
+            warnings.push(
+              `Dimension field "${dropped}" was dropped: template "${template}" exposes only ${templateDimensions.length} dimension slot(s).`,
+            );
+          }
+          for (const dropped of measureFields.slice(templateMeasures.length)) {
+            warnings.push(
+              `Measure field "${dropped}" was dropped: template "${template}" exposes only ${templateMeasures.length} measure slot(s).`,
+            );
+          }
+
+          // Inject title and replace field references. Per-apply calc namespacing is
+          // wired at this tool boundary: the shared core defaults namespacing OFF and
+          // never mints its own nonce, so derive one from session + apply timestamp
+          // (randomUUID guards same-millisecond applies). Distinct nonces => distinct
+          // calc-name suffixes => repeated applies into one workbook don't collide.
           templateXml = templateXml.replace(/\{\{TITLE\}\}/g, escapeXml(worksheetName));
-          templateXml = replaceFieldReferences(
+          const applyNonce = `${session}:${Date.now()}:${randomUUID()}`;
+          templateXml = rewriteFieldReferences(
             templateXml,
             fieldMapping,
             datasourceName,
             fieldMetadata,
+            { namespaceCalcs: true, applyNonce },
           );
 
           // Extract worksheet element
@@ -202,6 +230,7 @@ export const getBuildAndApplyWorksheetTool = (
             worksheetName,
             template,
             fieldCount: fields.length,
+            warnings,
           });
         },
       });

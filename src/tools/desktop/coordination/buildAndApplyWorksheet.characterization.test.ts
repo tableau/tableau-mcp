@@ -6,18 +6,21 @@ import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getBuildAndApplyWorksheetTool } from './buildAndApplyWorksheet.js';
 
-// CHARACTERIZATION SUITE — build-and-apply-worksheet consumer of C.
-// -----------------------------------------------------------------
-// Pins the taskSpec → fieldMapping glue at buildAndApplyWorksheet.ts:100-166: how
-// provided column refs are grouped by role and assigned, by INDEX, to the template's
-// dimension/measure slots before C is called; plus how the datasource name is
-// derived. The session boundary (executor / loadWorksheetXml) is mocked, and C
-// itself is mocked so we can capture the exact (fieldMapping, datasource, metadata)
-// the consumer constructs. These invariants must survive the shared-rewriter swap.
+// CHARACTERIZATION SUITE — build-and-apply-worksheet consumer of the shared rewriter.
+// ------------------------------------------------------------------------------------
+// Pins the taskSpec → fieldMapping glue in buildAndApplyWorksheet.ts: how provided
+// column refs are grouped by role and assigned, by INDEX, to the template's
+// dimension/measure slots before the rewriter is called; plus how the datasource name
+// is derived. W14-CM1 migrated this consumer OFF the deleted replaceFieldReferences
+// wrapper and onto the shared core (`rewriteFieldReferences`). The session boundary
+// (executor / loadWorksheetXml) is mocked, and the core is mocked so we can capture
+// the exact (fieldMapping, datasource, metadata) the consumer constructs. The
+// index-based slot assignment itself is UNCHANGED by the migration.
 
 vi.mock('../../../desktop/commands/workbook/loadWorksheetXml.js');
 vi.mock('../../../desktop/metadata/index.js');
-vi.mock('../../../desktop/templates/replaceFieldReferences.js');
+vi.mock('../../../desktop/templates/fieldReferenceRewriter.js');
+vi.mock('../../../desktop/templates/templateColumnRequirements.js');
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('fs');
 
@@ -25,10 +28,8 @@ import { existsSync, readFileSync } from 'fs';
 
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
-import {
-  getTemplateColumnRequirements,
-  replaceFieldReferences,
-} from '../../../desktop/templates/replaceFieldReferences.js';
+import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
+import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 
@@ -84,7 +85,7 @@ function makeExtra(workbookXml = WORKBOOK_WITH_CAPTION): TableauDesktopRequestHa
     { name: 'M1', role: 'measure', datatype: 'integer', type: 'quantitative' },
     { name: 'M2', role: 'measure', datatype: 'real', type: 'quantitative' },
   ]);
-  vi.mocked(replaceFieldReferences).mockReturnValue(WORKSHEET_OUTPUT);
+  vi.mocked(rewriteFieldReferences).mockReturnValue(WORKSHEET_OUTPUT);
   vi.mocked(loadWorksheetXml).mockResolvedValue(new Ok(undefined));
   return extra;
 }
@@ -111,13 +112,22 @@ type Captured = {
 
 function captureCall(): Captured {
   const captured: Captured = { mapping: {}, datasource: '', metadata: {} };
-  vi.mocked(replaceFieldReferences).mockImplementation((_xml, mapping, ds, meta) => {
+  vi.mocked(rewriteFieldReferences).mockImplementation((_xml, mapping, ds, meta) => {
     captured.mapping = mapping;
     captured.datasource = ds;
     captured.metadata = (meta ?? {}) as Captured['metadata'];
     return WORKSHEET_OUTPUT;
   });
   return captured;
+}
+
+// Parse the JSON success payload the tool returns (default getSuccessResult
+// JSON-stringifies the Ok value), so warnings assertions can read the structured
+// `warnings: string[]` field W14-CM1 added.
+function parsePayload(result: CallToolResult): { warnings?: string[]; [k: string]: unknown } {
+  const first = result.content[0];
+  if (first.type !== 'text') throw new Error('expected a text content block');
+  return JSON.parse(first.text);
 }
 
 describe('buildAndApplyWorksheetTool — mapping construction characterization', () => {
@@ -139,25 +149,34 @@ describe('buildAndApplyWorksheetTool — mapping construction characterization',
     });
   });
 
-  it('CHARACTERIZATION: silently drops extra role-matched fields when the template has fewer slots', async () => {
-    // CHARACTERIZATION: current behavior — the loop bound is `i < slots.length &&
-    // i < fields.length`, so the SECOND dimension (Segment) is dropped because the
-    // template exposes only one dimension slot. No warning surfaces to the caller.
+  it('CONVERGENCE: still index-drops extra role-matched fields, but now WARNS naming each one', async () => {
+    // CONVERGENCE (W14-CM1): the index-based slot assignment is UNCHANGED — the loop
+    // bound is still `i < slots.length && i < fields.length`, so the SECOND dimension
+    // (Segment) is still dropped because the template exposes only one dimension slot.
+    // What changed: the previously-SILENT drop (pinned by X1) now surfaces a
+    // non-breaking `warnings[]` entry naming the dropped field.
     const extra = makeExtra();
     const captured = captureCall();
 
-    await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
+    const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
 
     // The single dimension slot took the FIRST dimension field; the second is gone.
     expect(captured.mapping.Dim1).toBe('[DS].[none:Region:nk]');
     expect(Object.values(captured.mapping)).not.toContain('[DS].[none:Segment:nk]');
+
+    // ...and the drop is now visible in the result payload.
+    const warnings = parsePayload(result).warnings ?? [];
+    expect(warnings.some((w) => w.includes('[DS].[none:Segment:nk]'))).toBe(true);
   });
 
-  it('drops fields whose column_ref is unknown to listAvailableFields (no role → no slot)', async () => {
+  it('CONVERGENCE: still drops unknown-role fields, but now WARNS naming each one', async () => {
+    // CONVERGENCE (W14-CM1): a field whose column_ref is unknown to listAvailableFields
+    // (so it gets no role) is still not assigned to any slot — but the drop is no
+    // longer silent; it surfaces in `warnings[]`.
     const extra = makeExtra();
     const captured = captureCall();
 
-    await getResult(
+    const result = await getResult(
       {
         session: SESSION,
         taskSpec: {
@@ -169,6 +188,9 @@ describe('buildAndApplyWorksheetTool — mapping construction characterization',
     );
 
     expect(Object.values(captured.mapping)).not.toContain('[DS].[none:Unknown:nk]');
+
+    const warnings = parsePayload(result).warnings ?? [];
+    expect(warnings.some((w) => w.includes('[DS].[none:Unknown:nk]'))).toBe(true);
   });
 
   it('leaves surplus template slots unmapped when fewer role-matched fields are provided', async () => {
@@ -266,6 +288,52 @@ describe('buildAndApplyWorksheetTool — mapping construction characterization',
     expect(extra.getExecutor).toHaveBeenCalledWith(SESSION);
     expect(loadWorksheetXml).toHaveBeenCalledTimes(1);
     expect(result.isError).toBeFalsy();
+  });
+
+  it('CONVERGENCE: two applies namespace the template calc with DISTINCT nonces (no calc-name collision)', async () => {
+    // CONVERGENCE (W14-CM1): end-to-end proof through the REAL shared core (not the
+    // capture mock). A template calc column is namespaced per apply; because the
+    // consumer mints a fresh nonce each apply, two applies of the SAME template into
+    // the SAME workbook produce DISTINCT `_tpl_<suffix>` calc names — so a repeated
+    // apply can't collide with / shadow the earlier apply's template calc.
+    const actual = (await vi.importActual(
+      '../../../desktop/templates/fieldReferenceRewriter.js',
+    )) as typeof import('../../../desktop/templates/fieldReferenceRewriter.js');
+
+    const CALC_TEMPLATE =
+      '<workbook><worksheets><worksheet name="TEMPLATE"><table><view>' +
+      '<datasource-dependencies datasource="{{DATASOURCE}}">' +
+      '<column caption="Doubler" datatype="real" name="[MyCalc]" role="measure" type="quantitative">' +
+      '<calculation class="tableau" formula="[Sales]*2" />' +
+      '</column>' +
+      '</datasource-dependencies>' +
+      '</view></table></worksheet></worksheets></workbook>';
+
+    const extra = makeExtra();
+    // Feed the calc-bearing template and drive the REAL rewriter.
+    vi.mocked(readFileSync).mockImplementation((p) => {
+      if (String(p).includes('template')) return CALC_TEMPLATE as any;
+      return WORKBOOK_WITH_CAPTION as any;
+    });
+    vi.mocked(rewriteFieldReferences).mockImplementation(actual.rewriteFieldReferences);
+
+    const capturedXml: string[] = [];
+    vi.mocked(loadWorksheetXml).mockImplementation(async ({ xml }) => {
+      capturedXml.push(xml);
+      return new Ok(undefined);
+    });
+
+    // Two applies into the same workbook; no fields needed — we only exercise the calc.
+    await getResult({ session: SESSION, taskSpec: { ...TASK_SPEC_BASE, fields: [] } }, extra);
+    await getResult({ session: SESSION, taskSpec: { ...TASK_SPEC_BASE, fields: [] } }, extra);
+
+    expect(capturedXml).toHaveLength(2);
+    const suffix1 = capturedXml[0].match(/MyCalc_tpl_([0-9a-f]{8})/)?.[1];
+    const suffix2 = capturedXml[1].match(/MyCalc_tpl_([0-9a-f]{8})/)?.[1];
+    expect(suffix1).toBeTruthy();
+    expect(suffix2).toBeTruthy();
+    // Distinct per-apply nonces => distinct calc-name suffixes => no collision.
+    expect(suffix1).not.toBe(suffix2);
   });
 });
 
