@@ -61,6 +61,7 @@ describe('server', () => {
         'get-flow',
         'list-flow-runs',
         'list-flow-tasks',
+        'describe-flow',
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
@@ -227,6 +228,7 @@ describe('server', () => {
         'get-flow',
         'list-flow-runs',
         'list-flow-tasks',
+        'describe-flow',
       ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = ['generate-insight-cards'];
