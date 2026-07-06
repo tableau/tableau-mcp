@@ -1,3 +1,4 @@
+export { addDashboard, deleteDashboard, listWorkbookDashboards } from './dashboards.js';
 export { listAvailableFields } from './field-builder.js';
 export {
   type FieldCandidate,
@@ -32,6 +33,7 @@ export {
   parseXML,
   serializeXML,
 } from './parser.js';
+export { addSheet, deleteSheet, listSheets } from './sheets.js';
 export {
   AggregationType,
   type EncodingType,

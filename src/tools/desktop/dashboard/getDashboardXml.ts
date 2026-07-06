@@ -3,6 +3,7 @@ import { writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { formatArtifactSummary } from '../../../desktop/artifactSummary.js';
 import { DesktopCache } from '../../../desktop/cache.js';
 import { getDashboardXml } from '../../../desktop/commands/workbook/getDashboardXml.js';
 import {
@@ -100,7 +101,7 @@ export const getGetDashboardXmlTool = (
               });
 
               return Ok({
-                message: `Dashboard "${dashboardName}" saved to cache file (${bytes} bytes)`,
+                message: `Dashboard "${dashboardName}" saved to cache file (${bytes} bytes)\n\nArtifact summary:\n${formatArtifactSummary('dashboard', dashboardXml)}`,
                 file: cacheFile,
                 instructions:
                   'Use this file path with apply-dashboard instead of passing XML directly.',

@@ -1,0 +1,111 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column caption='-Profit' datatype='real' name='[Calculation_84161057772498944]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='-[Profit]' />
+        </column>
+        <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Sub-Category]' role='dimension' type='nominal' />
+        <column-instance column='[Profit]' derivation='Sum' name='[cum:sum:Profit:qk]' pivot='key' type='quantitative'>
+          <table-calc aggregation='Sum' ordering-type='Rows' type='CumTotal' />
+        </column-instance>
+        <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Calculation_84161057772498944]' derivation='Sum' name='[sum:Calculation_84161057772498944:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <alphabetic-sort column='[{{DATASOURCE}}].[none:Sub-Category:nk]' direction='ASC' />
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='title' class='0' field='[{{DATASOURCE}}].[cum:sum:Profit:qk]' scope='rows' value='' />
+        <format attr='subtitle' class='0' field='[{{DATASOURCE}}].[cum:sum:Profit:qk]' scope='rows' value='' />
+        <format attr='auto-subtitle' class='0' field='[{{DATASOURCE}}].[cum:sum:Profit:qk]' scope='rows' value='true' />
+      </style-rule>
+      <style-rule element='cell'>
+        <format attr='width' field='[{{DATASOURCE}}].[none:Sub-Category:nk]' value='56' />
+      </style-rule>
+      <style-rule element='label'>
+        <format attr='text-orientation' field='[{{DATASOURCE}}].[none:Sub-Category:nk]' value='-90' />
+      </style-rule>
+      <style-rule element='mark'>
+        <encoding attr='color' center='0.0' field='[{{DATASOURCE}}].[sum:Profit:qk]' num-steps='2' type='custom-interpolated'>
+          <color-palette custom='true' name='' type='ordered-diverging'>
+            <color>#ff0000</color>
+            <color>#fb1616</color>
+            <color>#f82d2d</color>
+            <color>#f44242</color>
+            <color>#f15757</color>
+            <color>#ed6c6c</color>
+            <color>#ea7f7f</color>
+            <color>#e69292</color>
+            <color>#e3a5a5</color>
+            <color>#dfb7b7</color>
+            <color>#dcc8c8</color>
+            <color>#d9d9d9</color>
+            <color>#c5c5c5</color>
+            <color>#b1b1b1</color>
+            <color>#9d9d9d</color>
+            <color>#8a8a8a</color>
+            <color>#767676</color>
+            <color>#626262</color>
+            <color>#4e4e4e</color>
+            <color>#3b3b3b</color>
+            <color>#272727</color>
+            <color>#131313</color>
+            <color>#000000</color>
+          </color-palette>
+        </encoding>
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='cols' value='false' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-disallow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='GanttBar' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[sum:Profit:qk]' />
+          <size column='[{{DATASOURCE}}].[sum:Calculation_84161057772498944:qk]' />
+        </encodings>
+        <customized-tooltip>
+          <formatted-text>
+            <run fontcolor='#787878'>Sub-Category:	</run>
+            <run bold='true'>&lt;[{{DATASOURCE}}].[none:Sub-Category:nk]&gt;</run>
+            <run fontcolor='#787878'>
+Profit:	</run>
+            <run bold='true'>&lt;[{{DATASOURCE}}].[sum:Profit:qk]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='pane'>
+            <format attr='minwidth' value='-1' />
+            <format attr='maxwidth' value='-1' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows total='true'>[{{DATASOURCE}}].[cum:sum:Profit:qk]</rows>
+    <cols total='true'>[{{DATASOURCE}}].[none:Sub-Category:nk]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

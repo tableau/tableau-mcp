@@ -35,7 +35,16 @@ export function searchDiffCorpusFormatted(
     };
   }
 
-  const lowerQuery = query.toLowerCase();
+  // An empty query would match every example via includes(''); treat it as no
+  // search rather than returning the entire corpus.
+  const lowerQuery = query.trim().toLowerCase();
+  if (lowerQuery === '') {
+    return {
+      text: 'Please provide a non-empty query describing the operation you want examples for (e.g., "add filter", "create dashboard", "bar chart").',
+      isError: true,
+    };
+  }
+
   const matches = corpus.examples.filter((ex) => {
     const textMatch =
       ex.title.toLowerCase().includes(lowerQuery) ||

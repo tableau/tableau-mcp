@@ -1,0 +1,71 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column datatype='real' name='[Discount]' role='measure' type='quantitative' />
+        <column datatype='date' name='[Order Date]' role='dimension' type='ordinal' />
+        <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column-instance column='[Discount]' derivation='Avg' name='[avg:Discount:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Order Date]' derivation='Month-Trunc' name='[tmn:Order Date:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <encoding attr='space' class='0' field='[{{DATASOURCE}}].[avg:Discount:qk]' field-type='quantitative' fold='true' scope='rows' type='space' />
+      </style-rule>
+      <style-rule element='label'>
+        <format attr='text-format' field='[{{DATASOURCE}}].[avg:Discount:qk]' value='p0%' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[:Measure Names]' />
+        </encodings>
+      </pane>
+      <pane id='1' selection-relaxation-option='selection-relaxation-allow' y-axis-name='[{{DATASOURCE}}].[sum:Profit:qk]'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Bar' />
+        <mark-sizing custom-mark-size-in-axis-units='1.0' mark-alignment='mark-alignment-left' mark-sizing-setting='marks-scaling-on' use-custom-mark-size='false' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[:Measure Names]' />
+        </encodings>
+      </pane>
+      <pane id='2' selection-relaxation-option='selection-relaxation-allow' y-axis-name='[{{DATASOURCE}}].[avg:Discount:qk]'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[:Measure Names]' />
+        </encodings>
+      </pane>
+    </panes>
+    <rows>([{{DATASOURCE}}].[sum:Profit:qk] + [{{DATASOURCE}}].[avg:Discount:qk])</rows>
+    <cols>[{{DATASOURCE}}].[tmn:Order Date:qk]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

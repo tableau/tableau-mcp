@@ -1,17 +1,10 @@
 import fs from 'fs';
 import Fuse from 'fuse.js';
-import path from 'path';
+import path, { join } from 'path';
 
-// Data files live at src/desktop/data/ and are resolved from the repo root at runtime.
-// Each path can be overridden via env vars.
-function dataPath(filename: string): string {
-  return path.join(process.cwd(), 'src', 'desktop', 'data', filename);
-}
+import { DATA_ROOT } from '../../server.desktop.js';
 
 // --- Commands reference ---
-
-const COMMANDS_REFERENCE_PATH =
-  process.env.COMMANDS_REFERENCE_PATH || dataPath('tableau-desktop-commands-reference.json');
 
 let _commandsReferenceCache: any = null;
 let _commandsSearchIndex: any = null;
@@ -20,6 +13,7 @@ let _commandsFuse: Fuse<any> | null = null;
 function loadCommandsReference(): any {
   if (_commandsReferenceCache) return _commandsReferenceCache;
   let raw: string;
+  const COMMANDS_REFERENCE_PATH = join(DATA_ROOT, 'tableau-desktop-commands-reference.json');
   try {
     raw = fs.readFileSync(COMMANDS_REFERENCE_PATH, 'utf8');
   } catch (e: any) {
@@ -156,9 +150,6 @@ export function searchCommandsByKeywords(keywords: string[]): any {
 
 // --- Workbook schema search ---
 
-const SCHEMA_REFERENCE_PATH =
-  process.env.SCHEMA_REFERENCE_PATH || dataPath('workbook-schema-reference.json');
-
 let _schemaCache: any = null;
 let _schemaEnumFuse: Fuse<any> | null = null;
 let _schemaElementFuse: Fuse<any> | null = null;
@@ -167,6 +158,8 @@ let _schemaElementToGroup: Record<string, string[]> | null = null;
 
 function loadSchemaReference(): any {
   if (_schemaCache) return _schemaCache;
+  const SCHEMA_REFERENCE_PATH =
+    process.env.SCHEMA_REFERENCE_PATH || join(DATA_ROOT, 'workbook-schema-reference.json');
   const raw = fs.readFileSync(SCHEMA_REFERENCE_PATH, 'utf8');
   _schemaCache = JSON.parse(raw);
   return _schemaCache;
@@ -370,9 +363,6 @@ export function searchWorkbookSchema(args: {
 
 // --- Workbook examples search ---
 
-const EXAMPLES_DIR = process.env.EXAMPLES_DIR || dataPath('examples');
-const TWB_INDEX_PATH = process.env.TWB_INDEX_PATH || dataPath('twb-example-index.json');
-
 let _examplesCache: any[] | null = null;
 let _twbIndexCache: any[] | null = null;
 
@@ -467,6 +457,7 @@ function extractFeatures(name: string): string[] {
 function loadWorkbookExamples(): any[] {
   if (_examplesCache) return _examplesCache;
   _examplesCache = [];
+  const EXAMPLES_DIR = process.env.EXAMPLES_DIR || join(DATA_ROOT, 'examples');
   if (!fs.existsSync(EXAMPLES_DIR)) return _examplesCache;
   const files = fs
     .readdirSync(EXAMPLES_DIR)
@@ -494,6 +485,7 @@ function loadWorkbookExamples(): any[] {
 function loadTwbExampleIndex(): any[] {
   if (_twbIndexCache) return _twbIndexCache;
   _twbIndexCache = [];
+  const TWB_INDEX_PATH = process.env.TWB_INDEX_PATH || join(DATA_ROOT, 'twb-example-index.json');
   if (!fs.existsSync(TWB_INDEX_PATH)) return _twbIndexCache;
   try {
     _twbIndexCache = JSON.parse(fs.readFileSync(TWB_INDEX_PATH, 'utf8'));

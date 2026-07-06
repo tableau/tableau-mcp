@@ -1,0 +1,178 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err, Ok } from 'ts-results-es';
+
+import { DesktopMcpServer } from '../../../server.desktop.js';
+import invariant from '../../../utils/invariant.js';
+import { Provider } from '../../../utils/provider.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getBuildAndApplyWorksheetTool } from './buildAndApplyWorksheet.js';
+
+vi.mock('../../../desktop/commands/workbook/loadWorksheetXml.js');
+vi.mock('../../../desktop/metadata/index.js');
+vi.mock('../../../desktop/templates/replaceFieldReferences.js');
+vi.mock('../../../desktop/templates/templatePath.js');
+vi.mock('fs');
+
+import { existsSync, readFileSync } from 'fs';
+
+import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
+import { listAvailableFields } from '../../../desktop/metadata/index.js';
+import {
+  getTemplateColumnRequirements,
+  replaceFieldReferences,
+} from '../../../desktop/templates/replaceFieldReferences.js';
+import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
+import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
+
+const SESSION = 'session-1';
+
+const WORKBOOK_XML = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource name="Sample Superstore" caption="Sample - Superstore"/>
+  </datasources>
+</workbook>`;
+
+const TEMPLATE_XML =
+  '<workbook><worksheets><worksheet name="TEMPLATE"><table/></worksheet></worksheets></workbook>';
+
+function makeExtra(): TableauDesktopRequestHandlerExtra {
+  const extra = getMockRequestHandlerExtra();
+  extra.getExecutor = vi.fn().mockResolvedValue({});
+  vi.mocked(existsSync).mockReturnValue(true);
+  vi.mocked(readFileSync).mockImplementation((p) => {
+    const path = String(p);
+    if (path.includes('template')) return TEMPLATE_XML as any;
+    return WORKBOOK_XML as any;
+  });
+  vi.mocked(getTemplatePath).mockReturnValue('/tmp/templates/ranking-ordered-bar.xml');
+  vi.mocked(listAvailableFields).mockReturnValue([
+    {
+      column_ref: '[DS].[sum:Sales:qk]',
+      role: 'measure',
+      datasource: 'Sample Superstore',
+      columnName: '[Sales]',
+      columnInstanceName: '[sum:Sales:qk]',
+      derivation: 'Sum' as any,
+      type: 'quantitative',
+      datatype: 'integer',
+    },
+  ]);
+  vi.mocked(getTemplateColumnRequirements).mockReturnValue([
+    { name: 'Sales', role: 'measure', datatype: 'integer', type: 'quantitative' },
+  ]);
+  vi.mocked(replaceFieldReferences).mockReturnValue(TEMPLATE_XML);
+  vi.mocked(loadWorksheetXml).mockResolvedValue(new Ok(undefined));
+  return extra;
+}
+
+const TASK_SPEC_BASE = {
+  worksheetName: 'Sheet1',
+  worksheetFile: '/cache/worksheet.xml',
+  type: 'chart' as const,
+  template: 'ranking-ordered-bar',
+  fields: ['[DS].[sum:Sales:qk]'],
+  workbookFile: '/cache/workbook.xml',
+};
+
+describe('buildAndApplyWorksheetTool', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should create a tool instance with correct properties', () => {
+    const tool = getBuildAndApplyWorksheetTool(new DesktopMcpServer());
+    expect(tool.name).toBe('build-and-apply-worksheet');
+    expect(tool.annotations).toMatchObject({ readOnlyHint: false });
+    expect(tool.paramsSchema).toMatchObject({
+      session: expect.any(Object),
+      taskSpec: expect.any(Object),
+    });
+  });
+
+  it('should succeed and apply worksheet on happy path', async () => {
+    const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE });
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Sheet1');
+    expect(result.content[0].text).toContain('ranking-ordered-bar');
+  });
+
+  it('should return error when workbook file does not exist', async () => {
+    const extra = makeExtra();
+    vi.mocked(existsSync).mockReturnValue(false);
+
+    const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('workbook.xml');
+  });
+
+  it('should return error when template is not provided', async () => {
+    const result = await getResult({
+      session: SESSION,
+      taskSpec: { ...TASK_SPEC_BASE, template: '' },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('template is required');
+  });
+
+  it('should return error when template file does not exist', async () => {
+    const extra = makeExtra();
+    vi.mocked(existsSync).mockImplementation((p) => !String(p).includes('template'));
+
+    const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Template not found');
+  });
+
+  it('should return error when loadWorksheetXml fails', async () => {
+    const extra = makeExtra();
+    vi.mocked(loadWorksheetXml).mockResolvedValue(
+      new Err({
+        type: 'execute-command-error',
+        error: {
+          type: 'command-failed' as const,
+          error: { code: 'E1', message: 'fail', recoverable: false },
+        },
+      }),
+    );
+
+    const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
+    expect(result.isError).toBe(true);
+  });
+
+  it('should call replaceFieldReferences with template, fieldMapping, and datasource name', async () => {
+    await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE });
+
+    expect(replaceFieldReferences).toHaveBeenCalledWith(
+      TEMPLATE_XML,
+      expect.any(Object),
+      expect.stringMatching(/Sample/),
+      expect.any(Object),
+    );
+  });
+
+  it('should return error when extracted worksheet element is missing from template', async () => {
+    const extra = makeExtra();
+    vi.mocked(replaceFieldReferences).mockReturnValue('<workbook>no worksheet here</workbook>');
+
+    const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('<worksheet>');
+  });
+});
+
+async function getResult(
+  params: { session: string; taskSpec: typeof TASK_SPEC_BASE & { template?: string } },
+  extra = makeExtra(),
+): Promise<CallToolResult> {
+  const tool = getBuildAndApplyWorksheetTool(new DesktopMcpServer());
+  const callback = await Provider.from(tool.callback);
+  return await callback(params as any, extra);
+}

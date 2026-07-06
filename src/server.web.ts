@@ -37,6 +37,10 @@ export class WebMcpServer extends Server {
     super({ mcpServer, clientInfo, serverName, serverVersion });
   }
 
+  registerResources = async (): Promise<void> => {
+    // No resources to register
+  };
+
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
     const config = getConfig();
 

@@ -29,6 +29,18 @@ export const desktopToolNames = [
   'list-templates',
   'propose-template',
   'validate-proposal',
+  'plan-dashboard-creation',
+  'batch-create-and-cache-sheets',
+  'build-and-apply-worksheet',
+  'list-xml-templates',
+  'validate-worksheet-xml',
+  'validate-workbook-xml',
+  'read-cached-xml',
+  'write-cached-xml',
+  'inject-template',
+  'get-dashboard-guide',
+  'list-knowledge-resources',
+  'read-knowledge-resource',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 

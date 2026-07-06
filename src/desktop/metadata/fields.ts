@@ -437,8 +437,54 @@ function mapDerivationToProperCase(abbrev: string): string {
     var: 'Var',
     varp: 'VarP',
     attr: 'Attr',
+    // Discrete date parts. Without these, a ref like [mn:Order Date:ok] was
+    // written with derivation="mn" (invalid), so Tableau silently coerced the
+    // pill back to a plain date — collapsing YoY/seasonal overlays into one line.
+    yr: 'Year',
+    qr: 'Quarter',
+    mn: 'Month',
+    wk: 'Week',
+    dy: 'Day',
+    // Truncated (continuous) date parts use the "<Part>-Trunc" form.
+    tyr: 'Year-Trunc',
+    tqr: 'Quarter-Trunc',
+    tmn: 'Month-Trunc',
+    twk: 'Week-Trunc',
+    tdy: 'Day-Trunc',
   };
   return derivationMap[abbrev.toLowerCase()] || abbrev;
+}
+
+// Date-part derivations whose column-instance type must follow the ref's pivot
+// suffix (the third segment), not the base date column's type — otherwise a
+// discrete month part is emitted as a continuous date type and Tableau coerces it.
+const DATE_PART_DERIVATIONS = new Set<string>([
+  'Year',
+  'Quarter',
+  'Month',
+  'Week',
+  'Day',
+  'Year-Trunc',
+  'Quarter-Trunc',
+  'Month-Trunc',
+  'Week-Trunc',
+  'Day-Trunc',
+]);
+
+// Map a column-instance pivot suffix (qk/ok/nk) to its Tableau type; null when unknown.
+function typeFromPivotSuffix(columnInstanceName: string): string | null {
+  const m = columnInstanceName.match(/:([^:\]]+)\]$/);
+  if (!m) return null;
+  switch (m[1].toLowerCase()) {
+    case 'qk':
+      return 'quantitative';
+    case 'ok':
+      return 'ordinal';
+    case 'nk':
+      return 'nominal';
+    default:
+      return null;
+  }
 }
 
 /**
@@ -805,6 +851,15 @@ function ensureColumnInstanceInDependencies(
             });
           }
         }
+      }
+    }
+
+    // For date-part derivations the instance type must follow the ref's pivot
+    // suffix, not the base date column's type, or Tableau coerces it back.
+    if (DATE_PART_DERIVATIONS.has(actualDerivation)) {
+      const pivotType = typeFromPivotSuffix(actualColumnInstanceName);
+      if (pivotType) {
+        instanceType = pivotType;
       }
     }
 
