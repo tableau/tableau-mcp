@@ -49,12 +49,34 @@ describe('formatPulseInsightsApiError', () => {
   });
 
   it.each([
+    // Definition specification
     ['400901', 'Missing measure field'],
     ['400902', 'Missing time dimension field'],
     ['400914', 'Invalid measure aggregation'],
+    ['400987', 'Missing basic specification'],
+    // Measurement period / comparison
+    ['400945', 'No measurement period present'],
     ['400946', 'No granularity specified'],
     ['400947', 'No range specified'],
+    ['400948', 'No comparison config present'],
+    // Constraints
+    ['400969', 'is_running_total cannot be true'],
     ['400972', 'Invalid input metric'],
+    // Auth
+    ['401003', 'Datasource authentication failed'],
+    ['403901', 'User lacks permissions on this datasource'],
+    ['403905', 'define metrics'],
+    // Not found
+    ['404900', 'Core metric (definition) not found'],
+    ['404939', 'Datasource is inaccessible'],
+    // Conflict
+    ['409902', 'same specification already exists'],
+    // Rate limiting
+    ['429956', 'already attempted in the past 24 hours'],
+    // Timeout
+    ['408901', 'Request timed out'],
+    // Server errors
+    ['500900', 'retryable'],
   ])('provides guidance for error code %s', (code, expectedFragment) => {
     const result = formatPulseInsightsApiError(400, { code, message: '0x00000000' });
     expect(result.message).toContain(expectedFragment);
