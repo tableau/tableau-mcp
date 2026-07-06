@@ -3,7 +3,7 @@
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Edit data/template-manifests/*.manifest.json and re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
   "_source": "data/template-manifests/*.manifest.json",
-  "count": 39,
+  "count": 40,
   "fast_path_templates": [
     "distribution-bar-code-chart",
     "kpi-text",
@@ -569,7 +569,7 @@
         "reference-line",
         "spc"
       ],
-      "description": "An aggregated measure over an exact date with template-owned average and +/-3-sigma reference lines/bands.",
+      "description": "An aggregated measure over an exact date with template-owned average and +/-3-sigma reference lines/bands; marks colored by an out-of-control (beyond +/-3-sigma) violation calc, not the raw measure.",
       "slots": [
         {
           "slot_id": "order_date",
@@ -588,26 +588,65 @@
           "template_field": "Profit",
           "derivation": "sum",
           "role": [
-            "rows",
-            "color"
+            "rows"
           ],
           "kind": "quantitative",
           "bindable": true,
           "required": true,
-          "notes": "same [sum:Profit:qk] instance drives rows, color, and the average/stdev reference lines (template-owned analytics)."
+          "notes": "[sum:Profit:qk] drives rows (the individuals series) and the template-owned average / +/-3-sigma sample-stdev reference lines/bands. It NO LONGER drives color: color is the template violation calc (control_status_calc), so the same field is not on both a shelf and color and the redundant-color-encoding design gate is not tripped."
         }
       ],
-      "calcs": [],
+      "calcs": [
+        {
+          "slot_id": "control_status_calc",
+          "template_field": "Calculation_20260705120000",
+          "derivation": "usr",
+          "role": [
+            "color"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "IF ABS(SUM([Profit]) - WINDOW_AVG(SUM([Profit]))) > 3 * WINDOW_STDEV(SUM([Profit])) THEN 1 ELSE 0 END",
+          "formula_refs": [
+            "Profit"
+          ],
+          "depends_on_slots": [
+            "profit"
+          ],
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Profit",
+              "slot_id": "profit",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ],
+          "notes": "XmR out-of-control flag: 1 when the point is beyond the +/-3-sigma control limits, else 0. WINDOW_AVG(SUM([Profit])) is the center line and 3*WINDOW_STDEV(SUM([Profit])) the band — the SAME limits the template's 'average' and sample-'stdev' (factor +/-3) reference lines draw, so color and bands agree. Referenced by [usr:Calculation_20260705120000:ok] (derivation='User' — an aggregate/table-calc field MUST use usr:, never none:, or the viz renders blank). Drives the color encoding (discrete: 1=red out-of-control, 0=blue in-control), replacing the former redundant [sum:Profit:qk] gradient."
+        }
+      ],
       "hazards": [
         {
           "code": "non-canonical-template-derivation",
           "detail": "Template date instance uses derivation short-form 'md' (long 'MDY', an exact discrete date), absent from templates.ts derivationMap and the §2.2 Derivation union. Manifest records the closest canonical 'tdy' (TruncDay). RESIDUAL RISK: TruncDay (continuous day) differs from MDY (discrete exact date) at runtime; the fast-path date binding may render continuous rather than discrete. XML trusted for slot/field structure; derivation token normalized.",
-          "xml": "control-chart-xmr.xml:13"
+          "xml": "control-chart-xmr.xml:16"
         },
         {
           "code": "template-owned-reference-lines",
           "detail": "average and sample-stdev (+/-3 factor) reference lines/bands are bound to [sum:Profit:qk] and repaired only because Profit is a bound slot; no dataset-specific calc IDs are referenced, so this is not a DATASET_SPECIFIC_FORMULA blocker.",
-          "xml": "control-chart-xmr.xml:47-51"
+          "xml": "control-chart-xmr.xml:58-62"
+        },
+        {
+          "code": "color-violation-calc-window-addressing",
+          "detail": "Color is driven by control_status_calc, a WINDOW_AVG/WINDOW_STDEV table calc (the ±3-sigma beyond-limits flag). The column-instance carries no explicit <table-calc> Compute Using, so on live apply the window addressing defaults to the natural table partition (the Order Date series on cols). RESIDUAL RISK: the exact Compute Using must be confirmed on a live render — render_verified stays 'none' until then. This lane is a code-only structural fix (unblock the redundant-color-encoding gate); no live apply/parity has run.",
+          "xml": "control-chart-xmr.xml:14"
+        },
+        {
+          "code": "raw-formula-refs",
+          "detail": "control_status_calc references the bare bindable [Profit]; templates.ts rewriteFormulaFieldRefs repairs it on bind because Profit is a bindable bare-key slot (same pattern as ww-ou-arrow). No template-internal calc-to-calc refs.",
+          "xml": "control-chart-xmr.xml:14"
         }
       ]
     },
@@ -1458,7 +1497,16 @@
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "live-2026-07-05"
+        "render_verified": "live-2026-07-05",
+        "render_evidence": {
+          "basis": "hand-stamp: live tier1-smoke render + non-blank pixel-floor probe + human review (coverage-envelope extension from 4 to up to 7 families); no numeric structural-parity score was measured",
+          "lane": "tier1-smoke live-verify 2026-07-05 (Tableau Desktop pid 36540, open 'Super Bowl by the Numbers' datasource; no-LLM binder: O/U Line(avg)->cols, Super Bowl->rows, Teams/Conference->detail)",
+          "structural": null,
+          "critical_pass": "not measured (blank-floor probe only, not a structural-parity pass-list)",
+          "high_pass": "not measured (blank-floor probe only, not a structural-parity pass-list)",
+          "pixel_oracle": "none (blank-floor probe only: rendered + NON-BLANK, inkRatio 1.29% — a confident non-blank for thin strip ticks, not a golden pixel oracle)",
+          "gate_composite": null
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [
@@ -1909,6 +1957,109 @@
       ]
     },
     {
+      "template": "gantt-task-rollup-chart",
+      "family": "time-series",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "gantt-task-rollup",
+        "task-rollup",
+        "gantt-rollup",
+        "one-bar-per-task",
+        "gantt",
+        "task-schedule"
+      ],
+      "description": "A task-rollup Gantt: exactly ONE GanttBar per task (categorical on rows), positioned by MIN(start_date) on a CONTINUOUS green date axis on cols (each task's EARLIEST start), sized by a summed duration measure (bar length) and colored by a phase dimension. The MIN aggregation is what makes the grain one-bar-per-task: an aggregated continuous date does not partition, so — when phase is functionally dependent on task — the render collapses to COUNTD(task) marks (offline-pinnable count 17 on the bundled Sample - Superstore when task=Sub-Category, phase=Category). Distinct from gantt-timeline-chart, whose cols is a per-date Day-Trunc [tdy:Start Date:qk] grain (a data-dependent bar count, one bar per date), and from gantt-chart, whose schedule MATRIX uses discrete Year/Month parts + two DATEDIFF calcs. PROVENANCE: this is the one-bar-per-task grain the INDEPENDENT gantt oracle (evals/runs/lane-i-smoke/make-gantt-oracle-twb.mjs -> ~/TableauGoldens/lab/gantt-oracle.twb) validly stamps — MIN(start) aggregated + task-grain rollup, EXPECTED_COUNT 17 on Superstore; W26-C identified the grain mismatch that made gantt-timeline-chart's per-date variant unstampable by that oracle. Factory-route template, generalized to placeholders + generic field names; structurally compiled, NOT live render-verified.",
+      "avoid_when": [
+        "The task has intra-task structure that matters — multiple segments, gaps, or per-date activity within one task. MIN(start_date) rolls every task up to a SINGLE bar from its earliest start, HIDING those gaps; for one bar per activity date use the per-date gantt-timeline-chart variant instead.",
+        "The dataset has no numeric duration/length measure to size the bars — a GanttBar with no size collapses to zero-length ticks; bind a real duration (days/periods) measure to the size slot or choose a dot/strip timeline.",
+        "The ask needs a schedule MATRIX broken out by discrete Year/Month columns with a computed ship/lead lag and Late/On-Time/Early status across a start AND an end date — that is gantt-chart; this rollup plots one continuous MIN(start) axis and a plain duration measure."
+      ],
+      "slots": [
+        {
+          "slot_id": "task",
+          "template_field": "Task",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The task/activity label on rows — exactly one GanttBar row per member (the rollup grain). XML column-instance [none:Task:nk]."
+        },
+        {
+          "slot_id": "start_date",
+          "template_field": "Start Date",
+          "derivation": "min",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "The bar's START position on the CONTINUOUS date axis, AGGREGATED as MIN (green [min:Start Date:qk]) = each task's EARLIEST start. The MIN aggregation (not a per-date Day-Trunc) is what collapses the grain to one bar per task — an aggregated continuous date does not partition. A single date field at a single derivation, so no qualified key is required. See hazards min-start-rollup-hides-intra-task-gaps + continuous-min-start-axis-required."
+        },
+        {
+          "slot_id": "duration",
+          "template_field": "Duration",
+          "derivation": "sum",
+          "role": [
+            "size"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The bar LENGTH (task duration in days/periods) on the size encoding — SUM([Duration]) -> [sum:Duration:qk]. A plain length measure, NOT a DATEDIFF calc, so the template binds a single-date schema. Must bind a REAL duration/length measure — see hazard gantt-size-real-duration-measure."
+        },
+        {
+          "slot_id": "phase",
+          "template_field": "Phase",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The phase/status dimension on color — one hue per member. XML column-instance [none:Phase:nk]. REQUIRED (not optional): the stampable oracle semantics carry color=phase in the default render, and an optional color slot would have to sit OFF-shelf (dropping color) or dangle an unbound pill — so the vocabulary forces required here. When phase is functionally dependent on task the rollup grain stays one-bar-per-task."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "not-live-render-verified",
+          "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop). portability_evidence.render_verified='none' and fast_path_eligible=false: the template binds the committed fixture (fixture_bind computed true) but has NO live render-readback proof. PROVENANCE: the golden this template's render_verified will reconcile against is the INDEPENDENT gantt oracle (evals/runs/lane-i-smoke/make-gantt-oracle-twb.mjs -> ~/TableauGoldens/lab/gantt-oracle.twb), which encodes the same one-bar-per-task MIN(start) rollup and asserts EXPECTED_COUNT=17 (COUNTD(Sub-Category)) on the bundled Sample - Superstore. A live-YYYY-MM-DD stamp is EARNED later by the golden-parity gate / a hand-stamp with render_evidence, never granted at compile time.",
+          "xml": "gantt-task-rollup-chart.xml:1"
+        },
+        {
+          "code": "min-start-rollup-hides-intra-task-gaps",
+          "detail": "The defining rollup: cols carries [min:Start Date:qk], an AGGREGATED continuous MIN date (derivation Min), so an aggregated date does not partition and the grain collapses to exactly one GanttBar per task at its EARLIEST start. This deliberately HIDES intra-task gaps, multiple segments, and any per-date structure within a task — the honest cost of the rollup versus gantt-timeline-chart's per-date [tdy:Start Date:qk] grain. If per-date/segment detail matters, use the timeline variant, not this rollup.",
+          "xml": "gantt-task-rollup-chart.xml:17"
+        },
+        {
+          "code": "gantt-size-real-duration-measure",
+          "detail": "The GanttBar length is driven by SUM([Duration]), a plain quantitative measure, not a DATEDIFF(end,start) duration calc (contrast gantt-chart's Ship Lag). This is what lets the template bind a single-date schema, but the size slot MUST bind a REAL duration/length-in-days measure — binding an unrelated measure sizes the bars by that measure instead of task duration, and binding nothing collapses the bars to zero-length ticks.",
+          "xml": "gantt-task-rollup-chart.xml:30"
+        },
+        {
+          "code": "continuous-min-start-axis-required",
+          "detail": "cols carries a CONTINUOUS MIN-aggregated date [min:Start Date:qk] (green pill) — the rollup start axis. The start_date slot must bind a real date/datetime field; binding a non-date field (or a discrete date part) collapses the axis to categorical headers and the GanttBars lose their time positions.",
+          "xml": "gantt-task-rollup-chart.xml:35"
+        }
+      ]
+    },
+    {
       "template": "gantt-timeline-chart",
       "family": "time-series",
       "readiness": "YELLOW",
@@ -2012,7 +2163,16 @@
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "live-2026-07-04"
+        "render_verified": "live-2026-07-04",
+        "render_evidence": {
+          "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
+          "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
+          "structural": null,
+          "critical_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
+          "high_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
+          "pixel_oracle": "none (generic template has no golden anchor; an anchor-only comparison is circular and is not credited)",
+          "gate_composite": null
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [
@@ -2026,9 +2186,18 @@
         "single-value",
         "total",
         "text",
-        "scorecard"
+        "scorecard",
+        "ratio",
+        "percent",
+        "percentage",
+        "number",
+        "rate",
+        "per-capita"
       ],
       "description": "A single big-number text card: one measure aggregated and shown as label text.",
+      "avoid_when": [
+        "The ask is for a grand total, a subtotal, or a running / cumulative 'percent of total' — a subtotaling or windowed running-sum aggregation across the rows of a table, not a single big-number KPI value."
+      ],
       "slots": [
         {
           "slot_id": "value",
@@ -2517,9 +2686,14 @@
         "composition",
         "proportion",
         "share",
-        "breakdown"
+        "breakdown",
+        "segmented",
+        "segmented-bar"
       ],
       "description": "Horizontal bars per category (rows) whose length is a measure, segmented by a second dimension (color); sorted by the measure.",
+      "avoid_when": [
+        "The ask wants a single market-share value — one measure divided by another to get a 'market share' number or ratio — which is a single KPI, not a segmented composition to break across categories in a stacked bar."
+      ],
       "slots": [
         {
           "slot_id": "region",
@@ -2580,7 +2754,16 @@
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "live-2026-07-04"
+        "render_verified": "live-2026-07-04",
+        "render_evidence": {
+          "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
+          "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
+          "structural": null,
+          "critical_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
+          "high_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
+          "pixel_oracle": "none (generic template has no golden anchor; an anchor-only comparison is circular and is not credited)",
+          "gate_composite": null
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [
@@ -3461,9 +3644,9 @@
         "final-vs-line",
         "actual-vs-line"
       ],
-      "description": "One floating (gantt) bar per category: the bar starts at a reference-line measure and its length is a template calc = parsed actual value − reference line. Deviation of an actual from a reference, per member.",
+      "description": "One floating (gantt) bar per category spanning a reference-line measure to a parsed actual score: a template SPLIT calc parses the combined actual score out of a compound '<code> <win>-<lose>' string (e.g. 'PHI 40-22' → 40+22=62), the size calc draws the span (actual − reference line), and an over/under SIGN calc colors each bar over (right/teal) vs under (left/red). Deviation of an actual outcome from a betting/reference line, per member.",
       "avoid_when": [
-        "the actual/score field is not a leading-numeric string — INT() parses only a leading integer, so compound strings like '35-31' or non-numeric text produce the wrong bar length",
+        "the actual field is not a compound '<prefix> <winner>-<loser>' score string — the SPLIT parse assumes a single-token prefix, a space, then a hyphen-separated winner-loser pair (e.g. 'PHI 40-22'); a different shape parses the wrong combined score",
         "both endpoints are already numeric measures — bind a simpler dual-measure or reference-line deviation chart instead of the string-parse calc"
       ],
       "slots": [
@@ -3490,7 +3673,7 @@
           "kind": "quantitative",
           "bindable": true,
           "required": true,
-          "notes": "The reference-line endpoint on columns AND a formula input to the size calc. Derivation 'min' is authored fidelity from the checkpoint — correct only at one-row-per-category grain (see min-derivation-per-row hazard)."
+          "notes": "The reference-line/betting-line endpoint on columns AND the subtrahend of the size and over/under calcs. Derivation 'min' is authored fidelity from the checkpoint — correct only at one-row-per-category grain (see min-derivation-per-row hazard)."
         },
         {
           "slot_id": "actual_input",
@@ -3502,22 +3685,46 @@
           "kind": "categorical",
           "bindable": true,
           "required": true,
-          "notes": "Compound-score STRING parsed by INT() inside the size calc. Bindable + required so templates.ts rewriteFormulaFieldRefs repairs the bare [Actual Input] token and Gate 6 can prove the dependency is bound. Never placed on a shelf (no column-instance)."
-        },
-        {
-          "slot_id": "color_dimension",
-          "template_field": "Segment",
-          "derivation": "none",
-          "role": [
-            "color"
-          ],
-          "kind": "categorical",
-          "bindable": true,
-          "required": true,
-          "notes": "FIDELITY from the final 'format' rung (absent in rung-1 floating-bars.xml): the over/under COLOR split (teal=over/right, red=under/left). A plain categorical color column-instance [none:Segment:nk]; parameterized like any bindable dimension so replaceFieldReferences substitutes it — never hardcoded to the Super Bowl O/U Winner field. Required so computeFixtureBind proves a full 4-field bind and the color encoding is never left dangling on an unbound field."
+          "notes": "Compound-score STRING (e.g. 'PHI 40-22') SPLIT-parsed by the actual-score calc into a combined numeric score (40+22=62). Bindable + required so templates.ts rewriteFormulaFieldRefs repairs the bare [Actual Input] token and Gate 6 can prove the dependency is bound. Never placed on a shelf (no column-instance)."
         }
       ],
       "calcs": [
+        {
+          "slot_id": "actual_score_calc",
+          "template_field": "Calculation_ActualScore",
+          "derivation": "usr",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "INT( SPLIT( TRIM( SPLIT( [Actual Input], \"-\", 1 ) ), \" \", 2 ) ) + INT( TRIM( SPLIT( [Actual Input], \"-\", 2 ) ) )",
+          "formula_refs": [
+            "Actual Input"
+          ],
+          "depends_on_slots": [
+            "actual_input"
+          ],
+          "notes": "GOLDEN actual-score parse (Over/Under and Betting Lines golden.twb: Winning Score = INT(SPLIT(TRIM(SPLIT([Final],'-',1)),' ',2)), Losing Score = INT(TRIM(SPLIT([Final],'-',2))), Total = Winning + Losing). Replaces the checkpoint's NULL-producing bare INT([Actual Input]) — INT() of a leading-alpha compound string ('PHI 40-22') is NULL, collapsing every bar to zero span. Not shelved; consumed as a template-internal input by the size and over/under calcs.",
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Actual Input",
+              "slot_id": "actual_input",
+              "slot_kind": "categorical",
+              "required": true,
+              "template_internal": false
+            }
+          ],
+          "avoid_when": [
+            "the actual string is not '<prefix> <winner>-<loser>' — the nested SPLIT/TRIM assumes a single-token prefix before the space and a hyphen between winner and loser scores"
+          ],
+          "prereqs": [
+            "compound-string-parse",
+            "raw-formula-refs"
+          ]
+        },
         {
           "slot_id": "bar_size_calc",
           "template_field": "Calculation_GanttSize",
@@ -3528,37 +3735,104 @@
           "kind": "calc",
           "bindable": false,
           "required": true,
-          "formula": "INT([Actual Input]) - [Reference Value]",
+          "formula": "[Calculation_ActualScore] - [Reference Value]",
           "formula_refs": [
-            "Actual Input",
+            "Calculation_ActualScore",
             "Reference Value"
           ],
           "depends_on_slots": [
-            "actual_input",
             "line_measure"
           ],
-          "notes": "Bar length = parsed actual − reference. formula_refs are the template_field names of the two bindable dependency slots; rewriteFormulaFieldRefs repairs them on bind (same mechanism as correlation-scatter's Profit Ratio)."
+          "notes": "Bar length = parsed actual score − reference line. Consumes the template-internal actual-score calc (SPLIT-parsed) and the bindable Reference Value; rewriteFormulaFieldRefs repairs [Reference Value] on bind, and leaves the template-owned [Calculation_ActualScore] untouched (unmapped).",
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Calculation_ActualScore",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            },
+            {
+              "ref": "Reference Value",
+              "slot_id": "line_measure",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ],
+          "avoid_when": [
+            "there is more than one row per category — the 'min' derivation collapses multi-row members to their minimum span"
+          ],
+          "prereqs": [
+            "min-derivation-per-row",
+            "raw-formula-refs"
+          ]
+        },
+        {
+          "slot_id": "over_under_calc",
+          "template_field": "Calculation_OverUnder",
+          "derivation": "sum",
+          "role": [
+            "color"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "SIGN([Calculation_ActualScore] - [Reference Value])",
+          "formula_refs": [
+            "Calculation_ActualScore",
+            "Reference Value"
+          ],
+          "depends_on_slots": [
+            "line_measure"
+          ],
+          "notes": "GOLDEN over/under color = sign(actual − line): +1 over (right/teal #76b7b2), -1 under (left/red #e15759), 0 push. Replaces the checkpoint's mis-chosen raw O/U Winner (Favorite/Underdog spread result) color. Shelved discretely as [sum:Calculation_OverUnder:ok] with a mark palette style-rule so the color splits by true over/under, not the spread.",
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Calculation_ActualScore",
+              "slot_id": null,
+              "slot_kind": "calc",
+              "required": true,
+              "template_internal": true
+            },
+            {
+              "ref": "Reference Value",
+              "slot_id": "line_measure",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ],
+          "avoid_when": [
+            "over/under is not defined against the reference line — this SIGN colors purely by (parsed actual − reference), so a reference that is not the true betting/expected line mislabels the split"
+          ],
+          "prereqs": [
+            "compound-string-parse",
+            "raw-formula-refs"
+          ]
         }
       ],
       "hazards": [
         {
-          "code": "dataset-specific-formula",
-          "detail": "INT([Actual Input]) parses a leading integer out of a compound score string; the parse is dataset-shape-specific (yields NULL/garbage on non-numeric or embedded-format text). Advisory only — surfaced via avoid_when and gated by render_verified, not a hard fast_path_blocker.",
-          "xml": "ww-floating-bars.xml:11"
+          "code": "compound-string-parse",
+          "detail": "The actual-score calc parses a combined score out of a compound '<prefix> <winner>-<loser>' string via nested SPLIT/TRIM (GOLDEN semantics). The parse is dataset-shape-specific: a different string shape (multi-token prefix, no hyphen, non-numeric scores) yields NULL/garbage. Advisory only — surfaced via avoid_when and gated by render_verified, not a hard fast_path_blocker.",
+          "xml": "ww-floating-bars.xml:9"
         },
         {
           "code": "raw-formula-refs",
-          "detail": "The size calc references bare [Actual Input]/[Reference Value]; templates.ts rewriteFormulaFieldRefs repairs them ONLY because both are bindable bare-key slots. Gate 6 asserts both are bound before injection.",
-          "xml": "ww-floating-bars.xml:11"
+          "detail": "The calcs reference bare bindable [Actual Input]/[Reference Value]; templates.ts rewriteFormulaFieldRefs repairs them ONLY because both are bindable bare-key slots. The template-internal [Calculation_ActualScore] ref is intentionally left unmapped (a template-owned calc). Gate 6 asserts the bindable deps are bound before injection.",
+          "xml": "ww-floating-bars.xml:9"
         },
         {
           "code": "min-derivation-per-row",
           "detail": "The size calc and the reference line use derivation 'min' (authored fidelity from the checkpoint). Min equals the row value only when there is exactly one mark per Category; a category with multiple rows collapses to the minimum. Bind at one-row-per-category grain or override the derivation.",
-          "xml": "ww-floating-bars.xml:17"
+          "xml": "ww-floating-bars.xml:20"
         }
       ],
       "golden": {
-        "checkpoint_render": "evals/checkpoints/ww-2026-23-gantt-superbowl/best/format.xml"
+        "checkpoint_render": "evals/cases/ww-2026-23-gantt-superbowl/reference/O_U Line.pdf"
       }
     },
     {
@@ -3932,7 +4206,8 @@
         }
       ],
       "golden": {
-        "checkpoint_render": "evals/cases/ww-2026-23-gantt-superbowl/golden/Super Bowl by the Numbers.twbx"
+        "checkpoint_render": "evals/cases/ww-2026-23-gantt-superbowl/golden/Super Bowl by the Numbers.twbx",
+        "anchor_sha256": "f6cd92c460838ff6ec8aebb83c9201fda37ef12f1f95cb74e4b39a912141c9c5"
       },
       "datasource_style": {
         "style_rule": "<style-rule element='mark'>\n          <encoding attr='color' field='[sum:Calculation_3985421012422657:ok]' type='palette'>\n            <map to='#76b7b2'>\n              <bucket>1</bucket>\n            </map>\n            <map to='#e15759'>\n              <bucket>-1</bucket>\n            </map>\n          </encoding>\n          <encoding attr='shape' field='[sum:Calculation_3985421012422657:ok]' type='shape'>\n            <map to=':filled/left-triangle'>\n              <bucket>-1</bucket>\n            </map>\n            <map to=':filled/right-triangle'>\n              <bucket>1</bucket>\n            </map>\n          </encoding>\n        </style-rule>",
@@ -4315,6 +4590,19 @@
       ],
       "golden": {
         "checkpoint_render": "evals/cases/ww-2026-23-gantt-superbowl/golden/Super Bowl by the Numbers.twbx"
+      },
+      "derivation": {
+        "parent_template": "ww-ou-arrow",
+        "removed_facets": [
+          "color-encoding-presence",
+          "shape-encoding-presence"
+        ],
+        "changed_facets": [
+          "mark-classes-per-pane",
+          "diff-calc-on-cols",
+          "label-column-instances",
+          "axis-titles"
+        ]
       }
     }
   ]

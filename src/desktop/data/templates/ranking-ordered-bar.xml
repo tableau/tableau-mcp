@@ -18,6 +18,7 @@
       <datasource-dependencies datasource='{{DATASOURCE}}'>
         <column datatype='string' name='[Region]' role='dimension' type='nominal' />
         <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Facet]' role='dimension' type='nominal' />
         <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />
         <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
       </datasource-dependencies>

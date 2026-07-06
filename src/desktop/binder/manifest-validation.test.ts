@@ -55,11 +55,15 @@ describe('binder/manifest-validation — pure module surface', () => {
 describe('binder/manifest-validation — superset is backward-compatible with the bundled manifests', () => {
   const bundled = readBundledManifestFiles();
 
-  it('there are 39 bundled manifests to check', () => {
+  it('there are 40 bundled manifests to check', () => {
     // W26-B re-snapshot: the shipped supply was resynced to the factory's full 39-template
-    // set (17 → 39; +22 new manifests copied verbatim, trust fields unchanged). Pinned in
-    // lockstep with the on-disk count so a silent add/drop of a bundled manifest fails here.
-    expect(bundled.length).toBe(39);
+    // set (17 → 39; +22 new manifests copied verbatim, trust fields unchanged).
+    // W28-D true byte-for-byte mirror: the remaining stale factory manifests were resynced
+    // and the factory's post-snapshot addition gantt-task-rollup-chart (#40, render_verified
+    // 'none' → fast_path_eligible false) was included verbatim, taking the count 39 → 40.
+    // Pinned in lockstep with the on-disk count so a silent add/drop of a bundled manifest
+    // fails here.
+    expect(bundled.length).toBe(40);
   });
 
   it('every bundled manifest validates through the new types’ validator (no errors)', () => {

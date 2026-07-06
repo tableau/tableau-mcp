@@ -42,8 +42,8 @@
     },
     {
       "path": "data-visualization-templates-xml/control-chart-xmr.xml",
-      "sha256": "4e73cff7dc18b5e3a41365f6c50f071ced4c2de9e8bb53d2eac06a91910d7300",
-      "bytes": 3453
+      "sha256": "130bce6e869a4f662fbeb061487cfb8a5296c51254fa9767cd47600fcf671510",
+      "bytes": 4107
     },
     {
       "path": "data-visualization-templates-xml/correlation-bubble-chart.xml",
@@ -99,6 +99,11 @@
       "path": "data-visualization-templates-xml/gantt-chart.xml",
       "sha256": "2a62ba5444632bb42082faa6d29a2fe23e1a775348fdfaa49f8be72ff47753e3",
       "bytes": 5720
+    },
+    {
+      "path": "data-visualization-templates-xml/gantt-task-rollup-chart.xml",
+      "sha256": "88a67da2a8703811cc32990bb04247cdd879bb5f0b3f10f6ae124f747c938dba",
+      "bytes": 1950
     },
     {
       "path": "data-visualization-templates-xml/gantt-timeline-chart.xml",
@@ -192,8 +197,8 @@
     },
     {
       "path": "data-visualization-templates-xml/ww-floating-bars.xml",
-      "sha256": "b50ee7500da71d7ba427027422931b59c96248ff083a8d96f6617237ee64d554",
-      "bytes": 2566
+      "sha256": "f4c3acbb0ff4d5d28634773f86bb4afd9c9f7d3d3520de96a573db9de030db5f",
+      "bytes": 3502
     },
     {
       "path": "template-manifests.fixture.json",
@@ -202,8 +207,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "28bf5505ca4ae09cf665c57429192d6cce58442ce360cd3fa07065a16f240456",
-      "bytes": 193330
+      "sha256": "e5f0f38769c56ab88cb95783a8e48a284f90129ddcf454bd2b0d7a95a691dfb8",
+      "bytes": 211619
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -237,8 +242,8 @@
     },
     {
       "path": "template-manifests/control-chart-xmr.manifest.json",
-      "sha256": "b8d8bc40d3df18058c58f9bf7606849140264ab0a1c982e32992b4452e93c4ee",
-      "bytes": 2273
+      "sha256": "21ae86a46d3d627c08eae93d6b7989cbecf06c32a7d52f9670b0f1002589ff8e",
+      "bytes": 4727
     },
     {
       "path": "template-manifests/correlation-bubble-chart.manifest.json",
@@ -257,8 +262,8 @@
     },
     {
       "path": "template-manifests/correlation-scatter-plot-chart.manifest.json",
-      "sha256": "ca0cb54f563e76f25624c5f987421417c55b65469b29e1fa5cc3c300ecb6740f",
-      "bytes": 2703
+      "sha256": "c091dbb856724a5b8c597f7951abfbc6b9ee91de8bea388b0c7c2c4c2193ed26",
+      "bytes": 3255
     },
     {
       "path": "template-manifests/deviation-diverging-bar.manifest.json",
@@ -277,8 +282,8 @@
     },
     {
       "path": "template-manifests/distribution-bar-code-chart.manifest.json",
-      "sha256": "94ec9cc90732ecca5dfa5f0e61a7b84edab3d441197ecdaad30eab67c46eebd3",
-      "bytes": 2080
+      "sha256": "74b8123718ed76649f6991363eb96a9358b11591d046fe33ba76a0f518df8df3",
+      "bytes": 2948
     },
     {
       "path": "template-manifests/distribution-histogram.manifest.json",
@@ -296,14 +301,19 @@
       "bytes": 7444
     },
     {
+      "path": "template-manifests/gantt-task-rollup-chart.manifest.json",
+      "sha256": "cdcefa36c4e36ffeb4a873948a850099ba3f2dcc9052082dd53479e143b3adf5",
+      "bytes": 7417
+    },
+    {
       "path": "template-manifests/gantt-timeline-chart.manifest.json",
       "sha256": "0be38bca7218b140c3412d0b7a61752340a392efc6ba7b328b0697a8f1d1a6f3",
       "bytes": 4719
     },
     {
       "path": "template-manifests/kpi-text.manifest.json",
-      "sha256": "7c87e121ed91bb4ba120f3f2574a4d893d2d2e43cdada44aaf0787531d64cf55",
-      "bytes": 933
+      "sha256": "977064a88359563476fe43afcaa15466687b89daa280cfc20587636f985a053c",
+      "bytes": 1980
     },
     {
       "path": "template-manifests/magnitude-paired-bar.manifest.json",
@@ -332,13 +342,13 @@
     },
     {
       "path": "template-manifests/part-to-whole-stacked-bar-chart.manifest.json",
-      "sha256": "9a36d5b637785b117bc60ab65b4c8501b8178b454e1e7b027599bf777bc8da61",
-      "bytes": 2310
+      "sha256": "c36cf53dc9f8f1cdbb2bf56565c9abce9cfa1dac154942e5a187771409b96b47",
+      "bytes": 2838
     },
     {
       "path": "template-manifests/part-to-whole-treemap-chart.manifest.json",
-      "sha256": "41b0ad67679de6aab5c3c04d56ea9a138fad16a9efd1b29e83305a6dccdfba9e",
-      "bytes": 1525
+      "sha256": "c954e6c491fc64cf3fb081db700a12df037ed80bc45c0a39ebcbafad252d0987",
+      "bytes": 2273
     },
     {
       "path": "template-manifests/part-to-whole-waterfall.manifest.json",
@@ -362,8 +372,8 @@
     },
     {
       "path": "template-manifests/ranking-ordered-column.manifest.json",
-      "sha256": "d30e35174a80711d8167b3df79d9d369491046a80c0eaa00d66c4f670a033d7c",
-      "bytes": 1646
+      "sha256": "fd2ba0fa6ccf940b2e9878280c251723a8ae0c879889b355bed1b9d915b195ba",
+      "bytes": 1828
     },
     {
       "path": "template-manifests/slope-chart.manifest.json",
@@ -387,18 +397,18 @@
     },
     {
       "path": "template-manifests/ww-floating-bars.manifest.json",
-      "sha256": "4d0cf8ff47a2f3e97c16479d8141300e93a03d43f03871a28d7281ebeadb6053",
-      "bytes": 5050
+      "sha256": "5017d94e10c8792bf0c861764c3cde5c62ab77e247e4acf1d27f21acedad2eba",
+      "bytes": 8830
     },
     {
       "path": "template-manifests/ww-ou-arrow.manifest.json",
-      "sha256": "9d9786369b3b65aef1690c999f02530bca9aaab91b25b21dd38fab7d2c6e37b4",
-      "bytes": 16525
+      "sha256": "4f391a1799e81713daf8d3e9c3c7ce28ef775ffaf33c0e8120ce3c171c29457a",
+      "bytes": 16614
     },
     {
       "path": "template-manifests/ww-ou-diff.manifest.json",
-      "sha256": "6d193934c098c77ec6ae4bcf9ab8b69cc30654e2f7c09055465bf73a229343db",
-      "bytes": 13742
+      "sha256": "af63a6e260383dd0a09c14dcd80311fcd6d5a7773bf1c6ec9d1400a2c08a2cfc",
+      "bytes": 14039
     }
   ]
 }
