@@ -6,6 +6,10 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getDeleteExtractRefreshTaskTool } from './deleteExtractRefreshTask.js';
+import { computeConfirmationToken } from './updateCloudExtractRefreshTask.js';
+
+const validTaskId = 'a1b2c3d4-e5f6-4789-9abc-ef1234567890';
+const validToken = computeConfirmationToken('test-site-id', validTaskId);
 
 const mocks = vi.hoisted(() => ({
   mockDeleteExtractRefreshTask: vi.fn(),
@@ -56,6 +60,8 @@ describe('deleteExtractRefreshTaskTool', () => {
       'Deletes an extract refresh task from the Tableau site',
     );
     expect(deleteExtractRefreshTaskTool.paramsSchema).toHaveProperty('taskId');
+    expect(deleteExtractRefreshTaskTool.paramsSchema).toHaveProperty('confirm');
+    expect(deleteExtractRefreshTaskTool.paramsSchema).toHaveProperty('confirmationToken');
   });
 
   it('should have correct annotations for destructive operation', () => {
@@ -105,10 +111,98 @@ describe('deleteExtractRefreshTaskTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
+
+  describe('two-phase contract', () => {
+    it('returns a preview without calling Tableau when confirm is omitted', async () => {
+      const result = await getToolResult({ taskId: validTaskId, confirm: false });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Preview');
+      expect(result.content[0].text).toContain(validTaskId);
+      // Token is the deterministic sha256(siteId:taskId)[0..12].
+      expect(result.content[0].text).toContain(validToken);
+      expect(result.content[0].text).toContain('confirm: true and confirmationToken');
+      // No Tableau call in the preview phase — admin gate runs but the delete endpoint does not.
+      expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    it('still runs the admin gate in the preview phase', async () => {
+      mocks.mockAssertAdmin.mockResolvedValue(
+        new Err('This tool requires site administrator permissions. Your site role is: Viewer'),
+      );
+      const result = await getToolResult({ taskId: validTaskId, confirm: false });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('requires site administrator permissions');
+      expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    it('rejects apply with a missing confirmationToken and never calls Tableau', async () => {
+      const result = await getToolResult({
+        taskId: validTaskId,
+        confirm: true,
+        confirmationToken: undefined,
+      });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('confirmationToken returned by the preview step');
+      expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    it('rejects apply with a mismatched confirmationToken and never calls Tableau', async () => {
+      const result = await getToolResult({
+        taskId: validTaskId,
+        confirm: true,
+        confirmationToken: 'deadbeefcafe',
+      });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('confirmationToken returned by the preview step');
+      expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    it('deletes when confirm is true and the confirmationToken matches', async () => {
+      const result = await getToolResult({
+        taskId: validTaskId,
+        confirm: true,
+        confirmationToken: validToken,
+      });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('successfully deleted');
+      expect(mocks.mockDeleteExtractRefreshTask).toHaveBeenCalledTimes(1);
+    });
+
+    it('emits the same deterministic token across preview calls', async () => {
+      const first = await getToolResult({ taskId: validTaskId, confirm: false });
+      const second = await getToolResult({ taskId: validTaskId, confirm: false });
+      invariant(first.content[0].type === 'text');
+      invariant(second.content[0].type === 'text');
+      expect(first.content[0].text).toContain(validToken);
+      expect(second.content[0].text).toContain(validToken);
+    });
+  });
 });
 
-async function getToolResult(args: { taskId: string }): Promise<CallToolResult> {
+async function getToolResult(args: {
+  taskId: string;
+  confirm?: boolean;
+  confirmationToken?: string;
+}): Promise<CallToolResult> {
   const deleteExtractRefreshTaskTool = getDeleteExtractRefreshTaskTool(new WebMcpServer());
   const callback = await Provider.from(deleteExtractRefreshTaskTool.callback);
-  return await callback(args, getMockRequestHandlerExtra());
+  // Default to the apply path (confirm: true + matching token) so existing one-call-style tests
+  // continue to exercise the destructive code path. Two-phase / preview tests opt out explicitly
+  // by passing `confirm: false` or a wrong token. The `'confirmationToken' in args` check matters
+  // because `??` would treat an explicit `undefined` the same as omitted and silently inject a
+  // valid token, masking the missing-token rejection test.
+  const resolved = {
+    ...args,
+    confirm: args.confirm ?? true,
+    confirmationToken:
+      'confirmationToken' in args
+        ? args.confirmationToken
+        : computeConfirmationToken('test-site-id', args.taskId),
+  };
+  return await callback(resolved, getMockRequestHandlerExtra());
 }

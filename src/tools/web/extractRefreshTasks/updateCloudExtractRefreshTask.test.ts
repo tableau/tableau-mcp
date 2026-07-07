@@ -10,7 +10,10 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getUpdateCloudExtractRefreshTaskTool } from './updateCloudExtractRefreshTask.js';
+import {
+  computeConfirmationToken,
+  getUpdateCloudExtractRefreshTaskTool,
+} from './updateCloudExtractRefreshTask.js';
 
 const mocks = vi.hoisted(() => ({
   mockUpdateCloudExtractRefreshTask: vi.fn(),
@@ -58,6 +61,8 @@ const validSchedule: UpdateCloudExtractRefreshSchedule = {
   },
 };
 
+const validToken = computeConfirmationToken('test-site-id', validTaskId, validSchedule);
+
 const updatedTask: ExtractRefreshTask = {
   id: validTaskId,
   type: 'RefreshExtractTask',
@@ -84,6 +89,8 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     expect(tool.description).toContain('Updates the schedule of an extract refresh task');
     expect(tool.paramsSchema).toHaveProperty('taskId');
     expect(tool.paramsSchema).toHaveProperty('schedule');
+    expect(tool.paramsSchema).toHaveProperty('confirm');
+    expect(tool.paramsSchema).toHaveProperty('confirmationToken');
   });
 
   it('should have correct annotations', () => {
@@ -92,7 +99,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       title: 'Update Cloud Extract Refresh Task',
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     });
   });
@@ -411,13 +418,165 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       expect(result.content[0].text).toContain('06:00:00');
     });
   });
+
+  describe('two-phase contract', () => {
+    it('returns a preview without calling Tableau when confirm is omitted', async () => {
+      const result = await getToolResult({
+        taskId: validTaskId,
+        schedule: validSchedule,
+        confirm: false,
+      });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Preview');
+      expect(result.content[0].text).toContain(validTaskId);
+      expect(result.content[0].text).toContain('Weekly');
+      // Token is the deterministic sha256(siteId:taskId:stableStringify(schedule))[0..12].
+      expect(result.content[0].text).toContain(validToken);
+      expect(result.content[0].text).toContain('confirm: true and confirmationToken');
+      // No Tableau call in the preview phase — admin gate runs but the update endpoint does not.
+      expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    it('still runs the admin gate in the preview phase', async () => {
+      mocks.mockAssertAdmin.mockResolvedValue(
+        new Err('This tool requires site administrator permissions. Your site role is: Viewer'),
+      );
+      const result = await getToolResult({
+        taskId: validTaskId,
+        schedule: validSchedule,
+        confirm: false,
+      });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('requires site administrator permissions');
+      expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    it('rejects apply with a missing confirmationToken and never calls Tableau', async () => {
+      const result = await getToolResult({
+        taskId: validTaskId,
+        schedule: validSchedule,
+        confirm: true,
+        confirmationToken: undefined,
+      });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('confirmationToken returned by the preview step');
+      expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    it('rejects apply with a mismatched confirmationToken and never calls Tableau', async () => {
+      const result = await getToolResult({
+        taskId: validTaskId,
+        schedule: validSchedule,
+        confirm: true,
+        confirmationToken: 'deadbeefcafe',
+      });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('confirmationToken returned by the preview step');
+      expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    it('applies the update when confirm is true and the confirmationToken matches', async () => {
+      const result = await getToolResult({
+        taskId: validTaskId,
+        schedule: validSchedule,
+        confirm: true,
+        confirmationToken: validToken,
+      });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('successfully updated');
+      expect(mocks.mockUpdateCloudExtractRefreshTask).toHaveBeenCalledTimes(1);
+    });
+
+    it('emits the same deterministic token across preview calls (idempotent friction gate)', async () => {
+      const first = await getToolResult({
+        taskId: validTaskId,
+        schedule: validSchedule,
+        confirm: false,
+      });
+      const second = await getToolResult({
+        taskId: validTaskId,
+        schedule: validSchedule,
+        confirm: false,
+      });
+      invariant(first.content[0].type === 'text');
+      invariant(second.content[0].type === 'text');
+      expect(first.content[0].text).toContain(validToken);
+      expect(second.content[0].text).toContain(validToken);
+    });
+
+    it('binds the schedule payload into the token so preview A and apply B do not match', async () => {
+      // Preview schedule A — returns token bound to A.
+      const scheduleA: UpdateCloudExtractRefreshSchedule = validSchedule;
+      const scheduleB: UpdateCloudExtractRefreshSchedule = {
+        frequency: 'Daily',
+        frequencyDetails: {
+          start: '06:00:00',
+          intervals: { interval: [{ weekDay: 'Monday' }] },
+        },
+      };
+      const tokenA = computeConfirmationToken('test-site-id', validTaskId, scheduleA);
+      const tokenB = computeConfirmationToken('test-site-id', validTaskId, scheduleB);
+      expect(tokenA).not.toBe(tokenB);
+
+      // Applying schedule B with A's token must be rejected — closes the swap-after-preview vector
+      // where a caller previews a benign schedule to obtain a token and then swaps to a more
+      // aggressive one on the confirmed call.
+      const result = await getToolResult({
+        taskId: validTaskId,
+        schedule: scheduleB,
+        confirm: true,
+        confirmationToken: tokenA,
+      });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('taskId + schedule pair');
+      expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+    });
+
+    it('hashes semantically equal schedules the same regardless of object key order', async () => {
+      // Object.keys iteration would otherwise depend on insertion order; the stable-stringify
+      // sorts keys so a caller who constructs the schedule with reordered top-level or nested
+      // keys still gets a preview→apply match.
+      const permuted: UpdateCloudExtractRefreshSchedule = {
+        // Reversed top-level order
+        frequencyDetails: {
+          intervals: { interval: [{ weekDay: 'Sunday' }] },
+          start: '06:00:00',
+        },
+        frequency: 'Weekly',
+      };
+      const canonicalToken = computeConfirmationToken('test-site-id', validTaskId, validSchedule);
+      const permutedToken = computeConfirmationToken('test-site-id', validTaskId, permuted);
+      expect(permutedToken).toBe(canonicalToken);
+    });
+  });
 });
 
 async function getToolResult(args: {
   taskId: string;
   schedule: UpdateCloudExtractRefreshSchedule;
+  confirm?: boolean;
+  confirmationToken?: string;
 }): Promise<CallToolResult> {
   const tool = getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
-  return await callback(args, getMockRequestHandlerExtra());
+  // Default to the apply path (confirm: true + matching token) so existing one-call-style tests
+  // continue to exercise the destructive code path. Two-phase / preview tests opt out explicitly
+  // by passing `confirm: false` or a wrong token. The `'confirmationToken' in args` check matters
+  // because `??` would treat an explicit `undefined` the same as omitted and silently inject a
+  // valid token, masking the missing-token rejection test.
+  const resolved = {
+    ...args,
+    confirm: args.confirm ?? true,
+    confirmationToken:
+      'confirmationToken' in args
+        ? args.confirmationToken
+        : computeConfirmationToken('test-site-id', args.taskId, args.schedule),
+  };
+  return await callback(resolved, getMockRequestHandlerExtra());
 }

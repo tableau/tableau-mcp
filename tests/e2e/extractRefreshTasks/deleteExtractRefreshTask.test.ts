@@ -84,7 +84,48 @@ describe('delete-extract-refresh-task', () => {
     expect(threw).toBe(true);
   });
 
+  it('should return a preview with confirmationToken when confirm is omitted', async () => {
+    // Exercises the preview leg of the two-phase contract end-to-end via a real MCP client.
+    // No Tableau delete endpoint is called — the preview response is admin-gated only. The
+    // taskId does not need to exist on the site; the preview echoes it verbatim.
+    if (!toolsAvailable) {
+      return;
+    }
+    const previewTaskId = 'a1b2c3d4-e5f6-4789-9abc-ef1234567890';
+    const message = await client.callTool('delete-extract-refresh-task', {
+      schema: z.string(),
+      toolArgs: { taskId: previewTaskId },
+    });
+    expect(message).toContain('Preview');
+    expect(message).toContain(previewTaskId);
+    expect(message).toContain('confirmationToken:');
+  });
+
+  it('should reject a confirmed call with a mismatched confirmationToken', async () => {
+    if (!toolsAvailable) {
+      return;
+    }
+    let threw = false;
+    try {
+      await client.callTool('delete-extract-refresh-task', {
+        schema: z.string(),
+        toolArgs: {
+          taskId: 'a1b2c3d4-e5f6-4789-9abc-ef1234567890',
+          confirm: true,
+          confirmationToken: 'deadbeefcafe',
+        },
+      });
+    } catch (e) {
+      threw = true;
+      expect(String(e)).toContain('confirmationToken returned by the preview step');
+    }
+    expect(threw).toBe(true);
+  });
+
   it('should delete a disposable task (opt-in, requires live endpoint)', async () => {
+    // Runs the full two-phase flow end-to-end: preview → extract token → confirm. Requires the
+    // delete endpoint to be reachable with the configured auth, hence env-gated. Uses the preview
+    // response's token verbatim (rather than recomputing) to keep the client honest.
     if (!toolsAvailable) {
       return;
     }
@@ -96,9 +137,22 @@ describe('delete-extract-refresh-task', () => {
       return;
     }
 
-    const message = await client.callTool('delete-extract-refresh-task', {
+    const preview = await client.callTool('delete-extract-refresh-task', {
       schema: z.string(),
       toolArgs: { taskId: disposableId },
+    });
+    expect(preview).toContain('Preview');
+    const tokenMatch = preview.match(/confirmationToken:\s*([a-f0-9]{12})/);
+    expect(tokenMatch).not.toBeNull();
+    const token = tokenMatch![1];
+
+    const message = await client.callTool('delete-extract-refresh-task', {
+      schema: z.string(),
+      toolArgs: {
+        taskId: disposableId,
+        confirm: true,
+        confirmationToken: token,
+      },
     });
 
     expect(message).toContain('successfully deleted');

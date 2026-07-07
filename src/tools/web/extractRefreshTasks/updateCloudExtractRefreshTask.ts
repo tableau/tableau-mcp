@@ -1,18 +1,88 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { createHash } from 'crypto';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { AdminOnlyError, UnknownError } from '../../../errors/mcpToolError.js';
+import { AdminOnlyError, ArgsValidationError, UnknownError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { updateCloudExtractRefreshScheduleSchema } from '../../../sdks/tableau/types/extractRefreshTask.js';
+import {
+  UpdateCloudExtractRefreshSchedule,
+  updateCloudExtractRefreshScheduleSchema,
+} from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { assertAdmin } from '../adminGate.js';
 import { WebTool } from '../tool.js';
 
+/**
+ * Canonical JSON serialization: object keys sorted so { a: 1, b: 2 } and { b: 2, a: 1 } hash
+ * identically. Used to bind the schedule payload into the confirmation token — preview of
+ * schedule A and confirmed apply of schedule B must produce different tokens even if the two
+ * objects happen to serialize differently under the default (insertion-order) stringify.
+ */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const keys = Object.keys(record).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * Deterministic confirmation token derived from the site + task (+ schedule, when applicable). The
+ * preview phase returns it; the apply phase requires a matching value. This forces an explicit,
+ * deliberate second call with a task-specific (and, for updates, payload-specific) token rather
+ * than a blind one-shot update.
+ *
+ * For the update tool, the caller-supplied `schedule` is folded into the hash via a canonical
+ * stringify. This binds the token to the exact schedule the preview validated — a caller cannot
+ * preview `A` and then apply `B` with the preview's token, because the hash would not match.
+ *
+ * For the delete tool, `schedule` is omitted and the token reduces to `sha256(siteId:taskId)`.
+ *
+ * NOTE: this is a friction/correctness gate, NOT proof that a preview actually ran. The token is a
+ * hash of caller-known inputs (siteId from the connected site, taskId + schedule from the tool
+ * args), so a caller can compute it without previewing. Guaranteeing a preview ran would require
+ * server-side state. Stateless by design so it works across instances and restarts. Matches the
+ * pattern in delete-datasource / delete-workbook.
+ */
+export function computeConfirmationToken(
+  siteId: string,
+  taskId: string,
+  schedule?: UpdateCloudExtractRefreshSchedule,
+): string {
+  const payload =
+    schedule === undefined
+      ? `${siteId}:${taskId}`
+      : `${siteId}:${taskId}:${stableStringify(schedule)}`;
+  return createHash('sha256').update(payload).digest('hex').slice(0, 12);
+}
+
 const paramsSchema = {
   taskId: z.string().uuid('taskId must be a valid UUID'),
   schedule: updateCloudExtractRefreshScheduleSchema,
+  confirm: z
+    .boolean()
+    .optional()
+    .describe(
+      'When omitted or false, runs a non-destructive preview: validates the schedule and returns ' +
+        'a confirmationToken without calling the Tableau API. When true, applies the schedule ' +
+        'change — requires a matching confirmationToken from the preview step.',
+    ),
+  confirmationToken: z
+    .string()
+    .optional()
+    .describe(
+      'Required when confirm is true. The confirmationToken returned by the preview step ' +
+        '(confirm omitted/false) for this taskId. The update is rejected without a matching token ' +
+        '— a friction gate requiring a deliberate second call. Note the token is a deterministic ' +
+        'hash of caller-known inputs, so it adds deliberation but does not by itself prove a ' +
+        'preview ran.',
+    ),
 };
 
 export const getUpdateCloudExtractRefreshTaskTool = (
@@ -31,6 +101,13 @@ export const getUpdateCloudExtractRefreshTaskTool = (
 
   **Tableau Cloud only.** This tool calls the Cloud variant of the update endpoint and is not appropriate for Tableau Server.
 
+  This tool is **two-phase** to keep the destructive action safe:
+
+  1. **Preview (default — \`confirm\` omitted or false):** validates the proposed schedule, echoes the change that would be applied, returns a \`confirmationToken\`, and does **not** call the Tableau update endpoint.
+  2. **Apply (\`confirm: true\` + \`confirmationToken\`):** applies the schedule change. The token from step 1 is required — the update is rejected without it, a friction gate requiring a deliberate second call rather than a blind one-shot update. The token is bound to the exact \`taskId\` + \`schedule\` pair that was previewed, so editing the schedule after previewing invalidates the token and the caller must re-preview. The token is a deterministic hash of caller-known inputs, so it adds deliberation but does not by itself prove a preview ran.
+
+  **Required human confirmation:** After preview, present the proposed change (task ID + frequency + time window) to the user and get explicit approval before applying. Do not auto-confirm or compute the \`confirmationToken\` yourself — use the exact value the preview returned.
+
   Use this tool when you need to:
   - Reduce the frequency of an under-used extract refresh (e.g. Hourly → Daily, Daily → Weekly)
   - Move a refresh window to off-peak hours
@@ -43,6 +120,8 @@ export const getUpdateCloudExtractRefreshTaskTool = (
     - \`frequencyDetails.start\` (required) – Start time in 24-hour \`HH:mm:ss\` format, e.g. \`"06:00:00"\`.
     - \`frequencyDetails.end\` (required for \`Hourly\`; omit for \`Daily\`/\`Weekly\`/\`Monthly\`) – End time in 24-hour \`HH:mm:ss\` format. For \`Hourly\` its minute portion must match \`start\` and it must be strictly after \`start\`.
     - \`frequencyDetails.intervals.interval\` (optional) – Array of recurrence intervals. Each entry can specify \`weekDay\` (Sunday..Saturday), \`monthDay\`, \`hours\`, or \`minutes\` depending on the frequency.
+  - \`confirm\` (optional) – Set \`true\` to apply the schedule change. Defaults to preview.
+  - \`confirmationToken\` (optional) – Required when \`confirm\` is true; the token from the preview step.
 
   **Schedule constraints (enforced at the schema layer — invalid input is rejected before any Tableau API call):**
   - \`start\` and \`end\` must be zero-padded \`HH:mm:ss\` (e.g. \`"06:00:00"\`, not \`"6:00:00"\`).
@@ -54,7 +133,7 @@ export const getUpdateCloudExtractRefreshTaskTool = (
 
   Tableau may still reject a request that passes schema validation with \`409004 Conflict\` for site-specific schedule rules; the tool surfaces Tableau's structured error code/summary/detail in the response so callers can recover.
 
-  **Response:** A confirmation message describing the updated task and its new schedule.
+  **Response:** A preview message (with \`confirmationToken\`) or a confirmation message describing the updated task and its new schedule.
 
   **Note:** This operation overwrites the existing schedule. To revert, call again with the prior schedule values. Tableau Cloud uses \`tableau:tasks:write\` scope.
   `,
@@ -63,7 +142,12 @@ export const getUpdateCloudExtractRefreshTaskTool = (
       title: 'Update Cloud Extract Refresh Task',
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      // The two-phase contract (first call → preview + token, second call → apply) means the same
+      // args do NOT produce the same outcome. A client retrying after a transient failure could
+      // call once (preview, no Tableau write) and again (apply with token, mutates), or call twice
+      // with `confirm: true` + token and get a token-reject the second time. Either way the
+      // operation is not idempotent. Mirrors `delete-extract-refresh-task` and `delete-datasource`.
+      idempotentHint: false,
       openWorldHint: false,
     },
     callback: async (args, extra): Promise<CallToolResult> => {
@@ -80,8 +164,43 @@ export const getUpdateCloudExtractRefreshTaskTool = (
                 return new AdminOnlyError(adminResult.error).toErr();
               }
 
+              const siteId = restApi.siteId;
+              const expectedToken = computeConfirmationToken(siteId, args.taskId, args.schedule);
+
+              // Gate the destructive path on the confirmation token BEFORE any write, so a missing
+              // or mismatched token is rejected with zero side effects. Forces a deliberate
+              // two-step update; does not prove a preview ran (token is a deterministic hash of
+              // caller-known inputs — see computeConfirmationToken).
+              if (args.confirm && args.confirmationToken !== expectedToken) {
+                return new ArgsValidationError(
+                  'Update requires the confirmationToken returned by the preview step for this ' +
+                    'exact taskId + schedule pair. Run update-cloud-extract-refresh-task with ' +
+                    'confirm omitted (or false) using the SAME taskId and schedule, then call ' +
+                    'again with confirm: true and the confirmationToken from that response. ' +
+                    'Editing the schedule after previewing invalidates the token — re-preview to ' +
+                    'get a fresh one.',
+                ).toErr();
+              }
+
+              if (!args.confirm) {
+                // Preview phase: validate the schedule (already done by Zod above) and echo the
+                // proposed change with the confirmation token. No call to Tableau.
+                const previewStart = args.schedule.frequencyDetails.start;
+                const previewEnd = args.schedule.frequencyDetails.end;
+                const previewWindow = previewEnd
+                  ? ` (${previewStart}–${previewEnd})`
+                  : ` (start ${previewStart})`;
+                return new Ok(
+                  `Preview — would update extract refresh task '${args.taskId}' to ${args.schedule.frequency}${previewWindow}. ` +
+                    'NEXT STEP — REQUIRED: present this proposed change to the user and obtain ' +
+                    "explicit approval. Do NOT update without the user's approval in this " +
+                    'conversation. ' +
+                    `Once approved, call again with confirm: true and confirmationToken: ${expectedToken}.`,
+                );
+              }
+
               const result = await restApi.tasksMethods.updateCloudExtractRefreshTask({
-                siteId: restApi.siteId,
+                siteId,
                 taskId: args.taskId,
                 schedule: args.schedule,
               });

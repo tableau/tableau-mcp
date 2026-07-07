@@ -64,24 +64,49 @@ export function renderHitlGate({
 }
 
 /**
- * Renders the instruction for the second, confirmed call against a two-phase delete tool. The tool
- * enforces a server-authoritative gate: before deleting it re-fetches the item and verifies it
- * carries the pending-deletion tag applied in the preview phase. The model cannot bypass this by
- * fabricating a value — the only way to satisfy the gate is to have run the preview (tag) step.
+ * Renders the instruction for the second, confirmed call against a two-phase apply tool. Two
+ * server-authoritative gate contracts are supported via `gateKind`:
+ *
+ * - `'tag'` (default): the tool re-fetches the item and verifies it carries the pending-deletion
+ *   tag applied in the preview phase. Used by the delete-workbook / delete-datasource path. A
+ *   caller cannot bypass by fabricating a value — the only way to satisfy the gate is to have run
+ *   the preview (tag) step.
+ * - `'token'`: the tool returns a per-item `confirmationToken` from the preview call, derived
+ *   server-side from caller-known inputs (e.g. site + task id). The confirm call must echo the
+ *   same token. Used by update-cloud-extract-refresh-task / delete-extract-refresh-task where
+ *   there is no Tableau REST API affordance for tagging the underlying object.
  *
  * `toolRef` is inserted verbatim, so callers control its formatting: pass a single backticked tool
  * name (e.g. "`delete-workbook`") for a one-tool prompt, or a phrase pointing at a routing table
- * (e.g. "the `deleteTool` the routing table maps the item's `itemType` to") to cover several delete
+ * (e.g. "the `deleteTool` the routing table maps the item's `itemType` to") to cover several
  * tools with a single block.
  */
 export function renderConfirmInstructions({
   toolRef,
   itemNoun = 'item',
+  gateKind = 'tag',
 }: {
-  /** Verbatim reference to the two-phase delete tool, e.g. "`delete-workbook`". */
+  /** Verbatim reference to the two-phase apply tool, e.g. "`delete-workbook`". */
   toolRef: string;
   itemNoun?: string;
+  /**
+   * Server-authoritative gate contract the tool implements. Defaults to `'tag'` (pending-deletion
+   * tag verified server-side). Use `'token'` for tools that return a per-item `confirmationToken`
+   * from the preview and verify it on confirm.
+   */
+  gateKind?: 'tag' | 'token';
 }): string {
+  if (gateKind === 'token') {
+    return [
+      `Only AFTER the user approves a given ${itemNoun}, call ${toolRef} for that ${itemNoun} ` +
+        `with \`confirm: true\` and \`confirmationToken: <the token the preview step returned for this ${itemNoun}>\`. ` +
+        'The tool re-derives the token from caller-known inputs and rejects mismatched or missing ' +
+        'tokens before any write.',
+      'Do NOT auto-confirm. Do NOT compute, guess, or reuse a `confirmationToken` — only use ' +
+        `the one returned for that exact ${itemNoun} by the preview step. Confirm each ${itemNoun} individually — never batch-confirm items the user has not explicitly approved.`,
+    ].join('\n');
+  }
+
   return [
     `Only AFTER the user approves a given ${itemNoun}, call ${toolRef} for that ${itemNoun} ` +
       'with `confirm: true` (using the same `tag` value used to tag it in the preview step). The ' +
