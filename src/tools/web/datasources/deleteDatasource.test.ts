@@ -16,13 +16,21 @@ import { DEFAULT_PENDING_DELETION_TAG, getDeleteDatasourceTool } from './deleteD
 // spy call (AC-6) rather than written to stderr.
 vi.mock('../../../logging/logger.js');
 
-// Parse the single mutation-audit record emitted on this call through the authoritative schema so
-// the assertion fails if the guard ever drops a required field. Returns the validated record.
-function getAuditRecord(): ReturnType<typeof auditRecordSchema.parse> {
+// All mutation-audit records emitted so far, each parsed through the authoritative schema so the
+// assertion fails if the guard ever drops a required field.
+function getAuditRecords(): ReturnType<typeof auditRecordSchema.parse>[] {
   const log = logger.log as MockedFunction<typeof logger.log>;
-  const auditEntries = log.mock.calls.map((c) => c[0]).filter((e) => e.logger === 'audit');
-  expect(auditEntries).toHaveLength(1);
-  return auditRecordSchema.parse(auditEntries[0].data);
+  return log.mock.calls
+    .map((c) => c[0])
+    .filter((e) => e.logger === 'audit')
+    .map((e) => auditRecordSchema.parse(e.data));
+}
+
+// Convenience for the single-audit-record assertions (preview and denied phases emit exactly one).
+function getAuditRecord(): ReturnType<typeof auditRecordSchema.parse> {
+  const records = getAuditRecords();
+  expect(records).toHaveLength(1);
+  return records[0];
 }
 
 const mockDatasource = {
@@ -385,12 +393,13 @@ describe('deleteDatasourceTool', () => {
     // No tagging or dependency check on the confirmed delete.
     expect(mocks.mockAddTagsToDatasource).not.toHaveBeenCalled();
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
-    // AC-6(c): the allowed confirm emits an allowed audit with the tag evidence descriptor.
-    const record = getAuditRecord();
-    expect(record.result).toBe('allowed');
-    expect(record.phase).toBe('confirm');
-    expect(record.denyReason).toBeUndefined();
-    expect(record.confirmationEvidence.kind).toBe('tag');
+    // A confirmed delete emits two records: the allowed authorization decision, then the terminal
+    // 'completed' outcome once the REST delete succeeds (Fix #2 — audit reflects outcome, not intent).
+    const records = getAuditRecords();
+    expect(records.map((r) => r.result)).toEqual(['allowed', 'completed']);
+    expect(records.every((r) => r.phase === 'confirm')).toBe(true);
+    expect(records.every((r) => r.denyReason === undefined)).toBe(true);
+    expect(records.every((r) => r.confirmationEvidence.kind === 'tag')).toBe(true);
   });
 
   it('should verify a caller-provided tag on confirm', async () => {
@@ -486,6 +495,13 @@ describe('deleteDatasourceTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
+    // Fix #2: an authorized-but-failed delete records the terminal 'failed' outcome (with detail) so
+    // the audit trail never claims a deletion that did not happen.
+    const records = getAuditRecords();
+    expect(records.map((r) => r.result)).toEqual(['allowed', 'failed']);
+    const failed = records.find((r) => r.result === 'failed');
+    invariant(failed, 'expected a failed audit record');
+    expect(failed.failureDetail).toContain(errorMessage);
   });
 
   // --- AC-6: end-to-end preview→confirm + audit on the in-scope tool ---
@@ -511,13 +527,14 @@ describe('deleteDatasourceTool', () => {
     vi.mocked(logger.log).mockClear();
     mocks.mockQueryDatasource.mockResolvedValue(mockTaggedDatasource);
 
-    // Confirm: verifies the tag against live state and deletes.
+    // Confirm: verifies the tag against live state and deletes. Emits the allowed decision followed
+    // by the terminal 'completed' outcome.
     const confirm = await getToolResult({ datasourceId: 'ds-1', confirm: true });
     expect(confirm.isError).toBe(false);
     expect(mocks.mockDeleteDatasource).toHaveBeenCalled();
-    const confirmRecord = getAuditRecord();
-    expect(confirmRecord.result).toBe('allowed');
-    expect(confirmRecord.phase).toBe('confirm');
+    const confirmRecords = getAuditRecords();
+    expect(confirmRecords.map((r) => r.result)).toEqual(['allowed', 'completed']);
+    expect(confirmRecords.every((r) => r.phase === 'confirm')).toBe(true);
   });
 
   it('AC-6(c): preview emits an allowed audit naming the datasource', async () => {

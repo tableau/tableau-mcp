@@ -100,6 +100,25 @@ describe('guardMutation', () => {
     expect(resolveTarget).toHaveBeenCalled();
   });
 
+  // Fix #3: resolveTarget() does a read that may 403/404/throw. A non-admin attempt is the exact
+  // event the audit surface most wants to preserve, so a lookup failure must NOT swallow the DENIED
+  // record — the guard falls back to a placeholder target instead of letting the throw propagate.
+  it('still emits the DENIED audit (with a placeholder target) when resolveTarget throws on the not-admin path', async () => {
+    mocks.mockAssertAdmin.mockResolvedValue(new Err('User is not a site administrator'));
+    const resolveTarget = vi.fn().mockRejectedValue(new Error('403 querying target'));
+    const result = await run({ phase: 'confirm', resolveTarget });
+    expect(result.isErr()).toBe(true);
+
+    const audits = getAuditRecords();
+    expect(audits).toHaveLength(1);
+    const record = auditRecordSchema.parse(audits[0]);
+    expect(record.result).toBe('denied');
+    expect(record.denyReason).toBe('not-admin');
+    // Placeholder target: id 'unresolved', kind inferred from the tool ('delete-datasource' here).
+    expect(record.target.id).toBe('unresolved');
+    expect(record.target.kind).toBe('datasource');
+  });
+
   // --- preview-confirm: verify gate ---
 
   it('on confirm, denies and emits a DENIED audit when evidence.verify is false (forged/precomputed)', async () => {

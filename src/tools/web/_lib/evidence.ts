@@ -25,6 +25,11 @@ export interface EvidenceContext {
   tool: WebToolName;
   userLuid: string;
   confirmationToken?: string;
+  // Optional fingerprint of the mutation's caller-controlled parameters (e.g. a hash of the schedule
+  // an update tool would apply). When present it is folded into the RegistryEvidence nonce key, so a
+  // nonce minted while previewing parameter set A cannot satisfy a confirm carrying parameter set B —
+  // the confirmed mutation is bound to exactly what was previewed. Ignored by TagEvidence/NoEvidence.
+  binding?: string;
 }
 
 /**
@@ -127,7 +132,11 @@ function getCache(): ExpiringMap<string, string> {
 }
 
 function nonceKey(ctx: EvidenceContext): string {
-  return `${ctx.siteId}:${ctx.userLuid}:${ctx.tool}:${ctx.target.id}`;
+  // Fold the optional parameter fingerprint into the key so a nonce is valid only for a confirm that
+  // carries the same caller-controlled parameters that were previewed. `binding` is a non-secret hash
+  // (see EvidenceContext.binding); an empty segment when absent keeps keys stable for taggable/no-arg
+  // targets like deletes.
+  return `${ctx.siteId}:${ctx.userLuid}:${ctx.tool}:${ctx.target.id}:${ctx.binding ?? ''}`;
 }
 
 /**
@@ -176,10 +185,13 @@ export class RegistryEvidence implements EvidenceStrategy<MutationTarget> {
 }
 
 /**
- * NoEvidence — for `confirm-only` mutations (e.g. update-cloud-extract-refresh-task) that gate on a
- * required `confirm: true` flag but have no preview→confirm evidence to establish or verify. The
- * guard never calls establish/verify in confirm-only mode; these are inert no-ops, and the audit
- * record reflects evidence kind 'none'.
+ * NoEvidence — for `confirm-only` mutations that gate on a required `confirm: true` flag but have no
+ * preview→confirm evidence to establish or verify. The guard never calls establish/verify in
+ * confirm-only mode; these are inert no-ops, and the audit record reflects evidence kind 'none'.
+ *
+ * No production tool currently uses this: update-cloud-extract-refresh-task moved to RegistryEvidence
+ * (a schedule-bound single-use nonce) so an un-previewed confirm is rejected server-side. Retained as
+ * the strategy for any future confirm-only tool whose target has no verifiable preview state.
  */
 export class NoEvidence implements EvidenceStrategy<MutationTarget> {
   async establish(): Promise<void> {

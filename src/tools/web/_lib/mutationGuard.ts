@@ -61,6 +61,14 @@ export interface MutationTarget {
 export interface GuardOutcome {
   actor: MutationActor;
   target: MutationTarget;
+  /**
+   * Records the TERMINAL outcome of a confirmed mutation's REST call. The guard's own `allowed`
+   * record captures only the authorization decision (it is emitted before the caller runs the
+   * destructive REST call); the caller MUST call this once the REST result is known so the audit
+   * trail reflects outcome, not just intent. No-op on the preview phase (nothing mutates), so callers
+   * can invoke it unconditionally. See finding: "Audit says 'allowed' before the mutation runs".
+   */
+  recordOutcome: (outcome: { ok: true } | { ok: false; failureDetail?: string }) => void;
 }
 
 /**
@@ -81,6 +89,7 @@ export async function guardMutation<TTarget>({
   evidence,
   resolveTarget,
   confirmationToken,
+  binding,
 }: {
   restApi: RestApi;
   extra: TableauWebRequestHandlerExtra;
@@ -91,6 +100,9 @@ export async function guardMutation<TTarget>({
   evidence: EvidenceStrategy<TTarget>;
   resolveTarget: () => Promise<MutationTarget>;
   confirmationToken?: string;
+  // Optional fingerprint of the caller-controlled parameters (see EvidenceContext.binding). Bound
+  // into the evidence so a confirm applies exactly what was previewed, never a swapped-in payload.
+  binding?: string;
 }): Promise<Result<GuardOutcome, McpToolError>> {
   // (2) Build the actor identity up front so a denied attempt is still attributable in the audit.
   const actor: MutationActor = {
@@ -105,7 +117,15 @@ export async function guardMutation<TTarget>({
   // privilege escalations are recorded — but resolve the target first so the record names it.
   const adminResult = await assertAdmin(restApi, extra);
   if (adminResult.isErr()) {
-    const deniedTarget = await resolveTarget();
+    // resolveTarget() typically does a read (which may itself 403/404/network-fail). This is the
+    // exact attempted-escalation event the audit surface most wants to preserve, so a lookup failure
+    // must NOT swallow the DENIED record — fall back to a placeholder target instead.
+    let deniedTarget: MutationTarget;
+    try {
+      deniedTarget = await resolveTarget();
+    } catch {
+      deniedTarget = { id: 'unresolved', kind: targetKindHint(tool) };
+    }
     emitAuditRecord({
       actor,
       tool,
@@ -128,6 +148,7 @@ export async function guardMutation<TTarget>({
     tool,
     userLuid: actor.userLuid ?? '',
     confirmationToken,
+    binding,
   };
 
   // (4) Confirm phase of a preview→confirm tool: verify the evidence against live state. A
@@ -159,7 +180,9 @@ export async function guardMutation<TTarget>({
     await evidence.establish(evidenceCtx);
   }
 
-  // (6) Allowed: record the attempt and let the tool perform its mutation / build its response.
+  // (6) Allowed: record the authorization decision and let the tool perform its mutation / build its
+  // response. For a confirm this is NOT the terminal record — the caller reports the REST outcome via
+  // recordOutcome() below so the audit trail distinguishes completed from authorized-but-failed.
   emitAuditRecord({
     actor,
     tool,
@@ -169,7 +192,44 @@ export async function guardMutation<TTarget>({
     confirmationEvidence: evidenceDescriptor,
     result: 'allowed',
   });
-  return new Ok({ actor, target });
+
+  // Terminal-outcome recorder handed to the caller. Only a confirm phase mutates, so the preview
+  // phase is a deliberate no-op — callers can invoke it unconditionally after their REST call.
+  const recordOutcome = (outcome: { ok: true } | { ok: false; failureDetail?: string }): void => {
+    if (phase !== 'confirm') {
+      return;
+    }
+    emitAuditRecord({
+      actor,
+      tool,
+      action,
+      phase,
+      target,
+      confirmationEvidence: evidenceDescriptor,
+      result: outcome.ok ? 'completed' : 'failed',
+      ...(outcome.ok ? {} : { failureDetail: outcome.failureDetail }),
+    });
+  };
+
+  return new Ok({ actor, target, recordOutcome });
+}
+
+/**
+ * Best-effort mapping from a mutation tool to the target `kind` it acts on, used only to label a
+ * DENIED audit when target resolution itself failed (so the record still carries a meaningful kind).
+ */
+function targetKindHint(tool: WebToolName): MutationTarget['kind'] {
+  switch (tool) {
+    case 'delete-datasource':
+      return 'datasource';
+    case 'delete-workbook':
+      return 'workbook';
+    case 'delete-extract-refresh-task':
+    case 'update-cloud-extract-refresh-task':
+      return 'extract-refresh-task';
+    default:
+      return 'datasource';
+  }
 }
 
 /**

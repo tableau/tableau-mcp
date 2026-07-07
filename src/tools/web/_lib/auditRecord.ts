@@ -40,8 +40,20 @@ export const auditRecordSchema = z.object({
     // Non-sensitive description only — NEVER the raw nonce.
     detail: z.string().optional(),
   }),
-  result: z.enum(['allowed', 'denied']),
+  // Lifecycle of a mutation attempt:
+  //   - 'denied'    — authorization/evidence gate rejected the attempt; nothing mutated.
+  //   - 'allowed'   — the attempt passed the gate. For a preview this is terminal (nothing mutates);
+  //                   for a confirm it records only the AUTHORIZATION decision and is followed by a
+  //                   terminal outcome record once the destructive REST call returns.
+  //   - 'completed' — the confirmed mutation's REST call succeeded.
+  //   - 'failed'    — the confirmed mutation was authorized but its REST call failed; the target is
+  //                   unchanged. Distinguishing this from 'completed' is what an incident responder
+  //                   needs — an 'allowed' record alone cannot tell authorized-but-failed from done.
+  result: z.enum(['allowed', 'denied', 'completed', 'failed']),
   denyReason: z.string().optional(),
+  // Non-sensitive summary of why a 'failed' outcome failed (e.g. the Tableau status/code). Never set
+  // for other results.
+  failureDetail: z.string().optional(),
 });
 
 export type AuditRecord = z.infer<typeof auditRecordSchema>;
