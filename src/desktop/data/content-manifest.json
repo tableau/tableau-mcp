@@ -217,8 +217,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "d4fb9d27ca63149101c526da353969a20cb6bbf66dbec1d6828ddbc9df8bc3c8",
-      "bytes": 228369
+      "sha256": "d3ce2f1a213e50ed6fbaff46b2e0e74b027610e13157c70662f21e9bce918a69",
+      "bytes": 229917
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -272,8 +272,8 @@
     },
     {
       "path": "template-manifests/correlation-scatter-plot-chart.manifest.json",
-      "sha256": "c091dbb856724a5b8c597f7951abfbc6b9ee91de8bea388b0c7c2c4c2193ed26",
-      "bytes": 3255
+      "sha256": "5d679334b17903a5a1099cfcd0f31de232dff5ef72fe754bdedab532bb07a533",
+      "bytes": 4687
     },
     {
       "path": "template-manifests/deviation-diverging-bar.manifest.json",

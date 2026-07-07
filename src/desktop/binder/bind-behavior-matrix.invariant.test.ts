@@ -38,6 +38,7 @@ const EXPECTED_DATASOURCE = 'Sample - Superstore';
 // extended (per the discover-and-pin contract) rather than silently under-covering.
 const EXPECTED_ELIGIBLE = [
   'box-plot-chart',
+  'correlation-scatter-plot-chart', // W60 parity port: factory stamp crossed
   'distribution-bar-code-chart',
   'funnel-chart',
   'gantt-task-rollup-chart',
@@ -74,6 +75,9 @@ const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
   ['treemap of Sales by Category and Sub-Category', 'part-to-whole-treemap-chart'],
   ['line chart of Sales by Order Date', 'trend-line-chart'],
   ['waterfall of Profit by Sub-Category', 'part-to-whole-waterfall'],
+  // W60 parity port: scatter's factory stamp crossed; full-phrasing ask one-shots
+  // (the bare 'scatter of Profit vs Sales' phrasing proposes — no 'scatter' chart noun).
+  ['scatter plot of Profit and Sales by Sub-Category', 'correlation-scatter-plot-chart'],
 ];
 
 // ── KNOWN SAFE-PROPOSES (NOT bound — fail-closed by design; WHY each) ──────────

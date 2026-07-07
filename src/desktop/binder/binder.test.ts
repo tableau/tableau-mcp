@@ -612,8 +612,11 @@ describe('binder/bindTemplate — evidence gate escalation (attacks 5+10)', () =
   it('a render-unverified template escalates not-fast-path', async () => {
     // correlation-scatter-plot-chart binds the fixture but is render_verified:'none'
     // ⇒ fast_path_eligible:false ⇒ the binder must refuse it (honest shrink).
+    // W60: fixture swapped correlation-scatter-plot-chart → connected-scatterplot when the
+    // former's factory stamp crossed (it is now legitimately eligible). connected-scatterplot
+    // carries the SAME slot_ids and remains render-unverified — the gate under test.
     const proposal: BindingProposal = {
-      template: 'correlation-scatter-plot-chart',
+      template: 'connected-scatterplot',
       title: 'Scatter',
       bindings: [
         { slot_id: 'sales', field: 'Sales' },
