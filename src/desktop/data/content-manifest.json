@@ -2,9 +2,9 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.11.0+content.2026-07-06",
+  "content_version": "2.11.0+content.2026-07-07",
   "schema_version": "1",
-  "generated": "2026-07-06",
+  "generated": "2026-07-07",
   "engine_compat": {
     "server_min": "2.11.0",
     "node": ">=22.7.5"
@@ -156,6 +156,11 @@
       "bytes": 5146
     },
     {
+      "path": "data-visualization-templates-xml/quota-attainment-bullet.xml",
+      "sha256": "6a0dfe73ca8d106a296fff0d22a06870c893124adf2a7079f33663e2ac92a614",
+      "bytes": 2032
+    },
+    {
       "path": "data-visualization-templates-xml/ranking-bump-chart.xml",
       "sha256": "79a6f458aa2538e48e9e62349d0b0608cbf981667ad7aec313889e2266c3a98e",
       "bytes": 8090
@@ -201,19 +206,24 @@
       "bytes": 3502
     },
     {
+      "path": "data-visualization-templates-xml/ww-ou-arrow.xml",
+      "sha256": "f822c0902be27773e93ab0a5f4e6b52063013a7347da7faf64ee23a73806b132",
+      "bytes": 19986
+    },
+    {
       "path": "template-manifests.fixture.json",
       "sha256": "3a305e60bddc4fec155c812ef8b9f598b010aaa6d663d56c7176cfd9f78996f6",
       "bytes": 1548
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "e5f0f38769c56ab88cb95783a8e48a284f90129ddcf454bd2b0d7a95a691dfb8",
-      "bytes": 211619
+      "sha256": "d4fb9d27ca63149101c526da353969a20cb6bbf66dbec1d6828ddbc9df8bc3c8",
+      "bytes": 228369
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
-      "sha256": "159a2e361389d6bc27a8ed91effc9067bf459a3b1da770cccba52c365784e903",
-      "bytes": 5824
+      "sha256": "e3cb287a383b13b2e413c4a2dd61dcde703a7abbf6d86627a772f17e6b3a4928",
+      "bytes": 7523
     },
     {
       "path": "template-manifests/bullet-variance-chart.manifest.json",
@@ -292,8 +302,8 @@
     },
     {
       "path": "template-manifests/funnel-chart.manifest.json",
-      "sha256": "28221fa4045bcef11e5f57bdd2060f3323527146617a1da0ff77079c1e216d3d",
-      "bytes": 5078
+      "sha256": "91b1bdfd520bab734cee8bb2892eda2002a9fd0028cf7f478e3580e83179723d",
+      "bytes": 7168
     },
     {
       "path": "template-manifests/gantt-chart.manifest.json",
@@ -302,8 +312,8 @@
     },
     {
       "path": "template-manifests/gantt-task-rollup-chart.manifest.json",
-      "sha256": "cdcefa36c4e36ffeb4a873948a850099ba3f2dcc9052082dd53479e143b3adf5",
-      "bytes": 7417
+      "sha256": "b61291596e313728c0862b681505c9fba5ea6d5bb9736643bccd53ae050aea9f",
+      "bytes": 9109
     },
     {
       "path": "template-manifests/gantt-timeline-chart.manifest.json",
@@ -352,8 +362,13 @@
     },
     {
       "path": "template-manifests/part-to-whole-waterfall.manifest.json",
-      "sha256": "f245af4f9bed1d7089680b3a972a0c6d00efe654043e125fbc67df3a6f195162",
-      "bytes": 8087
+      "sha256": "604e0410dc47c9d0c14bc32f07ef15c519c92eda45311eca76ec2ec3b7625090",
+      "bytes": 9674
+    },
+    {
+      "path": "template-manifests/quota-attainment-bullet.manifest.json",
+      "sha256": "d440645c62d86ab3f990923f28228d13ebee73d65a78dd4a0ea00d6f105f299c",
+      "bytes": 7700
     },
     {
       "path": "template-manifests/ranking-bump-chart.manifest.json",
@@ -382,8 +397,8 @@
     },
     {
       "path": "template-manifests/spatial-choropleth-map.manifest.json",
-      "sha256": "54504fcaae319608d6be2977935d7eb889df2bc69ee3cb3389072949c4b07c8d",
-      "bytes": 5439
+      "sha256": "977fe8ae7438f77f489c1279cb84ed2f9b564f641e0de22984ccbe009e25ae5d",
+      "bytes": 5452
     },
     {
       "path": "template-manifests/spatial-symbol-map.manifest.json",

@@ -37,7 +37,7 @@
     "bridge",
     "contribution"
   ],
-  "description": "A waterfall (bridge) chart: GanttBar floating bars whose tops sit on a running total ([cum:sum:Profit:qk] on rows) and whose lengths are the negative per-category measure (-SUM([Profit]) on size), so each category shows its incremental contribution to a cumulative whole across an ordered categorical axis (Sub-Category on cols, sorted DESC by SUM(Profit)). Color is a continuous SUM(Profit) encoding. Factory-compiled from the CookBook 'Waterfall Viz' worksheet; structurally compiled, not yet render-verified.",
+  "description": "A waterfall (bridge) chart: GanttBar floating bars whose tops sit on a running total ([cum:sum:Profit:qk] on rows) and whose lengths are the negative per-category measure (-SUM([Profit]) on size), so each category shows its incremental contribution to a cumulative whole across an ordered categorical axis (Sub-Category on cols, sorted DESC by SUM(Profit)). Color is a continuous SUM(Profit) encoding. Factory-compiled from the CookBook 'Waterfall Viz' worksheet; structurally compiled and render-verified (live-2026-07-06).",
   "avoid_when": [
     "The ask is about a smooth trend or trajectory over continuous time \u2014 a line/area chart shows the running trajectory better than a waterfall's discrete running-total bars.",
     "The bound categorical has no meaningful order and you do not sort it by the measure \u2014 the running total is order-dependent, so an arbitrary member order yields an arbitrary cumulative path (this template sorts Sub-Category DESC by SUM(Profit); binding an unordered dimension without that sort breaks the bridge).",
@@ -116,6 +116,16 @@
     {
       "code": "subtotals-mid-chain",
       "detail": "Product evidence (P&L waterfalls): real revenue/margin waterfalls carry MID-CHAIN SUBTOTAL members \u2014 e.g. 'Gross Profit' after the revenue/COGS block, then opex steps, then 'Operating Income'. This template treats EVERY member of the bound dimension as an independent step, adding its -SUM([Profit]) delta to the running total. A subtotal row is not an increment \u2014 it restates the running total to date \u2014 so if it is present as a member it DOUBLE-COUNTS: the cumulative path jumps by the subtotal's full value and every step after it is offset. The template cannot distinguish a subtotal member from a step member. Detection/guidance: bind a dimension of INCREMENTAL line items only (exclude subtotal/total members via a filter before binding), or model subtotals as reference lines / separate annotation rather than as steps. A tell-tale is a running total that ends at roughly 2x the true total, or a member whose delta equals the sum of the preceding steps.",
+      "xml": "part-to-whole-waterfall.xml:15-17"
+    },
+    {
+      "code": "running-total-needs-ordering",
+      "detail": "Product evidence (product team, 2026-07) \u2014 has bitten someone: the running total only MEANS something when the bound category carries an EXPLICIT or SEMANTIC order (a P&L line-item sequence, a time order, or the computed sort this template applies: Sub-Category DESC by SUM(Profit)). Bind a nominal dimension with NO inherent order and let it fall back to ALPHABETICAL member order (e.g. product names A\u2192Z) and the cumulative path becomes an arbitrary artifact of the labels \u2014 rename or re-sort the same rows and the bridge tells a different story. Bind an ordered/ordinal dimension or keep the measure sort; never read a cumulative build-up off an unordered alphabetical nominal. Tracked-hazard companion to the order-dependence avoid_when.",
+      "xml": "part-to-whole-waterfall.xml:22"
+    },
+    {
+      "code": "multi-currency-raw-sum",
+      "detail": "Product evidence (product team, 2026-07) \u2014 has bitten someone: when the source rows carry a MIXED currency_code (USD + EUR + GBP \u2026), the bound measure must NOT be summed raw. The running total [cum:sum:Profit:qk] on rows and every -SUM([Profit]) bar delta add different currency units as one number, so the cumulative whole is silently WRONG (a data-correctness bug, not a formatting one). The template has no currency awareness. Convert to a single reporting currency, or filter to one currency_code, BEFORE binding a revenue/margin measure into the waterfall.",
       "xml": "part-to-whole-waterfall.xml:15-17"
     }
   ]

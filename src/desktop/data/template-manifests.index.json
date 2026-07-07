@@ -3,13 +3,17 @@
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Edit data/template-manifests/*.manifest.json and re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
   "_source": "data/template-manifests/*.manifest.json",
-  "count": 40,
+  "count": 41,
   "fast_path_templates": [
+    "box-plot-chart",
     "distribution-bar-code-chart",
+    "funnel-chart",
+    "gantt-task-rollup-chart",
     "kpi-text",
     "part-to-whole-stacked-bar-chart",
     "part-to-whole-treemap-chart",
     "part-to-whole-waterfall",
+    "quota-attainment-bullet",
     "ranking-ordered-bar",
     "ranking-ordered-column",
     "spatial-choropleth-map",
@@ -21,11 +25,31 @@
       "template": "box-plot-chart",
       "family": "distribution",
       "readiness": "YELLOW",
-      "fast_path_eligible": false,
+      "fast_path_eligible": true,
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "none"
+        "render_verified": "live-2026-07-06",
+        "render_evidence": {
+          "method": "gate-composite",
+          "date": "2026-07-06",
+          "structural": 0.97297,
+          "critical_pass": "5/5",
+          "pixel": 1,
+          "pixel_regions": 6,
+          "sanity": "sane",
+          "sanity_signals": [
+            "mark-count=pass reconciled=true (800=800=EXPECTED_COUNT (grain DISTINCT(Customer Name,Segment)=800, FD assumption live-corrected from 793), Worksheet>Copy>Data on source and applied sheets)",
+            "caption-leak=pass"
+          ],
+          "run": "per-leg source-anchor replay (W38-LIVE-2); box-plot per-cell reference distribution survived apply; circle-per-customer over 3 Segment columns",
+          "artifacts": "local-only under ~/TableauGoldens/lab/ (box* renders, worksheet XMLs, w38l2 stamp JSON)",
+          "basis": "golden-parity gate run 2026-07-06 (source-anchor replay, W38-LIVE-2): structural 0.97297 (5/5 critical; sole miss = salience-1 resolved-title, sheet names differ by design), pixel 1.0 (6 ROIs, same-geometry captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 800=800=EXPECTED_COUNT (grain DISTINCT(Customer Name,Segment)=800, FD assumption live-corrected from 793)",
+          "lane": "fable-direct stamp run 2026-07-06 (orchestrator gate run over W38-LIVE-2 per-leg evidence; grade scratchpad imports parity-grade.mjs verbatim)",
+          "gate_composite": 98,
+          "high_pass": "0/0",
+          "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 ROIs). Source and applied are two INDEPENDENT renders of the same data on the same instance."
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [
@@ -40,7 +64,7 @@
         "quartile",
         "distribution"
       ],
-      "description": "A box-and-whisker plot showing the DISTRIBUTION of a measure: Circle marks at one point per grain member (the level dimension on the level-of-detail shelf), a continuous measure axis on rows ([sum:Measure:qk]), and a per-cell box-plot reference line (boxplot-whisker-type='standard') that draws the median / IQR box + whiskers over those points; an OPTIONAL facet dimension on cols splits the distribution into side-by-side boxes. Serves UC7 (distribution analysis) and the UC4 ranged/uncertainty view. Generalized from the repo distribution-bar-code-chart (a live-stamped strip plot: detail-grain dim on lod + aggregated measure axis) plus the distribution-box-whisker catalog exemplar's box-plot reference-line + Circle marks. Structurally compiled hermetically, NOT live render-verified.",
+      "description": "A box-and-whisker plot showing the DISTRIBUTION of a measure: Circle marks at one point per grain member (the level dimension on the level-of-detail shelf), a continuous measure axis on rows ([sum:Measure:qk]), and a per-cell box-plot reference line (boxplot-whisker-type='standard') that draws the median / IQR box + whiskers over those points; an OPTIONAL facet dimension on cols splits the distribution into side-by-side boxes. Serves UC7 (distribution analysis) and the UC4 ranged/uncertainty view. Generalized from the repo distribution-bar-code-chart (a live-stamped strip plot: detail-grain dim on lod + aggregated measure axis) plus the distribution-box-whisker catalog exemplar's box-plot reference-line + Circle marks. Live render-verified 2026-07-06 by the golden-parity gate (composite 98; see portability_evidence.render_evidence): structural 0.97297 (5/5 critical), pixel 1.0, binding-sanity sane via reconciled 800=800=EXPECTED_COUNT Copy>Data mark counts (grain live-corrected from the disproven Segment-FD assumption) and caption-leak pass.",
       "avoid_when": [
         "You want the frequency SHAPE across equal-width buckets (how many records fall in each range) — that is a histogram (distribution-histogram); a box plot summarizes to quartiles and hides the multi-modal shape a histogram reveals.",
         "The grain (level) dimension is coarse — a box drawn over only a handful of points is statistical noise (quartiles/whiskers are unstable); bind a fine-grained entity (deal/ticket/order) as the level (see hazard sparse-extremes).",
@@ -103,7 +127,7 @@
         },
         {
           "code": "not-live-render-verified",
-          "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop). portability_evidence.render_verified='none' and fast_path_eligible=false: the template binds the committed fixture (fixture_bind computed true — the measure + the grain dim; the optional facet is excluded) but has NO live render-readback proof. A live-YYYY-MM-DD stamp is EARNED later by the golden-parity gate / a hand-stamp with render_evidence, never granted at compile time.",
+          "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop) and SUBSEQUENTLY live render-verified on 2026-07-06: portability_evidence.render_verified='live-2026-07-06' and fast_path_eligible=true. The golden-parity gate earned the stamp (composite 98: structural 0.97297, pixel 1.0, binding-sanity sane via reconciled 800=800 Copy>Data mark counts — grain live-corrected from the disproven Segment-FD assumption — + caption-leak pass) — the live render-readback proof the hermetic compile alone could not supply. See portability_evidence.render_evidence for the auditable basis.",
           "xml": "box-plot-chart.xml:1"
         }
       ]
@@ -1679,11 +1703,31 @@
       "template": "funnel-chart",
       "family": "specialized",
       "readiness": "YELLOW",
-      "fast_path_eligible": false,
+      "fast_path_eligible": true,
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "none"
+        "render_verified": "live-2026-07-06",
+        "render_evidence": {
+          "method": "gate-composite",
+          "date": "2026-07-06",
+          "structural": 0.97297,
+          "critical_pass": "5/5",
+          "pixel": 1,
+          "pixel_regions": 6,
+          "sanity": "sane",
+          "sanity_signals": [
+            "mark-count=pass reconciled=true (4=4=EXPECTED_COUNT, Worksheet>Copy>Data on source and applied sheets)",
+            "caption-leak=pass"
+          ],
+          "run": "per-leg source-anchor replay (W38-LIVE-2); creative-bar funnel, native Ship Mode stage order; sanity earned via reconciled counts + positive no-captions pass (W38-B gate provenance fix)",
+          "artifacts": "local-only under ~/TableauGoldens/lab/ (funnel* renders, worksheet XMLs, w38l2 stamp JSON)",
+          "basis": "golden-parity gate run 2026-07-06 (source-anchor replay, W38-LIVE-2): structural 0.97297 (5/5 critical; sole miss = salience-1 resolved-title, sheet names differ by design), pixel 1.0 (6 ROIs, same-geometry captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 4=4=EXPECTED_COUNT",
+          "lane": "fable-direct stamp run 2026-07-06 (orchestrator gate run over W38-LIVE-2 per-leg evidence; grade scratchpad imports parity-grade.mjs verbatim)",
+          "gate_composite": 98,
+          "high_pass": "0/0",
+          "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 ROIs). Source and applied are two INDEPENDENT renders of the same data on the same instance."
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [
@@ -1698,7 +1742,7 @@
         "deal-flow",
         "drop-off"
       ],
-      "description": "A funnel/conversion chart for staged pipeline drop-off: an ORDERED stage dimension on rows ([none:Stage:nk], data/ordinal order preserved — deliberately NO computed sort) and the amount measure as a Bar on cols ([sum:Amount:qk]), also on the size encoding so the bars taper toward the narrow end of the funnel. Reading top-to-bottom the shrinking bars show stage-to-stage conversion / drop-off. Serves UC6 (pipeline health & deal flow). Tableau has no native funnel mark, so this is authored as creative Bar usage generalized from the proven ranking-ordered-bar structure (NO usable funnel exemplar exists in the twb corpus — grep 'funnel' returns nothing). Structurally compiled hermetically, NOT live render-verified.",
+      "description": "A funnel/conversion chart for staged pipeline drop-off: an ORDERED stage dimension on rows ([none:Stage:nk], data/ordinal order preserved — deliberately NO computed sort) and the amount measure as a Bar on cols ([sum:Amount:qk]), also on the size encoding so the bars taper toward the narrow end of the funnel. Reading top-to-bottom the shrinking bars show stage-to-stage conversion / drop-off. Serves UC6 (pipeline health & deal flow). Tableau has no native funnel mark, so this is authored as creative Bar usage generalized from the proven ranking-ordered-bar structure (NO usable funnel exemplar exists in the twb corpus — grep 'funnel' returns nothing). Live render-verified 2026-07-06 by the golden-parity gate (composite 98; see portability_evidence.render_evidence): structural 0.97297 (5/5 critical), pixel 1.0, binding-sanity sane via reconciled 4=4 Copy>Data mark counts and the positive no-captions caption-leak pass.",
       "avoid_when": [
         "The stages have no inherent sequence and you want members ranked by value — use ranking-ordered-bar (which sorts DESC by the measure); a funnel encodes a fixed conversion ORDER, not a value ranking.",
         "You need proportional multi-path flow between many source/target nodes — that is a sankey, not a single-path funnel.",
@@ -1749,8 +1793,13 @@
           "xml": "funnel-chart.xml:24"
         },
         {
+          "code": "multi-currency-raw-sum",
+          "detail": "Product evidence (product team, 2026-07) - has bitten someone: a pipeline amount summed across rows with a MIXED currency_code (USD + EUR + GBP ...) adds different currency units as one number, so each stage bar and the implied conversion are silently WRONG. SUM([Amount]) feeds BOTH the bar length (cols) and the taper (size) with no currency awareness. Convert to a single reporting currency, or filter to one currency_code, before binding a monetary pipeline measure.",
+          "xml": "funnel-chart.xml:34"
+        },
+        {
           "code": "not-live-render-verified",
-          "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop). portability_evidence.render_verified='none' and fast_path_eligible=false: the template binds the committed fixture (fixture_bind computed true — a dim + a measure) but has NO live render-readback proof. A live-YYYY-MM-DD stamp is EARNED later by the golden-parity gate / a hand-stamp with render_evidence, never granted at compile time.",
+          "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop) and SUBSEQUENTLY live render-verified on 2026-07-06: portability_evidence.render_verified='live-2026-07-06' and fast_path_eligible=true. The golden-parity gate earned the stamp (composite 98: structural 0.97297, pixel 1.0, binding-sanity sane via reconciled 4=4 Copy>Data mark counts + the positive no-captions caption-leak pass) — the live render-readback proof the hermetic compile alone could not supply. See portability_evidence.render_evidence for the auditable basis.",
           "xml": "funnel-chart.xml:1"
         }
       ]
@@ -1960,11 +2009,31 @@
       "template": "gantt-task-rollup-chart",
       "family": "time-series",
       "readiness": "YELLOW",
-      "fast_path_eligible": false,
+      "fast_path_eligible": true,
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "none"
+        "render_verified": "live-2026-07-06",
+        "render_evidence": {
+          "method": "gate-composite",
+          "date": "2026-07-06",
+          "structural": 0.97297,
+          "critical_pass": "5/5",
+          "pixel": 1,
+          "pixel_regions": 6,
+          "sanity": "sane",
+          "sanity_signals": [
+            "mark-count=pass reconciled=true (17=17=EXPECTED_COUNT, Worksheet>Copy>Data on source and applied sheets)",
+            "caption-leak=pass"
+          ],
+          "run": "source-anchor replay on the authored gantt oracle (Sample - Superstore, durable directory= connection); bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity fill + 9 template_fill_rewrites incl. DATEDIFF Order Duration calc graft — calc survived apply on [Calculation_9000000000000000026]; per-leg relaunch protocol, zero dialogs",
+          "artifacts": "local-only under ~/TableauGoldens/lab/gantt-* (renders, worksheet XMLs, workbook cache, stamp JSON)",
+          "basis": "golden-parity gate run 2026-07-06 (source-anchor replay, W31-B run-3): structural 0.97297 (5/5 critical; sole miss = salience-1 resolved-title, sheet names differ by design), pixel 1.0 (6 ROIs, same-geometry captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 17=17 and caption-leak pass (manifest source-domain vocabulary absent from applied captions)",
+          "lane": "fable-direct stamp run 2026-07-06 (orchestrator gate run over W31-B run-3 evidence; grade scratchpad imports parity-grade.mjs verbatim)",
+          "gate_composite": 98,
+          "high_pass": "0/0",
+          "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 ROIs all 1.0). Source and applied are two INDEPENDENT renders of the same data on the same instance."
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [
@@ -1979,7 +2048,7 @@
         "gantt",
         "task-schedule"
       ],
-      "description": "A task-rollup Gantt: exactly ONE GanttBar per task (categorical on rows), positioned by MIN(start_date) on a CONTINUOUS green date axis on cols (each task's EARLIEST start), sized by a summed duration measure (bar length) and colored by a phase dimension. The MIN aggregation is what makes the grain one-bar-per-task: an aggregated continuous date does not partition, so — when phase is functionally dependent on task — the render collapses to COUNTD(task) marks (offline-pinnable count 17 on the bundled Sample - Superstore when task=Sub-Category, phase=Category). Distinct from gantt-timeline-chart, whose cols is a per-date Day-Trunc [tdy:Start Date:qk] grain (a data-dependent bar count, one bar per date), and from gantt-chart, whose schedule MATRIX uses discrete Year/Month parts + two DATEDIFF calcs. PROVENANCE: this is the one-bar-per-task grain the INDEPENDENT gantt oracle (evals/runs/lane-i-smoke/make-gantt-oracle-twb.mjs -> ~/TableauGoldens/lab/gantt-oracle.twb) validly stamps — MIN(start) aggregated + task-grain rollup, EXPECTED_COUNT 17 on Superstore; W26-C identified the grain mismatch that made gantt-timeline-chart's per-date variant unstampable by that oracle. Factory-route template, generalized to placeholders + generic field names; structurally compiled, NOT live render-verified.",
+      "description": "A task-rollup Gantt: exactly ONE GanttBar per task (categorical on rows), positioned by MIN(start_date) on a CONTINUOUS green date axis on cols (each task's EARLIEST start), sized by a summed duration measure (bar length) and colored by a phase dimension. The MIN aggregation is what makes the grain one-bar-per-task: an aggregated continuous date does not partition, so — when phase is functionally dependent on task — the render collapses to COUNTD(task) marks (offline-pinnable count 17 on the bundled Sample - Superstore when task=Sub-Category, phase=Category). Distinct from gantt-timeline-chart, whose cols is a per-date Day-Trunc [tdy:Start Date:qk] grain (a data-dependent bar count, one bar per date), and from gantt-chart, whose schedule MATRIX uses discrete Year/Month parts + two DATEDIFF calcs. PROVENANCE: this is the one-bar-per-task grain the INDEPENDENT gantt oracle (evals/runs/lane-i-smoke/make-gantt-oracle-twb.mjs -> ~/TableauGoldens/lab/gantt-oracle.twb) validly stamps — MIN(start) aggregated + task-grain rollup, EXPECTED_COUNT 17 on Superstore; W26-C identified the grain mismatch that made gantt-timeline-chart's per-date variant unstampable by that oracle. Factory-route template, generalized to placeholders + generic field names; live render-verified 2026-07-06 by the golden-parity gate (composite 98; see portability_evidence.render_evidence): structural 0.97297 (5/5 critical), pixel 1.0, binding-sanity sane via reconciled 17=17=EXPECTED_COUNT Copy>Data mark counts and caption-leak pass.",
       "avoid_when": [
         "The task has intra-task structure that matters — multiple segments, gaps, or per-date activity within one task. MIN(start_date) rolls every task up to a SINGLE bar from its earliest start, HIDING those gaps; for one bar per activity date use the per-date gantt-timeline-chart variant instead.",
         "The dataset has no numeric duration/length measure to size the bars — a GanttBar with no size collapses to zero-length ticks; bind a real duration (days/periods) measure to the size slot or choose a dot/strip timeline.",
@@ -2039,7 +2108,7 @@
       "hazards": [
         {
           "code": "not-live-render-verified",
-          "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop). portability_evidence.render_verified='none' and fast_path_eligible=false: the template binds the committed fixture (fixture_bind computed true) but has NO live render-readback proof. PROVENANCE: the golden this template's render_verified will reconcile against is the INDEPENDENT gantt oracle (evals/runs/lane-i-smoke/make-gantt-oracle-twb.mjs -> ~/TableauGoldens/lab/gantt-oracle.twb), which encodes the same one-bar-per-task MIN(start) rollup and asserts EXPECTED_COUNT=17 (COUNTD(Sub-Category)) on the bundled Sample - Superstore. A live-YYYY-MM-DD stamp is EARNED later by the golden-parity gate / a hand-stamp with render_evidence, never granted at compile time.",
+          "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop) and SUBSEQUENTLY live render-verified on 2026-07-06: portability_evidence.render_verified='live-2026-07-06' and fast_path_eligible=true. PROVENANCE: the golden this template's render_verified reconciled against is the INDEPENDENT gantt oracle (evals/runs/lane-i-smoke/make-gantt-oracle-twb.mjs -> ~/TableauGoldens/lab/gantt-oracle.twb), which encodes the same one-bar-per-task MIN(start) rollup and asserts EXPECTED_COUNT=17 (COUNTD(Sub-Category)) on the bundled Sample - Superstore. The golden-parity gate earned the stamp (composite 98: structural 0.97297, pixel 1.0, binding-sanity sane via reconciled 17=17 Copy>Data mark counts + caption-leak pass) — see portability_evidence.render_evidence for the auditable basis.",
           "xml": "gantt-task-rollup-chart.xml:1"
         },
         {
@@ -2865,7 +2934,7 @@
         "bridge",
         "contribution"
       ],
-      "description": "A waterfall (bridge) chart: GanttBar floating bars whose tops sit on a running total ([cum:sum:Profit:qk] on rows) and whose lengths are the negative per-category measure (-SUM([Profit]) on size), so each category shows its incremental contribution to a cumulative whole across an ordered categorical axis (Sub-Category on cols, sorted DESC by SUM(Profit)). Color is a continuous SUM(Profit) encoding. Factory-compiled from the CookBook 'Waterfall Viz' worksheet; structurally compiled, not yet render-verified.",
+      "description": "A waterfall (bridge) chart: GanttBar floating bars whose tops sit on a running total ([cum:sum:Profit:qk] on rows) and whose lengths are the negative per-category measure (-SUM([Profit]) on size), so each category shows its incremental contribution to a cumulative whole across an ordered categorical axis (Sub-Category on cols, sorted DESC by SUM(Profit)). Color is a continuous SUM(Profit) encoding. Factory-compiled from the CookBook 'Waterfall Viz' worksheet; structurally compiled and render-verified (live-2026-07-06).",
       "avoid_when": [
         "The ask is about a smooth trend or trajectory over continuous time — a line/area chart shows the running trajectory better than a waterfall's discrete running-total bars.",
         "The bound categorical has no meaningful order and you do not sort it by the measure — the running total is order-dependent, so an arbitrary member order yields an arbitrary cumulative path (this template sorts Sub-Category DESC by SUM(Profit); binding an unordered dimension without that sort breaks the bridge).",
@@ -2945,6 +3014,126 @@
           "code": "subtotals-mid-chain",
           "detail": "Product evidence (P&L waterfalls): real revenue/margin waterfalls carry MID-CHAIN SUBTOTAL members — e.g. 'Gross Profit' after the revenue/COGS block, then opex steps, then 'Operating Income'. This template treats EVERY member of the bound dimension as an independent step, adding its -SUM([Profit]) delta to the running total. A subtotal row is not an increment — it restates the running total to date — so if it is present as a member it DOUBLE-COUNTS: the cumulative path jumps by the subtotal's full value and every step after it is offset. The template cannot distinguish a subtotal member from a step member. Detection/guidance: bind a dimension of INCREMENTAL line items only (exclude subtotal/total members via a filter before binding), or model subtotals as reference lines / separate annotation rather than as steps. A tell-tale is a running total that ends at roughly 2x the true total, or a member whose delta equals the sum of the preceding steps.",
           "xml": "part-to-whole-waterfall.xml:15-17"
+        },
+        {
+          "code": "running-total-needs-ordering",
+          "detail": "Product evidence (product team, 2026-07) — has bitten someone: the running total only MEANS something when the bound category carries an EXPLICIT or SEMANTIC order (a P&L line-item sequence, a time order, or the computed sort this template applies: Sub-Category DESC by SUM(Profit)). Bind a nominal dimension with NO inherent order and let it fall back to ALPHABETICAL member order (e.g. product names A→Z) and the cumulative path becomes an arbitrary artifact of the labels — rename or re-sort the same rows and the bridge tells a different story. Bind an ordered/ordinal dimension or keep the measure sort; never read a cumulative build-up off an unordered alphabetical nominal. Tracked-hazard companion to the order-dependence avoid_when.",
+          "xml": "part-to-whole-waterfall.xml:22"
+        },
+        {
+          "code": "multi-currency-raw-sum",
+          "detail": "Product evidence (product team, 2026-07) — has bitten someone: when the source rows carry a MIXED currency_code (USD + EUR + GBP …), the bound measure must NOT be summed raw. The running total [cum:sum:Profit:qk] on rows and every -SUM([Profit]) bar delta add different currency units as one number, so the cumulative whole is silently WRONG (a data-correctness bug, not a formatting one). The template has no currency awareness. Convert to a single reporting currency, or filter to one currency_code, BEFORE binding a revenue/margin measure into the waterfall.",
+          "xml": "part-to-whole-waterfall.xml:15-17"
+        }
+      ]
+    },
+    {
+      "template": "quota-attainment-bullet",
+      "family": "deviation",
+      "readiness": "YELLOW",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-06",
+        "render_evidence": {
+          "method": "gate-composite",
+          "date": "2026-07-06",
+          "structural": 0.97297,
+          "critical_pass": "5/5",
+          "pixel": 1,
+          "pixel_regions": 6,
+          "sanity": "sane",
+          "sanity_signals": [
+            "mark-count=pass reconciled=true (17=17=EXPECTED_COUNT, Worksheet>Copy>Data on source and applied sheets)",
+            "caption-leak=pass"
+          ],
+          "run": "per-leg source-anchor replay (W38-LIVE-2); grafted Target Amount calc ([Sales]*0.9) survived apply; per-cell reference line survived apply (all refline facets)",
+          "artifacts": "local-only under ~/TableauGoldens/lab/ (quota* renders, worksheet XMLs, w38l2 stamp JSON)",
+          "basis": "golden-parity gate run 2026-07-06 (source-anchor replay, W38-LIVE-2): structural 0.97297 (5/5 critical; sole miss = salience-1 resolved-title, sheet names differ by design), pixel 1.0 (6 ROIs, same-geometry captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 17=17=EXPECTED_COUNT",
+          "lane": "fable-direct stamp run 2026-07-06 (orchestrator gate run over W38-LIVE-2 per-leg evidence; grade scratchpad imports parity-grade.mjs verbatim)",
+          "gate_composite": 98,
+          "high_pass": "0/0",
+          "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 ROIs). Source and applied are two INDEPENDENT renders of the same data on the same instance."
+        }
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "quota",
+        "attainment",
+        "target",
+        "vs-goal",
+        "bullet"
+      ],
+      "description": "A quota-attainment bullet chart for the product #1-frequency use case (sales/quota performance, UC1): one Bar per entity member (rep/region on rows) whose length is the ACTUAL measure on cols ([sum:Actual:qk]), with a per-cell QUOTA reference line (SUM([Quota]) drawn as refline0 on the SAME axis as the actual bar) so the gap between the bar and the line reads as attainment vs goal at a glance. Compiled hermetically over a CLEANED copy of the repo ranking-bullet-chart.xml exemplar (which had no manifest, excluded by an earlier lane as dead XML; the original dead file is left untouched): the Superstore-specific categorical filter and the Profit-Ratio color calc were dropped, and Sub-Category/Sales/Profit were generalized to Entity/Actual/Quota placeholders, so the slot vocabulary is exactly {entity, actual, quota} (optional categorical filter dims are NOT slots). Sibling of bullet-variance-chart (same actual-vs-target shape, quota-attainment intent). Live render-verified 2026-07-06 by the golden-parity gate (composite 98; see portability_evidence.render_evidence): structural 0.97297 (5/5 critical), pixel 1.0, binding-sanity sane via reconciled 17=17=EXPECTED_COUNT Copy>Data mark counts and caption-leak pass (the grafted Target Amount calc and the per-cell reference line both survived apply). Provenance: product team, 2026-07.",
+      "avoid_when": [
+        "The actual and/or quota rows carry a MIXED currency_code (USD + EUR + GBP ...) that would be summed RAW: SUM([Actual]) on cols and the per-cell SUM([Quota]) reference line add different currency units as one number, so the attainment gap is silently wrong; convert to a single reporting currency (or filter to one currency_code) before binding a monetary measure.",
+        "There is no meaningful quota/goal/benchmark measure to compare against; without the reference line this collapses to a plain ranked bar (use ranking-ordered-bar), because a bullet's whole value is the actual-vs-quota gap."
+      ],
+      "slots": [
+        {
+          "slot_id": "entity",
+          "template_field": "Entity",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The entity dimension on rows: one bullet row per member (rep / region / team). Optional categorical FILTER dims are NOT slots (the dead exemplar's Superstore Sub-Category filter was dropped on clean). XML column-instance [none:Entity:nk]."
+        },
+        {
+          "slot_id": "actual",
+          "template_field": "Actual",
+          "derivation": "sum",
+          "role": [
+            "cols"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The ACTUAL/attained measure: the bar length on cols, SUM([Actual]) -> [sum:Actual:qk]. This is also the reference line's axis-column (the quota line sits on the same axis as the actual bar)."
+        },
+        {
+          "slot_id": "quota",
+          "template_field": "Quota",
+          "derivation": "sum",
+          "role": [
+            "lod",
+            "reference-line"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The QUOTA/target/goal measure that drives the reference line. Carried on the level-of-detail (lod) shelf as SUM([Quota]) -> [sum:Quota:qk] so it is in the view, and referenced by refline0 (value-column) as the per-cell quota line. replaceFieldReferences rewrites [Quota] in BOTH the lod instance and the reference-line on bind. See hazard quota-summed-per-cell / multi-currency-raw-sum."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "multi-currency-raw-sum",
+          "detail": "Product evidence (product team, 2026-07) - has bitten someone: when the actual and/or quota rows carry a MIXED currency_code (USD + EUR + GBP ...), neither measure may be summed raw. SUM([Actual]) on cols and the per-cell SUM([Quota]) reference line add different currency units as one number, so the attainment gap is silently WRONG (a data-correctness bug, not a formatting one). The template has no currency awareness. Convert to a single reporting currency, or filter to one currency_code, before binding a monetary measure.",
+          "xml": "quota-attainment-bullet.xml:33"
+        },
+        {
+          "code": "quota-summed-per-cell",
+          "detail": "The quota line is a per-cell reference line with formula='sum' (SUM([Quota])), so it aggregates the quota additively within each entity cell. If the bound quota is a rate/ratio, an average goal, or an already-rolled-up period total, SUM double-counts across the cell's rows and the line lands in the wrong place. Bind a quota that is additive at the entity grain, or switch the reference line's formula to average/median. (product team, 2026-07)",
+          "xml": "quota-attainment-bullet.xml:33"
+        },
+        {
+          "code": "partial-period-attainment",
+          "detail": "A mid-period ACTUAL compared against a FULL-period quota overstates the shortfall: the bar sits far below the quota line simply because the period is not over, not because the entity is behind. The template has no as-of/period-elapsed awareness: pro-rate the quota to the elapsed period, scale the actual to a run-rate, or label the as-of date before reading the gap as risk. (product team, 2026-07)",
+          "xml": "quota-attainment-bullet.xml:33"
+        },
+        {
+          "code": "not-live-render-verified",
+          "detail": "Compiled HERMETICALLY via the factory route over a cleaned copy of the previously dead ranking-bullet-chart.xml (no live Tableau Desktop) and SUBSEQUENTLY live render-verified on 2026-07-06: portability_evidence.render_verified='live-2026-07-06' and fast_path_eligible=true. The golden-parity gate earned the stamp (composite 98: structural 0.97297, pixel 1.0, binding-sanity sane via reconciled 17=17 Copy>Data mark counts + caption-leak pass; grafted Target Amount calc + per-cell reference line survived apply) — the live render-readback proof the hermetic compile alone could not supply. See portability_evidence.render_evidence for the auditable basis.",
+          "xml": "quota-attainment-bullet.xml:1"
         }
       ]
     },
@@ -3383,7 +3572,7 @@
         "spatial",
         "map"
       ],
-      "description": "Filled (choropleth) map: one Multipolygon per geographic region, shaded by a continuous color measure. Standard geo dimensions (Country + State) on level-of-detail with generated Latitude/Longitude on rows/cols; SUM(measure) on color as a custom-interpolated diverging gradient. Factory-compiled from the CookBook 'Choropleth Map Viz' worksheet; structurally compiled, not yet render-verified.",
+      "description": "Filled (choropleth) map: one Multipolygon per geographic region, shaded by a continuous color measure. Standard geo dimensions (Country + State) on level-of-detail with generated Latitude/Longitude on rows/cols; SUM(measure) on color as a custom-interpolated diverging gradient. Factory-compiled from the CookBook 'Choropleth Map Viz' worksheet; structurally compiled and render-verified (live-2026-07-06).",
       "avoid_when": [
         "The ask is 'which region ranks highest/lowest' or needs precise cross-region value comparison — filled-area color is hard to compare quantitatively; prefer a ranked bar chart.",
         "Regions differ wildly in physical size — large, low-value areas visually dominate (area is not magnitude); consider a symbol/bubble map sized by the measure instead.",

@@ -1,0 +1,51 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column datatype='string' name='[Facet]' role='dimension' type='nominal' />
+        <column datatype='string' name='[Level]' role='dimension' type='nominal' />
+        <column datatype='real' name='[Measure]' role='measure' type='quantitative' />
+        <column-instance column='[Facet]' derivation='None' name='[none:Facet:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Level]' derivation='None' name='[none:Level:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Measure]' derivation='Sum' name='[sum:Measure:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='refline'>
+        <format attr='stroke-color' id='refline0' value='#000000' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Circle' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <lod column='[{{DATASOURCE}}].[none:Level:nk]' />
+        </encodings>
+        <reference-line axis-column='[{{DATASOURCE}}].[sum:Measure:qk]' boxplot-mark-exclusion='false' boxplot-whisker-type='standard' enable-instant-analytics='true' formula='average' id='refline0' label-type='automatic' probability='95' scope='per-cell' symmetric='false' value-column='[{{DATASOURCE}}].[sum:Measure:qk]' z-order='1' />
+      </pane>
+    </panes>
+    <rows>[{{DATASOURCE}}].[sum:Measure:qk]</rows>
+    <cols>[{{DATASOURCE}}].[none:Facet:nk]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

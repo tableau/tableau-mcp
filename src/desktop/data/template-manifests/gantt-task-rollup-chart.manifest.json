@@ -1,103 +1,123 @@
 {
-  "template": "gantt-task-rollup-chart",
-  "family": "time-series",
-  "readiness": "YELLOW",
-  "fast_path_eligible": false,
-  "fast_path_blockers": [],
-  "portability_evidence": {
-    "fixture_bind": true,
-    "render_verified": "none"
+ "template": "gantt-task-rollup-chart",
+ "family": "time-series",
+ "readiness": "YELLOW",
+ "fast_path_eligible": true,
+ "fast_path_blockers": [],
+ "portability_evidence": {
+  "fixture_bind": true,
+  "render_verified": "live-2026-07-06",
+  "render_evidence": {
+   "method": "gate-composite",
+   "date": "2026-07-06",
+   "structural": 0.97297,
+   "critical_pass": "5/5",
+   "pixel": 1.0,
+   "pixel_regions": 6,
+   "sanity": "sane",
+   "sanity_signals": [
+    "mark-count=pass reconciled=true (17=17=EXPECTED_COUNT, Worksheet>Copy>Data on source and applied sheets)",
+    "caption-leak=pass"
+   ],
+   "run": "source-anchor replay on the authored gantt oracle (Sample - Superstore, durable directory= connection); bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity fill + 9 template_fill_rewrites incl. DATEDIFF Order Duration calc graft — calc survived apply on [Calculation_9000000000000000026]; per-leg relaunch protocol, zero dialogs",
+   "artifacts": "local-only under ~/TableauGoldens/lab/gantt-* (renders, worksheet XMLs, workbook cache, stamp JSON)",
+   "basis": "golden-parity gate run 2026-07-06 (source-anchor replay, W31-B run-3): structural 0.97297 (5/5 critical; sole miss = salience-1 resolved-title, sheet names differ by design), pixel 1.0 (6 ROIs, same-geometry captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 17=17 and caption-leak pass (manifest source-domain vocabulary absent from applied captions)",
+   "lane": "fable-direct stamp run 2026-07-06 (orchestrator gate run over W31-B run-3 evidence; grade scratchpad imports parity-grade.mjs verbatim)",
+   "gate_composite": 98,
+   "high_pass": "0/0",
+   "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 ROIs all 1.0). Source and applied are two INDEPENDENT renders of the same data on the same instance."
+  }
+ },
+ "datasource_placeholder": true,
+ "placeholders": [
+  "TITLE",
+  "DATASOURCE"
+ ],
+ "intent_keywords": [
+  "gantt-task-rollup",
+  "task-rollup",
+  "gantt-rollup",
+  "one-bar-per-task",
+  "gantt",
+  "task-schedule"
+ ],
+ "description": "A task-rollup Gantt: exactly ONE GanttBar per task (categorical on rows), positioned by MIN(start_date) on a CONTINUOUS green date axis on cols (each task's EARLIEST start), sized by a summed duration measure (bar length) and colored by a phase dimension. The MIN aggregation is what makes the grain one-bar-per-task: an aggregated continuous date does not partition, so — when phase is functionally dependent on task — the render collapses to COUNTD(task) marks (offline-pinnable count 17 on the bundled Sample - Superstore when task=Sub-Category, phase=Category). Distinct from gantt-timeline-chart, whose cols is a per-date Day-Trunc [tdy:Start Date:qk] grain (a data-dependent bar count, one bar per date), and from gantt-chart, whose schedule MATRIX uses discrete Year/Month parts + two DATEDIFF calcs. PROVENANCE: this is the one-bar-per-task grain the INDEPENDENT gantt oracle (evals/runs/lane-i-smoke/make-gantt-oracle-twb.mjs -> ~/TableauGoldens/lab/gantt-oracle.twb) validly stamps — MIN(start) aggregated + task-grain rollup, EXPECTED_COUNT 17 on Superstore; W26-C identified the grain mismatch that made gantt-timeline-chart's per-date variant unstampable by that oracle. Factory-route template, generalized to placeholders + generic field names; live render-verified 2026-07-06 by the golden-parity gate (composite 98; see portability_evidence.render_evidence): structural 0.97297 (5/5 critical), pixel 1.0, binding-sanity sane via reconciled 17=17=EXPECTED_COUNT Copy>Data mark counts and caption-leak pass.",
+ "avoid_when": [
+  "The task has intra-task structure that matters — multiple segments, gaps, or per-date activity within one task. MIN(start_date) rolls every task up to a SINGLE bar from its earliest start, HIDING those gaps; for one bar per activity date use the per-date gantt-timeline-chart variant instead.",
+  "The dataset has no numeric duration/length measure to size the bars — a GanttBar with no size collapses to zero-length ticks; bind a real duration (days/periods) measure to the size slot or choose a dot/strip timeline.",
+  "The ask needs a schedule MATRIX broken out by discrete Year/Month columns with a computed ship/lead lag and Late/On-Time/Early status across a start AND an end date — that is gantt-chart; this rollup plots one continuous MIN(start) axis and a plain duration measure."
+ ],
+ "slots": [
+  {
+   "slot_id": "task",
+   "template_field": "Task",
+   "derivation": "none",
+   "role": [
+    "rows"
+   ],
+   "kind": "categorical",
+   "bindable": true,
+   "required": true,
+   "notes": "The task/activity label on rows — exactly one GanttBar row per member (the rollup grain). XML column-instance [none:Task:nk]."
   },
-  "datasource_placeholder": true,
-  "placeholders": [
-    "TITLE",
-    "DATASOURCE"
-  ],
-  "intent_keywords": [
-    "gantt-task-rollup",
-    "task-rollup",
-    "gantt-rollup",
-    "one-bar-per-task",
-    "gantt",
-    "task-schedule"
-  ],
-  "description": "A task-rollup Gantt: exactly ONE GanttBar per task (categorical on rows), positioned by MIN(start_date) on a CONTINUOUS green date axis on cols (each task's EARLIEST start), sized by a summed duration measure (bar length) and colored by a phase dimension. The MIN aggregation is what makes the grain one-bar-per-task: an aggregated continuous date does not partition, so — when phase is functionally dependent on task — the render collapses to COUNTD(task) marks (offline-pinnable count 17 on the bundled Sample - Superstore when task=Sub-Category, phase=Category). Distinct from gantt-timeline-chart, whose cols is a per-date Day-Trunc [tdy:Start Date:qk] grain (a data-dependent bar count, one bar per date), and from gantt-chart, whose schedule MATRIX uses discrete Year/Month parts + two DATEDIFF calcs. PROVENANCE: this is the one-bar-per-task grain the INDEPENDENT gantt oracle (evals/runs/lane-i-smoke/make-gantt-oracle-twb.mjs -> ~/TableauGoldens/lab/gantt-oracle.twb) validly stamps — MIN(start) aggregated + task-grain rollup, EXPECTED_COUNT 17 on Superstore; W26-C identified the grain mismatch that made gantt-timeline-chart's per-date variant unstampable by that oracle. Factory-route template, generalized to placeholders + generic field names; structurally compiled, NOT live render-verified.",
-  "avoid_when": [
-    "The task has intra-task structure that matters — multiple segments, gaps, or per-date activity within one task. MIN(start_date) rolls every task up to a SINGLE bar from its earliest start, HIDING those gaps; for one bar per activity date use the per-date gantt-timeline-chart variant instead.",
-    "The dataset has no numeric duration/length measure to size the bars — a GanttBar with no size collapses to zero-length ticks; bind a real duration (days/periods) measure to the size slot or choose a dot/strip timeline.",
-    "The ask needs a schedule MATRIX broken out by discrete Year/Month columns with a computed ship/lead lag and Late/On-Time/Early status across a start AND an end date — that is gantt-chart; this rollup plots one continuous MIN(start) axis and a plain duration measure."
-  ],
-  "slots": [
-    {
-      "slot_id": "task",
-      "template_field": "Task",
-      "derivation": "none",
-      "role": [
-        "rows"
-      ],
-      "kind": "categorical",
-      "bindable": true,
-      "required": true,
-      "notes": "The task/activity label on rows — exactly one GanttBar row per member (the rollup grain). XML column-instance [none:Task:nk]."
-    },
-    {
-      "slot_id": "start_date",
-      "template_field": "Start Date",
-      "derivation": "min",
-      "role": [
-        "cols"
-      ],
-      "kind": "temporal",
-      "bindable": true,
-      "required": true,
-      "notes": "The bar's START position on the CONTINUOUS date axis, AGGREGATED as MIN (green [min:Start Date:qk]) = each task's EARLIEST start. The MIN aggregation (not a per-date Day-Trunc) is what collapses the grain to one bar per task — an aggregated continuous date does not partition. A single date field at a single derivation, so no qualified key is required. See hazards min-start-rollup-hides-intra-task-gaps + continuous-min-start-axis-required."
-    },
-    {
-      "slot_id": "duration",
-      "template_field": "Duration",
-      "derivation": "sum",
-      "role": [
-        "size"
-      ],
-      "kind": "quantitative",
-      "bindable": true,
-      "required": true,
-      "notes": "The bar LENGTH (task duration in days/periods) on the size encoding — SUM([Duration]) -> [sum:Duration:qk]. A plain length measure, NOT a DATEDIFF calc, so the template binds a single-date schema. Must bind a REAL duration/length measure — see hazard gantt-size-real-duration-measure."
-    },
-    {
-      "slot_id": "phase",
-      "template_field": "Phase",
-      "derivation": "none",
-      "role": [
-        "color"
-      ],
-      "kind": "categorical",
-      "bindable": true,
-      "required": true,
-      "notes": "The phase/status dimension on color — one hue per member. XML column-instance [none:Phase:nk]. REQUIRED (not optional): the stampable oracle semantics carry color=phase in the default render, and an optional color slot would have to sit OFF-shelf (dropping color) or dangle an unbound pill — so the vocabulary forces required here. When phase is functionally dependent on task the rollup grain stays one-bar-per-task."
-    }
-  ],
-  "calcs": [],
-  "hazards": [
-    {
-      "code": "not-live-render-verified",
-      "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop). portability_evidence.render_verified='none' and fast_path_eligible=false: the template binds the committed fixture (fixture_bind computed true) but has NO live render-readback proof. PROVENANCE: the golden this template's render_verified will reconcile against is the INDEPENDENT gantt oracle (evals/runs/lane-i-smoke/make-gantt-oracle-twb.mjs -> ~/TableauGoldens/lab/gantt-oracle.twb), which encodes the same one-bar-per-task MIN(start) rollup and asserts EXPECTED_COUNT=17 (COUNTD(Sub-Category)) on the bundled Sample - Superstore. A live-YYYY-MM-DD stamp is EARNED later by the golden-parity gate / a hand-stamp with render_evidence, never granted at compile time.",
-      "xml": "gantt-task-rollup-chart.xml:1"
-    },
-    {
-      "code": "min-start-rollup-hides-intra-task-gaps",
-      "detail": "The defining rollup: cols carries [min:Start Date:qk], an AGGREGATED continuous MIN date (derivation Min), so an aggregated date does not partition and the grain collapses to exactly one GanttBar per task at its EARLIEST start. This deliberately HIDES intra-task gaps, multiple segments, and any per-date structure within a task — the honest cost of the rollup versus gantt-timeline-chart's per-date [tdy:Start Date:qk] grain. If per-date/segment detail matters, use the timeline variant, not this rollup.",
-      "xml": "gantt-task-rollup-chart.xml:17"
-    },
-    {
-      "code": "gantt-size-real-duration-measure",
-      "detail": "The GanttBar length is driven by SUM([Duration]), a plain quantitative measure, not a DATEDIFF(end,start) duration calc (contrast gantt-chart's Ship Lag). This is what lets the template bind a single-date schema, but the size slot MUST bind a REAL duration/length-in-days measure — binding an unrelated measure sizes the bars by that measure instead of task duration, and binding nothing collapses the bars to zero-length ticks.",
-      "xml": "gantt-task-rollup-chart.xml:30"
-    },
-    {
-      "code": "continuous-min-start-axis-required",
-      "detail": "cols carries a CONTINUOUS MIN-aggregated date [min:Start Date:qk] (green pill) — the rollup start axis. The start_date slot must bind a real date/datetime field; binding a non-date field (or a discrete date part) collapses the axis to categorical headers and the GanttBars lose their time positions.",
-      "xml": "gantt-task-rollup-chart.xml:35"
-    }
-  ]
+  {
+   "slot_id": "start_date",
+   "template_field": "Start Date",
+   "derivation": "min",
+   "role": [
+    "cols"
+   ],
+   "kind": "temporal",
+   "bindable": true,
+   "required": true,
+   "notes": "The bar's START position on the CONTINUOUS date axis, AGGREGATED as MIN (green [min:Start Date:qk]) = each task's EARLIEST start. The MIN aggregation (not a per-date Day-Trunc) is what collapses the grain to one bar per task — an aggregated continuous date does not partition. A single date field at a single derivation, so no qualified key is required. See hazards min-start-rollup-hides-intra-task-gaps + continuous-min-start-axis-required."
+  },
+  {
+   "slot_id": "duration",
+   "template_field": "Duration",
+   "derivation": "sum",
+   "role": [
+    "size"
+   ],
+   "kind": "quantitative",
+   "bindable": true,
+   "required": true,
+   "notes": "The bar LENGTH (task duration in days/periods) on the size encoding — SUM([Duration]) -> [sum:Duration:qk]. A plain length measure, NOT a DATEDIFF calc, so the template binds a single-date schema. Must bind a REAL duration/length measure — see hazard gantt-size-real-duration-measure."
+  },
+  {
+   "slot_id": "phase",
+   "template_field": "Phase",
+   "derivation": "none",
+   "role": [
+    "color"
+   ],
+   "kind": "categorical",
+   "bindable": true,
+   "required": true,
+   "notes": "The phase/status dimension on color — one hue per member. XML column-instance [none:Phase:nk]. REQUIRED (not optional): the stampable oracle semantics carry color=phase in the default render, and an optional color slot would have to sit OFF-shelf (dropping color) or dangle an unbound pill — so the vocabulary forces required here. When phase is functionally dependent on task the rollup grain stays one-bar-per-task."
+  }
+ ],
+ "calcs": [],
+ "hazards": [
+  {
+   "code": "not-live-render-verified",
+   "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop) and SUBSEQUENTLY live render-verified on 2026-07-06: portability_evidence.render_verified='live-2026-07-06' and fast_path_eligible=true. PROVENANCE: the golden this template's render_verified reconciled against is the INDEPENDENT gantt oracle (evals/runs/lane-i-smoke/make-gantt-oracle-twb.mjs -> ~/TableauGoldens/lab/gantt-oracle.twb), which encodes the same one-bar-per-task MIN(start) rollup and asserts EXPECTED_COUNT=17 (COUNTD(Sub-Category)) on the bundled Sample - Superstore. The golden-parity gate earned the stamp (composite 98: structural 0.97297, pixel 1.0, binding-sanity sane via reconciled 17=17 Copy>Data mark counts + caption-leak pass) — see portability_evidence.render_evidence for the auditable basis.",
+   "xml": "gantt-task-rollup-chart.xml:1"
+  },
+  {
+   "code": "min-start-rollup-hides-intra-task-gaps",
+   "detail": "The defining rollup: cols carries [min:Start Date:qk], an AGGREGATED continuous MIN date (derivation Min), so an aggregated date does not partition and the grain collapses to exactly one GanttBar per task at its EARLIEST start. This deliberately HIDES intra-task gaps, multiple segments, and any per-date structure within a task — the honest cost of the rollup versus gantt-timeline-chart's per-date [tdy:Start Date:qk] grain. If per-date/segment detail matters, use the timeline variant, not this rollup.",
+   "xml": "gantt-task-rollup-chart.xml:17"
+  },
+  {
+   "code": "gantt-size-real-duration-measure",
+   "detail": "The GanttBar length is driven by SUM([Duration]), a plain quantitative measure, not a DATEDIFF(end,start) duration calc (contrast gantt-chart's Ship Lag). This is what lets the template bind a single-date schema, but the size slot MUST bind a REAL duration/length-in-days measure — binding an unrelated measure sizes the bars by that measure instead of task duration, and binding nothing collapses the bars to zero-length ticks.",
+   "xml": "gantt-task-rollup-chart.xml:30"
+  },
+  {
+   "code": "continuous-min-start-axis-required",
+   "detail": "cols carries a CONTINUOUS MIN-aggregated date [min:Start Date:qk] (green pill) — the rollup start axis. The start_date slot must bind a real date/datetime field; binding a non-date field (or a discrete date part) collapses the axis to categorical headers and the GanttBars lose their time positions.",
+   "xml": "gantt-task-rollup-chart.xml:35"
+  }
+ ]
 }
