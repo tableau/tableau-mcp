@@ -9,9 +9,6 @@ import { log } from '../logging/logger.js';
 import type { FeatureGateProvider } from './featureGateProvider.js';
 import { ServerFeatureGate } from './serverFeatureGate.js';
 
-// Re-export type for consumers
-export type { FeatureGateProvider };
-
 function isRecord(obj: unknown): obj is Record<string, unknown> {
   return typeof obj === 'object' && obj !== null && !Array.isArray(obj);
 }

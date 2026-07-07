@@ -5,9 +5,7 @@
  * so external deployments can implement a custom telemetry provider against a stable type,
  * without importing the server's internal config schemas or zod. Keep it free of runtime dependencies.
  *
- * `TelemetryAttributes` is hand-written here (rather than `z.infer` of the internal
- * `telemetryAttributesSchema`) so this file has no runtime imports. A compile-time guard in
- * `./types.ts` asserts the two stay in sync.
+ * `TelemetryAttributes` is hand-written here to avoid runtime dependencies.
  */
 
 /**
