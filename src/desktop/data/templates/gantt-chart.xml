@@ -32,26 +32,13 @@ END' />
         <column-instance column='[Order Date]' derivation='Year' name='[yr:Order Date:ok]' pivot='key' type='ordinal' />
       </datasource-dependencies>
       <filter class='categorical' column='[{{DATASOURCE}}].[none:Product Name:nk]'>
-        <groupfilter function='union' user:ui-domain='relevant' user:ui-enumeration='inclusive' user:ui-marker='enumerate'>
-          <groupfilter function='member' level='[none:Product Name:nk]' member='"Bevis Steel Folding Chairs"' />
-          <groupfilter function='member' level='[none:Product Name:nk]' member='"DMI Arturo Collection Mission-style Design Wood Chair"' />
-          <groupfilter function='member' level='[none:Product Name:nk]' member='"Global Airflow Leather Mesh Back Chair, Black"' />
-          <groupfilter function='member' level='[none:Product Name:nk]' member='"Global Armless Task Chair, Royal Blue"' />
-          <groupfilter function='member' level='[none:Product Name:nk]' member='"Global Chrome Stack Chair"' />
-          <groupfilter function='member' level='[none:Product Name:nk]' member='"Global Comet Stacking Arm Chair"' />
-          <groupfilter function='member' level='[none:Product Name:nk]' member='"Global Comet Stacking Armless Chair"' />
-          <groupfilter function='member' level='[none:Product Name:nk]' member='"Global Commerce Series High-Back Swivel/Tilt Chairs"' />
-          <groupfilter function='member' level='[none:Product Name:nk]' member='"Global Commerce Series Low-Back Swivel/Tilt Chairs"' />
-        </groupfilter>
+        <groupfilter function='level-members' level='[none:Product Name:nk]' />
       </filter>
       <filter class='categorical' column='[{{DATASOURCE}}].[none:Sub-Category:nk]'>
-        <groupfilter function='member' level='[none:Sub-Category:nk]' member='"Chairs"' user:ui-domain='relevant' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
+        <groupfilter function='level-members' level='[none:Sub-Category:nk]' />
       </filter>
       <filter class='categorical' column='[{{DATASOURCE}}].[yr:Order Date:ok]'>
-        <groupfilter function='union' user:ui-domain='relevant' user:ui-enumeration='inclusive' user:ui-marker='enumerate'>
-          <groupfilter function='member' level='[yr:Order Date:ok]' member='2016' />
-          <groupfilter function='member' level='[yr:Order Date:ok]' member='2026' />
-        </groupfilter>
+        <groupfilter function='level-members' level='[yr:Order Date:ok]' />
       </filter>
       <slices>
         <column>[{{DATASOURCE}}].[yr:Order Date:ok]</column>
