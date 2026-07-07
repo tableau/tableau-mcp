@@ -13,6 +13,7 @@ import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import { listKnowledgeResources, readKnowledgeResource } from './desktop/knowledge/index.js';
 import { SessionManager } from './desktop/sessionManager.js';
+import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
@@ -49,6 +50,15 @@ export class DesktopMcpServer extends Server {
 
   registerTools = async (): Promise<void> => {
     const config = getDesktopConfig();
+
+    log({
+      message: config.externalApiEnabled
+        ? 'Desktop transport ACTIVE: External Client API (Athena V0) — TABLEAU_EXTERNAL_API enabled'
+        : 'Desktop transport ACTIVE: Agent API (default)',
+      level: 'info',
+      logger: 'DesktopMcpServer',
+      data: { externalApiEnabled: config.externalApiEnabled },
+    });
 
     for (const {
       name,
