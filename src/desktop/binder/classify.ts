@@ -416,6 +416,19 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   // specificity ranking (multi-token 'sales-over-time' &c.) governs instead, so
   // admitting it cannot create a cross-template flip later.
   'over-time',
+  // Second growth event same night: the 13th-15th stamps made deviation
+  // (quota joins ww-ou-arrow) and distribution (box-plot joins bar-code)
+  // two-member families, collapsing nativity for the incumbent members'
+  // vocabulary — "over-under arrow chart of Sales" and "bar-code strip of X"
+  // classified null (live-caught by the drift guard). Each noun below is a
+  // deterministic type selector carried by exactly one template:
+  // 'arrow-chart' + 'over-under-arrow' (ww-ou-arrow),
+  // 'bar-code' + 'strip-plot' + 'dot-strip' (distribution-bar-code-chart).
+  'arrow-chart',
+  'over-under-arrow',
+  'bar-code',
+  'strip-plot',
+  'dot-strip',
 ]);
 
 /** True when at least one ask-matched keyword is a distinctive chart noun. */
