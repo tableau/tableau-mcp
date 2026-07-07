@@ -129,7 +129,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       title: 'Update Cloud Extract Refresh Task',
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     });
   });

@@ -127,7 +127,7 @@ export const getUpdateCloudExtractRefreshTaskTool = (
       title: 'Update Cloud Extract Refresh Task',
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     },
     callback: async (args, extra): Promise<CallToolResult> => {
