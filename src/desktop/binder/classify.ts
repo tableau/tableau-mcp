@@ -380,6 +380,28 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   'treemap',
   'pie',
   'donut',
+  // 2026-07-06 growth (per the table's own contract — grow as new distinct-shape
+  // templates are stamped eligible): gantt-task-rollup-chart's stamp made time-series
+  // a TWO-member eligible family, collapsing strict-majority nativity for trend-line's
+  // vocabulary ("line chart of X over Y" classified null — the exact sibling-scaling
+  // regression this table exists to prevent). Each noun below deterministically names
+  // a chart type and equals a real intent_keyword of its (stamped or imminently
+  // stamped, evidence-earned 2026-07-06) template: 'line' (trend-line-chart),
+  // 'gantt' (gantt-task-rollup-chart), 'histogram' (distribution-histogram),
+  // 'bullet' (quota-attainment-bullet), 'funnel' (funnel-chart),
+  // 'slope' + 'slope-chart' + 'slope-graph' (slope-chart),
+  // 'box-plot' + 'boxplot' + 'box-and-whisker' (box-plot-chart).
+  'line',
+  'gantt',
+  'histogram',
+  'bullet',
+  'funnel',
+  'slope',
+  'slope-chart',
+  'slope-graph',
+  'box-plot',
+  'boxplot',
+  'box-and-whisker',
 ]);
 
 /** True when at least one ask-matched keyword is a distinctive chart noun. */
