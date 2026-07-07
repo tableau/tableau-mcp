@@ -5,8 +5,8 @@
 import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
-import type { FeatureGateProvider } from './featureGateProvider.js';
 import { log } from '../logging/logger.js';
+import type { FeatureGateProvider } from './featureGateProvider.js';
 import { ServerFeatureGate } from './serverFeatureGate.js';
 
 // Re-export type for consumers

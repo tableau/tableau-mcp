@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import type { TelemetryAttributes } from './telemetryProvider.js';
 
 /**
@@ -13,12 +14,10 @@ export const telemetryAttributesSchema = z.record(
 // Compile-time guard: the hand-written `TelemetryAttributes` in ./telemetryProvider.ts must stay
 // structurally identical to the type inferred from `telemetryAttributesSchema`. If either drifts,
 // one of these assignments fails to type-check.
-type _AttributesInSyncA = z.infer<typeof telemetryAttributesSchema> extends TelemetryAttributes
-  ? true
-  : never;
-type _AttributesInSyncB = TelemetryAttributes extends z.infer<typeof telemetryAttributesSchema>
-  ? true
-  : never;
+type _AttributesInSyncA =
+  z.infer<typeof telemetryAttributesSchema> extends TelemetryAttributes ? true : never;
+type _AttributesInSyncB =
+  TelemetryAttributes extends z.infer<typeof telemetryAttributesSchema> ? true : never;
 const _attributesInSync: [_AttributesInSyncA, _AttributesInSyncB] = [true, true];
 void _attributesInSync;
 
