@@ -6,33 +6,43 @@ import { log } from '../../logging/logger.js';
 import { discoveryFileSchema, ExternalApiInstance } from './types.js';
 
 /**
- * Resolve the platform-correct directory where Desktop writes per-instance
- * `<pid>.json` discovery files. Overridable via `TABLEAU_EXTERNAL_API_DISCOVERY_DIR`.
+ * Resolve the candidate directories where Desktop writes per-instance `<pid>.json`
+ * discovery files, most-likely first. Overridable via `TABLEAU_EXTERNAL_API_DISCOVERY_DIR`.
  *
- * NOTE: the exact sub-path under the OS app-local-data root is a residual risk — the
- * PR evidence only pinned the `ExternalApi/<pid>.json` leaf. `Tableau/ExternalApi` is
- * the best current guess; keep it overridable.
+ * Desktop writes to Qt's AppLocalDataLocation, which is `<root>/<Org>/<AppName>` — and
+ * both Org and AppName are "Tableau", so the REAL path carries a DOUBLED segment:
+ * live-confirmed on Windows 2026-07-07 (Lauren Jackson's machine):
+ * `%LOCALAPPDATA%\Tableau\Tableau\ExternalApi\<pid>.json`. The single-`Tableau` form is
+ * kept as a fallback candidate in case a platform/build collapses the org segment.
  */
+export function getExternalApiDiscoveryDirs(
+  env: Record<string, string | undefined> = process.env,
+  platform: NodeJS.Platform = process.platform,
+): Array<string> {
+  const override = env.TABLEAU_EXTERNAL_API_DISCOVERY_DIR;
+  if (override) {
+    return [override];
+  }
+
+  const root =
+    platform === 'win32'
+      ? env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local')
+      : platform === 'darwin'
+        ? join(homedir(), 'Library', 'Application Support')
+        : env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
+
+  return [
+    join(root, 'Tableau', 'Tableau', 'ExternalApi'), // Qt <Org>/<AppName> — the live-confirmed shape
+    join(root, 'Tableau', 'ExternalApi'), // fallback: collapsed org segment
+  ];
+}
+
+/** Back-compat single-dir resolver: the most likely candidate. */
 export function getExternalApiDiscoveryDir(
   env: Record<string, string | undefined> = process.env,
   platform: NodeJS.Platform = process.platform,
 ): string {
-  const override = env.TABLEAU_EXTERNAL_API_DISCOVERY_DIR;
-  if (override) {
-    return override;
-  }
-
-  if (platform === 'win32') {
-    const localAppData = env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local');
-    return join(localAppData, 'Tableau', 'ExternalApi');
-  }
-
-  if (platform === 'darwin') {
-    return join(homedir(), 'Library', 'Application Support', 'Tableau', 'ExternalApi');
-  }
-
-  const xdgDataHome = env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
-  return join(xdgDataHome, 'Tableau', 'ExternalApi');
+  return getExternalApiDiscoveryDirs(env, platform)[0];
 }
 
 export type DiscoverInstancesDeps = {
@@ -64,26 +74,32 @@ export function defaultIsPidAlive(pid: number): boolean {
  * `startedAt`). Never throws — unreadable dirs/files yield fewer/zero instances.
  */
 export function discoverInstances(deps: DiscoverInstancesDeps = {}): Array<ExternalApiInstance> {
-  const dir = deps.discoveryDir ?? getExternalApiDiscoveryDir();
+  const dirs = deps.discoveryDir ? [deps.discoveryDir] : getExternalApiDiscoveryDirs();
   const readDir = deps.readDir ?? ((d: string): Array<string> => readdirSync(d));
   const readFile = deps.readFile ?? ((p: string): string => readFileSync(p, 'utf-8'));
   const isPidAlive = deps.isPidAlive ?? defaultIsPidAlive;
 
-  let files: Array<string>;
-  try {
-    files = readDir(dir).filter((name) => name.endsWith('.json'));
-  } catch (error) {
-    log({
-      message: 'External API discovery directory not readable',
-      level: 'debug',
-      logger: 'ExternalApiDiscovery',
-      data: { dir, error },
-    });
+  const candidates: Array<{ dir: string; name: string }> = [];
+  for (const dir of dirs) {
+    try {
+      for (const name of readDir(dir)) {
+        if (name.endsWith('.json')) candidates.push({ dir, name });
+      }
+    } catch (error) {
+      log({
+        message: 'External API discovery directory not readable',
+        level: 'debug',
+        logger: 'ExternalApiDiscovery',
+        data: { dir, error },
+      });
+    }
+  }
+  if (candidates.length === 0) {
     return [];
   }
 
   const scored: Array<{ instance: ExternalApiInstance; sortKey: number }> = [];
-  for (const name of files) {
+  for (const { dir, name } of candidates) {
     const fullPath = join(dir, name);
 
     let raw: unknown;
