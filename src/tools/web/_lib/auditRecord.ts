@@ -7,13 +7,17 @@ import { z } from 'zod';
  * of what the model does with the response.
  *
  * `schemaVersion` is a literal so downstream consumers can branch on the shape if it ever changes.
+ * Bumped to 2 when the `result` enum was widened from `allowed|denied` to
+ * `allowed|denied|completed|failed` (terminal-outcome records): a consumer pinned to the v1 strict
+ * enum would zod-fail on a `completed`/`failed` record, so the version bump signals that parsers
+ * must be updated rather than silently dropping the outcome data.
  *
  * SECURITY: `confirmationEvidence.detail` is a non-sensitive description of the evidence (e.g. the
  * tag label, or that a registry nonce matched) — it MUST NEVER carry the raw single-use nonce, which
  * would let a reader of the audit log forge a confirmation.
  */
 export const auditRecordSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   timestamp: z.string().datetime(),
   actor: z.object({
     username: z.string().optional(),

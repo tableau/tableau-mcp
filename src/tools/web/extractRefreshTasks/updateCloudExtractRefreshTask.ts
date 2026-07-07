@@ -40,13 +40,22 @@ const paramsSchema = {
 };
 
 /**
- * Deterministic, key-order-independent JSON serialization. Object keys are emitted sorted at every
- * depth so two schedules that differ only in the caller's key order produce identical output —
- * otherwise the preview and confirm fingerprints could diverge for the same logical schedule.
+ * Deterministic, order-independent JSON serialization. Object keys are emitted sorted at every
+ * depth, AND array elements are sorted by their own canonical form. Order-independence matters
+ * because Tableau treats `frequencyDetails.intervals.interval` as an order-independent bag of
+ * constraints — `[{weekDay:'Sunday'},{hours:2}]` and `[{hours:2},{weekDay:'Sunday'}]` describe the
+ * same schedule. Without sorting, an LLM caller that reorders elements between the preview and
+ * confirm calls would produce a different scheduleBinding and get a spurious `preview-not-run`
+ * rejection on confirm (fail-closed, so not a security hole — but it reads as flaky HITL). The
+ * schedule shape has no array whose order is semantically significant, so sorting all arrays is safe.
  */
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) {
-    return value.map(canonicalize);
+    return value.map(canonicalize).sort((a, b) => {
+      const sa = JSON.stringify(a);
+      const sb = JSON.stringify(b);
+      return sa < sb ? -1 : sa > sb ? 1 : 0;
+    });
   }
   if (value && typeof value === 'object') {
     return Object.keys(value as Record<string, unknown>)

@@ -627,6 +627,42 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       expect(result.isError).toBe(false);
       expect(mocks.mockUpdateCloudExtractRefreshTask).toHaveBeenCalled();
     });
+
+    // Non-blocking review follow-up: `canonicalize` sorts array elements, not just object keys.
+    // Tableau treats `intervals.interval` as an order-independent bag, so a caller that lists the
+    // same intervals in a different order between preview and confirm must still validate — without
+    // element sorting this would spuriously fail with `preview-not-run` (fail-closed but flaky HITL).
+    it('AC-6(h): a confirm whose intervals are reordered (same bag) still validates', async () => {
+      const previewSchedule: UpdateCloudExtractRefreshSchedule = {
+        frequency: 'Hourly',
+        frequencyDetails: {
+          start: '08:00:00',
+          end: '18:00:00',
+          intervals: { interval: [{ hours: 2 }, { weekDay: 'Monday' }] },
+        },
+      };
+      const previewResult = await getToolResult({ taskId: validTaskId, schedule: previewSchedule });
+      invariant(previewResult.content[0].type === 'text');
+      const token = extractConfirmationToken(previewResult.content[0].text);
+
+      // Confirm with the interval array elements in the OPPOSITE order.
+      const reorderedSchedule: UpdateCloudExtractRefreshSchedule = {
+        frequency: 'Hourly',
+        frequencyDetails: {
+          start: '08:00:00',
+          end: '18:00:00',
+          intervals: { interval: [{ weekDay: 'Monday' }, { hours: 2 }] },
+        },
+      };
+      const result = await getToolResult({
+        taskId: validTaskId,
+        schedule: reorderedSchedule,
+        confirm: true,
+        confirmationToken: token,
+      });
+      expect(result.isError).toBe(false);
+      expect(mocks.mockUpdateCloudExtractRefreshTask).toHaveBeenCalled();
+    });
   });
 });
 

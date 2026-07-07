@@ -202,7 +202,7 @@ describe('guardMutation', () => {
     expect(auditCall).toBeTruthy();
     // Required fields land on the record.
     const record = auditRecordSchema.parse(auditCall![0].data);
-    expect(record.schemaVersion).toBe(1);
+    expect(record.schemaVersion).toBe(2);
     expect(typeof record.timestamp).toBe('string');
     expect(record.actor.siteLuid).toBe('test-site-luid');
     expect(record.actor.siteName).toBe('tc25');

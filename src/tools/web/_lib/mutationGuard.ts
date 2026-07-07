@@ -241,7 +241,7 @@ function targetKindHint(tool: WebToolName): MutationTarget['kind'] {
  */
 function emitAuditRecord(record: Omit<AuditRecord, 'schemaVersion' | 'timestamp'>): void {
   const fullRecord = auditRecordSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     timestamp: new Date().toISOString(),
     ...record,
   });
