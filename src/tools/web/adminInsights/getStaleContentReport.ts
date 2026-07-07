@@ -141,6 +141,8 @@ and the REST API rejects it (404). \`itemLuid\` is \`null\` only on older sites 
     annotations: {
       title: 'Stale content report',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ minAgeDays, projectIds, itemTypes }, extra): Promise<CallToolResult> => {

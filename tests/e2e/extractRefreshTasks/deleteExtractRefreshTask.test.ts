@@ -12,10 +12,12 @@ import { McpClient } from '../mcpClient.js';
  * behind DELETE_EXTRACT_REFRESH_TASK_E2E_ID — set it to a disposable task LUID once the endpoint
  * is enabled on your Cloud site.
  *
- * The tool is two-phase (preview→confirm): the first call (confirm omitted/false) tags nothing but
- * returns a single-use confirmation token in its preview text; the second call passes that token
- * with confirm: true to perform the irreversible delete. This mirrors the delete-workbook /
- * delete-datasource e2e suites (those use a server-side tag; this tool uses a registry nonce).
+ * The tool is two-phase (preview→confirm): the first call (confirm omitted/false) deletes nothing
+ * but returns a server-generated single-use confirmation token in its preview text; the second call
+ * passes that token with confirm: true to perform the irreversible delete. This mirrors the
+ * delete-workbook / delete-datasource e2e suites (those use a server-side tag; this tool uses a
+ * server-authoritative registry nonce). A confirm with no prior preview (or a fabricated token) is
+ * rejected server-side — a value cannot be computed to bypass the gate.
  */
 describe('delete-extract-refresh-task', () => {
   let client: McpClient;
@@ -90,7 +92,47 @@ describe('delete-extract-refresh-task', () => {
     expect(threw).toBe(true);
   });
 
-  it('should preview (no delete) and return a confirmation token', async () => {
+  it('should return a preview with a confirmationToken when confirm is omitted', async () => {
+    // Exercises the preview leg of the two-phase contract end-to-end via a real MCP client.
+    // No Tableau delete endpoint is called — the preview response is admin-gated and mints the
+    // server-side nonce. The taskId does not need to exist on the site; preview echoes it verbatim.
+    if (!toolsAvailable) {
+      return;
+    }
+    const previewTaskId = 'a1b2c3d4-e5f6-4789-9abc-ef1234567890';
+    const message = await client.callTool('delete-extract-refresh-task', {
+      schema: z.string(),
+      toolArgs: { taskId: previewTaskId },
+    });
+    expect(message).toContain('Preview');
+    expect(message).toContain(previewTaskId);
+    expect(message).toContain('confirmationToken:');
+  });
+
+  it('should reject a confirmed call with a bogus (never-previewed) confirmationToken', async () => {
+    // No preview minted this token, so the server-authoritative gate cannot verify it and the
+    // delete is rejected with zero side effects.
+    if (!toolsAvailable) {
+      return;
+    }
+    let threw = false;
+    try {
+      await client.callTool('delete-extract-refresh-task', {
+        schema: z.string(),
+        toolArgs: {
+          taskId: 'a1b2c3d4-e5f6-4789-9abc-ef1234567890',
+          confirm: true,
+          confirmationToken: '00000000-0000-4000-8000-000000000000',
+        },
+      });
+    } catch (e) {
+      threw = true;
+      expect(String(e)).toContain('could not verify that a preview ran');
+    }
+    expect(threw).toBe(true);
+  });
+
+  it('should preview a disposable task without deleting it (opt-in, requires live endpoint)', async () => {
     if (!toolsAvailable) {
       return;
     }
@@ -109,7 +151,7 @@ describe('delete-extract-refresh-task', () => {
     });
 
     expect(message).toContain('Preview');
-    expect(message).toContain('confirmationToken');
+    expect(message).toContain('confirmationToken:');
   });
 
   it('should reject a confirmed delete when no prior preview supplied a valid token', async () => {
@@ -159,8 +201,11 @@ describe('delete-extract-refresh-task', () => {
       toolArgs: { taskId: disposableId },
     });
     invariant(preview.includes('Preview'), `Preview did not run: ${preview}`);
-    // The preview text echoes the token as: confirmationToken: "<uuid>".
-    const tokenMatch = preview.match(/confirmationToken:\s*"([^"]+)"/);
+    // The preview text echoes the token as a UUID: confirmationToken: "<uuid>". Use it verbatim
+    // (rather than recomputing) — the caller is not supposed to derive this server nonce.
+    const tokenMatch = preview.match(
+      /confirmationToken:\s*\\?"?([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/,
+    );
     invariant(tokenMatch, `Preview did not return a confirmation token: ${preview}`);
     const confirmationToken = tokenMatch[1];
 

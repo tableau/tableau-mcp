@@ -8,3 +8,9 @@ table td,
 table th {
   vertical-align: top;
 }
+
+/* Wrap long lines in code blocks */
+.theme-code-block pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}

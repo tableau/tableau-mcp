@@ -16,16 +16,18 @@ This tool calls the **Cloud variant** of the update endpoint and is not appropri
 
 ## Confirm and audit
 
-This mutation is gated on an explicit confirmation flag:
+This mutation is **two-phase**, gated on a server-generated single-use confirmation token:
 
 1. **Preview** (default — `confirm` omitted or `false`): reports the new schedule that would be
-   applied without changing anything.
-2. **Update** (`confirm: true`): applies the schedule update.
+   applied without changing anything, and returns a single-use `confirmationToken`.
+2. **Update** (`confirm: true` + `confirmationToken`): applies the schedule update. The server
+   verifies and consumes the token first.
 
-This is a `confirm-only` gate — there is no preview→confirm evidence token (the update is naturally
-idempotent and reversible by re-applying the prior schedule), but a schedule is never overwritten
-without an explicit confirmed call. Present the change to the user and get explicit approval before
-confirming.
+The token is server-generated and **bound to the previewed `taskId` and `schedule`**: a token minted
+while previewing schedule A cannot confirm an update to schedule B, and a `confirm: true` with no
+prior preview (no valid token) is rejected server-side. This gate genuinely requires the preview
+phase to have run for exactly this change; it cannot be bypassed by computing a value. Present the
+change to the user and get explicit approval before confirming.
 
 ### MCP-Apps confirm panel (real human-in-the-loop)
 
@@ -38,16 +40,18 @@ which invokes the model-invisible `confirm-update-cloud-extract-refresh-task` to
 model-driven `confirm: true` path is **closed** — the assistant cannot apply the change on the user's
 behalf; the only route is the human gesture. The confirm tool verifies a fresh, single-use human
 approval recorded during the preview (within `MUTATION_PREVIEW_TTL_MINUTES`, default 5); a missing or
-expired approval rejects the update. When the flag is off the tool behaves exactly as the
-`confirm`-only flow described above.
+expired approval rejects the update. When the flag is off the tool behaves exactly as the two-phase
+`confirm`/`confirmationToken` flow described above.
 
 :::note[Authoritative audit]
 Every attempt — both the preview and the confirmed update, and both allowed and denied attempts (for
 example a non-admin caller) — emits a structured authoritative audit record to the server's durable
 log sink (logger `audit`, level `notice`), not just to the tool-response text. Each record captures
 the actor identity, the tool, action (`update`), phase, the target id, the confirmation evidence kind
-(`none` for this confirm-only tool), and the result. This routing is centralized in the shared
-mutation guard so every TMCP mutation tool audits identically.
+(`registry-nonce` for this tool), and the result. A confirmed update emits an `allowed` record when
+authorized, then a terminal `completed` (or `failed`, with `failureDetail`) record reflecting the
+REST outcome — so the trail records what actually happened, not just intent. This routing is
+centralized in the shared mutation guard so every TMCP mutation tool audits identically.
 :::
 
 ## APIs called
@@ -84,7 +88,8 @@ See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)
 | Parameter  | Type   | Required | Description                                                                                       |
 | ---------- | ------ | -------- | ------------------------------------------------------------------------------------------------- |
 | `taskId`   | string (UUID) | Yes      | The ID of the extract refresh task to update. Obtain from `list-extract-refresh-tasks`.    |
-| `confirm`  | boolean | No      | Set `true` to apply the update. When omitted or false, previews the change without applying it.   |
+| `confirm`  | boolean | No      | Set `true` to apply the update (requires `confirmationToken`). When omitted or false, previews the change without applying it. |
+| `confirmationToken` | string | No | The single-use token returned by a prior preview of this same `taskId` and `schedule`. Required when `confirm` is `true`; ignored otherwise. A token minted for a different schedule will not validate. |
 | `schedule` | object | Yes      | The new schedule to apply. Replaces the existing schedule wholesale.                              |
 
 ### `schedule` shape

@@ -46,7 +46,7 @@ const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
 }));
 
-vi.mock('../../../features/featureGate.js', () => ({
+vi.mock('../../../features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 

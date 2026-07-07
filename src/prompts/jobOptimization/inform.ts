@@ -1,36 +1,13 @@
 import { z } from 'zod';
 
+import { EXTRACT_REFRESH_JOB_TYPES, JOB_PERFORMANCE_FIELDS } from '../_lib/jobPerformance.js';
 import { WebPromptFactory } from '../registry.js';
 import { renderNotesFor } from './renderNotes.js';
 
 const TOOL_NAME = 'query-admin-insights-job-performance';
 
-// Raw `Job Type` values as stored in the datasource (no spaces). Extract refresh
-// spans direct and Bridge variants, so the default scope is all four.
-const DEFAULT_JOB_TYPES = [
-  'RefreshExtracts',
-  'IncrementExtracts',
-  'RefreshExtractsViaBridge',
-  'IncrementExtractsViaBridge',
-];
-
 // Placeholder the model substitutes per discovered job type in discovery mode.
 const JOB_TYPE_PLACEHOLDER = '__JOB_TYPE__';
-
-// Fields requested for the optimization read. Kept here rather than in the
-// description to keep the prompt listing small.
-const FIELDS = [
-  'Item Name',
-  'Job Type',
-  'Job Result',
-  'Started At',
-  'Job Duration',
-  'Job Execution Duration',
-  'Schedule Name',
-  'Was Manual Run',
-  'Error Message',
-  'Extract File Size',
-];
 
 const argsSchema = {
   jobType: z
@@ -84,7 +61,10 @@ const buildToolArgs = (
   }
 
   const toolArgs: Record<string, unknown> = {
-    query: { fields: FIELDS.map((fieldCaption) => ({ fieldCaption })), filters },
+    query: {
+      fields: JOB_PERFORMANCE_FIELDS.map((fieldCaption) => ({ fieldCaption })),
+      filters,
+    },
   };
   if (limit !== undefined) {
     toolArgs.limit = limit;
@@ -113,13 +93,13 @@ export const getJobOptimizationInformPrompt: WebPromptFactory = () => ({
       ? [JOB_TYPE_PLACEHOLDER]
       : requested.length > 0
         ? requested
-        : DEFAULT_JOB_TYPES;
+        : EXTRACT_REFRESH_JOB_TYPES;
 
     const lookbackDays = args.lookbackDays ? parseInt(args.lookbackDays, 10) : undefined;
     const limit = args.limit ? parseInt(args.limit, 10) : undefined;
 
     const toolArgs = buildToolArgs(jobTypeValues, lookbackDays, limit);
-    const notes = renderNotesFor(discover ? DEFAULT_JOB_TYPES : jobTypeValues);
+    const notes = renderNotesFor(discover ? EXTRACT_REFRESH_JOB_TYPES : jobTypeValues);
 
     const lines: string[] = [
       `You are running the Tableau MCP **job-optimization-inform** workflow (read-only) using \`${TOOL_NAME}\`.`,

@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { UnknownError } from '../../../errors/mcpToolError.js';
-import { getFeatureGate } from '../../../features/featureGate.js';
+import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { updateCloudExtractRefreshScheduleSchema } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { WebMcpServer } from '../../../server.web.js';

@@ -4,9 +4,10 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { PreviewNotRunError, WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
-import { getFeatureGate } from '../../../features/featureGate.js';
+import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
 import {
   AppApprovalEvidence,
@@ -116,7 +117,11 @@ the user's explicit approval first.
       title: 'Delete Workbook',
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      // Hard delete-by-id: a second delete of the same workbookId 404s (isError: true), so the
+      // operation is not idempotent. A client trusting an idempotent hint and retrying after a
+      // transient failure would get a spurious error for a delete that already succeeded.
+      // Matches the accepted resolution for delete-extract-refresh-task (tableau/tableau-mcp#392).
+      idempotentHint: false,
       openWorldHint: false,
     },
     callback: async ({ workbookId, confirm, tag }, extra): Promise<CallToolResult> => {
@@ -198,12 +203,20 @@ the user's explicit approval first.
               if (guardResult.isErr()) {
                 return guardResult.error.toErr();
               }
-              const { target } = guardResult.value;
+              const { target, recordOutcome } = guardResult.value;
               const projectName = target.project ?? 'unknown project';
               const ownerText = target.owner ? `owner ${target.owner}` : 'owner unknown';
 
               if (confirm) {
-                await restApi.workbooksMethods.deleteWorkbook({ workbookId, siteId });
+                try {
+                  await restApi.workbooksMethods.deleteWorkbook({ workbookId, siteId });
+                } catch (e) {
+                  // Authorized-but-failed: record the terminal 'failed' outcome so the audit trail
+                  // does not claim a deletion that never happened, then rethrow to the tool's handler.
+                  recordOutcome({ ok: false, failureDetail: getExceptionMessage(e) });
+                  throw e;
+                }
+                recordOutcome({ ok: true });
                 return new Ok(
                   `Deleted workbook '${target.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
                     `It can be restored from the Tableau recycle bin (${RECYCLE_BIN_DOC_URL}) for a ` +

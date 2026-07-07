@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { DatasourceNotAllowedError } from '../../../../errors/mcpToolError.js';
+import { ArgsValidationError, DatasourceNotAllowedError } from '../../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import {
   pulseInsightBriefRequestSchema,
@@ -8,6 +8,7 @@ import {
 } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { WebTool } from '../../tool.js';
+import { validateBriefRequest } from '../validatePulsePayload.js';
 
 const paramsSchema = {
   briefRequest: pulseInsightBriefRequestSchema,
@@ -178,6 +179,8 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
     annotations: {
       title: 'Generate Pulse Insight Brief',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ briefRequest }, extra): Promise<CallToolResult> => {
@@ -187,6 +190,11 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
         extra,
         args: { briefRequest },
         callback: async () => {
+          const validationError = validateBriefRequest(briefRequest);
+          if (validationError) {
+            return new ArgsValidationError(validationError).toErr();
+          }
+
           // Filter out metrics that are not in the allowed datasource set
           const { datasourceIds } = configWithOverrides.boundedContext;
           if (datasourceIds) {

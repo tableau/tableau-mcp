@@ -71,6 +71,8 @@ export const getQueryDatasourceTool = (
     annotations: {
       title: 'Query Datasource',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ datasourceLuid, query, limit }, extra): Promise<CallToolResult> => {

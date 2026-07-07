@@ -1,5 +1,6 @@
 import { getConfig } from '../config.js';
 import { WebMcpServer } from '../server.web.js';
+import { getExtractOptimizationApplyPrompt } from './extractOptimization/apply.js';
 import { getJobOptimizationInformPrompt } from './jobOptimization/inform.js';
 import { WebPromptFactory } from './registry.js';
 import { getStaleContentCleanupApplyPrompt } from './staleContent/apply.js';
@@ -9,6 +10,7 @@ const webPromptFactories: ReadonlyArray<WebPromptFactory> = [
   getStaleContentCleanupInformPrompt,
   getStaleContentCleanupApplyPrompt,
   getJobOptimizationInformPrompt,
+  getExtractOptimizationApplyPrompt,
 ];
 
 export const registerPrompts = (server: WebMcpServer): void => {

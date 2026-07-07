@@ -41,6 +41,8 @@ describe('Tool', () => {
     annotations: {
       title: 'Get Datasource Metadata',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: vi.fn(),

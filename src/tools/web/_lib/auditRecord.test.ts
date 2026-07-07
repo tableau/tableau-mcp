@@ -1,7 +1,7 @@
 import { auditRecordSchema } from './auditRecord.js';
 
 const validRecord = {
-  schemaVersion: 1 as const,
+  schemaVersion: 2 as const,
   timestamp: new Date().toISOString(),
   actor: {
     username: 'admin@example.com',
@@ -43,8 +43,19 @@ describe('auditRecordSchema', () => {
     expect(auditRecordSchema.safeParse(minimal).success).toBe(true);
   });
 
-  it('pins schemaVersion to the literal 1', () => {
-    expect(auditRecordSchema.safeParse({ ...validRecord, schemaVersion: 2 }).success).toBe(false);
+  it('pins schemaVersion to the literal 2', () => {
+    expect(auditRecordSchema.safeParse({ ...validRecord, schemaVersion: 1 }).success).toBe(false);
+    expect(auditRecordSchema.safeParse({ ...validRecord, schemaVersion: 3 }).success).toBe(false);
+  });
+
+  it('accepts the terminal completed/failed outcome results (the v2 widening)', () => {
+    expect(auditRecordSchema.safeParse({ ...validRecord, result: 'completed' }).success).toBe(true);
+    const failed = {
+      ...validRecord,
+      result: 'failed' as const,
+      failureDetail: 'Tableau 500: Internal Server Error',
+    };
+    expect(auditRecordSchema.safeParse(failed).success).toBe(true);
   });
 
   it('rejects an unknown result value', () => {

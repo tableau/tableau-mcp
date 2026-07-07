@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
   mockIsFeatureEnabled: vi.fn(),
 }));
 
-vi.mock('../../../features/featureGate.js', () => ({
+vi.mock('../../../features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
@@ -56,13 +56,21 @@ vi.mock('../../../config.js', () => ({
 
 const validTaskId = 'a1b2c3d4-e5f6-4789-9abc-ef1234567890';
 
-// Parse the single mutation-audit record emitted on this call through the authoritative schema so
-// the assertion fails if the guard ever drops a required field. Returns the validated record.
-function getAuditRecord(): ReturnType<typeof auditRecordSchema.parse> {
+// All mutation-audit records emitted so far, each parsed through the authoritative schema so the
+// assertion fails if the guard ever drops a required field.
+function getAuditRecords(): ReturnType<typeof auditRecordSchema.parse>[] {
   const log = logger.log as MockedFunction<typeof logger.log>;
-  const auditEntries = log.mock.calls.map((c) => c[0]).filter((e) => e.logger === 'audit');
-  expect(auditEntries).toHaveLength(1);
-  return auditRecordSchema.parse(auditEntries[0].data);
+  return log.mock.calls
+    .map((c) => c[0])
+    .filter((e) => e.logger === 'audit')
+    .map((e) => auditRecordSchema.parse(e.data));
+}
+
+// Convenience for the single-audit-record assertions (preview and denied phases emit exactly one).
+function getAuditRecord(): ReturnType<typeof auditRecordSchema.parse> {
+  const records = getAuditRecords();
+  expect(records).toHaveLength(1);
+  return records[0];
 }
 
 // Run a preview and pull the server-minted single-use confirmation token from the response text so
@@ -211,9 +219,11 @@ describe('deleteExtractRefreshTaskTool', () => {
       siteId: 'test-site-id',
       taskId: validTaskId,
     });
-    const confirmRecord = getAuditRecord();
-    expect(confirmRecord.result).toBe('allowed');
-    expect(confirmRecord.phase).toBe('confirm');
+    // A confirmed delete emits two records: the allowed authorization decision, then the terminal
+    // 'completed' outcome once the REST delete succeeds (Fix #2 — audit reflects outcome, not intent).
+    const confirmRecords = getAuditRecords();
+    expect(confirmRecords.map((r) => r.result)).toEqual(['allowed', 'completed']);
+    expect(confirmRecords.every((r) => r.phase === 'confirm')).toBe(true);
   });
 
   it('single-use: a token consumed by one confirm cannot be replayed for a second delete', async () => {
@@ -249,6 +259,23 @@ describe('deleteExtractRefreshTaskTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
+    // Fix #2: an authorized-but-failed delete records the terminal 'failed' outcome (with detail) so
+    // the audit trail never claims a deletion that did not happen. previewAndGetToken emitted the
+    // preview 'allowed'; the confirm phase adds 'allowed' then 'failed'.
+    const confirmRecords = getAuditRecords().filter((r) => r.phase === 'confirm');
+    expect(confirmRecords.map((r) => r.result)).toEqual(['allowed', 'failed']);
+    const failed = confirmRecords.find((r) => r.result === 'failed');
+    invariant(failed, 'expected a failed audit record');
+    expect(failed.failureDetail).toContain(errorMessage);
+  });
+
+  it('should reject a non-UUID taskId at the schema boundary', () => {
+    const tool = getDeleteExtractRefreshTaskTool(new WebMcpServer());
+    const taskIdSchema = (
+      tool.paramsSchema as { taskId: { safeParse: (v: unknown) => { success: boolean } } }
+    ).taskId;
+    expect(taskIdSchema.safeParse('task-123').success).toBe(false);
+    expect(taskIdSchema.safeParse(validTaskId).success).toBe(true);
   });
 
   it('should reject a non-UUID taskId at the schema boundary', () => {

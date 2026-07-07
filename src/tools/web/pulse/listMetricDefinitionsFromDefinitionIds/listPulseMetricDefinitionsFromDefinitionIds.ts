@@ -52,6 +52,8 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
     annotations: {
       title: 'List Pulse Metric Definitions from Metric Definition IDs',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ view, metricDefinitionIds }, extra): Promise<CallToolResult> => {

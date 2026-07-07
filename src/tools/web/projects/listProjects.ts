@@ -52,6 +52,8 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
     annotations: {
       title: 'List Projects',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {

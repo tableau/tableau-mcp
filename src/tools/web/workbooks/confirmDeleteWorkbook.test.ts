@@ -74,7 +74,7 @@ vi.mock('../../../config.js', () => ({
   })),
 }));
 
-vi.mock('../../../features/featureGate.js', () => ({
+vi.mock('../../../features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 

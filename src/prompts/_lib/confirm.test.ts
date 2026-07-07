@@ -74,4 +74,17 @@ describe('renderConfirmInstructions', () => {
     });
     expect(text).toContain('the routing table maps');
   });
+
+  it('switches to confirmationToken wording when gateKind is token', () => {
+    const text = renderConfirmInstructions({
+      toolRef: '`update-cloud-extract-refresh-task`',
+      itemNoun: 'extract refresh task',
+      gateKind: 'token',
+    });
+    expect(text).toContain('confirmationToken: <the token the preview step returned');
+    expect(text).toContain('Do NOT compute, guess, or reuse a `confirmationToken`');
+    expect(text).toContain('never batch-confirm items the user has not explicitly approved');
+    expect(text).not.toContain('pending-deletion tag');
+    expect(text).not.toContain('rejected server-side');
+  });
 });

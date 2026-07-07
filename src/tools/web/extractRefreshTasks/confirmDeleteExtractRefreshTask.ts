@@ -3,7 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { getFeatureGate } from '../../../features/featureGate.js';
+import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { AppApprovalEvidence } from '../_lib/evidence.js';

@@ -60,6 +60,8 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
     annotations: {
       title: 'Get Workbook',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     app: getAppConfig('get-workbook'),

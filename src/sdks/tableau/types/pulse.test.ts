@@ -1,4 +1,6 @@
 import {
+  metricGroupContextSchema,
+  pulseBundleRequestSchema,
   PulseMetric,
   PulseMetricDefinition,
   pulseMetricDefinitionSchema,
@@ -99,6 +101,106 @@ describe('PulseMetricSubscription schema', () => {
       metric_id: 5678,
     };
     expect(() => pulseMetricSubscriptionSchema.parse(data)).toThrow();
+  });
+});
+
+describe('pulseBundleRequestSchema optionality', () => {
+  const minimalBundleRequest = {
+    bundle_request: {
+      version: 1,
+      options: {
+        output_format: 'OUTPUT_FORMAT_HTML' as const,
+        time_zone: 'UTC',
+        language: 'LANGUAGE_EN_US' as const,
+        locale: 'LOCALE_EN_US' as const,
+      },
+      input: {
+        metadata: {},
+        metric: {
+          definition: {
+            datasource: { id: 'ds-1' },
+            basic_specification: {
+              measure: { field: 'Sales', aggregation: 'AGGREGATION_SUM' },
+              time_dimension: { field: 'Order Date' },
+              filters: [],
+            },
+            is_running_total: false,
+          },
+          metric_specification: {
+            measurement_period: {
+              granularity: 'GRANULARITY_BY_MONTH',
+              range: 'RANGE_LAST_COMPLETE',
+            },
+            comparison: { comparison: 'TIME_COMPARISON_PREVIOUS_PERIOD' },
+          },
+        },
+      },
+    },
+  };
+
+  it('accepts a bundle request without optional fields', () => {
+    const parsed = pulseBundleRequestSchema.parse(minimalBundleRequest);
+    const metric = parsed.bundle_request.input.metric;
+    expect(metric.extension_options).toBeUndefined();
+    expect(metric.representation_options).toBeUndefined();
+    expect(metric.insights_options).toBeUndefined();
+    expect(metric.metric_specification.filters).toBeUndefined();
+  });
+
+  it('accepts a bundle request with partial representation_options', () => {
+    const req = {
+      ...minimalBundleRequest,
+      bundle_request: {
+        ...minimalBundleRequest.bundle_request,
+        input: {
+          ...minimalBundleRequest.bundle_request.input,
+          metric: {
+            ...minimalBundleRequest.bundle_request.input.metric,
+            representation_options: {
+              type: 'NUMBER_FORMAT_TYPE_NUMBER',
+            },
+          },
+        },
+      },
+    };
+    expect(() => pulseBundleRequestSchema.parse(req)).not.toThrow();
+  });
+});
+
+describe('metricGroupContextSchema optionality', () => {
+  const minimalContext = [
+    {
+      metadata: { name: 'Sales' },
+      metric: {
+        definition: {
+          datasource: { id: 'ds-1' },
+          basic_specification: {
+            measure: { field: 'Sales', aggregation: 'AGGREGATION_SUM' },
+            time_dimension: { field: 'Date' },
+            filters: [],
+          },
+          is_running_total: false,
+        },
+        metric_specification: {
+          measurement_period: {
+            granularity: 'GRANULARITY_BY_MONTH',
+            range: 'RANGE_LAST_COMPLETE',
+          },
+          comparison: { comparison: 'TIME_COMPARISON_PREVIOUS_PERIOD' },
+        },
+      },
+    },
+  ];
+
+  it('accepts metric_group_context without optional fields', () => {
+    const parsed = metricGroupContextSchema.parse(minimalContext);
+    const ctx = parsed[0];
+    expect(ctx.metric.extension_options).toBeUndefined();
+    expect(ctx.metric.representation_options).toBeUndefined();
+    expect(ctx.metric.insights_options).toBeUndefined();
+    expect(ctx.metric.candidates).toBeUndefined();
+    expect(ctx.metadata.metric_id).toBeUndefined();
+    expect(ctx.metadata.definition_id).toBeUndefined();
   });
 });
 
