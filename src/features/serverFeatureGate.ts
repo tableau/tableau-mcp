@@ -3,7 +3,7 @@ import path from 'path';
 
 import { log } from '../logging/logger.js';
 import { getDirname } from '../utils/getDirname.js';
-import { FeatureGateProvider } from './types.js';
+import type { FeatureGateProvider } from './featureGateProvider.js';
 
 const FEATURES_CONFIG_PATH = 'features.json';
 

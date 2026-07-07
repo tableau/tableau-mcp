@@ -1,47 +1,5 @@
 import { z } from 'zod';
-
-/**
- * Telemetry provider interface for metrics collection.
- */
-export interface TelemetryProvider {
-  /**
-   * Initialize the telemetry provider.
-   */
-  initialize(): void;
-
-  /**
-   * Record a custom metric with the given name and attributes.
-   *
-   * @param name - The metric name (e.g., 'apm_mcp_tool_calls')
-   * @param value - The metric value (default: 1 for counters)
-   * @param attributes - Dimensions/tags for the metric
-   *
-   * @example
-   * ```typescript
-   * telemetry.recordMetric('apm_mcp_tool_calls', 1, {
-   *   tool_name: 'list-pulse-metric-subscriptions',
-   * });
-   * ```
-   */
-  recordMetric(name: string, value: number, attributes: TelemetryAttributes): void;
-
-  /**
-   * Record a histogram observation (e.g., latency) with the given name and attributes.
-   *
-   * @param name - The metric name (e.g., 'http_server_request_duration')
-   * @param value - The observed value (e.g., duration in milliseconds)
-   * @param attributes - Dimensions/tags for the metric
-   *
-   * @example
-   * ```typescript
-   * telemetry.recordHistogram('apm_mcp_tool_duration', 142.5, {
-   *   tool_name: 'get-datasource-metadata',
-   *   success: true,
-   * });
-   * ```
-   */
-  recordHistogram(name: string, value: number, attributes: TelemetryAttributes): void;
-}
+import type { TelemetryAttributes } from './telemetryProvider.js';
 
 /**
  * Schema for telemetry attributes.
@@ -51,7 +9,18 @@ export const telemetryAttributesSchema = z.record(
   z.string(),
   z.union([z.string(), z.number(), z.boolean(), z.undefined()]),
 );
-export type TelemetryAttributes = z.infer<typeof telemetryAttributesSchema>;
+
+// Compile-time guard: the hand-written `TelemetryAttributes` in ./telemetryProvider.ts must stay
+// structurally identical to the type inferred from `telemetryAttributesSchema`. If either drifts,
+// one of these assignments fails to type-check.
+type _AttributesInSyncA = z.infer<typeof telemetryAttributesSchema> extends TelemetryAttributes
+  ? true
+  : never;
+type _AttributesInSyncB = TelemetryAttributes extends z.infer<typeof telemetryAttributesSchema>
+  ? true
+  : never;
+const _attributesInSync: [_AttributesInSyncA, _AttributesInSyncB] = [true, true];
+void _attributesInSync;
 
 /**
  * Valid telemetry provider names
