@@ -392,6 +392,13 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   // 'slope' + 'slope-chart' + 'slope-graph' (slope-chart),
   // 'box-plot' + 'boxplot' + 'box-and-whisker' (box-plot-chart).
   'line',
+  // 'trend' rides the same growth: carried ONLY by trend-line-chart and a
+  // deterministic type selector in practice ("trend of X" names a line chart);
+  // without it every noun-less trend ask ("trend over time by month") demotes to
+  // propose the moment the family gains a second member. Pattern PHRASES
+  // ('over-time', 'time-series') stay out — nouns only; the ask-router lane
+  // (W36) is the successor mechanism for phrase-level routing.
+  'trend',
   'gantt',
   'histogram',
   'bullet',
