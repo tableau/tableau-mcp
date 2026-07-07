@@ -326,6 +326,23 @@ export function matchAvoidWhen(
   return matched;
 }
 
+/**
+ * Hazard codes that DEMOTE the no-LLM shortcut unconditionally (W59). avoid_when
+ * is ask-conditioned; these hazards are DATA-conditioned — the risk (e.g. calcs
+ * that SPLIT a specific compound-string shape out of a bound field) is invisible
+ * in any natural ask, so the zero-model path can never rule it out. Demote-only:
+ * the template stays fully bindable via the propose leg, where the model sees the
+ * hazard detail and judges the actual schema against it.
+ */
+const DETERMINISTIC_PATH_BLOCKING_HAZARDS: ReadonlySet<string> = new Set(['compound-string-parse']);
+
+/** True when the manifest carries a hazard the no-LLM path must not bind through. */
+export function hasDeterministicPathBlockingHazard(
+  manifest: Pick<TemplateManifest, 'hazards'>,
+): boolean {
+  return (manifest.hazards ?? []).some((h) => DETERMINISTIC_PATH_BLOCKING_HAZARDS.has(h.code));
+}
+
 /** The intent_keywords (original case) that appear as whole tokens in `ask`. */
 function matchedKeywords(ask: string, keywords: string[]): string[] {
   return keywords.filter((kw) => phraseIndexInAsk(ask, kw) >= 0);
@@ -1022,6 +1039,16 @@ export function classifyNoLlm(
   // silently (the retrieval-without-adherence failure). Field names are masked
   // so a field literally named after a caution term can't force the demotion.
   if (matchAvoidWhen(maskedAsk, chosen.avoid_when, chosen.intent_keywords).length > 0) return null;
+
+  // DEMOTE on data-shape-parse hazards (W59): avoid_when only fires when the ASK
+  // reveals the risk, but a data-shape hazard lives in the DATA, which no natural
+  // ask mentions — "over-under arrow chart of Sales by Sub-Category" happily bound
+  // ww-ou-arrow and fed [Category] into sports-score SPLIT parsing (live-caught by
+  // the W59 proof-value spike + dual review). A template whose calcs parse a
+  // specific string shape out of a bound field can never prove data fit on the
+  // zero-model path, so it always falls through to propose, where the model sees
+  // the hazard notes + avoid_when and judges the actual schema.
+  if (hasDeterministicPathBlockingHazard(chosen)) return null;
 
   const bindings = roleGreedyBind(chosen, matched, aggOverride);
   if (!bindings) return null; // required slot unfilled → fail closed

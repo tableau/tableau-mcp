@@ -790,3 +790,37 @@ describe('binder/bindTemplate — eval-only injected llmPropose', () => {
     if (res.status === 'bound') expect(res.used_llm).toBe(true);
   });
 });
+
+describe('binder — deterministic-path hazard demotion (W59)', () => {
+  it('a compound-string-parse template NEVER one-shot binds — the Superstore arrow ask demotes to propose', async () => {
+    // Live-caught landmine: ww-ou-arrow (fast-path stamped on Super Bowl data) bound
+    // 'over-under arrow chart of Sales by Sub-Category' and mapped [Category] into
+    // sports-score SPLIT parsing → NULL calcs → broken viz. The hazard lives in the
+    // DATA shape, which no natural ask reveals, so avoid_when can't catch it — the
+    // no-LLM path must always fall through to propose for this hazard class.
+    const res = await bindTemplate({
+      ask: 'over-under arrow chart of Sales by Sub-Category',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+    });
+    expect(res.status).toBe('propose');
+    if (res.status === 'propose') {
+      // Demote-only: the template must still be REACHABLE via the propose leg.
+      const candidates = res.llm_input.candidate_templates.map((c) => c.template);
+      expect(candidates).toContain('ww-ou-arrow');
+    }
+  });
+
+  it('hazard-free stamped templates keep the one-shot path (control)', async () => {
+    const res = await bindTemplate({
+      ask: 'waterfall of Profit by Sub-Category',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.used_llm).toBe(false);
+      expect(res.args.template_name).toBe('part-to-whole-waterfall');
+    }
+  });
+});
