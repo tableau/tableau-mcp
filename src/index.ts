@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
+import { initializeFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { log } from './logging/logger.js';
@@ -20,6 +21,9 @@ async function startServer(): Promise<void> {
   const config = getConfig();
 
   RestApi.host = config.server;
+
+  // Initialize feature gate provider
+  initializeFeatureGate();
 
   // Start fetching server info immediately but don't block the port from opening.
   // Any failure here is fatal and logged explicitly -- no silent failures.

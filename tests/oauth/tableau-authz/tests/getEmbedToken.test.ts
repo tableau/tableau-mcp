@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { getFeatureGate } from '../../../../src/features/featureGate.js';
+import { getFeatureGate } from '../../../../src/features/init.js';
 import { expect, test } from './base.js';
 
 const tokenResponseSchema = z.object({

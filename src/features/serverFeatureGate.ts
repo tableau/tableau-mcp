@@ -3,10 +3,15 @@ import path from 'path';
 
 import { log } from '../logging/logger.js';
 import { getDirname } from '../utils/getDirname.js';
+import { FeatureGateProvider } from './types.js';
 
 const FEATURES_CONFIG_PATH = 'features.json';
 
-export class FeatureGate {
+/**
+ * Server-based feature gate provider that loads features from a local file.
+ * Used for on-premise Tableau Server deployments.
+ */
+export class ServerFeatureGate implements FeatureGateProvider {
   private features: Map<string, boolean>;
 
   constructor() {
@@ -55,6 +60,12 @@ export class FeatureGate {
         });
       }
 
+      log({
+        level: 'info',
+        message: `Loaded ${validFeatures.size} feature flag(s) from ${filePath} successfully.`,
+        logger: 'featureGate',
+      });
+
       return validFeatures;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -67,24 +78,4 @@ export class FeatureGate {
       return new Map<string, boolean>();
     }
   }
-}
-
-// Singleton instance for global use
-let globalFeatureGate: FeatureGate | null = null;
-
-/**
- * Get the global feature gate instance (lazy initialized)
- */
-export function getFeatureGate(): FeatureGate {
-  if (globalFeatureGate === null) {
-    globalFeatureGate = new FeatureGate();
-  }
-  return globalFeatureGate;
-}
-
-/**
- * Reset the global feature gate instance (for testing purposes only)
- */
-export function resetFeatureGate(): void {
-  globalFeatureGate = null;
 }

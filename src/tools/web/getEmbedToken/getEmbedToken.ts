@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
 import { EmbedTokenNotAvailableError } from '../../../errors/mcpToolError.js';
-import { getFeatureGate } from '../../../features/featureGate.js';
+import { getFeatureGate } from '../../../features/init.js';
 import { buildAuthConfig } from '../../../sdks/tableau/buildAuthConfig.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../tool.js';
