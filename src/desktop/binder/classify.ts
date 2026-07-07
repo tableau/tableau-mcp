@@ -409,6 +409,13 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   'box-plot',
   'boxplot',
   'box-and-whisker',
+  // 'over-time' is the one PHRASE-form deterministic selector admitted: carried
+  // solely by trend-line-chart, and "X over time" names a line chart as surely as
+  // the noun does. Lone-winner is the only path this table gates; if a second
+  // time-series template ever carries 'over-time', the TIE path's keyword-
+  // specificity ranking (multi-token 'sales-over-time' &c.) governs instead, so
+  // admitting it cannot create a cross-template flip later.
+  'over-time',
 ]);
 
 /** True when at least one ask-matched keyword is a distinctive chart noun. */
