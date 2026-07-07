@@ -16,7 +16,7 @@ import { join } from 'path';
 import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
-import { getFeatureGate } from './features/featureGate.js';
+import { getFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { registerPrompts } from './prompts/index.js';
 import { ClientInfo, Server } from './server.js';

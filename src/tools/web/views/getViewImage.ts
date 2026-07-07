@@ -48,6 +48,8 @@ export const getGetViewImageTool = (
     annotations: {
       title: 'Get View Image',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async (

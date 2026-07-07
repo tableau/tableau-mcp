@@ -4,9 +4,18 @@ sidebar_position: 8
 
 # Feature Flags
 
-Control available features during development via `features.json`.
+Control available features during development via `features.json` or a cloud-based feature flag service.
+
+## Provider Selection
+
+The feature gate system supports two providers, selected via the `FEATURE_GATE_PROVIDER` environment variable:
+
+- **`server`** (default): File-based feature flags using `features.json` in the project root. Intended for on-premise Tableau Server deployments.
+- **`cloud`**: Cloud-based feature flag service. Currently returns `false` for all features.
 
 ## Configuration
+
+### Server Provider (File-Based)
 
 Create a `features.json` file in the project root:
 
@@ -23,7 +32,7 @@ Create a `features.json` file in the project root:
 ## Usage in Code
 
 ```typescript
-import { getFeatureGate } from './features/featureGate.js';
+import { getFeatureGate } from './features/init.js';
 
 if (getFeatureGate().isFeatureEnabled('mcpapps')) {
   // MCP Apps logic here
@@ -39,6 +48,6 @@ if (getFeatureGate().isFeatureEnabled('mcpapps')) {
 
 ## Adding a New Feature Flag
 
-1. Add the feature name and default value to `features.json`
+1. Add the feature name and default value to `features.json` (for server provider)
 2. Use `getFeatureGate().isFeatureEnabled('your-feature')` in your code
-3. No code changes needed to enable/disable - just update the JSON file
+3. No code changes needed to enable/disable - just update the JSON file (server provider) or the cloud service configuration (cloud provider)

@@ -70,6 +70,8 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
     annotations: {
       title: 'List Views',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {

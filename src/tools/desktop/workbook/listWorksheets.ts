@@ -26,6 +26,8 @@ export const getListWorksheetsTool = (
     annotations: {
       title,
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ session }, extra): Promise<CallToolResult> => {

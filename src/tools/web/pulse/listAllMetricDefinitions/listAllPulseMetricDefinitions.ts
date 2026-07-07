@@ -54,6 +54,8 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
     annotations: {
       title: 'List All Pulse Metric Definitions',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ view, limit, pageSize }, extra): Promise<CallToolResult> => {

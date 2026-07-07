@@ -114,6 +114,8 @@ export const getGetDatasourceMetadataTool = (
     annotations: {
       title: 'Get Datasource Metadata',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ datasourceLuid }, extra): Promise<CallToolResult> => {

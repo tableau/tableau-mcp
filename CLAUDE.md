@@ -138,9 +138,30 @@ Wraps Tableau REST API:
 - Telemetry (TELEMETRY_PROVIDER, PRODUCT_TELEMETRY_ENDPOINT)
 
 ### Feature Gates (`src/features/`)
-Load `features.json` to enable/disable features at runtime:
+Provider-based feature flag system (mirrors telemetry provider pattern):
+- **Server provider** (default): Loads `features.json` from filesystem (on-prem)
+- **Custom provider**: Loads user-specified provider from module path (for cloud/external services)
+
+Files:
+- `types.ts`: `FeatureGateProvider` interface, config schemas, type guard
+- `serverFeatureGate.ts`: File-based provider (loads `features.json`)
+- `init.ts`: Provider factory + custom loader + singleton + public API (`initializeFeatureGate()`, `getFeatureGate()`, `resetFeatureGate()`, re-exports `FeatureGateProvider` type)
+- `init.test.ts`: All feature gate tests (includes provider tests + type guard tests)
+
+Usage (import from `init.ts`):
 ```typescript
+import { getFeatureGate } from './features/init.js';
 getFeatureGate().isFeatureEnabled('mcp-apps')
+```
+
+Configuration (same pattern as TELEMETRY_PROVIDER):
+```bash
+# Default: server provider
+FEATURE_GATE_PROVIDER=server
+
+# Custom provider (e.g., for cloud service)
+FEATURE_GATE_PROVIDER=custom
+FEATURE_GATE_PROVIDER_CONFIG='{"module":"./my-feature-gate.js"}'
 ```
 
 ### Overridable Config (`src/overridableConfig.ts`)

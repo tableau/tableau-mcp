@@ -1,4 +1,4 @@
-# Tableau MCP
+ # Tableau MCP
 
 [![Tableau Supported](https://img.shields.io/badge/Support%20Level-Tableau%20Supported-53bd92.svg)](https://www.tableau.com/support-levels-it-and-developer-tools)
 
@@ -15,14 +15,21 @@ make it easier for developers to build AI applications that integrate with Table
 
 https://tableau.github.io/tableau-mcp/
 
-## Quick Start
+## Getting Started
 
-### Requirements
+### Hosted Tableau MCP (Recommended for Tableau Cloud)
 
-- Node.js 22.7.5 or newer
-- An MCP client e.g. Claude Desktop, Cursor, VS Code, MCP Inspector, etc.
+Tableau MCP is available as a managed service at **`https://mcp.tableau.com`**. It uses OAuth 2.1 so every user signs in with their own Tableau Cloud identity, and all existing per-user permissions are enforced automatically.
 
-Standard config works in most MCP clients:
+Point any MCP-compatible client at `https://mcp.tableau.com` and complete the OAuth sign-in flow when prompted.
+
+See [Popular Client Integrations](https://tableau.github.io/tableau-mcp/docs/hosted-tableau-mcp/client-integrations) for step-by-step setup instructions for Slack, Claude, ChatGPT, and other common AI clients.
+
+> **Tableau Server customers** and Cloud customers who require self-hosted infrastructure should see the [Enterprise Deployment](https://tableau.github.io/tableau-mcp/docs/enterprise) and [Self-Hosted Getting Started](https://tableau.github.io/tableau-mcp/docs/getting-started) guides.
+
+### Self-Hosted / Local (npx)
+
+The quickest way to run Tableau MCP locally. Requires [Node.js](https://nodejs.org/en/download) 22.7.5 or later — no cloning or building needed. Configure your AI tool (MCP client) with:
 
 ```json
 {
@@ -40,6 +47,8 @@ Standard config works in most MCP clients:
   }
 }
 ```
+
+For Docker, building from source, and other self-hosted options, see the [Getting Started guide](https://tableau.github.io/tableau-mcp/docs/getting-started).
 
 ## Deploy to Heroku
 
@@ -87,7 +96,7 @@ Global Connections
 #### Prompt #3: Getting a View
 
 ```
-Show me an image of the "Economy" view in the "Finances" project.
+Show me the "Economy" view in the "Finances" project.
 ```
 
 #### Response

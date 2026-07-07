@@ -9,8 +9,16 @@ vi.mock('../utils/getDirname.js', () => ({
   getDirname: vi.fn(() => '/mock/module/directory'),
 }));
 
+vi.mock('../config.js', () => ({
+  getConfig: vi.fn(() => ({
+    featureGate: { provider: 'server' },
+  })),
+}));
+
+import { getConfig } from '../config.js';
 import { getDirname } from '../utils/getDirname.js';
-import { getFeatureGate, resetFeatureGate } from './featureGate.js';
+import { getFeatureGate, initializeFeatureGate, resetFeatureGate } from './init.js';
+import { featureGateProviderSchema, isFeatureGateProvider } from './types.js';
 
 describe('FeatureGate', () => {
   beforeEach(() => {
@@ -149,6 +157,109 @@ describe('FeatureGate', () => {
       expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
       expect(gate.isFeatureEnabled('pulse')).toBe(true);
       expect(gate.isFeatureEnabled('oauth-embedded')).toBe(false);
+    });
+  });
+
+  describe('provider selection', () => {
+    beforeEach(() => {
+      resetFeatureGate();
+      vi.clearAllMocks();
+    });
+
+    it('should use server provider by default and load from file', () => {
+      const config = { mcpapps: true, pulse: false };
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
+      vi.mocked(getConfig).mockReturnValue({ featureGate: { provider: 'server' } } as any);
+
+      initializeFeatureGate();
+      const gate = getFeatureGate();
+
+      expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
+      expect(gate.isFeatureEnabled('pulse')).toBe(false);
+      expect(readFileSync).toHaveBeenCalled();
+    });
+
+    it('should fall back to server provider when custom provider module fails to load', () => {
+      const config = { mcpapps: true };
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
+      vi.mocked(getConfig).mockReturnValue({
+        featureGate: {
+          provider: 'custom',
+          providerConfig: { module: './nonexistent-provider.js' },
+        },
+      } as any);
+
+      initializeFeatureGate();
+      const gate = getFeatureGate();
+
+      // Should fall back to server provider
+      expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
+      expect(readFileSync).toHaveBeenCalled();
+    });
+
+    it('should fall back to server provider on error', () => {
+      const config = { mcpapps: true };
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
+      vi.mocked(getConfig).mockImplementation(() => {
+        throw new Error('Config error');
+      });
+
+      initializeFeatureGate();
+      const gate = getFeatureGate();
+
+      expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
+      expect(readFileSync).toHaveBeenCalled();
+    });
+
+    it('should support lazy initialization without initializeFeatureGate call', () => {
+      const config = { mcpapps: true };
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
+      vi.mocked(getConfig).mockReturnValue({ featureGate: { provider: 'server' } } as any);
+
+      const gate = getFeatureGate();
+
+      expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
+    });
+  });
+
+  describe('Feature Gate Provider Types', () => {
+    describe('featureGateProviderSchema', () => {
+      it('should accept "server" as valid provider', () => {
+        const result = featureGateProviderSchema.safeParse('server');
+        expect(result.success).toBe(true);
+      });
+
+      it('should accept "custom" as valid provider', () => {
+        const result = featureGateProviderSchema.safeParse('custom');
+        expect(result.success).toBe(true);
+      });
+
+      it('should reject invalid provider values', () => {
+        const result = featureGateProviderSchema.safeParse('invalid');
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject undefined', () => {
+        const result = featureGateProviderSchema.safeParse(undefined);
+        expect(result.success).toBe(false);
+      });
+    });
+
+    describe('isFeatureGateProvider', () => {
+      it('should return true for "server"', () => {
+        expect(isFeatureGateProvider('server')).toBe(true);
+      });
+
+      it('should return true for "custom"', () => {
+        expect(isFeatureGateProvider('custom')).toBe(true);
+      });
+
+      it('should return false for invalid values', () => {
+        expect(isFeatureGateProvider('invalid')).toBe(false);
+        expect(isFeatureGateProvider(undefined)).toBe(false);
+        expect(isFeatureGateProvider(null)).toBe(false);
+        expect(isFeatureGateProvider(123)).toBe(false);
+      });
     });
   });
 });
