@@ -35,9 +35,18 @@ function errorReplacer(data: unknown): unknown {
   return data;
 }
 
+/**
+ * The dedicated logger name for authoritative audit records (e.g. the mutation guard). Audit
+ * records are a security control, so they bypass the LOG_LEVEL severity filter below — an operator
+ * must not be able to suppress them by raising LOG_LEVEL. They still honor the appLogger/fileLogger
+ * sink selection like any other entry.
+ */
+export const AUDIT_LOGGER = 'audit';
+
 export function log(entry: LogEntry): void {
   const config = getBaseConfig();
-  if (!shouldLog(entry.level, config.logLevel)) {
+  // Audit records always pass the severity gate; all other entries honor the configured level.
+  if (entry.logger !== AUDIT_LOGGER && !shouldLog(entry.level, config.logLevel)) {
     return;
   }
 

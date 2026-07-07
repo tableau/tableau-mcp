@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import invariant from '../../../src/utils/invariant.js';
 import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
 import { McpClient } from '../mcpClient.js';
 
@@ -10,6 +11,12 @@ import { McpClient } from '../mcpClient.js';
  * enablement (401 with PAT auth), so only registration and schema-validation paths are tested here.
  * The mutating leg is gated behind `UPDATE_CLOUD_EXTRACT_REFRESH_TASK_E2E_ID` — set it to a
  * disposable task LUID once the endpoint is enabled on your Cloud site.
+ *
+ * This tool is two-phase with a server-authoritative preview→confirm gate: the first call (confirm
+ * omitted/false) reports the schedule that would be applied, changes nothing, and returns a
+ * server-generated single-use `confirmationToken` bound to this exact taskId + schedule. The second
+ * call passes `confirm: true` plus that token; the server verifies and consumes it before applying.
+ * A confirm with no prior preview (or a token minted for a different schedule) is rejected.
  */
 describe('update-cloud-extract-refresh-task', () => {
   let client: McpClient;
@@ -98,10 +105,10 @@ describe('update-cloud-extract-refresh-task', () => {
     expect(threw).toBe(true);
   });
 
-  it('should return a preview with confirmationToken when confirm is omitted', async () => {
+  it('should return a preview with a confirmationToken when confirm is omitted', async () => {
     // Exercises the preview leg of the two-phase contract end-to-end via a real MCP client.
     // No Tableau update endpoint is called — the preview response is admin-gated + zod-validated
-    // only. The taskId does not need to exist on the site; the preview echoes it verbatim.
+    // and mints the server-side nonce. The taskId does not need to exist; preview echoes it.
     if (!toolsAvailable) {
       return;
     }
@@ -112,10 +119,13 @@ describe('update-cloud-extract-refresh-task', () => {
     });
     expect(message).toContain('Preview');
     expect(message).toContain(previewTaskId);
+    expect(message).toContain('No change has been made');
     expect(message).toContain('confirmationToken:');
   });
 
-  it('should reject a confirmed call with a mismatched confirmationToken', async () => {
+  it('should reject a confirmed call with a bogus (never-previewed) confirmationToken', async () => {
+    // No preview ran for this token, so the server-authoritative gate cannot verify it and the
+    // update is rejected with zero side effects — a value cannot be computed to bypass the gate.
     if (!toolsAvailable) {
       return;
     }
@@ -127,41 +137,66 @@ describe('update-cloud-extract-refresh-task', () => {
           taskId: 'a1b2c3d4-e5f6-4789-9abc-ef1234567890',
           schedule: validSchedule,
           confirm: true,
-          confirmationToken: 'deadbeefcafe',
+          confirmationToken: '00000000-0000-4000-8000-000000000000',
         },
       });
     } catch (e) {
       threw = true;
-      expect(String(e)).toContain('taskId + schedule pair');
+      expect(String(e)).toContain('could not verify that a preview ran');
     }
     expect(threw).toBe(true);
   });
 
-  it('should update a disposable task (opt-in, requires live endpoint)', async () => {
-    // Runs the full two-phase flow end-to-end: preview → extract token → confirm. Requires the
-    // update endpoint to be reachable with the configured auth, hence env-gated. Uses the preview
-    // response's token verbatim (rather than recomputing) to keep the client honest — the caller
-    // is not supposed to derive the token itself.
+  it('should preview a disposable task without changing it (opt-in, requires live endpoint)', async () => {
     if (!toolsAvailable) {
       return;
     }
-    const disposableId = process.env.UPDATE_CLOUD_EXTRACT_REFRESH_TASK_E2E_ID;
-    if (!disposableId) {
+    const previewId = process.env.UPDATE_CLOUD_EXTRACT_REFRESH_TASK_E2E_ID;
+    if (!previewId) {
       console.warn(
-        'Skipping mutating update — set UPDATE_CLOUD_EXTRACT_REFRESH_TASK_E2E_ID to a disposable task LUID.',
+        'Skipping preview assertion — set UPDATE_CLOUD_EXTRACT_REFRESH_TASK_E2E_ID to a disposable task LUID.',
       );
       return;
     }
 
+    // Preview phase: confirm omitted. The tool reports the schedule that would be applied and
+    // changes nothing.
+    const message = await client.callTool('update-cloud-extract-refresh-task', {
+      schema: z.string(),
+      toolArgs: { taskId: previewId, schedule: validSchedule },
+    });
+
+    expect(message).toContain('Preview');
+    expect(message).toContain('No change has been made');
+    expect(message).toContain('confirmationToken:');
+  });
+
+  it('should update a disposable task via preview → confirm (opt-in, requires live endpoint)', async () => {
+    if (!toolsAvailable) {
+      return;
+    }
+    // Mutating — only runs when explicitly opted in with a throwaway task LUID.
+    const disposableId = process.env.UPDATE_CLOUD_EXTRACT_REFRESH_TASK_E2E_DESTRUCTIVE_ID;
+    if (!disposableId) {
+      return;
+    }
+
+    // 1. Preview: confirm omitted. Reports the would-be schedule and mints the token; nothing
+    // changes. Use the preview response's token verbatim (rather than recomputing) — the caller is
+    // not supposed to derive the token itself, and for this tool it is an unguessable server nonce.
     const preview = await client.callTool('update-cloud-extract-refresh-task', {
       schema: z.string(),
       toolArgs: { taskId: disposableId, schedule: validSchedule },
     });
-    expect(preview).toContain('Preview');
-    const tokenMatch = preview.match(/confirmationToken:\s*([a-f0-9]{12})/);
-    expect(tokenMatch).not.toBeNull();
-    const token = tokenMatch![1];
+    invariant(preview.includes('No change has been made'), `Preview applied a change: ${preview}`);
+    const tokenMatch = preview.match(
+      /confirmationToken:\s*\\?"?([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/,
+    );
+    invariant(tokenMatch, `Preview did not surface a confirmationToken: ${preview}`);
+    const token = tokenMatch[1];
 
+    // 2. Confirm: confirm: true plus the previewed token. The server verifies and consumes it,
+    // then applies the schedule.
     const message = await client.callTool('update-cloud-extract-refresh-task', {
       schema: z.string(),
       toolArgs: {

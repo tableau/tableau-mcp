@@ -49,6 +49,16 @@ caller-computable-token bypass). It does **not** prove a *human approved* — an
 the preview and the confirm satisfies it on its own. Server-enforced human-in-the-loop requires an
 out-of-band approval primitive (e.g. MCP URL-mode elicitation) and is tracked as follow-up work.
 
+:::note[Authoritative audit]
+Every mutation attempt — both the preview and the confirmed delete, and both allowed and denied
+attempts (for example a non-admin caller, or a confirm without a prior preview) — emits a structured
+authoritative audit record to the server's durable log sink (logger `audit`, level `notice`), not
+just to the tool-response text. Each record captures the actor identity (username, user/site LUID,
+site name), the tool, action, phase, the target (id, name, project, owner), the confirmation evidence
+kind (`tag` here), and the result. The raw tag is described, never anything secret. This routing is
+centralized in the shared mutation guard so every TMCP mutation tool audits identically.
+:::
+
 :::note[Dependent content is not deleted]
 Deleting a published data source does **not** delete the workbooks or flows that use it. Those
 items remain but lose this data source (their views/extracts may break). The preview phase surfaces

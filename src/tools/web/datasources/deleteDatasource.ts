@@ -3,11 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import {
-  AdminOnlyError,
-  DatasourceNotAllowedError,
-  PreviewNotRunError,
-} from '../../../errors/mcpToolError.js';
+import { DatasourceNotAllowedError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
@@ -18,19 +14,17 @@ import {
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { assertAdmin } from '../adminGate.js';
+import { DEFAULT_PENDING_DELETION_TAG, TagEvidence } from '../_lib/evidence.js';
+import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
 
 const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm';
 
-// Default tag applied during the preview phase to mark a datasource as pending deletion. Reversible
-// and visible in the Tableau UI, giving owners a window to object before the confirmed delete.
-// Generic by design — callers (e.g. the Stale Content Cleanup prompt) override via `tag`.
-// NOTE: intentionally duplicated from deleteWorkbook.ts to keep this (in-flight, dependent) PR
-// purely additive; extract to a shared _lib module once both delete tools have merged.
-export const DEFAULT_PENDING_DELETION_TAG = 'pending-deletion';
+// Re-exported for back-compat with callers that imported it from this module before it moved to
+// the shared evidence module.
+export { DEFAULT_PENDING_DELETION_TAG };
 
 const paramsSchema = {
   datasourceId: z.string().describe('The LUID of the published data source to delete.'),
@@ -122,11 +116,6 @@ Do not auto-confirm — get the user's explicit approval first.
             ...extra,
             jwtScopes: deleteDatasourceTool.requiredApiScopes,
             callback: async (restApi) => {
-              const adminResult = await assertAdmin(restApi, extra);
-              if (adminResult.isErr()) {
-                return new AdminOnlyError(adminResult.error).toErr();
-              }
-
               const siteId = restApi.siteId;
 
               // Treat undefined, empty, and whitespace-only tags as "use the default" so a blank
@@ -144,82 +133,76 @@ Do not auto-confirm — get the user's explicit approval first.
                 return new DatasourceNotAllowedError(isDatasourceAllowedResult.message).toErr();
               }
 
-              if (confirm) {
-                // Server-authoritative gate: re-fetch the data source LIVE and verify it carries the
-                // pending-deletion tag set by a prior preview call. The tag is server-side state that
-                // a caller going through this MCP tool cannot set without running the preview — so its
-                // presence is genuine proof the preview ran, and (unlike a caller-computable token)
-                // this gate cannot be bypassed by an agent. NOTE: this is not full human-in-the-loop;
-                // it proves the preview ran, not that a human approved (an agent that runs both phases
-                // satisfies it). We query fresh here (not the access-check's cached content) so the
-                // check reflects current server state at delete time. Rejected with zero side effects.
-                const datasource = await restApi.datasourcesMethods.queryDatasource({
-                  datasourceId,
-                  siteId,
-                });
-                const isTaggedForDeletion = datasource.tags?.tag?.some(
-                  (t) => t.label === pendingTag,
-                );
-                if (!isTaggedForDeletion) {
-                  return new PreviewNotRunError(
-                    `Deletion blocked: data source ${datasourceId} is not tagged '${pendingTag}' as ` +
-                      'pending deletion. Run delete-datasource with confirm omitted (or false) for this ' +
-                      'datasourceId first to preview and tag it, then call again with confirm: true. This ' +
-                      'gate verifies server-side state and cannot be bypassed by computing a token.',
-                  ).toErr();
-                }
-
+              // Resolve identity so both the audit record and the response name the data source,
+              // project, and owner. Reuse the data source already fetched by the access check when a
+              // project/tag scope forced it, otherwise fetch it now.
+              const resolveTarget = async (): Promise<MutationTarget> => {
+                const datasource =
+                  isDatasourceAllowedResult.content ??
+                  (await restApi.datasourcesMethods.queryDatasource({ datasourceId, siteId }));
                 const ownerEmail = await resolveOwnerEmail(
                   restApi,
                   siteId,
                   datasource.owner?.id,
                   'delete-datasource',
                 );
-                const projectName = datasource.project?.name ?? 'unknown project';
-                const ownerText = ownerEmail ? `owner ${ownerEmail}` : 'owner unknown';
+                return {
+                  id: datasourceId,
+                  name: datasource.name,
+                  project: datasource.project?.name,
+                  owner: ownerEmail ?? undefined,
+                  kind: 'datasource',
+                };
+              };
 
-                await restApi.datasourcesMethods.deleteDatasource({ datasourceId, siteId });
+              // Route the admin gate, tag-evidence gate, and authoritative audit through the shared
+              // mutation guard. The guard re-fetches the data source on confirm and verifies the
+              // pending-deletion tag; a confirm without a prior preview is rejected server-side.
+              const guardResult = await guardMutation({
+                restApi,
+                extra,
+                tool: 'delete-datasource',
+                action: 'delete',
+                mode: 'preview-confirm',
+                phase: confirm ? 'confirm' : 'preview',
+                evidence: new TagEvidence({ tag: pendingTag, kind: 'datasource' }),
+                resolveTarget,
+              });
+              if (guardResult.isErr()) {
+                return guardResult.error.toErr();
+              }
+              const { target, recordOutcome } = guardResult.value;
+              const projectName = target.project ?? 'unknown project';
+              const ownerText = target.owner ? `owner ${target.owner}` : 'owner unknown';
+
+              if (confirm) {
+                try {
+                  await restApi.datasourcesMethods.deleteDatasource({ datasourceId, siteId });
+                } catch (e) {
+                  // Authorized-but-failed: record the terminal 'failed' outcome so the audit trail
+                  // does not claim a deletion that never happened, then rethrow to the tool's handler.
+                  recordOutcome({ ok: false, failureDetail: getExceptionMessage(e) });
+                  throw e;
+                }
+                recordOutcome({ ok: true });
                 return new Ok(
-                  `Deleted data source '${datasource.name}' (id ${datasourceId}) in '${projectName}', ${ownerText}. ` +
+                  `Deleted data source '${target.name}' (id ${datasourceId}) in '${projectName}', ${ownerText}. ` +
                     `On Tableau Cloud it can be restored from the recycle bin (${RECYCLE_BIN_DOC_URL}) for a ` +
                     'limited time before permanent removal; on Tableau Server deletion is permanent. ' +
                     'Dependent workbooks and flows were not deleted but no longer have this data source.',
                 );
               }
 
-              // Preview phase: warn about dependents, tag as pending deletion, report. No deletion.
-              // Resolve identity so the response names the data source, project, and owner for an
-              // auditable record of exactly what was acted on. Reuse the data source already fetched
-              // by the access check when a project/tag scope forced it, otherwise fetch it now.
-              const datasource =
-                isDatasourceAllowedResult.content ??
-                (await restApi.datasourcesMethods.queryDatasource({
-                  datasourceId,
-                  siteId,
-                }));
-              const ownerEmail = await resolveOwnerEmail(
-                restApi,
-                siteId,
-                datasource.owner?.id,
-                'delete-datasource',
-              );
-              const projectName = datasource.project?.name ?? 'unknown project';
-              const ownerText = ownerEmail ? `owner ${ownerEmail}` : 'owner unknown';
-
+              // Preview phase: the guard has tagged the data source pending deletion. Warn about
+              // dependents (tool-specific) and report. No deletion.
               const dependencyWarning = await describeDownstreamDependencies({
                 restApi,
                 datasourceId,
                 disableMetadataApiRequests: configWithOverrides.disableMetadataApiRequests,
               });
 
-              await restApi.datasourcesMethods.addTagsToDatasource({
-                datasourceId,
-                siteId,
-                tagLabels: [pendingTag],
-              });
-
               return new Ok(
-                `Preview — data source '${datasource.name}' (id ${datasourceId}) in '${projectName}', ${ownerText}. ` +
+                `Preview — data source '${target.name}' (id ${datasourceId}) in '${projectName}', ${ownerText}. ` +
                   `${dependencyWarning} ` +
                   `It has been tagged '${pendingTag}' (reversible). ` +
                   'NEXT STEP — REQUIRED: show this data source (name, project, owner) and its dependent ' +

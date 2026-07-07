@@ -14,22 +14,35 @@ This tool is restricted to Tableau site administrators and requires the `ADMIN_T
 This tool calls the **Cloud variant** of the update endpoint and is not appropriate for Tableau Server. The Server variant has a different payload shape and is tracked separately.
 :::
 
-## Two-phase contract
+## Confirm and audit
 
-The tool is **two-phase** to keep the destructive action safe. Both phases are the same tool call — they differ only by whether `confirm` is passed:
+This mutation is **two-phase**, gated on a server-generated single-use confirmation token:
 
-1. **Preview** (default — `confirm` omitted or `false`): validates the proposed schedule, echoes the change that would be applied, and returns a per-task `confirmationToken`. Does **not** call the Tableau update endpoint.
-2. **Apply** (`confirm: true` + `confirmationToken`): applies the schedule change. The `confirmationToken` from the preview step is required — the update is rejected without a matching token before any API call is made.
+1. **Preview** (default — `confirm` omitted or `false`): reports the new schedule that would be
+   applied without changing anything, and returns a single-use `confirmationToken`.
+2. **Update** (`confirm: true` + `confirmationToken`): applies the schedule update. The server
+   verifies and consumes the token first.
 
-The `confirmationToken` is a friction gate that forces a deliberate second call rather than a blind one-shot update. It is a deterministic hash of caller-known inputs — the site ID, task ID, and the schedule payload — so a preview against schedule `A` produces a token that a confirmed call against schedule `B` cannot satisfy. This means the applied schedule is always the exact schedule the user previewed and approved.
+The token is server-generated and **bound to the previewed `taskId` and `schedule`**: a token minted
+while previewing schedule A cannot confirm an update to schedule B, and a `confirm: true` with no
+prior preview (no valid token) is rejected server-side. This gate genuinely requires the preview
+phase to have run for exactly this change; it cannot be bypassed by computing a value. Present the
+change to the user and get explicit approval before confirming.
 
-:::warning Human confirmation required — advisory, not enforced
-Between the preview and the apply, the calling agent is instructed (via the tool description and the preview response) to surface the proposed change (task ID + frequency + time window) to the user and obtain explicit approval before applying. This human-approval step is a **prompt-level expectation, not a server guarantee**: the token gate forces two calls with a matching schedule, but the server cannot observe whether a human actually approved. An agent that calls preview and then confirm itself satisfies the gate with no human in the loop.
+:::note[Authoritative audit]
+Every attempt — both the preview and the confirmed update, and both allowed and denied attempts (for
+example a non-admin caller) — emits a structured authoritative audit record to the server's durable
+log sink (logger `audit`, level `notice`), not just to the tool-response text. Each record captures
+the actor identity, the tool, action (`update`), phase, the target id, the confirmation evidence kind
+(`registry-nonce` for this tool), and the result. A confirmed update emits an `allowed` record when
+authorized, then a terminal `completed` (or `failed`, with `failureDetail`) record reflecting the
+REST outcome — so the trail records what actually happened, not just intent. This routing is
+centralized in the shared mutation guard so every TMCP mutation tool audits identically.
 :::
 
 ## APIs called
 
-- [Update Cloud Extract Refresh Task](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#update_cloud_extract_refresh_task) (apply phase only; the preview phase makes no Tableau API call)
+- [Update Cloud Extract Refresh Task](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#update_cloud_extract_refresh_task)
 
 ## Use cases
 
@@ -58,12 +71,12 @@ See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)
 
 ## Arguments
 
-| Parameter           | Type          | Required                      | Description                                                                                                                             |
-| ------------------- | ------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `taskId`            | string (UUID) | Yes                           | The ID of the extract refresh task to update. Obtain from `list-extract-refresh-tasks`.                                                 |
-| `schedule`          | object        | Yes                           | The new schedule to apply. Replaces the existing schedule wholesale.                                                                    |
-| `confirm`           | boolean       | No (default `false`)          | When omitted or `false`, runs the preview. Set `true` to perform the update — requires a matching `confirmationToken`.                  |
-| `confirmationToken` | string        | Required when `confirm: true` | The token returned by the preview step for this `taskId` + `schedule`. The update is rejected without a matching value before any API call is made. |
+| Parameter  | Type   | Required | Description                                                                                       |
+| ---------- | ------ | -------- | ------------------------------------------------------------------------------------------------- |
+| `taskId`   | string (UUID) | Yes      | The ID of the extract refresh task to update. Obtain from `list-extract-refresh-tasks`.    |
+| `confirm`  | boolean | No      | Set `true` to apply the update (requires `confirmationToken`). When omitted or false, previews the change without applying it. |
+| `confirmationToken` | string | No | The single-use token returned by a prior preview of this same `taskId` and `schedule`. Required when `confirm` is `true`; ignored otherwise. A token minted for a different schedule will not validate. |
+| `schedule` | object | Yes      | The new schedule to apply. Replaces the existing schedule wholesale.                              |
 
 ### `schedule` shape
 
@@ -120,15 +133,7 @@ Tableau may still reject a schema-valid request with `409004 Conflict` (`Invalid
 
 ## Response
 
-### Preview (`confirm` omitted or `false`)
-
-Echoes the proposed change and the token to use on the confirmed call. No Tableau API call is made.
-
-```
-Preview — would update extract refresh task 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' to Weekly (start 06:00:00). NEXT STEP — REQUIRED: present this proposed change to the user and obtain explicit approval. Do NOT update without the user's approval in this conversation. Once approved, call again with confirm: true and confirmationToken: <token>.
-```
-
-### Apply (`confirm: true` + matching `confirmationToken`)
+A confirmation message describing the updated task and its new schedule:
 
 ```
 Extract refresh task 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' has been successfully updated. New schedule: Weekly (start 06:00:00).
@@ -144,4 +149,3 @@ Extract refresh task 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' has been successfull
 | Invalid `frequency` value         | Schema-level rejection before any API call                                     |
 | Missing `frequencyDetails.start`  | Schema-level rejection before any API call                                     |
 | Tableau Server (not Cloud)        | This tool is Cloud-only; calling it against a Server site is not supported     |
-| `confirm: true` with missing or mismatched `confirmationToken` | Update is rejected before any Tableau API call; response instructs the caller to run the preview first (same `taskId` + `schedule` pair) |
