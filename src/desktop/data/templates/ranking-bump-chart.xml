@@ -24,7 +24,7 @@
         <column-instance column='[Order Date]' derivation='Year' name='[yr:Order Date:ok]' pivot='key' type='ordinal' />
       </datasource-dependencies>
       <filter class='categorical' column='[{{DATASOURCE}}].[yr:Order Date:ok]'>
-        <groupfilter function='member' level='[yr:Order Date:ok]' member='2016' user:ui-domain='relevant' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
+        <groupfilter function='level-members' level='[yr:Order Date:ok]' />
       </filter>
       <slices>
         <column>[{{DATASOURCE}}].[yr:Order Date:ok]</column>

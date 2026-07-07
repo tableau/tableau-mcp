@@ -1,91 +1,111 @@
 {
-  "template": "box-plot-chart",
-  "family": "distribution",
-  "readiness": "YELLOW",
-  "fast_path_eligible": false,
-  "fast_path_blockers": [],
-  "portability_evidence": {
-    "fixture_bind": true,
-    "render_verified": "none"
+ "template": "box-plot-chart",
+ "family": "distribution",
+ "readiness": "YELLOW",
+ "fast_path_eligible": true,
+ "fast_path_blockers": [],
+ "portability_evidence": {
+  "fixture_bind": true,
+  "render_verified": "live-2026-07-06",
+  "render_evidence": {
+   "method": "gate-composite",
+   "date": "2026-07-06",
+   "structural": 0.97297,
+   "critical_pass": "5/5",
+   "pixel": 1.0,
+   "pixel_regions": 6,
+   "sanity": "sane",
+   "sanity_signals": [
+    "mark-count=pass reconciled=true (800=800=EXPECTED_COUNT (grain DISTINCT(Customer Name,Segment)=800, FD assumption live-corrected from 793), Worksheet>Copy>Data on source and applied sheets)",
+    "caption-leak=pass"
+   ],
+   "run": "per-leg source-anchor replay (W38-LIVE-2); box-plot per-cell reference distribution survived apply; circle-per-customer over 3 Segment columns",
+   "artifacts": "local-only under ~/TableauGoldens/lab/ (box* renders, worksheet XMLs, w38l2 stamp JSON)",
+   "basis": "golden-parity gate run 2026-07-06 (source-anchor replay, W38-LIVE-2): structural 0.97297 (5/5 critical; sole miss = salience-1 resolved-title, sheet names differ by design), pixel 1.0 (6 ROIs, same-geometry captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 800=800=EXPECTED_COUNT (grain DISTINCT(Customer Name,Segment)=800, FD assumption live-corrected from 793)",
+   "lane": "fable-direct stamp run 2026-07-06 (orchestrator gate run over W38-LIVE-2 per-leg evidence; grade scratchpad imports parity-grade.mjs verbatim)",
+   "gate_composite": 98,
+   "high_pass": "0/0",
+   "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 ROIs). Source and applied are two INDEPENDENT renders of the same data on the same instance."
+  }
+ },
+ "datasource_placeholder": true,
+ "placeholders": [
+  "TITLE",
+  "DATASOURCE"
+ ],
+ "intent_keywords": [
+  "box-plot",
+  "boxplot",
+  "box-and-whisker",
+  "whisker",
+  "quartile",
+  "distribution"
+ ],
+ "description": "A box-and-whisker plot showing the DISTRIBUTION of a measure: Circle marks at one point per grain member (the level dimension on the level-of-detail shelf), a continuous measure axis on rows ([sum:Measure:qk]), and a per-cell box-plot reference line (boxplot-whisker-type='standard') that draws the median / IQR box + whiskers over those points; an OPTIONAL facet dimension on cols splits the distribution into side-by-side boxes. Serves UC7 (distribution analysis) and the UC4 ranged/uncertainty view. Generalized from the repo distribution-bar-code-chart (a live-stamped strip plot: detail-grain dim on lod + aggregated measure axis) plus the distribution-box-whisker catalog exemplar's box-plot reference-line + Circle marks. Live render-verified 2026-07-06 by the golden-parity gate (composite 98; see portability_evidence.render_evidence): structural 0.97297 (5/5 critical), pixel 1.0, binding-sanity sane via reconciled 800=800=EXPECTED_COUNT Copy>Data mark counts (grain live-corrected from the disproven Segment-FD assumption) and caption-leak pass.",
+ "avoid_when": [
+  "You want the frequency SHAPE across equal-width buckets (how many records fall in each range) — that is a histogram (distribution-histogram); a box plot summarizes to quartiles and hides the multi-modal shape a histogram reveals.",
+  "The grain (level) dimension is coarse — a box drawn over only a handful of points is statistical noise (quartiles/whiskers are unstable); bind a fine-grained entity (deal/ticket/order) as the level (see hazard sparse-extremes).",
+  "The ask is a single headline number or a trend over time — a box plot answers 'how is it spread / where are the outliers', not 'what is it now' or 'is it rising'."
+ ],
+ "slots": [
+  {
+   "slot_id": "measure",
+   "template_field": "Measure",
+   "derivation": "sum",
+   "role": [
+    "rows"
+   ],
+   "kind": "quantitative",
+   "bindable": true,
+   "required": true,
+   "notes": "The distributed measure — the continuous axis on rows, SUM([Measure]) per grain member → [sum:Measure:qk]. It is BOTH the axis-column and value-column of the box-plot reference line (the box + whiskers summarize this measure's values across the level members)."
   },
-  "datasource_placeholder": true,
-  "placeholders": [
-    "TITLE",
-    "DATASOURCE"
-  ],
-  "intent_keywords": [
-    "box-plot",
-    "boxplot",
-    "box-and-whisker",
-    "whisker",
-    "quartile",
-    "distribution"
-  ],
-  "description": "A box-and-whisker plot showing the DISTRIBUTION of a measure: Circle marks at one point per grain member (the level dimension on the level-of-detail shelf), a continuous measure axis on rows ([sum:Measure:qk]), and a per-cell box-plot reference line (boxplot-whisker-type='standard') that draws the median / IQR box + whiskers over those points; an OPTIONAL facet dimension on cols splits the distribution into side-by-side boxes. Serves UC7 (distribution analysis) and the UC4 ranged/uncertainty view. Generalized from the repo distribution-bar-code-chart (a live-stamped strip plot: detail-grain dim on lod + aggregated measure axis) plus the distribution-box-whisker catalog exemplar's box-plot reference-line + Circle marks. Structurally compiled hermetically, NOT live render-verified.",
-  "avoid_when": [
-    "You want the frequency SHAPE across equal-width buckets (how many records fall in each range) \u2014 that is a histogram (distribution-histogram); a box plot summarizes to quartiles and hides the multi-modal shape a histogram reveals.",
-    "The grain (level) dimension is coarse \u2014 a box drawn over only a handful of points is statistical noise (quartiles/whiskers are unstable); bind a fine-grained entity (deal/ticket/order) as the level (see hazard sparse-extremes).",
-    "The ask is a single headline number or a trend over time \u2014 a box plot answers 'how is it spread / where are the outliers', not 'what is it now' or 'is it rising'."
-  ],
-  "slots": [
-    {
-      "slot_id": "measure",
-      "template_field": "Measure",
-      "derivation": "sum",
-      "role": [
-        "rows"
-      ],
-      "kind": "quantitative",
-      "bindable": true,
-      "required": true,
-      "notes": "The distributed measure \u2014 the continuous axis on rows, SUM([Measure]) per grain member \u2192 [sum:Measure:qk]. It is BOTH the axis-column and value-column of the box-plot reference line (the box + whiskers summarize this measure's values across the level members)."
-    },
-    {
-      "slot_id": "level",
-      "template_field": "Level",
-      "derivation": "none",
-      "role": [
-        "detail"
-      ],
-      "kind": "categorical",
-      "bindable": true,
-      "required": true,
-      "notes": "The GRAIN dimension on the level-of-detail (lod/detail) shelf \u2014 one Circle mark per member, and the population the box summarizes. REQUIRED because a box plot needs multiple marks per cell to have a distribution; an aggregated measure with no grain dim collapses to one point per cell (degenerate). Mirrors the bar-code chart's detail dim. XML column-instance [none:Level:nk]."
-    },
-    {
-      "slot_id": "facet",
-      "template_field": "Facet",
-      "derivation": "none",
-      "role": [
-        "cols"
-      ],
-      "kind": "categorical",
-      "bindable": true,
-      "required": false,
-      "notes": "OPTIONAL grouping dimension on cols \u2014 splits the distribution into side-by-side boxes (e.g. resolution-time distribution PER team). Because it is optional it is NOT counted in the required-bindable fixture_bind set (only {measure, level} are). When present it partitions the per-cell box plots; when absent the chart is a single box over the level members. XML column-instance [none:Facet:nk]."
-    }
-  ],
-  "calcs": [],
-  "hazards": [
-    {
-      "code": "outlier-domination",
-      "detail": "A few extreme values stretch the measure axis so the IQR box compresses to a sliver and the median/quartile story is lost \u2014 the exact 'outliers swamp' condition the product use case calls out. The template applies no outlier handling (boxplot-mark-exclusion='false' keeps outlier marks in the axis scaling). Filter or exclude extreme points, or use a log axis, when a long tail dominates.",
-      "xml": "box-plot-chart.xml:29"
-    },
-    {
-      "code": "sparse-extremes",
-      "detail": "With few points per box (a coarse level dim, or a facet member with only a handful of grain members) the quartiles and whiskers are statistically meaningless \u2014 a box over 2\u20133 points is noise dressed as a summary. The template cannot know the per-cell count; bind a fine-grained level and confirm each box has enough members before reading the spread.",
-      "xml": "box-plot-chart.xml:24"
-    },
-    {
-      "code": "grain-dimension-required",
-      "detail": "The box summarizes the measure ACROSS the level (grain) dimension's members. This is why 'level' is a REQUIRED slot even though the product sketch listed only {measure, optional facet}: with aggregation on and no grain dim, each cell has a single aggregated mark and the box is degenerate (one point). Bind the entity whose values you want distributed (deal/ticket/order) to 'level'; the facet is the optional grouping on top.",
-      "xml": "box-plot-chart.xml:20"
-    },
-    {
-      "code": "not-live-render-verified",
-      "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop). portability_evidence.render_verified='none' and fast_path_eligible=false: the template binds the committed fixture (fixture_bind computed true \u2014 the measure + the grain dim; the optional facet is excluded) but has NO live render-readback proof. A live-YYYY-MM-DD stamp is EARNED later by the golden-parity gate / a hand-stamp with render_evidence, never granted at compile time.",
-      "xml": "box-plot-chart.xml:1"
-    }
-  ]
+  {
+   "slot_id": "level",
+   "template_field": "Level",
+   "derivation": "none",
+   "role": [
+    "detail"
+   ],
+   "kind": "categorical",
+   "bindable": true,
+   "required": true,
+   "notes": "The GRAIN dimension on the level-of-detail (lod/detail) shelf — one Circle mark per member, and the population the box summarizes. REQUIRED because a box plot needs multiple marks per cell to have a distribution; an aggregated measure with no grain dim collapses to one point per cell (degenerate). Mirrors the bar-code chart's detail dim. XML column-instance [none:Level:nk]."
+  },
+  {
+   "slot_id": "facet",
+   "template_field": "Facet",
+   "derivation": "none",
+   "role": [
+    "cols"
+   ],
+   "kind": "categorical",
+   "bindable": true,
+   "required": false,
+   "notes": "OPTIONAL grouping dimension on cols — splits the distribution into side-by-side boxes (e.g. resolution-time distribution PER team). Because it is optional it is NOT counted in the required-bindable fixture_bind set (only {measure, level} are). When present it partitions the per-cell box plots; when absent the chart is a single box over the level members. XML column-instance [none:Facet:nk]."
+  }
+ ],
+ "calcs": [],
+ "hazards": [
+  {
+   "code": "outlier-domination",
+   "detail": "A few extreme values stretch the measure axis so the IQR box compresses to a sliver and the median/quartile story is lost — the exact 'outliers swamp' condition the product use case calls out. The template applies no outlier handling (boxplot-mark-exclusion='false' keeps outlier marks in the axis scaling). Filter or exclude extreme points, or use a log axis, when a long tail dominates.",
+   "xml": "box-plot-chart.xml:29"
+  },
+  {
+   "code": "sparse-extremes",
+   "detail": "With few points per box (a coarse level dim, or a facet member with only a handful of grain members) the quartiles and whiskers are statistically meaningless — a box over 2–3 points is noise dressed as a summary. The template cannot know the per-cell count; bind a fine-grained level and confirm each box has enough members before reading the spread.",
+   "xml": "box-plot-chart.xml:24"
+  },
+  {
+   "code": "grain-dimension-required",
+   "detail": "The box summarizes the measure ACROSS the level (grain) dimension's members. This is why 'level' is a REQUIRED slot even though the product sketch listed only {measure, optional facet}: with aggregation on and no grain dim, each cell has a single aggregated mark and the box is degenerate (one point). Bind the entity whose values you want distributed (deal/ticket/order) to 'level'; the facet is the optional grouping on top.",
+   "xml": "box-plot-chart.xml:20"
+  },
+  {
+   "code": "not-live-render-verified",
+   "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop) and SUBSEQUENTLY live render-verified on 2026-07-06: portability_evidence.render_verified='live-2026-07-06' and fast_path_eligible=true. The golden-parity gate earned the stamp (composite 98: structural 0.97297, pixel 1.0, binding-sanity sane via reconciled 800=800 Copy>Data mark counts — grain live-corrected from the disproven Segment-FD assumption — + caption-leak pass) — the live render-readback proof the hermetic compile alone could not supply. See portability_evidence.render_evidence for the auditable basis.",
+   "xml": "box-plot-chart.xml:1"
+  }
+ ]
 }

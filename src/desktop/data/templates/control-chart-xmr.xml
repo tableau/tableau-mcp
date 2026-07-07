@@ -10,14 +10,25 @@
       <datasource-dependencies datasource='{{DATASOURCE}}'>
         <column datatype='date' name='[Order Date]' role='dimension' type='ordinal' />
         <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column caption='Out of Control' datatype='integer' name='[Calculation_20260705120000]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='IF ABS(SUM([Profit]) - WINDOW_AVG(SUM([Profit]))) &gt; 3 * WINDOW_STDEV(SUM([Profit])) THEN 1 ELSE 0 END' />
+        </column>
         <column-instance column='[Order Date]' derivation='MDY' name='[md:Order Date:ok]' pivot='key' type='ordinal' />
         <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Calculation_20260705120000]' derivation='User' name='[usr:Calculation_20260705120000:ok]' pivot='key' type='ordinal' />
       </datasource-dependencies>
       <aggregation value='true' />
     </view>
     <style>
       <style-rule element='mark'>
-        <encoding attr='color' field='[{{DATASOURCE}}].[sum:Profit:qk]' num-steps='3' type='interpolated' />
+        <encoding attr='color' field='[{{DATASOURCE}}].[usr:Calculation_20260705120000:ok]' type='palette'>
+          <map to='#e15759'>
+            <bucket>1</bucket>
+          </map>
+          <map to='#4e79a7'>
+            <bucket>0</bucket>
+          </map>
+        </encoding>
       </style-rule>
       <style-rule element='refline'>
         <format attr='fill-above' id='refline0' value='#00000000' />
@@ -42,7 +53,7 @@
         <mark class='Automatic' />
         <mark-sizing mark-sizing-setting='marks-scaling-off' />
         <encodings>
-          <color column='[{{DATASOURCE}}].[sum:Profit:qk]' />
+          <color column='[{{DATASOURCE}}].[usr:Calculation_20260705120000:ok]' />
         </encodings>
         <reference-line axis-column='[{{DATASOURCE}}].[sum:Profit:qk]' enable-instant-analytics='true' formula='average' id='refline0' label-type='automatic' probability='95' scope='per-pane' value-column='[{{DATASOURCE}}].[sum:Profit:qk]' z-order='1' />
         <reference-line axis-column='[{{DATASOURCE}}].[sum:Profit:qk]' enable-instant-analytics='false' fill-above='false' fill-below='false' formula='stdev' id='refline1' label-type='automatic' scope='per-pane' symmetric='false' type='sample' value-column='[{{DATASOURCE}}].[sum:Profit:qk]' z-order='2'>

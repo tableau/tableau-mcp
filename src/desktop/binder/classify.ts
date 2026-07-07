@@ -326,6 +326,23 @@ export function matchAvoidWhen(
   return matched;
 }
 
+/**
+ * Hazard codes that DEMOTE the no-LLM shortcut unconditionally (W59). avoid_when
+ * is ask-conditioned; these hazards are DATA-conditioned — the risk (e.g. calcs
+ * that SPLIT a specific compound-string shape out of a bound field) is invisible
+ * in any natural ask, so the zero-model path can never rule it out. Demote-only:
+ * the template stays fully bindable via the propose leg, where the model sees the
+ * hazard detail and judges the actual schema against it.
+ */
+const DETERMINISTIC_PATH_BLOCKING_HAZARDS: ReadonlySet<string> = new Set(['compound-string-parse']);
+
+/** True when the manifest carries a hazard the no-LLM path must not bind through. */
+export function hasDeterministicPathBlockingHazard(
+  manifest: Pick<TemplateManifest, 'hazards'>,
+): boolean {
+  return (manifest.hazards ?? []).some((h) => DETERMINISTIC_PATH_BLOCKING_HAZARDS.has(h.code));
+}
+
 /** The intent_keywords (original case) that appear as whole tokens in `ask`. */
 function matchedKeywords(ask: string, keywords: string[]): string[] {
   return keywords.filter((kw) => phraseIndexInAsk(ask, kw) >= 0);
@@ -380,6 +397,68 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   'treemap',
   'pie',
   'donut',
+  // 2026-07-06 growth (per the table's own contract — grow as new distinct-shape
+  // templates are stamped eligible): gantt-task-rollup-chart's stamp made time-series
+  // a TWO-member eligible family, collapsing strict-majority nativity for trend-line's
+  // vocabulary ("line chart of X over Y" classified null — the exact sibling-scaling
+  // regression this table exists to prevent). Each noun below deterministically names
+  // a chart type and equals a real intent_keyword of its (stamped or imminently
+  // stamped, evidence-earned 2026-07-06) template: 'line' (trend-line-chart),
+  // 'gantt' (gantt-task-rollup-chart), 'histogram' (distribution-histogram),
+  // 'bullet' (quota-attainment-bullet), 'funnel' (funnel-chart),
+  // 'slope' + 'slope-chart' + 'slope-graph' (slope-chart),
+  // 'box-plot' + 'boxplot' + 'box-and-whisker' (box-plot-chart).
+  'line',
+  // 'trend' rides the same growth: carried ONLY by trend-line-chart and a
+  // deterministic type selector in practice ("trend of X" names a line chart);
+  // without it every noun-less trend ask ("trend over time by month") demotes to
+  // propose the moment the family gains a second member. Pattern PHRASES
+  // ('over-time', 'time-series') stay out — nouns only; the ask-router lane
+  // (W36) is the successor mechanism for phrase-level routing.
+  'trend',
+  'gantt',
+  'histogram',
+  'bullet',
+  'funnel',
+  'slope',
+  'slope-chart',
+  'slope-graph',
+  'box-plot',
+  'boxplot',
+  'box-and-whisker',
+  // 'over-time' is the one PHRASE-form deterministic selector admitted: carried
+  // solely by trend-line-chart, and "X over time" names a line chart as surely as
+  // the noun does. Lone-winner is the only path this table gates; if a second
+  // time-series template ever carries 'over-time', the TIE path's keyword-
+  // specificity ranking (multi-token 'sales-over-time' &c.) governs instead, so
+  // admitting it cannot create a cross-template flip later.
+  'over-time',
+  // Second growth event same night: the 13th-15th stamps made deviation
+  // (quota joins ww-ou-arrow) and distribution (box-plot joins bar-code)
+  // two-member families, collapsing nativity for the incumbent members'
+  // vocabulary — "over-under arrow chart of Sales" and "bar-code strip of X"
+  // classified null (live-caught by the drift guard). Each noun below is a
+  // deterministic type selector carried by exactly one template:
+  // 'arrow-chart' + 'over-under-arrow' (ww-ou-arrow),
+  // 'bar-code' + 'strip-plot' + 'dot-strip' (distribution-bar-code-chart).
+  'arrow-chart',
+  'over-under-arrow',
+  'bar-code',
+  'strip-plot',
+  'dot-strip',
+  // Third growth event (W59): the 2026-07-06 stamp wave's remaining fallout —
+  // part-to-whole-waterfall and spatial-choropleth-map shipped stamped but their
+  // nouns were never admitted, so both lead exec-demo asks ("waterfall of Profit
+  // by Sub-Category", "filled map of Profit by State/Province") demoted to propose
+  // (live-caught by the W59 proof-value spike). Each noun below is carried by
+  // exactly ONE stamped template (carrier-uniqueness checked across all bundled
+  // manifests; the generic 'map' stays OUT — dual-carrier with spatial-symbol-map):
+  // 'waterfall' (part-to-whole-waterfall),
+  // 'choropleth' + 'filled-map' + 'region-map' (spatial-choropleth-map).
+  'waterfall',
+  'choropleth',
+  'filled-map',
+  'region-map',
 ]);
 
 /** True when at least one ask-matched keyword is a distinctive chart noun. */
@@ -960,6 +1039,16 @@ export function classifyNoLlm(
   // silently (the retrieval-without-adherence failure). Field names are masked
   // so a field literally named after a caution term can't force the demotion.
   if (matchAvoidWhen(maskedAsk, chosen.avoid_when, chosen.intent_keywords).length > 0) return null;
+
+  // DEMOTE on data-shape-parse hazards (W59): avoid_when only fires when the ASK
+  // reveals the risk, but a data-shape hazard lives in the DATA, which no natural
+  // ask mentions — "over-under arrow chart of Sales by Sub-Category" happily bound
+  // ww-ou-arrow and fed [Category] into sports-score SPLIT parsing (live-caught by
+  // the W59 proof-value spike + dual review). A template whose calcs parse a
+  // specific string shape out of a bound field can never prove data fit on the
+  // zero-model path, so it always falls through to propose, where the model sees
+  // the hazard notes + avoid_when and judges the actual schema.
+  if (hasDeterministicPathBlockingHazard(chosen)) return null;
 
   const bindings = roleGreedyBind(chosen, matched, aggOverride);
   if (!bindings) return null; // required slot unfilled → fail closed

@@ -41,7 +41,7 @@
     "spatial",
     "map"
   ],
-  "description": "Filled (choropleth) map: one Multipolygon per geographic region, shaded by a continuous color measure. Standard geo dimensions (Country + State) on level-of-detail with generated Latitude/Longitude on rows/cols; SUM(measure) on color as a custom-interpolated diverging gradient. Factory-compiled from the CookBook 'Choropleth Map Viz' worksheet; structurally compiled, not yet render-verified.",
+  "description": "Filled (choropleth) map: one Multipolygon per geographic region, shaded by a continuous color measure. Standard geo dimensions (Country + State) on level-of-detail with generated Latitude/Longitude on rows/cols; SUM(measure) on color as a custom-interpolated diverging gradient. Factory-compiled from the CookBook 'Choropleth Map Viz' worksheet; structurally compiled and render-verified (live-2026-07-06).",
   "avoid_when": [
     "The ask is 'which region ranks highest/lowest' or needs precise cross-region value comparison \u2014 filled-area color is hard to compare quantitatively; prefer a ranked bar chart.",
     "Regions differ wildly in physical size \u2014 large, low-value areas visually dominate (area is not magnitude); consider a symbol/bubble map sized by the measure instead.",

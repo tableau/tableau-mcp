@@ -24,14 +24,7 @@
         <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
       </datasource-dependencies>
       <filter class='categorical' column='[{{DATASOURCE}}].[mn:Order Date:ok]'>
-        <groupfilter function='union' user:ui-domain='relevant' user:ui-enumeration='inclusive' user:ui-marker='enumerate'>
-          <groupfilter function='member' level='[mn:Order Date:ok]' member='1' />
-          <groupfilter function='member' level='[mn:Order Date:ok]' member='2' />
-          <groupfilter function='member' level='[mn:Order Date:ok]' member='3' />
-          <groupfilter function='member' level='[mn:Order Date:ok]' member='4' />
-          <groupfilter function='member' level='[mn:Order Date:ok]' member='5' />
-          <groupfilter function='member' level='[mn:Order Date:ok]' member='6' />
-        </groupfilter>
+        <groupfilter function='level-members' level='[mn:Order Date:ok]' />
       </filter>
       <slices>
         <column>[{{DATASOURCE}}].[mn:Order Date:ok]</column>

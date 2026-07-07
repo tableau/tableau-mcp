@@ -384,17 +384,15 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
     }
   });
 
-  it('the render-verified set is exactly the ten live-proven factory templates', () => {
-    // W26-B re-snapshot: the bundled supply was resynced to the factory's full 39 manifests.
-    // fast_path_eligible / render_verified TRAVEL UNCHANGED from the factory (no stamps minted
-    // in transit): the factory stamps exactly TEN templates render-verified, so the shipped
-    // eligible set is exactly ten. The two additions vs the prior shipped eight are NEW
-    // templates that arrive already factory render-verified (render_verified live-2026-07-06):
-    //   part-to-whole-waterfall, spatial-choropleth-map.
-    // The prior eight (unchanged): distribution-bar-code-chart, kpi-text,
-    //   part-to-whole-stacked-bar-chart, part-to-whole-treemap-chart, ranking-ordered-bar,
-    //   ranking-ordered-column, trend-line-chart, ww-ou-arrow.
-    // Everything else in the 39 ships propose-only (render_verified none) and honestly surfaces
+  it('the render-verified set is exactly the fourteen live-proven factory templates', () => {
+    // W59 template-sync: the seven missing fast-path XMLs were ported from the factory
+    // (a2td) with their manifests. fast_path_eligible / render_verified TRAVEL UNCHANGED
+    // from the factory (no stamps minted in transit): the factory's 2026-07-06 stamp wave
+    // stamps FOURTEEN of the bundled manifests render-verified. The four additions vs the
+    // prior shipped ten arrive already factory render-verified (render_verified
+    // live-2026-07-06): box-plot-chart, funnel-chart, gantt-task-rollup-chart,
+    // quota-attainment-bullet.
+    // Everything else ships propose-only (render_verified none) and honestly surfaces
     // the not-live-render-verified blocker via deriveFastPathBlockers.
     const eligible = [...manifests.values()]
       .filter((m) => m.fast_path_eligible)
@@ -402,11 +400,15 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
       .sort();
     expect(eligible).toEqual(
       [
+        'box-plot-chart',
         'distribution-bar-code-chart',
+        'funnel-chart',
+        'gantt-task-rollup-chart',
         'kpi-text',
         'part-to-whole-stacked-bar-chart',
         'part-to-whole-treemap-chart',
         'part-to-whole-waterfall',
+        'quota-attainment-bullet',
         'ranking-ordered-bar',
         'ranking-ordered-column',
         'spatial-choropleth-map',

@@ -75,10 +75,11 @@ describe('intelligence/BundledIntelligenceProvider — template accessors', () =
   });
 
   it('getTemplateXmlFragment returns null for a GOLDEN-ONLY template (no shipped XML)', () => {
-    // ww-ou-arrow ships a gate-earned manifest but its golden worksheet XML does not
-    // ship in-package — the provider must not fabricate a fragment.
-    expect(provider.getTemplateManifest('ww-ou-arrow')).toBeDefined();
-    expect(provider.getTemplateXmlFragment('ww-ou-arrow')).toBeNull();
+    // ww-ou-diff ships a gate-earned manifest but its golden worksheet XML does not
+    // ship in-package — the provider must not fabricate a fragment. (W59: the prior
+    // fixture ww-ou-arrow now ships factory-stamped XML, so it moved to the shipped set.)
+    expect(provider.getTemplateManifest('ww-ou-diff')).toBeDefined();
+    expect(provider.getTemplateXmlFragment('ww-ou-diff')).toBeNull();
   });
 
   it('getTemplateXmlFragment returns null for an unknown name (no path traversal)', () => {
