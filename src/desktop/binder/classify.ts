@@ -429,6 +429,19 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   'bar-code',
   'strip-plot',
   'dot-strip',
+  // Third growth event (W59): the 2026-07-06 stamp wave's remaining fallout —
+  // part-to-whole-waterfall and spatial-choropleth-map shipped stamped but their
+  // nouns were never admitted, so both lead exec-demo asks ("waterfall of Profit
+  // by Sub-Category", "filled map of Profit by State/Province") demoted to propose
+  // (live-caught by the W59 proof-value spike). Each noun below is carried by
+  // exactly ONE stamped template (carrier-uniqueness checked across all bundled
+  // manifests; the generic 'map' stays OUT — dual-carrier with spatial-symbol-map):
+  // 'waterfall' (part-to-whole-waterfall),
+  // 'choropleth' + 'filled-map' + 'region-map' (spatial-choropleth-map).
+  'waterfall',
+  'choropleth',
+  'filled-map',
+  'region-map',
 ]);
 
 /** True when at least one ask-matched keyword is a distinctive chart noun. */
