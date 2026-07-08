@@ -15,23 +15,13 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  worksheetFile: z
-    .string()
-    .describe(
-      'Path to the cache file containing worksheet XML (from get-worksheet-xml or a previous modification tool).',
-    ),
-  columnRef: z
-    .string()
-    .describe(
-      "Column reference — format: [ds].[derivation:LocalName:typePivot] (e.g. '[Sample - Superstore].[sum:Profit:qk]').",
-    ),
-  index: z.number().optional().describe('Optional position (0-based). If omitted, appends to end.'),
+  worksheetFile: z.string().describe('Worksheet XML cache file.'),
+  columnRef: z.string().describe('Column reference.'),
+  index: z.number().optional().describe('Optional 0-based insert position.'),
   workbookFile: z
     .string()
     .optional()
-    .describe(
-      'Optional path to workbook cache file (from get-workbook-xml). Provides datasource caption for better compatibility.',
-    ),
+    .describe('Optional workbook cache file for datasource caption.'),
 };
 
 const title = 'Add Field to Columns Shelf';
@@ -43,10 +33,8 @@ export const getAddFieldToColsTool = (
     name: 'add-field-to-cols',
     title,
     description: [
-      'Add a field to the columns shelf on a worksheet.',
-      'Reads from and writes to the worksheet cache file.',
-      'Workflow: get-workbook-xml → list-available-fields → get-worksheet-xml → this tool → apply-worksheet.',
-      'Automatically adds the column definition to datasource-dependencies if missing.',
+      'Add a field to the columns shelf (mutates worksheet cache; adds datasource dependency if missing).',
+      'Workflow: get-worksheet-xml → this tool → apply-worksheet.',
     ].join(' '),
     paramsSchema,
     annotations: {

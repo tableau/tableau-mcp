@@ -28,20 +28,9 @@ function getCorpus(): Corpus | null {
 }
 
 const paramsSchema = {
-  feature: z
-    .string()
-    .optional()
-    .describe(
-      "Feature tag for curated/indexed examples (e.g., 'sort', 'filter-categorical', 'encoding-color'). Also used as a fallback diff-corpus query when `query` is omitted.",
-    ),
-  query: z
-    .string()
-    .optional()
-    .describe('Diff-corpus query string. When source=diff-corpus, provide query or feature.'),
-  max_results: z
-    .number()
-    .optional()
-    .describe('Max diff-corpus examples when source includes diff-corpus (default 5).'),
+  feature: z.string().optional().describe('Feature tag; also fallback diff-corpus query.'),
+  query: z.string().optional().describe('Diff-corpus query string.'),
+  max_results: z.number().optional().describe('Max diff-corpus examples; default 5.'),
   source: z
     .enum(['curated', 'diff-corpus', 'both'])
     .optional()
@@ -58,7 +47,7 @@ export const getSearchWorkbookExamplesTool = (
     name: 'search-workbook-examples',
     title,
     description:
-      'Search curated examples and/or the transformation diff corpus. Default (source=curated) matches historical behavior. Use source=diff-corpus for the same corpus as search-examples, or source=both to return two sections.',
+      'Search curated workbook examples and/or the diff corpus. Default source=curated; use diff-corpus or both for XML diffs.',
     paramsSchema,
     annotations: {
       title,

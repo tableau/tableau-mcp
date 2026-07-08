@@ -43,26 +43,22 @@ const paramsSchema = {
   session: z
     .string()
     .optional()
-    .describe(
-      'Tableau instance Session ID from list-instances. Optional: when omitted and exactly one Desktop instance is running, it is resolved automatically; with 0 or 2+ instances the tool fails closed and lists the instances.',
-    ),
-  ask: z.string().describe("Natural-language chart request, e.g. 'bar chart of Sales by Region'."),
+    .describe('Session ID. Optional only when exactly one Desktop instance is running.'),
+  ask: z.string().describe('Natural-language chart request.'),
   proposal: proposalSchema
     .optional()
-    .describe(
-      "Call 2 only: the binding proposal you produced from a Call-1 'propose' payload (must match its output_schema).",
-    ),
+    .describe("Call 2 only: filled proposal from a Call-1 'propose' payload."),
   minConfidence: z
     .number()
     .min(0)
     .max(1)
     .optional()
-    .describe('Confidence floor for a proposal (default 0.6). Below this, the binder escalates.'),
+    .describe('Proposal confidence floor; default 0.6.'),
   auto_apply: z
     .boolean()
     .optional()
     .describe(
-      'When true AND this is a deterministic Call-1 bind (no proposal) of a fast-path-eligible template, apply the bound template server-side (get workbook XML → inject → validated apply) and return { applied, sheet_name, phase_ms }. On any inject/apply failure the bound args are returned intact with { applied:false, apply_error } so you can fall back to the manual inject/apply chain. Never auto-applies a Call-2 proposal. Default false (read-only).',
+      'When true, deterministic Call-1 binds apply server-side. Never auto-applies Call-2 proposals. Default false/read-only.',
     ),
 };
 
@@ -137,7 +133,9 @@ function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): 
       'Confidence was below the floor. Re-examine the candidate template(s), pick the best fit, and re-propose with higher confidence.';
   } else if (TIER2_REASONS.has(reason)) {
     next =
-      'This ask is not a fast-path template bind. Author the worksheet with the general field/worksheet build tools instead.';
+      'This ask is not a fast-path template bind. Author the worksheet with the general field/worksheet build tools instead. ' +
+      'If a blocker names a real but not-fast-path-eligible template, that template can still be applied via the manual chain: ' +
+      'get-workbook-xml -> inject-template (that template_name + an explicit field_mapping) -> apply-workbook.';
   } else {
     next = 'Author the worksheet with the general build tools instead.';
   }
@@ -155,6 +153,14 @@ function buildGuidance(res: BinderResult): string {
         'No deterministic (no-LLM) match. Choose exactly one template from llm_input.candidate_templates, ' +
         'bind every bindable slot to a field from llm_input.fields (match role/kind; use the exact field name), ' +
         'then call bind-template again with { session, ask, proposal } matching output_schema. ' +
+        // W60 pie-anyway gap: candidates carry ONLY fast-path-eligible templates, so an ask naming an
+        // unstamped shape (canonically pie) dead-ended here with no honest route — name both exits.
+        'If the asked chart shape is not among the candidates (e.g. pie/donut — no pie template is ' +
+        'fast-path eligible), do not force a mismatched proposal: bind the nearest candidate and tell the ' +
+        'user in one sentence why (for a pie ask, a sorted bar or treemap compares shares more precisely); ' +
+        'if they explicitly want the exact shape anyway, use the manual chain — get-workbook-xml -> ' +
+        "inject-template with template_name 'part-to-whole-pie-chart' (field_mapping: Region -> the " +
+        'category dimension, Sales -> the measure) -> apply-workbook. ' +
         `${DERIVATION_OVERRIDE_INSTRUCTION}.`
       );
     case 'escalate':
@@ -206,6 +212,9 @@ function describeApplyError(
     const inner = error.error;
     if (inner.type === 'validation-failed') {
       return `preflight validation failed: ${inner.issues.map((i) => i.message).join('; ')}`;
+    }
+    if (inner.type === 'load-rejected') {
+      return `Tableau rejected the load: ${inner.message}`;
     }
     return 'invalid workbook XML';
   }
@@ -347,11 +356,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     name: 'bind-template',
     title,
     description: [
-      'Deterministically bind a checked-in chart template to a natural-language ask and return validated inject args — a fast one-shot alternative to authoring a worksheet from scratch.',
-      'Reads the live workbook XML for the given session, loads the bundled template manifests, and runs the two-call binder (this server is model-free — it never calls a small model):',
-      "Call 1 { session, ask }: no-LLM keyword classification + role-greedy field binding. Returns status 'bound' with inject args, or status 'propose' with an llm_input (candidate templates + fields) and a strict output_schema for YOU to fill.",
-      "Call 2 { session, ask, proposal }: validates your proposal through the deterministic gate and returns status 'bound' or status 'escalate' with actionable guidance.",
-      "'bound' returns the args and an apply_instruction; 'propose' and 'escalate' are normal outcomes (not tool errors) carrying next-step guidance.",
+      'Bind a checked-in chart template to an ask and return validated inject args. Model-free.',
+      "Call 1 returns 'bound' or 'propose'; Call 2 returns 'bound' or 'escalate'.",
+      'auto_apply:true renders deterministic Call-1 binds in one call. Details: expertise://tableau/tableau-tactics/workflow/templates.',
     ].join(' '),
     paramsSchema,
     annotations: {

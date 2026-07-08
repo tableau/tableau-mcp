@@ -13,17 +13,12 @@ import { DesktopTool } from '../tool.js';
 const paramsSchema = {
   session: z.string().describe('Session ID from list-instances.'),
   dashboardName: z.string().describe('Name of the dashboard to create.'),
-  title: z.string().optional().describe('Optional title to display at top of dashboard.'),
+  title: z.string().optional().describe('Optional dashboard title.'),
   layout: z
     .object({
-      type: z
-        .enum(['auto-grid', 'rows', 'columns', 'custom'])
-        .describe("Layout type: 'auto-grid', 'rows', 'columns', 'custom'."),
-      gridColumns: z.number().optional().describe('For auto-grid: number of columns (default 2).'),
-      kpiStripHeight: z
-        .number()
-        .optional()
-        .describe('Height percentage for KPI strip if present (0-100, default 20).'),
+      type: z.enum(['auto-grid', 'rows', 'columns', 'custom']).describe('Layout type.'),
+      gridColumns: z.number().optional().describe('Auto-grid columns.'),
+      kpiStripHeight: z.number().optional().describe('KPI strip height percent.'),
       zones: z
         .array(
           z.object({
@@ -35,24 +30,17 @@ const paramsSchema = {
           }),
         )
         .optional()
-        .describe('For custom layout: explicit zone positions.'),
+        .describe('Custom zone positions.'),
     })
     .optional()
-    .describe('Dashboard layout configuration. If omitted, uses auto-grid with 2 columns.'),
+    .describe('Dashboard layout.'),
   worksheets: z
     .array(
       z.object({
         name: z.string().describe('Worksheet name.'),
-        type: z
-          .enum(['kpi', 'chart'])
-          .describe("Worksheet type: 'kpi' for KPI cards, 'chart' for visualizations."),
-        template: z
-          .string()
-          .optional()
-          .describe(
-            "Template name (e.g., 'ranking-ordered-bar', 'kpi-text'). Defaults: kpi → 'kpi-text', chart → 'ranking-ordered-bar'.",
-          ),
-        fields: z.array(z.string()).describe('Field names for the visualization.'),
+        type: z.enum(['kpi', 'chart']).describe('Worksheet type.'),
+        template: z.string().optional().describe('Optional template name.'),
+        fields: z.array(z.string()).describe('Visualization field names.'),
       }),
     )
     .describe('List of worksheets to create.'),
@@ -72,10 +60,8 @@ export const getPlanDashboardCreationTool = (
     name: 'plan-dashboard-creation',
     title: toolTitle,
     description: [
-      'Analyzes a dashboard specification and returns a structured work plan optimized for parallel execution.',
-      'Returns a 2-phase plan: Phase 1 batch-creates sheets, Phase 2 builds and applies worksheets + dashboard in parallel.',
-      'Blocks planning if any field is ambiguous across datasources — caller must resolve ambiguity first.',
-      "Use search-commands to find available commands. Use 'batch-create-and-cache-sheets' for Phase 1, 'build-and-apply-worksheet' for Phase 2.",
+      'Plan a dashboard build: Phase 1 caches sheets; Phase 2 builds/applies worksheets and dashboard in parallel.',
+      'Blocks planning if any field is ambiguous across datasources — caller must resolve ambiguity first. Details: expertise://tableau/dashboard-design/layout-patterns.',
     ].join(' '),
     paramsSchema,
     annotations: {

@@ -15,14 +15,10 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  worksheetFile: z
-    .string()
-    .describe(
-      'Path to the cache file containing worksheet XML (from get-worksheet-xml or a previous modification tool).',
-    ),
+  worksheetFile: z.string().describe('Worksheet XML cache file (from get-worksheet-xml).'),
   encodingType: z
     .enum(['color', 'size', 'lod', 'detail', 'text', 'tooltip', 'path', 'angle'])
-    .describe("Type of encoding (use 'text' for labels)."),
+    .describe("Encoding type (use 'text' for labels)."),
   columnRef: z.string().describe('Column reference to remove.'),
 };
 

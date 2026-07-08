@@ -15,11 +15,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  worksheetFile: z
-    .string()
-    .describe(
-      'Path to the cache file containing worksheet XML (from get-worksheet-xml or a previous modification tool).',
-    ),
+  worksheetFile: z.string().describe('Worksheet XML cache file (from get-worksheet-xml).'),
   columnRef: z.string().describe('Column reference to remove.'),
 };
 

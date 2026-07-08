@@ -218,10 +218,10 @@ describe('removeSameNamedWorksheet — demo idempotence (W60)', () => {
 
   it('removes the same-named worksheet and its window so re-inject replaces instead of (1)-copying', () => {
     const out = removeSameNamedWorksheet(wb, 'Bar of Sales');
-    expect(out).not.toContain("<worksheet name='Bar of Sales'>");
-    expect(out).not.toContain("<window class='worksheet' name='Bar of Sales'>");
-    expect(out).toContain("<worksheet name='Keep Me'>");
-    expect(out).toContain("<window class='worksheet' name='Keep Me' />");
+    expect(out).not.toMatch(/<worksheet name=['"]Bar of Sales['"]>/);
+    expect(out).not.toMatch(/<window class=['"]worksheet['"] name=['"]Bar of Sales['"]/);
+    expect(out).toMatch(/<worksheet name=['"]Keep Me['"]>/);
+    expect(out).toMatch(/<window class=['"]worksheet['"] name=['"]Keep Me['"]\s*(\/>|><\/window>)/);
   });
 
   it('leaves the workbook unchanged when the sheet is referenced by a dashboard zone (fail-safe)', () => {

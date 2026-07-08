@@ -19,12 +19,10 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Tableau instance Session ID from list-instances.'),
+  session: z.string().describe('Session ID from list-instances.'),
   dashboardName: z.string().describe('Name of the dashboard.'),
-  dashboardFile: z.string().describe('Path to the cached dashboard XML file to apply.'),
-  worksheetNames: z
-    .array(z.string())
-    .describe('Worksheet names to register as viewpoints in the dashboard window.'),
+  dashboardFile: z.string().describe('Cached dashboard XML file to apply.'),
+  worksheetNames: z.array(z.string()).describe('Worksheet viewpoints to register.'),
 };
 
 const title = 'Apply Dashboard with Viewpoints';
@@ -36,9 +34,7 @@ export const getApplyDashboardWithViewpointsTool = (
     name: 'apply-dashboard-with-viewpoints',
     title,
     description: [
-      'Apply a pre-built dashboard XML file and register worksheets as viewpoints in the workbook.',
-      'Viewpoints control which worksheets are accessible through the dashboard window.',
-      'Steps: fetches the current workbook, injects viewpoints into the dashboard window, applies the workbook, then applies the dashboard XML.',
+      'Apply dashboard XML and register worksheet viewpoints (mutating).',
       'Use after all worksheet files have been applied.',
     ].join(' '),
     paramsSchema,

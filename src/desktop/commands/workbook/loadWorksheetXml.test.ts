@@ -169,6 +169,67 @@ describe('loadWorksheetXml (Agent API transport, default)', () => {
     expect(result.isOk()).toBe(true);
     expect(validationRegistry.runValidation).toHaveBeenCalledWith(validXml, 'worksheet');
   });
+
+  it('reports load-rejected when the command completes but Desktop rejected the load', async () => {
+    // Mirrors the workbook path: the command reports status:'completed' while the
+    // document load itself failed — the failure lives in the result payload.
+    const deskError =
+      'The load was not able to complete successfully. Qualified Name Parse Error --- ' +
+      'Invalid input: mismatched brackets --- Input: [Sample - Superstore].[[Sub-Category]]';
+    const executeCommand = vi.fn().mockResolvedValue(
+      Ok({
+        command_id: 'cmd-1',
+        status: 'completed',
+        submitted_at: '',
+        result: { success: false, error: { message: deskError } },
+      }),
+    );
+    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      invariant(result.error.error.type === 'load-rejected');
+      expect(result.error.error.message).toContain('Qualified Name Parse Error');
+    }
+  });
+
+  it('reports load-rejected when the command status carries a top-level error object', async () => {
+    const executeCommand = vi.fn().mockResolvedValue(
+      Ok({
+        command_id: 'cmd-2',
+        status: 'completed',
+        submitted_at: '',
+        error: {
+          code: 'LOAD_FAILED',
+          message: 'worksheet could not be loaded',
+          recoverable: false,
+        },
+      }),
+    );
+    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      invariant(result.error.error.type === 'load-rejected');
+      expect(result.error.error.message).toContain('worksheet could not be loaded');
+    }
+  });
 });
 
 describe('loadWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API gate)', () => {

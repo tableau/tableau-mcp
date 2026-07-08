@@ -26,6 +26,7 @@ import { getRemoveFieldFromColsTool } from './fields/removeFieldFromCols.js';
 import { getRemoveFieldFromEncodingTool } from './fields/removeFieldFromEncoding.js';
 import { getRemoveFieldFromRowsTool } from './fields/removeFieldFromRows.js';
 import { getResolveFieldTool } from './fields/resolveField.js';
+import { getDashboardHealthCheckTool } from './health/dashboardHealthCheck.js';
 import { getListKnowledgeResourcesTool } from './knowledge/listKnowledgeResources.js';
 import { getReadKnowledgeResourceTool } from './knowledge/readKnowledgeResource.js';
 import { getLookupWorkbookSchemaTool } from './search/lookupWorkbookSchema.js';
@@ -40,6 +41,7 @@ import { getGetWorkbookXmlTool } from './workbook/getWorkbookXml.js';
 import { getListDashboardsTool } from './workbook/listDashboards.js';
 import { getListWorksheetsTool } from './workbook/listWorksheets.js';
 import { getApplyWorksheetTool } from './worksheet/applyWorksheet.js';
+import { getDeleteWorksheetTool } from './worksheet/deleteWorksheet.js';
 import { getGetWorksheetXmlTool } from './worksheet/getWorksheetXml.js';
 
 export const desktopToolFactories = [
@@ -51,6 +53,7 @@ export const desktopToolFactories = [
   getListDashboardsTool,
   getGetWorksheetXmlTool,
   getApplyWorksheetTool,
+  getDeleteWorksheetTool,
   getGetDashboardXmlTool,
   getApplyDashboardTool,
   getApplyDashboardWithViewpointsTool,
@@ -71,6 +74,7 @@ export const desktopToolFactories = [
   getExecuteTableauCommandTool,
   getBindTemplateTool,
   getDashboardAutoApplyTool,
+  getDashboardHealthCheckTool,
   getListTemplatesTool,
   getProposeTemplateTool,
   getValidateProposalTool,

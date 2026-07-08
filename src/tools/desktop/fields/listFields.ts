@@ -13,11 +13,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  worksheetFile: z
-    .string()
-    .describe(
-      'Path to worksheet cache file from get-worksheet-xml (NOT workbook file). Shows fields already placed on this specific worksheet.',
-    ),
+  worksheetFile: z.string().describe('Worksheet cache file, not workbook file.'),
 };
 
 const title = 'List Fields Already Placed on Worksheet';
@@ -27,12 +23,8 @@ export const getListFieldsTool = (server: DesktopMcpServer): DesktopTool<typeof 
     name: 'list-fields',
     title,
     description: [
-      'List all fields (encodings, rows, cols) that are ALREADY PLACED on a worksheet with their positions and column references.',
-      '⚠️ IMPORTANT: This shows what is ALREADY ON the worksheet, not what is available to add!',
-      'To discover what fields are AVAILABLE to add (from datasources), use list-available-fields with the WORKBOOK file instead.',
-      '✅ Use this to inspect what fields are already on the worksheet.',
-      '✅ See the EXACT column_ref format needed for removing/moving fields.',
-      '✅ Verify field placements before and after modifications.',
+      'List fields already placed on a worksheet: encodings, rows, cols, positions, column refs.',
+      'For available fields use list-available-fields with the workbook file. Use exact column_ref for removals.',
     ].join(' '),
     paramsSchema,
     annotations: {

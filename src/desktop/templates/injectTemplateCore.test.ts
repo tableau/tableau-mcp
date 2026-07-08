@@ -2,8 +2,26 @@
 // buildInjectedWorkbookXml). These exercise the REAL functions (no mocks) — the
 // sibling injectTemplate.test.ts mocks injectTemplate, so a real round-trip can
 // only live here. Cases ported from the W60 adversary probe (P0-3 double-quote,
-// P2-7 attribute-order) plus a reserialization round-trip.
+// P2-7 attribute-order) plus a reserialization round-trip. The strip is now
+// STRUCTURAL (parse → filter → serialize), so these pin behavior — quote style,
+// attribute order, multi-duplicate convergence (P2-8) — not string mechanics.
 import { buildInjectedWorkbookXml, removeSameNamedWorksheet } from './injectTemplateCore.js';
+
+// Pre-existing pile-up fixture (P2-8): two stale "Sales" copies in MIXED quote
+// styles + attribute orders (what Desktop dedup left behind before the strip was
+// quote-agnostic), one unrelated sheet, and a DASHBOARD-class window that shares
+// the name and must survive any strip.
+const DUPLICATED_WORKBOOK_XML = [
+  "<?xml version='1.0'?><workbook>",
+  "<worksheets><worksheet name='Keep'><table/></worksheet>",
+  '<worksheet name="Sales">STALE COPY 1</worksheet>',
+  "<worksheet name='Sales'>STALE COPY 2</worksheet></worksheets>",
+  '<windows><window class="worksheet" name="Keep"/>',
+  '<window class="worksheet" name="Sales"/>',
+  "<window active='true' class='worksheet' name='Sales'/>",
+  '<window class="dashboard" name="Sales"/></windows>',
+  '</workbook>',
+].join('');
 
 describe('removeSameNamedWorksheet — quote-agnostic strip (adversary P0-3)', () => {
   it('strips a double-quoted worksheet + window (the serializer emits double quotes)', () => {
@@ -72,6 +90,71 @@ describe('removeSameNamedWorksheet — dashboard-zone fail-safe holds for double
     const out = removeSameNamedWorksheet(workbookXml, 'Sales');
 
     expect(out).toBe(workbookXml);
+  });
+});
+
+describe('removeSameNamedWorksheet — structural multi-strip of pre-existing duplicates (P2-8)', () => {
+  it('removes ALL same-named worksheet nodes and worksheet-window entries, not just the first', () => {
+    const out = removeSameNamedWorksheet(DUPLICATED_WORKBOOK_XML, 'Sales');
+
+    expect(out).not.toContain('STALE COPY 1');
+    expect(out).not.toContain('STALE COPY 2');
+    expect(out).not.toMatch(/<worksheet name=['"]Sales['"]/);
+    // The unrelated sheet and its window survive; so does the DASHBOARD-class
+    // window that merely shares the name (class filter, same as before).
+    expect(out).toMatch(/<worksheet name="Keep">/);
+    expect(out).toMatch(/<window class="worksheet" name="Keep">/);
+    expect(out).toMatch(/<window class="dashboard" name="Sales">/);
+    expect((out.match(/<window\b/g) ?? []).length).toBe(2);
+  });
+
+  it('zone fail-safe still wins over multi-strip: ALL duplicates stay when a dashboard references the name', () => {
+    const withZone = DUPLICATED_WORKBOOK_XML.replace(
+      '<windows>',
+      '<dashboards><dashboard name="D1"><zones><zone name="Sales" x="0"/></zones></dashboard></dashboards><windows>',
+    );
+
+    expect(removeSameNamedWorksheet(withZone, 'Sales')).toBe(withZone);
+  });
+
+  it('strips a legal-XML literal apostrophe inside double quotes (structurally decoded; regex-unreachable)', () => {
+    const workbookXml = [
+      '<workbook><worksheets><worksheet name="Bob\'s Sales">OLD BODY</worksheet></worksheets>',
+      '<windows><window class="worksheet" name="Bob\'s Sales"/></windows></workbook>',
+    ].join('');
+
+    const out = removeSameNamedWorksheet(workbookXml, "Bob's Sales");
+
+    expect(out).not.toContain('OLD BODY');
+    expect(out).not.toMatch(/<window\b/);
+  });
+});
+
+describe('buildInjectedWorkbookXml — pre-existing duplicates converge in ONE apply (P2-8)', () => {
+  it('a workbook that already piled up two "Sales" copies ends with exactly one', () => {
+    const templateXml = [
+      "<?xml version='1.0'?><workbook>",
+      "<worksheets><worksheet name='{{TITLE}}'><table/></worksheet></worksheets>",
+      "<windows><window class='worksheet' name='{{TITLE}}'/></windows>",
+      '</workbook>',
+    ].join('');
+
+    const result = buildInjectedWorkbookXml({
+      workbookXml: DUPLICATED_WORKBOOK_XML,
+      templateXml,
+      title: 'Sales',
+      sheetType: 'worksheet',
+      applyNonce: 'converge-1',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).not.toContain('STALE COPY 1');
+    expect(result.xml).not.toContain('STALE COPY 2');
+    expect((result.xml.match(/<worksheet name="Sales">/g) ?? []).length).toBe(1);
+    expect((result.xml.match(/<window class="worksheet" name="Sales">/g) ?? []).length).toBe(1);
+    expect(result.xml).toMatch(/<worksheet name="Keep">/);
+    expect(result.xml).toMatch(/<window class="dashboard" name="Sales">/);
   });
 });
 

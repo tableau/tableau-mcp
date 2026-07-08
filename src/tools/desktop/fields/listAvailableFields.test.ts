@@ -53,7 +53,7 @@ describe('listAvailableFieldsTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getListAvailableFieldsTool(new DesktopMcpServer());
     expect(tool.name).toBe('list-available-fields');
-    expect(tool.description).toContain('List ALL fields available in the workbook datasources');
+    expect(tool.description).toContain('List ALL fields available in workbook datasources');
     expect(tool.paramsSchema).toMatchObject({ workbookFile: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
       title: 'List All Available Fields in Workbook Datasources',

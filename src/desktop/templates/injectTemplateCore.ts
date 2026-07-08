@@ -12,6 +12,8 @@
 // inject-template tool passes agent-supplied raw strings; bind-template passes the
 // binder's args as-is (matching what the manual inject-template call would receive).
 
+import { normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
+import { ParsedWindow, ParsedWorkbook, ParsedWorksheet } from '../metadata/types.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import { spliceBoundFacet } from './facetSplice.js';
 import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
@@ -58,50 +60,76 @@ export interface InjectTemplateCoreParams {
 export type InjectTemplateCoreResult = { ok: true; xml: string } | { ok: false; issues: string[] };
 
 /**
+ * True when any `<zone>` element ANYWHERE in the parsed workbook carries the sheet
+ * name — the member-sheet protection oracle for removeSameNamedWorksheet. Walks the
+ * whole tree (dashboards, nested layout zones, story points) exactly like the old
+ * whole-string regex did, but on decoded attribute values.
+ */
+function hasZoneNamed(node: unknown, title: string): boolean {
+  if (!node || typeof node !== 'object') return false;
+  if (Array.isArray(node)) return node.some((entry) => hasZoneNamed(entry, title));
+  const record = node as Record<string, unknown>;
+  const zones = normalizeArray(record['zone']);
+  if (
+    zones.some(
+      (zone) =>
+        !!zone && typeof zone === 'object' && (zone as Record<string, unknown>)['@_name'] === title,
+    )
+  ) {
+    return true;
+  }
+  return Object.values(record).some((value) => hasZoneNamed(value, title));
+}
+
+/**
+ * Remove every existing same-named worksheet (and worksheet-class window entry) so a
+ * re-inject REPLACES the sheet instead of Desktop deduplicating it to "Name (1)" (W60:
+ * repeat demo asks piled up suffixed copies). STRUCTURAL (parse → filter → serialize
+ * with the pipeline's own parser.ts pair), not string surgery: quote style, attribute
+ * order, whitespace, and entity encoding cannot defeat the match (the regex layer this
+ * replaces was defeated twice — adversary P0-3 quote flip, P2-7 attribute order).
+ * ALL same-named nodes are removed, not just the first (P2-8): Desktop enforces unique
+ * sheet names, so same-named siblings are always stale pile-up copies of one sheet —
+ * never distinct user work — and one apply now converges them.
+ * Fail-safes (both return the input string byte-identical, deferring to Desktop dedup):
+ * - the name is referenced by any dashboard zone — silently deleting a dashboard's
+ *   member sheet would corrupt the dashboard;
+ * - the XML does not parse — never strip what we cannot prove safe (the downstream
+ *   injectTemplate parse surfaces the real error).
+ */
+export function removeSameNamedWorksheet(workbookXml: string, title: string): string {
+  let workbook: ParsedWorkbook;
+  try {
+    workbook = parseXML(workbookXml);
+  } catch {
+    return workbookXml;
+  }
+  const wb = workbook.workbook;
+  const container = wb?.worksheets;
+  const worksheets = normalizeArray<ParsedWorksheet>(container?.worksheet);
+  const kept = worksheets.filter((ws) => ws?.['@_name'] !== title);
+  if (!wb || !container || kept.length === worksheets.length) {
+    return workbookXml;
+  }
+  if (hasZoneNamed(workbook, title)) {
+    return workbookXml;
+  }
+  container.worksheet = kept.length === 1 ? kept[0] : kept;
+  const windows = normalizeArray<ParsedWindow>(wb.windows?.window);
+  const keptWindows = windows.filter(
+    (w) => !(w?.['@_class'] === 'worksheet' && w?.['@_name'] === title),
+  );
+  if (wb.windows && keptWindows.length !== windows.length) {
+    wb.windows.window = keptWindows.length === 1 ? keptWindows[0] : keptWindows;
+  }
+  return serializeXML(workbook);
+}
+
+/**
  * Substitute a template's placeholders + field references and inject it into the
  * workbook XML, returning the modified workbook (or the well-formedness issues).
  * Mirrors the inject-template tool's transformation exactly.
  */
-/**
- * Remove an existing same-named worksheet (and its worksheet-class window entry) so a
- * re-inject REPLACES the sheet instead of Desktop deduplicating it to "Name (1)" (W60:
- * repeat demo asks piled up suffixed copies). Conservative: if the name is referenced by
- * any dashboard zone, the workbook is returned UNCHANGED and Desktop's dedup applies —
- * silently deleting a dashboard's member sheet would corrupt the dashboard. Pure string
- * ops on XML already in hand: no extra roundtrips.
- */
-export function removeSameNamedWorksheet(workbookXml: string, title: string): string {
-  const escaped = escapeXml(title);
-  const nameAttr = escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // Quote-agnostic (['"]): this pipeline's own serializer (parser.ts fast-xml-parser
-  // XMLBuilder, default quoteChar `"`) emits DOUBLE-quoted attributes, so a second apply
-  // over once-reserialized XML must still match — a single-quote-only regex silently
-  // no-ops the strip and the "Name (1)" pile-up returns (adversary P0-3).
-  const worksheetRe = new RegExp(
-    `[ \\t]*<worksheet name=['"]${nameAttr}['"]>[\\s\\S]*?</worksheet>\\n?`,
-  );
-  if (!worksheetRe.test(workbookXml)) {
-    return workbookXml;
-  }
-  // Referenced by a dashboard zone? Leave it alone (fail-safe to Desktop dedup). This
-  // check MUST also be quote-agnostic: on reserialized double-quoted XML a single-quote
-  // zone regex would miss the reference and strip a dashboard's member sheet.
-  const zoneRe = new RegExp(`<zone [^>]*name=['"]${nameAttr}['"]`);
-  if (zoneRe.test(workbookXml)) {
-    return workbookXml;
-  }
-  let out = workbookXml.replace(worksheetRe, '');
-  // Attribute-order tolerant (lookaheads, not a hardcoded `class='worksheet'` first):
-  // the serializer/Desktop may emit an attribute that sorts before `class` (e.g.
-  // `active`), which defeated the old anchored form (adversary P2-7). Match any
-  // <window> tag that carries BOTH class=worksheet AND the target name, in any order.
-  const windowRe = new RegExp(
-    `[ \\t]*<window\\b(?=[^>]*\\bclass=['"]worksheet['"])(?=[^>]*\\bname=['"]${nameAttr}['"])[^>]*(?:/>|>[\\s\\S]*?</window>)\\n?`,
-  );
-  out = out.replace(windowRe, '');
-  return out;
-}
-
 export function buildInjectedWorkbookXml({
   workbookXml,
   templateXml,

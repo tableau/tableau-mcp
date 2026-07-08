@@ -32,7 +32,7 @@ describe('applyWorksheetTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getApplyWorksheetTool(new DesktopMcpServer());
     expect(tool.name).toBe('apply-worksheet');
-    expect(tool.description).toContain('Apply modified worksheet XML back to Tableau');
+    expect(tool.description).toContain('Apply modified worksheet XML to Tableau');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),
@@ -248,6 +248,32 @@ describe('applyWorksheetTool', () => {
         signal: customSignal,
       }),
     );
+  });
+});
+
+describe('applyWorksheetTool over-cap note', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('accepts an over-cap inline apply but appends the file-mode note', async () => {
+    const overCapXml = '<worksheet name="Sales">' + 'x'.repeat(20000) + '</worksheet>';
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(Ok.EMPTY);
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: 'Sales',
+      mode: 'inline',
+      worksheetXml: overCapXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const message = JSON.parse(result.content[0].text).message as string;
+    expect(message).toContain('Successfully applied worksheet XML');
+    expect(message).toContain('inline cap');
+    expect(message).toContain('mode=file');
   });
 });
 

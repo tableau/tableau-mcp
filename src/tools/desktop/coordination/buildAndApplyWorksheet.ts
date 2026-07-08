@@ -33,20 +33,13 @@ const paramsSchema = {
   taskSpec: z
     .object({
       worksheetName: z.string(),
-      worksheetFile: z.string().describe('Path to cached empty worksheet XML (from Phase 1).'),
+      worksheetFile: z.string().describe('Cached worksheet XML file.'),
       type: z.enum(['kpi', 'chart']),
-      template: z
-        .string()
-        .optional()
-        .describe('Template name (e.g., "ranking-ordered-bar", "kpi-text").'),
-      fields: z
-        .array(z.string())
-        .describe(
-          "List of column refs (e.g., '[Sample - Superstore].[sum:Sales:qk]') to use in this worksheet.",
-        ),
-      workbookFile: z.string().describe('Path to cached workbook XML.'),
+      template: z.string().optional().describe('Template name.'),
+      fields: z.array(z.string()).describe('Column refs to use.'),
+      workbookFile: z.string().describe('Cached workbook XML file.'),
     })
-    .describe('Task specification from plan-dashboard-creation.'),
+    .describe('Task spec from plan-dashboard-creation.'),
 };
 
 const toolTitle = 'Build and Apply Worksheet';
@@ -58,9 +51,8 @@ export const getBuildAndApplyWorksheetTool = (
     name: 'build-and-apply-worksheet',
     title: toolTitle,
     description: [
-      'Build worksheet XML from a template and immediately apply it to Tableau.',
-      'Designed for parallel execution by subagents in Phase 2 of the dashboard creation workflow.',
-      'Reads template, maps provided fields to template placeholders, generates XML, and applies immediately.',
+      'Build worksheet XML from a template and immediately APPLY it to the live workbook.',
+      'Designed for parallel Phase-2 execution by subagents. Details: expertise://tableau/tableau-tactics/viz/worksheets.',
     ].join(' '),
     paramsSchema,
     annotations: {

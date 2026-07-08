@@ -128,16 +128,6 @@
       "code": "multi-currency-raw-sum",
       "detail": "Product evidence (product team, 2026-07) — has bitten someone: when the source rows carry a MIXED currency_code (USD + EUR + GBP …), the bound measure must NOT be summed raw. The running total [cum:sum:Profit:qk] on rows and every -SUM([Profit]) bar delta add different currency units as one number, so the cumulative whole is silently WRONG (a data-correctness bug, not a formatting one). The template has no currency awareness. Convert to a single reporting currency, or filter to one currency_code, BEFORE binding a revenue/margin measure into the waterfall.",
       "xml": "part-to-whole-waterfall.xml:15-17"
-    },
-    {
-      "code": "running-total-needs-ordering",
-      "detail": "Product evidence (product team, 2026-07) \u2014 has bitten someone: the running total only MEANS something when the bound category carries an EXPLICIT or SEMANTIC order (a P&L line-item sequence, a time order, or the computed sort this template applies: Sub-Category DESC by SUM(Profit)). Bind a nominal dimension with NO inherent order and let it fall back to ALPHABETICAL member order (e.g. product names A\u2192Z) and the cumulative path becomes an arbitrary artifact of the labels \u2014 rename or re-sort the same rows and the bridge tells a different story. Bind an ordered/ordinal dimension or keep the measure sort; never read a cumulative build-up off an unordered alphabetical nominal. Tracked-hazard companion to the order-dependence avoid_when.",
-      "xml": "part-to-whole-waterfall.xml:22"
-    },
-    {
-      "code": "multi-currency-raw-sum",
-      "detail": "Product evidence (product team, 2026-07) \u2014 has bitten someone: when the source rows carry a MIXED currency_code (USD + EUR + GBP \u2026), the bound measure must NOT be summed raw. The running total [cum:sum:Profit:qk] on rows and every -SUM([Profit]) bar delta add different currency units as one number, so the cumulative whole is silently WRONG (a data-correctness bug, not a formatting one). The template has no currency awareness. Convert to a single reporting currency, or filter to one currency_code, BEFORE binding a revenue/margin measure into the waterfall.",
-      "xml": "part-to-whole-waterfall.xml:15-17"
     }
   ]
 }

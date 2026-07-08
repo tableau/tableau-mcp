@@ -56,16 +56,8 @@ const MIN_ASKS = 2;
 const MAX_ASKS = 6;
 
 const askSchema = z.object({
-  ask: z
-    .string()
-    .min(1)
-    .describe("Natural-language chart request, e.g. 'bar chart of Sales by Region'."),
-  title: z
-    .string()
-    .min(1)
-    .max(80)
-    .optional()
-    .describe('Optional title override for this sheet (default: the deterministic bind title).'),
+  ask: z.string().min(1).describe('Natural-language chart request.'),
+  title: z.string().min(1).max(80).optional().describe('Optional sheet title override.'),
 });
 
 const layoutSchema = z.object({
@@ -73,27 +65,25 @@ const layoutSchema = z.object({
     .enum(['auto-grid', 'rows', 'columns'])
     .optional()
     .default('auto-grid')
-    .describe('Dashboard grid layout. v1 does not support custom zones or a KPI strip.'),
-  gridColumns: z.number().optional().describe('Number of columns for auto-grid layout.'),
+    .describe('Dashboard grid layout.'),
+  gridColumns: z.number().optional().describe('Auto-grid column count.'),
 });
 
 const paramsSchema = {
   session: z
     .string()
     .optional()
-    .describe(
-      'Tableau instance Session ID from list-instances. Optional: when omitted and exactly one Desktop instance is running, it is resolved automatically; with 0 or 2+ instances the tool fails closed and lists the instances.',
-    ),
+    .describe('Session ID. Optional only when exactly one Desktop instance is running.'),
   asks: z
     .array(askSchema)
     .min(MIN_ASKS)
     .max(MAX_ASKS)
     .describe(
-      `2-${MAX_ASKS} chart asks to bind and compose into one dashboard. Every ask must deterministically bind (Call-1, no proposal) or the whole batch is refused with each ask's outcome intact.`,
+      `2-${MAX_ASKS} chart asks; every ask must bind deterministically or the whole batch is refused.`,
     ),
   dashboardName: z.string().min(1).describe('Name of the dashboard to build and apply.'),
-  title: z.string().optional().describe('Optional title text zone at the top of the dashboard.'),
-  layout: layoutSchema.optional().describe('Dashboard layout options (default: auto-grid).'),
+  title: z.string().optional().describe('Optional dashboard title text.'),
+  layout: layoutSchema.optional().describe('Dashboard layout options.'),
 };
 
 /** One ask's outcome, tagged with its position and original ask text for diagnostics. */
@@ -142,6 +132,9 @@ function describeApplyError(
     if (inner.type === 'validation-failed') {
       return `preflight validation failed: ${inner.issues.map((i) => i.message).join('; ')}`;
     }
+    if (inner.type === 'load-rejected') {
+      return `Tableau rejected the load: ${inner.message}`;
+    }
     return 'invalid workbook XML';
   }
   return `workbook load command failed: ${JSON.stringify(error.error)}`;
@@ -180,10 +173,9 @@ export const getDashboardAutoApplyTool = (
     name: 'dashboard-auto-apply',
     title,
     description: [
-      'Bind 2-6 chart asks to checked-in templates and compose them into one new (or replaced) dashboard, applied to the live workbook in ONE call.',
-      "Every ask must deterministically bind (bind-template Call-1, no-LLM); if any ask does not, NOTHING is applied and every ask's full bind-template-shaped outcome is returned so you can fall back to the per-chart flow (bind-template with auto_apply, or propose/escalate resolution).",
-      "All-or-nothing: a duplicate title, a title already referenced by an existing dashboard's zone, a mid-flight user edit, or a preflight validation failure all refuse the WHOLE batch before anything is dispatched to Desktop.",
-      'On success returns the trimmed shape { applied:true, dashboard, sheets, phase_ms, guidance } — call list-worksheets / get-dashboard-xml if you need the full XML.',
+      'Bind 2-6 chart asks to checked-in templates and APPLY one new/replaced dashboard in one call.',
+      'Every ask must bind deterministically; otherwise NOTHING is applied and each outcome is returned.',
+      'All-or-nothing: duplicate/zone-used titles, user edits, or preflight failures refuse the WHOLE batch. Details: expertise://tableau/tableau-tactics/dashboard/zones.',
     ].join(' '),
     paramsSchema,
     annotations: {
