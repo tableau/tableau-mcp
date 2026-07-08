@@ -56,7 +56,7 @@ describe('ExternalApiToolExecutor', () => {
   });
 
   describe('executeCommand routing', () => {
-    it('routes save-underlying-metadata to GET /v1/workbook/document', async () => {
+    it('routes save-underlying-metadata to GET /v0/workbook/document', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
@@ -73,10 +73,10 @@ describe('ExternalApiToolExecutor', () => {
 
       const last = server.requests.at(-1);
       expect(last?.method).toBe('GET');
-      expect(last?.path).toBe('/v1/workbook/document');
+      expect(last?.path).toBe('/v0/workbook/document');
     });
 
-    it('routes load-underlying-metadata (text) to POST /v1/workbook/document', async () => {
+    it('routes load-underlying-metadata (text) to POST /v0/workbook/document', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
@@ -93,11 +93,11 @@ describe('ExternalApiToolExecutor', () => {
 
       const last = server.requests.at(-1);
       expect(last?.method).toBe('POST');
-      expect(last?.path).toBe('/v1/workbook/document');
+      expect(last?.path).toBe('/v0/workbook/document');
       expect(last?.body).toBe(xml);
     });
 
-    it('routes any other command to POST /v1/app:invokeCommand', async () => {
+    it('routes any other command to POST /v0/app:invokeCommand', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
@@ -114,7 +114,7 @@ describe('ExternalApiToolExecutor', () => {
 
       const last = server.requests.at(-1);
       expect(last?.method).toBe('POST');
-      expect(last?.path).toBe('/v1/app:invokeCommand');
+      expect(last?.path).toBe('/v0/app:invokeCommand');
     });
 
     it('maps a failed operation envelope to a command-failed error', async () => {
