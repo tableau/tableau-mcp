@@ -8,10 +8,15 @@ import {
 } from '../../toolExecutor/toolExecutor.js';
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
+import { interpretLoadOutcome } from './loadWorkbookXml.js';
 
 export type LoadDashboardXmlError =
   | { type: 'invalid-xml' }
-  | { type: 'validation-failed'; issues: Array<ValidationIssue> };
+  | { type: 'validation-failed'; issues: Array<ValidationIssue> }
+  // The load-dashboard command reported command-level completion, but Tableau
+  // rejected the actual document load (surfaced in the response payload, not in
+  // `status`). `message` carries Desktop's own error text.
+  | { type: 'load-rejected'; message: string };
 
 export async function loadDashboardXml({
   dashboardName,
@@ -74,6 +79,25 @@ export async function loadDashboardXml({
 
   if (result.isErr()) {
     return Err({ type: 'execute-command-error', error: result.error });
+  }
+
+  // Command completed — but "completed" means the command ran, not that Tableau
+  // accepted the document load. A content rejection is surfaced in the payload,
+  // so verify the actual load outcome before claiming success (mirrors the
+  // workbook path). Otherwise a rejected load would be relayed as success.
+  const outcome = interpretLoadOutcome(result.value);
+  if (!outcome.ok) {
+    log({
+      level: 'error',
+      message: 'load-dashboard completed but Tableau rejected the load',
+      logger: 'dashboardCommands',
+      data: { dashboardName, message: outcome.message },
+    });
+
+    return Err({
+      type: 'load-dashboard-xml-error',
+      error: { type: 'load-rejected', message: outcome.message },
+    });
   }
 
   log({

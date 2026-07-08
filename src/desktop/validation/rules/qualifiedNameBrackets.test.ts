@@ -79,6 +79,28 @@ describe('qualified-name-brackets rule', () => {
     expect(qualifiedNameBracketsRule.validate(xml)).toHaveLength(0);
   });
 
+  it('does not flag an object NAME that looks like a malformed field ref (sheet named [[Q3]])', () => {
+    // A worksheet/zone/window/dashboard `name` is an object label, not a field
+    // reference — a sheet literally named [[Q3]] must not be rejected.
+    const xml =
+      "<workbook><worksheets><worksheet name='[[Q3]]'><table/></worksheet></worksheets>" +
+      "<dashboards><dashboard name='[[Dash]]'><zones><zone name='[[Z]]'/></zones></dashboard></dashboards>" +
+      "<windows><window name='[[Q3]]'/></windows></workbook>";
+    expect(qualifiedNameBracketsRule.validate(xml)).toHaveLength(0);
+  });
+
+  it('still flags a malformed field reference even when a sheet is named [[Q3]]', () => {
+    const xml =
+      "<workbook><worksheets><worksheet name='[[Q3]]'><table><view>" +
+      "<filter class='categorical' column='[Ds].[[Bad]]' />" +
+      '</view></table></worksheet></worksheets></workbook>';
+    const errors = qualifiedNameBracketsRule.validate(xml).filter((i) => i.severity === 'error');
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0].message).toContain('[Ds].[[Bad]]');
+    // The object name itself must NOT be among the flagged strings.
+    expect(errors.some((e) => e.message.includes('[[Q3]]'))).toBe(false);
+  });
+
   it('runs in the workbook, worksheet and dashboard apply contexts', () => {
     expect(qualifiedNameBracketsRule.contexts).toContain('workbook');
     expect(qualifiedNameBracketsRule.contexts).toContain('worksheet');

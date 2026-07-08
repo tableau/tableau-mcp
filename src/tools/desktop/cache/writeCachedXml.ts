@@ -5,7 +5,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
-import { replaceElement } from '../../../desktop/xmlElement.js';
+import { parseOuterElement, replaceElement } from '../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
   FileNotFoundError,
@@ -99,6 +99,25 @@ export const getWriteCachedXmlTool = (
                 : undefined;
           const selectorName = worksheet ?? dashboard;
           if (selectorTag !== undefined && selectorName !== undefined) {
+            // Guard the splice: the replacement's outer element must be exactly the
+            // element the selector targets. Otherwise a mistyped/mismatched fragment
+            // would silently overwrite the wrong element (e.g. a <dashboard> body
+            // written over a <worksheet>, or the "Sales" sheet replaced by a "Profit"
+            // fragment). The name attribute is entity-decoded before comparison so a
+            // plain-text selector matches an XML-escaped attribute.
+            const outer = parseOuterElement(xmlContent);
+            if (outer === null || outer.tagName !== selectorTag || outer.name !== selectorName) {
+              const found =
+                outer === null
+                  ? 'no element'
+                  : `<${outer.tagName}${outer.name === null ? '' : ` name="${outer.name}"`}>`;
+              return new ArgsValidationError(
+                `Splice target mismatch: the ${selectorTag} selector is "${selectorName}", so ` +
+                  `xmlContent must be a <${selectorTag} name="${selectorName}"> element, but its ` +
+                  `outer element is ${found}. Fix the selector or the xmlContent so both name the ` +
+                  `same ${selectorTag}; nothing was written.`,
+              ).toErr();
+            }
             if (!existsSync(absolutePath)) {
               return new FileNotFoundError(filePath).toErr();
             }

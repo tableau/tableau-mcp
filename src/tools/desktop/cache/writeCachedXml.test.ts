@@ -158,6 +158,53 @@ describe('writeCachedXmlTool', () => {
       expect(result.content[0].text).toContain('validation failed');
       expect(writeFileSync).not.toHaveBeenCalled();
     });
+
+    it('rejects (without writing) when the fragment name does not match the selector', async () => {
+      // Selector says "Sales" but the replacement's outer element names "Profit" —
+      // splicing would silently overwrite the wrong worksheet, so it must error.
+      const result = await getResult(
+        CACHED_FILE,
+        "<worksheet name='Profit'><table><rows>[oops]</rows></table></worksheet>",
+        { worksheet: 'Sales' },
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Sales');
+      expect(result.content[0].text).toContain('Profit');
+      expect(writeFileSync).not.toHaveBeenCalled();
+    });
+
+    it('rejects (without writing) when the fragment tag does not match the selector', async () => {
+      // Selector is a worksheet but the fragment is a <dashboard>.
+      const result = await getResult(CACHED_FILE, "<dashboard name='Sales'><zones/></dashboard>", {
+        worksheet: 'Sales',
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('worksheet');
+      expect(result.content[0].text).toContain('dashboard');
+      expect(writeFileSync).not.toHaveBeenCalled();
+    });
+
+    it('splices when an entity-escaped fragment name matches a plain-text selector', async () => {
+      vi.mocked(readFileSync).mockReturnValue(
+        '<workbook><worksheets>' +
+          '<worksheet name="Sales &amp; Profit"><rows>[old]</rows></worksheet>' +
+          '</worksheets></workbook>',
+      );
+      const result = await getResult(
+        CACHED_FILE,
+        '<worksheet name="Sales &amp; Profit"><rows>[new]</rows></worksheet>',
+        { worksheet: 'Sales & Profit' },
+      );
+
+      expect(result.isError).toBeFalsy();
+      const written = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+      expect(written).toContain('[new]');
+      expect(written).not.toContain('[old]');
+    });
   });
 });
 

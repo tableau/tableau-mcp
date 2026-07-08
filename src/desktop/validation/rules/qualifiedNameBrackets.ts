@@ -40,6 +40,16 @@ const FREE_TEXT_ATTRS = new Set(['formula', 'caption']);
 const FREE_TEXT_ELEMENTS = new Set(['calculation', 'run', 'formatted-text', 'text']);
 
 /**
+ * Attributes that carry an object's OWN NAME (a user-chosen label), not a field
+ * reference, when they sit on one of {@link OBJECT_NAME_ELEMENTS}. A sheet, zone,
+ * or window can legally be named `[[Q3]]`; that is not a qualified name and must
+ * never be rejected. Field-reference-bearing attributes (`column`, `field`, …) are
+ * still scanned everywhere, so `column='[Ds].[[Bad]]'` is still caught.
+ */
+const OBJECT_NAME_ATTRS = new Set(['name', 'title', 'caption']);
+const OBJECT_NAME_ELEMENTS = new Set(['worksheet', 'dashboard', 'zone', 'window']);
+
+/**
  * A candidate is a value that is plausibly a SINGLE pure Tableau qualified name:
  * it is bracket-delimited at both ends and contains none of the characters that
  * mark a formula or a multi-reference expression. This admits the malformed
@@ -135,6 +145,12 @@ export const qualifiedNameBracketsRule: ValidationRule = {
       if (node.nodeType === ATTRIBUTE_NODE) {
         const attr = node as Attr;
         if (FREE_TEXT_ATTRS.has(attr.name)) continue;
+        // Skip object-name labels (a sheet/zone/window/dashboard literally named
+        // "[[Q3]]") — those are not field references and must not be rejected.
+        const owner = attr.ownerElement;
+        if (OBJECT_NAME_ATTRS.has(attr.name) && owner && OBJECT_NAME_ELEMENTS.has(owner.nodeName)) {
+          continue;
+        }
         value = attr.value;
       } else if (node.nodeType === TEXT_NODE) {
         const parent = (node as Text).parentNode as Element | null;
