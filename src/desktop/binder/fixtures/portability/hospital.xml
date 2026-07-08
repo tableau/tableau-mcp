@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- W60 portability CI fixture B — Hospital ops. Synthetic non-Superstore schema from the
+     W60 portability spike (~/.claude/state/minion/w60-portability-spike.md). No geo fields
+     at all; a distinct domain vocabulary (Department/Physician/Admission Date/Length of
+     Stay/Cost) to prove the deterministic fast path is schema-driven, not Superstore-named. -->
+<workbook>
+  <datasources>
+    <datasource name='Hospital Ops'>
+      <column name='[Department]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Physician]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Readmitted]' role='dimension' type='nominal' datatype='boolean' />
+      <column name='[Admission Date]' role='dimension' type='ordinal' datatype='date' />
+      <column name='[Length of Stay]' role='measure' type='quantitative' datatype='integer' />
+      <column name='[Cost]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>
