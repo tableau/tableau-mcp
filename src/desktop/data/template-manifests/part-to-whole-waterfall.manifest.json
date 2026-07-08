@@ -7,9 +7,10 @@
   "portability_evidence": {
     "fixture_bind": true,
     "render_verified": "live-2026-07-06",
+    "xml_sha256": "215d8fbe9970b79ecd46242799d600fd4775056d887571b5242b7b2726d00681",
     "render_evidence": {
       "method": "gate-composite",
-      "basis": "golden-parity gate run 2026-07-06 (source-anchor replay): structural 0.97297 (5/5 critical), pixel 1.0 (4 ROIs: whole-chart ink-colors + hue, left/right staircase clusters; same-geometry back-to-back captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 17=17 (Superstore Sub-Category) on source and applied renders; running total verified live (status bar Running Sum of SUM(Profit) 4,117,943)",
+      "basis": "golden-parity gate run 2026-07-06 (source-anchor replay): structural 0.97297 (5/5 critical), pixel 1.0 (4 ROIs: whole-chart ink-colors + hue, left/right staircase clusters; same-geometry back-to-back captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 17=17 (Superstore Sub-Category) on source and applied renders; running total verified live (status bar Running Sum of SUM(Profit) 4,117,943) | style-delta re-verify 2026-07-07: CookBook dark theme removed (black table background; choropleth also re-enabled base map layers). STRUCTURE unchanged. Live re-verified: bind(no-LLM)->inject->apply->render on Sample - Superstore, marks correct, light theme + map layers visually confirmed (W60). Pixel parity vs the dark source golden intentionally diverges on background/base-layer attrs.",
       "lane": "fable-direct overnight stamp factory 2026-07-06 (orchestrator live gate run)",
       "date": "2026-07-06",
       "structural": 0.97297,
@@ -39,9 +40,9 @@
   ],
   "description": "A waterfall (bridge) chart: GanttBar floating bars whose tops sit on a running total ([cum:sum:Profit:qk] on rows) and whose lengths are the negative per-category measure (-SUM([Profit]) on size), so each category shows its incremental contribution to a cumulative whole across an ordered categorical axis (Sub-Category on cols, sorted DESC by SUM(Profit)). Color is a continuous SUM(Profit) encoding. Factory-compiled from the CookBook 'Waterfall Viz' worksheet; structurally compiled and render-verified (live-2026-07-06).",
   "avoid_when": [
-    "The ask is about a smooth trend or trajectory over continuous time \u2014 a line/area chart shows the running trajectory better than a waterfall's discrete running-total bars.",
-    "The bound categorical has no meaningful order and you do not sort it by the measure \u2014 the running total is order-dependent, so an arbitrary member order yields an arbitrary cumulative path (this template sorts Sub-Category DESC by SUM(Profit); binding an unordered dimension without that sort breaks the bridge).",
-    "You only want to compare per-category magnitudes (not their cumulative build-up) \u2014 a ranked bar chart compares values more directly than a running-total waterfall."
+    "The ask is about a smooth trend or trajectory over continuous time — a line/area chart shows the running trajectory better than a waterfall's discrete running-total bars.",
+    "The bound categorical has no meaningful order and you do not sort it by the measure — the running total is order-dependent, so an arbitrary member order yields an arbitrary cumulative path (this template sorts Sub-Category DESC by SUM(Profit); binding an unordered dimension without that sort breaks the bridge).",
+    "You only want to compare per-category magnitudes (not their cumulative build-up) — a ranked bar chart compares values more directly than a running-total waterfall."
   ],
   "slots": [
     {
@@ -56,7 +57,7 @@
       "kind": "quantitative",
       "bindable": true,
       "required": true,
-      "notes": "The measure whose per-category contributions build the waterfall. Bound as SUM on color ([sum:Profit:qk]); the SAME base [Profit] also feeds the running-total [cum:sum:Profit:qk] on rows (a CumTotal table calc that rides along \u2014 hazard running-total-table-calc-rides-along) and the -SUM([Profit]) bar-length calc (calcs[0]). replaceFieldReferences rewrites every [Profit] instance on bind."
+      "notes": "The measure whose per-category contributions build the waterfall. Bound as SUM on color ([sum:Profit:qk]); the SAME base [Profit] also feeds the running-total [cum:sum:Profit:qk] on rows (a CumTotal table calc that rides along — hazard running-total-table-calc-rides-along) and the -SUM([Profit]) bar-length calc (calcs[0]). replaceFieldReferences rewrites every [Profit] instance on bind."
     },
     {
       "slot_id": "sub_category",
@@ -68,7 +69,7 @@
       "kind": "categorical",
       "bindable": true,
       "required": true,
-      "notes": "Categorical axis on cols \u2014 one floating bar per member, ordered by the computed-sort (DESC by SUM(Profit)); the running total accumulates left-to-right across these members. XML column-instance [none:Sub-Category:nk]."
+      "notes": "Categorical axis on cols — one floating bar per member, ordered by the computed-sort (DESC by SUM(Profit)); the running total accumulates left-to-right across these members. XML column-instance [none:Sub-Category:nk]."
     }
   ],
   "calcs": [
@@ -99,33 +100,33 @@
           "template_internal": false
         }
       ],
-      "notes": "Template-owned GanttBar length: -SUM([Profit]) sizes each floating bar downward from its running-total row anchor so the bar spans this category's delta. A self-closing <calculation>, so parseTemplateCalcs sees it \u2014 a declared calc slot. Its one input is the bindable 'profit' slot; replaceFieldReferences rewrites [Profit] on bind."
+      "notes": "Template-owned GanttBar length: -SUM([Profit]) sizes each floating bar downward from its running-total row anchor so the bar spans this category's delta. A self-closing <calculation>, so parseTemplateCalcs sees it — a declared calc slot. Its one input is the bindable 'profit' slot; replaceFieldReferences rewrites [Profit] on bind."
     }
   ],
   "hazards": [
     {
       "code": "running-total-table-calc-rides-along",
-      "detail": "The rows axis [cum:sum:Profit:qk] is a <column-instance> of base [Profit] carrying a nested <table-calc type='CumTotal'> (Running Total). Because it is a column-INSTANCE with a nested table-calc (not a <column><calculation>), parseTemplateCalcs (self-closing <calculation> only) never sees it \u2014 it is NOT a declared calc slot and rides along verbatim on rows. Its base is the bindable 'profit' slot; replaceFieldReferences rewrites [Profit] inside the instance on bind. The running total is ORDER-DEPENDENT (accumulates across Sub-Category in the computed-sort order), so an unordered bound dimension yields an arbitrary cumulative path. Same class as ranking-bump-chart table-calc-rank-rides-along and slope-chart slope-filter-table-calc.",
+      "detail": "The rows axis [cum:sum:Profit:qk] is a <column-instance> of base [Profit] carrying a nested <table-calc type='CumTotal'> (Running Total). Because it is a column-INSTANCE with a nested table-calc (not a <column><calculation>), parseTemplateCalcs (self-closing <calculation> only) never sees it — it is NOT a declared calc slot and rides along verbatim on rows. Its base is the bindable 'profit' slot; replaceFieldReferences rewrites [Profit] inside the instance on bind. The running total is ORDER-DEPENDENT (accumulates across Sub-Category in the computed-sort order), so an unordered bound dimension yields an arbitrary cumulative path. Same class as ranking-bump-chart table-calc-rank-rides-along and slope-chart slope-filter-table-calc.",
       "xml": "part-to-whole-waterfall.xml:15-17"
     },
     {
       "code": "datasource-style-dropped",
-      "detail": "The source workbook carries a datasource-level <style-rule element='mark'> value->hue/glyph map (3 color / 4 shape maps, factory-detected) referencing Sub-Category and other workbook-shared fields. It is NOT carried into this template (no datasource_style sidecar) because it is irrelevant to this waterfall: the color that matters is the continuous SUM(Profit) encoding fully contained in the worksheet (<color column='[sum:Profit:qk]'>), NOT a categorical Sub-Category hue. Carrying it would also splice customer member values + federated datasource IDs into the repo (licensing/sensitive-data wall) \u2014 the same decision L1 made for spatial-choropleth-map. No fidelity loss for this template; on apply only the in-worksheet encoding is applied.",
+      "detail": "The source workbook carries a datasource-level <style-rule element='mark'> value->hue/glyph map (3 color / 4 shape maps, factory-detected) referencing Sub-Category and other workbook-shared fields. It is NOT carried into this template (no datasource_style sidecar) because it is irrelevant to this waterfall: the color that matters is the continuous SUM(Profit) encoding fully contained in the worksheet (<color column='[sum:Profit:qk]'>), NOT a categorical Sub-Category hue. Carrying it would also splice customer member values + federated datasource IDs into the repo (licensing/sensitive-data wall) — the same decision L1 made for spatial-choropleth-map. No fidelity loss for this template; on apply only the in-worksheet encoding is applied.",
       "xml": "part-to-whole-waterfall.xml:73"
     },
     {
       "code": "subtotals-mid-chain",
-      "detail": "Product evidence (P&L waterfalls): real revenue/margin waterfalls carry MID-CHAIN SUBTOTAL members \u2014 e.g. 'Gross Profit' after the revenue/COGS block, then opex steps, then 'Operating Income'. This template treats EVERY member of the bound dimension as an independent step, adding its -SUM([Profit]) delta to the running total. A subtotal row is not an increment \u2014 it restates the running total to date \u2014 so if it is present as a member it DOUBLE-COUNTS: the cumulative path jumps by the subtotal's full value and every step after it is offset. The template cannot distinguish a subtotal member from a step member. Detection/guidance: bind a dimension of INCREMENTAL line items only (exclude subtotal/total members via a filter before binding), or model subtotals as reference lines / separate annotation rather than as steps. A tell-tale is a running total that ends at roughly 2x the true total, or a member whose delta equals the sum of the preceding steps.",
+      "detail": "Product evidence (P&L waterfalls): real revenue/margin waterfalls carry MID-CHAIN SUBTOTAL members — e.g. 'Gross Profit' after the revenue/COGS block, then opex steps, then 'Operating Income'. This template treats EVERY member of the bound dimension as an independent step, adding its -SUM([Profit]) delta to the running total. A subtotal row is not an increment — it restates the running total to date — so if it is present as a member it DOUBLE-COUNTS: the cumulative path jumps by the subtotal's full value and every step after it is offset. The template cannot distinguish a subtotal member from a step member. Detection/guidance: bind a dimension of INCREMENTAL line items only (exclude subtotal/total members via a filter before binding), or model subtotals as reference lines / separate annotation rather than as steps. A tell-tale is a running total that ends at roughly 2x the true total, or a member whose delta equals the sum of the preceding steps.",
       "xml": "part-to-whole-waterfall.xml:15-17"
     },
     {
       "code": "running-total-needs-ordering",
-      "detail": "Product evidence (product team, 2026-07) \u2014 has bitten someone: the running total only MEANS something when the bound category carries an EXPLICIT or SEMANTIC order (a P&L line-item sequence, a time order, or the computed sort this template applies: Sub-Category DESC by SUM(Profit)). Bind a nominal dimension with NO inherent order and let it fall back to ALPHABETICAL member order (e.g. product names A\u2192Z) and the cumulative path becomes an arbitrary artifact of the labels \u2014 rename or re-sort the same rows and the bridge tells a different story. Bind an ordered/ordinal dimension or keep the measure sort; never read a cumulative build-up off an unordered alphabetical nominal. Tracked-hazard companion to the order-dependence avoid_when.",
+      "detail": "Product evidence (product team, 2026-07) — has bitten someone: the running total only MEANS something when the bound category carries an EXPLICIT or SEMANTIC order (a P&L line-item sequence, a time order, or the computed sort this template applies: Sub-Category DESC by SUM(Profit)). Bind a nominal dimension with NO inherent order and let it fall back to ALPHABETICAL member order (e.g. product names A→Z) and the cumulative path becomes an arbitrary artifact of the labels — rename or re-sort the same rows and the bridge tells a different story. Bind an ordered/ordinal dimension or keep the measure sort; never read a cumulative build-up off an unordered alphabetical nominal. Tracked-hazard companion to the order-dependence avoid_when.",
       "xml": "part-to-whole-waterfall.xml:22"
     },
     {
       "code": "multi-currency-raw-sum",
-      "detail": "Product evidence (product team, 2026-07) \u2014 has bitten someone: when the source rows carry a MIXED currency_code (USD + EUR + GBP \u2026), the bound measure must NOT be summed raw. The running total [cum:sum:Profit:qk] on rows and every -SUM([Profit]) bar delta add different currency units as one number, so the cumulative whole is silently WRONG (a data-correctness bug, not a formatting one). The template has no currency awareness. Convert to a single reporting currency, or filter to one currency_code, BEFORE binding a revenue/margin measure into the waterfall.",
+      "detail": "Product evidence (product team, 2026-07) — has bitten someone: when the source rows carry a MIXED currency_code (USD + EUR + GBP …), the bound measure must NOT be summed raw. The running total [cum:sum:Profit:qk] on rows and every -SUM([Profit]) bar delta add different currency units as one number, so the cumulative whole is silently WRONG (a data-correctness bug, not a formatting one). The template has no currency awareness. Convert to a single reporting currency, or filter to one currency_code, BEFORE binding a revenue/margin measure into the waterfall.",
       "xml": "part-to-whole-waterfall.xml:15-17"
     }
   ]

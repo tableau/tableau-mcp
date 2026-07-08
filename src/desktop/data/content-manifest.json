@@ -2,9 +2,9 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.11.0+content.2026-07-07",
+  "content_version": "2.11.0+content.2026-07-08",
   "schema_version": "1",
-  "generated": "2026-07-07",
+  "generated": "2026-07-08",
   "engine_compat": {
     "server_min": "2.11.0",
     "node": ">=22.7.5"
@@ -152,8 +152,8 @@
     },
     {
       "path": "data-visualization-templates-xml/part-to-whole-waterfall.xml",
-      "sha256": "e371e4b32773244d8794dc75c956f9ca4baeba3f375ae93f1708240280aedad7",
-      "bytes": 5146
+      "sha256": "215d8fbe9970b79ecd46242799d600fd4775056d887571b5242b7b2726d00681",
+      "bytes": 5083
     },
     {
       "path": "data-visualization-templates-xml/quota-attainment-bullet.xml",
@@ -187,8 +187,8 @@
     },
     {
       "path": "data-visualization-templates-xml/spatial-choropleth-map.xml",
-      "sha256": "7db6f54e0a83c20bf5f04468da2e98420d5b82795af8b4de789f11e3fb415c86",
-      "bytes": 10586
+      "sha256": "b75f203fdb787be456d1d37e74d3d292de8850ab3f304016e3ff5401dfc175ea",
+      "bytes": 6220
     },
     {
       "path": "data-visualization-templates-xml/spatial-symbol-map.xml",
@@ -217,8 +217,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "d3ce2f1a213e50ed6fbaff46b2e0e74b027610e13157c70662f21e9bce918a69",
-      "bytes": 229917
+      "sha256": "88d48e47f756af9f15906c4cffddaab18febe97fe6836defe75e86822c403593",
+      "bytes": 230883
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -362,8 +362,8 @@
     },
     {
       "path": "template-manifests/part-to-whole-waterfall.manifest.json",
-      "sha256": "604e0410dc47c9d0c14bc32f07ef15c519c92eda45311eca76ec2ec3b7625090",
-      "bytes": 9674
+      "sha256": "087eed4302f3e4354b893e00e97e375611afc3651d737afc7e9a792eea4f9477",
+      "bytes": 10105
     },
     {
       "path": "template-manifests/quota-attainment-bullet.manifest.json",
@@ -397,8 +397,8 @@
     },
     {
       "path": "template-manifests/spatial-choropleth-map.manifest.json",
-      "sha256": "977fe8ae7438f77f489c1279cb84ed2f9b564f641e0de22984ccbe009e25ae5d",
-      "bytes": 5452
+      "sha256": "7655c768c1bb47d0a23d3c3ea793fd3d3259450a0bbcf7ba2f08c8c549abeb30",
+      "bytes": 5913
     },
     {
       "path": "template-manifests/spatial-symbol-map.manifest.json",
