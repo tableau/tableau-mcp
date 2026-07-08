@@ -11,4 +11,17 @@ describe('SEA release workflow', () => {
     expect(workflow).not.toMatch(/node --experimental-sea-config sea-config\.json/);
     expect(workflow).toMatch(/npm run build:sea/);
   });
+
+  it('smokes both SEA binaries and requires the desktop tool surface', () => {
+    const workflow = fs.readFileSync(WORKFLOW_PATH, 'utf8');
+
+    expect(workflow).toMatch(/npx tsx src\/scripts\/seaSmoke\.ts \.\/tableau-mcp\s/);
+    expect(workflow).toMatch(
+      /npx tsx src\/scripts\/seaSmoke\.ts \.\/tableau-mcp-desktop --require-tool bind-template/,
+    );
+    expect(workflow).toMatch(/npx tsx src\/scripts\/seaSmoke\.ts \.\\tableau-mcp\.exe\s/);
+    expect(workflow).toMatch(
+      /npx tsx src\/scripts\/seaSmoke\.ts \.\\tableau-mcp-desktop\.exe --require-tool bind-template/,
+    );
+  });
 });
