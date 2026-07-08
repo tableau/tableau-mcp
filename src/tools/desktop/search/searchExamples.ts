@@ -1,17 +1,19 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { readFileSync } from 'fs';
-import path from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { readDataAsset } from '../../../desktop/assets.js';
 import { Corpus, searchDiffCorpusFormatted } from '../../../desktop/search/diffCorpus.js';
-import { DATA_ROOT, DesktopMcpServer } from '../../../server.desktop.js';
+import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 function loadCorpus(): Corpus | null {
-  const corpusPath = process.env.CORPUS_PATH || path.join(DATA_ROOT, 'corpus.json');
   try {
-    return JSON.parse(readFileSync(corpusPath, 'utf8')) as Corpus;
+    const raw = process.env.CORPUS_PATH
+      ? readFileSync(process.env.CORPUS_PATH, 'utf8')
+      : readDataAsset('corpus.json');
+    return raw ? (JSON.parse(raw) as Corpus) : null;
   } catch {
     return null;
   }

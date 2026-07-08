@@ -1,6 +1,7 @@
 import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
 
+import * as configModule from './config.desktop.js';
 import * as loggerModule from './logging/logger.js';
 import {
   DEMO_TOOL_PROFILE,
@@ -33,6 +34,26 @@ describe('DesktopMcpServer', () => {
         },
         expect.any(Function),
       );
+    }
+  });
+
+  it('does not register check-for-user-changes on the External Client API transport', async () => {
+    const base = configModule.getDesktopConfig();
+    const spy = vi
+      .spyOn(configModule, 'getDesktopConfig')
+      .mockReturnValue({ ...base, externalApiEnabled: true });
+
+    try {
+      const server = getServer();
+      await server.registerTools();
+
+      const registeredNames = (
+        vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
+      ).map(([name]) => name);
+      expect(registeredNames).not.toContain('check-for-user-changes');
+      expect(registeredNames).toContain('list-worksheets');
+    } finally {
+      spy.mockRestore();
     }
   });
 });

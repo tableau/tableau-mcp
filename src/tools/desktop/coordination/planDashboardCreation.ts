@@ -1,12 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, readdirSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { DesktopCache } from '../../../desktop/cache.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { resolveField } from '../../../desktop/metadata/index.js';
-import { getTemplatesDir } from '../../../desktop/templates/templatePath.js';
+import { listTemplateNames } from '../../../desktop/templates/templatePath.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
@@ -87,13 +86,7 @@ export const getPlanDashboardCreationTool = (
           }
           const workbookXml = workbookResult.value;
 
-          // List available templates
-          const templatesDir = getTemplatesDir();
-          const templateFiles = existsSync(templatesDir)
-            ? readdirSync(templatesDir)
-                .filter((f) => f.endsWith('.xml'))
-                .map((f) => f.replace('.xml', ''))
-            : [];
+          const templateFiles = listTemplateNames();
 
           // Resolve all requested fields
           const cache = new DesktopCache(session);
