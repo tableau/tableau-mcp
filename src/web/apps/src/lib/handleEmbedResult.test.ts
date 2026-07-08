@@ -5,7 +5,7 @@ import type { App } from '@modelcontextprotocol/ext-apps';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { handleToolResult } from './handleToolResult.js';
+import { handleEmbedResult } from './handleEmbedResult.js';
 
 // Mock dependencies
 vi.mock('./getEmbedTokenToolClient.js');
@@ -18,7 +18,7 @@ import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
 
-describe('handleToolResult', () => {
+describe('handleEmbedResult', () => {
   let mockApp: App;
 
   beforeEach(() => {
@@ -59,7 +59,7 @@ describe('handleToolResult', () => {
       ],
     };
 
-    await handleToolResult(mockApp, errorResult);
+    await handleEmbedResult(mockApp, errorResult);
 
     // Flush async
     await new Promise((r) => setTimeout(r, 0));
@@ -87,7 +87,7 @@ describe('handleToolResult', () => {
 
   it('should show error UI when tool result is null or undefined', async () => {
     // Test with undefined
-    await handleToolResult(mockApp, undefined as any);
+    await handleEmbedResult(mockApp, undefined as any);
     await new Promise((r) => setTimeout(r, 0));
 
     const container = document.getElementById('tableauVizContainer');
@@ -114,7 +114,7 @@ describe('handleToolResult', () => {
     vi.mocked(embedTableauViz).mockClear();
 
     // Test with null
-    await handleToolResult(mockApp, null as any);
+    await handleEmbedResult(mockApp, null as any);
     await new Promise((r) => setTimeout(r, 0));
 
     const errorElement2 = container?.querySelector('.mcp-app-error');
@@ -139,7 +139,7 @@ describe('handleToolResult', () => {
       ],
     };
 
-    await handleToolResult(mockApp, malformedResult);
+    await handleEmbedResult(mockApp, malformedResult);
     await new Promise((r) => setTimeout(r, 0));
 
     const container = document.getElementById('tableauVizContainer');
@@ -173,7 +173,7 @@ describe('handleToolResult', () => {
       ],
     };
 
-    await handleToolResult(mockApp, missingUrlResult);
+    await handleEmbedResult(mockApp, missingUrlResult);
     await new Promise((r) => setTimeout(r, 0));
 
     const container = document.getElementById('tableauVizContainer');
@@ -199,7 +199,7 @@ describe('handleToolResult', () => {
 
     vi.mocked(loadTableauEmbeddingApi).mockRejectedValue(new Error('Script load failed'));
 
-    await handleToolResult(mockApp, validResult);
+    await handleEmbedResult(mockApp, validResult);
     await new Promise((r) => setTimeout(r, 0));
 
     const container = document.getElementById('tableauVizContainer');
@@ -238,7 +238,7 @@ describe('handleToolResult', () => {
 
     vi.mocked(callGetEmbedTokenTool).mockRejectedValue(new Error('Token minting failed'));
 
-    await handleToolResult(mockApp, validResult);
+    await handleEmbedResult(mockApp, validResult);
     await new Promise((r) => setTimeout(r, 0));
 
     const container = document.getElementById('tableauVizContainer');
@@ -285,7 +285,7 @@ describe('handleToolResult', () => {
       onError?.();
     });
 
-    await handleToolResult(mockApp, validResult);
+    await handleEmbedResult(mockApp, validResult);
     await new Promise((r) => setTimeout(r, 0));
 
     const container = document.getElementById('tableauVizContainer');
@@ -322,7 +322,7 @@ describe('handleToolResult', () => {
     vi.mocked(embedTableauViz).mockImplementation(() => {});
     vi.mocked(setupOpenInTableauLink).mockImplementation(() => {});
 
-    await handleToolResult(mockApp, validResult);
+    await handleEmbedResult(mockApp, validResult);
     await new Promise((r) => setTimeout(r, 0));
 
     const container = document.getElementById('tableauVizContainer');

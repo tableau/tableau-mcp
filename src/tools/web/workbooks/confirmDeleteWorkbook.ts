@@ -28,10 +28,12 @@ const paramsSchema = {
  * confirm-delete-workbook — the human-gesture confirm step of the MCP-Apps HITL flow for
  * delete-workbook (W-23125362, AC-5 closure).
  *
- * This tool is APP-ONLY (`meta.ui.visibility = ['app']`), so it is invisible to and uncallable by
- * the model — exactly like get-oauth-token. The ONLY path that reaches it is a human clicking
- * "Confirm" inside the rendered MCP-Apps iframe, which calls back via `app.callServerTool`. The
- * destructive `deleteWorkbook` REST call lives ONLY here.
+ * This tool is APP-ONLY (`meta.ui.visibility = ['app']`), so a cooperating MCP client hides it from
+ * the model — exactly like get-oauth-token. In that cooperative flow the only path that reaches it is
+ * a human clicking "Confirm" inside the rendered MCP-Apps iframe, which calls back via
+ * `app.callServerTool`. The destructive `deleteWorkbook` REST call lives ONLY here. NOTE: `visibility`
+ * is a client-side hint, not a server guarantee — a non-cooperating client could still call this tool
+ * directly; the TagEvidence + AppApprovalEvidence gate below is what the server actually enforces.
  *
  * The guard verifies BOTH (AllEvidence):
  *   - a fresh in-iframe human approval (AppApprovalEvidence) recorded by the delete-workbook preview
@@ -65,12 +67,15 @@ the deletion is rejected and the user must preview again.
       title: 'Confirm Delete Workbook',
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      // Hard delete-by-id: a second confirm of the same workbookId 404s (isError: true), so the
+      // operation is not idempotent. Matches delete-workbook and the accepted resolution for
+      // delete-extract-refresh-task (tableau/tableau-mcp#392).
+      idempotentHint: false,
       openWorldHint: false,
     },
     meta: {
       ui: {
-        visibility: ['app'], // Only the App can call this; never the model.
+        visibility: ['app'], // Cooperative-client hint: cooperating clients hide this from the model (not server-enforced).
       },
     },
     callback: async ({ workbookId }, extra): Promise<CallToolResult> => {

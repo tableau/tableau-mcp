@@ -18,10 +18,12 @@ const paramsSchema = {
  * confirm-delete-extract-refresh-task — the human-gesture confirm step of the MCP-Apps HITL flow for
  * delete-extract-refresh-task (W-23202047, mirroring confirm-delete-workbook).
  *
- * This tool is APP-ONLY (`meta.ui.visibility = ['app']`), so it is invisible to and uncallable by
- * the model. The ONLY path that reaches it is a human clicking "Confirm" inside the rendered
- * MCP-Apps iframe, which calls back via `app.callServerTool`. The destructive
- * `deleteExtractRefreshTask` REST call lives ONLY here.
+ * This tool is APP-ONLY (`meta.ui.visibility = ['app']`), so a cooperating MCP client hides it from
+ * the model. In that cooperative flow the only path that reaches it is a human clicking "Confirm"
+ * inside the rendered MCP-Apps iframe, which calls back via `app.callServerTool`. The destructive
+ * `deleteExtractRefreshTask` REST call lives ONLY here. NOTE: `visibility` is a client-side hint, not
+ * a server guarantee — a non-cooperating client could still call this tool directly. Because a task
+ * has no taggable state, AppApprovalEvidence is the ONLY server gate here (see below).
  *
  * Because an extract refresh task has no durable, taggable state, the human gesture in the iframe IS
  * the proof for the app flow: the guard verifies a fresh, single-use in-iframe human approval
@@ -61,7 +63,7 @@ operation is permanent and irreversible — the extract refresh task cannot be r
     },
     meta: {
       ui: {
-        visibility: ['app'], // Only the App can call this; never the model.
+        visibility: ['app'], // Cooperative-client hint: cooperating clients hide this from the model (not server-enforced).
       },
     },
     callback: async ({ taskId }, extra): Promise<CallToolResult> => {

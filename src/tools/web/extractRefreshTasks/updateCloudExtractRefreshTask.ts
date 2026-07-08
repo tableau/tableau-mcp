@@ -116,7 +116,9 @@ export const getUpdateCloudExtractRefreshTaskTool = (
     server,
     name: 'update-cloud-extract-refresh-task',
     disabled: !config.adminToolsEnabled,
-    ...(mcpAppsEnabled ? { app: getAppConfig('update-cloud-extract-refresh-task') } : {}),
+    ...(mcpAppsEnabled
+      ? { app: getAppConfig('update-cloud-extract-refresh-task', 'hitl-confirm') }
+      : {}),
     description: `
   Updates the schedule of an extract refresh task on Tableau Cloud. Use this to change how often an extract refresh runs (e.g. downgrade Daily → Weekly), shift its time window, or modify the day/hour it executes — without recreating the task.
 

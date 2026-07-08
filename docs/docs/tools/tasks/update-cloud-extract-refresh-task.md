@@ -29,9 +29,9 @@ prior preview (no valid token) is rejected server-side. This gate genuinely requ
 phase to have run for exactly this change; it cannot be bypassed by computing a value. Present the
 change to the user and get explicit approval before confirming.
 
-### MCP-Apps confirm panel (real human-in-the-loop)
+### MCP-Apps confirm panel (cooperative human-in-the-loop)
 
-When the off-by-default `mcp-apps` feature flag is enabled, this tool ships with an MCP App and the
+When the `mcp-apps` feature flag is enabled, this tool ships with an MCP App and the
 preview phase renders an in-iframe **confirm panel** describing the schedule change (new frequency and
 time window, plus a live countdown) instead of returning preview text the model could act on. The
 schedule change is then applied only when a person clicks **Apply schedule change** in that panel,
@@ -42,6 +42,17 @@ behalf; the only route is the human gesture. The confirm tool verifies a fresh, 
 approval recorded during the preview (within `MUTATION_PREVIEW_TTL_MINUTES`, default 5); a missing or
 expired approval rejects the update. When the flag is off the tool behaves exactly as the two-phase
 `confirm`/`confirmationToken` flow described above.
+
+:::warning[Cooperative, not server-enforced]
+This is **cooperative** human-in-the-loop: it depends on the MCP client honoring `visibility: ['app']`
+(hiding the `confirm-*` tool from the model) and rendering the confirm panel. The human approval is
+recorded during the model-driven preview phase, so a **non-cooperating** client that ignores the
+visibility hint could still drive `preview → confirm-*` back-to-back with no human gesture. This task
+tool has **no tag layer** — the app approval is the only gate — so a non-cooperating client has nothing
+else to clear (the schedule-bound registry nonce still proves a preview *ran*, but not that a human
+approved). Server-enforced HITL (an approval primitive the model cannot forge or reach) is tracked as
+follow-up work (W-23125362).
+:::
 
 :::note[Authoritative audit]
 Every attempt — both the preview and the confirmed update, and both allowed and denied attempts (for

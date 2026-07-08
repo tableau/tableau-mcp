@@ -2,27 +2,11 @@ import type { App } from '@modelcontextprotocol/ext-apps';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import {
-  isDeleteDatasourceConfirmResult,
-  renderDeleteDatasourceConfirm,
-} from './deleteDatasourceConfirmClient.js';
-import {
-  isDeleteExtractRefreshTaskConfirmResult,
-  renderDeleteExtractRefreshTaskConfirm,
-} from './deleteExtractRefreshTaskConfirmClient.js';
-import {
-  isDeleteWorkbookConfirmResult,
-  renderDeleteWorkbookConfirm,
-} from './deleteWorkbookConfirmClient.js';
 import { embedTableauViz } from './embedTableauViz.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
 import { showError } from './showError.js';
-import {
-  isUpdateCloudExtractRefreshTaskConfirmResult,
-  renderUpdateCloudExtractRefreshTaskConfirm,
-} from './updateCloudExtractRefreshTaskConfirmClient.js';
 
 const urlSchema = z.object({
   url: z.string().url(),
@@ -53,33 +37,13 @@ export function extractUrlObjectFromResult(result: CallToolResult): string {
 }
 
 /**
- * Handles the tool result from the MCP app and embeds the Tableau viz
+ * Handles a tool result from an embed-Tableau-viz tool (get-view / get-workbook) and embeds the viz.
  * @param app - The MCP App instance
  * @param result - The tool result containing the view URL
  */
-export async function handleToolResult(app: App, result: CallToolResult): Promise<void> {
+export async function handleEmbedResult(app: App, result: CallToolResult): Promise<void> {
   if (!result || result.isError) {
     showError('TOOL_ERROR');
-    return;
-  }
-
-  // MCP-Apps HITL (flag ON): a delete/update preview returns a confirm-panel payload, not a viz URL.
-  // Branch on the result shape and render the in-iframe HITL confirm panel; otherwise fall through to
-  // viz embedding.
-  if (isDeleteWorkbookConfirmResult(result)) {
-    renderDeleteWorkbookConfirm(app, result);
-    return;
-  }
-  if (isDeleteDatasourceConfirmResult(result)) {
-    renderDeleteDatasourceConfirm(app, result);
-    return;
-  }
-  if (isDeleteExtractRefreshTaskConfirmResult(result)) {
-    renderDeleteExtractRefreshTaskConfirm(app, result);
-    return;
-  }
-  if (isUpdateCloudExtractRefreshTaskConfirmResult(result)) {
-    renderUpdateCloudExtractRefreshTaskConfirm(app, result);
     return;
   }
 

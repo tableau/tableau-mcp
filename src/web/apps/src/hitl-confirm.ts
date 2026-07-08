@@ -5,12 +5,14 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import pkg from '~/package.json';
 
-import { handleEmbedResult } from './lib/handleEmbedResult.js';
+import { handleConfirmResult } from './lib/handleConfirmResult.js';
 
 const app = new App({ name: 'Tableau MCP App', version: pkg.version });
 app.ontoolresult = (result: CallToolResult) => {
-  void handleEmbedResult(app, result).catch((err) => {
-    console.error('[mcp-app] Unhandled error in handleEmbedResult:', err);
-  });
+  try {
+    handleConfirmResult(app, result);
+  } catch (err) {
+    console.error('[hitl-confirm] Unhandled error in handleConfirmResult:', err);
+  }
 };
 app.connect();

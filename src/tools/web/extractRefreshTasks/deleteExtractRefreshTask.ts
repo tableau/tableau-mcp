@@ -62,7 +62,7 @@ export const getDeleteExtractRefreshTaskTool = (
     server,
     name: 'delete-extract-refresh-task',
     disabled: !config.adminToolsEnabled,
-    ...(mcpAppsEnabled ? { app: getAppConfig('delete-extract-refresh-task') } : {}),
+    ...(mcpAppsEnabled ? { app: getAppConfig('delete-extract-refresh-task', 'hitl-confirm') } : {}),
     description: `
   Deletes an extract refresh task from the Tableau site. This permanently removes the scheduled extract refresh — the underlying data source or workbook is not affected, but it will no longer be refreshed on this schedule.
 

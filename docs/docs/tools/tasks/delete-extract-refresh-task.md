@@ -37,9 +37,9 @@ token gate guarantees the preview ran, but the **human approval** step is a prom
 agents must not auto-confirm.
 :::
 
-## MCP-Apps confirm panel (real human-in-the-loop)
+## MCP-Apps confirm panel (cooperative human-in-the-loop)
 
-When the off-by-default `mcp-apps` feature flag is enabled, this tool ships with an MCP App and the
+When the `mcp-apps` feature flag is enabled, this tool ships with an MCP App and the
 preview phase renders an in-iframe **confirm panel** (the task id and a live countdown) instead of
 returning a confirmation token the model could echo back. The permanent, irreversible delete is then
 performed only when a person clicks **Delete task** in that panel, which invokes the model-invisible
@@ -50,6 +50,16 @@ itself is the proof: the confirm tool verifies a fresh, single-use human approva
 preview (within `MUTATION_PREVIEW_TTL_MINUTES`, default 5); a missing or expired approval rejects the
 delete. When the flag is off the tool behaves exactly as the two-phase `confirm`/`confirmationToken`
 flow described above.
+
+:::warning[Cooperative, not server-enforced]
+This is **cooperative** human-in-the-loop: it depends on the MCP client honoring `visibility: ['app']`
+(hiding the `confirm-*` tool from the model) and rendering the confirm panel. The human approval is
+recorded during the model-driven preview phase, so a **non-cooperating** client that ignores the
+visibility hint could still drive `preview → confirm-*` back-to-back with no human gesture. Unlike the
+workbook and data source delete tools, this task tool has **no tag layer** — the app approval is the
+only gate — so a non-cooperating client has nothing else to clear. Server-enforced HITL (an approval
+primitive the model cannot forge or reach) is tracked as follow-up work (W-23125362).
+:::
 
 :::note[Authoritative audit]
 Every mutation attempt — both the preview and the confirmed delete, and both allowed and denied

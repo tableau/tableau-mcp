@@ -21,10 +21,12 @@ const paramsSchema = {
  * confirm-update-cloud-extract-refresh-task — the human-gesture confirm step of the MCP-Apps HITL
  * flow for update-cloud-extract-refresh-task (W-23202047, mirroring confirm-delete-workbook).
  *
- * This tool is APP-ONLY (`meta.ui.visibility = ['app']`), so it is invisible to and uncallable by
- * the model. The ONLY path that reaches it is a human clicking "Apply schedule change" inside the
- * rendered MCP-Apps iframe, which calls back via `app.callServerTool`. The mutating
- * `updateCloudExtractRefreshTask` REST call lives ONLY here.
+ * This tool is APP-ONLY (`meta.ui.visibility = ['app']`), so a cooperating MCP client hides it from
+ * the model. In that cooperative flow the only path that reaches it is a human clicking "Apply
+ * schedule change" inside the rendered MCP-Apps iframe, which calls back via `app.callServerTool`.
+ * The mutating `updateCloudExtractRefreshTask` REST call lives ONLY here. NOTE: `visibility` is a
+ * client-side hint, not a server guarantee — a non-cooperating client could still call this tool
+ * directly. The task has no taggable state, so AppApprovalEvidence is the ONLY server gate here.
  *
  * This is a SCHEDULE CHANGE, not a deletion. The task has no durable, taggable state, so the human
  * gesture in the iframe IS the proof: the guard verifies a fresh, single-use in-iframe human approval
@@ -65,7 +67,7 @@ schedule values.
     },
     meta: {
       ui: {
-        visibility: ['app'], // Only the App can call this; never the model.
+        visibility: ['app'], // Cooperative-client hint: cooperating clients hide this from the model (not server-enforced).
       },
     },
     callback: async (args, extra): Promise<CallToolResult> => {

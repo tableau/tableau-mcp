@@ -82,7 +82,7 @@ export const getDeleteWorkbookTool = (server: WebMcpServer): WebTool<typeof para
     server,
     name: 'delete-workbook',
     disabled: !config.adminToolsEnabled,
-    ...(mcpAppsEnabled ? { app: getAppConfig('delete-workbook') } : {}),
+    ...(mcpAppsEnabled ? { app: getAppConfig('delete-workbook', 'hitl-confirm') } : {}),
     description: `
 Permanently deletes a workbook from the current Tableau Cloud site. Restricted to Tableau site
 administrators and requires the \`ADMIN_TOOLS_ENABLED\` feature flag.

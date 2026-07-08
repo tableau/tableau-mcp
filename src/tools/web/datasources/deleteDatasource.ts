@@ -89,7 +89,7 @@ export const getDeleteDatasourceTool = (server: WebMcpServer): WebTool<typeof pa
     server,
     name: 'delete-datasource',
     disabled: !config.adminToolsEnabled,
-    ...(mcpAppsEnabled ? { app: getAppConfig('delete-datasource') } : {}),
+    ...(mcpAppsEnabled ? { app: getAppConfig('delete-datasource', 'hitl-confirm') } : {}),
     description: `
 Permanently deletes a published data source from the current Tableau site. Restricted to
 Tableau site administrators and requires the \`ADMIN_TOOLS_ENABLED\` feature flag.

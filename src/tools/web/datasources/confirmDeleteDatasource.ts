@@ -28,10 +28,13 @@ const paramsSchema = {
  * confirm-delete-datasource — the human-gesture confirm step of the MCP-Apps HITL flow for
  * delete-datasource (W-23202047, mirroring confirm-delete-workbook).
  *
- * This tool is APP-ONLY (`meta.ui.visibility = ['app']`), so it is invisible to and uncallable by
- * the model — exactly like confirm-delete-workbook. The ONLY path that reaches it is a human clicking
- * "Confirm" inside the rendered MCP-Apps iframe, which calls back via `app.callServerTool`. The
- * destructive `deleteDatasource` REST call lives ONLY here.
+ * This tool is APP-ONLY (`meta.ui.visibility = ['app']`), so a cooperating MCP client hides it from
+ * the model — exactly like confirm-delete-workbook. In that cooperative flow the only path that
+ * reaches it is a human clicking "Confirm" inside the rendered MCP-Apps iframe, which calls back via
+ * `app.callServerTool`. The destructive `deleteDatasource` REST call lives ONLY here. NOTE:
+ * `visibility` is a client-side hint, not a server guarantee — a non-cooperating client could still
+ * call this tool directly; the TagEvidence + AppApprovalEvidence gate below is what the server
+ * actually enforces.
  *
  * The guard verifies BOTH (AllEvidence):
  *   - a fresh in-iframe human approval (AppApprovalEvidence, namespace 'delete-datasource') recorded
@@ -70,7 +73,7 @@ the deletion is rejected and the user must preview again.
     },
     meta: {
       ui: {
-        visibility: ['app'], // Only the App can call this; never the model.
+        visibility: ['app'], // Cooperative-client hint: cooperating clients hide this from the model (not server-enforced).
       },
     },
     callback: async ({ datasourceId }, extra): Promise<CallToolResult> => {

@@ -95,34 +95,47 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   console.log('🏗️ Building MCP Apps...');
   try {
     const appsDir = resolve(process.cwd(), 'src/web/apps');
-    await viteBuild({
-      configFile: false, // Don't load vite.config.ts
-      root: appsDir,
-      plugins: [viteSingleFile()],
-      resolve: {
-        alias: {
-          '~': resolve(process.cwd()),
-        },
-      },
-      build: {
-        sourcemap: dev ? 'inline' : undefined,
-        cssMinify: !dev,
-        minify: !dev,
-        rollupOptions: {
-          input: resolve(appsDir, 'mcp-app.html'),
-        },
-        outDir: resolve(appsDir, 'dist'),
-        emptyOutDir: false,
-      },
-    });
 
-    // Copy built HTML to build directory
+    // Each entry is a self-contained, single-file HTML bundled by functionality:
+    // - mcp-app.html: embeds a Tableau viz (get-view / get-workbook).
+    // - hitl-confirm.html: the MCP-Apps HITL confirm panel for delete/update preview tools.
+    // viteSingleFile inlines all JS/CSS into one HTML per rollup input; to guarantee both outputs
+    // are fully inlined (a single multi-input build does not reliably inline every entry), build
+    // each entry with its own viteBuild call. emptyOutDir:false lets them share the dist directory.
+    const htmlEntries = ['mcp-app.html', 'hitl-confirm.html'];
+
+    for (const htmlEntry of htmlEntries) {
+      await viteBuild({
+        configFile: false, // Don't load vite.config.ts
+        root: appsDir,
+        plugins: [viteSingleFile()],
+        resolve: {
+          alias: {
+            '~': resolve(process.cwd()),
+          },
+        },
+        build: {
+          sourcemap: dev ? 'inline' : undefined,
+          cssMinify: !dev,
+          minify: !dev,
+          rollupOptions: {
+            input: resolve(appsDir, htmlEntry),
+          },
+          outDir: resolve(appsDir, 'dist'),
+          emptyOutDir: false,
+        },
+      });
+    }
+
+    // Copy each built HTML to the build directory.
     const buildWebApps = './build/web/apps/dist';
     await mkdir(buildWebApps, { recursive: true });
-    await copyFile(
-      resolve(appsDir, 'dist/mcp-app.html'),
-      resolve(process.cwd(), buildWebApps, 'mcp-app.html'),
-    );
+    for (const htmlEntry of htmlEntries) {
+      await copyFile(
+        resolve(appsDir, 'dist', htmlEntry),
+        resolve(process.cwd(), buildWebApps, htmlEntry),
+      );
+    }
 
     console.log('✅ MCP Apps built successfully');
   } catch (error) {
