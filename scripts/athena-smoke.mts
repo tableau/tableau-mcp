@@ -31,13 +31,21 @@ out(true, 'discovery', `pid=${inst.pid} baseUrl=${inst.baseUrl}`);
 const client = new ExternalApiClient(inst);
 
 const health = await client.health();
-out(health.isOk() && health.value.healthy, 'GET /v1/health', health.isErr() ? errDetail(health.error) : '');
+out(
+  health.isOk() && health.value.healthy,
+  'GET /v1/health',
+  health.isErr() ? errDetail(health.error) : '',
+);
 
 let xml: string | null = null;
 const doc = await client.getWorkbookDocument();
 if (doc.isOk()) {
   xml = doc.value.xml;
-  out(xml.includes('<workbook'), 'GET /v1/workbook/document', `${xml.length} bytes · appVersion=${doc.value.applicationVersion ?? '?'}`);
+  out(
+    xml.includes('<workbook'),
+    'GET /v1/workbook/document',
+    `${xml.length} bytes · appVersion=${doc.value.applicationVersion ?? '?'}`,
+  );
 } else {
   out(false, 'GET /v1/workbook/document', errDetail(doc.error));
 }
@@ -49,7 +57,8 @@ if (xml) {
     'POST /v1/workbook/document',
     applied.isOk()
       ? `operation state=${String((applied.value as { state?: unknown }).state ?? '?')}`
-      : errDetail(applied.error) + '  ← a 400 invalid-request-body here usually means the build predates #59238/#59383',
+      : errDetail(applied.error) +
+          '  ← a 400 invalid-request-body here usually means the build predates #59238/#59383',
   );
 }
 
@@ -61,7 +70,8 @@ out(
   'POST /v1/app:invokeCommand',
   op.isOk()
     ? `state=${String((op.value as { state?: unknown }).state ?? '?')}`
-    : errDetail(op.error) + '  ← if THIS fails with command-not-found too, send us your invokeCommand example — the body field names need aligning',
+    : errDetail(op.error) +
+        '  ← if THIS fails with command-not-found too, send us your invokeCommand example — the body field names need aligning',
 );
 
 const spec = await client.fetchOpenApi();
