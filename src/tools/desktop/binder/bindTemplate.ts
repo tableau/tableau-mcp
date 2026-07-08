@@ -73,13 +73,31 @@ const paramsSchema = {
  * present: `applied` + either `sheet_name`/`phase_ms` (success) or `apply_error`
  * (graceful fallback — the bound `args` are still intact).
  */
-type BindTemplateToolResult = BinderResult & {
+type BindTemplateToolResultBase = BinderResult & {
   guidance: string;
   applied?: boolean;
   sheet_name?: string;
   phase_ms?: { bind: number; inject: number; apply: number };
   apply_error?: string;
 };
+
+/**
+ * Trimmed shape returned ONLY on applied:true fast-path success (W60 spike lever 5 /
+ * preamble P4). It keeps just what a rendered success needs and drops the args echo, the
+ * ~170-token apply_instruction, apply_hint, and used_llm — those exist to enable a manual
+ * second call that never happens once the server-side apply succeeds. The FULL shape is
+ * preserved on applied:false / propose / escalate / error (the graceful-fallback contract
+ * is sacred — the fallback chain still needs the bound args).
+ */
+type AppliedFastPathResult = {
+  status: 'bound';
+  applied: true;
+  sheet_name: string;
+  phase_ms: { bind: number; inject: number; apply: number };
+  guidance: string;
+};
+
+type BindTemplateToolResult = BindTemplateToolResultBase | AppliedFastPathResult;
 
 /** Escalation reasons that route back to the general (non-fast-path) authoring flow. */
 const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
@@ -151,8 +169,11 @@ function buildGuidance(res: BinderResult): string {
  * instance is running. 0 or 2+ instances fail closed with an instance-listing error
  * so the caller must pick one — this deletes the list-instances turn from the common
  * single-Desktop case without ever guessing between multiple instances.
+ *
+ * Exported for reuse by dashboard-auto-apply (W60), which needs the identical
+ * fail-closed session resolution — no reason for a second implementation.
  */
-function resolveSession(session: string | undefined): Result<string, McpToolError> {
+export function resolveSession(session: string | undefined): Result<string, McpToolError> {
   if (session !== undefined) {
     return Ok(session);
   }
@@ -194,11 +215,24 @@ function describeApplyError(
 
 type BoundResult = Extract<BinderResult, { status: 'bound' }>;
 
-/** Build the graceful-fallback result: the bound args are intact + why apply didn't run. */
-function applyFallback(base: BindTemplateToolResult, apply_error: string): BindTemplateToolResult {
+/**
+ * Build the graceful-fallback result: the bound args are intact + why apply didn't run.
+ * Default guidance points at the manual inject/apply chain using the returned args — that
+ * is correct for inject/validation/apply failures (the workbook was not the problem). The
+ * events-dirty branch passes a custom `guidance` that DROPS the "apply the returned args
+ * manually" alternative, because there the args are stale pre-edit values and re-applying
+ * them would revert the user's changes (adversary P1-5).
+ */
+function applyFallback(
+  base: BindTemplateToolResultBase,
+  apply_error: string,
+  guidance?: string,
+): BindTemplateToolResultBase {
   return {
     ...base,
-    guidance: `Server-side auto-apply did not complete (${apply_error}). The bound args are intact — fall back to the manual chain: get-workbook-xml → inject-template → apply-workbook using the returned args.`,
+    guidance:
+      guidance ??
+      `Server-side auto-apply did not complete (${apply_error}). The bound args are intact — fall back to the manual chain: get-workbook-xml → inject-template → apply-workbook using the returned args.`,
     applied: false,
     apply_error,
   };
@@ -222,7 +256,7 @@ async function performAutoApply({
   eventsAnchor,
 }: {
   res: BoundResult;
-  base: BindTemplateToolResult;
+  base: BindTemplateToolResultBase;
   workbookXml: string;
   session: string;
   executor: ToolExecutor;
@@ -245,7 +279,14 @@ async function performAutoApply({
       return applyFallback(
         base,
         `user changed the workbook during the bind (${events.value.count} event(s) since read) — ` +
-          're-run bind-template for a fresh read, or apply the returned args manually after reviewing',
+          're-run bind-template for a fresh read',
+        // Events-dirty guidance DROPS the manual-apply alternative (P1-5): the bound args
+        // were computed against the pre-edit workbook, so re-applying them would revert
+        // the user's changes — the only safe recovery is a fresh read via bind-template.
+        'Server-side auto-apply was refused: the user changed the workbook after it was read ' +
+          `(${events.value.count} event(s) since read). Re-run bind-template so it reads the ` +
+          'current workbook — do NOT re-apply the returned args, they were computed against ' +
+          'the pre-edit workbook and would revert their changes.',
       );
     }
   }
@@ -283,9 +324,12 @@ async function performAutoApply({
     return applyFallback(base, `apply failed: ${describeApplyError(applyResult.error)}`);
   }
 
+  // W60 response-shape trim (P4): on success, return ONLY the trimmed fast-path shape —
+  // drop the args echo, apply_instruction, apply_hint, and used_llm from `base`. Those
+  // enable a manual second call that never happens once the apply succeeds.
   return {
-    ...base,
-    guidance: `Applied server-side: injected template "${args.template_name}" and applied worksheet "${args.title}" to the live workbook via the validated apply path (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
+    status: res.status,
+    guidance: `Applied "${args.title}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
     applied: true,
     sheet_name: args.title,
     phase_ms: { bind: bindMs, inject: injectMs, apply: applyMs },
@@ -333,23 +377,33 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           // Phase timing (only reported when auto_apply performs). The bind phase
           // subsumes the live workbook read since server-side they are one step.
           const bindStart = Date.now();
-          const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });
-          if (xmlResult.isErr()) {
-            return new DesktopCommandExecutionError(xmlResult.error).toErr();
-          }
 
-          // Events-clean anchor (W60 blind-spot #1): apply is whole-document
-          // last-writer-wins, so a user edit made in Desktop between this read and
-          // the auto-apply would be silently reverted. Anchor the event sequence
-          // now; performAutoApply refuses to apply over a dirty workbook. Best-
-          // effort: an executor without event support proceeds (surfaced in the
-          // result as events_gate 'unavailable') rather than disabling auto_apply.
+          // Events-clean anchor (W60 blind-spot #1 / adversary P1-4) — captured BEFORE
+          // the read. The apply is whole-document last-writer-wins, so a user edit made
+          // in Desktop between the read and the auto-apply would be silently reverted.
+          // Anchoring AFTER the read (the original bug) left any edit landing in the
+          // (read, anchor] window with sequence <= anchor, excluded by the strict `since`
+          // filter → count 0 → silently overwritten. Anchoring before the read makes that
+          // window checkable; worst case is now an over-cautious refusal (safe fallback),
+          // never a silent overwrite.
+          //
+          // Caveat verified (offline, no live Desktop): the read issues only
+          // `save-underlying-metadata` via getWorkbookXml — a metadata serialization/read
+          // that emits no counted document event. Counted events are user `doc:*`
+          // mutations (see checkForUserChanges tests), so a pre-read anchor does not
+          // false-trip the gate. Best-effort: an executor without event support proceeds
+          // rather than disabling auto_apply (Athena residual).
           let eventsAnchor: number | undefined;
           if (auto_apply === true) {
             const anchor = await executor.getEvents({ signal: extra.signal });
             if (anchor.isOk()) {
               eventsAnchor = anchor.value.latest_sequence;
             }
+          }
+
+          const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });
+          if (xmlResult.isErr()) {
+            return new DesktopCommandExecutionError(xmlResult.error).toErr();
           }
 
           // SEAM: source manifests through bundledIntelligenceProvider (never raw
@@ -373,7 +427,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           });
           const bindMs = Date.now() - bindStart;
 
-          const base: BindTemplateToolResult = { ...res, guidance: buildGuidance(res) };
+          const base: BindTemplateToolResultBase = { ...res, guidance: buildGuidance(res) };
 
           // ── Auto-apply gate (defense in depth) ───────────────────────────
           // Only a deterministic Call-1 bind (used_llm === false) of a fast-path-
