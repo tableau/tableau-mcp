@@ -53,10 +53,13 @@ describe('prewarm/prewarmForDatasource', () => {
     expect(fams).toEqual([...fams].sort());
     expect(fams).toContain('ranking');
     expect(fams).toContain('kpi');
-    // A render-unverified template (scatter) must not appear anywhere.
+    // A render-unverified template must not appear anywhere. (W60: the negative example
+    // moved from correlation-scatter-plot-chart — whose factory stamp crossed, now
+    // eligible — to its still-unverified sibling connected-scatterplot.)
     const allTemplates = r.families.flatMap((f) => f.templates.map((t) => t.template));
     expect(allTemplates).toContain('ranking-ordered-bar');
-    expect(allTemplates).not.toContain('correlation-scatter-plot-chart');
+    expect(allTemplates).toContain('correlation-scatter-plot-chart');
+    expect(allTemplates).not.toContain('connected-scatterplot');
   });
 
   it('precomputes per-slot candidate field shortlists by kind', () => {

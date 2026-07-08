@@ -2,11 +2,31 @@
   "template": "correlation-scatter-plot-chart",
   "family": "correlation",
   "readiness": "YELLOW",
-  "fast_path_eligible": false,
+  "fast_path_eligible": true,
   "fast_path_blockers": [],
   "portability_evidence": {
     "fixture_bind": true,
-    "render_verified": "none"
+    "render_verified": "live-2026-07-06",
+    "render_evidence": {
+      "method": "gate-composite",
+      "date": "2026-07-06",
+      "structural": 0.97297,
+      "critical_pass": "5/5",
+      "pixel": 1.0,
+      "pixel_regions": 6,
+      "sanity": "sane",
+      "sanity_signals": [
+        "mark-count=pass reconciled=true (2508=2508, Worksheet>Copy>Data on source and applied sheets)",
+        "caption-leak=pass"
+      ],
+      "run": "source-anchor replay on the authored scatter oracle (Sample - Superstore, live repaired connection); bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity placeholder fill; oracle opens worksheet-frontmost, no unhide bypass needed",
+      "artifacts": "local-only under ~/TableauGoldens/lab/scatter-* (renders, worksheet XMLs, workbook cache)",
+      "basis": "golden-parity gate run 2026-07-06 (source-anchor replay): structural 0.97297 (5/5 critical), pixel 1.0 (6 ROIs, same-geometry captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 2508=2508 on source and applied renders",
+      "lane": "fable-direct stamp run 2026-07-06 (orchestrator live gate run, driver evals/runs/scatter-stamp-live.mjs)",
+      "gate_composite": 98,
+      "high_pass": "3/3",
+      "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 ROIs all 1.0). Source and applied are two INDEPENDENT renders of the same data on the same instance."
+    }
   },
   "datasource_placeholder": true,
   "placeholders": [

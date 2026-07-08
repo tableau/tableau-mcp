@@ -314,6 +314,61 @@ describe('classifyNoLlm — geo slot name affinity', () => {
   });
 });
 
+// ── (6) W60 GEO-SLOT COMPLETION (required geo slot with zero ask-named candidates) ─
+// A required geo slot the ask does not name widens THAT slot's candidate pool to the
+// full schema's dimensions and binds the unique name-affine field — but ONLY when the
+// ask named at least one OTHER geo field (i.e. it demonstrated geographic intent). The
+// existing fail-closed rules survive: a widened TIE (2+ affine fields) fails closed, a
+// schema with no geo field fails closed, and an ask that names NO geo field at all
+// (section 4's ZERO-candidates test) is unchanged. The auto-completed field is reported
+// in `notes` so the caller can say "using Country/Region".
+describe('classifyNoLlm — geo-slot completion (W60)', () => {
+  it('auto-completes the unnamed country slot (state named → country widens to Country/Region)', () => {
+    const m = mapOf(synth('choropleth', 'spatial', ['choropleth'], geoTriple()));
+    // The ask names ONLY State/Province + Profit — Country/Region is NOT named.
+    const res = classifyNoLlm('choropleth of Profit by State/Province', m, SUMMARY);
+    expect(res).not.toBeNull();
+    expect(res!.bindings).toEqual([
+      { slot_id: 'country', field: 'Country/Region' },
+      { slot_id: 'state', field: 'State/Province' },
+      { slot_id: 'val', field: 'Profit' },
+    ]);
+    // Provenance surfaces the auto-completed field for the required geo slot.
+    const note = res!.notes?.find((n) => n.includes('Country/Region'));
+    expect(note).toBeDefined();
+    expect(note).toContain('country');
+  });
+
+  it('FAIL-CLOSED: a widened country slot with TWO affine candidates stays propose', () => {
+    // State is named (so the state slot is ask-satisfied and the country slot widens),
+    // but the schema has TWO country-affine fields → the widened pool ties → propose.
+    const twoCountry: SchemaSummary = {
+      datasource: 'DS',
+      fields: [
+        field('State', 'dimension', 'nominal', 'string'),
+        field('Country', 'dimension', 'nominal', 'string'),
+        field('Nation', 'dimension', 'nominal', 'string'),
+        field('Profit', 'measure', 'quantitative', 'real'),
+      ],
+    };
+    const m = mapOf(synth('choropleth', 'spatial', ['choropleth'], geoTriple()));
+    expect(classifyNoLlm('choropleth of Profit by State', m, twoCountry)).toBeNull();
+  });
+
+  it('FAIL-CLOSED: a schema with NO geo-role fields stays propose (existing behavior)', () => {
+    const noGeo: SchemaSummary = {
+      datasource: 'DS',
+      fields: [
+        field('Category', 'dimension', 'nominal', 'string'),
+        field('Amount', 'measure', 'quantitative', 'real'),
+        field('Profit', 'measure', 'quantitative', 'real'),
+      ],
+    };
+    const m = mapOf(synth('choropleth', 'spatial', ['choropleth'], geoTriple()));
+    expect(classifyNoLlm('choropleth of Profit by Category', m, noGeo)).toBeNull();
+  });
+});
+
 // ── (5) PLURAL CHART-NOUN BOUNDARY (FS4b) ─────────────────────────────────────
 // phraseIndexInAsk tolerates a trailing plural `s` on the FINAL token of a keyword
 // phrase, but ONLY when that final token is a chart noun (bar→bars, column→columns,

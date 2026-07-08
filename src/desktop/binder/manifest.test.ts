@@ -384,7 +384,7 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
     }
   });
 
-  it('the render-verified set is exactly the fourteen live-proven factory templates', () => {
+  it('the render-verified set is exactly the fifteen live-proven factory templates', () => {
     // W59 template-sync: the seven missing fast-path XMLs were ported from the factory
     // (a2td) with their manifests. fast_path_eligible / render_verified TRAVEL UNCHANGED
     // from the factory (no stamps minted in transit): the factory's 2026-07-06 stamp wave
@@ -392,6 +392,8 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
     // prior shipped ten arrive already factory render-verified (render_verified
     // live-2026-07-06): box-plot-chart, funnel-chart, gantt-task-rollup-chart,
     // quota-attainment-bullet.
+    // W60 parity port: correlation-scatter-plot-chart's factory stamp crossed (it was
+    // stamped in a2td all along and dark here) — 14 → 15.
     // Everything else ships propose-only (render_verified none) and honestly surfaces
     // the not-live-render-verified blocker via deriveFastPathBlockers.
     const eligible = [...manifests.values()]
@@ -401,6 +403,7 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
     expect(eligible).toEqual(
       [
         'box-plot-chart',
+        'correlation-scatter-plot-chart',
         'distribution-bar-code-chart',
         'funnel-chart',
         'gantt-task-rollup-chart',

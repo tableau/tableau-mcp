@@ -730,42 +730,89 @@ function geoAffinityOverlap(f: SchemaField, aff: Set<string>): number {
 }
 
 /**
- * Resolve every required geo slot to a distinct field by NAME AFFINITY, over the
- * pool of still-unused matched dimensions. Fail-closed (returns null → the caller
- * proposes) when any geo slot is not UNAMBIGUOUS: it binds the field with the
- * strictly-greatest affinity overlap, but only when that maximum is unique and > 0
- * (zero candidates, or 2+ tied at the max, → null). A final distinctness check
- * rejects two geo slots resolving to the SAME field. Computing every slot's overlap
- * over the SAME pool (not a shrinking one) is load-bearing: it lets a coarse phantom
- * like "Region" (a sub-token of "Country/Region") tie the state slot against
- * "Country/Region" and fail closed, rather than being silently mis-bound.
+ * The strictly-greatest, UNIQUE, > 0 geo-affinity field in `pool` for `aff`, as a
+ * discriminated outcome so callers can tell the three cases apart: `ok` (a clean unique
+ * winner), `none` (no field with any overlap), or `tie` (2+ fields tied at the max).
+ * Computing over ONE fixed pool (never a shrinking one) is load-bearing — see
+ * `resolveGeoSlots`.
+ */
+type GeoPick = { kind: 'ok'; field: SchemaField } | { kind: 'none' } | { kind: 'tie' };
+function pickUniqueMaxAffinity(pool: SchemaField[], aff: Set<string>): GeoPick {
+  let best: SchemaField | null = null;
+  let bestOverlap = 0;
+  let tie = false;
+  for (const f of pool) {
+    const ov = geoAffinityOverlap(f, aff);
+    if (ov > bestOverlap) {
+      best = f;
+      bestOverlap = ov;
+      tie = false;
+    } else if (ov === bestOverlap && ov > 0) {
+      tie = true;
+    }
+  }
+  if (!best || bestOverlap === 0) return { kind: 'none' };
+  if (tie) return { kind: 'tie' };
+  return { kind: 'ok', field: best };
+}
+
+/**
+ * Resolve every required geo slot to a distinct field by NAME AFFINITY. Fail-closed
+ * (returns null → the caller proposes) when a geo slot is not UNAMBIGUOUS: each binds
+ * the field with the strictly-greatest, unique, > 0 affinity overlap. A final
+ * distinctness check rejects two geo slots resolving to the SAME field. Computing every
+ * slot's overlap over the SAME pool (not a shrinking one) is load-bearing: it lets a
+ * coarse phantom like "Region" (a sub-token of "Country/Region") tie the state slot
+ * against "Country/Region" and fail closed, rather than being silently mis-bound.
+ *
+ * W60 GEO-SLOT COMPLETION: a REQUIRED geo slot with ZERO ask-named candidates widens
+ * THAT slot's pool to the full schema's dimensions (`schemaDims`) and binds the unique
+ * name-affine field there — BUT only when at least one OTHER geo slot was satisfied from
+ * the ask-named pool (the ask demonstrated geographic intent by naming ≥1 geo field).
+ * The unique-max + distinctness rules still hold over the widened pool, so a schema with
+ * two country-affine fields (a tie) or none still fails closed; an ask that names NO geo
+ * field at all keeps the pre-W60 fail-closed behavior. A `tie` in the ASK-NAMED pool
+ * always fails closed (the ask named ambiguous candidates) and never widens. Slots
+ * auto-completed from the widened pool are returned so the caller can surface which
+ * field it chose for a slot the ask did not name.
  */
 function resolveGeoSlots(
   geoSlots: TemplateManifest['slots'],
   pool: SchemaField[],
-): Map<string, SchemaField> | null {
+  schemaDims: SchemaField[],
+): { picks: Map<string, SchemaField>; autoCompleted: Map<string, SchemaField> } | null {
   const picks = new Map<string, SchemaField>();
+  const zeroSlots: TemplateManifest['slots'] = [];
+  let anyAskNamed = false;
+
+  // Phase 1 — resolve from the ASK-NAMED pool. A tie fails closed immediately.
   for (const slot of geoSlots) {
-    const aff = geoAffinityTokens(slot.slot_id);
-    let best: SchemaField | null = null;
-    let bestOverlap = 0;
-    let tie = false;
-    for (const f of pool) {
-      const ov = geoAffinityOverlap(f, aff);
-      if (ov > bestOverlap) {
-        best = f;
-        bestOverlap = ov;
-        tie = false;
-      } else if (ov === bestOverlap && ov > 0) {
-        tie = true;
-      }
+    const pick = pickUniqueMaxAffinity(pool, geoAffinityTokens(slot.slot_id));
+    if (pick.kind === 'tie') return null; // ask named 2+ tied candidates → fail closed
+    if (pick.kind === 'ok') {
+      picks.set(slot.slot_id, pick.field);
+      anyAskNamed = true;
+    } else {
+      zeroSlots.push(slot);
     }
-    if (!best || bestOverlap === 0 || tie) return null; // zero or 2+ candidates
-    picks.set(slot.slot_id, best);
   }
+
+  // Phase 2 — widen each zero-candidate slot to the full schema, but ONLY when the ask
+  // named ≥1 geo field. No ask-named geo slot ⇒ no geographic intent ⇒ fail closed.
+  const autoCompleted = new Map<string, SchemaField>();
+  if (zeroSlots.length > 0) {
+    if (!anyAskNamed) return null;
+    for (const slot of zeroSlots) {
+      const widened = pickUniqueMaxAffinity(schemaDims, geoAffinityTokens(slot.slot_id));
+      if (widened.kind !== 'ok') return null; // still zero, or now ambiguous → fail closed
+      picks.set(slot.slot_id, widened.field);
+      autoCompleted.set(slot.slot_id, widened.field);
+    }
+  }
+
   const chosen = [...picks.values()];
   if (new Set(chosen).size !== chosen.length) return null; // two slots, one field
-  return picks;
+  return { picks, autoCompleted };
 }
 
 /**
@@ -786,7 +833,11 @@ function roleGreedyBind(
   m: TemplateManifest,
   matched: SchemaField[],
   aggOverride: Derivation | null,
-): Array<{ slot_id: string; field: string; derivation?: Derivation }> | null {
+  schemaDims: SchemaField[],
+): {
+  bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>;
+  provenance: string[];
+} | null {
   const used = new Set<SchemaField>();
   const bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }> = [];
   // A REQUIRED calc forces its bindable input slots to bind even when the slot is
@@ -808,6 +859,7 @@ function roleGreedyBind(
     slot.bindable && (slot.required || forced.has(slot.slot_id));
   const geoSlots = m.slots.filter((s) => isActive(s) && s.kind === 'geo');
   let geoPicks: Map<string, SchemaField> | null = null;
+  let geoAutoCompleted = new Map<string, SchemaField>();
   let geoResolved = false;
 
   for (const slot of m.slots) {
@@ -827,11 +879,17 @@ function roleGreedyBind(
         // Resolve ALL geo slots together on first encounter, over the dimensions not
         // already consumed by the non-geo slots (which precede geo in every eligible
         // template). Name affinity replaces "first unused dimension", so a geo slot
-        // binds only a name-matching field or fails closed — never a silent swap.
+        // binds only a name-matching field or fails closed — never a silent swap. A
+        // required geo slot the ask does not name widens to the full schema's
+        // dimensions (`schemaDims`) when another geo slot IS named (W60).
         if (!geoResolved) {
           const pool = matched.filter((f) => !used.has(f) && f.role === 'dimension');
-          geoPicks = resolveGeoSlots(geoSlots, pool);
-          if (geoPicks) for (const f of geoPicks.values()) used.add(f);
+          const resolved = resolveGeoSlots(geoSlots, pool, schemaDims);
+          if (resolved) {
+            geoPicks = resolved.picks;
+            geoAutoCompleted = resolved.autoCompleted;
+            for (const f of geoPicks.values()) used.add(f);
+          }
           geoResolved = true;
         }
         chosen = geoPicks ? (geoPicks.get(slot.slot_id) ?? null) : null;
@@ -849,7 +907,17 @@ function roleGreedyBind(
     bindings.push(binding);
   }
 
-  return bindings;
+  // Surface any geo slot AUTO-COMPLETED from the full schema (W60) as provenance, so the
+  // caller can tell the agent which field it chose for a slot the ask did not name.
+  const provenance: string[] = [];
+  for (const [slotId, f] of geoAutoCompleted) {
+    provenance.push(
+      `Using '${f.name}' for the required geo slot '${slotId}' — auto-completed from the ` +
+        'datasource because the ask named no matching field.',
+    );
+  }
+
+  return { bindings, provenance };
 }
 
 /**
@@ -886,6 +954,7 @@ function selectWithinFamily(
   matched: SchemaField[],
   aggOverride: Derivation | null,
   manifests: Map<string, TemplateManifest>,
+  schemaDims: SchemaField[],
 ): TemplateManifest | null {
   if (top.length === 1) {
     const m = top[0].m;
@@ -904,7 +973,7 @@ function selectWithinFamily(
     // #1 binds, a #1/#2 specificity tie (or no chart-noun matcher) stays null.
     const byNoun = top
       .map((t) => ({ m: t.m, spec: chartNounSpecificity(maskedAsk, t.m.intent_keywords) }))
-      .filter((c) => c.spec > 0 && roleGreedyBind(c.m, matched, aggOverride) !== null)
+      .filter((c) => c.spec > 0 && roleGreedyBind(c.m, matched, aggOverride, schemaDims) !== null)
       .sort((a, b) => b.spec - a.spec || a.m.template.localeCompare(b.m.template));
     if (byNoun.length === 0) return null;
     if (byNoun.length > 1 && byNoun[0].spec === byNoun[1].spec) return null;
@@ -913,7 +982,7 @@ function selectWithinFamily(
 
   const bindable = top
     .map((t) => ({ m: t.m, spec: keywordSpecificity(maskedAsk, t.m.intent_keywords) }))
-    .filter((c) => roleGreedyBind(c.m, matched, aggOverride) !== null);
+    .filter((c) => roleGreedyBind(c.m, matched, aggOverride, schemaDims) !== null);
   if (bindable.length === 0) return null; // none bindable → propose
   bindable.sort((a, b) => b.spec - a.spec || a.m.template.localeCompare(b.m.template));
   return bindable[0].m;
@@ -1005,6 +1074,8 @@ export function classifyNoLlm(
 ): {
   template: string;
   bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>;
+  /** Advisory provenance (e.g. a required geo slot auto-completed from the schema, W60). Present only when non-empty. */
+  notes?: string[];
 } | null {
   // FAIL-CLOSED cost guard (M10 Finding 3): over the field cap, do NOT run the per-field
   // hot loop (maskFieldNames / matchFieldsInAsk) and do NOT classify a truncated subset —
@@ -1017,6 +1088,9 @@ export function classifyNoLlm(
   const maskedAsk = maskFieldNames(ask, summary);
   const aggOverride = detectAggregationOverride(maskedAsk);
   const matched = matchFieldsInAsk(ask, summary);
+  // The full dimension pool a required geo slot widens into when the ask names no
+  // affine candidate for it (W60 geo-slot completion).
+  const schemaDims = summary.fields.filter((f) => f.role === 'dimension');
 
   // Keyword-score the eligible fast-path templates against the masked ask.
   const scored: Array<{ m: TemplateManifest; score: number }> = [];
@@ -1030,7 +1104,7 @@ export function classifyNoLlm(
   const maxScore = scored.reduce((mx, s) => Math.max(mx, s.score), 0);
   const top = scored.filter((s) => s.score === maxScore);
 
-  const chosen = selectWithinFamily(top, maskedAsk, matched, aggOverride, manifests);
+  const chosen = selectWithinFamily(top, maskedAsk, matched, aggOverride, manifests, schemaDims);
   if (!chosen) return null;
 
   // DEMOTE (never hard-block): when the selected winner carries avoid_when
@@ -1050,8 +1124,9 @@ export function classifyNoLlm(
   // the hazard notes + avoid_when and judges the actual schema.
   if (hasDeterministicPathBlockingHazard(chosen)) return null;
 
-  const bindings = roleGreedyBind(chosen, matched, aggOverride);
-  if (!bindings) return null; // required slot unfilled → fail closed
+  const rgb = roleGreedyBind(chosen, matched, aggOverride, schemaDims);
+  if (!rgb) return null; // required slot unfilled → fail closed
+  const bindings = rgb.bindings;
   // OPTIONAL small-multiples facet (W23-SM1): additively bind a simple-trellis facet
   // dim (a spare categorical placed AHEAD of the existing pill) ONLY when the ask
   // names/implies a by-<dim> facet AND a spare categorical remains. This never flips
@@ -1059,7 +1134,11 @@ export function classifyNoLlm(
   // no-spare ask returns the exact same {template, bindings} as before.
   const facet = facetBinding(chosen, bindings, matched, maskedAsk);
   if (facet) bindings.push(facet);
-  return { template: chosen.template, bindings };
+  // Attach provenance (e.g. W60 geo auto-completion) only when non-empty, so a
+  // non-geo / no-auto-complete ask returns the exact same {template, bindings} shape.
+  return rgb.provenance.length > 0
+    ? { template: chosen.template, bindings, notes: rgb.provenance }
+    : { template: chosen.template, bindings };
 }
 
 /**
