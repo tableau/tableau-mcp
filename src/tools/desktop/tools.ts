@@ -14,6 +14,7 @@ import { getPlanDashboardCreationTool } from './coordination/planDashboardCreati
 import { getApplyDashboardTool } from './dashboard/applyDashboard.js';
 import { getApplyDashboardWithViewpointsTool } from './dashboard/applyDashboardWithViewpoints.js';
 import { getBuildAndApplyDashboardTool } from './dashboard/buildAndApplyDashboard.js';
+import { getDashboardAutoApplyTool } from './dashboard/dashboardAutoApply.js';
 import { getGetDashboardGuideTool } from './dashboard/getDashboardGuide.js';
 import { getGetDashboardXmlTool } from './dashboard/getDashboardXml.js';
 import { getAddFieldToColsTool } from './fields/addFieldToCols.js';
@@ -69,6 +70,7 @@ export const desktopToolFactories = [
   getSearchWorkbookExamplesTool,
   getExecuteTableauCommandTool,
   getBindTemplateTool,
+  getDashboardAutoApplyTool,
   getListTemplatesTool,
   getProposeTemplateTool,
   getValidateProposalTool,
