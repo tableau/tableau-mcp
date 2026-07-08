@@ -5,6 +5,8 @@ import { getDesktopConfig } from '../../../config.desktop.js';
 import { log } from '../../../logging/logger.js';
 import { DesktopCache } from '../../cache.js';
 import { xmlToJson } from '../../libraries/workbook-serialization-converter';
+import { listWorkbookDashboards } from '../../metadata/dashboards.js';
+import { listSheets } from '../../metadata/sheets.js';
 import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
@@ -12,6 +14,7 @@ import {
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { withApplyLock } from './applyMutex.js';
+import { getWorkbookXml } from './getWorkbookXml.js';
 
 export type LoadWorkbookXmlError =
   | { type: 'invalid-xml' }
@@ -63,11 +66,12 @@ export async function loadWorkbookXml({
     });
   }
 
-  // The External Client API ("Athena V0") whole-workbook POST upserts by sheet name: colliding
-  // sheets are overwritten in place and live sheets absent from the doc are left untouched. The
-  // apply lock serializes this against the per-sheet paths' fetch-modify-apply on the same transport.
+  // The External Client API ("Athena V0") whole-workbook POST upserts by sheet name — it overwrites
+  // colliding sheets but never removes a live sheet the doc omits. A whole-workbook apply is meant
+  // to be authoritative (matching the Agent API's replace), so replaceWorkbook reconciles to the
+  // doc's sheet set. The apply lock serializes it against the per-sheet paths' fetch-modify-apply.
   if (getDesktopConfig().externalApiEnabled) {
-    const result = await withApplyLock(() => applyWorkbookText({ xml, executor, signal }));
+    const result = await withApplyLock(() => replaceWorkbook({ xml, executor, signal }));
     if (result.isErr()) {
       return Err({ type: 'execute-command-error', error: result.error });
     }
@@ -201,6 +205,55 @@ async function loadUnderlyingMetadataByText({
       resultKeys: result.value.result ? Object.keys(result.value.result) : [],
     },
   });
+
+  return Ok.EMPTY;
+}
+
+// Makes the live workbook match the posted document's sheet set on the External Client API, whose
+// POST upserts but never prunes: deletes the live worksheets/dashboards the doc omitted. Two ordering
+// rules matter — (1) delete AFTER the POST so every posted sheet is already present and a delete can
+// never hit Tableau's refusal to remove the last remaining sheet; (2) delete dashboards BEFORE
+// worksheets, because Tableau silently refuses to delete a worksheet still referenced by a live
+// dashboard's zone (the refusal returns success, so the worksheet would otherwise survive the prune).
+async function replaceWorkbook({
+  xml,
+  executor,
+  signal,
+}: { xml: string } & WithExecutorAndAbortSignal): Promise<Result<void, ExecuteCommandError>> {
+  const liveResult = await getWorkbookXml({ executor, signal });
+  if (liveResult.isErr()) {
+    return liveResult;
+  }
+
+  let stale: Array<string>;
+  try {
+    const docSheets = new Set(listSheets(xml));
+    const docDashboards = new Set(listWorkbookDashboards(xml));
+    const staleDashboards = listWorkbookDashboards(liveResult.value).filter(
+      (name) => !docDashboards.has(name),
+    );
+    const staleSheets = listSheets(liveResult.value).filter((name) => !docSheets.has(name));
+    stale = [...staleDashboards, ...staleSheets];
+  } catch (error) {
+    return Err({ type: 'invalid-response', error });
+  }
+
+  const applied = await applyWorkbookText({ xml, executor, signal });
+  if (applied.isErr()) {
+    return applied;
+  }
+
+  for (const name of stale) {
+    const deleted = await executor.executeCommand({
+      namespace: 'tabdoc',
+      command: 'delete-sheet',
+      args: { Sheet: name },
+      signal,
+    });
+    if (deleted.isErr()) {
+      return deleted;
+    }
+  }
 
   return Ok.EMPTY;
 }
