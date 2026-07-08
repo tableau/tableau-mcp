@@ -179,10 +179,16 @@ function getApprovalCache(): ExpiringMap<string, true> {
  *
  * Unlike RegistryEvidence, NOTHING secret is minted, returned, or transported: approval is
  * PRESENCE-based, keyed server-side by site+user+tool+target (all server-known plus the one arg the
- * confirm tool takes). `establish` records presence with the TTL; `verify` returns true only if a
- * live, unexpired entry exists and DELETES it (single-use); `confirmationToken` is ignored. Layered
- * ON TOP of the durable tag (the confirm tool also re-checks the tag), this strategy only ever
- * NARROWS access → it can reject, never wrongly allow.
+ * confirm tool takes) AND the optional `binding` (a fingerprint of the mutation's caller-controlled
+ * parameters — see EvidenceContext.binding). `establish` records presence with the TTL; `verify`
+ * returns true only if a live, unexpired entry exists and DELETES it (single-use); `confirmationToken`
+ * is ignored. Layered ON TOP of the durable tag (the confirm tool also re-checks the tag), this
+ * strategy only ever NARROWS access → it can reject, never wrongly allow.
+ *
+ * Binding the key to `binding` closes a payload-swap gap for confirm tools that carry a mutable
+ * payload (e.g. update-cloud-extract-refresh-task's schedule): an approval minted while previewing
+ * schedule A must not satisfy a confirm that applies schedule B. Target-only-keyed confirms (the
+ * DELETEs, which carry no payload beyond the target id) pass no `binding`, so their key is unchanged.
  */
 export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
   // The preview-tool name that namespaces the approval key. The preview tool and its model-invisible
@@ -201,7 +207,10 @@ export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
   }
 
   private approvalKey(ctx: EvidenceContext): string {
-    return `${ctx.siteId}:${ctx.userLuid}:${this.namespace}:${ctx.target.id}`;
+    // Fold the optional parameter fingerprint into the key (mirrors RegistryEvidence's nonceKey) so an
+    // approval minted for parameter set A cannot satisfy a confirm carrying parameter set B. An empty
+    // segment when `binding` is absent keeps keys stable for payload-free targets like the deletes.
+    return `${ctx.siteId}:${ctx.userLuid}:${this.namespace}:${ctx.target.id}:${ctx.binding ?? ''}`;
   }
 
   async establish(ctx: EvidenceContext): Promise<void> {

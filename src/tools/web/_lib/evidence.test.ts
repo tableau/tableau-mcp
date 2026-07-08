@@ -468,6 +468,56 @@ describe('AppApprovalEvidence', () => {
       await expect(new AppApprovalEvidence('delete-datasource').verify(ctx)).resolves.toBe(false);
     });
   });
+
+  // --- Binding (payload) isolation (regression for the flag-ON schedule-swap defect) ---
+  //
+  // For a confirm tool that carries a mutable payload (update-cloud-extract-refresh-task's schedule),
+  // the approval MUST be bound to the previewed parameters. The bug: approvalKey ignored ctx.binding,
+  // so an approval minted while previewing schedule A satisfied a confirm applying schedule B — the
+  // human approved X, the client could apply Y. These pin that `binding` is folded into the key.
+  describe('binding (payload) isolation', () => {
+    it('an approval minted for binding A does NOT satisfy a confirm carrying binding B', async () => {
+      const ns = 'update-cloud-extract-refresh-task';
+      const target = { id: 'task-bind', kind: 'extract-refresh-task' as const };
+      await new AppApprovalEvidence(ns).establish(appCtx({ target, binding: 'schedule-A' }));
+      // Different payload → different binding → must be rejected (the swap the bug allowed).
+      await expect(
+        new AppApprovalEvidence(ns).verify(appCtx({ target, binding: 'schedule-B' })),
+      ).resolves.toBe(false);
+      // The genuine binding still verifies (the approval was recorded, just bound to A).
+      await expect(
+        new AppApprovalEvidence(ns).verify(appCtx({ target, binding: 'schedule-A' })),
+      ).resolves.toBe(true);
+    });
+
+    it('a mismatched-binding verify does NOT consume the genuine approval', async () => {
+      const ns = 'update-cloud-extract-refresh-task';
+      const target = { id: 'task-bind-noconsume', kind: 'extract-refresh-task' as const };
+      await new AppApprovalEvidence(ns).establish(appCtx({ target, binding: 'schedule-A' }));
+      // Wrong binding probe (rejected, must not touch the real entry).
+      await expect(
+        new AppApprovalEvidence(ns).verify(appCtx({ target, binding: 'schedule-B' })),
+      ).resolves.toBe(false);
+      // Genuine binding still verifies once...
+      await expect(
+        new AppApprovalEvidence(ns).verify(appCtx({ target, binding: 'schedule-A' })),
+      ).resolves.toBe(true);
+      // ...and is single-use thereafter.
+      await expect(
+        new AppApprovalEvidence(ns).verify(appCtx({ target, binding: 'schedule-A' })),
+      ).resolves.toBe(false);
+    });
+
+    it('absent binding on both sides keeps the delete flow unchanged (key stable)', async () => {
+      // The DELETEs pass no binding; establish/verify with binding undefined must still match, so
+      // folding binding into the key is a no-op for payload-free targets.
+      const target = { id: 'ds-nobind', kind: 'datasource' as const };
+      await new AppApprovalEvidence('delete-datasource').establish(appCtx({ target }));
+      await expect(
+        new AppApprovalEvidence('delete-datasource').verify(appCtx({ target })),
+      ).resolves.toBe(true);
+    });
+  });
 });
 
 describe('AllEvidence (AND-composition)', () => {

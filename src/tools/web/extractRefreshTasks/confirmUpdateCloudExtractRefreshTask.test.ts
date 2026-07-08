@@ -14,6 +14,7 @@ import { auditRecordSchema } from '../_lib/auditRecord.js';
 import { AppApprovalEvidence } from '../_lib/evidence.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getConfirmUpdateCloudExtractRefreshTaskTool } from './confirmUpdateCloudExtractRefreshTask.js';
+import { scheduleBinding } from './updateCloudExtractRefreshTask.js';
 
 vi.mock('../../../logging/logger.js');
 
@@ -82,13 +83,20 @@ vi.mock('../../../config.js', () => ({
   })),
 }));
 
-async function establishApproval(taskId: string): Promise<void> {
+// Mirrors what the update-cloud preview does flag-ON: records an app approval bound to the previewed
+// schedule. `schedule` defaults to validSchedule so callers exercising the happy path bind the same
+// schedule they later confirm; a swap test passes a different schedule to prove the binding rejects.
+async function establishApproval(
+  taskId: string,
+  schedule: UpdateCloudExtractRefreshSchedule = validSchedule,
+): Promise<void> {
   await new AppApprovalEvidence('update-cloud-extract-refresh-task').establish({
     restApi: { siteId: 'test-site-id' } as never,
     siteId: 'test-site-id',
     target: { id: taskId, kind: 'extract-refresh-task' },
     tool: 'confirm-update-cloud-extract-refresh-task',
     userLuid: getMockRequestHandlerExtra().getUserLuid(),
+    binding: scheduleBinding(schedule),
   });
 }
 
@@ -173,6 +181,44 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
     const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
     expect(result.isError).toBe(true);
     expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+  });
+
+  // --- Schedule binding: approve schedule A, confirm schedule B → rejected, no update ---
+
+  it('rejects when the confirm carries a different schedule than the one approved (no schedule swap)', async () => {
+    // The human approved validSchedule (Weekly/Sunday/06:00) in the preview panel. A client that then
+    // confirms a DIFFERENT schedule must be rejected — the approval is bound to the previewed schedule.
+    await establishApproval(validTaskId, validSchedule);
+    const swappedSchedule: UpdateCloudExtractRefreshSchedule = {
+      frequency: 'Weekly',
+      frequencyDetails: {
+        start: '09:00:00',
+        intervals: { interval: [{ weekDay: 'Monday' }] },
+      },
+    };
+    const result = await getToolResult({ taskId: validTaskId, schedule: swappedSchedule });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Mutation blocked');
+    expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+    expect(getAuditRecord().denyReason).toBe('preview-not-run');
+  });
+
+  it('a mismatched-schedule confirm does not consume the genuine approval', async () => {
+    // A rejected schedule-swap must not burn the single-use approval; the correct schedule still works.
+    await establishApproval(validTaskId, validSchedule);
+    const swappedSchedule: UpdateCloudExtractRefreshSchedule = {
+      frequency: 'Weekly',
+      frequencyDetails: { start: '09:00:00', intervals: { interval: [{ weekDay: 'Monday' }] } },
+    };
+    const swapped = await getToolResult({ taskId: validTaskId, schedule: swappedSchedule });
+    expect(swapped.isError).toBe(true);
+    expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+
+    vi.mocked(logger.log).mockClear();
+    const genuine = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+    expect(genuine.isError).toBe(false);
+    expect(mocks.mockUpdateCloudExtractRefreshTask).toHaveBeenCalledTimes(1);
   });
 
   // --- Single-use ---

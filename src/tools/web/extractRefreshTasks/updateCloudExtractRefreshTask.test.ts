@@ -14,7 +14,10 @@ import { Provider } from '../../../utils/provider.js';
 import { auditRecordSchema } from '../_lib/auditRecord.js';
 import { AppApprovalEvidence } from '../_lib/evidence.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getUpdateCloudExtractRefreshTaskTool } from './updateCloudExtractRefreshTask.js';
+import {
+  getUpdateCloudExtractRefreshTaskTool,
+  scheduleBinding,
+} from './updateCloudExtractRefreshTask.js';
 
 // Auto-mock the logger so the durable audit record emitted by the mutation guard is captured as a
 // spy call (AC-6) rather than written to stderr.
@@ -700,7 +703,9 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       // The destructive update never runs during preview.
       expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
 
-      // The approval was recorded under the 'update-cloud-extract-refresh-task' namespace.
+      // The approval was recorded under the 'update-cloud-extract-refresh-task' namespace, bound to
+      // the previewed schedule — so verify must pass the SAME schedule binding the preview folded
+      // into the approval key (an approval minted for schedule A does not satisfy a confirm for B).
       const extra = getMockRequestHandlerExtra();
       await expect(
         new AppApprovalEvidence('update-cloud-extract-refresh-task').verify({
@@ -709,6 +714,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
           target: { id: validTaskId, kind: 'extract-refresh-task' },
           tool: 'confirm-update-cloud-extract-refresh-task',
           userLuid: extra.getUserLuid(),
+          binding: scheduleBinding(validSchedule),
         }),
       ).resolves.toBe(true);
     });

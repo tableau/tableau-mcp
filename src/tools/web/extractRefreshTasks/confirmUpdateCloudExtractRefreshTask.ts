@@ -11,6 +11,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { AppApprovalEvidence } from '../_lib/evidence.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
 import { WebTool } from '../tool.js';
+import { scheduleBinding } from './updateCloudExtractRefreshTask.js';
 
 const paramsSchema = {
   taskId: z.string().uuid('taskId must be a valid UUID'),
@@ -86,7 +87,12 @@ schedule values.
                 kind: 'extract-refresh-task',
               });
 
-              // Require a fresh, single-use in-iframe human approval recorded by the preview.
+              // Require a fresh, single-use in-iframe human approval recorded by the preview — bound to
+              // the exact schedule that was previewed/approved. `binding` is folded into the approval
+              // key, so an approval minted for schedule A cannot confirm an update to schedule B; the
+              // fingerprint MUST match the preview tool's, so it is computed by the SAME exported
+              // scheduleBinding().
+              const binding = scheduleBinding(args.schedule);
               const guardResult = await guardMutation({
                 restApi,
                 extra,
@@ -97,6 +103,7 @@ schedule values.
                 phase: 'confirm',
                 evidence: new AppApprovalEvidence('update-cloud-extract-refresh-task'),
                 resolveTarget,
+                binding,
               });
               if (guardResult.isErr()) {
                 return guardResult.error.toErr();

@@ -96,7 +96,7 @@ function canonicalize(value: unknown): unknown {
  * a token minted while previewing schedule A cannot confirm an update to schedule B — the confirmed
  * mutation is provably the one that was previewed.
  */
-function scheduleBinding(schedule: UpdateCloudExtractRefreshSchedule): string {
+export function scheduleBinding(schedule: UpdateCloudExtractRefreshSchedule): string {
   return createHash('sha256')
     .update(JSON.stringify(canonicalize(schedule)))
     .digest('hex');
@@ -247,6 +247,10 @@ export const getUpdateCloudExtractRefreshTaskTool = (
                     target: { id: args.taskId, kind: 'extract-refresh-task' },
                     tool: 'confirm-update-cloud-extract-refresh-task',
                     userLuid: extra.getUserLuid(),
+                    // Bind the approval to the previewed schedule so the confirm can only apply THIS
+                    // schedule — an approval minted here will not satisfy a confirm carrying a
+                    // different schedule (see AppApprovalEvidence.approvalKey).
+                    binding,
                   });
                   const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
                   return new Ok<AppToolResult<UpdateCloudExtractRefreshTaskConfirmPanel>>({
