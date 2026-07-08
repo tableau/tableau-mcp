@@ -423,8 +423,9 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(typeof body.phase_ms.bind).toBe('number');
     expect(typeof body.phase_ms.inject).toBe('number');
     expect(typeof body.phase_ms.apply).toBe('number');
-    // Bound args stay intact for the client.
-    expect(body.args.template_name).toBe('bar-basic');
+    // W60 response-shape trim (P4): the applied:true fast-path drops the args echo — the
+    // manual second call it enabled never happens on success.
+    expect(body.args).toBeUndefined();
 
     expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(1);
     expect(buildInjectedWorkbookXml).toHaveBeenCalledWith(
@@ -439,6 +440,36 @@ describe('bindTemplateTool auto_apply gate', () => {
     );
     // Exactly one apply dispatch (the collapsed 4-call chain becomes one tool call).
     expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('applied:true returns ONLY the trimmed fast-path shape (W60 P4 response-shape trim)', async () => {
+    const { getExecutor } = setupAutoApplyMocks();
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    // Keep only what a successful apply needs; drop args + the ~170-token
+    // apply_instruction + apply_hint + used_llm (dead weight on the success fast path).
+    expect(Object.keys(body).sort()).toEqual([
+      'applied',
+      'guidance',
+      'phase_ms',
+      'sheet_name',
+      'status',
+    ]);
+    expect(body.status).toBe('bound');
+    expect(body.apply_instruction).toBeUndefined();
+    expect(body.apply_hint).toBeUndefined();
+    expect(body.used_llm).toBeUndefined();
+    // Guidance collapses to one short line, not the verbose manual-chain instruction.
+    expect(typeof body.guidance).toBe('string');
+    expect((body.guidance as string).length).toBeLessThan(200);
   });
 
   it('auto_apply=true NEVER applies a Call-2 proposal (used_llm) even with a fast-path manifest', async () => {
@@ -559,6 +590,10 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
     expect(body.apply_error).toContain('not well-formed');
     // The bind is never lost — args are intact for the manual fallback chain.
     expect(body.args).toEqual(boundResult.status === 'bound' ? boundResult.args : undefined);
+    // P1-5 contrast: inject/validation/apply failures did NOT stem from a stale
+    // workbook, so the "fall back to the manual chain using the returned args" guidance
+    // is correct here and must be retained (only the events-dirty branch drops it).
+    expect(String(body.guidance)).toMatch(/manual chain/i);
     // Apply is not attempted once inject fails.
     expect(executeCommand).not.toHaveBeenCalled();
   });
@@ -696,6 +731,47 @@ describe('bindTemplateTool auto_apply — events-clean gate (W60 blind-spot #1)'
     expect(String(body.apply_error)).toMatch(/user changed the workbook.*3 event/);
     expect(body.args).toBeDefined(); // the bind survives — agent can re-get and retry
     expect(executeCommand).not.toHaveBeenCalled(); // the apply dispatch was suppressed
+  });
+
+  it('anchors the events sequence BEFORE reading the workbook (P1 race fix)', async () => {
+    // The self-review / adversary P1-4 finding: with the anchor captured AFTER the read,
+    // a user edit landing in the (read, anchor] window gets sequence <= anchor and is
+    // excluded by the strict `since` filter → silently reverted by the whole-document
+    // apply. Pin the real call order (not independent mocks): the anchor getEvents must
+    // fire before getWorkbookXml.
+    const { getEvents, getExecutor } = setupAutoApplyMocks({ userEventsDuringBind: 0 });
+    await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    const anchorOrder = getEvents.mock.invocationCallOrder[0];
+    const readOrder = vi.mocked(getWorkbookXmlModule.getWorkbookXml).mock.invocationCallOrder[0];
+    expect(anchorOrder).toBeLessThan(readOrder);
+  });
+
+  it('refuses without inviting a manual re-apply of the stale pre-edit args (P1-5)', async () => {
+    // events-dirty branch: the returned args were computed against the pre-edit
+    // workbook. Guidance must NOT offer "apply the returned args manually" — that would
+    // reopen the exact race the gate just avoided. Re-running bind-template (fresh read)
+    // is the only safe option here.
+    const { getExecutor } = setupAutoApplyMocks({ userEventsDuringBind: 2 });
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(body.applied).toBe(false);
+    expect(String(body.apply_error)).not.toMatch(/apply the returned args manually/i);
+    expect(String(body.guidance)).not.toMatch(/using the returned args/i);
+    expect(String(body.guidance)).toMatch(/re-run bind-template/i);
+    // The bind still survives so the agent can re-get and retry deliberately.
+    expect(body.args).toBeDefined();
   });
 
   it('applies when the workbook is events-clean (0 user events since the read)', async () => {
