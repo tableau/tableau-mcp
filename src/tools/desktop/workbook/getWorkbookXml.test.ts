@@ -34,7 +34,7 @@ describe('getWorkbookXmlTool', () => {
   it('should create a tool instance with correct properties', () => {
     const getWorkbookXmlTool = getGetWorkbookXmlTool(new DesktopMcpServer());
     expect(getWorkbookXmlTool.name).toBe('get-workbook-xml');
-    expect(getWorkbookXmlTool.description).toContain('Gets the current workbook');
+    expect(getWorkbookXmlTool.description).toContain('Get current workbook XML');
     expect(getWorkbookXmlTool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       mode: expect.any(Object),

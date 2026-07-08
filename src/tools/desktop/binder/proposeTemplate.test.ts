@@ -60,7 +60,7 @@ describe('proposeTemplateTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getProposeTemplateTool(new DesktopMcpServer());
     expect(tool.name).toBe('propose-template');
-    expect(tool.description).toContain('propose leg');
+    expect(tool.description).toContain('Classify an ask against bundled fast-path templates');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       ask: expect.any(Object),

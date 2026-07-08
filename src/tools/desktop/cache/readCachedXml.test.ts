@@ -151,6 +151,65 @@ describe('readCachedXmlTool', () => {
       expect(result.content[0].text).toContain('Nope');
     });
   });
+
+  describe('ambiguous selector rejection (Andy-lens "please")', () => {
+    beforeEach(() => {
+      vi.mocked(readFileSync).mockReturnValue(SAMPLE_XML);
+    });
+
+    it('rejects worksheet + dashboard, naming both selectors, without reading', async () => {
+      const result = await getResult(CACHED_FILE, { worksheet: 'Sales', dashboard: 'Main' });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('worksheet');
+      expect(result.content[0].text).toContain('dashboard');
+      expect(readFileSync).not.toHaveBeenCalled();
+    });
+
+    it('rejects worksheet + byte range, naming both selectors received', async () => {
+      const result = await getResult(CACHED_FILE, {
+        worksheet: 'Sales',
+        startByte: 0,
+        endByte: 10,
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('worksheet');
+      expect(result.content[0].text).toMatch(/byte/i);
+    });
+
+    it('rejects dashboard + byte range', async () => {
+      const result = await getResult(CACHED_FILE, { dashboard: 'Main', endByte: 10 });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('dashboard');
+      expect(result.content[0].text).toMatch(/byte/i);
+    });
+
+    it('leaves the single worksheet selector path unchanged', async () => {
+      vi.mocked(readFileSync).mockReturnValue(
+        '<workbook><worksheets>' +
+          "<worksheet name='Sales'><rows>[Sales]</rows></worksheet>" +
+          '</worksheets></workbook>',
+      );
+      const result = await getResult(CACHED_FILE, { worksheet: 'Sales' });
+
+      expect(result.isError).toBeFalsy();
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('[Sales]');
+    });
+
+    it('leaves the single byte-range selector path (startByte + endByte) unchanged', async () => {
+      const result = await getResult(CACHED_FILE, { startByte: 0, endByte: 5 });
+
+      expect(result.isError).toBeFalsy();
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(SAMPLE_XML.slice(0, 5));
+    });
+  });
 });
 
 async function getResult(

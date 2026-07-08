@@ -1,3 +1,6 @@
+import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
+import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
+
 import * as loggerModule from './logging/logger.js';
 import {
   DEMO_TOOL_PROFILE,
@@ -48,6 +51,33 @@ For a data-value question ("what was revenue in Q3?"), do NOT answer with a numb
 Every session-scoped tool call needs the session id from list-instances — except bind-template and dashboard-auto-apply, which auto-resolve the session when exactly one Desktop instance is running.
 
 If an apply is rejected by preflight validation, fix the XML per the FIX lines in the error and re-apply. Prefer file mode for large workbooks.`);
+  });
+});
+
+describe('desktop tools/list serialized surface', () => {
+  it('stays under the tool-search auto-deferral threshold budget', async () => {
+    const server = new DesktopMcpServer();
+    let total = DESKTOP_INSTRUCTIONS.length;
+
+    for (const toolFactory of desktopToolFactories) {
+      const tool = toolFactory(server);
+      const paramsSchema = await Provider.from(tool.paramsSchema);
+      const obj = normalizeObjectSchema(paramsSchema as any);
+      const inputSchema = obj
+        ? toJsonSchemaCompat(obj, { strictUnions: true, pipeStrategy: 'input' } as any)
+        : { type: 'object', properties: {} };
+
+      total += JSON.stringify({
+        name: tool.name,
+        title: await Provider.from(tool.title),
+        description: await Provider.from(tool.description),
+        inputSchema,
+        annotations: await Provider.from(tool.annotations),
+        execution: { taskSupport: 'forbidden' },
+      }).length;
+    }
+
+    expect(total).toBeLessThanOrEqual(46_000);
   });
 });
 

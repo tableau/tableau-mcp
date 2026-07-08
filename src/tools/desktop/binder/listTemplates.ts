@@ -20,18 +20,11 @@ import { DesktopTool } from '../tool.js';
 // typo like 'timeseries' would parse and silently return an empty list, masking the
 // mistake as "no such templates". Rejecting it at the schema layer fails closed instead.
 const paramsSchema = {
-  family: z
-    .enum(FAMILY_VALUES)
-    .optional()
-    .describe(
-      'Optional filter to a single chart-intent family (closed taxonomy). Omit to list every family.',
-    ),
+  family: z.enum(FAMILY_VALUES).optional().describe('Optional chart-intent family filter.'),
   fastPathOnly: z
     .boolean()
     .optional()
-    .describe(
-      'When true, return only fast-path-eligible templates (render-verified + portable across the committed fixture). Default false: list all.',
-    ),
+    .describe('When true, return only fast-path-eligible templates.'),
 };
 
 /** One template's discovery summary: family / slots / fast-path status. */
@@ -113,10 +106,9 @@ export const getListTemplatesTool = (
     name: 'list-templates',
     title,
     description: [
-      'List the bundled fast-path chart templates the binder can bind to an ask, with each template\u2019s chart-intent family, slot contract (slot_id/kind/required/bindable), and fast-path-eligible status.',
-      'Use this to discover which templates exist and pick a candidate before calling bind-template; optionally filter by family or to fast-path-eligible templates only.',
-      'fast_path_eligible is the AUTHORITATIVE eligibility flag; fast_path_blockers gives the detail on WHY a template is ineligible \u2014 the manifest\u2019s explicit blocker codes when present, otherwise a single blocker derived from the manifest\u2019s verification stamp (e.g. a template with no live-render-verification stamp).',
-      'The response carries the content source status (kind, content_version, freshness): freshness is "bundled-snapshot" and satisfies_exec_freshness is false \u2014 an in-package snapshot, only as current as the last generator run, not a live remote fetch.',
+      'List bundled chart templates with family, slots, and fast-path eligibility.',
+      'Use before bind-template to discover candidates; fast_path_eligible is authoritative and blockers explain ineligible templates.',
+      'Details: expertise://tableau/tableau-tactics/workflow/templates.',
     ].join(' '),
     paramsSchema,
     annotations: {

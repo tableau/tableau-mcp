@@ -29,7 +29,7 @@ describe('applyDashboardTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getApplyDashboardTool(new DesktopMcpServer());
     expect(tool.name).toBe('apply-dashboard');
-    expect(tool.description).toContain('Apply modified dashboard XML back to Tableau');
+    expect(tool.description).toContain('Apply modified dashboard XML to Tableau');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       dashboardName: expect.any(Object),

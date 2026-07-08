@@ -155,11 +155,8 @@ function refusal(
 }
 
 const paramsSchema = {
-  session: z.string().describe('Tableau instance Session ID from list-instances.'),
-  worksheetName: z
-    .string()
-    .min(1)
-    .describe('Name of the worksheet to delete (must exist in the workbook).'),
+  session: z.string().describe('Session ID from list-instances.'),
+  worksheetName: z.string().min(1).describe('Existing worksheet name to delete.'),
 };
 
 const title = 'Delete Worksheet';
@@ -171,10 +168,9 @@ export const getDeleteWorksheetTool = (
     name: 'delete-worksheet',
     title,
     description: [
-      'Delete a worksheet from the live workbook by name: removes the <worksheet> node AND its worksheet-class <window> entry, then applies through the same validated apply path as every other apply tool.',
-      "SAFE BY DEFAULT: if any dashboard's zones reference the sheet, the delete is REFUSED and the referencing dashboards are named — remove the sheet's zone from those dashboards first (build-and-apply-dashboard / apply-dashboard), or delete the dashboard. There is no cascade delete.",
-      'Also refused: deleting the last remaining worksheet, and a mid-flight user edit between read and apply (re-run for a fresh read).',
-      'On success returns the trimmed shape { deleted:true, worksheet, guidance }.',
+      'Delete a worksheet from the live workbook (mutating) via the validated apply path.',
+      'SAFE BY DEFAULT: refuses when any dashboard zone references the sheet; no cascade delete.',
+      'Also refused: deleting the last remaining worksheet, and a mid-flight user edit (re-run for a fresh read).',
     ].join(' '),
     paramsSchema,
     annotations: {

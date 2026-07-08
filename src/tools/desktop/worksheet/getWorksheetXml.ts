@@ -22,15 +22,13 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Tableau instance Session ID from list-instances.'),
-  worksheetName: z.string().describe('Name of the worksheet to get (must exist in the workbook).'),
+  session: z.string().describe('Session ID from list-instances.'),
+  worksheetName: z.string().describe('Existing worksheet name.'),
   mode: z
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe(
-      'file: write cache and return path (default). inline: return worksheet XML in the tool result.',
-    ),
+    .describe('file writes cache path; inline returns XML.'),
 };
 
 type InlineResult = {
@@ -53,13 +51,8 @@ export const getGetWorksheetXmlTool = (
     name: 'get-worksheet-xml',
     title,
     description: [
-      'Gets the XML for a specific worksheet.',
-      'Default mode writes a cache file and returns the path (recommended).',
-      'Use mode=inline to return XML in the response.',
-      '⚠️ PREFERRED APPROACH: Use the field manipulation tools (add-field-to-*, etc.) instead of directly editing XML.',
-      "Only edit XML directly as a last resort when the higher-level tools don't support your use case.",
-      'Use apply-worksheet to apply changes.',
-      'IMPORTANT: This only works for existing worksheets — use list-worksheets to see available worksheets.',
+      'Get XML for an existing worksheet. mode=file is default; mode=inline returns XML.',
+      'IMPORTANT: only works for an existing worksheet (see list-worksheets). Prefer the field tools over editing XML directly. Use apply-worksheet to apply changes.',
     ].join(' '),
     paramsSchema,
     annotations: {

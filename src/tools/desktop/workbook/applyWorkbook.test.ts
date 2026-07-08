@@ -32,7 +32,7 @@ describe('applyWorkbookTool', () => {
   it('should create a tool instance with correct properties', () => {
     const applyWorkbookTool = getApplyWorkbookTool(new DesktopMcpServer());
     expect(applyWorkbookTool.name).toBe('apply-workbook');
-    expect(applyWorkbookTool.description).toContain('Apply modified workbook back to Tableau');
+    expect(applyWorkbookTool.description).toContain('Apply modified workbook XML to Tableau');
     expect(applyWorkbookTool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       mode: expect.any(Object),

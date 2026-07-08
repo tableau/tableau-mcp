@@ -22,15 +22,13 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Tableau instance Session ID from list-instances.'),
-  dashboardName: z.string().describe('Name of the dashboard to get (must exist in the workbook).'),
+  session: z.string().describe('Session ID from list-instances.'),
+  dashboardName: z.string().describe('Existing dashboard name.'),
   mode: z
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe(
-      'file: write cache and return path (default). inline: return dashboard XML in the tool result.',
-    ),
+    .describe('file writes cache path; inline returns XML.'),
 };
 
 type InlineResult = { dashboardXml: string };
@@ -46,12 +44,8 @@ export const getGetDashboardXmlTool = (
     name: 'get-dashboard-xml',
     title,
     description: [
-      'Gets the XML for a specific dashboard.',
-      'Default mode writes a cache file and returns the path (recommended).',
-      'Use mode=inline to return XML in the response.',
-      'IMPORTANT: This only works for existing dashboards — use list-dashboards to see available dashboards.',
-      'To create new dashboards, use apply-workbook.',
-      'Use apply-dashboard to apply changes.',
+      'Get XML for an existing dashboard. mode=file is default; mode=inline returns XML.',
+      'IMPORTANT: only works for an existing dashboard (see list-dashboards); to create one use apply-workbook. Use apply-dashboard to apply changes.',
     ].join(' '),
     paramsSchema,
     annotations: {

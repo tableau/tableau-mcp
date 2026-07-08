@@ -17,7 +17,7 @@ describe('searchExamplesTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getSearchExamplesTool(new DesktopMcpServer());
     expect(tool.name).toBe('search-examples');
-    expect(tool.description).toContain('before/after examples');
+    expect(tool.description).toContain('before/after workbook-change examples');
     expect(tool.paramsSchema).toMatchObject({
       query: expect.any(Object),
       max_results: expect.any(Object),

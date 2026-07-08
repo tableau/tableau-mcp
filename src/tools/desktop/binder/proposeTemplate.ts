@@ -32,8 +32,8 @@ import { DesktopTool } from '../tool.js';
 // exactly [...loadManifests().values()], so re-keying by m.template reproduces it.
 
 const paramsSchema = {
-  session: z.string().describe('Tableau instance Session ID from list-instances.'),
-  ask: z.string().describe("Natural-language chart request, e.g. 'bar chart of Sales by Region'."),
+  session: z.string().describe('Session ID from list-instances.'),
+  ask: z.string().describe('Natural-language chart request.'),
 };
 
 // WATCH-CLASS (input surface): propose-template takes only { session, ask } — both plain
@@ -85,11 +85,9 @@ export const getProposeTemplateTool = (
     name: 'propose-template',
     title,
     description: [
-      'Classify a natural-language chart ask against the bundled fast-path chart templates and return the ranked candidate templates plus the strict output_schema you fill to build a binding proposal — the propose leg of the binder, exposed for discovery.',
-      "Reads the live workbook XML for the session (to surface the datasource's fields), runs the deterministic no-LLM classifier, and builds the compact propose payload; this server is model-free (it never calls a small model).",
-      "status 'deterministic' means the no-LLM classifier found a single confident match (returned as no_llm_match) you can pass straight to validate-proposal / bind-template; status 'propose' means you choose one template from llm_input.candidate_templates, bind each bindable slot to a field from llm_input.fields, and self-rate confidence (0..1) per output_schema.",
-      'Discovery only: it never returns apply-ready args and never changes the workbook. Feed the filled proposal to validate-proposal (dry-run check) or bind-template (validate + get inject args).',
-      'content_status carries the content source freshness: "bundled-snapshot" with satisfies_exec_freshness=false — an in-package snapshot, only as current as the last generator run, not a live remote fetch.',
+      'Classify an ask against bundled fast-path templates and return candidates plus output_schema. Model-free.',
+      "status 'deterministic' can go to validate-proposal/bind-template; status 'propose' means choose a candidate and fill output_schema.",
+      'Discovery only: never returns apply-ready args and never changes the workbook. Details: expertise://tableau/tableau-tactics/workflow/templates.',
     ].join(' '),
     paramsSchema,
     annotations: {

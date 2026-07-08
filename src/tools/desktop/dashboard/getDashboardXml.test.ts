@@ -37,7 +37,7 @@ describe('getDashboardXmlTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getGetDashboardXmlTool(new DesktopMcpServer());
     expect(tool.name).toBe('get-dashboard-xml');
-    expect(tool.description).toContain('Gets the XML for a specific dashboard');
+    expect(tool.description).toContain('Get XML for an existing dashboard');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       dashboardName: expect.any(Object),

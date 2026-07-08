@@ -20,20 +20,14 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Tableau instance Session ID from list-instances.'),
+  session: z.string().describe('Session ID from list-instances.'),
   mode: z
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe('file: read workbookFile from disk (default). inline: use workbookXml string.'),
-  workbookFile: z
-    .string()
-    .optional()
-    .describe('Path to the cache file containing the modified workbook (required when mode=file)'),
-  workbookXml: z
-    .string()
-    .optional()
-    .describe('Full workbook TWB XML string (required when mode=inline)'),
+    .describe('file reads workbookFile; inline uses workbookXml.'),
+  workbookFile: z.string().optional().describe('Modified workbook cache file for mode=file.'),
+  workbookXml: z.string().optional().describe('Full workbook XML for mode=inline.'),
 };
 
 const title = 'Apply Workbook';
@@ -45,10 +39,8 @@ export const getApplyWorkbookTool = (
     name: 'apply-workbook',
     title,
     description: [
-      'Apply modified workbook back to Tableau.',
-      'Default mode reads from a cache file (recommended).',
-      'Use mode=inline with workbookXml for small workbooks.',
-      'See expertise://tableau/tableau-tactics/data/datasources before editing datasource XML (object-graph, relationships, connections).',
+      'Apply modified workbook XML to Tableau (mutating). mode=file is default; mode=inline is for small XML.',
+      'See expertise://tableau/tableau-tactics/data/datasources before editing datasource XML.',
     ].join(' '),
     paramsSchema,
     annotations: {

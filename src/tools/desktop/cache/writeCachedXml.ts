@@ -16,32 +16,15 @@ import { DesktopTool } from '../tool.js';
 import { getCacheDir, isWithinCacheDir } from './cachePath.js';
 
 const paramsSchema = {
-  filePath: z
-    .string()
-    .describe(
-      'Path to cached XML file to write (e.g., returned by batch-create-and-cache-sheets).',
-    ),
+  filePath: z.string().describe('Cached XML file path to write.'),
   xmlContent: z
     .string()
-    .describe(
-      'XML to write. Without a selector this is the whole file. With a worksheet/dashboard ' +
-        'selector this is just the replacement element, spliced into the existing file in place.',
-    ),
+    .describe('XML to write: whole file, or replacement element when a selector is provided.'),
   worksheet: z
     .string()
     .optional()
-    .describe(
-      'Optional: splice xmlContent in as the replacement for the <worksheet name="..."> element in ' +
-        'the existing cached file, leaving the rest untouched. Lets a filesystem-less client save a ' +
-        'targeted edit without holding the whole (large) workbook in context.',
-    ),
-  dashboard: z
-    .string()
-    .optional()
-    .describe(
-      'Optional: splice xmlContent in as the replacement for the <dashboard name="..."> element in ' +
-        'the existing cached file.',
-    ),
+    .describe('Optional worksheet splice selector. One selector at a time.'),
+  dashboard: z.string().optional().describe('Optional dashboard splice selector.'),
 };
 
 const toolTitle = 'Write Cached XML';
@@ -53,10 +36,8 @@ export const getWriteCachedXmlTool = (
     name: 'write-cached-xml',
     title: toolTitle,
     description:
-      'Write XML content to a file in the cache directory. Use this to save manually constructed or ' +
-      'modified XML back to cache files before applying with apply-* tools. For a large cached file, ' +
-      'pass a worksheet/dashboard selector to splice just that element back in place — you only need ' +
-      'to hold the one element in context, not the whole workbook.',
+      'Write cached XML before apply-* tools (mutates cache file). For large files, pass exactly ' +
+      'ONE worksheet or dashboard selector to splice one replacement element.',
     paramsSchema,
     annotations: {
       title: toolTitle,
@@ -77,6 +58,18 @@ export const getWriteCachedXmlTool = (
           if (!isWithinCacheDir(absolutePath, cacheDir)) {
             return new ArgsValidationError(
               `Security error: file path must be within cache directory.\n\nCache directory: ${cacheDir}\nRequested: ${absolutePath}`,
+            ).toErr();
+          }
+
+          // Reject ambiguous splice requests instead of silently prioritizing worksheet.
+          const selectorsReceived: string[] = [];
+          if (worksheet !== undefined) selectorsReceived.push(`worksheet="${worksheet}"`);
+          if (dashboard !== undefined) selectorsReceived.push(`dashboard="${dashboard}"`);
+          if (selectorsReceived.length > 1) {
+            return new ArgsValidationError(
+              `Multiple selectors provided: ${selectorsReceived.join(', ')}. Pass exactly one of ` +
+                'worksheet or dashboard so the splice target is unambiguous — re-call with a single ' +
+                'selector. Nothing was written.',
             ).toErr();
           }
 

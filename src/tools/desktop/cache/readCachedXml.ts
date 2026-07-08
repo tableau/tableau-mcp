@@ -15,34 +15,14 @@ import { DesktopTool } from '../tool.js';
 import { getCacheDir, isWithinCacheDir } from './cachePath.js';
 
 const paramsSchema = {
-  filePath: z
-    .string()
-    .describe('Path to cached XML file (e.g., returned by batch-create-and-cache-sheets).'),
+  filePath: z.string().describe('Cached XML file path.'),
   worksheet: z
     .string()
     .optional()
-    .describe(
-      'Optional: return only the <worksheet name="..."> element (a slice), not the whole file. ' +
-        'Use this to inspect one worksheet of a large cached workbook without pulling it all into context.',
-    ),
-  dashboard: z
-    .string()
-    .optional()
-    .describe(
-      'Optional: return only the <dashboard name="..."> element (a slice), not the whole file.',
-    ),
-  startByte: z
-    .number()
-    .int()
-    .min(0)
-    .optional()
-    .describe('Optional: return only bytes [startByte, endByte) of the file (a raw slice).'),
-  endByte: z
-    .number()
-    .int()
-    .min(0)
-    .optional()
-    .describe('Optional: end (exclusive) of the byte range. Defaults to end of file.'),
+    .describe('Optional worksheet slice selector. One selector at a time.'),
+  dashboard: z.string().optional().describe('Optional dashboard slice selector.'),
+  startByte: z.number().int().min(0).optional().describe('Optional raw byte-slice start.'),
+  endByte: z.number().int().min(0).optional().describe('Optional raw byte-slice end.'),
 };
 
 const toolTitle = 'Read Cached XML';
@@ -54,11 +34,8 @@ export const getReadCachedXmlTool = (
     name: 'read-cached-xml',
     title: toolTitle,
     description:
-      'Read an XML file from the cache directory. Use this to inspect worksheet, dashboard, or ' +
-      'workbook XML from cache files before or after modifications. For a large cached file, pass a ' +
-      'worksheet/dashboard selector (or startByte/endByte) to read just a slice instead of the whole ' +
-      'file — this is how a client with no local filesystem edits a capped workbook without pulling it ' +
-      'all into context.',
+      'Read cached worksheet/dashboard/workbook XML. For large files, pass exactly ONE selector: ' +
+      'worksheet, dashboard, or startByte/endByte range.',
     paramsSchema,
     annotations: {
       title: toolTitle,
@@ -79,6 +56,23 @@ export const getReadCachedXmlTool = (
           if (!isWithinCacheDir(absolutePath, cacheDir)) {
             return new ArgsValidationError(
               `Security error: file path must be within cache directory.\n\nCache directory: ${cacheDir}\nRequested: ${absolutePath}`,
+            ).toErr();
+          }
+
+          // Reject ambiguous slice requests instead of silently prioritizing one selector.
+          const selectorsReceived: string[] = [];
+          if (worksheet !== undefined) selectorsReceived.push(`worksheet="${worksheet}"`);
+          if (dashboard !== undefined) selectorsReceived.push(`dashboard="${dashboard}"`);
+          if (startByte !== undefined || endByte !== undefined) {
+            selectorsReceived.push(
+              `byte range (startByte=${startByte ?? 0}, endByte=${endByte ?? 'end'})`,
+            );
+          }
+          if (selectorsReceived.length > 1) {
+            return new ArgsValidationError(
+              `Multiple selectors provided: ${selectorsReceived.join(', ')}. Pass exactly one of ` +
+                'worksheet, dashboard, or a startByte/endByte byte range so the slice is unambiguous — ' +
+                're-call with a single selector.',
             ).toErr();
           }
 

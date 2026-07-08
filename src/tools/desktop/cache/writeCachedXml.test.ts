@@ -188,6 +188,35 @@ describe('writeCachedXmlTool', () => {
       expect(writeFileSync).not.toHaveBeenCalled();
     });
 
+    it('rejects worksheet + dashboard selectors together, naming both, without writing', async () => {
+      const result = await getResult(
+        CACHED_FILE,
+        "<worksheet name='Sales'><rows>[x]</rows></worksheet>",
+        { worksheet: 'Sales', dashboard: 'Main' },
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('worksheet');
+      expect(result.content[0].text).toContain('dashboard');
+      expect(writeFileSync).not.toHaveBeenCalled();
+    });
+
+    it('leaves the single dashboard selector path unchanged', async () => {
+      vi.mocked(readFileSync).mockReturnValue(
+        "<workbook><dashboards><dashboard name='Main'><zones><zone name='Sales'/></zones></dashboard></dashboards></workbook>",
+      );
+      const result = await getResult(
+        CACHED_FILE,
+        "<dashboard name='Main'><zones><zone name='Profit'/></zones></dashboard>",
+        { dashboard: 'Main' },
+      );
+
+      expect(result.isError).toBeFalsy();
+      const written = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+      expect(written).toContain("<zone name='Profit'/>");
+    });
+
     it('splices when an entity-escaped fragment name matches a plain-text selector', async () => {
       vi.mocked(readFileSync).mockReturnValue(
         '<workbook><worksheets>' +

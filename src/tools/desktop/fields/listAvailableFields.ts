@@ -9,11 +9,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  workbookFile: z
-    .string()
-    .describe(
-      'Path to workbook cache file from get-workbook-xml (NOT worksheet file). Lists all available fields from datasource definitions.',
-    ),
+  workbookFile: z.string().describe('Workbook cache file, not worksheet file.'),
 };
 
 const pad = (str: string, len: number): string => str + ' '.repeat(Math.max(0, len - str.length));
@@ -34,14 +30,9 @@ export const getListAvailableFieldsTool = (
     name: 'list-available-fields',
     title,
     description: [
-      'List ALL fields available in the workbook datasources.',
-      'Returns Name, Local Name, and type (Q/N/O) for every field — the inputs needed to construct a column reference.',
-      'Call before any tool that takes a column_ref (add-field-to-rows/cols/encoding, filters, calcs, sort keys).',
-      'Reads from the workbook cache file, not the worksheet.',
-      '✅ USE THIS FIRST before adding fields to rows/cols/encodings.',
-      '✅ Returns ALL fields with their EXACT column_ref needed for field manipulation tools.',
-      '✅ Shows field metadata: role (dimension/measure), type (quantitative/nominal), datatype, aggregation.',
-      'The column_ref values returned MUST be used exactly as-is in add-field-to-rows, add-field-to-cols, or add-field-to-encoding.',
+      'List ALL fields available in workbook datasources.',
+      'Returns exact column_ref inputs for field tools. Call before adding rows/cols/encodings.',
+      'Reads the workbook cache file, NOT a worksheet file.',
     ].join(' '),
     paramsSchema,
     annotations: {

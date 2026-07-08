@@ -17,34 +17,20 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  workbookFile: z
-    .string()
-    .describe('Path to workbook cache file (from get-workbook-xml with mode=file).'),
-  templateName: z
-    .string()
-    .describe('Template name without .xml extension (use list-xml-templates to see options).'),
-  title: z.string().describe('Name for the new sheet — replaces {{TITLE}} in the template.'),
+  workbookFile: z.string().describe('Workbook cache file path.'),
+  templateName: z.string().describe('Template name, without .xml.'),
+  title: z.string().describe('New sheet name; replaces {{TITLE}}.'),
   sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe('Type of sheet being injected.'),
   templateParameters: z
     .record(z.string())
     .optional()
-    .describe(
-      'Additional {{PLACEHOLDER}} substitutions, e.g. {"DATASOURCE": "Sales Data"}. DATASOURCE is handled alongside fieldMapping.',
-    ),
-  fieldMapping: z
-    .record(z.string())
-    .optional()
-    .describe(
-      'Map of template field names to column-instance refs, e.g. {"Sales": "[sum:Sales:qk]", "Region": "[none:Region:nk]"}.',
-    ),
+    .describe('Additional placeholder substitutions.'),
+  fieldMapping: z.record(z.string()).optional().describe('Template field to column-ref map.'),
   insertPosition: z
     .enum(['end', 'before_sheet', 'after_sheet'])
     .optional()
-    .describe('Tab order position (default: end).'),
-  relativeSheetName: z
-    .string()
-    .optional()
-    .describe('Required when insertPosition is before_sheet or after_sheet.'),
+    .describe('Tab insertion position.'),
+  relativeSheetName: z.string().optional().describe('Anchor sheet for before/after insertion.'),
 };
 
 const toolTitle = 'Inject Template';
@@ -56,9 +42,8 @@ export const getInjectTemplateTool = (
     name: 'inject-template',
     title: toolTitle,
     description: [
-      'Inject a pre-built worksheet, dashboard, or story from a template file into a cached workbook XML file.',
-      'Templates are TWB-format XML files; use list-xml-templates to see available names.',
-      'Supports {{PLACEHOLDER}} substitution — {{TITLE}} is always replaced with the title argument.',
+      'Inject a worksheet/dashboard/story template into cached workbook XML (mutates the file).',
+      'Use list-xml-templates for names; supports placeholders including {{TITLE}}.',
       'Workflow: get-workbook-xml (mode=file) → inject-template → apply-workbook.',
     ].join(' '),
     paramsSchema,

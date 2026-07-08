@@ -18,14 +18,12 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Tableau instance Session ID from list-instances.'),
+  session: z.string().describe('Session ID from list-instances.'),
   mode: z
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe(
-      'file: write cache and return path (default). inline: return full workbook XML in the tool result.',
-    ),
+    .describe('file writes cache path; inline returns XML.'),
 };
 
 type InlineResult = {
@@ -47,13 +45,8 @@ export const getGetWorkbookXmlTool = (
     name: 'get-workbook-xml',
     title,
     description: [
-      'Gets the current workbook.',
-      'Default mode writes a cache file and returns the path (recommended for large workbooks).',
-      'Use mode=inline to return XML in the response.',
-      '⚠️ PREFERRED APPROACH: Use the field manipulation tools (add-field-to-*, etc.) instead of directly editing XML.',
-      'To create new worksheets or dashboards, use batch-create-and-cache-sheets.',
-      "Only edit XML directly as a last resort when the higher-level tools don't support your use case.",
-      'Use apply-workbook to apply changes.',
+      'Get current workbook XML. mode=file is default; mode=inline returns XML.',
+      'PREFERRED: use the field tools (add-field-to-*) or batch-create-and-cache-sheets instead of editing XML directly; edit XML only as a last resort. Use apply-workbook to apply changes.',
     ].join(' '),
     paramsSchema,
     annotations: {
