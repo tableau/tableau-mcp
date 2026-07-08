@@ -320,7 +320,15 @@ export async function bindTemplate(args: {
       bindings: cls.bindings,
     };
     const res = validateAndBuild(proposal, args.manifests, summary, minConfidence, false, args.ask);
-    if (res.status === 'bound') return res;
+    if (res.status === 'bound') {
+      // Surface the classifier's advisory provenance (e.g. a required geo slot
+      // auto-completed from the schema, W60) alongside any avoid_when warnings, using
+      // the bound result's existing `warnings` channel — never a blocker.
+      if (cls.notes && cls.notes.length > 0) {
+        res.warnings = [...(res.warnings ?? []), ...cls.notes];
+      }
+      return res;
+    }
     // else fall through — the no-LLM guess didn't validate.
   }
 

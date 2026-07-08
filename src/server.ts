@@ -34,11 +34,14 @@ export abstract class Server {
     clientInfo,
     serverName,
     serverVersion,
+    instructions,
   }: {
     mcpServer?: McpServer;
     clientInfo?: ClientInfo;
     serverName: string;
     serverVersion: string;
+    /** MCP server instructions surfaced to every connecting client at initialize. */
+    instructions?: string;
   }) {
     this.mcpServer =
       mcpServer ??
@@ -53,6 +56,7 @@ export abstract class Server {
             tools: {},
             prompts: {},
           },
+          ...(instructions ? { instructions } : {}),
         },
       );
 

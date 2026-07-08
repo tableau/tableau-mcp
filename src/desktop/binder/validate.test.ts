@@ -259,6 +259,94 @@ describe('binder/validate — gate 4: derivation legality', () => {
   });
 });
 
+describe('binder/validate — gate 4: min/max on a temporal field is legal (W60 gantt-task-rollup)', () => {
+  // gantt-task-rollup-chart authors MIN on its DATE start_date slot (each task's
+  // earliest start on a continuous date axis). MIN/MAX over a date is legal Tableau,
+  // so the template's OWN manifest must pass the legality gate against a schema with a
+  // date-typed start field + a real duration measure. Pre-W60 the gate treated `min`
+  // as numeric-only, so it rejected the date slot and the template could never one-shot
+  // on ANY schema (confirmed on the Superstore control).
+  const GANTT_SCHEMA: SchemaSummary = {
+    datasource: 'Projects',
+    fields: [
+      field({
+        columnName: '[Task]',
+        role: 'dimension',
+        type: 'nominal',
+        datatype: 'string',
+        datasource: 'Projects',
+      }),
+      field({
+        columnName: '[Phase]',
+        role: 'dimension',
+        type: 'nominal',
+        datatype: 'string',
+        datasource: 'Projects',
+      }),
+      field({
+        columnName: '[Start Date]',
+        role: 'dimension',
+        type: 'ordinal',
+        datatype: 'date',
+        datasource: 'Projects',
+      }),
+      field({
+        columnName: '[Duration]',
+        role: 'measure',
+        type: 'quantitative',
+        datatype: 'real',
+        datasource: 'Projects',
+      }),
+    ],
+  };
+
+  const ganttProposal = (m: TemplateManifest): BindingProposal => ({
+    template: m.template,
+    title: 'Task rollup',
+    bindings: [
+      { slot_id: 'task', field: 'Task' },
+      { slot_id: 'start_date', field: 'Start Date' },
+      { slot_id: 'duration', field: 'Duration' },
+      { slot_id: 'phase', field: 'Phase' },
+    ],
+  });
+
+  it("gantt-task-rollup's own manifest passes its legality gate (MIN on the date start slot)", () => {
+    const m = manifests.get('gantt-task-rollup-chart')!;
+    const r = validateBinding(m, ganttProposal(m), GANTT_SCHEMA);
+    expect(r.ok).toBe(true);
+  });
+
+  it('MIN on a date never fires a derivation-illegal blocker (regression guard)', () => {
+    const m = manifests.get('gantt-task-rollup-chart')!;
+    const r = validateBinding(m, ganttProposal(m), GANTT_SCHEMA);
+    if (!r.ok) {
+      expect(r.blockers.some((b) => b.code === 'derivation-illegal')).toBe(false);
+    }
+  });
+
+  it('a MIN override on a plain STRING dimension is STILL illegal (temporal exemption is date-only)', () => {
+    // The exemption is scoped to temporal datatypes: MIN on a non-numeric, non-temporal
+    // field must still be rejected so the gate is not broadened to strings.
+    const m = manifests.get('ranking-ordered-bar')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'region', field: 'Region', derivation: 'min' }, // Region is a string dim
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+    };
+    const r = validateBinding(m, p, SUMMARY);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(
+        r.blockers.some((b) => b.code === 'derivation-illegal' && b.slot_id === 'region'),
+      ).toBe(true);
+    }
+  });
+});
+
 describe('binder/validate — gate 4/7: aggregated calc forces usr', () => {
   it("binds an aggregated calc into a quantitative slot as usr (not the slot's sum)", () => {
     const m = manifests.get('kpi-text')!;

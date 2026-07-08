@@ -127,6 +127,13 @@ const AGGREGATION_DERIVATIONS: ReadonlySet<string> = new Set([
 const NUMERIC_DATATYPES: ReadonlySet<string> = new Set(['integer', 'real']);
 const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
 
+// Aggregations that are ALSO legal over a date/datetime field. MIN/MAX of a date are
+// real Tableau aggregations (earliest/latest date, a continuous green pill) — e.g.
+// gantt-task-rollup-chart authors MIN on its DATE start_date slot. The other
+// aggregations (sum/avg/count/median) stay numeric-only. Scoped to temporal datatypes
+// only; MIN/MAX on a plain string dimension remains illegal (unchanged).
+const TEMPORAL_MINMAX_DERIVATIONS: ReadonlySet<string> = new Set(['min', 'max']);
+
 /** Column-instance type suffix (field-resolver.ts:107-112 / field-builder.ts:408-410). */
 function typeSuffixFor(type: string): string {
   if (type === 'quantitative') return 'qk';
@@ -328,17 +335,24 @@ export function validateBinding(
         });
         continue;
       }
+      // MIN/MAX over a date/datetime field is legal (earliest/latest date), so the
+      // numeric-measure requirement is waived for that temporal case; every other
+      // aggregation still requires a numeric measure.
+      const temporalMinMaxOk =
+        TEMPORAL_MINMAX_DERIVATIONS.has(effDeriv) && TEMPORAL_DATATYPES.has(f.datatype);
       if (
         AGGREGATION_DERIVATIONS.has(effDeriv) &&
-        !(NUMERIC_DATATYPES.has(f.datatype) || f.role === 'measure')
+        !(NUMERIC_DATATYPES.has(f.datatype) || f.role === 'measure') &&
+        !temporalMinMaxOk
       ) {
         blockers.push({
           code: 'derivation-illegal',
           slot_id: slotId,
           detail:
             `aggregation ${src} '${effDeriv}' requires a numeric measure, but "${fieldQuery}" is ` +
-            `role=${f.role}, datatype=${f.datatype}. Aggregations (sum/avg/min/max/median/count) apply ` +
-            'only to numeric measures — bind a numeric measure or drop the derivation override.',
+            `role=${f.role}, datatype=${f.datatype}. Aggregations (sum/avg/median/count) apply only ` +
+            'to numeric measures (min/max also apply to date/datetime fields) — bind a numeric ' +
+            'measure or drop the derivation override.',
         });
         continue;
       }

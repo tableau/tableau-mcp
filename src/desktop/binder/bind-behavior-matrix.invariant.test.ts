@@ -78,6 +78,11 @@ const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
   // W60 parity port: scatter's factory stamp crossed; full-phrasing ask one-shots
   // (the bare 'scatter of Profit vs Sales' phrasing proposes — no 'scatter' chart noun).
   ['scatter plot of Profit and Sales by Sub-Category', 'correlation-scatter-plot-chart'],
+  // W60 geo-slot completion: the required country slot has ZERO ask-named candidates, so
+  // it widens to the full schema and binds the unique country-affine field
+  // [Country/Region]; the ask-named [State/Province] fills the state slot. MOVED here
+  // from PINNED_PROPOSE (was fail-closed pre-W60) — see resolveGeoSlots widening.
+  ['filled map of Profit by State/Province', 'spatial-choropleth-map'],
 ];
 
 // ── KNOWN SAFE-PROPOSES (NOT bound — fail-closed by design; WHY each) ──────────
@@ -156,12 +161,10 @@ const PINNED_PROPOSE: ReadonlyArray<readonly [ask: string, note: string]> = [
     // (both geo); a Sales-by-Sub-Category ask names no geo field → geo slots unfilled → propose.
     'pinned-current-behavior: distribution-bar-code-chart requires two geo slots — none named → fail closed',
   ],
-  [
-    'filled map of Profit by State/Province',
-    // spatial-choropleth-map requires TWO geo slots (country + state); a single geo dim leaves
-    // one unfilled, and geo binding is fail-closed on ambiguity → propose.
-    'pinned-current-behavior: spatial-choropleth-map needs two geo dims; one geo → fail closed',
-  ],
+  // NB (W60): 'filled map of Profit by State/Province' MOVED to the ONE_SHOTS table — the
+  // required country geo slot now auto-completes from the schema (Country/Region) when the
+  // state slot is ask-named. The distribution-bar-code strip-plot case above stays here:
+  // its ask names NO geo field, so no geo slot is ask-satisfied → no widening → fail closed.
 ];
 
 describe('binder/bind-behavior-matrix — eligibility tripwire', () => {

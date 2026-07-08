@@ -544,6 +544,28 @@ describe('binder/bindTemplate — avoid_when consumption (H3.2)', () => {
   });
 });
 
+describe('binder/bindTemplate — W60 choropleth geo-slot completion', () => {
+  it("'choropleth of Profit by State/Province' one-shot binds; country auto-completes to Country/Region", async () => {
+    const res = await bindTemplate({
+      ask: 'choropleth of Profit by State/Province',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.used_llm).toBe(false);
+      expect(res.args.template_name).toBe('spatial-choropleth-map');
+      // The required country slot was NOT named in the ask; it auto-completes to the
+      // unique country-affine field [Country/Region] (template_field 'Country'), while
+      // the ask-named [State/Province] fills the state slot (template_field 'State').
+      expect(res.args.field_mapping['Country']).toBe('[Superstore].[none:Country/Region:nk]');
+      expect(res.args.field_mapping['State']).toBe('[Superstore].[none:State/Province:nk]');
+      // Provenance is surfaced so the agent can say "using Country/Region".
+      expect(res.warnings?.some((w) => /Country\/Region/.test(w))).toBe(true);
+    }
+  });
+});
+
 describe('binder/buildLlmInput — family-aware truncation (attack 2)', () => {
   function synth(template: string, family: Family, keyword: string): TemplateManifest {
     return {
