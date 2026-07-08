@@ -6,11 +6,10 @@ import {
   ServerNotification,
   ServerRequest,
 } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync } from 'fs';
-import { join } from 'path';
 
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
+import { DATA_ROOT, readResourceAsset, RESOURCES_ROOT } from './desktop/assets.js';
 import { listKnowledgeResources, readKnowledgeResource } from './desktop/knowledge/index.js';
 import { SessionManager } from './desktop/sessionManager.js';
 import { log } from './logging/logger.js';
@@ -18,23 +17,12 @@ import { ClientInfo, Server } from './server.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
-import { getDirname } from './utils/getDirname';
 import { Provider } from './utils/provider.js';
 
 const serverName = 'tableau-desktop-mcp';
 const serverVersion = pkg.version;
 
-const DATA_ROOTS = [
-  join(getDirname(), 'desktop', 'data'),
-  join(getDirname(), '..', 'src', 'desktop', 'data'),
-];
-const RESOURCE_ROOTS = [
-  join(getDirname(), 'resources', 'desktop'),
-  join(getDirname(), '..', 'resources', 'desktop'),
-];
-
-export const DATA_ROOT = DATA_ROOTS.find(existsSync) ?? DATA_ROOTS[0];
-export const RESOURCES_ROOT = RESOURCE_ROOTS.find(existsSync) ?? RESOURCE_ROOTS[0];
+export { DATA_ROOT, RESOURCES_ROOT };
 
 // Routing guidance every connecting client receives at initialize (W60 adoption P5 —
 // the demo build previously shipped NO instructions, so skill-less clients got zero
@@ -149,12 +137,19 @@ export class DesktopMcpServer extends Server {
   };
 
   private _registerDashboardXmlGuide = async (): Promise<void> => {
+    const text = readResourceAsset('dashboard-xml-guide.md');
+    if (text === null) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        'Dashboard XML guide asset not found: dashboard-xml-guide.md',
+      );
+    }
     this.registerResource({
       name: 'dashboard-xml-guide',
       uri: 'tableau://docs/dashboard-xml-guide',
       title: 'Dashboard XML manipulation guide',
       description: 'Zone positioning, layouts, best practices for dashboard XML editing',
-      path: join(RESOURCES_ROOT, 'dashboard-xml-guide.md'),
+      text,
       mimeType: 'text/markdown',
     });
   };
