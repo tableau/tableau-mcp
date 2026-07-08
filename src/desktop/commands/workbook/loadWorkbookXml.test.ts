@@ -298,6 +298,102 @@ describe('loadWorkbookXml', () => {
     expect(validationRegistry.runValidation).toHaveBeenCalledWith(validXml, 'workbook');
   });
 
+  it('reports load-rejected when the filepath command completes but Desktop rejected the load', async () => {
+    // The false-success shape from Bug 1's root cause: the Agent API reports the
+    // COMMAND completed (status: 'completed') while the document load itself failed —
+    // the load outcome is carried in the result payload, not in status.
+    const mockJson = '{"workbook": {}}';
+    vi.spyOn(xmlToJsonModule, 'xmlToJson').mockReturnValue(mockJson);
+
+    const deskError =
+      'The load was not able to complete successfully. Qualified Name Parse Error --- ' +
+      'Invalid input: mismatched brackets --- Input: [Sample - Superstore].[[Sub-Category]]';
+
+    const executeCommand = vi.fn().mockResolvedValue(
+      Ok({
+        command_id: 'cmd-123',
+        status: 'completed',
+        submitted_at: '',
+        result: { success: false, error: { message: deskError } },
+      }),
+    );
+    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+
+    const result = await loadWorkbookXml({
+      xml: validXml,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-workbook-xml-error');
+      invariant(result.error.error.type === 'load-rejected');
+      expect(result.error.error.message).toContain('Qualified Name Parse Error');
+    }
+    // A genuine content rejection must NOT be retried via the text path.
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports load-rejected when the text command completes but result carries an error', async () => {
+    // Force the text path (JSON conversion fails), then the command "completes" but
+    // the result payload signals a failed load.
+    vi.spyOn(xmlToJsonModule, 'xmlToJson').mockImplementation(() => {
+      throw new Error('Conversion failed');
+    });
+
+    const executeCommand = vi.fn().mockResolvedValue(
+      Ok({
+        command_id: 'cmd-124',
+        status: 'completed',
+        submitted_at: '',
+        result: { status: 'failed', message: 'Qualified Name Parse Error: mismatched brackets' },
+      }),
+    );
+    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+
+    const result = await loadWorkbookXml({
+      xml: validXml,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-workbook-xml-error');
+      invariant(result.error.error.type === 'load-rejected');
+      expect(result.error.error.message).toContain('Qualified Name Parse Error');
+    }
+  });
+
+  it('reports load-rejected when the command status carries a top-level error object', async () => {
+    const mockJson = '{"workbook": {}}';
+    vi.spyOn(xmlToJsonModule, 'xmlToJson').mockReturnValue(mockJson);
+
+    const executeCommand = vi.fn().mockResolvedValue(
+      Ok({
+        command_id: 'cmd-125',
+        status: 'completed',
+        submitted_at: '',
+        error: { code: 'LOAD_FAILED', message: 'workbook could not be loaded', recoverable: false },
+      }),
+    );
+    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+
+    const result = await loadWorkbookXml({
+      xml: validXml,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-workbook-xml-error');
+      invariant(result.error.error.type === 'load-rejected');
+      expect(result.error.error.message).toContain('workbook could not be loaded');
+    }
+  });
+
   it('should proceed with warnings but not errors', async () => {
     vi.spyOn(validationRegistry, 'runValidation').mockReturnValue({
       valid: true,

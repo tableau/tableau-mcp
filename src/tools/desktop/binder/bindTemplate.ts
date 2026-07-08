@@ -218,6 +218,9 @@ function describeApplyError(
     if (inner.type === 'validation-failed') {
       return `preflight validation failed: ${inner.issues.map((i) => i.message).join('; ')}`;
     }
+    if (inner.type === 'load-rejected') {
+      return `Tableau rejected the load: ${inner.message}`;
+    }
     return 'invalid workbook XML';
   }
   return `workbook load command failed: ${JSON.stringify(error.error)}`;

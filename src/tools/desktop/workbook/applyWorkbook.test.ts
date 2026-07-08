@@ -235,6 +235,36 @@ describe('applyWorkbookTool', () => {
     expect(result.content[0].text).toBe(new WorkbookXmlLoadFailedError(error.error).message);
   });
 
+  it('reports failure (not success) when Desktop rejected the load', async () => {
+    // Bug 1 (P0): apply must not lie. When loadWorkbookXml surfaces Desktop's actual
+    // load rejection, the tool must return isError with that error text — never the
+    // canned "Successfully applied" message.
+    const mockXml = '<?xml version="1.0"?><workbook></workbook>';
+    const deskError =
+      'The load was not able to complete successfully. Qualified Name Parse Error --- ' +
+      'Invalid input: mismatched brackets --- Input: [Sample - Superstore].[[Sub-Category]]';
+    const error = {
+      type: 'load-workbook-xml-error' as const,
+      error: { type: 'load-rejected' as const, message: deskError },
+    };
+
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Err(error));
+
+    const mockExecutor = vi.fn().mockResolvedValue({});
+
+    const result = await getToolResult({
+      session: '12345',
+      mode: 'inline',
+      workbookXml: mockXml,
+      mockExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).not.toContain('Successfully applied');
+    expect(result.content[0].text).toContain('Qualified Name Parse Error');
+  });
+
   it('should pass the abort signal to loadWorkbookXml command', async () => {
     const mockXml = '<?xml version="1.0"?><workbook></workbook>';
     const mockLoadWorkbookXml = vi

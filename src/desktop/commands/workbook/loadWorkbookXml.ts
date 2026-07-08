@@ -2,6 +2,7 @@ import { writeFileSync } from 'fs';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../../logging/logger.js';
+import { GetCommandStatusResponse } from '../../../sdks/desktop/agentApi/types.js';
 import { DesktopCache } from '../../cache.js';
 import { xmlToJson } from '../../libraries/workbook-serialization-converter';
 import {
@@ -13,7 +14,114 @@ import { ValidationIssue } from '../../validation/types.js';
 
 export type LoadWorkbookXmlError =
   | { type: 'invalid-xml' }
-  | { type: 'validation-failed'; issues: Array<ValidationIssue> };
+  | { type: 'validation-failed'; issues: Array<ValidationIssue> }
+  // Bug 1 (P0): the load-underlying-metadata command reported command-level
+  // completion, but Tableau rejected the actual document load (e.g. "Qualified
+  // Name Parse Error"). `message` carries Desktop's own error text.
+  | { type: 'load-rejected'; message: string };
+
+/**
+ * Load-outcome type shared by both apply helpers below.
+ */
+type LoadHelperResult = Result<
+  void,
+  | { type: 'execute-command-error'; error: ExecuteCommandError }
+  | { type: 'load-workbook-xml-error'; error: LoadWorkbookXmlError }
+>;
+
+/**
+ * Inspect a COMPLETED `load-underlying-metadata` command status for a document
+ * load failure. Tableau's Agent API reports the COMMAND as `status: 'completed'`
+ * once it has accepted the payload, but a rejected document load (mismatched
+ * brackets, a dropped worksheet, etc.) is surfaced in the response payload — a
+ * top-level `error`, or a failure signal inside `result` — not in `status`. The
+ * executor only maps `status: 'failed'` to an error, so without this check a
+ * rejected load is relayed as success (the P0 "apply must not lie" bug).
+ *
+ * Conservative by design: it only reports failure on an EXPLICIT failure signal,
+ * so a normal success (empty `result`, no `error`) is never turned into a false
+ * negative.
+ */
+export function interpretLoadOutcome(
+  status: GetCommandStatusResponse,
+): { ok: true } | { ok: false; message: string } {
+  // 1. Top-level command error object — present even when status !== 'failed'.
+  if (status.error && (status.error.message || status.error.code)) {
+    const { code, message } = status.error;
+    return { ok: false, message: message ? (code ? `${code}: ${message}` : message) : code };
+  }
+
+  const result = status.result;
+  if (!result || typeof result !== 'object') {
+    return { ok: true };
+  }
+
+  const record = result as Record<string, unknown>;
+
+  // 2. Explicit boolean success flags.
+  if (record.success === false || record.ok === false || record.loaded === false) {
+    return { ok: false, message: extractErrorMessage(record) };
+  }
+
+  // 3. Nested status field reporting a failure.
+  const innerStatus = typeof record.status === 'string' ? record.status.toLowerCase() : undefined;
+  if (innerStatus && /^(fail|failed|failure|error|errored|rejected|invalid)$/.test(innerStatus)) {
+    return { ok: false, message: extractErrorMessage(record) };
+  }
+
+  // 4. An error / errors payload alongside an otherwise-"completed" command.
+  const errText = extractErrorPayload(record);
+  if (errText) {
+    return { ok: false, message: errText };
+  }
+
+  return { ok: true };
+}
+
+/** Pull the most human-readable message out of a failing load result payload. */
+function extractErrorMessage(record: Record<string, unknown>): string {
+  return (
+    extractErrorPayload(record) ??
+    firstString(record.message, record.error_message, record.errorMessage, record.reason) ??
+    'Tableau reported that the workbook load did not complete successfully.'
+  );
+}
+
+/** Extract text from `error` / `errors` fields, if present. */
+function extractErrorPayload(record: Record<string, unknown>): string | undefined {
+  const { error, errors } = record;
+  if (typeof error === 'string' && error.trim()) return error;
+  if (error && typeof error === 'object') {
+    const msg = firstString(
+      (error as Record<string, unknown>).message,
+      (error as Record<string, unknown>).text,
+    );
+    if (msg) return msg;
+  }
+  if (Array.isArray(errors) && errors.length > 0) {
+    const msgs = errors
+      .map((e) =>
+        typeof e === 'string'
+          ? e
+          : e && typeof e === 'object'
+            ? firstString(
+                (e as Record<string, unknown>).message,
+                (e as Record<string, unknown>).text,
+              )
+            : undefined,
+      )
+      .filter((m): m is string => !!m);
+    if (msgs.length > 0) return msgs.join('; ');
+  }
+  return undefined;
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const v of values) {
+    if (typeof v === 'string' && v.trim()) return v;
+  }
+  return undefined;
+}
 
 export async function loadWorkbookXml({
   xml,
@@ -69,9 +177,7 @@ async function loadUnderlyingMetadataByFilepath({
 }: {
   xml: string;
   filePath?: string;
-} & WithExecutorAndAbortSignal): Promise<
-  Result<void, { type: 'execute-command-error'; error: ExecuteCommandError }>
-> {
+} & WithExecutorAndAbortSignal): Promise<LoadHelperResult> {
   let jsonContent: string | undefined;
 
   try {
@@ -132,6 +238,25 @@ async function loadUnderlyingMetadataByFilepath({
     return Err({ type: 'execute-command-error', error: result.error });
   }
 
+  // Command completed — but "completed" means the command ran, not that Tableau
+  // accepted the document load. A content rejection is surfaced in the payload,
+  // so verify the actual load outcome before claiming success. A genuine
+  // rejection is NOT retried via text (text would reject identically).
+  const outcome = interpretLoadOutcome(result.value);
+  if (!outcome.ok) {
+    log({
+      level: 'error',
+      message: 'load-underlying-metadata (filepath/JSON) completed but Tableau rejected the load',
+      logger: 'workbookCommands',
+      data: { message: outcome.message },
+    });
+
+    return Err({
+      type: 'load-workbook-xml-error',
+      error: { type: 'load-rejected', message: outcome.message },
+    });
+  }
+
   log({
     level: 'info',
     message: 'load-underlying-metadata (filepath/JSON) completed',
@@ -147,9 +272,7 @@ async function loadUnderlyingMetadataByText({
   signal,
 }: {
   xml: string;
-} & WithExecutorAndAbortSignal): Promise<
-  Result<void, { type: 'execute-command-error'; error: ExecuteCommandError }>
-> {
+} & WithExecutorAndAbortSignal): Promise<LoadHelperResult> {
   const result = await executor.executeCommand({
     namespace: 'tabui',
     command: 'load-underlying-metadata',
@@ -173,6 +296,23 @@ async function loadUnderlyingMetadataByText({
     }
 
     return Err({ type: 'execute-command-error', error: result.error });
+  }
+
+  // Command completed — verify Tableau actually accepted the load (see the
+  // filepath helper for the full rationale). Otherwise a rejected load is a lie.
+  const outcome = interpretLoadOutcome(result.value);
+  if (!outcome.ok) {
+    log({
+      level: 'error',
+      message: 'load-underlying-metadata (text) completed but Tableau rejected the load',
+      logger: 'workbookCommands',
+      data: { message: outcome.message },
+    });
+
+    return Err({
+      type: 'load-workbook-xml-error',
+      error: { type: 'load-rejected', message: outcome.message },
+    });
   }
 
   log({
