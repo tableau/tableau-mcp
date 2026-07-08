@@ -1,16 +1,6 @@
 import { z } from 'zod';
 
 /**
- * Feature gate provider interface
- */
-export interface FeatureGateProvider {
-  /**
-   * Check if a feature is enabled
-   */
-  isFeatureEnabled(featureName: string): boolean;
-}
-
-/**
  * Valid feature gate provider names
  */
 export const featureGateProviderSchema = z.enum(['server', 'custom']);

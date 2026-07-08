@@ -7,7 +7,7 @@ import { resolve } from 'path';
 import { getConfig } from '../config.js';
 import { log } from '../logging/logger.js';
 import { NoOpTelemetryProvider } from './noop.js';
-import { TelemetryProvider } from './types.js';
+import type { TelemetryProvider } from './telemetryProvider.js';
 
 /**
  * Get all instance methods from a class prototype
