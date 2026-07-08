@@ -261,6 +261,25 @@ describe('loadDashboardXml (External Client API transport, TABLEAU_EXTERNAL_API 
     expect(applied).not.toContain('<worksheet');
   });
 
+  it('does not reject a per-dashboard apply whose minimal document omits live worksheets referenced by zones', async () => {
+    const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
+    const { executor, calls } = dispatchingExecutor(
+      liveWorkbook(['Sales Dashboard', 'Other DB'], ['Sheet 1']),
+    );
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: dashboardXml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    const applyCall = calls.find((c) => c.command === 'load-underlying-metadata');
+    expect(applyCall?.args?.text).toContain('name="Sheet 1"');
+    expect(applyCall?.args?.text).not.toContain('<worksheet');
+  });
+
   it('should apply a minimal document for a brand-new dashboard', async () => {
     const { executor, calls } = dispatchingExecutor(liveWorkbook(['Some Other DB']));
 
