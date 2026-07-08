@@ -11,7 +11,6 @@
 
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'crypto';
-import { readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -31,7 +30,7 @@ import {
   buildInjectedWorkbookXml,
   escapeXml,
 } from '../../../desktop/templates/injectTemplateCore.js';
-import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
+import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { ExecuteCommandError } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -344,7 +343,12 @@ export const getDashboardAutoApplyTool = (
             }
             let templateXml: string;
             try {
-              templateXml = readFileSync(getTemplatePath(bound.args.template_name), 'utf-8');
+              // SEA-aware template read (#433 seam): embedded asset in a SEA binary, disk otherwise.
+              const xml = readTemplate(bound.args.template_name);
+              if (!xml) {
+                throw new Error('template not found in template assets');
+              }
+              templateXml = xml;
             } catch (err) {
               return refusal(
                 outcomes,

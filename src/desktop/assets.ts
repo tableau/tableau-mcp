@@ -32,6 +32,8 @@ export function getDataRoot(): string {
   return resolveRoot([
     join(safeDirname(), 'desktop', 'data'),
     join(safeDirname(), '..', 'src', 'desktop', 'data'),
+    // Unbundled source/vitest: getDirname() is src/utils, so the data dir is a sibling.
+    join(safeDirname(), '..', 'desktop', 'data'),
   ]);
 }
 

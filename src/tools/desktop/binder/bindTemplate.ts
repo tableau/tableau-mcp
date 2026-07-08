@@ -1,6 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'crypto';
-import { readFileSync } from 'fs';
 import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -22,7 +21,7 @@ import {
 import { DesktopDiscoverer } from '../../../desktop/desktopDiscoverer.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
-import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
+import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { ExecuteCommandError, ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
 import {
   ArgsValidationError,
@@ -295,7 +294,11 @@ async function performAutoApply({
   const injectStart = Date.now();
   let injected: ReturnType<typeof buildInjectedWorkbookXml>;
   try {
-    const templateXml = readFileSync(getTemplatePath(args.template_name), 'utf-8');
+    // SEA-aware template read (#433 seam): embedded asset in a SEA binary, disk otherwise.
+    const templateXml = readTemplate(args.template_name);
+    if (!templateXml) {
+      throw new Error(`template "${args.template_name}" not found in template assets`);
+    }
     // Per-apply calc-namespacing identity: session + apply timestamp (randomUUID
     // guards same-millisecond applies), mirroring the inject-template tool's nonce.
     const applyNonce = `${session}:${Date.now()}:${randomUUID()}`;
