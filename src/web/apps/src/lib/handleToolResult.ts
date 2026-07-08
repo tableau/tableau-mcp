@@ -41,7 +41,7 @@ export function extractUrlObjectFromResult(result: CallToolResult): string {
  * @param app - The MCP App instance
  * @param result - The tool result containing the view URL
  */
-export async function handleEmbedResult(app: App, result: CallToolResult): Promise<void> {
+export async function handleToolResult(app: App, result: CallToolResult): Promise<void> {
   if (!result || result.isError) {
     showError('TOOL_ERROR');
     return;
