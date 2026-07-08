@@ -1,3 +1,4 @@
+import { desktopToolNames } from '../tools/desktop/toolName.js';
 import {
   DESKTOP_ROUTE_TABLE,
   DesktopInstructionRoute,
@@ -8,6 +9,17 @@ import {
 const routes = DESKTOP_ROUTE_TABLE.filter(
   (entry): entry is DesktopInstructionRoute => entry.kind === 'route',
 );
+
+// WHY: boundary guards keep 'apply-dashboard' from matching inside 'build-and-apply-dashboard'.
+const toolMentionsInFirstMentionOrder = (text: string): string[] =>
+  desktopToolNames
+    .map((tool) => ({
+      tool,
+      index: text.search(new RegExp(`(?<![a-z0-9-])${tool}(?![a-z0-9-])`)),
+    }))
+    .filter(({ index }) => index !== -1)
+    .sort((a, b) => a.index - b.index)
+    .map(({ tool }) => tool);
 
 describe('DESKTOP_ROUTE_TABLE', () => {
   it('entry ids are unique', () => {
@@ -30,12 +42,14 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(renderInstructionEntry(route)).toBe(`For ${route.trigger}, ${route.action}`);
   });
 
-  it.each(routes)('route "$id" rendered block names every tool in its sequence', (route) => {
-    const rendered = renderInstructionEntry(route);
-    for (const tool of route.toolSequence) {
-      expect(rendered).toContain(tool);
-    }
-  });
+  it.each(routes)(
+    'route "$id" toolSequence lists exactly the tools its rendered block names, in first-mention order',
+    (route) => {
+      expect(toolMentionsInFirstMentionOrder(renderInstructionEntry(route))).toEqual([
+        ...route.toolSequence,
+      ]);
+    },
+  );
 
   it.each(routes)('route "$id" rendered block states each stop condition verbatim', (route) => {
     const rendered = renderInstructionEntry(route);
