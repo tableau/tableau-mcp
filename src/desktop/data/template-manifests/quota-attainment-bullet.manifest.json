@@ -1,0 +1,110 @@
+{
+ "template": "quota-attainment-bullet",
+ "family": "deviation",
+ "readiness": "YELLOW",
+ "fast_path_eligible": true,
+ "fast_path_blockers": [],
+ "portability_evidence": {
+  "fixture_bind": true,
+  "render_verified": "live-2026-07-06",
+  "render_evidence": {
+   "method": "gate-composite",
+   "date": "2026-07-06",
+   "structural": 0.97297,
+   "critical_pass": "5/5",
+   "pixel": 1.0,
+   "pixel_regions": 6,
+   "sanity": "sane",
+   "sanity_signals": [
+    "mark-count=pass reconciled=true (17=17=EXPECTED_COUNT, Worksheet>Copy>Data on source and applied sheets)",
+    "caption-leak=pass"
+   ],
+   "run": "per-leg source-anchor replay (W38-LIVE-2); grafted Target Amount calc ([Sales]*0.9) survived apply; per-cell reference line survived apply (all refline facets)",
+   "artifacts": "local-only under ~/TableauGoldens/lab/ (quota* renders, worksheet XMLs, w38l2 stamp JSON)",
+   "basis": "golden-parity gate run 2026-07-06 (source-anchor replay, W38-LIVE-2): structural 0.97297 (5/5 critical; sole miss = salience-1 resolved-title, sheet names differ by design), pixel 1.0 (6 ROIs, same-geometry captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 17=17=EXPECTED_COUNT",
+   "lane": "fable-direct stamp run 2026-07-06 (orchestrator gate run over W38-LIVE-2 per-leg evidence; grade scratchpad imports parity-grade.mjs verbatim)",
+   "gate_composite": 98,
+   "high_pass": "0/0",
+   "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 ROIs). Source and applied are two INDEPENDENT renders of the same data on the same instance."
+  }
+ },
+ "datasource_placeholder": true,
+ "placeholders": [
+  "TITLE",
+  "DATASOURCE"
+ ],
+ "intent_keywords": [
+  "quota",
+  "attainment",
+  "target",
+  "vs-goal",
+  "bullet"
+ ],
+ "description": "A quota-attainment bullet chart for the product #1-frequency use case (sales/quota performance, UC1): one Bar per entity member (rep/region on rows) whose length is the ACTUAL measure on cols ([sum:Actual:qk]), with a per-cell QUOTA reference line (SUM([Quota]) drawn as refline0 on the SAME axis as the actual bar) so the gap between the bar and the line reads as attainment vs goal at a glance. Compiled hermetically over a CLEANED copy of the repo ranking-bullet-chart.xml exemplar (which had no manifest, excluded by an earlier lane as dead XML; the original dead file is left untouched): the Superstore-specific categorical filter and the Profit-Ratio color calc were dropped, and Sub-Category/Sales/Profit were generalized to Entity/Actual/Quota placeholders, so the slot vocabulary is exactly {entity, actual, quota} (optional categorical filter dims are NOT slots). Sibling of bullet-variance-chart (same actual-vs-target shape, quota-attainment intent). Live render-verified 2026-07-06 by the golden-parity gate (composite 98; see portability_evidence.render_evidence): structural 0.97297 (5/5 critical), pixel 1.0, binding-sanity sane via reconciled 17=17=EXPECTED_COUNT Copy>Data mark counts and caption-leak pass (the grafted Target Amount calc and the per-cell reference line both survived apply). Provenance: product team, 2026-07.",
+ "avoid_when": [
+  "The actual and/or quota rows carry a MIXED currency_code (USD + EUR + GBP ...) that would be summed RAW: SUM([Actual]) on cols and the per-cell SUM([Quota]) reference line add different currency units as one number, so the attainment gap is silently wrong; convert to a single reporting currency (or filter to one currency_code) before binding a monetary measure.",
+  "There is no meaningful quota/goal/benchmark measure to compare against; without the reference line this collapses to a plain ranked bar (use ranking-ordered-bar), because a bullet's whole value is the actual-vs-quota gap."
+ ],
+ "slots": [
+  {
+   "slot_id": "entity",
+   "template_field": "Entity",
+   "derivation": "none",
+   "role": [
+    "rows"
+   ],
+   "kind": "categorical",
+   "bindable": true,
+   "required": true,
+   "notes": "The entity dimension on rows: one bullet row per member (rep / region / team). Optional categorical FILTER dims are NOT slots (the dead exemplar's Superstore Sub-Category filter was dropped on clean). XML column-instance [none:Entity:nk]."
+  },
+  {
+   "slot_id": "actual",
+   "template_field": "Actual",
+   "derivation": "sum",
+   "role": [
+    "cols"
+   ],
+   "kind": "quantitative",
+   "bindable": true,
+   "required": true,
+   "notes": "The ACTUAL/attained measure: the bar length on cols, SUM([Actual]) -> [sum:Actual:qk]. This is also the reference line's axis-column (the quota line sits on the same axis as the actual bar)."
+  },
+  {
+   "slot_id": "quota",
+   "template_field": "Quota",
+   "derivation": "sum",
+   "role": [
+    "lod",
+    "reference-line"
+   ],
+   "kind": "quantitative",
+   "bindable": true,
+   "required": true,
+   "notes": "The QUOTA/target/goal measure that drives the reference line. Carried on the level-of-detail (lod) shelf as SUM([Quota]) -> [sum:Quota:qk] so it is in the view, and referenced by refline0 (value-column) as the per-cell quota line. replaceFieldReferences rewrites [Quota] in BOTH the lod instance and the reference-line on bind. See hazard quota-summed-per-cell / multi-currency-raw-sum."
+  }
+ ],
+ "calcs": [],
+ "hazards": [
+  {
+   "code": "multi-currency-raw-sum",
+   "detail": "Product evidence (product team, 2026-07) - has bitten someone: when the actual and/or quota rows carry a MIXED currency_code (USD + EUR + GBP ...), neither measure may be summed raw. SUM([Actual]) on cols and the per-cell SUM([Quota]) reference line add different currency units as one number, so the attainment gap is silently WRONG (a data-correctness bug, not a formatting one). The template has no currency awareness. Convert to a single reporting currency, or filter to one currency_code, before binding a monetary measure.",
+   "xml": "quota-attainment-bullet.xml:33"
+  },
+  {
+   "code": "quota-summed-per-cell",
+   "detail": "The quota line is a per-cell reference line with formula='sum' (SUM([Quota])), so it aggregates the quota additively within each entity cell. If the bound quota is a rate/ratio, an average goal, or an already-rolled-up period total, SUM double-counts across the cell's rows and the line lands in the wrong place. Bind a quota that is additive at the entity grain, or switch the reference line's formula to average/median. (product team, 2026-07)",
+   "xml": "quota-attainment-bullet.xml:33"
+  },
+  {
+   "code": "partial-period-attainment",
+   "detail": "A mid-period ACTUAL compared against a FULL-period quota overstates the shortfall: the bar sits far below the quota line simply because the period is not over, not because the entity is behind. The template has no as-of/period-elapsed awareness: pro-rate the quota to the elapsed period, scale the actual to a run-rate, or label the as-of date before reading the gap as risk. (product team, 2026-07)",
+   "xml": "quota-attainment-bullet.xml:33"
+  },
+  {
+   "code": "not-live-render-verified",
+   "detail": "Compiled HERMETICALLY via the factory route over a cleaned copy of the previously dead ranking-bullet-chart.xml (no live Tableau Desktop) and SUBSEQUENTLY live render-verified on 2026-07-06: portability_evidence.render_verified='live-2026-07-06' and fast_path_eligible=true. The golden-parity gate earned the stamp (composite 98: structural 0.97297, pixel 1.0, binding-sanity sane via reconciled 17=17 Copy>Data mark counts + caption-leak pass; grafted Target Amount calc + per-cell reference line survived apply) — the live render-readback proof the hermetic compile alone could not supply. See portability_evidence.render_evidence for the auditable basis.",
+   "xml": "quota-attainment-bullet.xml:1"
+  }
+ ]
+}

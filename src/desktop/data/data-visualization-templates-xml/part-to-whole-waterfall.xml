@@ -1,0 +1,106 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+      <table>
+        <view>
+          <datasources>
+            <datasource name='{{DATASOURCE}}' />
+          </datasources>
+          <datasource-dependencies datasource='{{DATASOURCE}}'>
+            <column caption='-SUM([Profit])' datatype='real' name='[Calculation_767019348535836686]' role='measure' type='quantitative'>
+              <calculation class='tableau' formula='-SUM([Profit])' />
+            </column>
+            <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+            <column datatype='string' name='[Sub-Category]' role='dimension' type='nominal' />
+            <column-instance column='[Profit]' derivation='Sum' name='[cum:sum:Profit:qk]' pivot='key' type='quantitative'>
+              <table-calc aggregation='Sum' ordering-type='Rows' type='CumTotal' />
+            </column-instance>
+            <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />
+            <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
+            <column-instance column='[Calculation_767019348535836686]' derivation='User' name='[usr:Calculation_767019348535836686:qk]' pivot='key' type='quantitative' />
+          </datasource-dependencies>
+          <computed-sort column='[{{DATASOURCE}}].[none:Sub-Category:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:Profit:qk]' />
+          <aggregation value='true' />
+        </view>
+        <style>
+          <style-rule element='axis'>
+            <format attr='tick-color' value='#00000000' />
+            <format attr='line-visibility' value='off' />
+            <format attr='display' class='0' field='[{{DATASOURCE}}].[cum:sum:Profit:qk]' scope='rows' value='false' />
+          </style-rule>
+          <style-rule element='header'>
+            <format attr='border-style' data-class='total' value='none' />
+          </style-rule>
+          <style-rule element='label'>
+            <format attr='display' field='[{{DATASOURCE}}].[none:Sub-Category:nk]' value='false' />
+          </style-rule>
+          <style-rule element='pane'>
+            <format attr='border-style' data-class='total' value='none' />
+            <format attr='border-style' data-class='subtotal' value='solid' />
+            <format attr='border-color' data-class='subtotal' value='#ffffff' />
+          </style-rule>
+          <style-rule element='table'>
+            <format attr='show-null-value-warning' value='false' />
+          </style-rule>
+          <style-rule element='worksheet'>
+            <format attr='display-field-labels' scope='cols' value='false' />
+          </style-rule>
+          <style-rule element='dropline'>
+            <format attr='line-visibility' value='off' />
+          </style-rule>
+          <style-rule element='refline'>
+            <format attr='line-visibility' value='off' />
+          </style-rule>
+          <style-rule element='gridline'>
+            <format attr='line-visibility' value='off' />
+          </style-rule>
+          <style-rule element='zeroline'>
+            <format attr='line-visibility' value='off' />
+          </style-rule>
+          <style-rule element='table-div'>
+            <format attr='line-visibility' scope='rows' value='off' />
+            <format attr='line-visibility' scope='cols' value='off' />
+          </style-rule>
+        </style>
+        <panes>
+          <pane selection-relaxation-option='selection-relaxation-disallow'>
+            <view>
+              <breakdown value='auto' />
+            </view>
+            <mark class='GanttBar' />
+            <encodings>
+              <color column='[{{DATASOURCE}}].[sum:Profit:qk]' />
+              <size column='[{{DATASOURCE}}].[usr:Calculation_767019348535836686:qk]' />
+            </encodings>
+            <style>
+              <style-rule element='datalabel'>
+                <format attr='color-mode' value='user' />
+                <format attr='color' value='#ffffff' />
+              </style-rule>
+              <style-rule element='mark'>
+                <format attr='mark-color' value='#000000' />
+                <format attr='mark-transparency' value='255' />
+                <format attr='has-stroke' value='true' />
+                <format attr='stroke-color' value='#ffffff' />
+              </style-rule>
+              <style-rule element='trendline'>
+                <format attr='line-visibility' value='off' />
+              </style-rule>
+            </style>
+          </pane>
+        </panes>
+        <rows>[{{DATASOURCE}}].[cum:sum:Profit:qk]</rows>
+        <cols>[{{DATASOURCE}}].[none:Sub-Category:nk]</cols>
+      </table>
+      <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+    </worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+      <viewpoint>
+        <zoom type='entire-view' />
+      </viewpoint>
+      <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+    </window>
+  </windows>
+</workbook>

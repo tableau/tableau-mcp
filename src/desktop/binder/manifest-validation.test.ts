@@ -55,8 +55,18 @@ describe('binder/manifest-validation — pure module surface', () => {
 describe('binder/manifest-validation — superset is backward-compatible with the bundled manifests', () => {
   const bundled = readBundledManifestFiles();
 
-  it('there are 17 bundled manifests to check', () => {
-    expect(bundled.length).toBe(17);
+  it('there are 41 bundled manifests to check', () => {
+    // W26-B re-snapshot: the shipped supply was resynced to the factory's full 39-template
+    // set (17 → 39; +22 new manifests copied verbatim, trust fields unchanged).
+    // W28-D true byte-for-byte mirror: the remaining stale factory manifests were resynced
+    // and the factory's post-snapshot addition gantt-task-rollup-chart (#40, render_verified
+    // 'none' → fast_path_eligible false) was included verbatim, taking the count 39 → 40.
+    // W59 template-sync: the seven missing fast-path XMLs ported from the factory with
+    // manifests copied verbatim (six overwrote stale copies; ww-ou-arrow's manifest was
+    // net-new), taking the count 40 → 41.
+    // Pinned in lockstep with the on-disk count so a silent add/drop of a bundled manifest
+    // fails here.
+    expect(bundled.length).toBe(41);
   });
 
   it('every bundled manifest validates through the new types’ validator (no errors)', () => {
@@ -96,17 +106,6 @@ describe('binder/manifest-validation — the new superset fields are additive/pa
     expect(validateManifest(m)).toEqual([]);
   });
 
-  it('accepts an optional DerivationContract on the manifest (pass-through, not re-derived)', () => {
-    const m = baseManifest();
-    const derivation: DerivationContract = {
-      parent_template: 'ww-ou-arrow',
-      removed_facets: ['color-encoding-presence'],
-      changed_facets: ['diff-calc-on-cols'],
-    };
-    m.derivation = derivation;
-    expect(validateManifest(m)).toEqual([]);
-  });
-
   it('types a RenderStampLedgerEntry as an all-optional, fail-closed record', () => {
     // Not part of the on-disk manifest schema — a purely additive convergence type.
     // A partial line must still type-check (every field optional).
@@ -114,5 +113,82 @@ describe('binder/manifest-validation — the new superset fields are additive/pa
     const empty: RenderStampLedgerEntry = {};
     expect(partial.composite).toBe(91);
     expect(Object.keys(empty)).toHaveLength(0);
+  });
+});
+
+describe('binder/manifest-validation — validateManifest ENFORCES the DerivationContract shape (LR2-3)', () => {
+  // Attach a derivation block to a known-valid bundled manifest to exercise the ported shape gate
+  // (superset from A's manifest.ts). The facet-vocabulary / parent-existence cross-checks still
+  // live at the golden-parity gate — this validator only enforces object shape + closed vocab.
+  function withDerivation(d: unknown): unknown {
+    const base = structuredClone(loadManifests().get('ranking-ordered-bar')!) as unknown as Record<
+      string,
+      unknown
+    >;
+    base.derivation = d;
+    return base;
+  }
+
+  it('accepts a well-formed derivation block (disjoint, non-empty union)', () => {
+    const derivation: DerivationContract = {
+      parent_template: 'ww-ou-arrow',
+      removed_facets: ['color-encoding-presence'],
+      changed_facets: ['diff-calc-on-cols'],
+    };
+    expect(validateManifest(withDerivation(derivation))).toEqual([]);
+  });
+
+  it('rejects an UNKNOWN derivation key (closed-vocabulary discipline)', () => {
+    expect(
+      validateManifest(
+        withDerivation({
+          parent_template: 'p',
+          removed_facets: [],
+          changed_facets: ['mark-classes-per-pane'],
+          bogus: 1,
+        }),
+      ).join(' '),
+    ).toMatch(/unknown key 'bogus'/);
+  });
+
+  it('rejects a facet appearing in BOTH removed_facets and changed_facets (must be disjoint)', () => {
+    expect(
+      validateManifest(
+        withDerivation({
+          parent_template: 'p',
+          removed_facets: ['mark-classes-per-pane'],
+          changed_facets: ['mark-classes-per-pane'],
+        }),
+      ).join(' '),
+    ).toMatch(/disjoint/);
+  });
+
+  it('rejects an exemption-free derivation (omit the block for a non-derivation template)', () => {
+    expect(
+      validateManifest(
+        withDerivation({ parent_template: 'p', removed_facets: [], changed_facets: [] }),
+      ).join(' '),
+    ).toMatch(/no exempt facets/);
+  });
+
+  it('rejects a missing/empty parent_template and a non-string-array facet list', () => {
+    expect(
+      validateManifest(
+        withDerivation({
+          parent_template: '',
+          removed_facets: [],
+          changed_facets: ['mark-classes-per-pane'],
+        }),
+      ).join(' '),
+    ).toMatch(/parent_template/);
+    expect(
+      validateManifest(
+        withDerivation({
+          parent_template: 'p',
+          removed_facets: 'not-an-array',
+          changed_facets: ['mark-classes-per-pane'],
+        }),
+      ).join(' '),
+    ).toMatch(/removed_facets/);
   });
 });

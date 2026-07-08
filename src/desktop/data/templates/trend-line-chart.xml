@@ -9,6 +9,7 @@
       <datasource-dependencies datasource='{{DATASOURCE}}'>
         <column datatype='date' name='[Order Date]' role='dimension' type='ordinal' />
         <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Facet]' role='dimension' type='nominal' />
         <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
         <column-instance column='[Order Date]' derivation='Month-Trunc' name='[tmn:Order Date:qk]' pivot='key' type='quantitative' />
       </datasource-dependencies>

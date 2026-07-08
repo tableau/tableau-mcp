@@ -1,0 +1,93 @@
+{
+  "template": "ranking-bump-chart",
+  "family": "ranking",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": false,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "bump",
+    "bump-chart",
+    "rank-over-time",
+    "ranking"
+  ],
+  "description": "A bump chart: rank (a table calc of an aggregated measure) plotted over a Year/Month date on cols, one Line per category (color), with a Circle dot and rank label at each period — shows how members' rankings rise and fall across time. Lane W11-F2: the source year pin was PARAMETERIZED (collapsed to level-members) so the date stays a data-driven Filters pill with no source literals.",
+  "slots": [
+    {
+      "slot_id": "order_date_year",
+      "template_field": "Order Date",
+      "derivation": "yr",
+      "role": [
+        "cols"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "qualified_key_required": true,
+      "notes": "Year part of the SAME bound date field (outer cols axis). Reuses Order Date at a second derivation — see hazard single-date-two-derivations."
+    },
+    {
+      "slot_id": "order_date_month",
+      "template_field": "Order Date",
+      "derivation": "mn",
+      "role": [
+        "cols"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "qualified_key_required": true,
+      "notes": "Month part of the SAME bound date field (inner cols axis) — the period the rank is recomputed at."
+    },
+    {
+      "slot_id": "sub_category",
+      "template_field": "Sub-Category",
+      "derivation": "none",
+      "role": [
+        "color"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "One ranked line/color per member — the entities whose ranks bump over time."
+    },
+    {
+      "slot_id": "sales",
+      "template_field": "Sales",
+      "derivation": "sum",
+      "role": [
+        "calc-input"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "The measure that is ranked. It is not on a shelf directly; it feeds the template-owned Rank(Sum([Sales])) table calc (see hazard table-calc-rank-rides-along). replaceFieldReferences rewrites [Sales] inside that formula on bind."
+    }
+  ],
+  "calcs": [],
+  "hazards": [
+    {
+      "code": "hardcoded-filter-parameterized",
+      "detail": "The source workbook pinned Year of Order Date to member='2016' — a source-calendar literal that would render empty on a differently-shaped date. Lane F2's compile-time filter policy PARAMETERIZED it: the member pin was collapsed to the neutral all-members form (<groupfilter function='level-members' level='[yr:Order Date:ok]'/>), so Year stays a data-driven Filters-shelf pill (its <slices> entry preserved) with the source literal removed — the same neutral form the apply-path 3c neutralizer writes (idempotent).",
+      "xml": "ranking-bump-chart.xml:26-28"
+    },
+    {
+      "code": "single-date-two-derivations",
+      "detail": "The one [Order Date] field is used at BOTH Year and Month on cols. Against the single-date committed fixture the second temporal slot cannot bind a DISTINCT field, so fixture_bind=false — a valid, honest state (same as change-over-time-calendar-heatmap). On a real dataset both slots bind the same date field via qualified keys; the false reflects the fixture's one-date shape, not a template defect.",
+      "xml": "ranking-bump-chart.xml:24,19"
+    },
+    {
+      "code": "table-calc-rank-rides-along",
+      "detail": "The Rank measure [Calculation_508343847073411072] is a table calc 'Rank(Sum([Sales]))' with a nested <table-calc>. Its <calculation> is NON-self-closing, so parseTemplateCalcs (self-closing only) does NOT see it — it is NOT a declared calc slot and rides along verbatim. Its one bindable input is Sales (the 'sales' slot); replaceFieldReferences rewrites [Sales] inside the formula on bind. The ranking assumes the bound measure is meaningfully rankable across the categories.",
+      "xml": "ranking-bump-chart.xml:11-15"
+    }
+  ]
+}

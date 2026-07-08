@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { resolve } from 'path';
 
+import { removeSameNamedWorksheet } from '../../../desktop/templates/injectTemplateCore.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -196,3 +197,42 @@ async function getResult(
   const callback = await Provider.from(tool.callback);
   return await callback(params as any, extra);
 }
+
+describe('removeSameNamedWorksheet — demo idempotence (W60)', () => {
+  const wb = `<workbook>
+  <worksheets>
+    <worksheet name='Keep Me'>
+      <table><rows /></table>
+    </worksheet>
+    <worksheet name='Bar of Sales'>
+      <table><rows>[old]</rows></table>
+    </worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' name='Bar of Sales'>
+      <cards />
+    </window>
+    <window class='worksheet' name='Keep Me' />
+  </windows>
+</workbook>`;
+
+  it('removes the same-named worksheet and its window so re-inject replaces instead of (1)-copying', () => {
+    const out = removeSameNamedWorksheet(wb, 'Bar of Sales');
+    expect(out).not.toContain("<worksheet name='Bar of Sales'>");
+    expect(out).not.toContain("<window class='worksheet' name='Bar of Sales'>");
+    expect(out).toContain("<worksheet name='Keep Me'>");
+    expect(out).toContain("<window class='worksheet' name='Keep Me' />");
+  });
+
+  it('leaves the workbook unchanged when the sheet is referenced by a dashboard zone (fail-safe)', () => {
+    const withDash = wb.replace(
+      '</worksheets>',
+      "</worksheets>\n  <dashboards><dashboard name='D'><zones><zone name='Bar of Sales' /></zones></dashboard></dashboards>",
+    );
+    expect(removeSameNamedWorksheet(withDash, 'Bar of Sales')).toBe(withDash);
+  });
+
+  it('no-ops when there is no name collision', () => {
+    expect(removeSameNamedWorksheet(wb, 'Fresh Name')).toBe(wb);
+  });
+});

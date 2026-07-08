@@ -4,7 +4,19 @@
   "readiness": "GREEN",
   "fast_path_eligible": true,
   "fast_path_blockers": [],
-  "portability_evidence": { "fixture_bind": true, "render_verified": "live-2026-07-05" },
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "live-2026-07-05",
+    "render_evidence": {
+      "basis": "hand-stamp: live tier1-smoke render + non-blank pixel-floor probe + human review (coverage-envelope extension from 4 to up to 7 families); no numeric structural-parity score was measured",
+      "lane": "tier1-smoke live-verify 2026-07-05 (Tableau Desktop pid 36540, open 'Super Bowl by the Numbers' datasource; no-LLM binder: O/U Line(avg)->cols, Super Bowl->rows, Teams/Conference->detail)",
+      "structural": null,
+      "critical_pass": "not measured (blank-floor probe only, not a structural-parity pass-list)",
+      "high_pass": "not measured (blank-floor probe only, not a structural-parity pass-list)",
+      "pixel_oracle": "none (blank-floor probe only: rendered + NON-BLANK, inkRatio 1.29% — a confident non-blank for thin strip ticks, not a golden pixel oracle)",
+      "gate_composite": null
+    }
+  },
   "datasource_placeholder": true,
   "placeholders": ["TITLE", "DATASOURCE"],
   "intent_keywords": ["bar-code", "strip-plot", "distribution", "spread", "jitter", "gantt-strip", "dot-strip"],

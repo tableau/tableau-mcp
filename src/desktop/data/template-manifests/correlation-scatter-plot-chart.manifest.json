@@ -2,42 +2,147 @@
   "template": "correlation-scatter-plot-chart",
   "family": "correlation",
   "readiness": "YELLOW",
-  "fast_path_eligible": false,
+  "fast_path_eligible": true,
   "fast_path_blockers": [],
-  "portability_evidence": { "fixture_bind": true, "render_verified": "none" },
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "live-2026-07-06",
+    "render_evidence": {
+      "method": "gate-composite",
+      "date": "2026-07-06",
+      "structural": 0.97297,
+      "critical_pass": "5/5",
+      "pixel": 1.0,
+      "pixel_regions": 6,
+      "sanity": "sane",
+      "sanity_signals": [
+        "mark-count=pass reconciled=true (2508=2508, Worksheet>Copy>Data on source and applied sheets)",
+        "caption-leak=pass"
+      ],
+      "run": "source-anchor replay on the authored scatter oracle (Sample - Superstore, live repaired connection); bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity placeholder fill; oracle opens worksheet-frontmost, no unhide bypass needed",
+      "artifacts": "local-only under ~/TableauGoldens/lab/scatter-* (renders, worksheet XMLs, workbook cache)",
+      "basis": "golden-parity gate run 2026-07-06 (source-anchor replay): structural 0.97297 (5/5 critical), pixel 1.0 (6 ROIs, same-geometry captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 2508=2508 on source and applied renders",
+      "lane": "fable-direct stamp run 2026-07-06 (orchestrator live gate run, driver evals/runs/scatter-stamp-live.mjs)",
+      "gate_composite": 98,
+      "high_pass": "3/3",
+      "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 ROIs all 1.0). Source and applied are two INDEPENDENT renders of the same data on the same instance."
+    }
+  },
   "datasource_placeholder": true,
-  "placeholders": ["TITLE", "DATASOURCE"],
-  "intent_keywords": ["scatter", "correlation", "relationship", "vs", "versus", "against"],
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "scatter",
+    "correlation",
+    "relationship",
+    "vs",
+    "versus",
+    "against"
+  ],
   "description": "One point per detail-grain member; X and Y are two measures; color is a template calc; a second dimension adds detail.",
   "slots": [
-    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
-      "role": ["cols", "formula-input"], "kind": "quantitative", "bindable": true, "required": true },
-    { "slot_id": "profit", "template_field": "Profit", "derivation": "sum",
-      "role": ["rows", "formula-input"], "kind": "quantitative", "bindable": true, "required": true },
-    { "slot_id": "customer_name", "template_field": "Customer Name", "derivation": "none",
-      "role": ["detail"], "kind": "categorical", "bindable": true, "required": true },
-    { "slot_id": "region", "template_field": "Region", "derivation": "none",
-      "role": ["detail"], "kind": "categorical", "bindable": true, "required": true,
-      "notes": "template column has aggregate-role-from='[State/Province]'; NOT rewritten by replaceFieldReferences (cosmetic secondary-role hint carried onto the target)." }
+    {
+      "slot_id": "sales",
+      "template_field": "Sales",
+      "derivation": "sum",
+      "role": [
+        "cols",
+        "formula-input"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true
+    },
+    {
+      "slot_id": "profit",
+      "template_field": "Profit",
+      "derivation": "sum",
+      "role": [
+        "rows",
+        "formula-input"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true
+    },
+    {
+      "slot_id": "customer_name",
+      "template_field": "Customer Name",
+      "derivation": "none",
+      "role": [
+        "detail"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true
+    },
+    {
+      "slot_id": "region",
+      "template_field": "Region",
+      "derivation": "none",
+      "role": [
+        "detail"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "template column has aggregate-role-from='[State/Province]'; NOT rewritten by replaceFieldReferences (cosmetic secondary-role hint carried onto the target)."
+    }
   ],
   "calcs": [
-    { "slot_id": "profit_ratio_calc", "template_field": "Calculation_1368249927221915648", "derivation": "usr",
-      "role": ["color"], "kind": "calc", "bindable": false, "required": true,
-      "formula": "SUM([Profit])/SUM([Sales])", "formula_refs": ["Profit", "Sales"],
-      "depends_on_slots": ["profit", "sales"],
+    {
+      "slot_id": "profit_ratio_calc",
+      "template_field": "Calculation_1368249927221915648",
+      "derivation": "usr",
+      "role": [
+        "color"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "SUM([Profit])/SUM([Sales])",
+      "formula_refs": [
+        "Profit",
+        "Sales"
+      ],
+      "depends_on_slots": [
+        "profit",
+        "sales"
+      ],
       "result_role": "measure",
       "inputs": [
-        { "ref": "Profit", "slot_id": "profit", "slot_kind": "quantitative", "required": true, "template_internal": false },
-        { "ref": "Sales", "slot_id": "sales", "slot_kind": "quantitative", "required": true, "template_internal": false }
+        {
+          "ref": "Profit",
+          "slot_id": "profit",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        },
+        {
+          "ref": "Sales",
+          "slot_id": "sales",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        }
       ],
-      "prereqs": ["raw-formula-refs"] }
+      "prereqs": [
+        "raw-formula-refs"
+      ]
+    }
   ],
   "hazards": [
-    { "code": "raw-formula-refs",
+    {
+      "code": "raw-formula-refs",
       "detail": "Calc formula references bare [Profit]/[Sales]; rewriteFormulaFieldRefs repairs them ONLY because Profit & Sales are bindable bare-key slots. Gate #6 asserts both are bound.",
-      "xml": "correlation-scatter-plot-chart.xml:10-11" },
-    { "code": "hidden-aggregate-role-from",
+      "xml": "correlation-scatter-plot-chart.xml:10-11"
+    },
+    {
+      "code": "hidden-aggregate-role-from",
       "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target field inherits the template's secondary-role hint (verification-report correction).",
-      "xml": "correlation-scatter-plot-chart.xml:15" }
+      "xml": "correlation-scatter-plot-chart.xml:15"
+    }
   ]
 }

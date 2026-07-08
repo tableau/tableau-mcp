@@ -2,18 +2,33 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.11.0+content.2026-07-06",
+  "content_version": "2.11.0+content.2026-07-08",
   "schema_version": "1",
-  "generated": "2026-07-06",
+  "generated": "2026-07-08",
   "engine_compat": {
     "server_min": "2.11.0",
     "node": ">=22.7.5"
   },
   "resources": [
     {
+      "path": "data-visualization-templates-xml/box-plot-chart.xml",
+      "sha256": "88884a946deae4555f31ab65c4063f1105e2a100a534cf494b3f55f10b1ad797",
+      "bytes": 2204
+    },
+    {
+      "path": "data-visualization-templates-xml/bullet-variance-chart.xml",
+      "sha256": "8cee866f415ee3dca10814307ba7ca3a804c859dae0c0f91d8207537ca5ea57f",
+      "bytes": 2046
+    },
+    {
       "path": "data-visualization-templates-xml/change-over-time-area-chart.xml",
       "sha256": "9a2ff5bc3b63389cfe0eeaea50991fd547f6103fa65d4854efac0e930662aeae",
       "bytes": 1728
+    },
+    {
+      "path": "data-visualization-templates-xml/change-over-time-calendar-heatmap.xml",
+      "sha256": "e86b39fc3a324b02c59dc2cf5d2503cbb6b1c603f899644e27a31cd3f5912430",
+      "bytes": 2128
     },
     {
       "path": "data-visualization-templates-xml/change-over-time-stacked-area-chart.xml",
@@ -21,9 +36,14 @@
       "bytes": 1729
     },
     {
+      "path": "data-visualization-templates-xml/connected-scatterplot.xml",
+      "sha256": "a1af2dbcb0101f71e0837623d04ab346f5ef121fd2ba3d740fed209329fc72be",
+      "bytes": 2297
+    },
+    {
       "path": "data-visualization-templates-xml/control-chart-xmr.xml",
-      "sha256": "4e73cff7dc18b5e3a41365f6c50f071ced4c2de9e8bb53d2eac06a91910d7300",
-      "bytes": 3453
+      "sha256": "130bce6e869a4f662fbeb061487cfb8a5296c51254fa9767cd47600fcf671510",
+      "bytes": 4107
     },
     {
       "path": "data-visualization-templates-xml/correlation-bubble-chart.xml",
@@ -36,9 +56,29 @@
       "bytes": 2962
     },
     {
+      "path": "data-visualization-templates-xml/correlation-highlight-table.xml",
+      "sha256": "688cbb4986529a36956dec2dddab714f18734e146a6231acaadee191d9988eaf",
+      "bytes": 5896
+    },
+    {
       "path": "data-visualization-templates-xml/correlation-scatter-plot-chart.xml",
       "sha256": "f50364bb90648c7ead3f6b7b247c4d6fa2082b7460e06a34b916ca4287ec3958",
       "bytes": 3250
+    },
+    {
+      "path": "data-visualization-templates-xml/deviation-diverging-bar.xml",
+      "sha256": "a94fd1809cfd21594b250feb07cc6a1fe3c8bfa0de958430917ac832869334d5",
+      "bytes": 3675
+    },
+    {
+      "path": "data-visualization-templates-xml/deviation-gain-loss-chart.xml",
+      "sha256": "7fe6e0a458650e5cb4923cfed471ad4bc666eac7f12eb2cd7984e756487821fc",
+      "bytes": 9565
+    },
+    {
+      "path": "data-visualization-templates-xml/deviation-spine-chart.xml",
+      "sha256": "3994a391f450cbf250214e3ed46d0c7ff294b67353689170d20aca3f40f9390d",
+      "bytes": 5901
     },
     {
       "path": "data-visualization-templates-xml/distribution-bar-code-chart.xml",
@@ -46,14 +86,59 @@
       "bytes": 2396
     },
     {
+      "path": "data-visualization-templates-xml/distribution-histogram.xml",
+      "sha256": "bc70eb365ebe8647a5118d31389fc25205a4ca2807cc2286b348b39e503ab8fc",
+      "bytes": 1822
+    },
+    {
+      "path": "data-visualization-templates-xml/funnel-chart.xml",
+      "sha256": "09dd141149ed8ddc2c6161776f71efcb28a427582483a140fdc47cf74e0433d7",
+      "bytes": 1606
+    },
+    {
+      "path": "data-visualization-templates-xml/gantt-chart.xml",
+      "sha256": "2a62ba5444632bb42082faa6d29a2fe23e1a775348fdfaa49f8be72ff47753e3",
+      "bytes": 5720
+    },
+    {
+      "path": "data-visualization-templates-xml/gantt-task-rollup-chart.xml",
+      "sha256": "88a67da2a8703811cc32990bb04247cdd879bb5f0b3f10f6ae124f747c938dba",
+      "bytes": 1950
+    },
+    {
+      "path": "data-visualization-templates-xml/gantt-timeline-chart.xml",
+      "sha256": "945e7c588a5ac3325197e2b26b38e119f6985706f79a0d1c238b4921ea086256",
+      "bytes": 1956
+    },
+    {
       "path": "data-visualization-templates-xml/kpi-text.xml",
       "sha256": "c949d0041cb100b30ab2845e53f3c4326c12bc018700869a9b10f4ddca881516",
       "bytes": 1800
     },
     {
+      "path": "data-visualization-templates-xml/magnitude-paired-bar.xml",
+      "sha256": "7cfd1c10ecb46e630432afc9c91564bda16c50f1317ac8cc19217912dce08fb6",
+      "bytes": 2406
+    },
+    {
+      "path": "data-visualization-templates-xml/magnitude-paired-column-chart.xml",
+      "sha256": "c481d9c89a318ca5eada06e0394599f252ee6479030b0340e83f61d4729c7b2c",
+      "bytes": 2406
+    },
+    {
+      "path": "data-visualization-templates-xml/pareto-chart.xml",
+      "sha256": "319452a70c9eb83c85d0620fdfa2486e852bd84049bbae20f550cc47897e50a6",
+      "bytes": 4971
+    },
+    {
       "path": "data-visualization-templates-xml/part-to-whole-pie-chart.xml",
       "sha256": "c4db7330b9cb223795d1dbf230a15f4b482b540fa792f57c7599e0dc75dcff11",
       "bytes": 1709
+    },
+    {
+      "path": "data-visualization-templates-xml/part-to-whole-proportional-stacked-bar.xml",
+      "sha256": "778fb59ad23b91f1e61e8b3caae40b7933348f5e46ee781c8b124408a3c94b3f",
+      "bytes": 2991
     },
     {
       "path": "data-visualization-templates-xml/part-to-whole-stacked-bar-chart.xml",
@@ -66,9 +151,29 @@
       "bytes": 2087
     },
     {
+      "path": "data-visualization-templates-xml/part-to-whole-waterfall.xml",
+      "sha256": "215d8fbe9970b79ecd46242799d600fd4775056d887571b5242b7b2726d00681",
+      "bytes": 5083
+    },
+    {
+      "path": "data-visualization-templates-xml/quota-attainment-bullet.xml",
+      "sha256": "6a0dfe73ca8d106a296fff0d22a06870c893124adf2a7079f33663e2ac92a614",
+      "bytes": 2032
+    },
+    {
+      "path": "data-visualization-templates-xml/ranking-bump-chart.xml",
+      "sha256": "79a6f458aa2538e48e9e62349d0b0608cbf981667ad7aec313889e2266c3a98e",
+      "bytes": 8090
+    },
+    {
+      "path": "data-visualization-templates-xml/ranking-dot-strip-plot.xml",
+      "sha256": "36aa23b7779995125c486c84ac2fe73d0515adab106d97747e76c6c7d3f2c2b6",
+      "bytes": 4210
+    },
+    {
       "path": "data-visualization-templates-xml/ranking-ordered-bar.xml",
-      "sha256": "0f9a70bfdca9171d40022364a94d0ee7fe036dc792f741ab104fc38dc6a28c4e",
-      "bytes": 2430
+      "sha256": "63040f0d4b4ee0f84f995a82ea0a7845453e078708e1cd55aa13f878ffc00d0e",
+      "bytes": 2514
     },
     {
       "path": "data-visualization-templates-xml/ranking-ordered-column.xml",
@@ -76,14 +181,34 @@
       "bytes": 2430
     },
     {
+      "path": "data-visualization-templates-xml/slope-chart.xml",
+      "sha256": "170c6c14aabba89a37209664ca3e15da163c4d83c0ff6e25a7efc976ee4e3b7b",
+      "bytes": 3076
+    },
+    {
+      "path": "data-visualization-templates-xml/spatial-choropleth-map.xml",
+      "sha256": "b75f203fdb787be456d1d37e74d3d292de8850ab3f304016e3ff5401dfc175ea",
+      "bytes": 6220
+    },
+    {
+      "path": "data-visualization-templates-xml/spatial-symbol-map.xml",
+      "sha256": "0e10814f07d32b7c4c1a9113f0b6d2db9e62119316d39630db43a3415fd424d0",
+      "bytes": 2852
+    },
+    {
       "path": "data-visualization-templates-xml/trend-line-chart.xml",
-      "sha256": "a7b05cae4d0271b7459ab80b7120a4e8a474aa1483944cb0449e0fff7a138d11",
-      "bytes": 2020
+      "sha256": "fe35111190516e789d2db3666a7f4f86899e149839b203079a4e42f297c80f44",
+      "bytes": 2104
     },
     {
       "path": "data-visualization-templates-xml/ww-floating-bars.xml",
-      "sha256": "b50ee7500da71d7ba427027422931b59c96248ff083a8d96f6617237ee64d554",
-      "bytes": 2566
+      "sha256": "f4c3acbb0ff4d5d28634773f86bb4afd9c9f7d3d3520de96a573db9de030db5f",
+      "bytes": 3502
+    },
+    {
+      "path": "data-visualization-templates-xml/ww-ou-arrow.xml",
+      "sha256": "f822c0902be27773e93ab0a5f4e6b52063013a7347da7faf64ee23a73806b132",
+      "bytes": 19986
     },
     {
       "path": "template-manifests.fixture.json",
@@ -92,8 +217,18 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "9ceb3be4f1d5684e1a044e09e30f3228b6e34baa4fae7ced1f9e955441221521",
-      "bytes": 73785
+      "sha256": "f7cc927a430e445f7d58212cd2c6b021cdf19e49b65a4d3088a3e25eb57fbb40",
+      "bytes": 232482
+    },
+    {
+      "path": "template-manifests/box-plot-chart.manifest.json",
+      "sha256": "e3cb287a383b13b2e413c4a2dd61dcde703a7abbf6d86627a772f17e6b3a4928",
+      "bytes": 7523
+    },
+    {
+      "path": "template-manifests/bullet-variance-chart.manifest.json",
+      "sha256": "64098d8739656b5751cbc63591967ec19a07f16ad2272f8a818502e14038ae53",
+      "bytes": 5412
     },
     {
       "path": "template-manifests/change-over-time-area-chart.manifest.json",
@@ -101,14 +236,24 @@
       "bytes": 1856
     },
     {
+      "path": "template-manifests/change-over-time-calendar-heatmap.manifest.json",
+      "sha256": "d8cdd560e0bd1b553b53e9cd63012a61c86ff8e6832b5c45ae7ae0e8736ffab7",
+      "bytes": 2594
+    },
+    {
       "path": "template-manifests/change-over-time-stacked-area-chart.manifest.json",
       "sha256": "4edcd16aac3ab8c3fe39284c7456a188e74d90506e29e4148f1312a24d19d3ce",
       "bytes": 1775
     },
     {
+      "path": "template-manifests/connected-scatterplot.manifest.json",
+      "sha256": "6569269ee10409cd4ce2173cf41ed49050a50f89486ad97e8bb34d59462c8b54",
+      "bytes": 3468
+    },
+    {
       "path": "template-manifests/control-chart-xmr.manifest.json",
-      "sha256": "b8d8bc40d3df18058c58f9bf7606849140264ab0a1c982e32992b4452e93c4ee",
-      "bytes": 2273
+      "sha256": "21ae86a46d3d627c08eae93d6b7989cbecf06c32a7d52f9670b0f1002589ff8e",
+      "bytes": 4727
     },
     {
       "path": "template-manifests/correlation-bubble-chart.manifest.json",
@@ -121,19 +266,79 @@
       "bytes": 3387
     },
     {
+      "path": "template-manifests/correlation-highlight-table.manifest.json",
+      "sha256": "fb0afcc6fecb727f92044e7a1ed4f3afac9d7e34a50c7bb4792ee30ed464f996",
+      "bytes": 5811
+    },
+    {
       "path": "template-manifests/correlation-scatter-plot-chart.manifest.json",
-      "sha256": "ca0cb54f563e76f25624c5f987421417c55b65469b29e1fa5cc3c300ecb6740f",
-      "bytes": 2703
+      "sha256": "5d679334b17903a5a1099cfcd0f31de232dff5ef72fe754bdedab532bb07a533",
+      "bytes": 4687
+    },
+    {
+      "path": "template-manifests/deviation-diverging-bar.manifest.json",
+      "sha256": "2e369ac51bcca9d1a96d6efd014578f561f77edaa47e5198b050ba075434cac8",
+      "bytes": 4749
+    },
+    {
+      "path": "template-manifests/deviation-gain-loss-chart.manifest.json",
+      "sha256": "7385e2509c747c7088f927025fdd8aed80dcec2fb9524ed6b85c1d885de129af",
+      "bytes": 5563
+    },
+    {
+      "path": "template-manifests/deviation-spine-chart.manifest.json",
+      "sha256": "40c5f9d5ab5f6bc73afe84eab1798d196b33ddf28d0d9b618aab0e0649651c39",
+      "bytes": 6995
     },
     {
       "path": "template-manifests/distribution-bar-code-chart.manifest.json",
-      "sha256": "94ec9cc90732ecca5dfa5f0e61a7b84edab3d441197ecdaad30eab67c46eebd3",
-      "bytes": 2080
+      "sha256": "74b8123718ed76649f6991363eb96a9358b11591d046fe33ba76a0f518df8df3",
+      "bytes": 2948
+    },
+    {
+      "path": "template-manifests/distribution-histogram.manifest.json",
+      "sha256": "c5e177d839219b67d03f013352fb18b765301b29553079398bf33bb2d24be4d6",
+      "bytes": 5445
+    },
+    {
+      "path": "template-manifests/funnel-chart.manifest.json",
+      "sha256": "91b1bdfd520bab734cee8bb2892eda2002a9fd0028cf7f478e3580e83179723d",
+      "bytes": 7168
+    },
+    {
+      "path": "template-manifests/gantt-chart.manifest.json",
+      "sha256": "33807d09f569e9c430099cab2644d31b71c1b09139a93a49dbfbbed9b82c6d28",
+      "bytes": 7444
+    },
+    {
+      "path": "template-manifests/gantt-task-rollup-chart.manifest.json",
+      "sha256": "b61291596e313728c0862b681505c9fba5ea6d5bb9736643bccd53ae050aea9f",
+      "bytes": 9109
+    },
+    {
+      "path": "template-manifests/gantt-timeline-chart.manifest.json",
+      "sha256": "0be38bca7218b140c3412d0b7a61752340a392efc6ba7b328b0697a8f1d1a6f3",
+      "bytes": 4719
     },
     {
       "path": "template-manifests/kpi-text.manifest.json",
-      "sha256": "7c87e121ed91bb4ba120f3f2574a4d893d2d2e43cdada44aaf0787531d64cf55",
-      "bytes": 933
+      "sha256": "977064a88359563476fe43afcaa15466687b89daa280cfc20587636f985a053c",
+      "bytes": 1980
+    },
+    {
+      "path": "template-manifests/magnitude-paired-bar.manifest.json",
+      "sha256": "922ca8545ceacbaf28f1fd0efc22bece3f5e52401bdf903d85471ac2fa0c23e3",
+      "bytes": 3424
+    },
+    {
+      "path": "template-manifests/magnitude-paired-column-chart.manifest.json",
+      "sha256": "5d40aff2e959c014e71f303c2f4d09d1a71eea19b7b85b8bc7f7eca66de45c4e",
+      "bytes": 3206
+    },
+    {
+      "path": "template-manifests/pareto-chart.manifest.json",
+      "sha256": "0c81718e05d2e10bde0909f26b7c1ab92383625ab8af0f8f98b7aa83548a8651",
+      "bytes": 4714
     },
     {
       "path": "template-manifests/part-to-whole-pie-chart.manifest.json",
@@ -141,44 +346,84 @@
       "bytes": 1950
     },
     {
+      "path": "template-manifests/part-to-whole-proportional-stacked-bar.manifest.json",
+      "sha256": "89d3c77327a2cb3c06cba9ff59cf4835f5757ab2f473e2e28a99a7a08e7871c1",
+      "bytes": 5752
+    },
+    {
       "path": "template-manifests/part-to-whole-stacked-bar-chart.manifest.json",
-      "sha256": "9a36d5b637785b117bc60ab65b4c8501b8178b454e1e7b027599bf777bc8da61",
-      "bytes": 2310
+      "sha256": "c36cf53dc9f8f1cdbb2bf56565c9abce9cfa1dac154942e5a187771409b96b47",
+      "bytes": 2838
     },
     {
       "path": "template-manifests/part-to-whole-treemap-chart.manifest.json",
-      "sha256": "41b0ad67679de6aab5c3c04d56ea9a138fad16a9efd1b29e83305a6dccdfba9e",
-      "bytes": 1525
+      "sha256": "c954e6c491fc64cf3fb081db700a12df037ed80bc45c0a39ebcbafad252d0987",
+      "bytes": 2273
+    },
+    {
+      "path": "template-manifests/part-to-whole-waterfall.manifest.json",
+      "sha256": "2e167c32a8139469fad42d2ddd05db143e28131354e43951f336ed9cf6359b4c",
+      "bytes": 11679
+    },
+    {
+      "path": "template-manifests/quota-attainment-bullet.manifest.json",
+      "sha256": "d440645c62d86ab3f990923f28228d13ebee73d65a78dd4a0ea00d6f105f299c",
+      "bytes": 7700
+    },
+    {
+      "path": "template-manifests/ranking-bump-chart.manifest.json",
+      "sha256": "c2238f17c58709023f3412998e88538c22592315f070d1635f730e210146915e",
+      "bytes": 4248
+    },
+    {
+      "path": "template-manifests/ranking-dot-strip-plot.manifest.json",
+      "sha256": "df44680d837235cd32bf25b4e949b2115d23307cec73ae3f820f13e53c6bee06",
+      "bytes": 2661
     },
     {
       "path": "template-manifests/ranking-ordered-bar.manifest.json",
-      "sha256": "d1880b8a047d8e169b267e16d0e52a9f1b22a1f1684edf093df30ef230306575",
-      "bytes": 1186
+      "sha256": "ba1931651c6fa8f9871eba46af855d14a656e40671266c2f499aef05b2be7bb8",
+      "bytes": 3214
     },
     {
       "path": "template-manifests/ranking-ordered-column.manifest.json",
-      "sha256": "d30e35174a80711d8167b3df79d9d369491046a80c0eaa00d66c4f670a033d7c",
-      "bytes": 1646
+      "sha256": "fd2ba0fa6ccf940b2e9878280c251723a8ae0c879889b355bed1b9d915b195ba",
+      "bytes": 1828
+    },
+    {
+      "path": "template-manifests/slope-chart.manifest.json",
+      "sha256": "d810b3d3a77af18685d03410faad8b6a51c0186bb109734a5be2aeef7625626b",
+      "bytes": 2689
+    },
+    {
+      "path": "template-manifests/spatial-choropleth-map.manifest.json",
+      "sha256": "7655c768c1bb47d0a23d3c3ea793fd3d3259450a0bbcf7ba2f08c8c549abeb30",
+      "bytes": 5913
+    },
+    {
+      "path": "template-manifests/spatial-symbol-map.manifest.json",
+      "sha256": "21276c67b45d5a515a91ea061fe3654b6153e3f10f5bae809c7274e6fd3e0ee9",
+      "bytes": 2763
     },
     {
       "path": "template-manifests/trend-line-chart.manifest.json",
-      "sha256": "808d75660cdbaee08c9b34fc2f37467ac5e29433dd4d6eebafc1fb46f88e192c",
-      "bytes": 1924
+      "sha256": "a3f76e50ba83cc1a85656149de632bf29ec17b14b0eed601f70effabf050f6eb",
+      "bytes": 3908
     },
     {
       "path": "template-manifests/ww-floating-bars.manifest.json",
-      "sha256": "4d0cf8ff47a2f3e97c16479d8141300e93a03d43f03871a28d7281ebeadb6053",
-      "bytes": 5050
+      "sha256": "5017d94e10c8792bf0c861764c3cde5c62ab77e247e4acf1d27f21acedad2eba",
+      "bytes": 8830
     },
     {
       "path": "template-manifests/ww-ou-arrow.manifest.json",
-      "sha256": "9d9786369b3b65aef1690c999f02530bca9aaab91b25b21dd38fab7d2c6e37b4",
-      "bytes": 16525
+      "sha256": "4f391a1799e81713daf8d3e9c3c7ce28ef775ffaf33c0e8120ce3c171c29457a",
+      "bytes": 16614
     },
     {
       "path": "template-manifests/ww-ou-diff.manifest.json",
-      "sha256": "6d193934c098c77ec6ae4bcf9ab8b69cc30654e2f7c09055465bf73a229343db",
-      "bytes": 13742
+      "sha256": "af63a6e260383dd0a09c14dcd80311fcd6d5a7773bf1c6ec9d1400a2c08a2cfc",
+      "bytes": 14039
     }
   ]
 }

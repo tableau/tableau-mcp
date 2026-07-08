@@ -7,16 +7,21 @@
             <datasource name='{{DATASOURCE}}' />
           </datasources>
           <datasource-dependencies datasource='{{DATASOURCE}}'>
+            <column caption='Actual Score' datatype='integer' name='[Calculation_ActualScore]' role='measure' type='quantitative'>
+              <calculation class='tableau' formula='INT( SPLIT( TRIM( SPLIT( [Actual Input], &quot;-&quot;, 1 ) ), &quot; &quot;, 2 ) ) + INT( TRIM( SPLIT( [Actual Input], &quot;-&quot;, 2 ) ) )' />
+            </column>
             <column caption='Gantt Size' datatype='real' name='[Calculation_GanttSize]' role='measure' type='quantitative'>
-              <calculation class='tableau' formula='INT([Actual Input]) - [Reference Value]' />
+              <calculation class='tableau' formula='[Calculation_ActualScore] - [Reference Value]' />
+            </column>
+            <column caption='Over Under' datatype='integer' name='[Calculation_OverUnder]' role='measure' type='quantitative'>
+              <calculation class='tableau' formula='SIGN([Calculation_ActualScore] - [Reference Value])' />
             </column>
             <column datatype='string' name='[Actual Input]' role='dimension' type='nominal' />
             <column datatype='real' name='[Reference Value]' role='measure' type='quantitative' />
-            <column datatype='string' name='[Segment]' role='dimension' type='nominal' />
             <column datatype='string' name='[Category]' role='dimension' type='nominal' />
             <column-instance column='[Calculation_GanttSize]' derivation='Min' name='[min:Calculation_GanttSize:qk]' pivot='key' type='quantitative' />
+            <column-instance column='[Calculation_OverUnder]' derivation='Sum' name='[sum:Calculation_OverUnder:ok]' pivot='key' type='ordinal' />
             <column-instance column='[Reference Value]' derivation='Min' name='[min:Reference Value:qk]' pivot='key' type='quantitative' />
-            <column-instance column='[Segment]' derivation='None' name='[none:Segment:nk]' pivot='key' type='nominal' />
             <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
           </datasource-dependencies>
           <aggregation value='true' />
@@ -24,6 +29,16 @@
         <style>
           <style-rule element='axis'>
             <format attr='title' value='Points' />
+          </style-rule>
+          <style-rule element='mark'>
+            <encoding attr='color' field='[{{DATASOURCE}}].[sum:Calculation_OverUnder:ok]' type='palette'>
+              <map to='#76b7b2'>
+                <bucket>1</bucket>
+              </map>
+              <map to='#e15759'>
+                <bucket>-1</bucket>
+              </map>
+            </encoding>
           </style-rule>
         </style>
         <panes>
@@ -33,7 +48,7 @@
             </view>
             <mark class='GanttBar' />
             <encodings>
-              <color column='[{{DATASOURCE}}].[none:Segment:nk]' />
+              <color column='[{{DATASOURCE}}].[sum:Calculation_OverUnder:ok]' />
               <size column='[{{DATASOURCE}}].[min:Calculation_GanttSize:qk]' />
             </encodings>
           </pane>

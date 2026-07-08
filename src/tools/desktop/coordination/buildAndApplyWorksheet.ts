@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
+import { spliceBoundFacet } from '../../../desktop/templates/facetSplice.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
@@ -185,6 +186,10 @@ export const getBuildAndApplyWorksheetTool = (
           // calc-name suffixes => repeated applies into one workbook don't collide.
           templateXml = templateXml.replace(/\{\{TITLE\}\}/g, escapeXml(worksheetName));
           const applyNonce = `${session}:${Date.now()}:${randomUUID()}`;
+          // W28-C: splice a BOUND facet pill onto the trellis shelf BEFORE the frozen
+          // core rewrite (identity no-op when no facet is bound). The core then maps
+          // [Facet] → the bound field so the facet actually renders.
+          templateXml = spliceBoundFacet(templateXml, fieldMapping);
           templateXml = rewriteFieldReferences(
             templateXml,
             fieldMapping,

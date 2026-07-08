@@ -384,28 +384,37 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
     }
   });
 
-  it('the render-verified set is exactly the eight live-proven templates', () => {
-    // The W2-R008 wave3 floor-raise (live-verify 2026-07-05) hand-stamped four MORE
-    // templates fast_path_eligible after a live render + structural-parity + human
-    // review — their provenance rides in portability_evidence.render_evidence (the three
-    // shipped-XML siblings) and golden.checkpoint_render (the golden-only ww-ou-arrow):
-    //   distribution-bar-code-chart, part-to-whole-stacked-bar-chart, ranking-ordered-column,
-    //   ww-ou-arrow.
-    // Still UNSTAMPED (render_verified none): ww-ou-diff (a documented derivation that
-    // could not be live-render-verified here), ww-floating-bars (recompiled from the final
-    // 'format' rung but not yet re-golden-matched), and control-chart-xmr.
+  it('the render-verified set is exactly the fifteen live-proven factory templates', () => {
+    // W59 template-sync: the seven missing fast-path XMLs were ported from the factory
+    // (a2td) with their manifests. fast_path_eligible / render_verified TRAVEL UNCHANGED
+    // from the factory (no stamps minted in transit): the factory's 2026-07-06 stamp wave
+    // stamps FOURTEEN of the bundled manifests render-verified. The four additions vs the
+    // prior shipped ten arrive already factory render-verified (render_verified
+    // live-2026-07-06): box-plot-chart, funnel-chart, gantt-task-rollup-chart,
+    // quota-attainment-bullet.
+    // W60 parity port: correlation-scatter-plot-chart's factory stamp crossed (it was
+    // stamped in a2td all along and dark here) — 14 → 15.
+    // Everything else ships propose-only (render_verified none) and honestly surfaces
+    // the not-live-render-verified blocker via deriveFastPathBlockers.
     const eligible = [...manifests.values()]
       .filter((m) => m.fast_path_eligible)
       .map((m) => m.template)
       .sort();
     expect(eligible).toEqual(
       [
+        'box-plot-chart',
+        'correlation-scatter-plot-chart',
         'distribution-bar-code-chart',
+        'funnel-chart',
+        'gantt-task-rollup-chart',
         'kpi-text',
         'part-to-whole-stacked-bar-chart',
         'part-to-whole-treemap-chart',
+        'part-to-whole-waterfall',
+        'quota-attainment-bullet',
         'ranking-ordered-bar',
         'ranking-ordered-column',
+        'spatial-choropleth-map',
         'trend-line-chart',
         'ww-ou-arrow',
       ].sort(),

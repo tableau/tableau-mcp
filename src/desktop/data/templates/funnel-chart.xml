@@ -1,0 +1,47 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column datatype='string' name='[Stage]' role='dimension' type='ordinal' />
+        <column datatype='real' name='[Amount]' role='measure' type='quantitative' />
+        <column-instance column='[Stage]' derivation='None' name='[none:Stage:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Amount]' derivation='Sum' name='[sum:Amount:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='rows' value='false' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Bar' />
+        <encodings>
+          <size column='[{{DATASOURCE}}].[sum:Amount:qk]' />
+        </encodings>
+      </pane>
+    </panes>
+    <rows>[{{DATASOURCE}}].[none:Stage:nk]</rows>
+    <cols>[{{DATASOURCE}}].[sum:Amount:qk]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

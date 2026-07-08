@@ -12,6 +12,7 @@ import { getDesktopConfig } from './config.desktop.js';
 import { DATA_ROOT, readResourceAsset, RESOURCES_ROOT } from './desktop/assets.js';
 import { listKnowledgeResources, readKnowledgeResource } from './desktop/knowledge/index.js';
 import { SessionManager } from './desktop/sessionManager.js';
+import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
@@ -23,11 +24,22 @@ const serverVersion = pkg.version;
 
 export { DATA_ROOT, RESOURCES_ROOT };
 
+// Routing guidance every connecting client receives at initialize (W60 adoption P5 —
+// the demo build previously shipped NO instructions, so skill-less clients got zero
+// routing and the template fast path stayed dark in real sessions).
+const DESKTOP_INSTRUCTIONS = `You are controlling Tableau Desktop.
+
+For a plain chart ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot), FIRST call bind-template with the user's ask and auto_apply: true — a confident bind renders the chart in ONE call (~2s server-side, no further tool calls). On propose/escalate, fall back to the general authoring tools (get-workbook-xml -> edit -> apply-workbook, or inject-template for a known template).
+
+Every session-scoped tool call needs the session id from list-instances — except bind-template, which auto-resolves the session when exactly one Desktop instance is running.
+
+If an apply is rejected by preflight validation, fix the XML per the FIX lines in the error and re-apply. Prefer file mode for large workbooks.`;
+
 export class DesktopMcpServer extends Server {
   private readonly sessionManager = new SessionManager();
 
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
-    super({ mcpServer, clientInfo, serverName, serverVersion });
+    super({ mcpServer, clientInfo, serverName, serverVersion, instructions: DESKTOP_INSTRUCTIONS });
   }
 
   registerResources = async (): Promise<void> => {
@@ -37,6 +49,15 @@ export class DesktopMcpServer extends Server {
 
   registerTools = async (): Promise<void> => {
     const config = getDesktopConfig();
+
+    log({
+      message: config.externalApiEnabled
+        ? 'Desktop transport ACTIVE: External Client API (Athena V0) — TABLEAU_EXTERNAL_API enabled'
+        : 'Desktop transport ACTIVE: Agent API (default)',
+      level: 'info',
+      logger: 'DesktopMcpServer',
+      data: { externalApiEnabled: config.externalApiEnabled },
+    });
 
     for (const {
       name,

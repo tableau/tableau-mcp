@@ -20,7 +20,38 @@ import Fuse from 'fuse.js';
 
 import { calcForcedSlotIds } from './calc-derivation.js';
 import type { Derivation, SlotKind, TemplateManifest } from './manifest-types.js';
-import { bareName, type SchemaField, type SchemaSummary } from './schema-summary.js';
+
+/**
+ * SCHEMA SHAPES + `bareName`, inlined so this file stays import-pure — it severs the
+ * divergent `./schema-summary.js` edge (the same convergence move calc-derivation.ts
+ * makes) so the classifier depends only on `./manifest-types.js` + `./calc-derivation.js`
+ * and a byte-identical copy resolves entirely within the shared lockstep-core set.
+ * These MIRROR the schema module's exported `SchemaField`/`SchemaSummary` structurally;
+ * the PRODUCER (`summarizeSchema`) still lives there — only the read-only shapes the
+ * classifier consumes are declared here.
+ */
+interface SchemaField {
+  name: string; // friendly name: caption ?? bare column name
+  caption?: string;
+  columnName: string; // bracketed local name, e.g. "[Region]"
+  role: 'dimension' | 'measure';
+  type: string; // "quantitative" | "nominal" | "ordinal" | ...
+  datatype: string; // "string" | "real" | "integer" | "date" | "datetime" | ...
+  datasource: string;
+  isAggregated: boolean;
+  column_ref: string; // straight from listAvailableFields, e.g. "[Superstore].[sum:Sales:qk]"
+}
+
+interface SchemaSummary {
+  /** The primary datasource — substituted for {{DATASOURCE}} and the expected home of every bound field. */
+  datasource: string;
+  fields: SchemaField[];
+}
+
+/** Strip surrounding brackets from a Tableau field name: "[Region]" -> "Region". */
+function bareName(name: string): string {
+  return name.replace(/^\[|\]$/g, '');
+}
 
 export interface LlmProposeInput {
   ask: string;
@@ -109,6 +140,26 @@ function escapeRegex(s: string): string {
 }
 
 /**
+ * PLURALIZABLE CHART-NOUN TOKENS (FS4b token-class guard). Singular chart-type
+ * nouns whose natural English plural (`bar`→`bars`, `column`→`columns`, `map`→
+ * `maps`) an ask commonly uses ("Stacked bars", "Maps"). A keyword phrase earns a
+ * trailing-`s` tolerance in `phraseIndexInAsk` ONLY when its FINAL token is in this
+ * set, so the tolerance stays scoped to deterministic chart-type nouns and never
+ * broadens matching for a non-noun keyword (e.g. "trend"→"trends" stays a miss).
+ * A multi-token compound ("stacked-bar") pluralizes on its final token only. Kept
+ * as bare tokens (not the phrase set CHART_NOUN_KEYWORDS) because the plural sits on
+ * the final token — "stacked-bar"/"sorted-bar"/"vertical-bar" all pluralize via "bar".
+ */
+const PLURALIZABLE_CHART_NOUNS: ReadonlySet<string> = new Set([
+  'bar',
+  'column',
+  'map',
+  'treemap',
+  'pie',
+  'donut',
+]);
+
+/**
  * Index of the first whole-token occurrence of `phrase` in `ask`, else -1.
  * Boundaries are non-alphanumeric so "bar" matches "bar chart" but not "sidebar".
  * A HYPHEN in a keyword matches a hyphen OR whitespace in the ask, so a compound
@@ -116,12 +167,21 @@ function escapeRegex(s: string): string {
  * matches the natural spaced form a user types ("stacked bar", "over time"). This
  * lets a distinctive multi-token chart noun keep its keyword-match specificity when
  * the ask spells it with a space — the classifier stays no-LLM and deterministic.
+ *
+ * PLURAL TOLERANCE (FS4b): when the phrase's FINAL token is a chart noun
+ * (`PLURALIZABLE_CHART_NOUNS`), an optional trailing `s` is allowed on that token so
+ * "bars"/"columns"/"maps"/"stacked bars" match "bar"/"column"/"map"/"stacked-bar".
+ * Scoped to chart nouns only — no stemming, no mid-token change, no broadening of
+ * non-noun keywords; the singular still matches unchanged.
  */
 function phraseIndexInAsk(ask: string, phrase: string): number {
   const p = phrase.toLowerCase().trim();
   if (!p) return -1;
   const body = escapeRegex(p).replace(/-/g, '[\\s-]+');
-  const re = new RegExp(`(^|[^a-z0-9])${body}([^a-z0-9]|$)`);
+  const tokens = p.split(/[^a-z0-9]+/).filter(Boolean);
+  const finalToken = tokens[tokens.length - 1];
+  const pluralSuffix = finalToken && PLURALIZABLE_CHART_NOUNS.has(finalToken) ? 's?' : '';
+  const re = new RegExp(`(^|[^a-z0-9])${body}${pluralSuffix}([^a-z0-9]|$)`);
   const match = re.exec(ask.toLowerCase());
   return match ? match.index : -1;
 }
@@ -266,6 +326,23 @@ export function matchAvoidWhen(
   return matched;
 }
 
+/**
+ * Hazard codes that DEMOTE the no-LLM shortcut unconditionally (W59). avoid_when
+ * is ask-conditioned; these hazards are DATA-conditioned — the risk (e.g. calcs
+ * that SPLIT a specific compound-string shape out of a bound field) is invisible
+ * in any natural ask, so the zero-model path can never rule it out. Demote-only:
+ * the template stays fully bindable via the propose leg, where the model sees the
+ * hazard detail and judges the actual schema against it.
+ */
+const DETERMINISTIC_PATH_BLOCKING_HAZARDS: ReadonlySet<string> = new Set(['compound-string-parse']);
+
+/** True when the manifest carries a hazard the no-LLM path must not bind through. */
+export function hasDeterministicPathBlockingHazard(
+  manifest: Pick<TemplateManifest, 'hazards'>,
+): boolean {
+  return (manifest.hazards ?? []).some((h) => DETERMINISTIC_PATH_BLOCKING_HAZARDS.has(h.code));
+}
+
 /** The intent_keywords (original case) that appear as whole tokens in `ask`. */
 function matchedKeywords(ask: string, keywords: string[]): string[] {
   return keywords.filter((kw) => phraseIndexInAsk(ask, kw) >= 0);
@@ -320,6 +397,68 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   'treemap',
   'pie',
   'donut',
+  // 2026-07-06 growth (per the table's own contract — grow as new distinct-shape
+  // templates are stamped eligible): gantt-task-rollup-chart's stamp made time-series
+  // a TWO-member eligible family, collapsing strict-majority nativity for trend-line's
+  // vocabulary ("line chart of X over Y" classified null — the exact sibling-scaling
+  // regression this table exists to prevent). Each noun below deterministically names
+  // a chart type and equals a real intent_keyword of its (stamped or imminently
+  // stamped, evidence-earned 2026-07-06) template: 'line' (trend-line-chart),
+  // 'gantt' (gantt-task-rollup-chart), 'histogram' (distribution-histogram),
+  // 'bullet' (quota-attainment-bullet), 'funnel' (funnel-chart),
+  // 'slope' + 'slope-chart' + 'slope-graph' (slope-chart),
+  // 'box-plot' + 'boxplot' + 'box-and-whisker' (box-plot-chart).
+  'line',
+  // 'trend' rides the same growth: carried ONLY by trend-line-chart and a
+  // deterministic type selector in practice ("trend of X" names a line chart);
+  // without it every noun-less trend ask ("trend over time by month") demotes to
+  // propose the moment the family gains a second member. Pattern PHRASES
+  // ('over-time', 'time-series') stay out — nouns only; the ask-router lane
+  // (W36) is the successor mechanism for phrase-level routing.
+  'trend',
+  'gantt',
+  'histogram',
+  'bullet',
+  'funnel',
+  'slope',
+  'slope-chart',
+  'slope-graph',
+  'box-plot',
+  'boxplot',
+  'box-and-whisker',
+  // 'over-time' is the one PHRASE-form deterministic selector admitted: carried
+  // solely by trend-line-chart, and "X over time" names a line chart as surely as
+  // the noun does. Lone-winner is the only path this table gates; if a second
+  // time-series template ever carries 'over-time', the TIE path's keyword-
+  // specificity ranking (multi-token 'sales-over-time' &c.) governs instead, so
+  // admitting it cannot create a cross-template flip later.
+  'over-time',
+  // Second growth event same night: the 13th-15th stamps made deviation
+  // (quota joins ww-ou-arrow) and distribution (box-plot joins bar-code)
+  // two-member families, collapsing nativity for the incumbent members'
+  // vocabulary — "over-under arrow chart of Sales" and "bar-code strip of X"
+  // classified null (live-caught by the drift guard). Each noun below is a
+  // deterministic type selector carried by exactly one template:
+  // 'arrow-chart' + 'over-under-arrow' (ww-ou-arrow),
+  // 'bar-code' + 'strip-plot' + 'dot-strip' (distribution-bar-code-chart).
+  'arrow-chart',
+  'over-under-arrow',
+  'bar-code',
+  'strip-plot',
+  'dot-strip',
+  // Third growth event (W59): the 2026-07-06 stamp wave's remaining fallout —
+  // part-to-whole-waterfall and spatial-choropleth-map shipped stamped but their
+  // nouns were never admitted, so both lead exec-demo asks ("waterfall of Profit
+  // by Sub-Category", "filled map of Profit by State/Province") demoted to propose
+  // (live-caught by the W59 proof-value spike). Each noun below is carried by
+  // exactly ONE stamped template (carrier-uniqueness checked across all bundled
+  // manifests; the generic 'map' stays OUT — dual-carrier with spatial-symbol-map):
+  // 'waterfall' (part-to-whole-waterfall),
+  // 'choropleth' + 'filled-map' + 'region-map' (spatial-choropleth-map).
+  'waterfall',
+  'choropleth',
+  'filled-map',
+  'region-map',
 ]);
 
 /** True when at least one ask-matched keyword is a distinctive chart noun. */
@@ -591,42 +730,89 @@ function geoAffinityOverlap(f: SchemaField, aff: Set<string>): number {
 }
 
 /**
- * Resolve every required geo slot to a distinct field by NAME AFFINITY, over the
- * pool of still-unused matched dimensions. Fail-closed (returns null → the caller
- * proposes) when any geo slot is not UNAMBIGUOUS: it binds the field with the
- * strictly-greatest affinity overlap, but only when that maximum is unique and > 0
- * (zero candidates, or 2+ tied at the max, → null). A final distinctness check
- * rejects two geo slots resolving to the SAME field. Computing every slot's overlap
- * over the SAME pool (not a shrinking one) is load-bearing: it lets a coarse phantom
- * like "Region" (a sub-token of "Country/Region") tie the state slot against
- * "Country/Region" and fail closed, rather than being silently mis-bound.
+ * The strictly-greatest, UNIQUE, > 0 geo-affinity field in `pool` for `aff`, as a
+ * discriminated outcome so callers can tell the three cases apart: `ok` (a clean unique
+ * winner), `none` (no field with any overlap), or `tie` (2+ fields tied at the max).
+ * Computing over ONE fixed pool (never a shrinking one) is load-bearing — see
+ * `resolveGeoSlots`.
+ */
+type GeoPick = { kind: 'ok'; field: SchemaField } | { kind: 'none' } | { kind: 'tie' };
+function pickUniqueMaxAffinity(pool: SchemaField[], aff: Set<string>): GeoPick {
+  let best: SchemaField | null = null;
+  let bestOverlap = 0;
+  let tie = false;
+  for (const f of pool) {
+    const ov = geoAffinityOverlap(f, aff);
+    if (ov > bestOverlap) {
+      best = f;
+      bestOverlap = ov;
+      tie = false;
+    } else if (ov === bestOverlap && ov > 0) {
+      tie = true;
+    }
+  }
+  if (!best || bestOverlap === 0) return { kind: 'none' };
+  if (tie) return { kind: 'tie' };
+  return { kind: 'ok', field: best };
+}
+
+/**
+ * Resolve every required geo slot to a distinct field by NAME AFFINITY. Fail-closed
+ * (returns null → the caller proposes) when a geo slot is not UNAMBIGUOUS: each binds
+ * the field with the strictly-greatest, unique, > 0 affinity overlap. A final
+ * distinctness check rejects two geo slots resolving to the SAME field. Computing every
+ * slot's overlap over the SAME pool (not a shrinking one) is load-bearing: it lets a
+ * coarse phantom like "Region" (a sub-token of "Country/Region") tie the state slot
+ * against "Country/Region" and fail closed, rather than being silently mis-bound.
+ *
+ * W60 GEO-SLOT COMPLETION: a REQUIRED geo slot with ZERO ask-named candidates widens
+ * THAT slot's pool to the full schema's dimensions (`schemaDims`) and binds the unique
+ * name-affine field there — BUT only when at least one OTHER geo slot was satisfied from
+ * the ask-named pool (the ask demonstrated geographic intent by naming ≥1 geo field).
+ * The unique-max + distinctness rules still hold over the widened pool, so a schema with
+ * two country-affine fields (a tie) or none still fails closed; an ask that names NO geo
+ * field at all keeps the pre-W60 fail-closed behavior. A `tie` in the ASK-NAMED pool
+ * always fails closed (the ask named ambiguous candidates) and never widens. Slots
+ * auto-completed from the widened pool are returned so the caller can surface which
+ * field it chose for a slot the ask did not name.
  */
 function resolveGeoSlots(
   geoSlots: TemplateManifest['slots'],
   pool: SchemaField[],
-): Map<string, SchemaField> | null {
+  schemaDims: SchemaField[],
+): { picks: Map<string, SchemaField>; autoCompleted: Map<string, SchemaField> } | null {
   const picks = new Map<string, SchemaField>();
+  const zeroSlots: TemplateManifest['slots'] = [];
+  let anyAskNamed = false;
+
+  // Phase 1 — resolve from the ASK-NAMED pool. A tie fails closed immediately.
   for (const slot of geoSlots) {
-    const aff = geoAffinityTokens(slot.slot_id);
-    let best: SchemaField | null = null;
-    let bestOverlap = 0;
-    let tie = false;
-    for (const f of pool) {
-      const ov = geoAffinityOverlap(f, aff);
-      if (ov > bestOverlap) {
-        best = f;
-        bestOverlap = ov;
-        tie = false;
-      } else if (ov === bestOverlap && ov > 0) {
-        tie = true;
-      }
+    const pick = pickUniqueMaxAffinity(pool, geoAffinityTokens(slot.slot_id));
+    if (pick.kind === 'tie') return null; // ask named 2+ tied candidates → fail closed
+    if (pick.kind === 'ok') {
+      picks.set(slot.slot_id, pick.field);
+      anyAskNamed = true;
+    } else {
+      zeroSlots.push(slot);
     }
-    if (!best || bestOverlap === 0 || tie) return null; // zero or 2+ candidates
-    picks.set(slot.slot_id, best);
   }
+
+  // Phase 2 — widen each zero-candidate slot to the full schema, but ONLY when the ask
+  // named ≥1 geo field. No ask-named geo slot ⇒ no geographic intent ⇒ fail closed.
+  const autoCompleted = new Map<string, SchemaField>();
+  if (zeroSlots.length > 0) {
+    if (!anyAskNamed) return null;
+    for (const slot of zeroSlots) {
+      const widened = pickUniqueMaxAffinity(schemaDims, geoAffinityTokens(slot.slot_id));
+      if (widened.kind !== 'ok') return null; // still zero, or now ambiguous → fail closed
+      picks.set(slot.slot_id, widened.field);
+      autoCompleted.set(slot.slot_id, widened.field);
+    }
+  }
+
   const chosen = [...picks.values()];
   if (new Set(chosen).size !== chosen.length) return null; // two slots, one field
-  return picks;
+  return { picks, autoCompleted };
 }
 
 /**
@@ -647,7 +833,11 @@ function roleGreedyBind(
   m: TemplateManifest,
   matched: SchemaField[],
   aggOverride: Derivation | null,
-): Array<{ slot_id: string; field: string; derivation?: Derivation }> | null {
+  schemaDims: SchemaField[],
+): {
+  bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>;
+  provenance: string[];
+} | null {
   const used = new Set<SchemaField>();
   const bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }> = [];
   // A REQUIRED calc forces its bindable input slots to bind even when the slot is
@@ -669,6 +859,7 @@ function roleGreedyBind(
     slot.bindable && (slot.required || forced.has(slot.slot_id));
   const geoSlots = m.slots.filter((s) => isActive(s) && s.kind === 'geo');
   let geoPicks: Map<string, SchemaField> | null = null;
+  let geoAutoCompleted = new Map<string, SchemaField>();
   let geoResolved = false;
 
   for (const slot of m.slots) {
@@ -688,11 +879,17 @@ function roleGreedyBind(
         // Resolve ALL geo slots together on first encounter, over the dimensions not
         // already consumed by the non-geo slots (which precede geo in every eligible
         // template). Name affinity replaces "first unused dimension", so a geo slot
-        // binds only a name-matching field or fails closed — never a silent swap.
+        // binds only a name-matching field or fails closed — never a silent swap. A
+        // required geo slot the ask does not name widens to the full schema's
+        // dimensions (`schemaDims`) when another geo slot IS named (W60).
         if (!geoResolved) {
           const pool = matched.filter((f) => !used.has(f) && f.role === 'dimension');
-          geoPicks = resolveGeoSlots(geoSlots, pool);
-          if (geoPicks) for (const f of geoPicks.values()) used.add(f);
+          const resolved = resolveGeoSlots(geoSlots, pool, schemaDims);
+          if (resolved) {
+            geoPicks = resolved.picks;
+            geoAutoCompleted = resolved.autoCompleted;
+            for (const f of geoPicks.values()) used.add(f);
+          }
           geoResolved = true;
         }
         chosen = geoPicks ? (geoPicks.get(slot.slot_id) ?? null) : null;
@@ -710,7 +907,17 @@ function roleGreedyBind(
     bindings.push(binding);
   }
 
-  return bindings;
+  // Surface any geo slot AUTO-COMPLETED from the full schema (W60) as provenance, so the
+  // caller can tell the agent which field it chose for a slot the ask did not name.
+  const provenance: string[] = [];
+  for (const [slotId, f] of geoAutoCompleted) {
+    provenance.push(
+      `Using '${f.name}' for the required geo slot '${slotId}' — auto-completed from the ` +
+        'datasource because the ask named no matching field.',
+    );
+  }
+
+  return { bindings, provenance };
 }
 
 /**
@@ -747,6 +954,7 @@ function selectWithinFamily(
   matched: SchemaField[],
   aggOverride: Derivation | null,
   manifests: Map<string, TemplateManifest>,
+  schemaDims: SchemaField[],
 ): TemplateManifest | null {
   if (top.length === 1) {
     const m = top[0].m;
@@ -765,7 +973,7 @@ function selectWithinFamily(
     // #1 binds, a #1/#2 specificity tie (or no chart-noun matcher) stays null.
     const byNoun = top
       .map((t) => ({ m: t.m, spec: chartNounSpecificity(maskedAsk, t.m.intent_keywords) }))
-      .filter((c) => c.spec > 0 && roleGreedyBind(c.m, matched, aggOverride) !== null)
+      .filter((c) => c.spec > 0 && roleGreedyBind(c.m, matched, aggOverride, schemaDims) !== null)
       .sort((a, b) => b.spec - a.spec || a.m.template.localeCompare(b.m.template));
     if (byNoun.length === 0) return null;
     if (byNoun.length > 1 && byNoun[0].spec === byNoun[1].spec) return null;
@@ -774,10 +982,77 @@ function selectWithinFamily(
 
   const bindable = top
     .map((t) => ({ m: t.m, spec: keywordSpecificity(maskedAsk, t.m.intent_keywords) }))
-    .filter((c) => roleGreedyBind(c.m, matched, aggOverride) !== null);
+    .filter((c) => roleGreedyBind(c.m, matched, aggOverride, schemaDims) !== null);
   if (bindable.length === 0) return null; // none bindable → propose
   bindable.sort((a, b) => b.spec - a.spec || a.m.template.localeCompare(b.m.template));
   return bindable[0].m;
+}
+
+/**
+ * SMALL-MULTIPLES FACET CUES (W23-SM1). Explicit facet/trellis vocabulary a user
+ * types when they want one chart PER member (side-by-side panes), NOT a color/detail
+ * grouping. Deliberately tight: a bare "by <dim>" is ambiguous (could be a color
+ * encoding) and is EXCLUDED — only these unambiguous cues (plus "per", which the spec
+ * names for per-category facets) arm a facet bind. Matched as WHOLE tokens against the
+ * MASKED ask (field names blanked) so a field literally named "per…"/"facet…" can't
+ * arm it, and so faceting is a phrasing decision, never a field-name accident.
+ */
+const FACET_CUES: readonly string[] = [
+  'small multiple',
+  'small multiples',
+  'trellis',
+  'facet',
+  'faceted',
+  'facets',
+  'faceting',
+  'for each',
+  'one per',
+  'per',
+];
+
+/** True when the (masked) ask carries explicit small-multiples / facet intent. */
+function askImpliesFacet(maskedAsk: string): boolean {
+  return FACET_CUES.some((cue) => phraseIndexInAsk(maskedAsk, cue) >= 0);
+}
+
+/**
+ * A manifest's OPTIONAL trellis facet slot: bindable + optional + categorical, on
+ * rows or cols, with a `facet*` slot_id (facet / facet_row / facet_col). This is the
+ * single dimension placed AHEAD of the existing pill for a simple one-dim trellis.
+ */
+function isFacetSlot(s: TemplateManifest['slots'][number]): boolean {
+  return (
+    s.bindable &&
+    !s.required &&
+    s.kind === 'categorical' &&
+    s.slot_id.startsWith('facet') &&
+    (s.role.includes('rows') || s.role.includes('cols'))
+  );
+}
+
+/**
+ * FAIL-CLOSED optional-facet augmentation (W23-SM1). Purely ADDITIVE: called only
+ * AFTER the required slots have bound, it appends ONE categorical facet binding when
+ * (a) the ask names/implies a facet, (b) the template declares an optional facet slot
+ * not already bound, and (c) a spare categorical the ask NAMED remains after the
+ * required slots. Any miss ⇒ null (no facet). It never changes template selection, the
+ * required-slot bindings, or the bound/unbound decision, and never steals a slot-bound
+ * dim (excluded via `boundFields`) — so a no-cue / no-spare ask is byte-unchanged.
+ */
+function facetBinding(
+  m: TemplateManifest,
+  bound: Array<{ slot_id: string; field: string; derivation?: Derivation }>,
+  matched: SchemaField[],
+  maskedAsk: string,
+): { slot_id: string; field: string } | null {
+  if (!askImpliesFacet(maskedAsk)) return null;
+  const boundIds = new Set(bound.map((b) => b.slot_id));
+  const facetSlot = m.slots.find((s) => isFacetSlot(s) && !boundIds.has(s.slot_id));
+  if (!facetSlot) return null;
+  const boundFields = new Set(bound.map((b) => b.field));
+  const spare = matched.find((f) => isCategorical(f) && !boundFields.has(f.name));
+  if (!spare) return null;
+  return { slot_id: facetSlot.slot_id, field: spare.name };
 }
 
 /**
@@ -799,6 +1074,8 @@ export function classifyNoLlm(
 ): {
   template: string;
   bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>;
+  /** Advisory provenance (e.g. a required geo slot auto-completed from the schema, W60). Present only when non-empty. */
+  notes?: string[];
 } | null {
   // FAIL-CLOSED cost guard (M10 Finding 3): over the field cap, do NOT run the per-field
   // hot loop (maskFieldNames / matchFieldsInAsk) and do NOT classify a truncated subset —
@@ -811,6 +1088,9 @@ export function classifyNoLlm(
   const maskedAsk = maskFieldNames(ask, summary);
   const aggOverride = detectAggregationOverride(maskedAsk);
   const matched = matchFieldsInAsk(ask, summary);
+  // The full dimension pool a required geo slot widens into when the ask names no
+  // affine candidate for it (W60 geo-slot completion).
+  const schemaDims = summary.fields.filter((f) => f.role === 'dimension');
 
   // Keyword-score the eligible fast-path templates against the masked ask.
   const scored: Array<{ m: TemplateManifest; score: number }> = [];
@@ -824,7 +1104,7 @@ export function classifyNoLlm(
   const maxScore = scored.reduce((mx, s) => Math.max(mx, s.score), 0);
   const top = scored.filter((s) => s.score === maxScore);
 
-  const chosen = selectWithinFamily(top, maskedAsk, matched, aggOverride, manifests);
+  const chosen = selectWithinFamily(top, maskedAsk, matched, aggOverride, manifests, schemaDims);
   if (!chosen) return null;
 
   // DEMOTE (never hard-block): when the selected winner carries avoid_when
@@ -834,9 +1114,31 @@ export function classifyNoLlm(
   // so a field literally named after a caution term can't force the demotion.
   if (matchAvoidWhen(maskedAsk, chosen.avoid_when, chosen.intent_keywords).length > 0) return null;
 
-  const bindings = roleGreedyBind(chosen, matched, aggOverride);
-  if (!bindings) return null; // required slot unfilled → fail closed
-  return { template: chosen.template, bindings };
+  // DEMOTE on data-shape-parse hazards (W59): avoid_when only fires when the ASK
+  // reveals the risk, but a data-shape hazard lives in the DATA, which no natural
+  // ask mentions — "over-under arrow chart of Sales by Sub-Category" happily bound
+  // ww-ou-arrow and fed [Category] into sports-score SPLIT parsing (live-caught by
+  // the W59 proof-value spike + dual review). A template whose calcs parse a
+  // specific string shape out of a bound field can never prove data fit on the
+  // zero-model path, so it always falls through to propose, where the model sees
+  // the hazard notes + avoid_when and judges the actual schema.
+  if (hasDeterministicPathBlockingHazard(chosen)) return null;
+
+  const rgb = roleGreedyBind(chosen, matched, aggOverride, schemaDims);
+  if (!rgb) return null; // required slot unfilled → fail closed
+  const bindings = rgb.bindings;
+  // OPTIONAL small-multiples facet (W23-SM1): additively bind a simple-trellis facet
+  // dim (a spare categorical placed AHEAD of the existing pill) ONLY when the ask
+  // names/implies a by-<dim> facet AND a spare categorical remains. This never flips
+  // the bound decision, the chosen template, or the required bindings — a no-cue /
+  // no-spare ask returns the exact same {template, bindings} as before.
+  const facet = facetBinding(chosen, bindings, matched, maskedAsk);
+  if (facet) bindings.push(facet);
+  // Attach provenance (e.g. W60 geo auto-completion) only when non-empty, so a
+  // non-geo / no-auto-complete ask returns the exact same {template, bindings} shape.
+  return rgb.provenance.length > 0
+    ? { template: chosen.template, bindings, notes: rgb.provenance }
+    : { template: chosen.template, bindings };
 }
 
 /**
