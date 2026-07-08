@@ -2,6 +2,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
 import { listWorksheets } from './listWorksheets.js';
+import { SCRATCH_PREFIX } from './loadWorkbookXml.js';
 
 vi.mock('../../toolExecutor/localToolExecutor.js');
 
@@ -51,6 +52,19 @@ describe('listWorksheets', () => {
       schema: expect.any(Object),
       signal: mockSignal,
     });
+  });
+
+  it('hides the additive-POST scratch sheet from the list', async () => {
+    const mockExecutor = executorReturning(
+      workbookWith(['Sheet 1', `${SCRATCH_PREFIX}abc123`, 'Sales']),
+    );
+
+    const result = await listWorksheets({ executor: mockExecutor, signal: mockSignal });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value).toEqual({ count: 2, worksheets: ['Sheet 1', 'Sales'] });
+    }
   });
 
   it('should return empty list when no worksheets exist', async () => {

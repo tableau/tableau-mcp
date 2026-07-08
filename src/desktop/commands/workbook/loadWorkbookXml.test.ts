@@ -3,7 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 import invariant from '../../../utils/invariant.js';
 import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
 import * as validationRegistry from '../../validation/registry.js';
-import { loadWorkbookXml } from './loadWorkbookXml.js';
+import { loadWorkbookXml, SCRATCH_PREFIX } from './loadWorkbookXml.js';
 
 vi.mock('../../toolExecutor/localToolExecutor.js');
 vi.mock('../../validation/registry.js');
@@ -49,7 +49,7 @@ describe('loadWorkbookXml', () => {
     const scratchAdd = calls.find((c) => c.command === 'new-worksheet');
     expect(scratchAdd?.namespace).toBe('tabdoc');
     const scratchName = scratchAdd?.args?.NewSheet as string;
-    expect(scratchName).toMatch(/^mcpApplyScratch[a-zA-Z0-9]+$/);
+    expect(scratchName.startsWith(SCRATCH_PREFIX)).toBe(true);
 
     // The doc's own sheet is deleted before the POST so the additive merge can re-add it cleanly.
     expect(calls.some((c) => c.command === 'delete-sheet' && c.args?.Sheet === 'Sheet 1')).toBe(
