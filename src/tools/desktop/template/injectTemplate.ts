@@ -5,11 +5,8 @@ import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { spliceBoundFacet } from '../../../desktop/templates/facetSplice.js';
-import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
-import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
+import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { getTemplatePath, getTemplatesDir } from '../../../desktop/templates/templatePath.js';
-import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
 import {
   ArgsValidationError,
   FileNotFoundError,
@@ -49,15 +46,6 @@ const paramsSchema = {
     .optional()
     .describe('Required when insertPosition is before_sheet or after_sheet.'),
 };
-
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
 
 const toolTitle = 'Inject Template';
 export const getInjectTemplateTool = (
@@ -125,57 +113,32 @@ export const getInjectTemplateTool = (
           }
 
           try {
-            let templateXml = readFileSync(templateFilePath, 'utf-8');
-
-            templateXml = templateXml.replace(/\{\{TITLE\}\}/g, escapeXml(title));
-
-            if (templateParameters) {
-              for (const [key, value] of Object.entries(templateParameters)) {
-                if (key === 'DATASOURCE') continue;
-                templateXml = templateXml.replace(
-                  new RegExp(`\\{\\{${key}\\}\\}`, 'g'),
-                  escapeXml(value),
-                );
-              }
-            }
-
-            if (templateParameters?.['DATASOURCE']) {
-              // Per-apply calc namespacing at the tool boundary: the shared core
-              // defaults namespacing OFF and never mints its own nonce, so the
-              // caller supplies one. inject-template has no session, so the
-              // per-apply identity is the target workbook file + apply timestamp;
-              // a randomUUID guards against same-millisecond collisions. Distinct
-              // nonces => distinct calc-name suffixes => repeated injects into one
-              // workbook can't shadow each other's template calcs.
-              const applyNonce = `${workbookFile}:${Date.now()}:${randomUUID()}`;
-              // W28-C: splice a BOUND facet pill onto the trellis shelf BEFORE the
-              // frozen core rewrite (identity no-op when no facet is bound, so un-faceted
-              // applies stay byte-identical). The core then maps [Facet] → the bound field.
-              templateXml = spliceBoundFacet(templateXml, fieldMapping ?? {});
-              templateXml = rewriteFieldReferences(
-                templateXml,
-                fieldMapping ?? {},
-                templateParameters['DATASOURCE'],
-                undefined,
-                { namespaceCalcs: true, applyNonce },
-              );
-            }
-
+            const templateXml = readFileSync(templateFilePath, 'utf-8');
             const workbookXml = readFileSync(resolve(workbookFile), 'utf-8');
-            const modifiedXml = injectTemplate(
+
+            // Per-apply calc namespacing identity: the shared core defaults
+            // namespacing OFF and never mints its own nonce, so the caller supplies
+            // one. inject-template has no session, so the per-apply identity is the
+            // target workbook file + apply timestamp; a randomUUID guards against
+            // same-millisecond collisions.
+            const applyNonce = `${workbookFile}:${Date.now()}:${randomUUID()}`;
+            const result = buildInjectedWorkbookXml({
               workbookXml,
               templateXml,
+              title,
               sheetType,
-              insertPosition ?? 'end',
+              templateParameters,
+              fieldMapping,
+              insertPosition,
               relativeSheetName,
-            );
+              applyNonce,
+            });
 
-            const issues = wellFormedXmlRule.validate(modifiedXml);
-            if (issues.length > 0) {
-              return new XmlValidationError(issues.map((i) => i.message)).toErr();
+            if (!result.ok) {
+              return new XmlValidationError(result.issues).toErr();
             }
 
-            writeFileSync(resolve(workbookFile), modifiedXml, 'utf-8');
+            writeFileSync(resolve(workbookFile), result.xml, 'utf-8');
 
             return new Ok({ workbookFile, templateName, title, sheetType });
           } catch (err) {
