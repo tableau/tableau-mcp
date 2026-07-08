@@ -13,6 +13,12 @@ const manifestSchema = z.object({
 export type DesktopInstanceManifest = z.infer<typeof manifestSchema>;
 
 export class DesktopDiscoverer {
+  private readonly isPidAlive: (pid: number) => boolean;
+
+  constructor({ isPidAlive = defaultIsPidAlive }: { isPidAlive?: (pid: number) => boolean } = {}) {
+    this.isPidAlive = isPidAlive;
+  }
+
   getInstances(): Map<number, DesktopInstance> {
     const manifestPath = getManifestPath();
     if (!existsSync(manifestPath)) {
@@ -28,7 +34,7 @@ export class DesktopDiscoverer {
       // sessions. Keep only entries whose pid is alive.
       return new Map(
         manifest.instances
-          .filter((instance) => isPidAlive(instance.pid))
+          .filter((instance) => this.isPidAlive(instance.pid))
           .map((instance) => [instance.pid, new DesktopInstance(instance)]),
       );
     } catch (error) {
@@ -55,7 +61,7 @@ export class DesktopDiscoverer {
 }
 
 /** Liveness probe via a no-op signal. EPERM = alive but not ours; ESRCH = dead. */
-function isPidAlive(pid: number): boolean {
+function defaultIsPidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
