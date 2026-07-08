@@ -62,6 +62,34 @@ export type InjectTemplateCoreResult = { ok: true; xml: string } | { ok: false; 
  * workbook XML, returning the modified workbook (or the well-formedness issues).
  * Mirrors the inject-template tool's transformation exactly.
  */
+/**
+ * Remove an existing same-named worksheet (and its worksheet-class window entry) so a
+ * re-inject REPLACES the sheet instead of Desktop deduplicating it to "Name (1)" (W60:
+ * repeat demo asks piled up suffixed copies). Conservative: if the name is referenced by
+ * any dashboard zone, the workbook is returned UNCHANGED and Desktop's dedup applies —
+ * silently deleting a dashboard's member sheet would corrupt the dashboard. Pure string
+ * ops on XML already in hand: no extra roundtrips.
+ */
+export function removeSameNamedWorksheet(workbookXml: string, title: string): string {
+  const escaped = escapeXml(title);
+  const nameAttr = escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const worksheetRe = new RegExp(`[ \\t]*<worksheet name='${nameAttr}'>[\\s\\S]*?</worksheet>\\n?`);
+  if (!worksheetRe.test(workbookXml)) {
+    return workbookXml;
+  }
+  // Referenced by a dashboard zone? Leave it alone (fail-safe to Desktop dedup).
+  const zoneRe = new RegExp(`<zone [^>]*name='${nameAttr}'`);
+  if (zoneRe.test(workbookXml)) {
+    return workbookXml;
+  }
+  let out = workbookXml.replace(worksheetRe, '');
+  const windowRe = new RegExp(
+    `[ \\t]*<window class='worksheet'[^>]*name='${nameAttr}'[^>]*(?:/>|>[\\s\\S]*?</window>)\\n?`,
+  );
+  out = out.replace(windowRe, '');
+  return out;
+}
+
 export function buildInjectedWorkbookXml({
   workbookXml,
   templateXml,
@@ -73,6 +101,11 @@ export function buildInjectedWorkbookXml({
   relativeSheetName,
   applyNonce,
 }: InjectTemplateCoreParams): InjectTemplateCoreResult {
+  // W60 demo-idempotence: a worksheet inject with a colliding title replaces the
+  // existing sheet rather than accumulating "Name (1)" copies.
+  const baseWorkbookXml =
+    sheetType === 'worksheet' ? removeSameNamedWorksheet(workbookXml, title) : workbookXml;
+
   let processed = templateXml.replace(/\{\{TITLE\}\}/g, escapeXml(title));
 
   if (templateParameters) {
@@ -97,7 +130,7 @@ export function buildInjectedWorkbookXml({
   }
 
   const modifiedXml = injectTemplate(
-    workbookXml,
+    baseWorkbookXml,
     processed,
     sheetType,
     insertPosition ?? 'end',
