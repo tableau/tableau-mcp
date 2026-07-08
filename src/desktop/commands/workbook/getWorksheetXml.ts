@@ -1,10 +1,11 @@
 import { Err, Ok, Result } from 'ts-results-es';
-import { z } from 'zod';
 
+import { extractSheetXml } from '../../metadata/sheets.js';
 import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
+import { getWorkbookXml } from './getWorkbookXml.js';
 
 export type GetWorksheetXmlError = (
   | { type: 'no-worksheet-found' }
@@ -22,39 +23,22 @@ export async function getWorksheetXml({
     | { type: 'get-worksheet-xml-error'; error: GetWorksheetXmlError }
   >
 > {
-  const result = await executor.executeCommand({
-    namespace: 'tabui',
-    command: 'save-worksheet',
-    args: {
-      worksheetName,
-    },
-    schema: z.object({
-      worksheetXml: z.string(),
-    }),
-    signal,
-  });
-
-  if (result.isErr()) {
-    return Err({ type: 'execute-command-error', error: result.error });
+  const workbookResult = await getWorkbookXml({ executor, signal });
+  if (workbookResult.isErr()) {
+    return Err({ type: 'execute-command-error', error: workbookResult.error });
   }
 
-  const worksheetXml = result.value.parsedResult.worksheetXml;
-  const worksheetCount = (worksheetXml.match(/<worksheet/g) || []).length;
+  let worksheetXml: string | null;
+  try {
+    worksheetXml = extractSheetXml(workbookResult.value, worksheetName);
+  } catch (error) {
+    return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
+  }
 
-  if (worksheetCount === 0) {
+  if (worksheetXml === null) {
     return Err({
       type: 'get-worksheet-xml-error',
       error: { type: 'no-worksheet-found', message: `No worksheet found for ${worksheetName}.` },
-    });
-  }
-
-  if (worksheetCount > 1) {
-    return Err({
-      type: 'get-worksheet-xml-error',
-      error: {
-        type: 'multiple-worksheets-found',
-        message: `${worksheetCount} worksheets found instead of 1.`,
-      },
     });
   }
 
