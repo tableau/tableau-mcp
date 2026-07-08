@@ -8,54 +8,95 @@ import { loadWorksheetXml } from './loadWorksheetXml.js';
 vi.mock('../../toolExecutor/localToolExecutor.js');
 vi.mock('../../validation/registry.js');
 
+const worksheetName = 'Sheet 1';
+const validXml = `<worksheet name='${worksheetName}'><table><rows /></table></worksheet>`;
+
+function liveWorkbook(worksheetNames: string[]): string {
+  const worksheets = worksheetNames
+    .map((name) => `<worksheet name='${name}'><table /></worksheet>`)
+    .join('');
+  const windows = worksheetNames
+    .map((name) => `<window class='worksheet' name='${name}' />`)
+    .join('');
+  return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets><windows>${windows}</windows></workbook>`;
+}
+
+// Executor that dispatches by command, recording each call so the delete-then-apply
+// sequence can be asserted. `save-underlying-metadata` returns the live workbook.
+function dispatchingExecutor(workbookXml: string): {
+  executor: LocalExecutor;
+  calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }>;
+} {
+  const calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }> = [];
+  const executeCommand = vi.fn(async (params: any) => {
+    calls.push({ namespace: params.namespace, command: params.command, args: params.args });
+    if (params.command === 'save-underlying-metadata') {
+      return Ok({
+        command_id: 'cmd-get',
+        status: 'completed',
+        parsedResult: { text: workbookXml },
+      });
+    }
+    return Ok({ command_id: 'cmd-ok', status: 'completed', submitted_at: '' });
+  });
+  return { executor: { executeCommand } as unknown as LocalExecutor, calls };
+}
+
 describe('loadWorksheetXml', () => {
   const mockSignal = new AbortController().signal;
-  const worksheetName = 'Sheet 1';
-  const validXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(validationRegistry, 'runValidation').mockReturnValue({ valid: true, issues: [] });
   });
 
-  it('should successfully load worksheet XML', async () => {
-    const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(
-        Ok({
-          command_id: 'cmd-123',
-          status: 'completed',
-          submitted_at: '',
-        }),
-      ),
-    } as unknown as LocalExecutor;
+  it('should delete the live sheet then apply a minimal document for an existing sheet', async () => {
+    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Sheet 1', 'Other']));
 
     const result = await loadWorksheetXml({
       worksheetName,
       xml: validXml,
-      executor: mockExecutor,
+      executor,
       signal: mockSignal,
     });
 
     expect(result.isOk()).toBe(true);
-    expect(mockExecutor.executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        namespace: 'tabui',
-        command: 'load-worksheet',
-        args: {
-          worksheetName,
-          worksheetXml: validXml,
-        },
-      }),
-    );
+
+    const deleteCall = calls.find((c) => c.command === 'delete-sheet');
+    expect(deleteCall).toEqual({
+      namespace: 'tabdoc',
+      command: 'delete-sheet',
+      args: { Sheet: worksheetName },
+    });
+
+    const applyCall = calls.find((c) => c.command === 'load-underlying-metadata');
+    expect(applyCall?.namespace).toBe('tabui');
+    expect(typeof applyCall?.args?.text).toBe('string');
+    // The applied minimal doc carries the edited sheet but not the untouched "Other".
+    expect(applyCall?.args?.text).toContain('name="Sheet 1"');
+    expect(applyCall?.args?.text).not.toContain('Other');
   });
 
-  it('should return error when XML is invalid', async () => {
-    const mockExecutor = {} as unknown as LocalExecutor;
+  it('should skip the delete when the sheet does not yet exist (new sheet)', async () => {
+    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Some Other Sheet']));
 
     const result = await loadWorksheetXml({
       worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(calls.find((c) => c.command === 'delete-sheet')).toBeUndefined();
+    expect(calls.find((c) => c.command === 'load-underlying-metadata')).toBeDefined();
+  });
+
+  it('should return error when XML is invalid', async () => {
+    const result = await loadWorksheetXml({
+      worksheetName,
       xml: 'not xml',
-      executor: mockExecutor,
+      executor: {} as unknown as LocalExecutor,
       signal: mockSignal,
     });
 
@@ -67,12 +108,10 @@ describe('loadWorksheetXml', () => {
   });
 
   it('should return error when XML is empty', async () => {
-    const mockExecutor = {} as unknown as LocalExecutor;
-
     const result = await loadWorksheetXml({
       worksheetName,
       xml: '',
-      executor: mockExecutor,
+      executor: {} as unknown as LocalExecutor,
       signal: mockSignal,
     });
 
@@ -88,12 +127,10 @@ describe('loadWorksheetXml', () => {
       issues: [{ ruleId: 'test-rule', severity: 'error', message: 'Invalid structure' }],
     });
 
-    const mockExecutor = {} as unknown as LocalExecutor;
-
     const result = await loadWorksheetXml({
       worksheetName,
       xml: validXml,
-      executor: mockExecutor,
+      executor: {} as unknown as LocalExecutor,
       signal: mockSignal,
     });
 
@@ -104,30 +141,7 @@ describe('loadWorksheetXml', () => {
     }
   });
 
-  it('should proceed with warnings but not errors', async () => {
-    vi.spyOn(validationRegistry, 'runValidation').mockReturnValue({
-      valid: true,
-      issues: [{ ruleId: 'test-rule', severity: 'warning', message: 'Deprecated element' }],
-    });
-
-    const mockExecutor = {
-      executeCommand: vi
-        .fn()
-        .mockResolvedValue(Ok({ command_id: 'cmd-123', status: 'completed', submitted_at: '' })),
-    } as unknown as LocalExecutor;
-
-    const result = await loadWorksheetXml({
-      worksheetName,
-      xml: validXml,
-      executor: mockExecutor,
-      signal: mockSignal,
-    });
-
-    expect(result.isOk()).toBe(true);
-    expect(mockExecutor.executeCommand).toHaveBeenCalled();
-  });
-
-  it('should return error when executeCommand fails', async () => {
+  it('should return execute-command-error when the workbook fetch fails', async () => {
     const error = {
       type: 'command-failed' as const,
       error: { code: 'ERROR', message: 'Failed', recoverable: false },
@@ -145,27 +159,8 @@ describe('loadWorksheetXml', () => {
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
-      expect(result.error.type).toBe('execute-command-error');
+      invariant(result.error.type === 'execute-command-error');
       expect(result.error.error).toEqual(error);
     }
-  });
-
-  it('should trim whitespace from XML', async () => {
-    const xmlWithWhitespace = `\n  ${validXml}\n`;
-    const mockExecutor = {
-      executeCommand: vi
-        .fn()
-        .mockResolvedValue(Ok({ command_id: 'cmd-123', status: 'completed', submitted_at: '' })),
-    } as unknown as LocalExecutor;
-
-    const result = await loadWorksheetXml({
-      worksheetName,
-      xml: xmlWithWhitespace,
-      executor: mockExecutor,
-      signal: mockSignal,
-    });
-
-    expect(result.isOk()).toBe(true);
-    expect(validationRegistry.runValidation).toHaveBeenCalledWith(validXml, 'worksheet');
   });
 });

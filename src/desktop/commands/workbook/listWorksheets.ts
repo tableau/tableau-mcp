@@ -1,15 +1,11 @@
 import { Err, Ok, Result } from 'ts-results-es';
-import { z } from 'zod';
 
+import { listSheets } from '../../metadata/sheets.js';
 import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
-
-const worksheetNamesSchema = z.object({
-  count: z.number(),
-  worksheets: z.array(z.object({ name: z.string() })),
-});
+import { getWorkbookXml } from './getWorkbookXml.js';
 
 export async function listWorksheets({ executor, signal }: WithExecutorAndAbortSignal): Promise<
   Result<
@@ -20,33 +16,20 @@ export async function listWorksheets({ executor, signal }: WithExecutorAndAbortS
     ExecuteCommandError
   >
 > {
-  const result = await executor.executeCommand({
-    namespace: 'tabui',
-    command: 'list-worksheets',
-    schema: z.object({
-      worksheets: z.string(),
-    }),
-    signal,
-  });
-
-  if (result.isErr()) {
-    return result;
+  const workbookResult = await getWorkbookXml({ executor, signal });
+  if (workbookResult.isErr()) {
+    return workbookResult;
   }
 
-  let worksheets: unknown;
+  let worksheets: Array<string>;
   try {
-    worksheets = JSON.parse(result.value.parsedResult.worksheets || '[]');
-  } catch (e) {
-    return Err({ type: 'invalid-response', error: e });
-  }
-
-  const worksheetsResult = worksheetNamesSchema.safeParse(worksheets);
-  if (!worksheetsResult.success) {
-    return Err({ type: 'invalid-response', error: worksheetsResult.error });
+    worksheets = listSheets(workbookResult.value);
+  } catch (error) {
+    return Err({ type: 'invalid-response', error });
   }
 
   return Ok({
-    count: worksheetsResult.data.worksheets.length,
-    worksheets: worksheetsResult.data.worksheets.map((worksheet) => worksheet.name),
+    count: worksheets.length,
+    worksheets,
   });
 }

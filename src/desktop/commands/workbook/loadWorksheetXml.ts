@@ -2,12 +2,16 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { log } from '../../../logging/logger.js';
 import { sanitizeValue } from '../../../logging/sanitize.js';
+import { buildMinimalSheetDoc } from '../../metadata/sheets.js';
 import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
+import { deleteLiveSheet } from './deleteLiveSheet.js';
+import { getWorkbookXml } from './getWorkbookXml.js';
+import { applyWorkbookText } from './loadWorkbookXml.js';
 
 export type LoadWorksheetXmlError =
   | { type: 'invalid-xml' }
@@ -62,28 +66,33 @@ export async function loadWorksheetXml({
     });
   }
 
-  const result = await executor.executeCommand({
-    namespace: 'tabui',
-    command: 'load-worksheet',
-    signal,
-    args: {
-      worksheetName,
-      worksheetXml: xml,
-    },
-  });
+  const workbookResult = await getWorkbookXml({ executor, signal });
+  if (workbookResult.isErr()) {
+    return Err({ type: 'execute-command-error', error: workbookResult.error });
+  }
 
-  if (result.isErr()) {
-    return Err({ type: 'execute-command-error', error: result.error });
+  let minimalDoc: string;
+  try {
+    minimalDoc = buildMinimalSheetDoc(workbookResult.value, worksheetName, xml);
+  } catch (error) {
+    return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
+  }
+
+  const deleteResult = await deleteLiveSheet({ sheetName: worksheetName, executor, signal });
+  if (deleteResult.isErr()) {
+    return Err({ type: 'execute-command-error', error: deleteResult.error });
+  }
+
+  const applyResult = await applyWorkbookText({ xml: minimalDoc, executor, signal });
+  if (applyResult.isErr()) {
+    return Err({ type: 'execute-command-error', error: applyResult.error });
   }
 
   log({
     level: 'info',
     message: 'load-worksheet completed',
     logger: 'worksheetCommands',
-    data: {
-      worksheetName,
-      commandId: result.value.command_id,
-    },
+    data: { worksheetName },
   });
 
   return Ok.EMPTY;
