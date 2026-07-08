@@ -22,8 +22,14 @@ export class DesktopDiscoverer {
     try {
       const content = readFileSync(manifestPath, 'utf8');
       const manifest = manifestSchema.parse(JSON.parse(content));
+      // Desktop appends to the manifest but never prunes, so it accumulates entries for
+      // long-dead pids (observed: 119 "instances" with one Desktop running — W60). A stale
+      // entry breaks session auto-resolution (never "exactly one") and offers agents dead
+      // sessions. Keep only entries whose pid is alive.
       return new Map(
-        manifest.instances.map((instance) => [instance.pid, new DesktopInstance(instance)]),
+        manifest.instances
+          .filter((instance) => isPidAlive(instance.pid))
+          .map((instance) => [instance.pid, new DesktopInstance(instance)]),
       );
     } catch (error) {
       log({
@@ -45,6 +51,16 @@ export class DesktopDiscoverer {
     }
 
     return instance;
+  }
+}
+
+/** Liveness probe via a no-op signal. EPERM = alive but not ours; ESRCH = dead. */
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
 
