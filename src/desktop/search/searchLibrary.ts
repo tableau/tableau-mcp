@@ -1,8 +1,8 @@
 import fs from 'fs';
 import Fuse from 'fuse.js';
-import path, { join } from 'path';
+import { join } from 'path';
 
-import { DATA_ROOT } from '../../server.desktop.js';
+import { listDataAssetNames, readDataAsset } from '../assets.js';
 
 // --- Commands reference ---
 
@@ -12,25 +12,21 @@ let _commandsFuse: Fuse<any> | null = null;
 
 function loadCommandsReference(): any {
   if (_commandsReferenceCache) return _commandsReferenceCache;
-  let raw: string;
-  const COMMANDS_REFERENCE_PATH = join(DATA_ROOT, 'tableau-desktop-commands-reference.json');
-  try {
-    raw = fs.readFileSync(COMMANDS_REFERENCE_PATH, 'utf8');
-  } catch (e: any) {
-    throw new Error(
-      `Commands reference not available at ${COMMANDS_REFERENCE_PATH}: ${e?.message ?? String(e)}`,
-    );
+  const assetName = 'tableau-desktop-commands-reference.json';
+  const raw = readDataAsset(assetName);
+  if (raw === null) {
+    throw new Error(`Commands reference not available: ${assetName}`);
   }
   let ref: any;
   try {
     ref = JSON.parse(raw);
   } catch (e: any) {
     throw new Error(
-      `Commands reference file is not valid JSON at ${COMMANDS_REFERENCE_PATH}: ${e?.message ?? String(e)}`,
+      `Commands reference file is not valid JSON (${assetName}): ${e?.message ?? String(e)}`,
     );
   }
   if (!ref || typeof ref !== 'object') {
-    throw new Error(`Commands reference did not contain an object at ${COMMANDS_REFERENCE_PATH}`);
+    throw new Error(`Commands reference did not contain an object (${assetName})`);
   }
   _commandsReferenceCache = ref;
   return ref;
@@ -158,9 +154,12 @@ let _schemaElementToGroup: Record<string, string[]> | null = null;
 
 function loadSchemaReference(): any {
   if (_schemaCache) return _schemaCache;
-  const SCHEMA_REFERENCE_PATH =
-    process.env.SCHEMA_REFERENCE_PATH || join(DATA_ROOT, 'workbook-schema-reference.json');
-  const raw = fs.readFileSync(SCHEMA_REFERENCE_PATH, 'utf8');
+  const raw = process.env.SCHEMA_REFERENCE_PATH
+    ? fs.readFileSync(process.env.SCHEMA_REFERENCE_PATH, 'utf8')
+    : readDataAsset('workbook-schema-reference.json');
+  if (raw === null) {
+    throw new Error('Workbook schema reference not available: workbook-schema-reference.json');
+  }
   _schemaCache = JSON.parse(raw);
   return _schemaCache;
 }
@@ -457,27 +456,40 @@ function extractFeatures(name: string): string[] {
 function loadWorkbookExamples(): any[] {
   if (_examplesCache) return _examplesCache;
   _examplesCache = [];
-  const EXAMPLES_DIR = process.env.EXAMPLES_DIR || join(DATA_ROOT, 'examples');
-  if (!fs.existsSync(EXAMPLES_DIR)) return _examplesCache;
-  const files = fs
-    .readdirSync(EXAMPLES_DIR)
-    .filter((f) => f.endsWith('.json') || f.endsWith('.md'));
+  const readExample =
+    process.env.EXAMPLES_DIR !== undefined
+      ? (f: string): string | null => {
+          try {
+            return fs.readFileSync(join(process.env.EXAMPLES_DIR as string, f), 'utf8');
+          } catch {
+            return null;
+          }
+        }
+      : (f: string): string | null => readDataAsset(`examples/${f}`);
+  const fileNames =
+    process.env.EXAMPLES_DIR !== undefined
+      ? fs.existsSync(process.env.EXAMPLES_DIR)
+        ? fs.readdirSync(process.env.EXAMPLES_DIR)
+        : []
+      : listDataAssetNames('examples');
+  const files = fileNames.filter((f) => f.endsWith('.json') || f.endsWith('.md'));
   for (const f of files) {
-    const filePath = path.join(EXAMPLES_DIR, f);
     const name = f.replace(/\.[^.]+$/, '');
-    const firstLine = fs.readFileSync(filePath, 'utf8').split('\n')[0];
+    const content = readExample(f);
+    if (content === null) continue;
+    const firstLine = content.split('\n')[0];
     let description = name.replace(/[-_]/g, ' ');
     if (firstLine.startsWith('# ')) {
       description = firstLine.slice(2).trim();
     } else if (firstLine.startsWith('{')) {
       try {
-        const obj = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        const obj = JSON.parse(content);
         if (obj._description) description = obj._description;
       } catch {
         // ignore malformed JSON
       }
     }
-    _examplesCache.push({ name, description, filePath, features: extractFeatures(name) });
+    _examplesCache.push({ name, description, features: extractFeatures(name) });
   }
   return _examplesCache;
 }
@@ -485,10 +497,14 @@ function loadWorkbookExamples(): any[] {
 function loadTwbExampleIndex(): any[] {
   if (_twbIndexCache) return _twbIndexCache;
   _twbIndexCache = [];
-  const TWB_INDEX_PATH = process.env.TWB_INDEX_PATH || join(DATA_ROOT, 'twb-example-index.json');
-  if (!fs.existsSync(TWB_INDEX_PATH)) return _twbIndexCache;
+  const raw = process.env.TWB_INDEX_PATH
+    ? fs.existsSync(process.env.TWB_INDEX_PATH)
+      ? fs.readFileSync(process.env.TWB_INDEX_PATH, 'utf8')
+      : null
+    : readDataAsset('twb-example-index.json');
+  if (raw === null) return _twbIndexCache;
   try {
-    _twbIndexCache = JSON.parse(fs.readFileSync(TWB_INDEX_PATH, 'utf8'));
+    _twbIndexCache = JSON.parse(raw);
   } catch (e: any) {
     console.error('Failed to load TWB example index:', e.message);
   }
