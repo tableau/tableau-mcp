@@ -1,5 +1,6 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
+import { getDesktopConfig } from '../../../config.desktop.js';
 import { log } from '../../../logging/logger.js';
 import { sanitizeValue } from '../../../logging/sanitize.js';
 import { buildMinimalSheetDoc } from '../../metadata/sheets.js';
@@ -18,18 +19,21 @@ export type LoadWorksheetXmlError =
   | { type: 'invalid-xml' }
   | { type: 'validation-failed'; issues: Array<ValidationIssue> };
 
+type LoadWorksheetXmlResult = Result<
+  void,
+  | { type: 'execute-command-error'; error: ExecuteCommandError }
+  | { type: 'load-worksheet-xml-error'; error: LoadWorksheetXmlError }
+>;
+
 export async function loadWorksheetXml({
   worksheetName,
   xml,
   executor,
   signal,
-}: { worksheetName: string; xml: string } & WithExecutorAndAbortSignal): Promise<
-  Result<
-    void,
-    | { type: 'execute-command-error'; error: ExecuteCommandError }
-    | { type: 'load-worksheet-xml-error'; error: LoadWorksheetXmlError }
-  >
-> {
+}: {
+  worksheetName: string;
+  xml: string;
+} & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
     return Err({ type: 'load-worksheet-xml-error', error: { type: 'invalid-xml' } });
@@ -67,6 +71,59 @@ export async function loadWorksheetXml({
     });
   }
 
+  // External Client API ("Athena V0") exposes no per-sheet route — tabui:load-worksheet is not
+  // in its command registry, and the whole-workbook POST is additive-only, so applying a single
+  // sheet has to delete the live copy first and re-post a minimal whole-workbook document.
+  return getDesktopConfig().externalApiEnabled
+    ? loadWorksheetXmlViaExternalApi({ worksheetName, xml, executor, signal })
+    : loadWorksheetXmlViaAgentApi({ worksheetName, xml, executor, signal });
+}
+
+async function loadWorksheetXmlViaAgentApi({
+  worksheetName,
+  xml,
+  executor,
+  signal,
+}: {
+  worksheetName: string;
+  xml: string;
+} & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
+  const result = await executor.executeCommand({
+    namespace: 'tabui',
+    command: 'load-worksheet',
+    signal,
+    args: {
+      worksheetName,
+      worksheetXml: xml,
+    },
+  });
+
+  if (result.isErr()) {
+    return Err({ type: 'execute-command-error', error: result.error });
+  }
+
+  log({
+    level: 'info',
+    message: 'load-worksheet completed',
+    logger: 'worksheetCommands',
+    data: {
+      worksheetName,
+      commandId: result.value.command_id,
+    },
+  });
+
+  return Ok.EMPTY;
+}
+
+async function loadWorksheetXmlViaExternalApi({
+  worksheetName,
+  xml,
+  executor,
+  signal,
+}: {
+  worksheetName: string;
+  xml: string;
+} & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   return withApplyLock(async () => {
     const workbookResult = await getWorkbookXml({ executor, signal });
     if (workbookResult.isErr()) {

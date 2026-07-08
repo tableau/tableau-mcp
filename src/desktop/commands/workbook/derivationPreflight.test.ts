@@ -10,27 +10,15 @@
 import { Ok } from 'ts-results-es';
 
 import invariant from '../../../utils/invariant.js';
+import * as xmlToJsonModule from '../../libraries/workbook-serialization-converter/index.js';
 import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
 import { loadWorkbookXml } from './loadWorkbookXml.js';
 import { loadWorksheetXml } from './loadWorksheetXml.js';
 
-const mockSignal = new AbortController().signal;
+vi.mock('fs');
+vi.mock('../../libraries/workbook-serialization-converter/index.js');
 
-// Executor that serves the live workbook on the save-underlying-metadata fetch and acks
-// every other command, so the multi-call apply-worksheet flow (fetch → delete → apply) runs.
-function dispatchingExecutor(workbookXml: string): LocalExecutor {
-  const executeCommand = vi.fn(async (params: any) => {
-    if (params.command === 'save-underlying-metadata') {
-      return Ok({
-        command_id: 'cmd-get',
-        status: 'completed',
-        parsedResult: { text: workbookXml },
-      });
-    }
-    return Ok({ command_id: 'cmd-ok', status: 'completed', submitted_at: '' });
-  });
-  return { executeCommand } as unknown as LocalExecutor;
-}
+const mockSignal = new AbortController().signal;
 
 function workbookWithDerivation(derivation: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -93,16 +81,21 @@ describe('derivation preflight — apply-workbook path', () => {
   });
 
   it('sends a canonical derivation through to Tableau (positive control)', async () => {
-    const executor = dispatchingExecutor(workbookWithDerivation('Month-Trunc'));
+    vi.spyOn(xmlToJsonModule, 'xmlToJson').mockReturnValue('{"workbook": {}}');
+
+    const executeCommand = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-1', status: 'completed', submitted_at: '' }));
+    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
 
     const result = await loadWorkbookXml({
       xml: workbookWithDerivation('Month-Trunc'),
-      executor,
+      executor: mockExecutor,
       signal: mockSignal,
     });
 
     expect(result.isOk()).toBe(true);
-    expect(executor.executeCommand).toHaveBeenCalled();
+    expect(executeCommand).toHaveBeenCalled();
   });
 });
 
@@ -136,16 +129,19 @@ describe('derivation preflight — apply-worksheet path', () => {
   });
 
   it('sends a canonical derivation through to Tableau (positive control)', async () => {
-    const executor = dispatchingExecutor(workbookWithDerivation('Month-Trunc'));
+    const executeCommand = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-1', status: 'completed', submitted_at: '' }));
+    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
 
     const result = await loadWorksheetXml({
       worksheetName: 'Sheet 1',
       xml: worksheetWithDerivation('Month-Trunc'),
-      executor,
+      executor: mockExecutor,
       signal: mockSignal,
     });
 
     expect(result.isOk()).toBe(true);
-    expect(executor.executeCommand).toHaveBeenCalled();
+    expect(executeCommand).toHaveBeenCalled();
   });
 });

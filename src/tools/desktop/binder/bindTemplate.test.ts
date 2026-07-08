@@ -438,10 +438,8 @@ describe('bindTemplateTool auto_apply gate', () => {
         applyNonce: expect.any(String),
       }),
     );
-    // The additive-POST workaround dispatches the scratch-reset chain: add scratch →
-    // (delete colliding sheets — none here, XML has no sheets) → POST → delete scratch.
-    const dispatched = executeCommand.mock.calls.map(([p]) => p.command);
-    expect(dispatched).toEqual(['new-worksheet', 'load-underlying-metadata', 'delete-sheet']);
+    // Exactly one apply dispatch (the collapsed 4-call chain becomes one tool call).
+    expect(executeCommand).toHaveBeenCalledTimes(1);
   });
 
   it('applied:true returns ONLY the trimmed fast-path shape (W60 P4 response-shape trim)', async () => {
@@ -558,13 +556,11 @@ describe('bindTemplateTool auto_apply gate', () => {
       getExecutor,
     });
 
+    expect(validationRegistry.runValidation).toHaveBeenCalledTimes(1);
     expect(validationRegistry.runValidation).toHaveBeenCalledWith('<workbook/>', 'workbook');
+    expect(executeCommand).toHaveBeenCalledTimes(1);
     const validationOrder = vi.mocked(validationRegistry.runValidation).mock.invocationCallOrder[0];
-    // The apply POST must dispatch AFTER preflight validation.
-    const postCallIdx = executeCommand.mock.calls.findIndex(
-      ([p]) => p.command === 'load-underlying-metadata',
-    );
-    const dispatchOrder = executeCommand.mock.invocationCallOrder[postCallIdx];
+    const dispatchOrder = executeCommand.mock.invocationCallOrder[0];
     expect(validationOrder).toBeLessThan(dispatchOrder);
   });
 });

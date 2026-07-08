@@ -286,12 +286,8 @@ describe('dashboardAutoApplyTool happy path', () => {
       'sheets',
     ]);
 
-    // One read for the pristine bind; resetAndApplyWorkbook re-reads before the additive-POST
-    // workaround, so getWorkbookXml is called twice total. The apply dispatches the scratch-reset
-    // chain (new-worksheet → POST → delete-scratch) rather than a single command.
-    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(2);
-    const dispatched = executeCommand.mock.calls.map(([p]) => p.command);
-    expect(dispatched).toEqual(['new-worksheet', 'load-underlying-metadata', 'delete-sheet']);
+    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
   });
 
   it('injects the dashboard wrapper with zones referencing every resolved title', async () => {
@@ -363,12 +359,9 @@ describe('dashboardAutoApplyTool happy path', () => {
     });
 
     expect(validationRegistry.runValidation).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
     const validationOrder = vi.mocked(validationRegistry.runValidation).mock.invocationCallOrder[0];
-    // The apply POST must dispatch AFTER preflight validation.
-    const postIdx = executeCommand.mock.calls.findIndex(
-      ([p]) => p.command === 'load-underlying-metadata',
-    );
-    const dispatchOrder = executeCommand.mock.invocationCallOrder[postIdx];
+    const dispatchOrder = executeCommand.mock.invocationCallOrder[0];
     expect(validationOrder).toBeLessThan(dispatchOrder);
   });
 
@@ -590,7 +583,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(true);
-    expect(executeCommand.mock.calls.map(([p]) => p.command)).toContain('load-underlying-metadata');
+    expect(executeCommand).toHaveBeenCalledTimes(1);
   });
 
   it('a resolved title matching an already-existing worksheet is reported as replaced', async () => {
