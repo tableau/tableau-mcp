@@ -40,7 +40,6 @@
             <format attr='border-color' data-class='subtotal' value='#ffffff' />
           </style-rule>
           <style-rule element='table'>
-            <format attr='background-color' value='#000000' />
             <format attr='show-null-value-warning' value='false' />
           </style-rule>
           <style-rule element='worksheet'>

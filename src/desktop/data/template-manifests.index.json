@@ -2925,9 +2925,10 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-06",
+        "xml_sha256": "215d8fbe9970b79ecd46242799d600fd4775056d887571b5242b7b2726d00681",
         "render_evidence": {
           "method": "gate-composite",
-          "basis": "golden-parity gate run 2026-07-06 (source-anchor replay): structural 0.97297 (5/5 critical), pixel 1.0 (4 ROIs: whole-chart ink-colors + hue, left/right staircase clusters; same-geometry back-to-back captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 17=17 (Superstore Sub-Category) on source and applied renders; running total verified live (status bar Running Sum of SUM(Profit) 4,117,943)",
+          "basis": "golden-parity gate run 2026-07-06 (source-anchor replay): structural 0.97297 (5/5 critical), pixel 1.0 (4 ROIs: whole-chart ink-colors + hue, left/right staircase clusters; same-geometry back-to-back captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 17=17 (Superstore Sub-Category) on source and applied renders; running total verified live (status bar Running Sum of SUM(Profit) 4,117,943) | style-delta re-verify 2026-07-07: CookBook dark theme removed (black table background; choropleth also re-enabled base map layers). STRUCTURE unchanged. Live re-verified: bind(no-LLM)->inject->apply->render on Sample - Superstore, marks correct, light theme + map layers visually confirmed (W60). Pixel parity vs the dark source golden intentionally diverges on background/base-layer attrs.",
           "lane": "fable-direct overnight stamp factory 2026-07-06 (orchestrator live gate run)",
           "date": "2026-07-06",
           "structural": 0.97297,
@@ -3559,6 +3560,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-06",
+        "xml_sha256": "b75f203fdb787be456d1d37e74d3d292de8850ab3f304016e3ff5401dfc175ea",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-06",
@@ -3573,7 +3575,7 @@
           ],
           "run": "source-anchor replay on the source workbook's Superstore datasource; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via direct placeholder fill; hidden source worksheet surfaced via unhide+activate .twb bypass",
           "artifacts": "local-only under ~/TableauGoldens/lab/choropleth-* (renders, worksheet XMLs, workbook cache)",
-          "basis": "golden-parity gate run 2026-07-06 (source-anchor replay): structural 0.97297 (5/5 critical), pixel 1.0 (5 ROIs, same-geometry captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 49=49 on source and applied renders",
+          "basis": "golden-parity gate run 2026-07-06 (source-anchor replay): structural 0.97297 (5/5 critical), pixel 1.0 (5 ROIs, same-geometry captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 49=49 on source and applied renders | style-delta re-verify 2026-07-07: CookBook dark theme removed (black table background; choropleth also re-enabled base map layers). STRUCTURE unchanged. Live re-verified: bind(no-LLM)->inject->apply->render on Sample - Superstore, marks correct, light theme + map layers visually confirmed (W60). Pixel parity vs the dark source golden intentionally diverges on background/base-layer attrs.",
           "lane": "fable-direct stamp day 2026-07-06 (orchestrator live gate run)",
           "high_pass": "3/3",
           "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 5 ROIs: whole-map ink-colors + hue, west/east/south clusters — all 1.0). Anchor-only in the hand-stamp sense is NOT the case here: source and applied are two INDEPENDENT renders of the same data.",
