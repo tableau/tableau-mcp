@@ -166,8 +166,24 @@ export const useRestApi = async <T>(
       // Tableau REST sessions for 'pat' and 'direct-trust' are intentionally ephemeral.
       // Sessions for 'oauth' and 'passthrough' are not. Signing out would invalidate the session,
       // preventing the access token from being reused for subsequent requests.
-      await restApi.signOut();
-      log({ message: 'Signed out of Tableau REST API', level: 'debug', logger: 'auth' });
+      //
+      // Isolate the sign-out so a teardown failure can NEVER mask the callback's real result or
+      // error. A throw inside `finally` replaces whatever the `try` was returning or throwing, so an
+      // un-caught sign-out error would clobber the real outcome — e.g. a callback that 404s on a
+      // missing resource surfaces to the caller as the sign-out's 401 once the session is torn down
+      // (W-23202034). Swallow-and-log instead: sign-out is best-effort cleanup, and the ephemeral
+      // session expires on its own regardless.
+      try {
+        await restApi.signOut();
+        log({ message: 'Signed out of Tableau REST API', level: 'debug', logger: 'auth' });
+      } catch (error) {
+        log({
+          message: `Failed to sign out of Tableau REST API: ${getExceptionMessage(error)}`,
+          level: 'warning',
+          logger: 'auth',
+          data: error,
+        });
+      }
     }
   }
 };
