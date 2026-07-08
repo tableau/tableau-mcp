@@ -2,7 +2,7 @@ import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { EventEmitter } from 'events';
 
 import * as telemetryInit from '../telemetry/init.js';
-import { TelemetryProvider } from '../telemetry/types.js';
+import type { TelemetryProvider } from '../telemetry/telemetryProvider.js';
 import { latencyMiddleware } from './latencyMiddleware.js';
 import { AuthenticatedRequest } from './oauth/types.js';
 

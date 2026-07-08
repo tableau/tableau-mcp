@@ -6,7 +6,7 @@
  * when telemetry is not needed.
  */
 
-import { TelemetryAttributes, TelemetryProvider } from './types.js';
+import type { TelemetryAttributes, TelemetryProvider } from './telemetryProvider.js';
 
 export class NoOpTelemetryProvider implements TelemetryProvider {
   initialize(): void {
