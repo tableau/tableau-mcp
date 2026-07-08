@@ -43,6 +43,8 @@ For a plain chart ask (bar, column, line, treemap, waterfall, scatter, filled ma
 
 For a dashboard ask with 2-6 charts (e.g. "a dashboard with sales by region and profit by category"), FIRST call dashboard-auto-apply with one { ask, title? } per chart and a dashboardName — it binds and composes every chart into one dashboard in ONE call. If any ask fails to deterministically bind, nothing is applied and each ask's outcome is returned; fall back to bind-template per chart, or build-and-apply-dashboard for KPI strips / custom zone layouts.
 
+For a data-value question ("what was revenue in Q3?"), do NOT answer with a number — this server cannot read data values. Say so, then offer the chart that would show it (a plain chart ask via bind-template) instead.
+
 Every session-scoped tool call needs the session id from list-instances — except bind-template and dashboard-auto-apply, which auto-resolve the session when exactly one Desktop instance is running.
 
 If an apply is rejected by preflight validation, fix the XML per the FIX lines in the error and re-apply. Prefer file mode for large workbooks.`);
