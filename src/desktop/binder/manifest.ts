@@ -23,7 +23,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { listDataAssetNames, readDataAsset } from '../assets.js';
+import { listDataAssetNames, readDataAsset, runningAsSea } from '../assets.js';
 import type { TemplateManifest } from './manifest-types.js';
 import {
   type BinderFixture,
@@ -169,11 +169,17 @@ export function loadBinderFixture(): BinderFixture {
 export function loadManifests(): Map<string, TemplateManifest> {
   if (_manifestsCache) return _manifestsCache;
   const cache = new Map<string, TemplateManifest>();
-  // listDataAssetNames returns [] when the directory/asset prefix is absent,
-  // preserving the old `!fs.existsSync(MANIFESTS_DIR)` empty-cache behavior.
+  // Disk builds keep the old empty-cache behavior for a missing directory; SEA
+  // builds fail closed below because an empty listing means the embedded supply is broken.
   const files = listDataAssetNames(MANIFESTS_ASSET_DIR)
     .filter((f) => f.endsWith(MANIFEST_SUFFIX))
     .sort();
+  if (runningAsSea() && files.length === 0) {
+    throw new Error(
+      `SEA template manifest asset directory 'desktop/data/${MANIFESTS_ASSET_DIR}' ` +
+        'is missing or empty',
+    );
+  }
   for (const file of files) {
     const raw = readDataAsset(`${MANIFESTS_ASSET_DIR}/${file}`);
     if (raw === null) {

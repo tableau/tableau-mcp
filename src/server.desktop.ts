@@ -11,9 +11,11 @@ import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import { DATA_ROOT, readResourceAsset, RESOURCES_ROOT } from './desktop/assets.js';
 import { listKnowledgeResources, readKnowledgeResource } from './desktop/knowledge/index.js';
+import { DESKTOP_ROUTE_TABLE, generateDesktopInstructions } from './desktop/routeTable.js';
 import { SessionManager } from './desktop/sessionManager.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
+import { getCheckForUserChangesTool } from './tools/desktop/session/checkForUserChanges.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { DesktopToolName } from './tools/desktop/toolName.js';
@@ -77,16 +79,9 @@ export { DATA_ROOT, RESOURCES_ROOT };
 
 // Routing guidance every connecting client receives at initialize (W60 adoption P5 —
 // the demo build previously shipped NO instructions, so skill-less clients got zero
-// routing and the template fast path stayed dark in real sessions).
-const DESKTOP_INSTRUCTIONS = `You are controlling Tableau Desktop.
-
-For a plain chart ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot), FIRST call bind-template with the user's ask and auto_apply: true — a confident bind renders the chart in ONE call (~2s server-side, no further tool calls). On propose/escalate, fall back to the general authoring tools (get-workbook-xml -> edit -> apply-workbook, or inject-template for a known template).
-
-For a dashboard ask with 2-6 charts (e.g. "a dashboard with sales by region and profit by category"), FIRST call dashboard-auto-apply with one { ask, title? } per chart and a dashboardName — it binds and composes every chart into one dashboard in ONE call. If any ask fails to deterministically bind, nothing is applied and each ask's outcome is returned; fall back to bind-template per chart, or build-and-apply-dashboard for KPI strips / custom zone layouts.
-
-Every session-scoped tool call needs the session id from list-instances — except bind-template and dashboard-auto-apply, which auto-resolve the session when exactly one Desktop instance is running.
-
-If an apply is rejected by preflight validation, fix the XML per the FIX lines in the error and re-apply. Prefer file mode for large workbooks.`;
+// routing and the template fast path stayed dark in real sessions). Generated from the
+// typed route table so route edits are pinned by tests instead of drifting as prose.
+export const DESKTOP_INSTRUCTIONS = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
 
 export class DesktopMcpServer extends Server {
   private readonly sessionManager = new SessionManager();
@@ -151,7 +146,12 @@ export class DesktopMcpServer extends Server {
   };
 
   protected _getToolsToRegister = async (): Promise<Array<DesktopTool<any>>> => {
-    const allTools = desktopToolFactories.map((toolFactory) => toolFactory(this));
+    // check-for-user-changes needs the events endpoint, which the External Client API does not
+    // expose; don't advertise a tool that can only return an error on that transport.
+    const factories = getDesktopConfig().externalApiEnabled
+      ? desktopToolFactories.filter((factory) => factory !== getCheckForUserChangesTool)
+      : desktopToolFactories;
+    const allTools = factories.map((toolFactory) => toolFactory(this));
     return selectToolsForProfile(allTools, getDesktopConfig().toolProfile);
   };
 

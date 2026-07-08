@@ -11,12 +11,12 @@ const paramsSchema = {
   command: z
     .string()
     .describe(
-      "Full command name in format 'namespace:command' (e.g., 'tabdoc:goto-sheet', 'tabui:save-workbook'). Use search-commands to find available commands.",
+      "Full command name in format 'namespace:command' (e.g., 'tabdoc:save', 'tabdoc:delete-sheet'). Use search-commands to find available commands.",
     ),
   args: z
     .record(z.any())
     .optional()
-    .describe("Command arguments as a JSON object (e.g., { 'sheet': 'Sheet1' })"),
+    .describe("Command arguments as a JSON object (e.g., { 'Sheet': 'Sheet 1' })"),
 };
 
 const title = 'Execute Tableau Command';
@@ -28,7 +28,7 @@ export const getExecuteTableauCommandTool = (
     name: 'execute-tableau-command',
     title,
     description:
-      "Execute an arbitrary Tableau command via the Agent API. Use search-commands to find available commands. Commands use the format 'namespace:command' (e.g., 'tabdoc:goto-sheet', 'tabui:save-workbook').",
+      "Execute an arbitrary registered Tableau Desktop command. Use search-commands to find available commands; a name not in the registry returns command-not-found. Commands use the format 'namespace:command' (e.g., 'tabdoc:save', 'tabdoc:delete-sheet').",
     paramsSchema,
     annotations: {
       title,

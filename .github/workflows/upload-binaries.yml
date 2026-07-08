@@ -19,10 +19,9 @@ jobs:
           git fetch --tags
           git checkout -b sea-linux ${{ github.event.release.tag_name }}
           npm ci
-          npm run build
-          node --experimental-sea-config sea-config.json
-          cp $(command -v node) tableau-mcp
-          npx -y postject tableau-mcp NODE_SEA_BLOB sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+          npm run build:sea -- --platform linux-x64
+          cp build/sea/default/linux-x64/tableau-mcp tableau-mcp
+          cp build/sea/desktop/linux-x64/tableau-mcp-desktop tableau-mcp-desktop
           echo "SERVER=${{ secrets.E2E_TEST_SERVER }}" > .env
           echo "AUTH=${{ secrets.E2E_TEST_AUTH }}" >> .env
           echo "SITE_NAME=${{ secrets.E2E_TEST_SITE_NAME }}" >> .env
@@ -39,7 +38,7 @@ jobs:
             echo "tableau-mcp failed to start"
             exit 1
           fi
-          tar -czf tableau-mcp.tar.gz tableau-mcp
+          tar -czf tableau-mcp.tar.gz tableau-mcp tableau-mcp-desktop
       - name: Upload archive to release
         run: |
           gh release upload ${{github.event.release.tag_name}} tableau-mcp.tar.gz
@@ -61,11 +60,9 @@ jobs:
           git fetch --tags
           git checkout -b sea-windows ${{ github.event.release.tag_name }}
           npm ci
-          npm run build
-
-          node --experimental-sea-config sea-config.json
-          node -e "require('fs').copyFileSync(process.execPath, 'tableau-mcp.exe')"
-          npx -y postject tableau-mcp.exe NODE_SEA_BLOB sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+          npm run build:sea -- --platform win-x64
+          Copy-Item -Path .\build\sea\default\win-x64\tableau-mcp.exe -Destination .\tableau-mcp.exe
+          Copy-Item -Path .\build\sea\desktop\win-x64\tableau-mcp-desktop.exe -Destination .\tableau-mcp-desktop.exe
 
           "SERVER=${{ secrets.E2E_TEST_SERVER }}" | Out-File -FilePath ".env" -Encoding UTF8
           "AUTH=${{ secrets.E2E_TEST_AUTH }}" | Out-File -FilePath ".env" -Append -Encoding UTF8
@@ -86,7 +83,7 @@ jobs:
             Write-Host "tableau-mcp.exe failed to start"
             exit 1
           }
-          Compress-Archive -Path tableau-mcp.exe -DestinationPath tableau-mcp.zip
+          Compress-Archive -Path tableau-mcp.exe, tableau-mcp-desktop.exe -DestinationPath tableau-mcp.zip
       - name: Upload zip to release
         run: |
           gh release upload ${{github.event.release.tag_name}} tableau-mcp.zip

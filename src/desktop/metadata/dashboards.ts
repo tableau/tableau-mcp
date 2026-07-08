@@ -157,3 +157,50 @@ export function listWorkbookDashboards(workbookXml: string): string[] {
   const dashboards = normalizeArray(workbook.workbook?.dashboards?.dashboard);
   return dashboards.map((db) => db['@_name']).filter((name): name is string => !!name);
 }
+
+// Returns a standalone `<dashboard>` fragment (not a whole workbook), or null if absent.
+export function extractDashboardXml(workbookXml: string, dashboardName: string): string | null {
+  const workbook = parseXML(workbookXml);
+  const dashboard = findDashboard(workbook, dashboardName);
+  if (!dashboard) {
+    return null;
+  }
+  return serializeXML({ dashboard });
+}
+
+// Builds a whole-workbook document carrying only the one edited dashboard (and its window).
+// Worksheets are stripped: they stay live and the dashboard's zones still reference them by name,
+// whereas re-posting them would duplicate them. The workbook POST merges additively and never
+// overwrites, so the caller MUST delete the live dashboard first to avoid a uniquified "(2)" name.
+export function buildMinimalDashboardDoc(
+  workbookXml: string,
+  dashboardName: string,
+  editedDashboardXml: string,
+): string {
+  const workbook = parseXML(workbookXml);
+  const editedParsed = parseXML(editedDashboardXml);
+  const editedDashboard = normalizeArray(editedParsed.dashboard as ParsedDashboard | undefined)[0];
+  if (!editedDashboard || editedDashboard['@_name'] !== dashboardName) {
+    throw new Error(`Edited XML does not contain a <dashboard name="${dashboardName}">`);
+  }
+
+  if (workbook.workbook?.dashboards) {
+    workbook.workbook.dashboards.dashboard = editedDashboard;
+  }
+
+  if (workbook.workbook?.windows) {
+    const windows = normalizeArray(workbook.workbook.windows.window);
+    const targetWindow = windows.find(
+      (win) => win['@_class'] === 'dashboard' && win['@_name'] === dashboardName,
+    );
+    if (targetWindow) {
+      workbook.workbook.windows.window = targetWindow;
+    } else {
+      delete workbook.workbook.windows.window;
+    }
+  }
+
+  delete workbook.workbook?.worksheets;
+
+  return serializeXML(workbook);
+}

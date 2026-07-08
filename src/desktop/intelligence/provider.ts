@@ -25,10 +25,8 @@
 // getTemplateManifest / getTemplateXmlFragment. Knowledge / dashboards / prefabs
 // methods arrive in a later milestone and are intentionally NOT stubbed here.
 
-import fs from 'fs';
-import path from 'path';
-
-import { CONTENT_MANIFEST_PATH, loadManifests, TEMPLATE_XML_DIR } from '../binder/manifest.js';
+import { readDataAsset } from '../assets.js';
+import { CONTENT_MANIFEST_PATH, loadManifests } from '../binder/manifest.js';
 import type { TemplateManifest } from '../binder/manifest-types.js';
 
 /**
@@ -153,13 +151,14 @@ export class BundledIntelligenceProvider implements AuthoringIntelligenceProvide
     if (this.contentManifestCache) {
       return this.contentManifestCache;
     }
-    if (!fs.existsSync(CONTENT_MANIFEST_PATH)) {
+    const rawText = readDataAsset('content-manifest.json');
+    if (rawText === null) {
       throw new Error(
         `content-manifest.json missing at ${CONTENT_MANIFEST_PATH} — run ` +
           '`npx tsx src/scripts/buildTemplateManifests.ts` to generate it.',
       );
     }
-    const raw = JSON.parse(fs.readFileSync(CONTENT_MANIFEST_PATH, 'utf8')) as RawContentManifest;
+    const raw = JSON.parse(rawText) as RawContentManifest;
     const { content_version, schema_version, generated, engine_compat, resources } = raw;
     this.contentManifestCache = {
       content_version,
@@ -202,13 +201,13 @@ export class BundledIntelligenceProvider implements AuthoringIntelligenceProvide
     if (!loadManifests().has(name)) {
       return null;
     }
-    const xmlPath = path.join(TEMPLATE_XML_DIR, `${name}.xml`);
-    if (!fs.existsSync(xmlPath)) {
+    const xml = readDataAsset(`data-visualization-templates-xml/${name}.xml`);
+    if (xml === null) {
       // Golden-only templates (e.g. ww-ou-arrow/ww-ou-diff) ship a manifest but no
       // worksheet XML — their golden .twbx does not ship in-package.
       return null;
     }
-    return fs.readFileSync(xmlPath, 'utf8');
+    return xml;
   }
 }
 
