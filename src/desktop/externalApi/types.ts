@@ -24,6 +24,27 @@ export const EXTERNAL_API_ROUTES = {
 export const HEADER_APPLICATION_VERSION = 'x-tableau-application-version';
 export const HEADER_XSD_PAYLOAD_VERSION = 'x-tableau-xsd-payload-version';
 
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+
+/**
+ * True iff `value` parses as a URL whose host is exactly a loopback address — not a
+ * prefix/suffix match, so `127.0.0.1.evil.com` and `notlocalhost` are rejected. Part of
+ * the W60 P0-1 hardening: a forged discovery file must not be able to point
+ * `baseUrl` off-box. See the hardening spec's residual-risk section — this does NOT
+ * defend against a same-uid attacker running their own loopback listener.
+ */
+export function isLoopbackBaseUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  // WHATWG URL keeps IPv6 hostnames bracketed (`[::1]`); strip to match the bare form.
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  return LOOPBACK_HOSTS.has(host);
+}
+
 /**
  * Discovery file written by Desktop to `<OS app-local-data>/ExternalApi/<pid>.json`.
  * Only `schemaVersion === 1` is understood. Version fields are optional so a slightly
@@ -33,7 +54,9 @@ export const discoveryFileSchema = z.object({
   schemaVersion: z.literal(1),
   instanceId: z.string(),
   pid: z.number(),
-  baseUrl: z.string().url(),
+  baseUrl: z.string().url().refine(isLoopbackBaseUrl, {
+    message: 'baseUrl must be a loopback host (127.0.0.1, localhost, or ::1)',
+  }),
   tokenType: z.string().optional(),
   token: z.string(),
   applicationVersion: z.string().optional(),

@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { readFileSync } from 'fs';
 import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
@@ -194,6 +194,11 @@ function describeApplyError(
 
 type BoundResult = Extract<BinderResult, { status: 'bound' }>;
 
+/** sha256 of the workbook XML — used by the staleness hash gate (W60 P1-6). */
+function hashWorkbookXml(xml: string): string {
+  return createHash('sha256').update(xml).digest('hex');
+}
+
 /** Build the graceful-fallback result: the bound args are intact + why apply didn't run. */
 function applyFallback(base: BindTemplateToolResult, apply_error: string): BindTemplateToolResult {
   return {
@@ -215,6 +220,7 @@ async function performAutoApply({
   res,
   base,
   workbookXml,
+  workbookHash,
   session,
   executor,
   signal,
@@ -224,6 +230,7 @@ async function performAutoApply({
   res: BoundResult;
   base: BindTemplateToolResult;
   workbookXml: string;
+  workbookHash: string;
   session: string;
   executor: ToolExecutor;
   signal: AbortSignal;
@@ -274,6 +281,32 @@ async function performAutoApply({
     return applyFallback(base, `inject failed: ${injected.issues.join('; ')}`);
   }
   const injectMs = Date.now() - injectStart;
+
+  // ── Staleness hash gate (W60 P1-6 — transport-agnostic) ───────────
+  // Independent of the events-clean gate above: works with zero support from the
+  // executor (no getEvents needed), so it's the ONLY staleness protection the Athena
+  // transport gets today (its getEvents always Errs — see externalApiToolExecutor.ts).
+  // Re-reads the live workbook right before dispatch and compares against the hash
+  // taken at the original read; any change in between (including changes the
+  // events-gate should have caught but couldn't, on transports where it's unsupported)
+  // is refused. Costs one extra round-trip on every auto_apply — accepted: this path
+  // writes the whole document, last-writer-wins, so the safety property is worth it.
+  const rehashResult = await getWorkbookXml({ executor, signal });
+  if (rehashResult.isErr()) {
+    return applyFallback(
+      base,
+      `staleness re-check failed: could not re-read the workbook before apply (${JSON.stringify(
+        rehashResult.error,
+      )})`,
+    );
+  }
+  if (hashWorkbookXml(rehashResult.value) !== workbookHash) {
+    return applyFallback(
+      base,
+      'workbook changed since the read that produced this bind (staleness hash mismatch) — ' +
+        're-run bind-template for a fresh read, or apply the returned args manually after reviewing the current workbook',
+    );
+  }
 
   // ── Apply leg (SAME validated path; runValidation preflight runs) ─
   const applyStart = Date.now();
@@ -337,6 +370,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           if (xmlResult.isErr()) {
             return new DesktopCommandExecutionError(xmlResult.error).toErr();
           }
+          const workbookHashAtRead = hashWorkbookXml(xmlResult.value);
 
           // Events-clean anchor (W60 blind-spot #1): apply is whole-document
           // last-writer-wins, so a user edit made in Desktop between this read and
@@ -397,6 +431,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               res,
               base,
               workbookXml: xmlResult.value,
+              workbookHash: workbookHashAtRead,
               session: resolvedSession,
               executor,
               signal: extra.signal,

@@ -40,6 +40,11 @@ export type ExternalApiToolExecutorDeps = {
 };
 
 type NoInstance = { type: 'no-instance' };
+/** Multiple discovery entries claim the same pinned pid — refuse rather than guess
+ * (W60 P0-1 fix 3: this is the direct regression guard for the demonstrated pid-forge
+ * MITM, which relies on `Array.find` silently picking the first of N matches). */
+type AmbiguousPid = { type: 'ambiguous-pid'; pid: number; count: number };
+type ResolveClientError = NoInstance | AmbiguousPid;
 
 /** Normalized shape shared by document + invokeCommand responses. */
 type RawOutcome = {
@@ -85,12 +90,21 @@ export class ExternalApiToolExecutor extends ToolExecutor {
 
     const resolved = await this.resolveClient();
     if (resolved.isErr()) {
-      log({
-        message: 'No External Client API instance discovered yet',
-        level: 'warning',
-        logger: LOGGER,
-        data: { pid: this.deps.pid },
-      });
+      if (resolved.error.type === 'ambiguous-pid') {
+        log({
+          message: `Refusing to connect: ${resolved.error.count} discovery entries for pid ${resolved.error.pid}`,
+          level: 'error',
+          logger: LOGGER,
+          data: { pid: resolved.error.pid, count: resolved.error.count },
+        });
+      } else {
+        log({
+          message: 'No External Client API instance discovered yet',
+          level: 'warning',
+          logger: LOGGER,
+          data: { pid: this.deps.pid },
+        });
+      }
       return;
     }
 
@@ -196,12 +210,27 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     return factory(instance, this.deps.clientOptions);
   }
 
-  private async resolveClient(): Promise<Result<ExternalApiClient, NoInstance>> {
+  private async resolveClient(): Promise<Result<ExternalApiClient, ResolveClientError>> {
     const instances = await this.deps.discover();
-    const chosen =
-      this.deps.pid !== undefined
-        ? (instances.find((instance) => instance.pid === this.deps.pid) ?? instances[0])
-        : instances[0];
+
+    let chosen: ExternalApiInstance | undefined;
+    if (this.deps.pid !== undefined) {
+      const matches = instances.filter((instance) => instance.pid === this.deps.pid);
+      if (matches.length > 1) {
+        log({
+          message:
+            'Refusing ambiguous External API pid-pinned lookup — multiple discovery entries for the same pid',
+          level: 'error',
+          logger: LOGGER,
+          data: { pid: this.deps.pid, count: matches.length },
+        });
+        this.client = undefined;
+        return Err({ type: 'ambiguous-pid', pid: this.deps.pid, count: matches.length });
+      }
+      chosen = matches[0]; // exactly 0 or 1 — no silent fallback to instances[0]
+    } else {
+      chosen = instances[0];
+    }
 
     if (!chosen) {
       this.client = undefined;
@@ -212,7 +241,7 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     return Ok(this.client);
   }
 
-  private async ensureClient(): Promise<Result<ExternalApiClient, NoInstance>> {
+  private async ensureClient(): Promise<Result<ExternalApiClient, ResolveClientError>> {
     if (this.client) {
       return Ok(this.client);
     }
@@ -221,7 +250,7 @@ export class ExternalApiToolExecutor extends ToolExecutor {
 
   private async withRescan(
     op: (client: ExternalApiClient) => Promise<Result<RawOutcome, ExternalApiError>>,
-  ): Promise<Result<RawOutcome, ExternalApiError | NoInstance>> {
+  ): Promise<Result<RawOutcome, ExternalApiError | ResolveClientError>> {
     const first = await this.ensureClient();
     if (first.isErr()) {
       return Err(first.error);
@@ -337,7 +366,7 @@ function buildCommandStatus(
   });
 }
 
-function mapClientError(error: ExternalApiError | NoInstance): ExecuteCommandError {
+function mapClientError(error: ExternalApiError | ResolveClientError): ExecuteCommandError {
   switch (error.type) {
     case 'problem':
       return {
@@ -359,6 +388,11 @@ function mapClientError(error: ExternalApiError | NoInstance): ExecuteCommandErr
       return { type: 'unknown', error: error.error };
     case 'no-instance':
       return { type: 'unknown', error: 'No External Client API instance available.' };
+    case 'ambiguous-pid':
+      return {
+        type: 'unknown',
+        error: `Refusing to guess: ${error.count} External Client API discovery entries found for pid ${error.pid}. This may indicate a forged discovery file. Remove stale/duplicate entries from the discovery directory and retry.`,
+      };
   }
 }
 

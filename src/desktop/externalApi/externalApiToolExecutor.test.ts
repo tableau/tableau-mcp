@@ -219,4 +219,123 @@ describe('ExternalApiToolExecutor', () => {
       expect(result.isErr()).toBe(true);
     });
   });
+
+  // ── W60 P0-1 Fix 3: refuse, don't pick-first, on pid-pinned ambiguity ────────
+  // This is the direct regression test for the teardown's demonstrated attack: a
+  // forged discovery entry claiming the REAL Desktop pid, sorted ahead of the real
+  // entry by a future `startedAt`. Pre-fix, `instances.find(pid===X) ?? instances[0]`
+  // silently connected to whichever sorted first (the forged entry). Post-fix, ANY
+  // pid collision refuses outright rather than guessing which entry is real.
+  describe('pid-pinned ambiguity refusal', () => {
+    it('refuses and never connects when two discovery entries claim the same pinned pid', async () => {
+      const createClient = vi.fn();
+      const real: ExternalApiInstance = instanceFor(server);
+      // The "forged" entry sorts first (discover() returns newest-startedAt-first
+      // per discovery.ts) but shares the real pid — this is attack A/B verbatim.
+      const forged: ExternalApiInstance = {
+        ...real,
+        baseUrl: 'http://127.0.0.1:9/attacker',
+        instanceId: 'forged',
+      };
+
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [forged, real],
+        pid: real.pid,
+        createClient,
+      });
+      await executor.start();
+
+      expect(executor.isAvailable()).toBe(false);
+      // No connection is ever attempted — not to the forged instance, not to the real one.
+      expect(createClient).not.toHaveBeenCalled();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'undo',
+        signal,
+      });
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('unknown');
+      if (error.type === 'unknown') {
+        expect(String(error.error)).toContain('2');
+        expect(String(error.error)).toContain(String(real.pid));
+      }
+      expect(createClient).not.toHaveBeenCalled();
+    });
+
+    it('refuses (no-instance) rather than falling back to an unrelated instance when zero entries match the pinned pid', async () => {
+      const createClient = vi.fn();
+      const unrelated: ExternalApiInstance = {
+        ...instanceFor(server),
+        pid: 111,
+        instanceId: 'unrelated',
+      };
+
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [unrelated],
+        pid: 999,
+        createClient,
+      });
+      await executor.start();
+
+      expect(executor.isAvailable()).toBe(false);
+      expect(createClient).not.toHaveBeenCalled();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'undo',
+        signal,
+      });
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('unknown');
+      expect(createClient).not.toHaveBeenCalled();
+    });
+
+    it('connects normally when exactly one discovery entry matches the pinned pid', async () => {
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server)],
+        pid: 999,
+      });
+      await executor.start();
+
+      expect(executor.isAvailable()).toBe(true);
+    });
+
+    it('unpinned (no deps.pid) still takes instances[0] even with multiple instances present', async () => {
+      const newest: ExternalApiInstance = { ...instanceFor(server), instanceId: 'newest', pid: 1 };
+      const older: ExternalApiInstance = { ...instanceFor(server), instanceId: 'older', pid: 2 };
+
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [newest, older],
+      });
+      await executor.start();
+
+      expect(executor.isAvailable()).toBe(true);
+    });
+
+    it("mapClientError names the pid and count for an 'ambiguous-pid' failure", async () => {
+      const real: ExternalApiInstance = instanceFor(server);
+      const forged: ExternalApiInstance = { ...real, instanceId: 'forged' };
+
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [forged, real],
+        pid: real.pid,
+      });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'undo',
+        signal,
+      });
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      if (error.type === 'unknown') {
+        expect(String(error.error)).toMatch(new RegExp(`2.*${real.pid}|${real.pid}.*2`));
+      } else {
+        throw new Error(`expected 'unknown', got ${error.type}`);
+      }
+    });
+  });
 });

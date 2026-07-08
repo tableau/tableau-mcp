@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok } from 'ts-results-es';
+import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import type { BinderResult, BindingProposal } from '../../../desktop/binder/binder.js';
@@ -11,6 +11,7 @@ import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provi
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
+import { ExecuteCommandError } from '../../../desktop/toolExecutor/toolExecutor.js';
 import * as validationRegistry from '../../../desktop/validation/registry.js';
 import {
   DesktopCommandExecutionError,
@@ -330,6 +331,11 @@ function setupAutoApplyMocks({
   // the workbook between read and apply; 'unsupported' = executor without events
   // (gate is best-effort and must NOT block auto_apply).
   userEventsDuringBind = 0,
+  // Staleness hash gate (W60 P1-6): the XML `getWorkbookXml` returns on its SECOND
+  // call (the pre-apply rehash). Defaults to `XML` (unchanged workbook, gate passes).
+  // Pass a different string to simulate a stale/edited workbook, or an Err(...) to
+  // simulate the rehash read itself failing.
+  workbookXmlOnRehash = Ok(XML) as Result<string, ExecuteCommandError>,
 }: {
   bind?: BinderResult;
   fastPathEligible?: boolean;
@@ -337,12 +343,18 @@ function setupAutoApplyMocks({
   validationValid?: boolean;
   dispatch?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
   userEventsDuringBind?: number | 'unsupported';
+  workbookXmlOnRehash?: Result<string, ExecuteCommandError>;
 } = {}): {
   executeCommand: ReturnType<typeof vi.fn>;
   getEvents: ReturnType<typeof vi.fn>;
   getExecutor: ReturnType<typeof vi.fn>;
 } {
-  vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+  // 1st call: the original bind-time read. 2nd call (and beyond): the pre-apply
+  // staleness rehash — independently variable so the hash-gate is testable without
+  // breaking every existing test that assumes a single stable `Ok(XML)`.
+  vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml')
+    .mockResolvedValueOnce(Ok(XML))
+    .mockResolvedValue(workbookXmlOnRehash);
   vi.mocked(binderModule.bindTemplate).mockResolvedValue(bind);
   vi.spyOn(bundledIntelligenceProvider, 'listTemplateManifests').mockReturnValue([
     { template: 'bar-basic', fast_path_eligible: fastPathEligible } as unknown as TemplateManifest,
@@ -726,5 +738,95 @@ describe('bindTemplateTool auto_apply — events-clean gate (W60 blind-spot #1)'
     const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
     expect(body.applied).toBe(true);
     expect(executeCommand).toHaveBeenCalled();
+  });
+});
+
+describe('bindTemplateTool auto_apply — staleness hash gate (W60 P1-6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('applies when the workbook is unchanged between the read and the pre-apply rehash', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({ workbookXmlOnRehash: Ok(XML) });
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(body.applied).toBe(true);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses to apply when the workbook XML differs at the pre-apply rehash (falls back, bind intact)', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      workbookXmlOnRehash: Ok('<?xml version="1.0"?><workbook><edited-by-user/></workbook>'),
+    });
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(body.applied).toBe(false);
+    expect(String(body.apply_error)).toMatch(/staleness hash mismatch/);
+    expect(body.args).toBeDefined(); // the bind survives — agent can re-get and retry
+    expect(executeCommand).not.toHaveBeenCalled(); // the apply dispatch was never sent
+  });
+
+  it('falls back gracefully when the pre-apply rehash read itself fails (no dispatch)', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      workbookXmlOnRehash: Err({ type: 'command-timed-out', error: 'Timeout' }),
+    });
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(body.applied).toBe(false);
+    expect(String(body.apply_error)).toMatch(/staleness re-check failed/);
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('does not block the Athena-transport happy path: no events support + unchanged workbook still applies', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      userEventsDuringBind: 'unsupported',
+      workbookXmlOnRehash: Ok(XML),
+    });
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(body.applied).toBe(true);
+    expect(executeCommand).toHaveBeenCalled();
+  });
+
+  it('is the ONLY staleness protection on a transport where the events-gate is a total no-op (W60 P1-6 direct regression)', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      userEventsDuringBind: 'unsupported',
+      workbookXmlOnRehash: Ok('<?xml version="1.0"?><workbook><edited-by-user/></workbook>'),
+    });
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(body.applied).toBe(false);
+    expect(String(body.apply_error)).toMatch(/staleness hash mismatch/);
+    expect(executeCommand).not.toHaveBeenCalled();
   });
 });

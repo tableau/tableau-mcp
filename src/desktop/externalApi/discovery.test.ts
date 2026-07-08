@@ -2,10 +2,13 @@ import { homedir } from 'os';
 import { join } from 'path';
 
 import {
+  defaultIsDiscoveryFileTrusted,
+  defaultIsProcessTableau,
   discoverInstances,
   getExternalApiDiscoveryDir,
   getExternalApiDiscoveryDirs,
 } from './discovery.js';
+import { isLoopbackBaseUrl } from './types.js';
 
 vi.mock('os', () => ({
   homedir: vi.fn(() => '/home/testuser'),
@@ -13,6 +16,11 @@ vi.mock('os', () => ({
 
 vi.mock('../../logging/logger.js', () => ({
   log: vi.fn(),
+}));
+
+const execFileSyncMock = vi.hoisted(() => vi.fn());
+vi.mock('child_process', () => ({
+  execFileSync: execFileSyncMock,
 }));
 
 const validFile = (overrides: Record<string, unknown> = {}): string =>
@@ -29,6 +37,11 @@ const validFile = (overrides: Record<string, unknown> = {}): string =>
     ...overrides,
   });
 
+/** Trust-gate deps that reproduce pre-W60 behavior: every file is trusted and every
+ * alive pid is treated as a real Tableau process — isolates tests that predate the
+ * W60 hardening pass from the new gates unless they explicitly opt in. */
+const trusting = { isFileTrusted: (): boolean => true, isProcessTableau: (): boolean => true };
+
 describe('discoverInstances', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -41,6 +54,7 @@ describe('discoverInstances', () => {
       readDir: () => ['12345.json'],
       readFile: () => validFile(),
       isPidAlive: () => true,
+      ...trusting,
     });
 
     expect(instances).toEqual([
@@ -60,6 +74,7 @@ describe('discoverInstances', () => {
       readDir: () => ['12345.json'],
       readFile: () => validFile(),
       isPidAlive: () => false,
+      ...trusting,
     });
 
     expect(instances).toEqual([]);
@@ -71,6 +86,7 @@ describe('discoverInstances', () => {
       readDir: () => ['bad.json'],
       readFile: () => validFile({ schemaVersion: 2 }),
       isPidAlive: () => true,
+      ...trusting,
     });
 
     expect(instances).toEqual([]);
@@ -82,6 +98,7 @@ describe('discoverInstances', () => {
       readDir: () => ['broken.json'],
       readFile: () => 'not json at all',
       isPidAlive: () => true,
+      ...trusting,
     });
 
     expect(instances).toEqual([]);
@@ -94,6 +111,7 @@ describe('discoverInstances', () => {
       readDir: () => ['12345.json', 'notes.txt', '.DS_Store'],
       readFile,
       isPidAlive: () => true,
+      ...trusting,
     });
 
     expect(instances).toHaveLength(1);
@@ -119,6 +137,7 @@ describe('discoverInstances', () => {
       readDir: () => Object.keys(files),
       readFile: (path) => files[path.split('/').pop() as string],
       isPidAlive: () => true,
+      ...trusting,
     });
 
     expect(instances.map((i) => i.instanceId)).toEqual(['new', 'old']);
@@ -132,9 +151,188 @@ describe('discoverInstances', () => {
       },
       readFile: () => validFile(),
       isPidAlive: () => true,
+      ...trusting,
     });
 
     expect(instances).toEqual([]);
+  });
+
+  // ── W60 P0-1 Fix 1: loopback-only baseUrl allowlist ──────────────────────────
+  describe('loopback-only baseUrl allowlist (W60 P0-1 fix 1)', () => {
+    it('skips a file whose baseUrl is a non-loopback host', () => {
+      const instances = discoverInstances({
+        discoveryDir: '/discovery',
+        readDir: () => ['forged.json'],
+        readFile: () => validFile({ baseUrl: 'https://attacker.example.com/' }),
+        isPidAlive: () => true,
+        ...trusting,
+      });
+
+      expect(instances).toEqual([]);
+    });
+
+    it.each([
+      ['http://127.0.0.1.evil.com/', 'suffix-appended IPv4 lookalike'],
+      ['http://notlocalhost/', 'suffix-appended localhost lookalike'],
+    ])('skips a baseUrl bypass attempt: %s (%s)', (baseUrl) => {
+      const instances = discoverInstances({
+        discoveryDir: '/discovery',
+        readDir: () => ['forged.json'],
+        readFile: () => validFile({ baseUrl }),
+        isPidAlive: () => true,
+        ...trusting,
+      });
+
+      expect(instances).toEqual([]);
+    });
+
+    it.each([
+      ['http://127.0.0.1:51000/', '127.0.0.1'],
+      ['http://localhost:51000/', 'localhost'],
+      ['http://[::1]:51000/', '::1'],
+    ])('accepts an allowed loopback host: %s (%s)', (baseUrl) => {
+      const instances = discoverInstances({
+        discoveryDir: '/discovery',
+        readDir: () => ['ok.json'],
+        readFile: () => validFile({ baseUrl }),
+        isPidAlive: () => true,
+        ...trusting,
+      });
+
+      expect(instances).toHaveLength(1);
+      expect(instances[0].baseUrl).toBe(baseUrl);
+    });
+  });
+
+  describe('isLoopbackBaseUrl', () => {
+    it('accepts the three allowed loopback hosts', () => {
+      expect(isLoopbackBaseUrl('http://127.0.0.1:51000/')).toBe(true);
+      expect(isLoopbackBaseUrl('http://localhost:51000/')).toBe(true);
+      expect(isLoopbackBaseUrl('http://[::1]:51000/')).toBe(true);
+    });
+
+    it('strips IPv6 brackets before matching', () => {
+      expect(isLoopbackBaseUrl('http://[::1]/')).toBe(true);
+    });
+
+    it('rejects non-loopback and lookalike hosts', () => {
+      expect(isLoopbackBaseUrl('https://attacker.example.com/')).toBe(false);
+      expect(isLoopbackBaseUrl('http://127.0.0.1.evil.com/')).toBe(false);
+      expect(isLoopbackBaseUrl('http://notlocalhost/')).toBe(false);
+    });
+
+    it('rejects unparseable values', () => {
+      expect(isLoopbackBaseUrl('not a url')).toBe(false);
+    });
+  });
+
+  // ── W60 P0-1 Fix 2: file-ownership/permission trust gate ─────────────────────
+  describe('file-ownership/permission trust gate (W60 P0-1 fix 2)', () => {
+    it('skips a file when isFileTrusted (injected) returns false', () => {
+      const readFile = vi.fn(() => validFile());
+      const instances = discoverInstances({
+        discoveryDir: '/discovery',
+        readDir: () => ['12345.json'],
+        readFile,
+        isPidAlive: () => true,
+        isFileTrusted: () => false,
+        isProcessTableau: () => true,
+      });
+
+      expect(instances).toEqual([]);
+      expect(readFile).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── W60 P0-1 Fix 3 (process-identity check): skip pids that aren't Tableau ───
+  describe('process-identity check (W60 P0-1 fix 3, defense-in-depth)', () => {
+    it('skips an alive pid whose isProcessTableau (injected) returns false', () => {
+      const instances = discoverInstances({
+        discoveryDir: '/discovery',
+        readDir: () => ['12345.json'],
+        readFile: () => validFile(),
+        isPidAlive: () => true,
+        isFileTrusted: () => true,
+        isProcessTableau: () => false,
+      });
+
+      expect(instances).toEqual([]);
+    });
+  });
+});
+
+describe('defaultIsDiscoveryFileTrusted', () => {
+  const REAL_UID = 501;
+
+  beforeEach(() => {
+    vi.spyOn(process, 'getuid' as never).mockReturnValue(REAL_UID as never);
+  });
+
+  it('trusts a file owned by the current uid with mode 0600', () => {
+    const statFile = (): { uid: number; mode: number } => ({ uid: REAL_UID, mode: 0o100600 });
+    expect(defaultIsDiscoveryFileTrusted('/f', 'darwin', statFile)).toBe(true);
+  });
+
+  it('trusts a file owned by the current uid with mode 0644 (world-readable, not writable)', () => {
+    const statFile = (): { uid: number; mode: number } => ({ uid: REAL_UID, mode: 0o100644 });
+    expect(defaultIsDiscoveryFileTrusted('/f', 'darwin', statFile)).toBe(true);
+  });
+
+  it('does not trust a group-writable file (mode 0664)', () => {
+    const statFile = (): { uid: number; mode: number } => ({ uid: REAL_UID, mode: 0o100664 });
+    expect(defaultIsDiscoveryFileTrusted('/f', 'darwin', statFile)).toBe(false);
+  });
+
+  it('does not trust a file owned by a different uid', () => {
+    const statFile = (): { uid: number; mode: number } => ({ uid: REAL_UID + 1, mode: 0o100600 });
+    expect(defaultIsDiscoveryFileTrusted('/f', 'darwin', statFile)).toBe(false);
+  });
+
+  it('fails closed when stat throws', () => {
+    const statFile = (): { uid: number; mode: number } => {
+      throw new Error('ENOENT');
+    };
+    expect(defaultIsDiscoveryFileTrusted('/f', 'darwin', statFile)).toBe(false);
+  });
+
+  it('is trusted regardless of stat on win32 (documented accepted gap)', () => {
+    const statFile = (): { uid: number; mode: number } => {
+      throw new Error('should never be called on win32');
+    };
+    expect(defaultIsDiscoveryFileTrusted('/f', 'win32', statFile)).toBe(true);
+  });
+});
+
+describe('defaultIsProcessTableau', () => {
+  beforeEach(() => {
+    execFileSyncMock.mockReset();
+  });
+
+  it.each(['Tableau', 'tableau', 'TableauDesktop'])(
+    'returns true for a Tableau-named comm output: %s',
+    (comm) => {
+      execFileSyncMock.mockReturnValue(`${comm}\n`);
+      expect(defaultIsProcessTableau(123, 'darwin')).toBe(true);
+    },
+  );
+
+  it('returns false for an unrelated comm name', () => {
+    execFileSyncMock.mockReturnValue('Finder\n');
+    expect(defaultIsProcessTableau(123, 'darwin')).toBe(false);
+  });
+
+  it('fails closed when execFileSync throws', () => {
+    execFileSyncMock.mockImplementation(() => {
+      throw new Error('no such process');
+    });
+    expect(defaultIsProcessTableau(123, 'darwin')).toBe(false);
+  });
+
+  it('returns true unconditionally on win32', () => {
+    execFileSyncMock.mockImplementation(() => {
+      throw new Error('should never be called on win32');
+    });
+    expect(defaultIsProcessTableau(123, 'win32')).toBe(true);
   });
 });
 
