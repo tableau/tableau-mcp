@@ -690,7 +690,8 @@ describe('bindTemplateTool auto_apply — events-clean gate (W60 blind-spot #1)'
       auto_apply: true,
       getExecutor,
     });
-    const body = JSON.parse(result.content[0].text as string) as Record<string, unknown>;
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
     expect(body.applied).toBe(false);
     expect(String(body.apply_error)).toMatch(/user changed the workbook.*3 event/);
     expect(body.args).toBeDefined(); // the bind survives — agent can re-get and retry
@@ -705,7 +706,8 @@ describe('bindTemplateTool auto_apply — events-clean gate (W60 blind-spot #1)'
       auto_apply: true,
       getExecutor,
     });
-    const body = JSON.parse(result.content[0].text as string) as Record<string, unknown>;
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
     expect(body.applied).toBe(true);
     expect(executeCommand).toHaveBeenCalled();
   });
@@ -720,7 +722,8 @@ describe('bindTemplateTool auto_apply — events-clean gate (W60 blind-spot #1)'
       auto_apply: true,
       getExecutor,
     });
-    const body = JSON.parse(result.content[0].text as string) as Record<string, unknown>;
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
     expect(body.applied).toBe(true);
     expect(executeCommand).toHaveBeenCalled();
   });
