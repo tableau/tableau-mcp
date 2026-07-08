@@ -59,6 +59,16 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     ],
   },
   {
+    kind: 'route',
+    id: 'data-value-question',
+    trigger: 'a data-value question ("what was revenue in Q3?")',
+    action:
+      'do NOT answer with a number — this server cannot read data values. Say so, then offer the chart that would show it (a plain chart ask via bind-template) instead.',
+    toolSequence: ['bind-template'],
+    stopConditions: ['do NOT answer with a number — this server cannot read data values'],
+    requiredEvidence: [],
+  },
+  {
     kind: 'prose',
     id: 'session-resolution',
     text: 'Every session-scoped tool call needs the session id from list-instances — except bind-template and dashboard-auto-apply, which auto-resolve the session when exactly one Desktop instance is running.',
