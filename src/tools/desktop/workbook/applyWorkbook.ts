@@ -5,6 +5,11 @@ import { z } from 'zod';
 
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import {
+  buildApplyOverCapNote,
+  isOverInlineXmlCap,
+  xmlByteLength,
+} from '../../../desktop/inlineXmlCap.js';
+import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   FileReadError,
@@ -118,8 +123,17 @@ export const getApplyWorkbookTool = (
             }
           }
 
+          // Applies are never rejected on size; if an inline payload was over the cap, just
+          // point at the cheaper file-mode workflow for next time (the token win is on GET).
+          const capBytes = extra.config.inlineXmlMaxBytes;
+          const inlineBytes = mode === 'inline' ? xmlByteLength(workbookXml ?? '') : 0;
+          const note =
+            mode === 'inline' && isOverInlineXmlCap(inlineBytes, capBytes)
+              ? `\n\n${buildApplyOverCapNote(inlineBytes, capBytes)}`
+              : '';
+
           return new Ok({
-            message: 'Successfully applied workbook XML. The workbook has been updated.',
+            message: `Successfully applied workbook XML. The workbook has been updated.${note}`,
           });
         },
       });

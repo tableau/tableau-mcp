@@ -134,6 +134,21 @@ describe('applyDashboardTool', () => {
     expect(result.content[0].text).toBe(new DesktopCommandExecutionError(error.error).message);
   });
 
+  it('accepts an over-cap inline apply but appends the file-mode note', async () => {
+    const overCapXml =
+      '<dashboard name="Sales Dashboard"><zones>' + 'x'.repeat(20000) + '</zones></dashboard>';
+    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(Ok.EMPTY);
+
+    const result = await getToolResult({ mode: 'inline', dashboardXml: overCapXml });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const message = JSON.parse(result.content[0].text).message as string;
+    expect(message).toContain('Successfully applied dashboard XML');
+    expect(message).toContain('inline cap');
+    expect(message).toContain('mode=file');
+  });
+
   it('should pass the abort signal to loadDashboardXml', async () => {
     const mockXml = '<dashboard name="Sales Dashboard"><zones></zones></dashboard>';
     const mockLoad = vi

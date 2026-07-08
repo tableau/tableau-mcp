@@ -10,7 +10,7 @@ import { getWriteCachedXmlTool } from './writeCachedXml.js';
 vi.mock('../../../desktop/cache.js');
 vi.mock('fs');
 
-import { writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 
 import { DesktopCache } from '../../../desktop/cache.js';
 
@@ -111,10 +111,65 @@ describe('writeCachedXmlTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Disk full');
   });
+
+  describe('element splice (targeted no-dead-end write)', () => {
+    const WORKBOOK =
+      '<workbook><worksheets>' +
+      "<worksheet name='Sales'><table><rows>[Sales]</rows></table></worksheet>" +
+      "<worksheet name='Profit'><table><rows>[Profit]</rows></table></worksheet>" +
+      '</worksheets></workbook>';
+
+    beforeEach(() => {
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readFileSync).mockReturnValue(WORKBOOK);
+    });
+
+    it('splices the replacement element into the file, leaving siblings intact', async () => {
+      const modified =
+        "<worksheet name='Sales'><table><rows>[Sales Modified]</rows></table></worksheet>";
+
+      const result = await getResult(CACHED_FILE, modified, { worksheet: 'Sales' });
+
+      expect(result.isError).toBeFalsy();
+      const written = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+      expect(written).toContain('[Sales Modified]');
+      expect(written).toContain('[Profit]');
+      expect(written).not.toContain('[Sales]</rows>');
+    });
+
+    it('errors (without writing) when the element to splice is absent', async () => {
+      const result = await getResult(CACHED_FILE, "<worksheet name='Nope'/>", {
+        worksheet: 'Nope',
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Nope');
+      expect(writeFileSync).not.toHaveBeenCalled();
+    });
+
+    it('rejects a malformed replacement fragment without writing', async () => {
+      const result = await getResult(CACHED_FILE, '<worksheet name="Sales"><table>', {
+        worksheet: 'Sales',
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('validation failed');
+      expect(writeFileSync).not.toHaveBeenCalled();
+    });
+  });
 });
 
-async function getResult(filePath: string, xmlContent: string): Promise<CallToolResult> {
+async function getResult(
+  filePath: string,
+  xmlContent: string,
+  selectors: { worksheet?: string; dashboard?: string } = {},
+): Promise<CallToolResult> {
   const tool = getWriteCachedXmlTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
-  return await callback({ filePath, xmlContent }, getMockRequestHandlerExtra());
+  return await callback(
+    { filePath, xmlContent, worksheet: selectors.worksheet, dashboard: selectors.dashboard },
+    getMockRequestHandlerExtra(),
+  );
 }

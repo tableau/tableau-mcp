@@ -5,6 +5,11 @@ import { z } from 'zod';
 
 import { loadDashboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
 import {
+  buildApplyOverCapNote,
+  isOverInlineXmlCap,
+  xmlByteLength,
+} from '../../../desktop/inlineXmlCap.js';
+import {
   ArgsValidationError,
   DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
@@ -122,8 +127,15 @@ export const getApplyDashboardTool = (
             }
           }
 
+          const capBytes = extra.config.inlineXmlMaxBytes;
+          const inlineBytes = mode === 'inline' ? xmlByteLength(dashboardXml ?? '') : 0;
+          const note =
+            mode === 'inline' && isOverInlineXmlCap(inlineBytes, capBytes)
+              ? `\n\n${buildApplyOverCapNote(inlineBytes, capBytes)}`
+              : '';
+
           return new Ok({
-            message: `Successfully applied dashboard XML for "${dashboardName}". The dashboard has been updated.`,
+            message: `Successfully applied dashboard XML for "${dashboardName}". The dashboard has been updated.${note}`,
           });
         },
       });

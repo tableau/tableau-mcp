@@ -265,6 +265,43 @@ describe('applyWorkbookTool', () => {
     expect(result.content[0].text).toContain('Qualified Name Parse Error');
   });
 
+  it('accepts an over-cap inline apply but appends the file-mode note', async () => {
+    const overCapXml = '<workbook>' + 'x'.repeat(20000) + '</workbook>';
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Ok.EMPTY);
+
+    const result = await getToolResult({
+      session: '12345',
+      mode: 'inline',
+      workbookXml: overCapXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
+    // Still applied (not rejected on size) ...
+    expect(resultObj.message).toContain('Successfully applied workbook XML');
+    // ... but nudged toward file mode for next time.
+    expect(resultObj.message).toContain('inline cap');
+    expect(resultObj.message).toContain('mode=file');
+  });
+
+  it('does not append the note for an under-cap inline apply', async () => {
+    const smallXml = '<?xml version="1.0"?><workbook></workbook>';
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Ok.EMPTY);
+
+    const result = await getToolResult({
+      session: '12345',
+      mode: 'inline',
+      workbookXml: smallXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    invariant(result.content[0].type === 'text');
+    const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(resultObj.message).not.toContain('inline cap');
+  });
+
   it('should pass the abort signal to loadWorkbookXml command', async () => {
     const mockXml = '<?xml version="1.0"?><workbook></workbook>';
     const mockLoadWorkbookXml = vi

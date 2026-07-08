@@ -1,11 +1,16 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
-import { ArgsValidationError, FileReadError } from '../../../errors/mcpToolError.js';
+import { replaceElement } from '../../../desktop/xmlElement.js';
+import {
+  ArgsValidationError,
+  FileNotFoundError,
+  FileReadError,
+} from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 import { getCacheDir, isWithinCacheDir } from './cachePath.js';
@@ -16,7 +21,27 @@ const paramsSchema = {
     .describe(
       'Path to cached XML file to write (e.g., returned by batch-create-and-cache-sheets).',
     ),
-  xmlContent: z.string().describe('XML content to write to the file.'),
+  xmlContent: z
+    .string()
+    .describe(
+      'XML to write. Without a selector this is the whole file. With a worksheet/dashboard ' +
+        'selector this is just the replacement element, spliced into the existing file in place.',
+    ),
+  worksheet: z
+    .string()
+    .optional()
+    .describe(
+      'Optional: splice xmlContent in as the replacement for the <worksheet name="..."> element in ' +
+        'the existing cached file, leaving the rest untouched. Lets a filesystem-less client save a ' +
+        'targeted edit without holding the whole (large) workbook in context.',
+    ),
+  dashboard: z
+    .string()
+    .optional()
+    .describe(
+      'Optional: splice xmlContent in as the replacement for the <dashboard name="..."> element in ' +
+        'the existing cached file.',
+    ),
 };
 
 const toolTitle = 'Write Cached XML';
@@ -28,17 +53,23 @@ export const getWriteCachedXmlTool = (
     name: 'write-cached-xml',
     title: toolTitle,
     description:
-      'Write XML content to a file in the cache directory. Use this to save manually constructed or modified XML back to cache files before applying with apply-* tools.',
+      'Write XML content to a file in the cache directory. Use this to save manually constructed or ' +
+      'modified XML back to cache files before applying with apply-* tools. For a large cached file, ' +
+      'pass a worksheet/dashboard selector to splice just that element back in place — you only need ' +
+      'to hold the one element in context, not the whole workbook.',
     paramsSchema,
     annotations: {
       title: toolTitle,
       readOnlyHint: false,
       openWorldHint: false,
     },
-    callback: async ({ filePath, xmlContent }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { filePath, xmlContent, worksheet, dashboard },
+      extra,
+    ): Promise<CallToolResult> => {
       return await tool.logAndExecute({
         extra,
-        args: { filePath, xmlContent },
+        args: { filePath, xmlContent, worksheet, dashboard },
         callback: async () => {
           const absolutePath = resolve(filePath);
           const cacheDir = getCacheDir();
@@ -57,18 +88,51 @@ export const getWriteCachedXmlTool = (
             ).toErr();
           }
 
+          // Targeted splice: replace only the selected element in the existing file so a
+          // filesystem-less client never has to round-trip the whole (large) document.
+          let contentToWrite = xmlContent;
+          const selectorTag =
+            worksheet !== undefined
+              ? 'worksheet'
+              : dashboard !== undefined
+                ? 'dashboard'
+                : undefined;
+          const selectorName = worksheet ?? dashboard;
+          if (selectorTag !== undefined && selectorName !== undefined) {
+            if (!existsSync(absolutePath)) {
+              return new FileNotFoundError(filePath).toErr();
+            }
+            let existing: string;
+            try {
+              existing = readFileSync(absolutePath, 'utf-8');
+            } catch (err) {
+              return new FileReadError(err).toErr();
+            }
+            const spliced = replaceElement(existing, selectorTag, selectorName, xmlContent);
+            if (spliced === null) {
+              return new ArgsValidationError(
+                `No <${selectorTag} name="${selectorName}"> element found in ${filePath}; nothing was written.`,
+              ).toErr();
+            }
+            contentToWrite = spliced;
+          }
+
           try {
-            writeFileSync(absolutePath, xmlContent, 'utf-8');
-            return new Ok({ filePath, bytes: xmlContent.length });
+            writeFileSync(absolutePath, contentToWrite, 'utf-8');
+            return new Ok({
+              filePath,
+              bytes: contentToWrite.length,
+              spliced: selectorTag !== undefined,
+            });
           } catch (err) {
             return new FileReadError(err).toErr();
           }
         },
-        getSuccessResult: ({ filePath, bytes }) => ({
+        getSuccessResult: ({ filePath, bytes, spliced }) => ({
           content: [
             {
               type: 'text',
-              text: `Wrote ${bytes} bytes to ${filePath}\n\nFile is ready to use with apply-* tools.`,
+              text: `${spliced ? 'Spliced edit into' : 'Wrote'} ${bytes} bytes ${spliced ? 'in' : 'to'} ${filePath}\n\nFile is ready to use with apply-* tools.`,
             },
           ],
         }),

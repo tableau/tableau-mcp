@@ -5,6 +5,11 @@ import { z } from 'zod';
 
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import {
+  buildApplyOverCapNote,
+  isOverInlineXmlCap,
+  xmlByteLength,
+} from '../../../desktop/inlineXmlCap.js';
+import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   FileReadError,
@@ -121,8 +126,15 @@ export const getApplyWorksheetTool = (
             }
           }
 
+          const capBytes = extra.config.inlineXmlMaxBytes;
+          const inlineBytes = mode === 'inline' ? xmlByteLength(worksheetXml ?? '') : 0;
+          const note =
+            mode === 'inline' && isOverInlineXmlCap(inlineBytes, capBytes)
+              ? `\n\n${buildApplyOverCapNote(inlineBytes, capBytes)}`
+              : '';
+
           return new Ok({
-            message: `Successfully applied worksheet XML for "${worksheetName}". The worksheet has been updated.`,
+            message: `Successfully applied worksheet XML for "${worksheetName}". The worksheet has been updated.${note}`,
           });
         },
       });

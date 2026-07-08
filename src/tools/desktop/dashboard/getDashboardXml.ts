@@ -7,6 +7,12 @@ import { formatArtifactSummary } from '../../../desktop/artifactSummary.js';
 import { DesktopCache } from '../../../desktop/cache.js';
 import { getDashboardXml } from '../../../desktop/commands/workbook/getDashboardXml.js';
 import {
+  buildInlineCapFileMessage,
+  isOverInlineXmlCap,
+  logInlineXmlCapHit,
+  xmlByteLength,
+} from '../../../desktop/inlineXmlCap.js';
+import {
   DesktopCommandExecutionError,
   GetDashboardXmlFailedError,
   UnknownError,
@@ -78,36 +84,54 @@ export const getGetDashboardXmlTool = (
           }
 
           const dashboardXml = result.value;
-          const bytes = new TextEncoder().encode(dashboardXml).byteLength;
+          const bytes = xmlByteLength(dashboardXml);
+          const capBytes = extra.config.inlineXmlMaxBytes;
+          const capFired = mode === 'inline' && isOverInlineXmlCap(bytes, capBytes);
 
-          switch (mode) {
-            case 'inline': {
-              return new Ok({
-                message: `Dashboard XML returned inline (${bytes} bytes)`,
-                dashboardXml,
-              });
-            }
-            case 'file': {
-              const safeName = dashboardName.replace(/[^a-zA-Z0-9]/g, '_');
-              const cacheFile = new DesktopCache().getCacheFilePath({
-                prefix: `dashboard-${safeName}`,
-              });
-              writeFileSync(cacheFile, dashboardXml, 'utf-8');
-              log({
-                message: `Saved dashboard XML to cache file: ${cacheFile}`,
-                level: 'info',
-                logger: 'tool',
-                data: { file: cacheFile, size: bytes },
-              });
-
-              return Ok({
-                message: `Dashboard "${dashboardName}" saved to cache file (${bytes} bytes)\n\nArtifact summary:\n${formatArtifactSummary('dashboard', dashboardXml)}`,
-                file: cacheFile,
-                instructions:
-                  'Use this file path with apply-dashboard instead of passing XML directly.',
-              });
-            }
+          if (mode === 'inline' && !capFired) {
+            return new Ok({
+              message: `Dashboard XML returned inline (${bytes} bytes)`,
+              dashboardXml,
+            });
           }
+
+          const safeName = dashboardName.replace(/[^a-zA-Z0-9]/g, '_');
+          const cacheFile = new DesktopCache().getCacheFilePath({
+            prefix: `dashboard-${safeName}`,
+          });
+          writeFileSync(cacheFile, dashboardXml, 'utf-8');
+
+          if (capFired) {
+            logInlineXmlCapHit({ tool: 'get-dashboard-xml', bytes, capBytes, file: cacheFile });
+            return Ok({
+              message: buildInlineCapFileMessage({
+                kind: 'dashboard',
+                label: `Dashboard "${dashboardName}"`,
+                bytes,
+                capBytes,
+                xml: dashboardXml,
+              }),
+              file: cacheFile,
+              instructions:
+                'This dashboard exceeds the inline cap. Use read-cached-xml (with a dashboard ' +
+                'selector or startByte/endByte to read a slice), write-cached-xml (same selector to ' +
+                'splice edits back), then apply-dashboard with mode=file. Do not request mode=inline.',
+            });
+          }
+
+          log({
+            message: `Saved dashboard XML to cache file: ${cacheFile}`,
+            level: 'info',
+            logger: 'tool',
+            data: { file: cacheFile, size: bytes },
+          });
+
+          return Ok({
+            message: `Dashboard "${dashboardName}" saved to cache file (${bytes} bytes)\n\nArtifact summary:\n${formatArtifactSummary('dashboard', dashboardXml)}`,
+            file: cacheFile,
+            instructions:
+              'Use this file path with apply-dashboard instead of passing XML directly.',
+          });
         },
       });
     },

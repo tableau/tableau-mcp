@@ -76,4 +76,23 @@ describe('DesktopConfig', () => {
     const config = new Config();
     expect(config.agentApiClientConfig.commandTimeoutMs).toBe(180000);
   });
+
+  it('should default inlineXmlMaxBytes to 16 KiB', () => {
+    const config = new Config();
+    expect(config.inlineXmlMaxBytes).toBe(16 * 1024);
+  });
+
+  it('should override inlineXmlMaxBytes from INLINE_XML_MAX_BYTES', () => {
+    vi.stubEnv('INLINE_XML_MAX_BYTES', '2048');
+
+    const config = new Config();
+    expect(config.inlineXmlMaxBytes).toBe(2048);
+  });
+
+  it('should fall back to the default inlineXmlMaxBytes for a non-number', () => {
+    vi.stubEnv('INLINE_XML_MAX_BYTES', 'not-a-number');
+
+    const config = new Config();
+    expect(config.inlineXmlMaxBytes).toBe(16 * 1024);
+  });
 });
