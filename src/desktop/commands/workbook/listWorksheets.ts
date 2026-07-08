@@ -8,7 +8,6 @@ import {
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
-import { SCRATCH_PREFIX } from './loadWorkbookXml.js';
 
 const worksheetNamesSchema = z.object({
   count: z.number(),
@@ -79,9 +78,7 @@ async function listWorksheetsViaExternalApi({
 
   let worksheets: Array<string>;
   try {
-    worksheets = listSheets(workbookResult.value).filter(
-      (name) => !name.startsWith(SCRATCH_PREFIX),
-    );
+    worksheets = listSheets(workbookResult.value);
   } catch (error) {
     return Err({ type: 'invalid-response', error });
   }

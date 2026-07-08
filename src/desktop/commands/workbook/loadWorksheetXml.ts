@@ -11,7 +11,6 @@ import {
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { withApplyLock } from './applyMutex.js';
-import { deleteLiveSheet } from './deleteLiveSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
 
@@ -71,9 +70,9 @@ export async function loadWorksheetXml({
     });
   }
 
-  // External Client API ("Athena V0") exposes no per-sheet route — tabui:load-worksheet is not
-  // in its command registry, and the whole-workbook POST is additive-only, so applying a single
-  // sheet has to delete the live copy first and re-post a minimal whole-workbook document.
+  // External Client API ("Athena V0") exposes no per-sheet route — tabui:load-worksheet is not in
+  // its command registry, so applying a single sheet re-posts a minimal whole-workbook document.
+  // The POST upserts by name: it overwrites the colliding sheet in place and leaves the rest live.
   return getDesktopConfig().externalApiEnabled
     ? loadWorksheetXmlViaExternalApi({ worksheetName, xml, executor, signal })
     : loadWorksheetXmlViaAgentApi({ worksheetName, xml, executor, signal });
@@ -135,11 +134,6 @@ async function loadWorksheetXmlViaExternalApi({
       minimalDoc = buildMinimalSheetDoc(workbookResult.value, worksheetName, xml);
     } catch (error) {
       return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
-    }
-
-    const deleteResult = await deleteLiveSheet({ sheetName: worksheetName, executor, signal });
-    if (deleteResult.isErr()) {
-      return Err({ type: 'execute-command-error', error: deleteResult.error });
     }
 
     const applyResult = await applyWorkbookText({ xml: minimalDoc, executor, signal });

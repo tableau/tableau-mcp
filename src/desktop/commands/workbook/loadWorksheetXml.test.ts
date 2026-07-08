@@ -186,7 +186,7 @@ describe('loadWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API 
     return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets><windows>${windows}</windows></workbook>`;
   }
 
-  // Executor that dispatches by command, recording each call so the delete-then-apply
+  // Executor that dispatches by command, recording each call so the fetch-then-apply
   // sequence can be asserted. `save-underlying-metadata` returns the live workbook.
   function dispatchingExecutor(workbookXml: string): {
     executor: LocalExecutor;
@@ -221,7 +221,7 @@ describe('loadWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API 
     vi.restoreAllMocks();
   });
 
-  it('should delete the live sheet then apply a minimal document for an existing sheet', async () => {
+  it('should apply a minimal document that upserts the edited sheet without deleting first', async () => {
     const { executor, calls } = dispatchingExecutor(liveWorkbook(['Sheet 1', 'Other']));
 
     const result = await loadWorksheetXml({
@@ -233,12 +233,8 @@ describe('loadWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API 
 
     expect(result.isOk()).toBe(true);
 
-    const deleteCall = calls.find((c) => c.command === 'delete-sheet');
-    expect(deleteCall).toEqual({
-      namespace: 'tabdoc',
-      command: 'delete-sheet',
-      args: { Sheet: worksheetName },
-    });
+    // The upsert POST overwrites the colliding sheet in place — no delete-sheet step.
+    expect(calls.find((c) => c.command === 'delete-sheet')).toBeUndefined();
 
     const applyCall = calls.find((c) => c.command === 'load-underlying-metadata');
     expect(applyCall?.namespace).toBe('tabui');
@@ -248,7 +244,7 @@ describe('loadWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API 
     expect(applyCall?.args?.text).not.toContain('Other');
   });
 
-  it('should skip the delete when the sheet does not yet exist (new sheet)', async () => {
+  it('should apply a minimal document for a brand-new sheet', async () => {
     const { executor, calls } = dispatchingExecutor(liveWorkbook(['Some Other Sheet']));
 
     const result = await loadWorksheetXml({

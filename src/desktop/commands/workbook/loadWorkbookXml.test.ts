@@ -6,7 +6,7 @@ import invariant from '../../../utils/invariant.js';
 import * as xmlToJsonModule from '../../libraries/workbook-serialization-converter/index.js';
 import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
 import * as validationRegistry from '../../validation/registry.js';
-import { loadWorkbookXml, SCRATCH_PREFIX } from './loadWorkbookXml.js';
+import { loadWorkbookXml } from './loadWorkbookXml.js';
 
 vi.mock('fs');
 vi.mock('../../toolExecutor/localToolExecutor.js');
@@ -342,19 +342,14 @@ describe('loadWorkbookXml (External Client API transport, TABLEAU_EXTERNAL_API g
     '<worksheets><worksheet name="Sheet 1"><table /></worksheet></worksheets>' +
     '</workbook>';
 
-  // Executor that records every dispatched command so the scratch-reset sequence
-  // (save-underlying-metadata fetch → new-worksheet → delete-sheet* → load-underlying-metadata →
-  // delete-sheet scratch) is assertable. The fetch returns `liveXml` as the live workbook.
-  function dispatchingExecutor(liveXml: string = validXml): {
+  // Executor that records every dispatched command so the apply is assertable.
+  function dispatchingExecutor(): {
     executor: LocalExecutor;
     calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }>;
   } {
     const calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }> = [];
     const executeCommand = vi.fn(async (params: any) => {
       calls.push({ namespace: params.namespace, command: params.command, args: params.args });
-      if (params.command === 'save-underlying-metadata') {
-        return Ok({ command_id: 'cmd-get', status: 'completed', parsedResult: { text: liveXml } });
-      }
       return Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' });
     });
     return { executor: { executeCommand } as unknown as LocalExecutor, calls };
@@ -374,31 +369,21 @@ describe('loadWorkbookXml (External Client API transport, TABLEAU_EXTERNAL_API g
     vi.restoreAllMocks();
   });
 
-  it('resets colliding sheets behind a scratch sheet, then applies via the text POST', async () => {
+  it('applies the whole workbook via a single upsert text POST, with no scratch or delete steps', async () => {
     const { executor, calls } = dispatchingExecutor();
 
     const result = await loadWorkbookXml({ xml: validXml, executor, signal: mockSignal });
 
     expect(result.isOk()).toBe(true);
 
-    const scratchAdd = calls.find((c) => c.command === 'new-worksheet');
-    expect(scratchAdd?.namespace).toBe('tabdoc');
-    const scratchName = scratchAdd?.args?.NewSheet as string;
-    expect(scratchName.startsWith(SCRATCH_PREFIX)).toBe(true);
+    // The upsert POST overwrites colliding sheets in place — no scratch sheet, no deletes.
+    expect(calls.find((c) => c.command === 'new-worksheet')).toBeUndefined();
+    expect(calls.find((c) => c.command === 'delete-sheet')).toBeUndefined();
 
-    // The doc's own sheet is deleted before the POST so the additive merge can re-add it cleanly.
-    expect(calls.some((c) => c.command === 'delete-sheet' && c.args?.Sheet === 'Sheet 1')).toBe(
-      true,
-    );
-
-    // POST happens after the deletes and before the scratch is removed.
-    const postIdx = calls.findIndex((c) => c.command === 'load-underlying-metadata');
-    const scratchDeleteIdx = calls.findIndex(
-      (c) => c.command === 'delete-sheet' && c.args?.Sheet === scratchName,
-    );
-    expect(postIdx).toBeGreaterThan(0);
-    expect(scratchDeleteIdx).toBeGreaterThan(postIdx);
-    expect(calls[postIdx].args).toEqual({ text: validXml });
+    const posts = calls.filter((c) => c.command === 'load-underlying-metadata');
+    expect(posts).toHaveLength(1);
+    expect(posts[0].namespace).toBe('tabui');
+    expect(posts[0].args).toEqual({ text: validXml });
   });
 
   it('should return error when XML is invalid', async () => {
@@ -450,9 +435,6 @@ describe('loadWorkbookXml (External Client API transport, TABLEAU_EXTERNAL_API g
   it('should return execute-command-error when the apply POST fails', async () => {
     const error = { type: 'command-timed-out' as const, error: 'Timeout' };
     const executeCommand = vi.fn(async (params: any) => {
-      if (params.command === 'save-underlying-metadata') {
-        return Ok({ command_id: 'cmd-get', status: 'completed', parsedResult: { text: validXml } });
-      }
       if (params.command === 'load-underlying-metadata') {
         return Err(error);
       }
@@ -471,16 +453,6 @@ describe('loadWorkbookXml (External Client API transport, TABLEAU_EXTERNAL_API g
       invariant(result.error.type === 'execute-command-error');
       expect(result.error.error).toEqual(error);
     }
-    // The scratch sheet is still cleaned up even after a failed POST.
-    const scratchAdd = (executeCommand.mock.calls as any[]).find(
-      ([p]) => p.command === 'new-worksheet',
-    );
-    const scratchName = scratchAdd[0].args.NewSheet;
-    expect(
-      (executeCommand.mock.calls as any[]).some(
-        ([p]) => p.command === 'delete-sheet' && p.args?.Sheet === scratchName,
-      ),
-    ).toBe(true);
   });
 
   it('should trim whitespace from XML before validating and applying', async () => {
