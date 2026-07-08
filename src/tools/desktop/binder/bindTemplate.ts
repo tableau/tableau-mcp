@@ -169,8 +169,11 @@ function buildGuidance(res: BinderResult): string {
  * instance is running. 0 or 2+ instances fail closed with an instance-listing error
  * so the caller must pick one — this deletes the list-instances turn from the common
  * single-Desktop case without ever guessing between multiple instances.
+ *
+ * Exported for reuse by dashboard-auto-apply (W60), which needs the identical
+ * fail-closed session resolution — no reason for a second implementation.
  */
-function resolveSession(session: string | undefined): Result<string, McpToolError> {
+export function resolveSession(session: string | undefined): Result<string, McpToolError> {
   if (session !== undefined) {
     return Ok(session);
   }
