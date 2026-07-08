@@ -6,6 +6,7 @@ import { getConfig } from '../../../config.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { AppApprovalEvidence } from '../_lib/evidence.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
 import { WebTool } from '../tool.js';
@@ -99,8 +100,17 @@ operation is permanent and irreversible — the extract refresh task cannot be r
               if (guardResult.isErr()) {
                 return guardResult.error.toErr();
               }
+              const { recordOutcome } = guardResult.value;
 
-              await restApi.tasksMethods.deleteExtractRefreshTask({ siteId, taskId });
+              try {
+                await restApi.tasksMethods.deleteExtractRefreshTask({ siteId, taskId });
+              } catch (e) {
+                // Authorized-but-failed: record the terminal 'failed' outcome so the audit trail
+                // does not claim a deletion that never happened, then rethrow to the tool's handler.
+                recordOutcome({ ok: false, failureDetail: getExceptionMessage(e) });
+                throw e;
+              }
+              recordOutcome({ ok: true });
               return new Ok(
                 `Extract refresh task '${taskId}' has been successfully deleted. The underlying data source or workbook is unaffected, but it will no longer be refreshed on this schedule.`,
               );

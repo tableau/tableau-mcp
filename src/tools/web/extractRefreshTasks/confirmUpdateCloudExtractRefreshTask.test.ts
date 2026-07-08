@@ -18,11 +18,22 @@ import { scheduleBinding } from './updateCloudExtractRefreshTask.js';
 
 vi.mock('../../../logging/logger.js');
 
-function getAuditRecord(): ReturnType<typeof auditRecordSchema.parse> {
+// All mutation-audit records emitted so far, each parsed through the authoritative schema so the
+// assertion fails if the guard ever drops a required field. A confirmed update emits two (the
+// allowed authorization decision, then the terminal completed/failed outcome); denied paths emit one.
+function getAuditRecords(): ReturnType<typeof auditRecordSchema.parse>[] {
   const log = logger.log as MockedFunction<typeof logger.log>;
-  const auditEntries = log.mock.calls.map((c) => c[0]).filter((e) => e.logger === 'audit');
-  expect(auditEntries).toHaveLength(1);
-  return auditRecordSchema.parse(auditEntries[0].data);
+  return log.mock.calls
+    .map((c) => c[0])
+    .filter((e) => e.logger === 'audit')
+    .map((e) => auditRecordSchema.parse(e.data));
+}
+
+// Convenience for the single-audit-record assertions (denied paths emit exactly one).
+function getAuditRecord(): ReturnType<typeof auditRecordSchema.parse> {
+  const records = getAuditRecords();
+  expect(records).toHaveLength(1);
+  return records[0];
 }
 
 const validTaskId = 'a1b2c3d4-e5f6-4789-9abc-ef1234567890';
@@ -148,11 +159,13 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
       taskId: validTaskId,
       schedule: validSchedule,
     });
-    const record = getAuditRecord();
-    expect(record.result).toBe('allowed');
-    expect(record.phase).toBe('confirm');
-    expect(record.action).toBe('update');
-    expect(record.confirmationEvidence.kind).toBe('registry-nonce');
+    // A confirmed update emits two records: the allowed authorization decision, then the terminal
+    // 'completed' outcome once the REST update succeeds (audit reflects outcome, not just intent).
+    const records = getAuditRecords();
+    expect(records.map((r) => r.result)).toEqual(['allowed', 'completed']);
+    expect(records.every((r) => r.phase === 'confirm')).toBe(true);
+    expect(records.every((r) => r.action === 'update')).toBe(true);
+    expect(records.every((r) => r.confirmationEvidence.kind === 'registry-nonce')).toBe(true);
   });
 
   // --- Missing approval → PreviewNotRunError, no update ---
@@ -282,6 +295,13 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Tableau Cloud only');
     expect(result.content[0].text).toContain('Tableau 404 [404001]');
+    // An authorized-but-failed update records the terminal 'failed' outcome (with the Tableau-api
+    // detail) so the audit trail never claims an update that did not happen.
+    const records = getAuditRecords();
+    expect(records.map((r) => r.result)).toEqual(['allowed', 'failed']);
+    const failed = records.find((r) => r.result === 'failed');
+    invariant(failed, 'expected a failed audit record');
+    expect(failed.failureDetail).toContain('Tableau 404 [404001]');
   });
 });
 

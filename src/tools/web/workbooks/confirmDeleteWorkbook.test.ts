@@ -16,11 +16,22 @@ import { mockWorkbook } from './mockWorkbook.js';
 // spy call rather than written to stderr.
 vi.mock('../../../logging/logger.js');
 
-function getAuditRecord(): ReturnType<typeof auditRecordSchema.parse> {
+// All mutation-audit records emitted so far, each parsed through the authoritative schema so the
+// assertion fails if the guard ever drops a required field. A confirmed delete emits two (the
+// allowed authorization decision, then the terminal completed/failed outcome); denied paths emit one.
+function getAuditRecords(): ReturnType<typeof auditRecordSchema.parse>[] {
   const log = logger.log as MockedFunction<typeof logger.log>;
-  const auditEntries = log.mock.calls.map((c) => c[0]).filter((e) => e.logger === 'audit');
-  expect(auditEntries).toHaveLength(1);
-  return auditRecordSchema.parse(auditEntries[0].data);
+  return log.mock.calls
+    .map((c) => c[0])
+    .filter((e) => e.logger === 'audit')
+    .map((e) => auditRecordSchema.parse(e.data));
+}
+
+// Convenience for the single-audit-record assertions (denied paths emit exactly one).
+function getAuditRecord(): ReturnType<typeof auditRecordSchema.parse> {
+  const records = getAuditRecords();
+  expect(records).toHaveLength(1);
+  return records[0];
 }
 
 // A workbook that has been through the preview phase: carries the pending-deletion tag the confirm
@@ -149,13 +160,15 @@ describe('confirmDeleteWorkbookTool', () => {
       workbookId: 'wb-1',
       siteId: 'test-site-id',
     });
-    const record = getAuditRecord();
-    expect(record.result).toBe('allowed');
-    expect(record.phase).toBe('confirm');
-    expect(record.tool).toBe('confirm-delete-workbook');
+    // A confirmed delete emits two records: the allowed authorization decision, then the terminal
+    // 'completed' outcome once the REST delete succeeds (audit reflects outcome, not just intent).
+    const records = getAuditRecords();
+    expect(records.map((r) => r.result)).toEqual(['allowed', 'completed']);
+    expect(records.every((r) => r.phase === 'confirm')).toBe(true);
+    expect(records.every((r) => r.tool === 'confirm-delete-workbook')).toBe(true);
     // The audit surfaces the human-gesture evidence, never a secret.
-    expect(record.confirmationEvidence.kind).toBe('registry-nonce');
-    expect(record.confirmationEvidence.detail).toContain('app-approval');
+    expect(records.every((r) => r.confirmationEvidence.kind === 'registry-nonce')).toBe(true);
+    expect(records[0].confirmationEvidence.detail).toContain('app-approval');
   });
 
   it('rejects (no delete) when there was no human approval, even though the tag is present', async () => {
@@ -211,6 +224,25 @@ describe('confirmDeleteWorkbookTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('not allowed');
     expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+  });
+
+  // --- Error path on the destructive call ---
+
+  it('surfaces a delete API error and records the terminal failed outcome', async () => {
+    await establishApproval('wb-err');
+    mocks.mockGetWorkbook.mockResolvedValue({ ...mockTaggedWorkbook, id: 'wb-err' });
+    mocks.mockDeleteWorkbook.mockRejectedValue(new Error('Workbook delete failed'));
+    const result = await getToolResult({ workbookId: 'wb-err' });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Workbook delete failed');
+    // An authorized-but-failed delete records the terminal 'failed' outcome (with detail) so the
+    // audit trail never claims a deletion that did not happen.
+    const records = getAuditRecords();
+    expect(records.map((r) => r.result)).toEqual(['allowed', 'failed']);
+    const failed = records.find((r) => r.result === 'failed');
+    invariant(failed, 'expected a failed audit record');
+    expect(failed.failureDetail).toContain('Workbook delete failed');
   });
 });
 

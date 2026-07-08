@@ -7,6 +7,7 @@ import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import {
   AllEvidence,
   AppApprovalEvidence,
@@ -137,11 +138,19 @@ the deletion is rejected and the user must preview again.
               if (guardResult.isErr()) {
                 return guardResult.error.toErr();
               }
-              const { target } = guardResult.value;
+              const { target, recordOutcome } = guardResult.value;
               const projectName = target.project ?? 'unknown project';
               const ownerText = target.owner ? `owner ${target.owner}` : 'owner unknown';
 
-              await restApi.workbooksMethods.deleteWorkbook({ workbookId, siteId });
+              try {
+                await restApi.workbooksMethods.deleteWorkbook({ workbookId, siteId });
+              } catch (e) {
+                // Authorized-but-failed: record the terminal 'failed' outcome so the audit trail
+                // does not claim a deletion that never happened, then rethrow to the tool's handler.
+                recordOutcome({ ok: false, failureDetail: getExceptionMessage(e) });
+                throw e;
+              }
+              recordOutcome({ ok: true });
               return new Ok(
                 `Deleted workbook '${target.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
                   `It can be restored from the Tableau recycle bin (${RECYCLE_BIN_DOC_URL}) for a ` +

@@ -108,6 +108,7 @@ schedule values.
               if (guardResult.isErr()) {
                 return guardResult.error.toErr();
               }
+              const { recordOutcome } = guardResult.value;
 
               const result = await restApi.tasksMethods.updateCloudExtractRefreshTask({
                 siteId: restApi.siteId,
@@ -116,26 +117,33 @@ schedule values.
               });
 
               if (result.isErr()) {
+                // Authorized-but-failed: emit the terminal 'failed' audit so the trail distinguishes
+                // this from a completed update. The target is unchanged.
                 if (result.error.type === 'tableau-api') {
                   const { status, code, summary, detail } = result.error;
+                  const codeStr = code ? ` [${code}]` : '';
+                  const summaryDetail = [summary, detail].filter(Boolean).join(': ');
+                  recordOutcome({
+                    ok: false,
+                    failureDetail: `Tableau ${status}${codeStr}${summaryDetail ? `: ${summaryDetail}` : ''}`,
+                  });
                   // 404 from Cloud commonly means the tool was called against a Tableau Server
                   // site or the taskId doesn't exist on this site — surface a Cloud-only hint
                   // instead of the bare "Not Found".
                   if (status === 404) {
-                    const codeStr = code ? ` [${code}]` : '';
                     return new UnknownError(
                       `Tableau 404${codeStr}: extract refresh task '${args.taskId}' not found. This tool is Tableau Cloud only — verify you're connected to a Cloud site (not Server) and that the taskId came from list-extract-refresh-tasks.`,
                       404,
                     ).toErr();
                   }
-                  const codeStr = code ? ` [${code}]` : '';
-                  const summaryDetail = [summary, detail].filter(Boolean).join(': ');
                   const tail = summaryDetail ? `: ${summaryDetail}` : '';
                   return new UnknownError(`Tableau ${status}${codeStr}${tail}`, status).toErr();
                 }
+                recordOutcome({ ok: false, failureDetail: result.error.message });
                 return new UnknownError(result.error.message).toErr();
               }
 
+              recordOutcome({ ok: true });
               const updated = result.value;
               // Fall back to args for every field — the Cloud response payload varies by site
               // and we don't want a partial response to produce a misleading message.
