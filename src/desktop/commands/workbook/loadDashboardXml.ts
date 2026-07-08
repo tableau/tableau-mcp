@@ -11,7 +11,6 @@ import {
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { withApplyLock } from './applyMutex.js';
-import { deleteLiveSheet } from './deleteLiveSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { applyWorkbookText, interpretLoadOutcome } from './loadWorkbookXml.js';
 
@@ -75,9 +74,9 @@ export async function loadDashboardXml({
     });
   }
 
-  // External Client API ("Athena V0") exposes no per-sheet route — tabui:load-dashboard is not
-  // in its command registry, and the whole-workbook POST is additive-only, so applying a single
-  // dashboard has to delete the live copy first and re-post a minimal whole-workbook document.
+  // External Client API ("Athena V0") exposes no per-sheet route — tabui:load-dashboard is not in
+  // its command registry, so applying a single dashboard re-posts a minimal whole-workbook document.
+  // The POST upserts by name: it overwrites the colliding dashboard in place and leaves the rest live.
   return getDesktopConfig().externalApiEnabled
     ? loadDashboardXmlViaExternalApi({ dashboardName, xml, executor, signal })
     : loadDashboardXmlViaAgentApi({ dashboardName, xml, executor, signal });
@@ -158,11 +157,6 @@ async function loadDashboardXmlViaExternalApi({
       minimalDoc = buildMinimalDashboardDoc(workbookResult.value, dashboardName, xml);
     } catch (error) {
       return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
-    }
-
-    const deleteResult = await deleteLiveSheet({ sheetName: dashboardName, executor, signal });
-    if (deleteResult.isErr()) {
-      return Err({ type: 'execute-command-error', error: deleteResult.error });
     }
 
     const applyResult = await applyWorkbookText({ xml: minimalDoc, executor, signal });

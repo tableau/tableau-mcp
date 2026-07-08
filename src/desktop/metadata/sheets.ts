@@ -124,8 +124,8 @@ export function extractSheetXml(workbookXml: string, sheetName: string): string 
 }
 
 // Builds a whole-workbook document carrying only the one edited worksheet (and its window).
-// The workbook POST merges additively and never overwrites, so the caller MUST delete the live
-// sheet first — otherwise the merge re-adds this one under a uniquified "(2)" name.
+// The workbook POST upserts by name: it overwrites the colliding live sheet and, because the
+// doc carries no other sheets, leaves the rest of the live workbook untouched.
 export function buildMinimalSheetDoc(
   workbookXml: string,
   sheetName: string,

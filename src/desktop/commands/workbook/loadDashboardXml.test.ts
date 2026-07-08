@@ -235,7 +235,7 @@ describe('loadDashboardXml (External Client API transport, TABLEAU_EXTERNAL_API 
     vi.restoreAllMocks();
   });
 
-  it('should delete the live dashboard then apply a minimal document that omits worksheets', async () => {
+  it('should apply a minimal document that upserts the dashboard and omits worksheets', async () => {
     const { executor, calls } = dispatchingExecutor(
       liveWorkbook(['Sales Dashboard', 'Other DB'], ['Sheet 1']),
     );
@@ -249,23 +249,19 @@ describe('loadDashboardXml (External Client API transport, TABLEAU_EXTERNAL_API 
 
     expect(result.isOk()).toBe(true);
 
-    const deleteCall = calls.find((c) => c.command === 'delete-sheet');
-    expect(deleteCall).toEqual({
-      namespace: 'tabdoc',
-      command: 'delete-sheet',
-      args: { Sheet: dashboardName },
-    });
+    // The upsert POST overwrites the colliding dashboard in place — no delete-sheet step.
+    expect(calls.find((c) => c.command === 'delete-sheet')).toBeUndefined();
 
     const applyCall = calls.find((c) => c.command === 'load-underlying-metadata');
     expect(applyCall?.namespace).toBe('tabui');
     const applied = applyCall?.args?.text as string;
     expect(applied).toContain('name="Sales Dashboard"');
     expect(applied).not.toContain('Other DB');
-    // Worksheets are stripped so the additive POST does not duplicate them.
+    // Worksheets are stripped so the POST leaves the live sheets untouched.
     expect(applied).not.toContain('<worksheet');
   });
 
-  it('should skip the delete when the dashboard does not yet exist', async () => {
+  it('should apply a minimal document for a brand-new dashboard', async () => {
     const { executor, calls } = dispatchingExecutor(liveWorkbook(['Some Other DB']));
 
     const result = await loadDashboardXml({

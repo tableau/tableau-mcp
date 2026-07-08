@@ -169,9 +169,9 @@ export function extractDashboardXml(workbookXml: string, dashboardName: string):
 }
 
 // Builds a whole-workbook document carrying only the one edited dashboard (and its window).
-// Worksheets are stripped: they stay live and the dashboard's zones still reference them by name,
-// whereas re-posting them would duplicate them. The workbook POST merges additively and never
-// overwrites, so the caller MUST delete the live dashboard first to avoid a uniquified "(2)" name.
+// The workbook POST upserts by name: it overwrites the colliding live dashboard and leaves the
+// rest of the live workbook untouched. Worksheets are stripped from the doc — they stay live and
+// the dashboard's zones still reference them by name — so the POST does not touch them at all.
 export function buildMinimalDashboardDoc(
   workbookXml: string,
   dashboardName: string,
