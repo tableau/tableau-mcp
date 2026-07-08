@@ -53,13 +53,15 @@ if (xml) {
   );
 }
 
-const op = await client.invokeCommand('tabdoc', 'get-app-version', {});
+// tabdoc:undo is a REAL registry command with no required params — harmless when there is
+// nothing to undo, and it proves the {namespace, command, parameters} body shape end-to-end.
+const op = await client.invokeCommand('tabdoc', 'undo', {});
 out(
   op.isOk(),
   'POST /v1/app:invokeCommand',
   op.isOk()
     ? `state=${String((op.value as { state?: unknown }).state ?? '?')}`
-    : errDetail(op.error) + '  ← command-not-found? try any known tabdoc command; ALSO tells us if the `parameters` field name guess is wrong',
+    : errDetail(op.error) + '  ← if THIS fails with command-not-found too, send us your invokeCommand example — the body field names need aligning',
 );
 
 const spec = await client.fetchOpenApi();
