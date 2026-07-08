@@ -18,9 +18,9 @@ import {
   ProblemResponse,
 } from './types.js';
 
-/** The single "get whole workbook document" command, routed to GET /v1/workbook/document. */
+/** The single "get whole workbook document" command, routed to GET /v0/workbook/document. */
 const SAVE_UNDERLYING_METADATA = 'save-underlying-metadata';
-/** The single "apply whole workbook document" command, routed to POST /v1/workbook/document. */
+/** The single "apply whole workbook document" command, routed to POST /v0/workbook/document. */
 const LOAD_UNDERLYING_METADATA = 'load-underlying-metadata';
 
 const LOGGER = 'ExternalApiToolExecutor';
@@ -57,9 +57,9 @@ type RawOutcome = {
  *
  * Command surface → endpoint mapping (thin, verified against localToolExecutor's
  * command shapes):
- *   - `tabui:save-underlying-metadata` (is-json !== true) → GET  /v1/workbook/document
- *   - `tabui:load-underlying-metadata` (with `text`)      → POST /v1/workbook/document
- *   - everything else                                     → POST /v1/app:invokeCommand
+ *   - `tabui:save-underlying-metadata` (is-json !== true) → GET  /v0/workbook/document
+ *   - `tabui:load-underlying-metadata` (with `text`)      → POST /v0/workbook/document
+ *   - everything else                                     → POST /v0/app:invokeCommand
  *     (the API resolves the SAME legacy command registry, so params pass through as-is)
  *
  * On a 401 (stale discovery file) the executor rescans discovery exactly once and

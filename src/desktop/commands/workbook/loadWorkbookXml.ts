@@ -214,7 +214,7 @@ async function loadUnderlyingMetadataByText({
   return Ok.EMPTY;
 }
 
-// TEMPORARY workaround for an External Client API bug: POST /v1/workbook/document is additive on
+// TEMPORARY workaround for an External Client API bug: POST /v0/workbook/document is additive on
 // sheet-name collision (never overwrites), so re-posting a whole workbook re-adds every sheet it
 // already has as "(2)". The API fix + an expanded get/set surface are coming; remove this then.
 // The scratch sheet exists only so the delete loop never hits Tableau's refusal to delete the

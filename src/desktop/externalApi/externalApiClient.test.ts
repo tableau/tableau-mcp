@@ -23,7 +23,7 @@ describe('ExternalApiClient', () => {
     await server.close();
   });
 
-  it('reports liveness from GET /v1/health', async () => {
+  it('reports liveness from GET /v0/health', async () => {
     const result = await client.health();
     expect(result.isOk()).toBe(true);
     expect(result.unwrap().healthy).toBe(true);
@@ -68,7 +68,7 @@ describe('ExternalApiClient', () => {
   });
 
   it('maps a 415 unsupported-content-type problem response', async () => {
-    server.setOverride('POST /v1/workbook/document', {
+    server.setOverride('POST /v0/workbook/document', {
       status: 415,
       body: JSON.stringify({ code: 'unsupported-content-type', title: 'unsupported-content-type' }),
     });
