@@ -10,7 +10,12 @@ import {
 } from '../../toolExecutor/toolExecutor.js';
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
+import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
+
+// Name prefix for the throwaway sheet the additive-POST workaround creates. Reads as a progress
+// label if it ever flashes in the UI. Callers listing sheets filter it so it never surfaces.
+export const SCRATCH_PREFIX = '...thinking-';
 
 export type LoadWorkbookXmlError =
   | { type: 'invalid-xml' }
@@ -58,7 +63,7 @@ export async function loadWorkbookXml({
     });
   }
 
-  const result = await resetAndApplyWorkbook({ xml, executor, signal });
+  const result = await withApplyLock(() => resetAndApplyWorkbook({ xml, executor, signal }));
   if (result.isErr()) {
     return Err({ type: 'execute-command-error', error: result.error });
   }
@@ -94,7 +99,16 @@ async function resetAndApplyWorkbook({
     return Err({ type: 'invalid-response', error });
   }
 
-  const scratchName = `mcpApplyScratch${generateUUID().replace(/[^a-zA-Z0-9]/g, '')}`;
+  // Sweep any scratch left over from a prior apply whose trailing delete no-op'd (Tableau silently
+  // refuses to delete the last sheet, and the post-POST doc may not have settled yet). Safe because
+  // the apply lock serializes us — no live apply owns a scratch right now, and real sheets remain.
+  for (const name of listSheets(liveResult.value)) {
+    if (name.startsWith(SCRATCH_PREFIX)) {
+      await deleteScratch(name, executor, signal);
+    }
+  }
+
+  const scratchName = `${SCRATCH_PREFIX}${generateUUID().replace(/[^a-zA-Z0-9]/g, '')}`;
   const addScratch = await executor.executeCommand({
     namespace: 'tabdoc',
     command: 'new-worksheet',
@@ -124,7 +138,8 @@ async function resetAndApplyWorkbook({
     return applied;
   }
 
-  return deleteScratch(scratchName, executor, signal);
+  await deleteScratch(scratchName, executor, signal);
+  return Ok.EMPTY;
 }
 
 async function deleteScratch(

@@ -9,6 +9,7 @@ import {
 } from '../../toolExecutor/toolExecutor.js';
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
+import { withApplyLock } from './applyMutex.js';
 import { deleteLiveSheet } from './deleteLiveSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
@@ -66,36 +67,38 @@ export async function loadDashboardXml({
     });
   }
 
-  const workbookResult = await getWorkbookXml({ executor, signal });
-  if (workbookResult.isErr()) {
-    return Err({ type: 'execute-command-error', error: workbookResult.error });
-  }
+  return withApplyLock(async () => {
+    const workbookResult = await getWorkbookXml({ executor, signal });
+    if (workbookResult.isErr()) {
+      return Err({ type: 'execute-command-error', error: workbookResult.error });
+    }
 
-  let minimalDoc: string;
-  try {
-    minimalDoc = buildMinimalDashboardDoc(workbookResult.value, dashboardName, xml);
-  } catch (error) {
-    return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
-  }
+    let minimalDoc: string;
+    try {
+      minimalDoc = buildMinimalDashboardDoc(workbookResult.value, dashboardName, xml);
+    } catch (error) {
+      return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
+    }
 
-  const deleteResult = await deleteLiveSheet({ sheetName: dashboardName, executor, signal });
-  if (deleteResult.isErr()) {
-    return Err({ type: 'execute-command-error', error: deleteResult.error });
-  }
+    const deleteResult = await deleteLiveSheet({ sheetName: dashboardName, executor, signal });
+    if (deleteResult.isErr()) {
+      return Err({ type: 'execute-command-error', error: deleteResult.error });
+    }
 
-  const applyResult = await applyWorkbookText({ xml: minimalDoc, executor, signal });
-  if (applyResult.isErr()) {
-    return Err({ type: 'execute-command-error', error: applyResult.error });
-  }
+    const applyResult = await applyWorkbookText({ xml: minimalDoc, executor, signal });
+    if (applyResult.isErr()) {
+      return Err({ type: 'execute-command-error', error: applyResult.error });
+    }
 
-  log({
-    level: 'info',
-    message: 'load-dashboard completed',
-    logger: 'dashboardCommands',
-    data: { dashboardName },
+    log({
+      level: 'info',
+      message: 'load-dashboard completed',
+      logger: 'dashboardCommands',
+      data: { dashboardName },
+    });
+
+    return Ok.EMPTY;
   });
-
-  return Ok.EMPTY;
 }
 
 function sanitize(value: unknown): unknown {

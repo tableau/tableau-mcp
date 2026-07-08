@@ -6,6 +6,7 @@ import {
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
+import { SCRATCH_PREFIX } from './loadWorkbookXml.js';
 
 export async function listWorksheets({ executor, signal }: WithExecutorAndAbortSignal): Promise<
   Result<
@@ -23,7 +24,9 @@ export async function listWorksheets({ executor, signal }: WithExecutorAndAbortS
 
   let worksheets: Array<string>;
   try {
-    worksheets = listSheets(workbookResult.value);
+    worksheets = listSheets(workbookResult.value).filter(
+      (name) => !name.startsWith(SCRATCH_PREFIX),
+    );
   } catch (error) {
     return Err({ type: 'invalid-response', error });
   }
