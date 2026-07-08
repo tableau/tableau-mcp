@@ -61,6 +61,7 @@ describe('OverridableConfig', () => {
         'list-workbooks',
         'get-workbook',
         'delete-workbook',
+        'confirm-delete-workbook',
       ]);
     });
 
@@ -80,6 +81,7 @@ describe('OverridableConfig', () => {
         'list-workbooks',
         'get-workbook',
         'delete-workbook',
+        'confirm-delete-workbook',
       ]);
     });
 

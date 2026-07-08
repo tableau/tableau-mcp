@@ -3,8 +3,11 @@ import { getQueryAdminInsightsJobPerformanceTool } from './adminInsights/queryJo
 import { getQueryAdminInsightsSiteContentTool } from './adminInsights/querySiteContent.js';
 import { getQueryAdminInsightsTsEventsTool } from './adminInsights/queryTsEvents.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
+import { getConfirmDeleteDatasourceTool } from './datasources/confirmDeleteDatasource.js';
 import { getDeleteDatasourceTool } from './datasources/deleteDatasource.js';
 import { getListDatasourcesTool } from './datasources/listDatasources.js';
+import { getConfirmDeleteExtractRefreshTaskTool } from './extractRefreshTasks/confirmDeleteExtractRefreshTask.js';
+import { getConfirmUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/confirmUpdateCloudExtractRefreshTask.js';
 import { getDeleteExtractRefreshTaskTool } from './extractRefreshTasks/deleteExtractRefreshTask.js';
 import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/updateCloudExtractRefreshTask.js';
@@ -30,6 +33,7 @@ import { getGetViewDataTool } from './views/getViewData.js';
 import { getGetViewImageTool } from './views/getViewImage.js';
 import { getListCustomViewsTool } from './views/listCustomViews.js';
 import { getListViewsTool } from './views/listViews.js';
+import { getConfirmDeleteWorkbookTool } from './workbooks/confirmDeleteWorkbook.js';
 import { getDeleteWorkbookTool } from './workbooks/deleteWorkbook.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
@@ -39,9 +43,12 @@ export const webToolFactories = [
   getEmbedTokenTool,
   getListDatasourcesTool,
   getDeleteDatasourceTool,
+  getConfirmDeleteDatasourceTool,
   getListExtractRefreshTasksTool,
   getDeleteExtractRefreshTaskTool,
+  getConfirmDeleteExtractRefreshTaskTool,
   getUpdateCloudExtractRefreshTaskTool,
+  getConfirmUpdateCloudExtractRefreshTaskTool,
   getListJobsTool,
   getListUsersTool,
   getQueryDatasourceTool,
@@ -58,6 +65,7 @@ export const webToolFactories = [
   getGetViewImageTool,
   getListWorkbooksTool,
   getDeleteWorkbookTool,
+  getConfirmDeleteWorkbookTool,
   getListProjectsTool,
   getListViewsTool,
   getListCustomViewsTool,

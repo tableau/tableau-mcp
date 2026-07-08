@@ -140,6 +140,100 @@ function nonceKey(ctx: EvidenceContext): string {
 }
 
 /**
+ * The preview→confirm approval window, in milliseconds, from MUTATION_PREVIEW_TTL_MINUTES (default
+ * 5, min 1, max 24h) — the same bound RegistryEvidence's nonce cache uses. Exported so a preview
+ * tool can compute and surface the absolute expiry (`expiresAtMs`) to its UI without duplicating
+ * the parse/bounds logic.
+ */
+export function getMutationPreviewTtlMs(): number {
+  const ttlMinutes = parseNumber(process.env.MUTATION_PREVIEW_TTL_MINUTES, {
+    defaultValue: 5,
+    minValue: 1,
+    maxValue: 60 * 24, // 24 hours
+  });
+  return milliseconds.fromMinutes(ttlMinutes);
+}
+
+// Lazy-initialized registry of in-iframe human approvals, keyed identically to the nonce cache
+// (`${siteId}:${userLuid}:${tool}:${targetId}`) but storing only PRESENCE — there is no secret to
+// transport. Kept separate from `nonceCache` so the two strategies never collide on a key. Same
+// DURABILITY CAVEAT applies: in-memory, so a lost entry can only force a re-preview (reject), never
+// wrongly allow.
+let approvalCache: ExpiringMap<string, true> | null = null;
+
+function getApprovalCache(): ExpiringMap<string, true> {
+  if (!approvalCache) {
+    approvalCache = new ExpiringMap<string, true>({
+      defaultExpirationTimeMs: getMutationPreviewTtlMs(),
+    });
+  }
+  return approvalCache;
+}
+
+/**
+ * AppApprovalEvidence — proof that a human approved the mutation by a gesture inside a rendered
+ * MCP-Apps iframe, within the preview→confirm TTL window. Closes AC-5's residual gap (the tag gate
+ * proves a preview RAN, not that a HUMAN approved): the destructive confirm tool is model-invisible
+ * (`visibility:['app']`), so the only path that calls `establish`/`verify` is a human click in the
+ * iframe — never the LLM.
+ *
+ * Unlike RegistryEvidence, NOTHING secret is minted, returned, or transported: approval is
+ * PRESENCE-based, keyed server-side by site+user+tool+target (all server-known plus the one arg the
+ * confirm tool takes) AND the optional `binding` (a fingerprint of the mutation's caller-controlled
+ * parameters — see EvidenceContext.binding). `establish` records presence with the TTL; `verify`
+ * returns true only if a live, unexpired entry exists and DELETES it (single-use); `confirmationToken`
+ * is ignored. Layered ON TOP of the durable tag (the confirm tool also re-checks the tag), this
+ * strategy only ever NARROWS access → it can reject, never wrongly allow.
+ *
+ * Binding the key to `binding` closes a payload-swap gap for confirm tools that carry a mutable
+ * payload (e.g. update-cloud-extract-refresh-task's schedule): an approval minted while previewing
+ * schedule A must not satisfy a confirm that applies schedule B. Target-only-keyed confirms (the
+ * DELETEs, which carry no payload beyond the target id) pass no `binding`, so their key is unchanged.
+ */
+export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
+  // The preview-tool name that namespaces the approval key. The preview tool and its model-invisible
+  // confirm tool run as separate WebTool instances under DIFFERENT tool names, so the key must NOT be
+  // `ctx.tool` (that would never match across the pair). Instead both sides pass the SAME fixed
+  // namespace — the preview tool's name (e.g. 'delete-workbook', 'delete-datasource',
+  // 'delete-extract-refresh-task', 'update-cloud-extract-refresh-task') — so each tool's approval is
+  // isolated from every other tool's and the preview/confirm pair resolves the same entry.
+  private readonly namespace: string;
+
+  // Defaults to 'delete-workbook' to preserve the original (pre-generalization) behavior for the
+  // first tool to adopt this strategy. Every NEW tool MUST pass its own preview-tool name so the
+  // approvals don't collide on the 'delete-workbook' namespace.
+  constructor(namespace: string = 'delete-workbook') {
+    this.namespace = namespace;
+  }
+
+  private approvalKey(ctx: EvidenceContext): string {
+    // Fold the optional parameter fingerprint into the key (mirrors RegistryEvidence's nonceKey) so an
+    // approval minted for parameter set A cannot satisfy a confirm carrying parameter set B. An empty
+    // segment when `binding` is absent keeps keys stable for payload-free targets like the deletes.
+    return `${ctx.siteId}:${ctx.userLuid}:${this.namespace}:${ctx.target.id}:${ctx.binding ?? ''}`;
+  }
+
+  async establish(ctx: EvidenceContext): Promise<void> {
+    getApprovalCache().set(this.approvalKey(ctx), true);
+  }
+
+  async verify(ctx: EvidenceContext): Promise<boolean> {
+    const key = this.approvalKey(ctx);
+    if (!getApprovalCache().get(key)) {
+      return false;
+    }
+    // Single-use: consume the approval so it cannot be replayed.
+    getApprovalCache().delete(key);
+    return true;
+  }
+
+  describeEvidence(): { kind: 'registry-nonce'; detail?: string } {
+    // Reuse the audited 'registry-nonce' kind (no schema change); the detail distinguishes it.
+    return { kind: 'registry-nonce', detail: 'app-approval (human gesture in MCP-Apps iframe)' };
+  }
+}
+
+/**
  * RegistryEvidence — server-generated single-use confirmation nonce, for mutations whose target has
  * no durable taggable state (e.g. extract refresh tasks).
  *
@@ -181,6 +275,46 @@ export class RegistryEvidence implements EvidenceStrategy<MutationTarget> {
   /** The nonce minted by the last establish(), for the preview response text. Never audited. */
   getEstablishedNonce(): string | undefined {
     return this.lastNonce;
+  }
+}
+
+/**
+ * AllEvidence — AND-composition of several strategies. `verify` is true only when EVERY member
+ * verifies; `establish` establishes every member. Used by confirm-delete-workbook to require BOTH a
+ * live `pending-deletion` tag (durable, un-forgeable) AND a fresh in-iframe human approval
+ * (AppApprovalEvidence) — layering the human-gesture proof ON TOP of the tag so the composite can
+ * only ever NARROW access (reject), never wrongly allow.
+ *
+ * `verify` short-circuits in array order. Place a NON-consuming check (the tag re-fetch) before a
+ * single-use one (the approval) so a missing tag never wastes the one-shot approval. For the audit,
+ * `describeEvidence` surfaces a 'registry-nonce' member if any is present (the meaningful
+ * human-gesture signal), otherwise the first member's kind.
+ */
+export class AllEvidence implements EvidenceStrategy<MutationTarget> {
+  private readonly strategies: ReadonlyArray<EvidenceStrategy<MutationTarget>>;
+
+  constructor(strategies: ReadonlyArray<EvidenceStrategy<MutationTarget>>) {
+    this.strategies = strategies;
+  }
+
+  async establish(ctx: EvidenceContext): Promise<void> {
+    for (const strategy of this.strategies) {
+      await strategy.establish(ctx);
+    }
+  }
+
+  async verify(ctx: EvidenceContext): Promise<boolean> {
+    for (const strategy of this.strategies) {
+      if (!(await strategy.verify(ctx))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  describeEvidence(): { kind: 'tag' | 'registry-nonce' | 'none'; detail?: string } {
+    const descriptors = this.strategies.map((s) => s.describeEvidence());
+    return descriptors.find((d) => d.kind === 'registry-nonce') ?? descriptors[0];
   }
 }
 

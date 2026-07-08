@@ -42,6 +42,10 @@ const paramsSchema = {
 
 export type StaleContentRow = {
   itemId: string;
+  // The content LUID (UUID) — the identifier delete-workbook/get-workbook/delete-datasource require.
+  // Distinct from itemId, which is Site Content's integer repository ID and is NOT accepted by REST.
+  // Null only when the Site Content datasource omits the Item LUID column (older schemas).
+  itemLuid: string | null;
   itemType: string;
   itemName: string;
   project: string | null;
@@ -61,6 +65,7 @@ export type StaleContentRow = {
 const siteContentRowSchema = z
   .object({
     'Item ID': z.union([z.string(), z.number()]).nullable().optional(),
+    'Item LUID': z.string().nullable().optional(),
     'Item Type': z.string().nullable().optional(),
     'Item Name': z.string().nullable().optional(),
     'Item Parent Project Name': z.string().nullable().optional(),
@@ -103,6 +108,7 @@ receive only items where days since last use exceed the threshold. No client-sid
   "rows": [
     {
       "itemId": "...",
+      "itemLuid": "..." | null,
       "itemType": "Workbook" | "Datasource",
       "itemName": "...",
       "project": "..." | null,
@@ -120,6 +126,10 @@ receive only items where days since last use exceed the threshold. No client-sid
 
 Rows are sorted descending by \`daysSinceLastUse\`, then by \`size\`. Items with no recorded
 access have \`lastUsedDate = createdAt\` and \`neverAccessed = true\`.
+
+To act on a stale item (e.g. \`delete-workbook\`, \`get-workbook\`, \`delete-datasource\`), pass
+\`itemLuid\` — the content LUID. Do NOT pass \`itemId\`: it is Site Content's integer repository ID
+and the REST API rejects it (404). \`itemLuid\` is \`null\` only on older sites that omit the column.
 
 **Caveats**
 - The Tableau-managed \`Admin Insights\` project is excluded by design — its datasources
@@ -243,6 +253,7 @@ function buildSiteContentQuery(
   return {
     fields: [
       { fieldCaption: 'Item ID' },
+      { fieldCaption: 'Item LUID' },
       { fieldCaption: 'Item Type' },
       { fieldCaption: 'Item Name' },
       { fieldCaption: 'Item Parent Project Name' },
@@ -407,6 +418,7 @@ export function computeStaleRows({
 
     out.push({
       itemId,
+      itemLuid: typeof row['Item LUID'] === 'string' ? row['Item LUID'] : null,
       itemType,
       itemName,
       project:

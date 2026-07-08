@@ -47,8 +47,15 @@ describe('server', () => {
         'query-admin-insights-job-performance',
         'get-stale-content-report',
       ];
-      // get-embed-token is gated by the mcp-apps feature (disabled by default in features.json)
-      const mcpAppsTools: ReadonlyArray<WebToolName> = ['get-embed-token'];
+      // These tools are gated by the mcp-apps feature (disabled by default in features.json):
+      // get-embed-token, plus the app-only confirm-* tools.
+      const mcpAppsTools: ReadonlyArray<WebToolName> = [
+        'get-embed-token',
+        'confirm-delete-datasource',
+        'confirm-delete-extract-refresh-task',
+        'confirm-update-cloud-extract-refresh-task',
+        'confirm-delete-workbook',
+      ];
 
       let expectedToolNames = [...webToolNames];
 
@@ -134,8 +141,15 @@ describe('server', () => {
         'query-admin-insights-job-performance',
         'get-stale-content-report',
       ];
-      // get-embed-token is gated by the mcp-apps feature (disabled by default in features.json)
-      const mcpAppsTools: ReadonlyArray<WebToolName> = ['get-embed-token'];
+      // These tools are gated by the mcp-apps feature (disabled by default in features.json):
+      // get-embed-token, plus the app-only confirm-* tools.
+      const mcpAppsTools: ReadonlyArray<WebToolName> = [
+        'get-embed-token',
+        'confirm-delete-datasource',
+        'confirm-delete-extract-refresh-task',
+        'confirm-update-cloud-extract-refresh-task',
+        'confirm-delete-workbook',
+      ];
 
       let expectedWebToolNames = [...webToolNames];
 

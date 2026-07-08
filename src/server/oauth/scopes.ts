@@ -102,7 +102,22 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:tasks:delete'],
     api: new Set(['tableau:tasks:delete', 'tableau:users:read']),
   },
+  // Admin-only, app-only confirm step for delete-extract-refresh-task (MCP-Apps HITL). Invoked ONLY
+  // by a human gesture in the rendered iframe (visibility:['app']), never the model. Deletes the task
+  // (tasks:delete); adminGate.assertAdmin → GET /sites/{siteId}/users/{userId} → users:read.
+  'confirm-delete-extract-refresh-task': {
+    mcp: ['tableau:mcp:tasks:delete'],
+    api: new Set(['tableau:tasks:delete', 'tableau:users:read']),
+  },
   'update-cloud-extract-refresh-task': {
+    mcp: ['tableau:mcp:tasks:write'],
+    api: new Set(['tableau:tasks:write', 'tableau:users:read']),
+  },
+  // Admin-only, app-only confirm step for update-cloud-extract-refresh-task (MCP-Apps HITL). Invoked
+  // ONLY by a human gesture in the rendered iframe (visibility:['app']), never the model. Applies the
+  // schedule change (tasks:write); adminGate.assertAdmin → GET /sites/{siteId}/users/{userId} →
+  // users:read.
+  'confirm-update-cloud-extract-refresh-task': {
     mcp: ['tableau:mcp:tasks:write'],
     api: new Set(['tableau:tasks:write', 'tableau:users:read']),
   },
@@ -132,6 +147,19 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
+  // Admin-only, app-only confirm step for delete-workbook (MCP-Apps HITL). Invoked ONLY by a human
+  // gesture in the rendered iframe (visibility:['app']), never the model. Re-fetches + re-checks the
+  // pending-deletion tag and deletes (workbooks:delete + content:read), resolves the owner for the
+  // audit (users:read), and goes through the resourceAccessChecker — same API scopes as delete-workbook
+  // minus the tag write (the tag was applied in the preview phase).
+  'confirm-delete-workbook': {
+    mcp: ['tableau:mcp:workbook:delete'],
+    api: new Set([
+      'tableau:workbooks:delete',
+      'tableau:users:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
+  },
   // Admin-only destructive tool. Preview tags the datasource (datasource_tags:update), resolves the
   // owner (users:read), and warns about dependent workbooks/flows via the Metadata API (content:read);
   // confirm deletes it (datasources:delete). adminGate.assertAdmin → GET /users/{id} → users:read.
@@ -142,6 +170,19 @@ const toolScopeMap: Record<
     api: new Set([
       'tableau:datasources:delete',
       'tableau:datasource_tags:update',
+      'tableau:users:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
+  },
+  // Admin-only, app-only confirm step for delete-datasource (MCP-Apps HITL). Invoked ONLY by a human
+  // gesture in the rendered iframe (visibility:['app']), never the model. Re-fetches + re-checks the
+  // pending-deletion tag and deletes (datasources:delete + content:read), resolves the owner for the
+  // audit (users:read), and goes through the resourceAccessChecker — same API scopes as
+  // delete-datasource minus the tag write (the tag was applied in the preview phase).
+  'confirm-delete-datasource': {
+    mcp: ['tableau:mcp:datasource:delete'],
+    api: new Set([
+      'tableau:datasources:delete',
       'tableau:users:read',
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
@@ -300,10 +341,14 @@ function getEnabledToolNames(): Set<WebToolName> {
   if (!config.adminToolsEnabled) {
     enabledTools.delete('list-extract-refresh-tasks');
     enabledTools.delete('delete-extract-refresh-task');
+    enabledTools.delete('confirm-delete-extract-refresh-task');
     enabledTools.delete('update-cloud-extract-refresh-task');
+    enabledTools.delete('confirm-update-cloud-extract-refresh-task');
     enabledTools.delete('delete-workbook');
+    enabledTools.delete('confirm-delete-workbook');
     enabledTools.delete('list-jobs');
     enabledTools.delete('delete-datasource');
+    enabledTools.delete('confirm-delete-datasource');
     enabledTools.delete('list-users');
     enabledTools.delete('query-admin-insights-ts-events');
     enabledTools.delete('query-admin-insights-site-content');
@@ -311,9 +356,14 @@ function getEnabledToolNames(): Set<WebToolName> {
     enabledTools.delete('get-stale-content-report');
   }
 
-  // Remove get-embed-token if mcp-apps feature is disabled
+  // Remove the MCP-Apps-only tools if the mcp-apps feature is disabled. The confirm-* tools are the
+  // human-gesture confirm steps for their preview tools and only exist when the iframe can render.
   if (!featureGate.isFeatureEnabled('mcp-apps')) {
     enabledTools.delete('get-embed-token');
+    enabledTools.delete('confirm-delete-workbook');
+    enabledTools.delete('confirm-delete-datasource');
+    enabledTools.delete('confirm-delete-extract-refresh-task');
+    enabledTools.delete('confirm-update-cloud-extract-refresh-task');
   }
 
   return enabledTools;

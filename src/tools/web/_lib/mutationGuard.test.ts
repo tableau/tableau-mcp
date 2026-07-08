@@ -139,6 +139,34 @@ describe('guardMutation', () => {
     expect(record.phase).toBe('confirm');
   });
 
+  it('on a model-visible preview-confirm tool (no previewTool), the denial says to re-run with confirm omitted', async () => {
+    const evidence = makeEvidence({ verify: vi.fn().mockResolvedValue(false) });
+    const result = await run({ phase: 'confirm', evidence });
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.message).toContain('Run delete-datasource with confirm omitted');
+      // The app-only recovery (re-preview + approve in panel) must NOT appear for in-place tools.
+      expect(result.error.message).not.toContain('confirmation panel');
+    }
+  });
+
+  it('on an app-only confirm tool (previewTool set), the denial points at the preview tool + panel, not a confirm arg', async () => {
+    const evidence = makeEvidence({ verify: vi.fn().mockResolvedValue(false) });
+    const result = await run({
+      tool: 'confirm-delete-datasource',
+      previewTool: 'delete-datasource',
+      phase: 'confirm',
+      evidence,
+    });
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.message).toContain('Re-run delete-datasource to preview again');
+      expect(result.error.message).toContain('approve in the confirmation panel');
+      // The model-invisible confirm tool takes no `confirm` arg, so never tell the user to pass one.
+      expect(result.error.message).not.toContain('with confirm omitted');
+    }
+  });
+
   it('on confirm, allows and emits an ALLOWED audit when evidence.verify is true', async () => {
     const evidence = makeEvidence({ verify: vi.fn().mockResolvedValue(true) });
     const result = await run({ phase: 'confirm', evidence });

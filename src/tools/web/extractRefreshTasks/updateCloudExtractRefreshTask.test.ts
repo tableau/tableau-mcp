@@ -12,8 +12,12 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { auditRecordSchema } from '../_lib/auditRecord.js';
+import { AppApprovalEvidence } from '../_lib/evidence.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getUpdateCloudExtractRefreshTaskTool } from './updateCloudExtractRefreshTask.js';
+import {
+  getUpdateCloudExtractRefreshTaskTool,
+  scheduleBinding,
+} from './updateCloudExtractRefreshTask.js';
 
 // Auto-mock the logger so the durable audit record emitted by the mutation guard is captured as a
 // spy call (AC-6) rather than written to stderr.
@@ -53,6 +57,11 @@ const mocks = vi.hoisted(() => ({
   mockUpdateCloudExtractRefreshTask: vi.fn(),
   mockQueryUserOnSite: vi.fn(),
   mockAssertAdmin: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -113,6 +122,8 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
     mocks.mockQueryUserOnSite.mockResolvedValue({ siteRole: 'SiteAdministratorCreator' });
     mocks.mockUpdateCloudExtractRefreshTask.mockResolvedValue(new Ok(updatedTask));
+    // Default: mcp-apps flag OFF → today's exact confirm-only behavior.
+    mocks.mockIsFeatureEnabled.mockReturnValue(false);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -662,6 +673,62 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       });
       expect(result.isError).toBe(false);
       expect(mocks.mockUpdateCloudExtractRefreshTask).toHaveBeenCalled();
+    });
+  });
+
+  // --- MCP-Apps flag ON: preview carries the iframe app + records a human-approval window ---
+
+  describe('with mcp-apps flag ON', () => {
+    beforeEach(() => {
+      mocks.mockIsFeatureEnabled.mockReturnValue(true);
+    });
+
+    it('carries the update-cloud-extract-refresh-task app config so the host renders the confirm iframe', () => {
+      const tool = getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+      expect(tool.app).toBeDefined();
+      expect(tool.app?.resourceUri).toContain('update-cloud-extract-refresh-task');
+    });
+
+    it('preview returns an AppToolResult panel payload AND records a single-use human approval', async () => {
+      const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.data.kind).toBe('update-cloud-extract-refresh-task-confirm');
+      expect(payload.data.taskId).toBe(validTaskId);
+      expect(payload.data.schedule.frequency).toBe('Weekly');
+      expect(typeof payload.data.expiresAtMs).toBe('number');
+      // SECURITY: no secret/token is transported to the iframe — approval is presence-based.
+      expect(result.content[0].text).not.toMatch(/nonce|token|secret/i);
+      // The destructive update never runs during preview.
+      expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+
+      // The approval was recorded under the 'update-cloud-extract-refresh-task' namespace, bound to
+      // the previewed schedule — so verify must pass the SAME schedule binding the preview folded
+      // into the approval key (an approval minted for schedule A does not satisfy a confirm for B).
+      const extra = getMockRequestHandlerExtra();
+      await expect(
+        new AppApprovalEvidence('update-cloud-extract-refresh-task').verify({
+          restApi: { siteId: 'test-site-id' } as never,
+          siteId: 'test-site-id',
+          target: { id: validTaskId, kind: 'extract-refresh-task' },
+          tool: 'confirm-update-cloud-extract-refresh-task',
+          userLuid: extra.getUserLuid(),
+          binding: scheduleBinding(validSchedule),
+        }),
+      ).resolves.toBe(true);
+    });
+
+    it('routes confirm:true to the human-gesture panel instead of updating (no model self-confirm)', async () => {
+      const result = await getToolResult({
+        taskId: validTaskId,
+        schedule: validSchedule,
+        confirm: true,
+      });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('confirm-update-cloud-extract-refresh-task');
+      expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
     });
   });
 });
