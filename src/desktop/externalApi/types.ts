@@ -12,15 +12,15 @@ import { z } from 'zod';
 
 /** Route paths served by the running Desktop loopback host. */
 export const EXTERNAL_API_ROUTES = {
-  health: '/v1/health',
-  app: '/v1/app',
-  workbookDocument: '/v1/workbook/document',
-  invokeCommand: '/v1/app:invokeCommand',
+  health: '/v0/health',
+  app: '/v0/app',
+  workbookDocument: '/v0/workbook/document',
+  invokeCommand: '/v0/app:invokeCommand',
   openapi: '/openapi.json',
   oauthProtectedResource: '/.well-known/oauth-protected-resource',
 } as const;
 
-/** Response headers on `GET /v1/workbook/document`. Matched case-insensitively. */
+/** Response headers on `GET /v0/workbook/document`. Matched case-insensitively. */
 export const HEADER_APPLICATION_VERSION = 'x-tableau-application-version';
 export const HEADER_XSD_PAYLOAD_VERSION = 'x-tableau-xsd-payload-version';
 
@@ -74,8 +74,8 @@ export const problemResponseSchema = z
 export type ProblemResponse = z.infer<typeof problemResponseSchema>;
 
 /**
- * Operation envelope returned by `POST /v1/workbook/document` and
- * `POST /v1/app:invokeCommand`. `result` is captured on success; `state` +
+ * Operation envelope returned by `POST /v0/workbook/document` and
+ * `POST /v0/app:invokeCommand`. `result` is captured on success; `state` +
  * `createdAt`/`completedAt` (ISO8601-Z) describe the operation lifecycle.
  */
 export const operationEnvelopeSchema = z
