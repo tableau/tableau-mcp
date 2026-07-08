@@ -138,7 +138,9 @@ function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): 
       'Confidence was below the floor. Re-examine the candidate template(s), pick the best fit, and re-propose with higher confidence.';
   } else if (TIER2_REASONS.has(reason)) {
     next =
-      'This ask is not a fast-path template bind. Author the worksheet with the general field/worksheet build tools instead.';
+      'This ask is not a fast-path template bind. Author the worksheet with the general field/worksheet build tools instead. ' +
+      'If a blocker names a real but not-fast-path-eligible template, that template can still be applied via the manual chain: ' +
+      'get-workbook-xml -> inject-template (that template_name + an explicit field_mapping) -> apply-workbook.';
   } else {
     next = 'Author the worksheet with the general build tools instead.';
   }
@@ -156,6 +158,14 @@ function buildGuidance(res: BinderResult): string {
         'No deterministic (no-LLM) match. Choose exactly one template from llm_input.candidate_templates, ' +
         'bind every bindable slot to a field from llm_input.fields (match role/kind; use the exact field name), ' +
         'then call bind-template again with { session, ask, proposal } matching output_schema. ' +
+        // W60 pie-anyway gap: candidates carry ONLY fast-path-eligible templates, so an ask naming an
+        // unstamped shape (canonically pie) dead-ended here with no honest route — name both exits.
+        'If the asked chart shape is not among the candidates (e.g. pie/donut — no pie template is ' +
+        'fast-path eligible), do not force a mismatched proposal: bind the nearest candidate and tell the ' +
+        'user in one sentence why (for a pie ask, a sorted bar or treemap compares shares more precisely); ' +
+        'if they explicitly want the exact shape anyway, use the manual chain — get-workbook-xml -> ' +
+        "inject-template with template_name 'part-to-whole-pie-chart' (field_mapping: Region -> the " +
+        'category dimension, Sales -> the measure) -> apply-workbook. ' +
         `${DERIVATION_OVERRIDE_INSTRUCTION}.`
       );
     case 'escalate':
