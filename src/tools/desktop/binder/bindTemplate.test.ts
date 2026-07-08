@@ -10,7 +10,7 @@ import { DesktopDiscoverer } from '../../../desktop/desktopDiscoverer.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
-import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
+import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import * as validationRegistry from '../../../desktop/validation/registry.js';
 import {
   DesktopCommandExecutionError,
@@ -48,21 +48,15 @@ vi.mock('../../../desktop/templates/injectTemplateCore.js', () => ({
 }));
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('../../../desktop/validation/registry.js');
-// Partial fs mock: bind-template reads the bound template via the NAMED `readFileSync`
-// import, so stub ONLY the sentinel mock-template path. Real manifest/content reads go
-// through the DEFAULT fs import (manifest.ts / provider.ts) and stay live, so the
-// existing tests that exercise the bundled provider for real are unaffected.
+// Partial fs mock: the bound template is read via the mocked SEA-aware
+// `readTemplate` seam (templatePath.js above), so fs reads stay live for the real
+// manifest/content loads (manifest.ts / provider.ts via the assets seam); only
+// writes are stubbed so no test touches disk.
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
   return {
     ...actual,
     default: (actual as unknown as { default?: typeof actual }).default ?? actual,
-    readFileSync: vi.fn((path: unknown, ...rest: unknown[]) => {
-      if (typeof path === 'string' && path.includes('mock-templates')) {
-        return '<template/>';
-      }
-      return (actual.readFileSync as (...a: unknown[]) => unknown)(path, ...rest);
-    }),
     writeFileSync: vi.fn(),
   };
 });
@@ -347,7 +341,7 @@ function setupAutoApplyMocks({
   vi.spyOn(bundledIntelligenceProvider, 'listTemplateManifests').mockReturnValue([
     { template: 'bar-basic', fast_path_eligible: fastPathEligible } as unknown as TemplateManifest,
   ]);
-  vi.mocked(getTemplatePath).mockReturnValue('/mock-templates/bar-basic.xml');
+  vi.mocked(readTemplate).mockReturnValue('<template/>');
   vi.mocked(buildInjectedWorkbookXml).mockReturnValue(inject);
   // Force loadWorkbookXml down its text branch so the real validated path runs
   // without touching the on-disk JSON cache (DesktopCache mkdirs in its ctor).

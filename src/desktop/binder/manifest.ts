@@ -3,9 +3,13 @@
 // Tier-1 fast-path binder — manifest loader I/O (design doc §2.1, §3.1).
 //
 // `loadManifests()` mirrors the repo loader idiom (`src/search/index.ts`
-// `loadWorkbookExamples`): a repoRoot-relative directory read, `JSON.parse`,
-// and a module-level cache. It returns the per-template manifests keyed by
-// template name (== filename == inject-template `template_name`).
+// `loadWorkbookExamples`): a directory listing, `JSON.parse`, and a module-level
+// cache. It returns the per-template manifests keyed by template name
+// (== filename == inject-template `template_name`). Reads go through the
+// SEA-aware assets seam (`readDataAsset`/`listDataAssetNames`, see
+// `src/desktop/assets.ts`) so a Single Executable Application binary with no
+// on-disk data dir loads the embedded manifests; normal builds/tests fall back
+// to the disk data dir exactly like the templates seam (#433).
 //
 // The PURE half — shape/enum validation (`validateManifest`) plus the eligibility
 // predicates (`computeFixtureBind`, `computeFastPathEligible`) — now lives in the
@@ -19,6 +23,7 @@
 import fs from 'fs';
 import path from 'path';
 
+import { listDataAssetNames, readDataAsset, runningAsSea } from '../assets.js';
 import type { TemplateManifest } from './manifest-types.js';
 import {
   type BinderFixture,
@@ -131,13 +136,25 @@ export const CONTENT_MANIFEST_PATH = path.join(DATA_DIR, 'content-manifest.json'
 export const TEMPLATE_XML_DIR = path.join(DATA_DIR, 'data-visualization-templates-xml');
 const MANIFEST_SUFFIX = '.manifest.json';
 
+// Asset keys (desktop/data-relative) for the SEA-aware seam. The absolute-path
+// constants above remain for consumers that still build disk paths (provider.ts
+// TEMPLATE_XML_DIR/CONTENT_MANIFEST_PATH, the manifest tests).
+const MANIFESTS_ASSET_DIR = 'template-manifests';
+const FIXTURE_ASSET = 'template-manifests.fixture.json';
+
 let _manifestsCache: Map<string, TemplateManifest> | null = null;
 
 let _fixtureCache: BinderFixture | null = null;
 /** Load the committed schema fixture the eligibility gate binds against. */
 export function loadBinderFixture(): BinderFixture {
   if (_fixtureCache) return _fixtureCache;
-  const raw = fs.readFileSync(BINDER_FIXTURE_PATH, 'utf8');
+  const raw = readDataAsset(FIXTURE_ASSET);
+  if (raw === null) {
+    // Fail closed like the old fs.readFileSync ENOENT throw.
+    throw new Error(
+      `Binder fixture asset '${FIXTURE_ASSET}' is missing or unreadable (disk fallback: ${BINDER_FIXTURE_PATH})`,
+    );
+  }
   const parsed = JSON.parse(raw) as BinderFixture;
   _fixtureCache = parsed;
   return parsed;
@@ -152,17 +169,22 @@ export function loadBinderFixture(): BinderFixture {
 export function loadManifests(): Map<string, TemplateManifest> {
   if (_manifestsCache) return _manifestsCache;
   const cache = new Map<string, TemplateManifest>();
-  if (!fs.existsSync(MANIFESTS_DIR)) {
-    _manifestsCache = cache;
-    return cache;
-  }
-  const files = fs
-    .readdirSync(MANIFESTS_DIR)
+  // Disk builds keep the old empty-cache behavior for a missing directory; SEA
+  // builds fail closed below because an empty listing means the embedded supply is broken.
+  const files = listDataAssetNames(MANIFESTS_ASSET_DIR)
     .filter((f) => f.endsWith(MANIFEST_SUFFIX))
     .sort();
+  if (runningAsSea() && files.length === 0) {
+    throw new Error(
+      `SEA template manifest asset directory 'desktop/data/${MANIFESTS_ASSET_DIR}' ` +
+        'is missing or empty',
+    );
+  }
   for (const file of files) {
-    const filePath = path.join(MANIFESTS_DIR, file);
-    const raw = fs.readFileSync(filePath, 'utf8');
+    const raw = readDataAsset(`${MANIFESTS_ASSET_DIR}/${file}`);
+    if (raw === null) {
+      throw new Error(`Manifest ${file} is missing or unreadable`);
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);

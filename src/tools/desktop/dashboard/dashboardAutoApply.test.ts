@@ -12,7 +12,7 @@ import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provi
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
 import * as injectTemplateModule from '../../../desktop/templates/injectTemplate.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
-import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
+import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import * as validationRegistry from '../../../desktop/validation/registry.js';
 import { NoDesktopInstancesFoundError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -41,17 +41,14 @@ vi.mock('../../../desktop/desktopDiscoverer.js');
 vi.mock('../../../desktop/libraries/workbook-serialization-converter/index.js');
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('../../../desktop/validation/registry.js');
+// Partial fs mock: templates come from the mocked SEA-aware `readTemplate` seam
+// (templatePath.js above); fs reads stay live for the real manifest/content loads
+// and only writes are stubbed so no test touches disk.
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
   return {
     ...actual,
     default: (actual as unknown as { default?: typeof actual }).default ?? actual,
-    readFileSync: vi.fn((path: unknown, ...rest: unknown[]) => {
-      if (typeof path === 'string' && path.includes('mock-templates')) {
-        return '<template/>';
-      }
-      return (actual.readFileSync as (...a: unknown[]) => unknown)(path, ...rest);
-    }),
     writeFileSync: vi.fn(),
   };
 });
@@ -194,7 +191,7 @@ function setupMocks({
         ({ template, fast_path_eligible: fastPathEligible }) as unknown as TemplateManifest,
     ),
   );
-  vi.mocked(getTemplatePath).mockReturnValue('/mock-templates/tpl.xml');
+  vi.mocked(readTemplate).mockReturnValue('<template/>');
   vi.mocked(buildInjectedWorkbookXml).mockReturnValue(inject);
   vi.mocked(injectTemplateModule.injectTemplate).mockImplementation(
     (wb: string) => wb, // pass currentXml through unchanged; the wrapper content is asserted via the spy call args

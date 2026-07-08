@@ -146,6 +146,7 @@ describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
   });
 });
 
+
 function getServer(): DesktopMcpServer {
   const server = new DesktopMcpServer();
   server.mcpServer.registerTool = vi.fn();

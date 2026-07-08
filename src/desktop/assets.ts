@@ -6,6 +6,7 @@
 // build root, e.g. "desktop/data/corpus.json" or
 // "resources/desktop/knowledge/viz-design/chart-selection.md".
 
+import { createHash } from 'crypto';
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -32,6 +33,8 @@ export function getDataRoot(): string {
   return resolveRoot([
     join(safeDirname(), 'desktop', 'data'),
     join(safeDirname(), '..', 'src', 'desktop', 'data'),
+    // Unbundled source/vitest: getDirname() is src/utils, so the data dir is a sibling.
+    join(safeDirname(), '..', 'desktop', 'data'),
   ]);
 }
 
@@ -53,6 +56,9 @@ type SeaApi = {
 };
 
 let _seaApi: SeaApi | null | undefined;
+let _manifest: string[] | undefined;
+let _contentManifest: Map<string, { sha256: string; bytes: number }> | undefined;
+const _verifiedDataAssets = new Map<string, string>();
 
 function getSeaApi(): SeaApi | null {
   if (_seaApi !== undefined) {
@@ -90,18 +96,22 @@ function readSeaAssetText(key: string): string | null {
   }
 }
 
-let _manifest: string[] | null | undefined;
-
 function getManifest(): string[] {
-  if (_manifest !== undefined && _manifest !== null) {
+  if (_manifest !== undefined) {
     return _manifest;
   }
   const raw = readSeaAssetText(MANIFEST_KEY);
+  if (raw === null) {
+    throw new Error(`SEA asset listing '${MANIFEST_KEY}' is missing or unreadable`);
+  }
   try {
-    const parsed = raw ? JSON.parse(raw) : [];
-    _manifest = Array.isArray(parsed) ? parsed.map(String) : [];
-  } catch {
-    _manifest = [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || !parsed.every((key) => typeof key === 'string')) {
+      throw new Error('expected an array of asset keys');
+    }
+    _manifest = parsed;
+  } catch (error) {
+    throw new Error(`SEA asset listing '${MANIFEST_KEY}' is corrupt: ${(error as Error).message}`);
   }
   return _manifest;
 }
@@ -115,12 +125,85 @@ function toForwardSlash(value: string): string {
   return value.split('\\').join('/');
 }
 
+function sha256(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+function getContentManifestEntries(): Map<string, { sha256: string; bytes: number }> {
+  if (_contentManifest) {
+    return _contentManifest;
+  }
+  const raw = readSeaAssetText('desktop/data/content-manifest.json');
+  if (raw === null) {
+    throw new Error(
+      "SEA desktop data integrity manifest 'desktop/data/content-manifest.json' is missing or unreadable",
+    );
+  }
+  try {
+    const parsed = JSON.parse(raw) as {
+      resources?: Array<{ path?: unknown; sha256?: unknown; bytes?: unknown }>;
+    };
+    if (!Array.isArray(parsed.resources)) {
+      throw new Error('missing resources array');
+    }
+    _contentManifest = new Map(
+      parsed.resources.map((resource) => {
+        if (
+          typeof resource.path !== 'string' ||
+          typeof resource.sha256 !== 'string' ||
+          typeof resource.bytes !== 'number'
+        ) {
+          throw new Error('resource entries must include path, sha256, and bytes');
+        }
+        return [resource.path, { sha256: resource.sha256, bytes: resource.bytes }];
+      }),
+    );
+    return _contentManifest;
+  } catch (error) {
+    throw new Error(
+      `SEA desktop data integrity manifest 'desktop/data/content-manifest.json' is corrupt: ${
+        (error as Error).message
+      }`,
+    );
+  }
+}
+
+function readVerifiedSeaDataAsset(rel: string): string | null {
+  if (_verifiedDataAssets.has(rel)) {
+    return _verifiedDataAssets.get(rel)!;
+  }
+  const key = `desktop/data/${rel}`;
+  if (!getManifest().includes(key)) {
+    return null;
+  }
+  const raw = readSeaAssetText(key);
+  if (raw === null) {
+    throw new Error(`SEA data asset '${key}' is listed but missing or unreadable`);
+  }
+  if (rel !== 'content-manifest.json') {
+    const expected = getContentManifestEntries().get(rel);
+    if (!expected) {
+      throw new Error(`SEA data asset '${rel}' is missing from content-manifest.json`);
+    }
+    const actualHash = sha256(raw);
+    const actualBytes = Buffer.byteLength(raw);
+    if (actualHash !== expected.sha256 || actualBytes !== expected.bytes) {
+      throw new Error(
+        `SEA data asset '${rel}' failed sha256 integrity check: expected ${expected.sha256} ` +
+          `(${expected.bytes} bytes), got ${actualHash} (${actualBytes} bytes)`,
+      );
+    }
+  }
+  _verifiedDataAssets.set(rel, raw);
+  return raw;
+}
+
 // --- Logical asset accessors (SEA-aware, disk fallback) ---
 
 export function readDataAsset(relPath: string): string | null {
   const rel = toForwardSlash(relPath);
   if (runningAsSea()) {
-    return readSeaAssetText(`desktop/data/${rel}`);
+    return readVerifiedSeaDataAsset(rel);
   }
   try {
     return readFileSync(join(getDataRoot(), ...rel.split('/')), 'utf-8');
@@ -135,6 +218,13 @@ export function dataAssetExists(relPath: string): boolean {
     return getManifest().includes(`desktop/data/${rel}`);
   }
   return existsSync(join(getDataRoot(), ...rel.split('/')));
+}
+
+export function _setSeaApiForTest(seaApi: SeaApi | null): void {
+  _seaApi = seaApi;
+  _manifest = undefined;
+  _contentManifest = undefined;
+  _verifiedDataAssets.clear();
 }
 
 // File names (not full paths) of the entries under a desktop/data subdirectory.

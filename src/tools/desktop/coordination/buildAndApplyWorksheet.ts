@@ -9,7 +9,7 @@ import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import { spliceBoundFacet } from '../../../desktop/templates/facetSplice.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
-import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
+import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -87,15 +87,15 @@ export const getBuildAndApplyWorksheetTool = (
             ).toErr();
           }
 
-          const templatePath = getTemplatePath(template);
-          if (!existsSync(templatePath)) {
+          // SEA-aware template read (#433 seam): embedded asset in a SEA binary, disk otherwise.
+          let templateXml = readTemplate(template);
+          if (!templateXml) {
             return new ArgsValidationError(
               `Template not found: "${template}". Check available templates with list-xml-templates.`,
             ).toErr();
           }
 
           const workbookXml = readFileSync(workbookFile, 'utf-8');
-          let templateXml = readFileSync(templatePath, 'utf-8');
 
           // Determine datasource name from workbook
           let datasourceName = 'Unknown';

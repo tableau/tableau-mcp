@@ -30,7 +30,7 @@ import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorkshe
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
-import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
+import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 
 const SESSION = 'session-1';
@@ -72,12 +72,8 @@ function makeExtra(workbookXml = WORKBOOK_WITH_CAPTION): TableauDesktopRequestHa
   const extra = getMockRequestHandlerExtra();
   extra.getExecutor = vi.fn().mockResolvedValue({});
   vi.mocked(existsSync).mockReturnValue(true);
-  vi.mocked(readFileSync).mockImplementation((p) => {
-    const path = String(p);
-    if (path.includes('template')) return '<template/>' as any;
-    return workbookXml as any;
-  });
-  vi.mocked(getTemplatePath).mockReturnValue('/tmp/templates/chart.xml');
+  vi.mocked(readFileSync).mockReturnValue(workbookXml as any);
+  vi.mocked(readTemplate).mockReturnValue('<template/>');
   vi.mocked(listAvailableFields).mockReturnValue(FIELD_LIBRARY as any);
   // Default: 1 dimension slot + 2 measure slots.
   vi.mocked(getTemplateColumnRequirements).mockReturnValue([
@@ -311,10 +307,8 @@ describe('buildAndApplyWorksheetTool — mapping construction characterization',
 
     const extra = makeExtra();
     // Feed the calc-bearing template and drive the REAL rewriter.
-    vi.mocked(readFileSync).mockImplementation((p) => {
-      if (String(p).includes('template')) return CALC_TEMPLATE as any;
-      return WORKBOOK_WITH_CAPTION as any;
-    });
+    vi.mocked(readTemplate).mockReturnValue(CALC_TEMPLATE);
+    vi.mocked(readFileSync).mockReturnValue(WORKBOOK_WITH_CAPTION as any);
     vi.mocked(rewriteFieldReferences).mockImplementation(actual.rewriteFieldReferences);
 
     const capturedXml: string[] = [];

@@ -20,7 +20,7 @@ import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorkshe
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
-import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
+import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 
 const SESSION = 'session-1';
@@ -39,12 +39,8 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   const extra = getMockRequestHandlerExtra();
   extra.getExecutor = vi.fn().mockResolvedValue({});
   vi.mocked(existsSync).mockReturnValue(true);
-  vi.mocked(readFileSync).mockImplementation((p) => {
-    const path = String(p);
-    if (path.includes('template')) return TEMPLATE_XML as any;
-    return WORKBOOK_XML as any;
-  });
-  vi.mocked(getTemplatePath).mockReturnValue('/tmp/templates/ranking-ordered-bar.xml');
+  vi.mocked(readFileSync).mockReturnValue(WORKBOOK_XML as any);
+  vi.mocked(readTemplate).mockReturnValue(TEMPLATE_XML);
   vi.mocked(listAvailableFields).mockReturnValue([
     {
       column_ref: '[DS].[sum:Sales:qk]',
@@ -121,7 +117,7 @@ describe('buildAndApplyWorksheetTool', () => {
 
   it('should return error when template file does not exist', async () => {
     const extra = makeExtra();
-    vi.mocked(existsSync).mockImplementation((p) => !String(p).includes('template'));
+    vi.mocked(readTemplate).mockReturnValue(null);
 
     const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
     expect(result.isError).toBe(true);
