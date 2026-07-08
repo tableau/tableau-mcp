@@ -73,18 +73,30 @@ export type InjectTemplateCoreResult = { ok: true; xml: string } | { ok: false; 
 export function removeSameNamedWorksheet(workbookXml: string, title: string): string {
   const escaped = escapeXml(title);
   const nameAttr = escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const worksheetRe = new RegExp(`[ \\t]*<worksheet name='${nameAttr}'>[\\s\\S]*?</worksheet>\\n?`);
+  // Quote-agnostic (['"]): this pipeline's own serializer (parser.ts fast-xml-parser
+  // XMLBuilder, default quoteChar `"`) emits DOUBLE-quoted attributes, so a second apply
+  // over once-reserialized XML must still match — a single-quote-only regex silently
+  // no-ops the strip and the "Name (1)" pile-up returns (adversary P0-3).
+  const worksheetRe = new RegExp(
+    `[ \\t]*<worksheet name=['"]${nameAttr}['"]>[\\s\\S]*?</worksheet>\\n?`,
+  );
   if (!worksheetRe.test(workbookXml)) {
     return workbookXml;
   }
-  // Referenced by a dashboard zone? Leave it alone (fail-safe to Desktop dedup).
-  const zoneRe = new RegExp(`<zone [^>]*name='${nameAttr}'`);
+  // Referenced by a dashboard zone? Leave it alone (fail-safe to Desktop dedup). This
+  // check MUST also be quote-agnostic: on reserialized double-quoted XML a single-quote
+  // zone regex would miss the reference and strip a dashboard's member sheet.
+  const zoneRe = new RegExp(`<zone [^>]*name=['"]${nameAttr}['"]`);
   if (zoneRe.test(workbookXml)) {
     return workbookXml;
   }
   let out = workbookXml.replace(worksheetRe, '');
+  // Attribute-order tolerant (lookaheads, not a hardcoded `class='worksheet'` first):
+  // the serializer/Desktop may emit an attribute that sorts before `class` (e.g.
+  // `active`), which defeated the old anchored form (adversary P2-7). Match any
+  // <window> tag that carries BOTH class=worksheet AND the target name, in any order.
   const windowRe = new RegExp(
-    `[ \\t]*<window class='worksheet'[^>]*name='${nameAttr}'[^>]*(?:/>|>[\\s\\S]*?</window>)\\n?`,
+    `[ \\t]*<window\\b(?=[^>]*\\bclass=['"]worksheet['"])(?=[^>]*\\bname=['"]${nameAttr}['"])[^>]*(?:/>|>[\\s\\S]*?</window>)\\n?`,
   );
   out = out.replace(windowRe, '');
   return out;

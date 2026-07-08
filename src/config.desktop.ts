@@ -5,6 +5,13 @@ import { parseNumber } from './utils/parseNumber.js';
 
 export class Config extends BaseConfig {
   agentApiClientConfig: AgentApiClientConfig;
+  /**
+   * Which set of desktop tools to register (W60 spike lever 1 / preamble P1). Normalized
+   * (trim + lowercase). '' (unset) or 'full' registers the full set; 'demo' registers the
+   * slim fast-path + escalation-fallback set; any other value falls back to full with a
+   * logged warning. Slimming the registered surface cuts per-turn schema tokens/latency.
+   */
+  toolProfile: string;
 
   /**
    * When true, the desktop server talks to Tableau Desktop's new "External Client API"
@@ -26,6 +33,7 @@ export class Config extends BaseConfig {
       AGENT_API_POLL_INTERVAL_MS: agentApiPollIntervalMs,
       TABLEAU_EXTERNAL_API: externalApi,
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
+      TOOL_PROFILE: toolProfile,
     } = cleansedVars;
 
     if (this.transport !== 'stdio') {
@@ -34,6 +42,7 @@ export class Config extends BaseConfig {
 
     this.externalApiEnabled = externalApi === '1' || externalApi === 'true';
     this.externalApiDiscoveryDir = externalApiDiscoveryDir || undefined;
+    this.toolProfile = (toolProfile ?? '').trim().toLowerCase();
 
     this.agentApiClientConfig = {
       agentApiBase: agentApiBase ?? 'http://127.0.0.1:8765/api/v1',
