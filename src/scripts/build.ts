@@ -1,7 +1,8 @@
 /* eslint-disable no-console */
 
 import { build, BuildOptions } from 'esbuild';
-import { chmod, copyFile, mkdir, rm } from 'fs/promises';
+import { cpSync } from 'fs';
+import { chmod, copyFile, cp, mkdir, rm } from 'fs/promises';
 import { resolve } from 'path';
 import { build as viteBuild } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
@@ -43,8 +44,8 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     },
     outfile: './build/index.js',
     // must be last so that the action can override previous build options
-    ...globalIdentifiers.reduce((acc, { name, defaultValue, action }) => {
-      return { ...acc, ...action(globalValues[name] ?? defaultValue) };
+    ...globalIdentifiers.reduce((acc, { name, defaultValue, getBuildOptions }) => {
+      return { ...acc, ...getBuildOptions(globalValues[name] ?? defaultValue) };
     }, {}),
   };
 
@@ -60,6 +61,13 @@ const globalValues: Record<GlobalIdentifierName, string> = {
 
   for (const warning of result.warnings) {
     console.log(`⚠️ ${warning.text}`);
+  }
+
+  if (variant === 'desktop' || variant === 'combined') {
+    copyDirectory('./resources/desktop', './build/resources/desktop');
+    // NOTE: desktop data is NOT copied here. It is staged below through the AUTHORITATIVE
+    // allowlist (`stagedDesktopData`). A blanket copy of src/desktop/data used to run here
+    // and silently defeated that allowlist (TR1) — do not reintroduce it.
   }
 
   console.log('🏗️ Building telemetry/tracing.js...');
@@ -91,6 +99,62 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     resolve(process.cwd(), 'build', 'features.json'),
   );
   console.log('✅ features.json copied successfully');
+
+  // Stage the bundled authoring data into the build output. esbuild bundles CODE
+  // only — these files are read at runtime via fs, so a published / npm-installed
+  // server has no data unless we copy them. The target `build/desktop/data` is the
+  // path server.desktop.ts resolves package-relative as DATA_ROOT (`__dirname/desktop/data`,
+  // where __dirname === build/ in the bundle); the binder, the BundledIntelligenceProvider,
+  // and the search library all read their inputs through it.
+  //
+  // AUTHORITATIVE ALLOWLIST, not a blanket copy (Lane M5 tarball scoping + TR1 fix): stage
+  // ONLY the entries below, so a large asset can never silently ride into the npm tarball.
+  // The earlier blanket `copyDirectory('./src/desktop/data', ...)` defeated this list and was
+  // removed. Every entry is resolved package-relative via DATA_ROOT and feeds either the
+  // binder core / BundledIntelligenceProvider (bind-template / list-templates) or a shipped
+  // search tool: tableau-desktop-commands-reference.json (search-commands),
+  // workbook-schema-reference.json (lookup-workbook-schema), corpus.json + examples/
+  // (search-examples / search-workbook-examples), and twb-example-index.json — the committed
+  // TRIMMED index (~920 KB). Its ~10 MB ungzipped source lives OUTSIDE this dir at
+  // src/desktop/data-source/ and is never staged.
+  //
+  // VARIANT-GATED: only the desktop tool surface (the `desktop` and `combined` variants)
+  // ever resolves `build/desktop/data` at runtime. The `default` variant's server
+  // (src/index.ts) never reads it — and `default` is the ONLY variant the publish pipeline
+  // builds via `npm run build` — so staging is skipped there to keep the default package lean.
+  if (variant === 'desktop' || variant === 'combined') {
+    console.log('🏗️ Staging desktop data (allowlist)...');
+    const desktopDataSrc = './src/desktop/data';
+    const desktopDataOut = './build/desktop/data';
+    // LOCKSTEP: this allowlist is mirrored in
+    // src/desktop/intelligence/content-manifest-staging.test.ts (STAGED_DESKTOP_DATA).
+    // build.ts runs an IIFE at import (can't be imported without side effects), so the
+    // test parses this array out of build.ts and fails if the two diverge. That test also
+    // PROVES every content-manifest.json resource lands under one of these roots and that
+    // the src/desktop/data-source/ trim source can never be staged.
+    const stagedDesktopData = [
+      'template-manifests', // MANIFESTS_DIR — loadManifests() (binder + provider)
+      'template-manifests.index.json', // MANIFEST_INDEX_PATH — loadManifests()
+      'template-manifests.fixture.json', // BINDER_FIXTURE_PATH — eligibility gate
+      'content-manifest.json', // CONTENT_MANIFEST_PATH — provider.getStatus/getContentManifest
+      'data-visualization-templates-xml', // TEMPLATE_XML_DIR — provider.getTemplateXmlFragment + content-manifest hashes
+      'templates', // legacy XML templates read via DATA_ROOT
+      'tableau-desktop-commands-reference.json', // searchLibrary COMMANDS_REFERENCE_PATH — search-commands
+      'workbook-schema-reference.json', // searchLibrary SCHEMA_REFERENCE_PATH — lookup-workbook-schema
+      'corpus.json', // searchExamples/searchWorkbookExamples CORPUS_PATH
+      'twb-example-index.json', // searchLibrary TWB_INDEX_PATH — committed trimmed index (~920 KB)
+      'examples', // searchLibrary EXAMPLES_DIR — search-examples
+    ];
+    await mkdir(desktopDataOut, { recursive: true });
+    for (const entry of stagedDesktopData) {
+      await cp(`${desktopDataSrc}/${entry}`, `${desktopDataOut}/${entry}`, { recursive: true });
+    }
+    console.log(
+      `✅ Desktop data staged to ${desktopDataOut} (${stagedDesktopData.length} entries)`,
+    );
+  } else {
+    console.log(`⏭️ Skipping desktop data staging for the '${variant}' variant (not read by it).`);
+  }
 
   console.log('🏗️ Building MCP Apps...');
   try {
@@ -143,3 +207,8 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     process.exit(1);
   }
 })();
+
+function copyDirectory(source: string, destination: string): void {
+  console.log(`🏗️ Copying ${source} to ${destination}...`);
+  cpSync(source, destination, { recursive: true });
+}

@@ -1,0 +1,118 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column caption='Profit Ratio' datatype='real' default-format='p0%' name='[Calculation_1368249927221915648]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='SUM([Profit])/SUM([Sales])' />
+        </column>
+        <column datatype='date' name='[Order Date]' role='dimension' type='ordinal' />
+        <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Segment]' role='dimension' type='nominal' />
+        <column datatype='string' name='[Sub-Category]' role='dimension' type='nominal' />
+        <column-instance column='[Order Date]' derivation='Month' name='[mn:Order Date:ok]' pivot='key' type='ordinal' />
+        <column-instance column='[Segment]' derivation='None' name='[none:Segment:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Calculation_1368249927221915648]' derivation='User' name='[usr:Calculation_1368249927221915648:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Order Date]' derivation='Year' name='[yr:Order Date:ok]' pivot='key' type='ordinal' />
+      </datasource-dependencies>
+      <filter class='categorical' column='[{{DATASOURCE}}].[none:Sub-Category:nk]'>
+        <groupfilter function='union' user:ui-domain='relevant' user:ui-enumeration='inclusive' user:ui-marker='enumerate'>
+          <groupfilter function='member' level='[none:Sub-Category:nk]' member='"Accessories"' />
+          <groupfilter function='member' level='[none:Sub-Category:nk]' member='"Appliances"' />
+          <groupfilter function='member' level='[none:Sub-Category:nk]' member='"Art"' />
+          <groupfilter function='member' level='[none:Sub-Category:nk]' member='"Binders"' />
+          <groupfilter function='member' level='[none:Sub-Category:nk]' member='"Bookcases"' />
+          <groupfilter function='member' level='[none:Sub-Category:nk]' member='"Chairs"' />
+          <groupfilter function='member' level='[none:Sub-Category:nk]' member='"Copiers"' />
+        </groupfilter>
+      </filter>
+      <slices>
+        <column>[{{DATASOURCE}}].[none:Sub-Category:nk]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='label'>
+        <format attr='text-format' field='[{{DATASOURCE}}].[mn:Order Date:ok]' value='iLLL' />
+      </style-rule>
+      <style-rule element='mark'>
+        <encoding attr='size-bar' field='[{{DATASOURCE}}].[usr:Calculation_1368249927221915648:qk]' field-type='quantitative' max-size='1' min-size='0.005' type='centersize' />
+        <encoding attr='color' field='[{{DATASOURCE}}].[usr:Calculation_1368249927221915648:qk]' num-steps='7' symmetric='false' type='custom-interpolated'>
+          <color-palette custom='true' name='' type='ordered-diverging'>
+            <color>#9e3d22</color>
+            <color>#ad4523</color>
+            <color>#bc4d23</color>
+            <color>#cb5522</color>
+            <color>#d95e21</color>
+            <color>#e76820</color>
+            <color>#ee7725</color>
+            <color>#f58a30</color>
+            <color>#fa9e3f</color>
+            <color>#fdb053</color>
+            <color>#ffc171</color>
+            <color>#d9d5c9</color>
+            <color>#dcdcdc</color>
+            <color>#dfdfdf</color>
+            <color>#e3e3e3</color>
+            <color>#e6e6e6</color>
+            <color>#eaeaea</color>
+            <color>#ededed</color>
+            <color>#f1f1f1</color>
+            <color>#f4f4f4</color>
+            <color>#f8f8f8</color>
+            <color>#fbfbfb</color>
+            <color>#ffffff</color>
+          </color-palette>
+        </encoding>
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='cols' value='false' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-disallow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Square' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[usr:Calculation_1368249927221915648:qk]' />
+          <text column='[{{DATASOURCE}}].[usr:Calculation_1368249927221915648:qk]' />
+        </encodings>
+        <style>
+          <style-rule element='mark'>
+            <format attr='mark-labels-show' value='true' />
+            <format attr='mark-labels-cull' value='true' />
+            <format attr='mark-labels-line-first' value='true' />
+            <format attr='mark-labels-line-last' value='true' />
+            <format attr='mark-labels-range-min' value='true' />
+            <format attr='mark-labels-range-max' value='true' />
+            <format attr='mark-labels-mode' value='all' />
+            <format attr='mark-labels-range-scope' value='pane' />
+            <format attr='mark-labels-range-field' value='' />
+            <format attr='has-stroke' value='false' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[{{DATASOURCE}}].[mn:Order Date:ok]</rows>
+    <cols>([{{DATASOURCE}}].[none:Segment:nk] / [{{DATASOURCE}}].[yr:Order Date:ok])</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

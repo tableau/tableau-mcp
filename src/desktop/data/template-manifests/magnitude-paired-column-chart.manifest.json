@@ -1,0 +1,78 @@
+{
+  "template": "magnitude-paired-column-chart",
+  "family": "magnitude",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [
+    "HARDCODED_FILTER_MEMBERS"
+  ],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "paired-column",
+    "paired-columns",
+    "grouped-column",
+    "side-by-side-columns",
+    "magnitude"
+  ],
+  "description": "A paired (grouped) column chart: vertical bars for a measure, grouped by a category and paired by a period (Year) on the column axis, colored by the period — the vertical sibling of the paired-bar magnitude comparison. Lane W10-F1: BLOCKED (fast_path_blockers HARDCODED_FILTER_MEMBERS) because its year filter is a load-bearing EXCLUSION — see hazard hardcoded-filter-blocking.",
+  "slots": [
+    {
+      "slot_id": "sales",
+      "template_field": "Sales",
+      "derivation": "sum",
+      "role": [
+        "rows"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "Column height — the magnitude being compared across periods."
+    },
+    {
+      "slot_id": "region",
+      "template_field": "Region",
+      "derivation": "none",
+      "role": [
+        "cols"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "Outer group on the column axis (nested as Region / Year) — one cluster of paired columns per member. Template column carries aggregate-role-from='[State/Province]' (cosmetic — see hazard hidden-aggregate-role-from)."
+    },
+    {
+      "slot_id": "order_date",
+      "template_field": "Order Date",
+      "derivation": "yr",
+      "role": [
+        "cols",
+        "color"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "notes": "Year — the inner pairing dimension on the column axis AND color. Used at a single derivation (yr), so no qualified key is required."
+    }
+  ],
+  "calcs": [],
+  "hazards": [
+    {
+      "code": "hardcoded-filter-blocking",
+      "detail": "The source workbook filters Year of Order Date with an EXCLUSION (function='except') that removes {2024, 2025} — a partial/incomplete-recent-year guard (short partial-year columns would distort the paired-column magnitude read). The factory filter policy fails CLOSED on exclusions: dropping or neutralizing an exclusion WIDENS the data (re-includes the removed years) in a potentially result-corrupting direction, and the excluded years are source-calendar literals. Kept VERBATIM and flagged HARDCODED_FILTER_MEMBERS — not fast-path eligible until a follow-up re-expresses the exclusion as a declared 'exclude incomplete periods' slot.",
+      "xml": "magnitude-paired-column-chart.xml:17"
+    },
+    {
+      "code": "hidden-aggregate-role-from",
+      "detail": "[Region] carries aggregate-role-from='[State/Province]', a cosmetic secondary-role hint that is not rewritten onto the bound field (same behavior as magnitude-paired-bar / slope-chart). No binding impact.",
+      "xml": "magnitude-paired-column-chart.xml:11"
+    }
+  ]
+}

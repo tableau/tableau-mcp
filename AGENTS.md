@@ -6,7 +6,7 @@ Repo-level contract for the global agent OS. Defines what "correct" means in `ta
 
 ## Project overview
 
-`@tableau/mcp-server` — an MCP server "helping agents see and understand data." Exposes Tableau capabilities to MCP clients over stdio and HTTP. Ships multiple build variants (default web, **desktop**, combined) from one codebase via `src/scripts/build.ts` + esbuild conditional bundling. An active migration on `feature/authoring` ports Tableau Desktop *authoring* tools from the `agent-to-tableau-desktop` repo into `src/tools/desktop/`.
+`@tableau/mcp-server` — an MCP server "helping agents see and understand data." Exposes Tableau capabilities to MCP clients over stdio and HTTP. Ships multiple build variants (default web, **desktop**, combined) from one codebase via `src/scripts/build.ts` + esbuild conditional bundling. An active migration on `feature/authoring` ports Tableau Desktop *authoring* tools from the `agent-to-tableau-desktop` repo/source implementation into `src/tools/desktop/`.
 
 ## Architecture
 

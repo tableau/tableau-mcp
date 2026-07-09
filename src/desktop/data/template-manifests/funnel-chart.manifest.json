@@ -1,0 +1,105 @@
+{
+ "template": "funnel-chart",
+ "family": "specialized",
+ "readiness": "YELLOW",
+ "fast_path_eligible": true,
+ "fast_path_blockers": [],
+ "portability_evidence": {
+  "fixture_bind": true,
+  "render_verified": "live-2026-07-06",
+  "render_evidence": {
+   "method": "gate-composite",
+   "date": "2026-07-06",
+   "structural": 0.97297,
+   "critical_pass": "5/5",
+   "pixel": 1.0,
+   "pixel_regions": 6,
+   "sanity": "sane",
+   "sanity_signals": [
+    "mark-count=pass reconciled=true (4=4=EXPECTED_COUNT, Worksheet>Copy>Data on source and applied sheets)",
+    "caption-leak=pass"
+   ],
+   "run": "per-leg source-anchor replay (W38-LIVE-2); creative-bar funnel, native Ship Mode stage order; sanity earned via reconciled counts + positive no-captions pass (W38-B gate provenance fix)",
+   "artifacts": "local-only under ~/TableauGoldens/lab/ (funnel* renders, worksheet XMLs, w38l2 stamp JSON)",
+   "basis": "golden-parity gate run 2026-07-06 (source-anchor replay, W38-LIVE-2): structural 0.97297 (5/5 critical; sole miss = salience-1 resolved-title, sheet names differ by design), pixel 1.0 (6 ROIs, same-geometry captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 4=4=EXPECTED_COUNT",
+   "lane": "fable-direct stamp run 2026-07-06 (orchestrator gate run over W38-LIVE-2 per-leg evidence; grade scratchpad imports parity-grade.mjs verbatim)",
+   "gate_composite": 98,
+   "high_pass": "0/0",
+   "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 ROIs). Source and applied are two INDEPENDENT renders of the same data on the same instance."
+  }
+ },
+ "datasource_placeholder": true,
+ "placeholders": [
+  "TITLE",
+  "DATASOURCE"
+ ],
+ "intent_keywords": [
+  "funnel",
+  "pipeline",
+  "conversion",
+  "stage",
+  "deal-flow",
+  "drop-off"
+ ],
+ "description": "A funnel/conversion chart for staged pipeline drop-off: an ORDERED stage dimension on rows ([none:Stage:nk], data/ordinal order preserved — deliberately NO computed sort) and the amount measure as a Bar on cols ([sum:Amount:qk]), also on the size encoding so the bars taper toward the narrow end of the funnel. Reading top-to-bottom the shrinking bars show stage-to-stage conversion / drop-off. Serves UC6 (pipeline health & deal flow). Tableau has no native funnel mark, so this is authored as creative Bar usage generalized from the proven ranking-ordered-bar structure (NO usable funnel exemplar exists in the twb corpus — grep 'funnel' returns nothing). Live render-verified 2026-07-06 by the golden-parity gate (composite 98; see portability_evidence.render_evidence): structural 0.97297 (5/5 critical), pixel 1.0, binding-sanity sane via reconciled 4=4 Copy>Data mark counts and the positive no-captions caption-leak pass.",
+ "avoid_when": [
+  "The stages have no inherent sequence and you want members ranked by value — use ranking-ordered-bar (which sorts DESC by the measure); a funnel encodes a fixed conversion ORDER, not a value ranking.",
+  "You need proportional multi-path flow between many source/target nodes — that is a sankey, not a single-path funnel.",
+  "The amount is not monotonically non-increasing across the stages (a later stage can carry more than an earlier one) — the funnel silhouette assumes drop-off and inverts when a stage rises (see hazard stage-skipping)."
+ ],
+ "slots": [
+  {
+   "slot_id": "stage",
+   "template_field": "Stage",
+   "derivation": "none",
+   "role": [
+    "rows"
+   ],
+   "kind": "categorical",
+   "bindable": true,
+   "required": true,
+   "notes": "The ORDERED pipeline-stage dimension on rows — one funnel band per stage. The template applies NO computed sort, so stages render in the bound field's member order; bind an ordinal/ordered stage field (or set a manual member sort) so the conversion sequence is correct. See hazard stage-order-dependence. XML column-instance [none:Stage:nk]."
+  },
+  {
+   "slot_id": "amount",
+   "template_field": "Amount",
+   "derivation": "sum",
+   "role": [
+    "cols",
+    "size"
+   ],
+   "kind": "quantitative",
+   "bindable": true,
+   "required": true,
+   "notes": "The stage amount (deal value / count) — SUM([Amount]) → [sum:Amount:qk], the SAME instance on cols (bar length) AND on the size encoding (bar taper). One derivation, so no qualified key. replaceFieldReferences rewrites [Amount] in both places on bind."
+  }
+ ],
+ "calcs": [],
+ "hazards": [
+  {
+   "code": "stage-order-dependence",
+   "detail": "The template plots stages in the BOUND dimension's native member order (there is deliberately NO computed-sort element — sorting DESC by amount would reorder stages and destroy the sequence). A funnel's whole story is the fixed stage order (Lead → Qualified → Proposal → Closed); binding an unordered nominal stage field yields an arbitrary, meaningless funnel. Bind an ordinal/ordered stage field or set a manual member sort before trusting the silhouette.",
+   "xml": "funnel-chart.xml:34"
+  },
+  {
+   "code": "stage-skipping",
+   "detail": "Deals that skip stages, or are counted at more than one stage, break the monotonic drop-off the funnel assumes: a later stage can exceed an earlier one, so the silhouette inverts and the implied conversion rates mislead. The template cannot detect non-monotonic stages — validate the data is a clean single-count-per-stage funnel (or model conversion explicitly) before reading drop-off from the bars.",
+   "xml": "funnel-chart.xml:29"
+  },
+  {
+   "code": "funnel-is-creative-bar-usage",
+   "detail": "Tableau has no native funnel mark; this is an ordered Bar with amount on both length and size (taper) — a left-aligned conversion bar, NOT a centered/symmetric funnel. A true mirrored funnel needs a dual-axis with a negated companion measure, which the {stage, amount} slot vocabulary does not express. The chart communicates stage drop-off honestly but is not a geometrically symmetric funnel; do not claim symmetry.",
+   "xml": "funnel-chart.xml:24"
+  },
+  {
+   "code": "multi-currency-raw-sum",
+   "detail": "Product evidence (product team, 2026-07) - has bitten someone: a pipeline amount summed across rows with a MIXED currency_code (USD + EUR + GBP ...) adds different currency units as one number, so each stage bar and the implied conversion are silently WRONG. SUM([Amount]) feeds BOTH the bar length (cols) and the taper (size) with no currency awareness. Convert to a single reporting currency, or filter to one currency_code, before binding a monetary pipeline measure.",
+   "xml": "funnel-chart.xml:34"
+  },
+  {
+   "code": "not-live-render-verified",
+   "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop) and SUBSEQUENTLY live render-verified on 2026-07-06: portability_evidence.render_verified='live-2026-07-06' and fast_path_eligible=true. The golden-parity gate earned the stamp (composite 98: structural 0.97297, pixel 1.0, binding-sanity sane via reconciled 4=4 Copy>Data mark counts + the positive no-captions caption-leak pass) — the live render-readback proof the hermetic compile alone could not supply. See portability_evidence.render_evidence for the auditable basis.",
+   "xml": "funnel-chart.xml:1"
+  }
+ ]
+}

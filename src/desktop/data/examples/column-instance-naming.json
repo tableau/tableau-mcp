@@ -1,0 +1,71 @@
+{
+  "_description": "Column instance naming conventions for rows, cols, and datasource-dependencies",
+  "_feature": "worksheet,encoding",
+  "naming_pattern": "[derivation:FieldName:typePivot]",
+  "derivation_values": {
+    "None": "No aggregation (dimensions)",
+    "Sum": "SUM aggregation",
+    "Avg": "AVERAGE aggregation",
+    "Min": "MIN aggregation",
+    "Max": "MAX aggregation",
+    "Count": "COUNT aggregation",
+    "CountD": "COUNTD aggregation",
+    "Median": "MEDIAN aggregation",
+    "Attr": "ATTR aggregation",
+    "Stdev": "Standard deviation",
+    "Var": "Variance",
+    "Year": "YEAR date part",
+    "Quarter": "QUARTER date part",
+    "Month": "MONTH date part",
+    "Day": "DAY date part",
+    "Week": "WEEK date part",
+    "TruncYear": "Date truncated to year",
+    "TruncQuarter": "Date truncated to quarter",
+    "TruncMonth": "Date truncated to month",
+    "TruncDay": "Date truncated to day"
+  },
+  "type_pivot_values": {
+    "nk": "nominal-key (discrete dimension)",
+    "qk": "quantitative-key (continuous measure)",
+    "ok": "ordinal-key (ordered discrete)",
+    "nq": "nominal-quantitative (discrete measure — rare)"
+  },
+  "examples": {
+    "discrete_dimension": {
+      "column": "[Category]",
+      "instance_name": "[none:Category:nk]",
+      "derivation": "None",
+      "type": "nominal",
+      "pivot": "key"
+    },
+    "sum_measure": {
+      "column": "[Sales]",
+      "instance_name": "[sum:Sales:qk]",
+      "derivation": "Sum",
+      "type": "quantitative",
+      "pivot": "key"
+    },
+    "year_date": {
+      "column": "[Order Date]",
+      "instance_name": "[yr:Order Date:ok]",
+      "derivation": "Year",
+      "type": "ordinal",
+      "pivot": "key"
+    },
+    "truncated_month": {
+      "column": "[Order Date]",
+      "instance_name": "[tmo:Order Date:qk]",
+      "derivation": "TruncMonth",
+      "type": "quantitative",
+      "pivot": "key"
+    },
+    "count_distinct": {
+      "column": "[Customer ID]",
+      "instance_name": "[ctd:Customer ID:qk]",
+      "derivation": "CountD",
+      "type": "quantitative",
+      "pivot": "key"
+    }
+  },
+  "rows_cols_usage": "[datasourceId].[column-instance-name] — e.g. [federated.XXXX].[sum:Sales:qk]"
+}

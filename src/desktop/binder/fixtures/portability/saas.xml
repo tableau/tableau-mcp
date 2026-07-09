@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- W60 portability CI fixture A — SaaS revenue ops. Synthetic non-Superstore schema
+     from the W60 portability spike (~/.claude/state/minion/w60-portability-spike.md).
+     [Region Name] is a PLAIN string dimension with NO geo semantic-role — the geo-refusal
+     regression lock: choropleth/filled-map asks must stay not-bound even under the W60
+     geo-slot completion widening. -->
+<workbook>
+  <datasources>
+    <datasource name='SaaS Revenue'>
+      <column name='[Account Name]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Industry]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Region Name]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Churned]' role='dimension' type='nominal' datatype='boolean' />
+      <column name='[Renewal Date]' role='dimension' type='ordinal' datatype='date' />
+      <column name='[ARR]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Seats]' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>

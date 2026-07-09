@@ -61,6 +61,22 @@ else
   skip "unit tests (npx unavailable)"
 fi
 
+# ---- Desktop build (authoring variant; esbuild plus providers type build) -----
+run "desktop build" npm run build:desktop
+
+# ---- Desktop unit tests (focused authoring surface) ---------------------------
+if have npx; then
+  run "desktop unit tests" npx --no-install vitest run --config ./vitest.config.ts src/desktop src/tools/desktop
+else
+  skip "desktop unit tests (npx unavailable)"
+fi
+
+# ---- Lockstep-core hash gate (W14-LS1 mirror; see scripts/check-lockstep.mjs) --
+if have node; then
+  run "lockstep-core hash gate" node scripts/check-lockstep.mjs
+else
+  skip "lockstep-core hash gate (node unavailable)"
+fi
 # ---- Verdict -----------------------------------------------------------------
 echo
 if [ "$ran" -eq 0 ]; then

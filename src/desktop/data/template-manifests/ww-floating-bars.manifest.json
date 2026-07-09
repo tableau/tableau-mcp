@@ -1,0 +1,214 @@
+{
+  "template": "ww-floating-bars",
+  "family": "deviation",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "floating-bar",
+    "gantt",
+    "over-under",
+    "betting-line",
+    "final-vs-line",
+    "actual-vs-line"
+  ],
+  "description": "One floating (gantt) bar per category spanning a reference-line measure to a parsed actual score: a template SPLIT calc parses the combined actual score out of a compound '<code> <win>-<lose>' string (e.g. 'PHI 40-22' → 40+22=62), the size calc draws the span (actual − reference line), and an over/under SIGN calc colors each bar over (right/teal) vs under (left/red). Deviation of an actual outcome from a betting/reference line, per member.",
+  "avoid_when": [
+    "the actual field is not a compound '<prefix> <winner>-<loser>' score string — the SPLIT parse assumes a single-token prefix, a space, then a hyphen-separated winner-loser pair (e.g. 'PHI 40-22'); a different shape parses the wrong combined score",
+    "both endpoints are already numeric measures — bind a simpler dual-measure or reference-line deviation chart instead of the string-parse calc"
+  ],
+  "slots": [
+    {
+      "slot_id": "row_dimension",
+      "template_field": "Category",
+      "derivation": "none",
+      "role": [
+        "rows"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "The row/category each floating bar is drawn for (one mark per member)."
+    },
+    {
+      "slot_id": "line_measure",
+      "template_field": "Reference Value",
+      "derivation": "min",
+      "role": [
+        "cols",
+        "formula-input"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "The reference-line/betting-line endpoint on columns AND the subtrahend of the size and over/under calcs. Derivation 'min' is authored fidelity from the checkpoint — correct only at one-row-per-category grain (see min-derivation-per-row hazard)."
+    },
+    {
+      "slot_id": "actual_input",
+      "template_field": "Actual Input",
+      "derivation": "none",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "Compound-score STRING (e.g. 'PHI 40-22') SPLIT-parsed by the actual-score calc into a combined numeric score (40+22=62). Bindable + required so templates.ts rewriteFormulaFieldRefs repairs the bare [Actual Input] token and Gate 6 can prove the dependency is bound. Never placed on a shelf (no column-instance)."
+    }
+  ],
+  "calcs": [
+    {
+      "slot_id": "actual_score_calc",
+      "template_field": "Calculation_ActualScore",
+      "derivation": "usr",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "INT( SPLIT( TRIM( SPLIT( [Actual Input], \"-\", 1 ) ), \" \", 2 ) ) + INT( TRIM( SPLIT( [Actual Input], \"-\", 2 ) ) )",
+      "formula_refs": [
+        "Actual Input"
+      ],
+      "depends_on_slots": [
+        "actual_input"
+      ],
+      "notes": "GOLDEN actual-score parse (Over/Under and Betting Lines golden.twb: Winning Score = INT(SPLIT(TRIM(SPLIT([Final],'-',1)),' ',2)), Losing Score = INT(TRIM(SPLIT([Final],'-',2))), Total = Winning + Losing). Replaces the checkpoint's NULL-producing bare INT([Actual Input]) — INT() of a leading-alpha compound string ('PHI 40-22') is NULL, collapsing every bar to zero span. Not shelved; consumed as a template-internal input by the size and over/under calcs.",
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Actual Input",
+          "slot_id": "actual_input",
+          "slot_kind": "categorical",
+          "required": true,
+          "template_internal": false
+        }
+      ],
+      "avoid_when": [
+        "the actual string is not '<prefix> <winner>-<loser>' — the nested SPLIT/TRIM assumes a single-token prefix before the space and a hyphen between winner and loser scores"
+      ],
+      "prereqs": [
+        "compound-string-parse",
+        "raw-formula-refs"
+      ]
+    },
+    {
+      "slot_id": "bar_size_calc",
+      "template_field": "Calculation_GanttSize",
+      "derivation": "min",
+      "role": [
+        "size"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "[Calculation_ActualScore] - [Reference Value]",
+      "formula_refs": [
+        "Calculation_ActualScore",
+        "Reference Value"
+      ],
+      "depends_on_slots": [
+        "line_measure"
+      ],
+      "notes": "Bar length = parsed actual score − reference line. Consumes the template-internal actual-score calc (SPLIT-parsed) and the bindable Reference Value; rewriteFormulaFieldRefs repairs [Reference Value] on bind, and leaves the template-owned [Calculation_ActualScore] untouched (unmapped).",
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Calculation_ActualScore",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        },
+        {
+          "ref": "Reference Value",
+          "slot_id": "line_measure",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        }
+      ],
+      "avoid_when": [
+        "there is more than one row per category — the 'min' derivation collapses multi-row members to their minimum span"
+      ],
+      "prereqs": [
+        "min-derivation-per-row",
+        "raw-formula-refs"
+      ]
+    },
+    {
+      "slot_id": "over_under_calc",
+      "template_field": "Calculation_OverUnder",
+      "derivation": "sum",
+      "role": [
+        "color"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "SIGN([Calculation_ActualScore] - [Reference Value])",
+      "formula_refs": [
+        "Calculation_ActualScore",
+        "Reference Value"
+      ],
+      "depends_on_slots": [
+        "line_measure"
+      ],
+      "notes": "GOLDEN over/under color = sign(actual − line): +1 over (right/teal #76b7b2), -1 under (left/red #e15759), 0 push. Replaces the checkpoint's mis-chosen raw O/U Winner (Favorite/Underdog spread result) color. Shelved discretely as [sum:Calculation_OverUnder:ok] with a mark palette style-rule so the color splits by true over/under, not the spread.",
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Calculation_ActualScore",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        },
+        {
+          "ref": "Reference Value",
+          "slot_id": "line_measure",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        }
+      ],
+      "avoid_when": [
+        "over/under is not defined against the reference line — this SIGN colors purely by (parsed actual − reference), so a reference that is not the true betting/expected line mislabels the split"
+      ],
+      "prereqs": [
+        "compound-string-parse",
+        "raw-formula-refs"
+      ]
+    }
+  ],
+  "hazards": [
+    {
+      "code": "compound-string-parse",
+      "detail": "The actual-score calc parses a combined score out of a compound '<prefix> <winner>-<loser>' string via nested SPLIT/TRIM (GOLDEN semantics). The parse is dataset-shape-specific: a different string shape (multi-token prefix, no hyphen, non-numeric scores) yields NULL/garbage. Advisory only — surfaced via avoid_when and gated by render_verified, not a hard fast_path_blocker.",
+      "xml": "ww-floating-bars.xml:9"
+    },
+    {
+      "code": "raw-formula-refs",
+      "detail": "The calcs reference bare bindable [Actual Input]/[Reference Value]; templates.ts rewriteFormulaFieldRefs repairs them ONLY because both are bindable bare-key slots. The template-internal [Calculation_ActualScore] ref is intentionally left unmapped (a template-owned calc). Gate 6 asserts the bindable deps are bound before injection.",
+      "xml": "ww-floating-bars.xml:9"
+    },
+    {
+      "code": "min-derivation-per-row",
+      "detail": "The size calc and the reference line use derivation 'min' (authored fidelity from the checkpoint). Min equals the row value only when there is exactly one mark per Category; a category with multiple rows collapses to the minimum. Bind at one-row-per-category grain or override the derivation.",
+      "xml": "ww-floating-bars.xml:20"
+    }
+  ],
+  "golden": {
+    "checkpoint_render": "evals/cases/ww-2026-23-gantt-superbowl/reference/O_U Line.pdf"
+  }
+}

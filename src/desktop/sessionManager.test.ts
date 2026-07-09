@@ -29,6 +29,8 @@ describe('SessionManager', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    // W60 dead-pid pruning: fixture manifest pids are not real processes; force alive.
+    vi.spyOn(process, 'kill').mockReturnValue(true as never);
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin');
     vi.mocked(homedir).mockReturnValue(mockMacHomedir);
 

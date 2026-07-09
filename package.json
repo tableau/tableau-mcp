@@ -16,10 +16,12 @@
     "mcp"
   ],
   "bin": {
-    "tableau-mcp-server": "./build/index.js"
+    "tableau-mcp-server": "./build/index.js",
+    "tableau-desktop-mcp-server": "./build/index.desktop.js"
   },
   "exports": {
     ".": "./build/index.js",
+    "./desktop": "./build/index.desktop.js",
     "./tracing": "./build/telemetry/tracing.js",
     "./features/featureGateProvider": {
       "types": "./build/features/featureGateProvider.d.ts"
@@ -34,6 +36,8 @@
     "build:combined": "tsx src/scripts/build.ts --variant combined && tsc --project tsconfig.providers.json",
     "build:dev": "tsx src/scripts/build.ts --dev && tsc --project tsconfig.providers.json",
     "build:docker": "docker build -t tableau-mcp .",
+    "build:sea": "tsx src/scripts/buildSea.ts",
+    "build:sea:desktop": "tsx src/scripts/buildSea.ts --variant desktop",
     ":build:mcpb": "npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb",
     "build:mcpb": "run-s build:manifest :build:mcpb",
     "build:manifest": "tsx src/scripts/createClaudeMcpBundleManifest.ts",
@@ -71,6 +75,8 @@
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "fast-levenshtein": "^3.0.0",
+    "fast-xml-parser": "^5.9.0",
+    "fuse.js": "^7.4.2",
     "jose": "^6.0.12",
     "ssrfcheck": "^1.2.0",
     "ts-results-es": "^7.1.0",

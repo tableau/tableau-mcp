@@ -1,0 +1,78 @@
+{
+  "template": "slope-chart",
+  "family": "time-series",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "slope",
+    "slope-chart",
+    "slope-graph",
+    "before-after",
+    "two-period",
+    "change"
+  ],
+  "description": "A slope chart: a measure plotted against a truncated-quarter date, with a template-internal FIRST/LAST filter keeping only the two endpoint periods; one line per category shows the direction/magnitude of change between the two periods.",
+  "slots": [
+    {
+      "slot_id": "region",
+      "template_field": "Region",
+      "derivation": "none",
+      "role": [
+        "color",
+        "text"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "one slope line per member; also the line-end label. Template column carries aggregate-role-from='[State/Province]' — see hazard hidden-aggregate-role-from."
+    },
+    {
+      "slot_id": "profit",
+      "template_field": "Profit",
+      "derivation": "sum",
+      "role": [
+        "rows",
+        "text"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "the measure whose endpoint values define each slope; also the value label."
+    },
+    {
+      "slot_id": "order_date",
+      "template_field": "Order Date",
+      "derivation": "tqr",
+      "role": [
+        "cols"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "notes": "truncated-quarter date on the columns axis; the FIRST/LAST filter reduces it to the two endpoint periods."
+    }
+  ],
+  "calcs": [],
+  "hazards": [
+    {
+      "code": "slope-filter-table-calc",
+      "detail": "A template-internal boolean table calc 'FIRST()==0 or LAST()==0' filters to the two endpoint periods. It is NON-self-closing (nested <table-calc>), so parseTemplateCalcs (self-closing only) does NOT see it — it is NOT a declared calc slot and rides along verbatim. It has NO bindable inputs (FIRST/LAST are positional), so it is portable, but it assumes the bound temporal spans ≥2 periods; a single-period bind degenerates to one endpoint.",
+      "xml": "slope-chart.xml:10-13,25-27"
+    },
+    {
+      "code": "hidden-aggregate-role-from",
+      "detail": "[Region] aggregate-role-from='[State/Province]' is a cosmetic secondary-role hint that is not rewritten onto the bound field (same behavior as correlation-scatter-plot-chart).",
+      "xml": "slope-chart.xml:17"
+    }
+  ]
+}

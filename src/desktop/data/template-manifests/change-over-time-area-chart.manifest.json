@@ -1,0 +1,28 @@
+{
+  "template": "change-over-time-area-chart",
+  "family": "time-series",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": { "fixture_bind": true, "render_verified": "none" },
+  "datasource_placeholder": true,
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["area", "over-time", "change-over-time", "trend", "time-series", "filled-line"],
+  "description": "A filled area of an aggregated measure over a truncated date; a color dimension splits the area into bands.",
+  "slots": [
+    { "slot_id": "order_date", "template_field": "Order Date", "derivation": "tqr",
+      "role": ["cols"], "kind": "temporal", "bindable": true, "required": true,
+      "notes": "XML instance [tqr:Order Date:qk] derivation='Quarter-Trunc'; short-form 'tqr' IS a derivationMap key (long form differs: 'TruncQuarter'). Kept verbatim." },
+    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
+      "role": ["rows"], "kind": "quantitative", "bindable": true, "required": true },
+    { "slot_id": "region", "template_field": "Region", "derivation": "none",
+      "role": ["color"], "kind": "categorical", "bindable": true, "required": true,
+      "notes": "template column has aggregate-role-from='[State/Province]'; a cosmetic secondary-role hint carried onto the target, not rewritten (verification-report correction: GREEN -> YELLOW)." }
+  ],
+  "calcs": [],
+  "hazards": [
+    { "code": "hidden-aggregate-role-from",
+      "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten by replaceFieldReferences; the target field inherits the template's secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding (cosmetic), so fast_path_eligible stays true.",
+      "xml": "change-over-time-area-chart.xml:11" }
+  ]
+}

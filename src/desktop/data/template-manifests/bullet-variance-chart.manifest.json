@@ -1,0 +1,92 @@
+{
+  "template": "bullet-variance-chart",
+  "family": "deviation",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "bullet",
+    "variance",
+    "actual-vs-target",
+    "attainment",
+    "quota-attainment",
+    "target-line"
+  ],
+  "description": "A bullet/variance chart for actual-vs-target comparison: one Bar per category member (rep/region/segment on rows) whose length is the ACTUAL measure on cols ([sum:Actual:qk]), with a per-cell TARGET reference line (SUM([Target]) drawn as refline0) so the gap between the bar and the line reads as attainment/variance at a glance. Serves UC1 (sales performance & quota attainment). Generalized from the repo ranking-bullet-chart exemplar (bar + per-cell sum reference line); the Profit-Ratio color calc was dropped so the slot vocabulary is exactly {category, actual, target}. Structurally compiled hermetically, NOT live render-verified.",
+  "avoid_when": [
+    "The ask is a running cumulative build-up to a total (revenue minus costs, contribution to a whole) \u2014 that is a waterfall; this bullet compares each member's actual against its own target independently, not a cumulative path.",
+    "There is no meaningful target/goal/benchmark measure to compare against \u2014 without the target reference line this collapses to a plain ranked bar (use ranking-ordered-bar).",
+    "The target is a rate/ratio or an already-period-total that is not additive at the category grain \u2014 the reference line SUMs the target per cell (formula='sum'), so a non-additive target double-counts (see hazard target-summed-per-cell)."
+  ],
+  "slots": [
+    {
+      "slot_id": "category",
+      "template_field": "Category",
+      "derivation": "none",
+      "role": [
+        "rows"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "The comparison dimension on rows \u2014 one bullet row per member (rep / region / segment). XML column-instance [none:Category:nk]."
+    },
+    {
+      "slot_id": "actual",
+      "template_field": "Actual",
+      "derivation": "sum",
+      "role": [
+        "cols"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "The ACTUAL/attained measure \u2014 the bar length on cols, SUM([Actual]) \u2192 [sum:Actual:qk]. This is also the reference line's axis-column (the target line is drawn on the same axis as the actual bar)."
+    },
+    {
+      "slot_id": "target",
+      "template_field": "Target",
+      "derivation": "sum",
+      "role": [
+        "lod",
+        "reference-line"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "The TARGET/quota/goal measure. Carried on the level-of-detail (lod) shelf as SUM([Target]) \u2192 [sum:Target:qk] so it is in the view, and referenced by refline0 (value-column) as the per-cell target line. replaceFieldReferences rewrites [Target] in BOTH the lod instance and the reference-line on bind. See hazard target-summed-per-cell."
+    }
+  ],
+  "calcs": [],
+  "hazards": [
+    {
+      "code": "partial-period-attainment",
+      "detail": "A mid-period ACTUAL compared against a FULL-period target overstates the shortfall \u2014 the bar sits far below the target line simply because the quarter is not over, not because the member is behind. The template has no as-of/period-elapsed awareness: pro-rate the target to the elapsed period, scale the actual to a run-rate, or label the as-of date before reading the gap as risk.",
+      "xml": "bullet-variance-chart.xml:31"
+    },
+    {
+      "code": "zero-activity-members",
+      "detail": "A category member with no rows in the bound data produces NO bar (an inner-join / no-mark), so a zero-attainment rep/region silently disappears rather than showing a visible 0 bar beneath its target line \u2014 exactly the at-risk member the ask (\u201cwhich reps are at risk of missing\u201d) wants surfaced. Bind against data that carries every member (or densify/pad), or the chart hides its most important marks.",
+      "xml": "bullet-variance-chart.xml:29"
+    },
+    {
+      "code": "target-summed-per-cell",
+      "detail": "The target line is a per-cell reference line with formula='sum' (SUM([Target])), so it aggregates the target additively within each category cell. If the bound target is a rate/ratio, an average goal, or an already-rolled-up period total, SUM double-counts across the cell's rows and the line lands in the wrong place. Bind a target that is additive at the category grain, or switch the reference line's formula to average/median.",
+      "xml": "bullet-variance-chart.xml:31"
+    },
+    {
+      "code": "not-live-render-verified",
+      "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop). portability_evidence.render_verified='none' and fast_path_eligible=false: the template binds the committed fixture (fixture_bind computed true \u2014 a dim + two distinct measures) but has NO live render-readback proof. A live-YYYY-MM-DD stamp is EARNED later by the golden-parity gate / a hand-stamp with render_evidence, never granted at compile time.",
+      "xml": "bullet-variance-chart.xml:1"
+    }
+  ]
+}

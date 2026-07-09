@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- W60 portability CI fixture C — adversarial field-name collisions. Dimensions are
+     literally named [Trend] and [Waterfall Stage]; measures are named [Max Temp],
+     [Line Items], [Count of Errors], [Average Score]. These masking hazards MUST NOT
+     drive chart selection: a field named [Trend] must not hijack trend-line-chart, a
+     field named [Waterfall Stage] must not false-trigger the waterfall, and field names
+     containing max/count/average must not force an aggregation override. From the W60
+     portability spike (~/.claude/state/minion/w60-portability-spike.md). NOTE: no temporal
+     and no geo fields, so line/gantt/choropleth asks fail closed. -->
+<workbook>
+  <datasources>
+    <datasource name='Adversarial'>
+      <column name='[Trend]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Waterfall Stage]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Max Temp]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Line Items]' role='measure' type='quantitative' datatype='integer' />
+      <column name='[Count of Errors]' role='measure' type='quantitative' datatype='integer' />
+      <column name='[Average Score]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>

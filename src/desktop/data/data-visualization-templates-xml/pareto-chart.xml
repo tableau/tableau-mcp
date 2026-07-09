@@ -1,0 +1,98 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+        <datasource name='Parameters' />
+      </datasources>
+      <datasource-dependencies datasource='Parameters'>
+        <column caption='80%' datatype='real' name='[Parameter 3]' param-domain-type='any' role='measure' type='quantitative' value='0.80000000000000004'>
+          <calculation class='tableau' formula='0.80000000000000004' />
+        </column>
+      </datasource-dependencies>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Sub-Category]' role='dimension' type='nominal' />
+        <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Sales]' derivation='Sum' name='[pcto:cum:sum:Sales:qk]' pivot='key' type='quantitative'>
+          <table-calc aggregation='Sum' ordering-type='Rows' type='CumTotal' />
+          <table-calc ordering-type='Rows' type='PctTotal' />
+        </column-instance>
+        <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <computed-sort column='[{{DATASOURCE}}].[none:Sub-Category:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:Sales:qk]' />
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <encoding attr='space' class='0' field='[{{DATASOURCE}}].[pcto:cum:sum:Sales:qk]' field-type='quantitative' fold='true' scope='rows' type='space' />
+        <format attr='title' class='0' field='[{{DATASOURCE}}].[pcto:cum:sum:Sales:qk]' scope='rows' value='' />
+        <format attr='subtitle' class='0' field='[{{DATASOURCE}}].[pcto:cum:sum:Sales:qk]' scope='rows' value='' />
+        <format attr='auto-subtitle' class='0' field='[{{DATASOURCE}}].[pcto:cum:sum:Sales:qk]' scope='rows' value='true' />
+        <format attr='width' field='[{{DATASOURCE}}].[sum:Sales:qk]' value='51' />
+        <format attr='width' field='[{{DATASOURCE}}].[pcto:cum:sum:Sales:qk]' value='51' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='cols' value='false' />
+      </style-rule>
+      <style-rule element='refline'>
+        <format attr='fill-above' id='refline0' value='#00000000' />
+        <format attr='fill-below' id='refline0' value='#00000000' />
+        <format attr='fill-above' id='refline1' value='#00000000' />
+        <format attr='fill-below' id='refline1' value='#00000000' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane id='2' selection-relaxation-option='selection-relaxation-disallow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Bar' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[:Measure Names]' />
+        </encodings>
+        <reference-line axis-column='[{{DATASOURCE}}].[sum:Sales:qk]' enable-instant-analytics='true' formula='average' id='refline0' label-type='none' probability='95' scope='per-table' value-column='[Parameters].[Parameter 3]' z-order='1' />
+        <reference-line axis-column='[{{DATASOURCE}}].[pcto:cum:sum:Sales:qk]' enable-instant-analytics='true' formula='average' id='refline1' label-type='automatic' probability='95' scope='per-table' value-column='[Parameters].[Parameter 3]' z-order='2' />
+      </pane>
+      <pane id='3' selection-relaxation-option='selection-relaxation-disallow' y-axis-name='[{{DATASOURCE}}].[sum:Sales:qk]'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Bar' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[:Measure Names]' />
+        </encodings>
+      </pane>
+      <pane id='4' selection-relaxation-option='selection-relaxation-disallow' y-axis-name='[{{DATASOURCE}}].[pcto:cum:sum:Sales:qk]'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Line' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[:Measure Names]' />
+        </encodings>
+        <style>
+          <style-rule element='mark'>
+            <format attr='size' value='1.8790607452392578' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>([{{DATASOURCE}}].[sum:Sales:qk] + [{{DATASOURCE}}].[pcto:cum:sum:Sales:qk])</rows>
+    <cols>[{{DATASOURCE}}].[none:Sub-Category:nk]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

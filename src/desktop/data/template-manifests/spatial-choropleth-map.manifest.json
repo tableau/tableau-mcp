@@ -1,0 +1,102 @@
+{
+  "template": "spatial-choropleth-map",
+  "family": "spatial",
+  "readiness": "YELLOW",
+  "fast_path_eligible": true,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "live-2026-07-06",
+    "xml_sha256": "b75f203fdb787be456d1d37e74d3d292de8850ab3f304016e3ff5401dfc175ea",
+    "render_evidence": {
+      "method": "gate-composite",
+      "date": "2026-07-06",
+      "structural": 0.97297,
+      "critical_pass": "5/5",
+      "pixel": 1.0,
+      "pixel_regions": 5,
+      "sanity": "sane",
+      "sanity_signals": [
+        "mark-count=pass reconciled=true (49=49, Worksheet>Copy>Data on source and applied sheets)",
+        "caption-leak=pass"
+      ],
+      "run": "source-anchor replay on the source workbook's Superstore datasource; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via direct placeholder fill; hidden source worksheet surfaced via unhide+activate .twb bypass",
+      "artifacts": "local-only under ~/TableauGoldens/lab/choropleth-* (renders, worksheet XMLs, workbook cache)",
+      "basis": "golden-parity gate run 2026-07-06 (source-anchor replay): structural 0.97297 (5/5 critical), pixel 1.0 (5 ROIs, same-geometry captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 49=49 on source and applied renders | style-delta re-verify 2026-07-07: CookBook dark theme removed (black table background; choropleth also re-enabled base map layers). STRUCTURE unchanged. Live re-verified: bind(no-LLM)->inject->apply->render on Sample - Superstore, marks correct, light theme + map layers visually confirmed (W60). Pixel parity vs the dark source golden intentionally diverges on background/base-layer attrs.",
+      "lane": "fable-direct stamp day 2026-07-06 (orchestrator live gate run)",
+      "high_pass": "3/3",
+      "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 5 ROIs: whole-map ink-colors + hue, west/east/south clusters — all 1.0). Anchor-only in the hand-stamp sense is NOT the case here: source and applied are two INDEPENDENT renders of the same data.",
+      "gate_composite": 98
+    }
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "choropleth",
+    "filled-map",
+    "region-map",
+    "geographic-map",
+    "spatial",
+    "map"
+  ],
+  "description": "Filled (choropleth) map: one Multipolygon per geographic region, shaded by a continuous color measure. Standard geo dimensions (Country + State) on level-of-detail with generated Latitude/Longitude on rows/cols; SUM(measure) on color as a custom-interpolated diverging gradient. Factory-compiled from the CookBook 'Choropleth Map Viz' worksheet; structurally compiled and render-verified (live-2026-07-06).",
+  "avoid_when": [
+    "The ask is 'which region ranks highest/lowest' or needs precise cross-region value comparison — filled-area color is hard to compare quantitatively; prefer a ranked bar chart.",
+    "Regions differ wildly in physical size — large, low-value areas visually dominate (area is not magnitude); consider a symbol/bubble map sized by the measure instead.",
+    "The dimension has no geographic semantic-role (not a Country/State/etc.) — a choropleth needs fields Tableau can resolve to a filled geometry."
+  ],
+  "slots": [
+    {
+      "slot_id": "country",
+      "template_field": "Country",
+      "derivation": "none",
+      "role": [
+        "lod"
+      ],
+      "kind": "geo",
+      "bindable": true,
+      "required": true,
+      "notes": "Geographic dimension on level-of-detail (outer region). Binds to a Country/Region-class field; XML column-instance [none:Country:nk]."
+    },
+    {
+      "slot_id": "state",
+      "template_field": "State",
+      "derivation": "none",
+      "role": [
+        "lod"
+      ],
+      "kind": "geo",
+      "bindable": true,
+      "required": true,
+      "notes": "Geographic dimension on level-of-detail (the shaded unit). Binds to a State/Province-class field; XML column-instance [none:State:nk]."
+    },
+    {
+      "slot_id": "profit",
+      "template_field": "Profit",
+      "derivation": "sum",
+      "role": [
+        "color"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "Continuous color measure driving the diverging gradient (custom-interpolated). Binds to any measure; XML column-instance [sum:Profit:qk]."
+    }
+  ],
+  "calcs": [],
+  "hazards": [
+    {
+      "code": "datasource-style-dropped",
+      "detail": "The source workbook carries a datasource-level <style-rule element='mark'> with categorical value->hue / value->glyph maps for OTHER fields (State, Sub-Category, Region, Ship Mode, Segment, Measure Names, flag-icon shapes) shared across the workbook's sheets. It is NOT carried into this template (unlike the factory golden's datasource_style sidecar) because it is irrelevant to this choropleth — the color that matters is a continuous SUM(measure) diverging gradient fully contained in the worksheet XML (custom-interpolated color encoding). Carrying it would also splice customer member values and federated datasource IDs into the repo (licensing/sensitive-data wall). No fidelity loss for this template; on apply, only the in-worksheet gradient is applied.",
+      "xml": "spatial-choropleth-map.xml:31"
+    },
+    {
+      "code": "generated-geo-required",
+      "detail": "The template plots generated [Latitude (generated)]/[Longitude (generated)] on rows/cols and a generated [Geometry (generated)] on the geometry encoding. These are Tableau-generated fields that exist only when the bound dimensions carry a geographic semantic-role — the binder must map the two geo slots to fields Tableau geocodes (e.g. Country/Region, State/Province), or the map will not render filled areas.",
+      "xml": "spatial-choropleth-map.xml:181"
+    }
+  ]
+}

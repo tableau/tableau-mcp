@@ -1,0 +1,151 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { writeFileSync } from 'fs';
+import { Ok } from 'ts-results-es';
+import { z } from 'zod';
+
+import { DesktopCache } from '../../../desktop/cache.js';
+import { getDashboardXml } from '../../../desktop/commands/workbook/getDashboardXml.js';
+import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
+import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheetXml.js';
+import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
+import { addDashboard, addSheet } from '../../../desktop/metadata/index.js';
+import {
+  DesktopCommandExecutionError,
+  WorkbookXmlLoadFailedError,
+} from '../../../errors/mcpToolError.js';
+import { DesktopMcpServer } from '../../../server.desktop.js';
+import { DesktopTool } from '../tool.js';
+
+const paramsSchema = {
+  session: z.string().describe('Session ID from list-instances.'),
+  worksheetNames: z.array(z.string()).describe('Names of worksheets to create.'),
+  dashboardName: z.string().describe('Name of dashboard to create.'),
+};
+
+const toolTitle = 'Batch Create Sheets and Cache XMLs';
+export const getBatchCreateAndCacheSheetsTool = (
+  server: DesktopMcpServer,
+): DesktopTool<typeof paramsSchema> => {
+  const tool = new DesktopTool({
+    server,
+    name: 'batch-create-and-cache-sheets',
+    title: toolTitle,
+    description: [
+      'Create multiple worksheet sheets and one dashboard in one operation, then cache all empty XMLs.',
+      'Phase 1 of the parallel dashboard creation workflow.',
+      'Returns file paths for use in build-and-apply-worksheet and build-and-apply-dashboard.',
+    ].join(' '),
+    paramsSchema,
+    annotations: {
+      title: toolTitle,
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+    callback: async (
+      { session, worksheetNames, dashboardName },
+      extra,
+    ): Promise<CallToolResult> => {
+      return await tool.logAndExecute({
+        extra,
+        args: { session, worksheetNames, dashboardName },
+        callback: async () => {
+          const executor = await extra.getExecutor(session);
+          const signal = extra.signal;
+          const cache = new DesktopCache(session);
+
+          // Fetch current workbook
+          const workbookResult = await getWorkbookXml({ executor, signal });
+          if (workbookResult.isErr()) {
+            return new DesktopCommandExecutionError(workbookResult.error).toErr();
+          }
+          let workbookXml = workbookResult.value;
+
+          // Add worksheets and dashboard to workbook XML
+          for (const name of worksheetNames) {
+            workbookXml = addSheet(workbookXml, name);
+          }
+          workbookXml = addDashboard(workbookXml, dashboardName);
+
+          // Apply modified workbook
+          const applyResult = await loadWorkbookXml({ xml: workbookXml, executor, signal });
+          if (applyResult.isErr()) {
+            const { type, error } = applyResult.error;
+            switch (type) {
+              case 'execute-command-error':
+                return new DesktopCommandExecutionError(error).toErr();
+              case 'load-workbook-xml-error':
+                return new WorkbookXmlLoadFailedError(error).toErr();
+              default: {
+                const _exhaustive: never = type;
+              }
+            }
+          }
+
+          // Cache workbook
+          const workbookFile = cache.getCacheFilePath({
+            prefix: 'workbook',
+            id: 'for-parallel-build',
+          });
+          writeFileSync(workbookFile, workbookXml, 'utf-8');
+
+          // Fetch and cache all worksheet XMLs
+          const worksheetFiles: Record<string, string> = {};
+          const worksheetWarnings: string[] = [];
+          for (const name of worksheetNames) {
+            const wsResult = await getWorksheetXml({ worksheetName: name, executor, signal });
+            if (wsResult.isErr()) {
+              const { type, error } = wsResult.error;
+              if (type === 'get-worksheet-xml-error') {
+                worksheetWarnings.push(`${name}: ${error.message}`);
+              } else {
+                worksheetWarnings.push(`${name}: command error`);
+              }
+              continue;
+            }
+            const safeWsName = name.replace(/[^a-zA-Z0-9]/g, '_');
+            const file = cache.getCacheFilePath({ prefix: 'worksheet', id: safeWsName });
+            writeFileSync(file, wsResult.value, 'utf-8');
+            worksheetFiles[name] = file;
+          }
+
+          // Fetch and cache dashboard XML
+          let dashboardFile: string | null = null;
+          const dashResult = await getDashboardXml({ dashboardName, executor, signal });
+          if (dashResult.isErr()) {
+            const { type, error } = dashResult.error;
+            if (type === 'get-dashboard-xml-error') {
+              worksheetWarnings.push(`dashboard "${dashboardName}": ${error.message}`);
+            }
+          } else {
+            const safeDashName = dashboardName.replace(/[^a-zA-Z0-9]/g, '_');
+            dashboardFile = cache.getCacheFilePath({ prefix: 'dashboard', id: safeDashName });
+            writeFileSync(dashboardFile, dashResult.value, 'utf-8');
+          }
+
+          const worksheetFileLines = Object.entries(worksheetFiles)
+            .map(([name, file]) => `  ${name} → ${file}`)
+            .join('\n');
+
+          let msg = `Created and cached ${worksheetNames.length} worksheets + 1 dashboard\n\n`;
+          msg += `Worksheets:\n${worksheetFileLines || '  (none cached)'}\n\n`;
+          msg += `Dashboard:\n  ${dashboardName} → ${dashboardFile || 'FAILED'}\n\n`;
+          msg += `Workbook cache: ${workbookFile}`;
+          if (worksheetWarnings.length > 0) {
+            msg += `\n\nWarnings:\n${worksheetWarnings.map((w) => `  • ${w}`).join('\n')}`;
+          }
+          msg += '\n\nReady for Phase 2 parallel execution.';
+
+          return new Ok({
+            message: msg,
+            worksheetFiles,
+            dashboardFile,
+            workbookFile,
+          });
+        },
+      });
+    },
+  });
+  return tool;
+};

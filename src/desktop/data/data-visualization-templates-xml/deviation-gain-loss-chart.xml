@@ -1,0 +1,164 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <layout-options>
+    <caption>
+      <formatted-text>
+        <run>From  Kevin M. Knorpp @ </run>
+        <run auto-url='true' hyperlink='tabdoc:load-url url=&amp;quot;https://typicalanalytical.com/2017/09/16/how-to-build-this-chart-type-in-tableau/amp/&amp;quot;'>https://typicalanalytical.com/2017/09/16/how-to-build-this-chart-type-in-tableau/amp/</run>
+      </formatted-text>
+    </caption>
+  </layout-options>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column caption='Difference in sales' datatype='real' name='[Calculation_44402728363008000]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='ZN(SUM([Sales])) - LOOKUP(ZN(SUM([Sales])), -1)'>
+            <table-calc ordering-type='Field'>
+              <order field='[{{DATASOURCE}}].[Category]' />
+              <order field='[{{DATASOURCE}}].[Order Date]' />
+            </table-calc>
+          </calculation>
+        </column>
+        <column caption='Difference if negative' datatype='real' name='[Calculation_44402728363352065]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='if [Calculation_44402728363008000] &lt; 0 then [Calculation_44402728363008000] END'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column caption='Difference if positive' datatype='real' name='[Calculation_44402728363454466]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='if [Calculation_44402728363008000] &gt;= 0 then [Calculation_44402728363008000] END'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column caption='Rank of difference if negative' datatype='integer' name='[Calculation_44402728363560963]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='RANK_UNIQUE([Calculation_44402728363352065])'>
+            <table-calc ordering-field='[{{DATASOURCE}}].[Category]' ordering-type='Field' />
+          </calculation>
+        </column>
+        <column caption='Rank of difference if positive' datatype='integer' name='[Calculation_44402728363651076]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='RANK_UNIQUE([Calculation_44402728363454466],&apos;asc&apos;)'>
+            <table-calc ordering-field='[{{DATASOURCE}}].[Category]' ordering-type='Field' />
+          </calculation>
+        </column>
+        <column caption='y-axis' datatype='integer' name='[Calculation_44402728364228614]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='if [Calculation_44402728363008000] &gt;= 0
+
+then [Calculation_44402728363651076]
+
+else -[Calculation_44402728363560963]
+
+END'>
+            <table-calc ordering-type='Rows' />
+          </calculation>
+        </column>
+        <column datatype='string' name='[Category]' role='dimension' type='nominal' />
+        <column datatype='date' name='[Order Date]' role='dimension' type='ordinal' />
+        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Sub-Category]' role='dimension' type='nominal' />
+        <column-instance column='[Order Date]' derivation='Month' name='[mn:Order Date:ok]' pivot='key' type='ordinal' />
+        <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Calculation_44402728363008000]' derivation='User' name='[usr:Calculation_44402728363008000:qk:5]' pivot='key' type='quantitative'>
+          <table-calc ordering-type='Field'>
+            <order field='[{{DATASOURCE}}].[Sub-Category]' />
+            <order field='[{{DATASOURCE}}].[yr:Order Date:ok]' />
+          </table-calc>
+        </column-instance>
+        <column-instance column='[Calculation_44402728363352065]' derivation='User' name='[usr:Calculation_44402728363352065:qk:1]' pivot='key' type='quantitative'>
+          <table-calc ordering-type='Rows' />
+          <table-calc field='[{{DATASOURCE}}].[Calculation_44402728363008000]' ordering-type='Field'>
+            <order field='[{{DATASOURCE}}].[Sub-Category]' />
+            <order field='[{{DATASOURCE}}].[yr:Order Date:ok]' />
+          </table-calc>
+        </column-instance>
+        <column-instance column='[Calculation_44402728363454466]' derivation='User' name='[usr:Calculation_44402728363454466:qk:1]' pivot='key' type='quantitative'>
+          <table-calc ordering-type='Rows' />
+          <table-calc field='[{{DATASOURCE}}].[Calculation_44402728363008000]' ordering-type='Field'>
+            <order field='[{{DATASOURCE}}].[Sub-Category]' />
+            <order field='[{{DATASOURCE}}].[yr:Order Date:ok]' />
+          </table-calc>
+        </column-instance>
+        <column-instance column='[Calculation_44402728364228614]' derivation='User' name='[usr:Calculation_44402728364228614:qk:22]' pivot='key' type='quantitative'>
+          <table-calc ordering-type='Rows' />
+          <table-calc field='[{{DATASOURCE}}].[Calculation_44402728363352065]' ordering-type='Rows' />
+          <table-calc field='[{{DATASOURCE}}].[Calculation_44402728363651076]' ordering-field='[{{DATASOURCE}}].[Sub-Category]' ordering-type='Field' />
+          <table-calc field='[{{DATASOURCE}}].[Calculation_44402728363008000]' ordering-type='Field'>
+            <order field='[{{DATASOURCE}}].[Sub-Category]' />
+            <order field='[{{DATASOURCE}}].[yr:Order Date:ok]' />
+          </table-calc>
+          <table-calc field='[{{DATASOURCE}}].[Calculation_44402728363454466]' ordering-type='Rows' />
+          <table-calc field='[{{DATASOURCE}}].[Calculation_44402728363560963]' ordering-field='[{{DATASOURCE}}].[Sub-Category]' ordering-type='Field' />
+        </column-instance>
+        <column-instance column='[Order Date]' derivation='Year' name='[yr:Order Date:ok]' pivot='key' type='ordinal' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='subtitle' class='0' field='[{{DATASOURCE}}].[usr:Calculation_44402728364228614:qk:22]' scope='rows' value='' />
+        <format attr='auto-subtitle' class='0' field='[{{DATASOURCE}}].[usr:Calculation_44402728364228614:qk:22]' scope='rows' value='true' />
+        <format attr='title' class='0' field='[{{DATASOURCE}}].[usr:Calculation_44402728364228614:qk:22]' scope='rows' value='&lt;- Sub-Category Declining                         Sub-Cetegory Improving -&gt;' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='cols' value='false' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Shape' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[usr:Calculation_44402728363008000:qk:5]' />
+          <lod column='[{{DATASOURCE}}].[none:Sub-Category:nk]' />
+          <tooltip column='[{{DATASOURCE}}].[sum:Sales:qk]' />
+          <tooltip column='[{{DATASOURCE}}].[usr:Calculation_44402728363352065:qk:1]' />
+          <tooltip column='[{{DATASOURCE}}].[usr:Calculation_44402728363454466:qk:1]' />
+        </encodings>
+        <customized-tooltip show-buttons='false'>
+          <formatted-text>
+            <run bold='true' fontsize='14'>&lt;[{{DATASOURCE}}].[mn:Order Date:ok]&gt;</run>
+            <run fontsize='14'>, </run>
+            <run bold='true' fontsize='14'>&lt;[{{DATASOURCE}}].[yr:Order Date:ok]&gt;</run>
+            <run fontsize='14'>Æ </run>
+            <run>Æ
+</run>
+            <run fontsize='14'>&lt;[{{DATASOURCE}}].[none:Sub-Category:nk]&gt; : </run>
+            <run bold='true' fontsize='14'>&lt;[{{DATASOURCE}}].[sum:Sales:qk]&gt;</run>
+            <run>Æ
+</run>
+            <run fontsize='14'>Sales : </run>
+            <run bold='true' fontsize='14'>&lt;[{{DATASOURCE}}].[usr:Calculation_44402728363008000:qk:5]&gt;</run>
+            <run fontsize='14'> Difference : </run>
+            <run bold='true' fontcolor='#ba4c23' fontsize='14'>&lt;[{{DATASOURCE}}].[usr:Calculation_44402728363352065:qk:1]&gt;</run>
+            <run bold='true' fontcolor='#659ac6' fontsize='14'>&lt;[{{DATASOURCE}}].[usr:Calculation_44402728363454466:qk:1]&gt;</run>
+          </formatted-text>
+        </customized-tooltip>
+        <style>
+          <style-rule element='mark'>
+            <format attr='shape' value='Custom/noun_585136.png' />
+            <format attr='size' value='2.2872927188873291' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[{{DATASOURCE}}].[usr:Calculation_44402728364228614:qk:22]</rows>
+    <cols>([{{DATASOURCE}}].[mn:Order Date:ok] / [{{DATASOURCE}}].[yr:Order Date:ok])</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

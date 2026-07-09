@@ -1,0 +1,86 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column caption='Profit Ratio' datatype='real' default-format='p0%' name='[Calculation_1368249927221915648]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='SUM([Profit])/SUM([Sales])' />
+        </column>
+        <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Sub-Category]' role='dimension' type='nominal' />
+        <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Calculation_1368249927221915648]' derivation='User' name='[usr:Calculation_1368249927221915648:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <filter class='categorical' column='[{{DATASOURCE}}].[none:Sub-Category:nk]'>
+        <groupfilter function='except' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate'>
+          <groupfilter function='level-members' level='[none:Sub-Category:nk]' />
+          <groupfilter function='union'>
+            <groupfilter function='member' level='[none:Sub-Category:nk]' member='"Machines"' />
+            <groupfilter function='member' level='[none:Sub-Category:nk]' member='"Paper"' />
+            <groupfilter function='member' level='[none:Sub-Category:nk]' member='"Phones"' />
+            <groupfilter function='member' level='[none:Sub-Category:nk]' member='"Storage"' />
+            <groupfilter function='member' level='[none:Sub-Category:nk]' member='"Supplies"' />
+            <groupfilter function='member' level='[none:Sub-Category:nk]' member='"Tables"' />
+            <groupfilter function='member' level='[none:Sub-Category:nk]' member='%null%' />
+          </groupfilter>
+        </groupfilter>
+      </filter>
+      <slices>
+        <column>[{{DATASOURCE}}].[none:Sub-Category:nk]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='title' class='0' field='[{{DATASOURCE}}].[sum:Sales:qk]' scope='cols' value='' />
+        <format attr='subtitle' class='0' field='[{{DATASOURCE}}].[sum:Sales:qk]' scope='cols' value='' />
+        <format attr='auto-subtitle' class='0' field='[{{DATASOURCE}}].[sum:Sales:qk]' scope='cols' value='true' />
+      </style-rule>
+      <style-rule element='refline'>
+        <format attr='stroke-color' id='refline0' value='#000000' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='div-level' scope='rows' value='10' />
+        <format attr='div-level' scope='cols' value='10' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-disallow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[usr:Calculation_1368249927221915648:qk]' />
+          <lod column='[{{DATASOURCE}}].[sum:Profit:qk]' />
+        </encodings>
+        <reference-line axis-column='[{{DATASOURCE}}].[sum:Sales:qk]' enable-instant-analytics='true' formula='sum' id='refline0' label-type='none' scope='per-cell' value-column='[{{DATASOURCE}}].[sum:Profit:qk]' z-order='1' />
+        <style>
+          <style-rule element='mark'>
+            <format attr='size' value='1' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[{{DATASOURCE}}].[none:Sub-Category:nk]</rows>
+    <cols>[{{DATASOURCE}}].[sum:Sales:qk]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

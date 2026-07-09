@@ -1,0 +1,28 @@
+{
+  "template": "change-over-time-stacked-area-chart",
+  "family": "time-series",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": { "fixture_bind": true, "render_verified": "none" },
+  "datasource_placeholder": true,
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["stacked-area", "area", "over-time", "change-over-time", "composition-over-time", "time-series"],
+  "description": "Stacked filled areas of an aggregated measure over a truncated date; a color dimension stacks the bands.",
+  "slots": [
+    { "slot_id": "order_date", "template_field": "Order Date", "derivation": "tqr",
+      "role": ["cols"], "kind": "temporal", "bindable": true, "required": true,
+      "notes": "XML instance [tqr:Order Date:qk] derivation='Quarter-Trunc'; short-form 'tqr' IS a derivationMap key. Kept verbatim." },
+    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
+      "role": ["rows"], "kind": "quantitative", "bindable": true, "required": true },
+    { "slot_id": "region", "template_field": "Region", "derivation": "none",
+      "role": ["color"], "kind": "categorical", "bindable": true, "required": true,
+      "notes": "template column has aggregate-role-from='[State/Province]'; cosmetic secondary-role hint carried onto the target (verification-report correction: GREEN -> YELLOW)." }
+  ],
+  "calcs": [],
+  "hazards": [
+    { "code": "hidden-aggregate-role-from",
+      "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
+      "xml": "change-over-time-stacked-area-chart.xml:11" }
+  ]
+}

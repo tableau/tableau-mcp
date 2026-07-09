@@ -2,7 +2,11 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
+import type { GetDashboardXmlError } from '../desktop/commands/workbook/getDashboardXml.js';
+import type { GetWorksheetXmlError } from '../desktop/commands/workbook/getWorksheetXml.js';
+import type { LoadDashboardXmlError } from '../desktop/commands/workbook/loadDashboardXml.js';
 import { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWorkbookXml.js';
+import type { LoadWorksheetXmlError } from '../desktop/commands/workbook/loadWorksheetXml.js';
 import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
@@ -167,6 +171,12 @@ export class WorkbookNotFoundError extends McpToolError {
   }
 }
 
+export class WorksheetNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'worksheet-not-found', message, statusCode: 404 });
+  }
+}
+
 export class ZodiosValidationError extends McpToolError {
   constructor(error: ZodiosError) {
     super({
@@ -254,12 +264,79 @@ export class WorkbookXmlLoadFailedError extends McpToolError {
   }
 }
 
+export class WorksheetXmlLoadFailedError extends McpToolError {
+  constructor(error: LoadWorksheetXmlError) {
+    super({
+      type: 'load-worksheet-xml-error',
+      message: JSON.stringify(error),
+      statusCode: 500,
+    });
+  }
+}
+
+export class GetWorksheetXmlFailedError extends McpToolError {
+  constructor(error: GetWorksheetXmlError) {
+    super({
+      type: 'get-worksheet-xml-error',
+      message: JSON.stringify(error),
+      statusCode: 500,
+    });
+  }
+}
+
+export class GetDashboardXmlFailedError extends McpToolError {
+  constructor(error: GetDashboardXmlError) {
+    super({
+      type: 'get-dashboard-xml-error',
+      message: JSON.stringify(error),
+      statusCode: 500,
+    });
+  }
+}
+
+export class DashboardXmlLoadFailedError extends McpToolError {
+  constructor(error: LoadDashboardXmlError) {
+    super({
+      type: 'load-dashboard-xml-error',
+      message: JSON.stringify(error),
+      statusCode: 500,
+    });
+  }
+}
+
 export class FileReadError extends McpToolError {
   constructor(error: unknown) {
     super({
       type: 'file-read-error',
       message: `Failed to read file: ${getExceptionMessage(error)}. Make sure the file exists and is readable.`,
       statusCode: 500,
+    });
+  }
+}
+
+export class FileNotFoundError extends McpToolError {
+  constructor(filePath: string) {
+    super({
+      type: 'file-not-found',
+      message: `File not found: ${filePath}. Make sure the path was returned from the appropriate get-*-xml tool.`,
+      statusCode: 404,
+    });
+  }
+}
+
+export class XmlModificationError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'xml-modification-error', message, statusCode: 422 });
+  }
+}
+
+export class XmlValidationError extends McpToolError {
+  constructor(errors: string[]) {
+    const errorList = errors.map((e, i) => `${i + 1}. ${e}`).join('\n');
+    super({
+      type: 'xml-validation-error',
+      message: `Modified XML failed validation with ${errors.length} error(s):\n\n${errorList}\n\nThis is likely a bug in the MCP. Please report this issue.`,
+      statusCode: 422,
     });
   }
 }

@@ -1,0 +1,151 @@
+{
+  "template": "correlation-highlight-table",
+  "family": "correlation",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [
+    "HARDCODED_FILTER_MEMBERS"
+  ],
+  "portability_evidence": {
+    "fixture_bind": false,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "highlight-table",
+    "heat-table",
+    "heatmap-table",
+    "colored-table",
+    "matrix"
+  ],
+  "description": "A highlight table: Square marks in a Segment x Year (cols) by Month (rows) matrix, each cell shaded AND labelled by a Profit-Ratio template calc (SUM([Profit])/SUM([Sales])) on a diverging color ramp. Reads a two-way categorical/temporal grid where the ratio's magnitude is the color. Structurally compiled, not render-verified; the source Sub-Category inclusion filter rides along verbatim (HARDCODED_FILTER_MEMBERS).",
+  "slots": [
+    {
+      "slot_id": "order_date_month",
+      "template_field": "Order Date",
+      "derivation": "mn",
+      "role": [
+        "rows"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "qualified_key_required": true,
+      "notes": "Month part of the SAME bound date field (rows axis / one cell row per month). Reuses Order Date at a second derivation \u2014 see hazard single-date-two-derivations."
+    },
+    {
+      "slot_id": "segment",
+      "template_field": "Segment",
+      "derivation": "none",
+      "role": [
+        "cols"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "The outer categorical column dimension; cols is the nested expression ([none:Segment:nk] / [yr:Order Date:ok]) \u2014 Segment crossed with Year."
+    },
+    {
+      "slot_id": "order_date_year",
+      "template_field": "Order Date",
+      "derivation": "yr",
+      "role": [
+        "cols"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "qualified_key_required": true,
+      "notes": "Year part of the SAME bound date field (inner cols axis, nested under Segment)."
+    },
+    {
+      "slot_id": "profit",
+      "template_field": "Profit",
+      "derivation": "sum",
+      "role": [
+        "calc-input"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "Not on a shelf directly \u2014 feeds the Profit-Ratio template calc (numerator). replaceFieldReferences rewrites [Profit] inside the formula on bind."
+    },
+    {
+      "slot_id": "sales",
+      "template_field": "Sales",
+      "derivation": "sum",
+      "role": [
+        "calc-input"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "Not on a shelf directly \u2014 feeds the Profit-Ratio template calc (denominator). replaceFieldReferences rewrites [Sales] inside the formula on bind."
+    }
+  ],
+  "calcs": [
+    {
+      "slot_id": "profit_ratio_calc",
+      "template_field": "Calculation_1368249927221915648",
+      "derivation": "usr",
+      "role": [
+        "color",
+        "text"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "SUM([Profit])/SUM([Sales])",
+      "formula_refs": [
+        "Profit",
+        "Sales"
+      ],
+      "depends_on_slots": [
+        "profit",
+        "sales"
+      ],
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Profit",
+          "slot_id": "profit",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        },
+        {
+          "ref": "Sales",
+          "slot_id": "sales",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        }
+      ],
+      "prereqs": [
+        "raw-formula-refs"
+      ],
+      "notes": "The cell color AND text: SUM([Profit])/SUM([Sales]) on a diverging ramp. A self-closing <calculation>, so parseTemplateCalcs sees it \u2014 a declared calc slot. Its two inputs are the bindable profit/sales slots; replaceFieldReferences rewrites both bare refs on bind."
+    }
+  ],
+  "hazards": [
+    {
+      "code": "single-date-two-derivations",
+      "detail": "The one [Order Date] field is used at BOTH Month (rows) and Year (cols). Against the single-date committed fixture the second temporal slot cannot bind a DISTINCT field, so fixture_bind=false \u2014 a valid, honest state (same as change-over-time-calendar-heatmap / ranking-bump-chart). On a real dataset both slots bind the same date field via qualified keys; the false reflects the fixture's one-date shape, not a template defect.",
+      "xml": "correlation-highlight-table.xml:18,22"
+    },
+    {
+      "code": "hardcoded-filter-blocking",
+      "detail": "The source workbook pins Sub-Category to an INCLUSION set (function='union' of member='\"Accessories\"'..'\"Copiers\"') \u2014 seven source-calendar member literals kept on the Filters shelf (<slices>). This lane does NOT run the compile-time filter neutralizer (no XML edits), so the members ride along VERBATIM and are flagged HARDCODED_FILTER_MEMBERS: on a differently-membered dimension the inclusion matches nothing and the table renders empty. A follow-up can PARAMETERIZE it (collapse to level-members) to unblock \u2014 a conscious decision, not an accident.",
+      "xml": "correlation-highlight-table.xml:24-34"
+    },
+    {
+      "code": "raw-formula-refs",
+      "detail": "The Profit-Ratio calc references the bare bindable [Profit]/[Sales]; templates.ts rewriteFormulaFieldRefs repairs them on bind ONLY because both are bindable bare-key slots (same pattern as correlation-scatter-plot-chart). Gate #6 asserts both are bound.",
+      "xml": "correlation-highlight-table.xml:10-11"
+    }
+  ]
+}

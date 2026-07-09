@@ -1,4 +1,4 @@
-import { calcFieldNamesRule } from './rules/calcFieldNames.js';
+import { validationRules } from './rules/rules.js';
 import type {
   ValidationContext,
   ValidationIssue,
@@ -6,7 +6,7 @@ import type {
   ValidationRule,
 } from './types.js';
 
-const allRules: ValidationRule[] = [calcFieldNamesRule];
+const allRules: ValidationRule[] = validationRules;
 
 export function runValidation(
   xml: string,

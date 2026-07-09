@@ -1,0 +1,129 @@
+{
+  "template": "connected-scatterplot",
+  "family": "correlation",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "connected-scatterplot",
+    "connected-scatter",
+    "scatter",
+    "trajectory",
+    "path",
+    "relationship"
+  ],
+  "description": "A connected scatterplot: X is a measure, Y is a template calc (Profit Ratio), Line marks connect the per-member points into a path; color by a dimension, detail by a second dimension.",
+  "slots": [
+    {
+      "slot_id": "sales",
+      "template_field": "Sales",
+      "derivation": "sum",
+      "role": [
+        "cols",
+        "formula-input"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "X axis measure; also a denominator input to the Profit Ratio calc."
+    },
+    {
+      "slot_id": "profit",
+      "template_field": "Profit",
+      "derivation": "sum",
+      "role": [
+        "formula-input"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "numerator input to the Profit Ratio calc (Y axis is the calc, not Profit directly)."
+    },
+    {
+      "slot_id": "region",
+      "template_field": "Region",
+      "derivation": "none",
+      "role": [
+        "color"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true
+    },
+    {
+      "slot_id": "customer_name",
+      "template_field": "Customer Name",
+      "derivation": "none",
+      "role": [
+        "detail"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "detail grain — one point per member; the mark path connects points within a color group."
+    }
+  ],
+  "calcs": [
+    {
+      "slot_id": "profit_ratio_calc",
+      "template_field": "Calculation_1368249927221915648",
+      "derivation": "usr",
+      "role": [
+        "rows"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "SUM([Profit])/SUM([Sales])",
+      "formula_refs": [
+        "Profit",
+        "Sales"
+      ],
+      "depends_on_slots": [
+        "profit",
+        "sales"
+      ],
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Profit",
+          "slot_id": "profit",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        },
+        {
+          "ref": "Sales",
+          "slot_id": "sales",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        }
+      ],
+      "prereqs": [
+        "raw-formula-refs"
+      ]
+    }
+  ],
+  "hazards": [
+    {
+      "code": "raw-formula-refs",
+      "detail": "Calc formula references bare [Profit]/[Sales]; rewriteFormulaFieldRefs repairs them ONLY because Profit & Sales are bindable bare-key slots. Gate #6 asserts both are bound.",
+      "xml": "connected-scatterplot.xml:14-15"
+    },
+    {
+      "code": "implicit-path-order",
+      "detail": "mark='Line' draws a path through the per-member points; the connect order follows the mark/LOD ordering, NOT an explicit sort field. Binding a categorical with no meaningful order yields an arbitrary path.",
+      "xml": "connected-scatterplot.xml:30-33"
+    }
+  ]
+}
