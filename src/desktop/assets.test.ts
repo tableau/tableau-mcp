@@ -102,4 +102,32 @@ describe('desktop SEA asset access', () => {
 
     expect(readResourceAsset('knowledge/viz-design/chart-selection.md')).toBe(assetText);
   });
+
+  it('verifies raw bytes, so a non-UTF-8 asset passes when its build-time byte hash matches', async () => {
+    const key = 'desktop/data/example.bin';
+    const raw = new Uint8Array([0xff, 0xfe, 0x00, 0x01, 0x80]);
+    const bytes = Buffer.from(raw);
+    vi.resetModules();
+    const module = await import('./assets.js');
+    module._setSeaApiForTest({
+      isSea: () => true,
+      getAsset: (assetKey: string, encoding?: string) => {
+        if (assetKey === 'asset-manifest.json') {
+          return JSON.stringify({
+            [key]: {
+              sha256: createHash('sha256').update(bytes).digest('hex'),
+              bytes: bytes.byteLength,
+            },
+          });
+        }
+        if (assetKey === key) {
+          return encoding === 'utf8' ? bytes.toString('utf-8') : raw.buffer;
+        }
+        throw new Error(`missing SEA asset: ${assetKey}`);
+      },
+    });
+
+    expect(() => module.readDataAsset('example.bin')).not.toThrow();
+    expect(module.readDataAsset('example.bin')).toBe(bytes.toString('utf-8'));
+  });
 });

@@ -97,6 +97,19 @@ function readSeaAssetText(key: string): string | null {
   }
 }
 
+function readSeaAssetBytes(key: string): Buffer | null {
+  const sea = getSeaApi();
+  if (!sea) {
+    return null;
+  }
+  try {
+    const asset = sea.getAsset(key);
+    return typeof asset === 'string' ? Buffer.from(asset, 'utf-8') : Buffer.from(asset);
+  } catch {
+    return null;
+  }
+}
+
 // The SEA asset manifest maps every embedded asset key to its build-time sha256 and
 // byte length. buildSea.ts hashes each file as it embeds it, so coverage cannot drift:
 // a newly embedded asset is automatically verifiable at runtime.
@@ -153,28 +166,29 @@ function readVerifiedSeaAsset(key: string): string | null {
   if (!expected) {
     return null;
   }
-  const raw = readSeaAssetText(key);
-  if (raw === null) {
+  const bytes = readSeaAssetBytes(key);
+  if (bytes === null) {
     throw new Error(`SEA asset '${key}' is listed but missing or unreadable`);
   }
-  const actualHash = sha256(raw);
-  const actualBytes = Buffer.byteLength(raw);
+  const actualHash = sha256(bytes);
+  const actualBytes = bytes.byteLength;
   if (actualHash !== expected.sha256 || actualBytes !== expected.bytes) {
     throw new Error(
       `SEA asset '${key}' failed sha256 integrity check: expected ${expected.sha256} ` +
         `(${expected.bytes} bytes), got ${actualHash} (${actualBytes} bytes)`,
     );
   }
-  _verifiedAssets.set(key, raw);
-  return raw;
+  const text = bytes.toString('utf-8');
+  _verifiedAssets.set(key, text);
+  return text;
 }
 
 function toForwardSlash(value: string): string {
   return value.split('\\').join('/');
 }
 
-function sha256(text: string): string {
-  return createHash('sha256').update(text).digest('hex');
+function sha256(data: string | Buffer): string {
+  return createHash('sha256').update(data).digest('hex');
 }
 
 // --- Logical asset accessors (SEA-aware, disk fallback) ---
