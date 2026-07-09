@@ -4,35 +4,38 @@ sidebar_position: 3
 
 # Get Stale Content Report
 
-Builds a deterministic report of stale Tableau Cloud content (workbooks and published
-datasources) by querying the Admin Insights `Site Content` datasource — which exposes a
-`Last Accessed At` field per item — applying the staleness threshold server-side, and returning
-already-filtered rows.
+Builds a deterministic report of stale Tableau Cloud content (workbooks and published datasources)
+by querying the Admin Insights `Site Content` datasource — which exposes a `Last Accessed At` field
+per item — applying the staleness threshold server-side, and returning already-filtered rows.
 
-The server applies the threshold comparison, optional project filter, and sort. Clients receive
-only items where days since last use exceed the threshold. **No client-side math is required.**
+The server applies the threshold comparison, optional project filter, and sort. Clients receive only
+items where days since last use exceed the threshold. **No client-side math is required.**
 
-The tool is admin-only — it is registered only when `ADMIN_TOOLS_ENABLED=true`, and at request
-time it verifies the caller's site role and rejects anything below
-`SiteAdministratorCreator` / `SiteAdministratorExplorer` / `ServerAdministrator`.
+The tool is admin-only — it is registered only when `ADMIN_TOOLS_ENABLED=true`, and at request time
+it verifies the caller's site role and rejects anything below `SiteAdministratorCreator` /
+`SiteAdministratorExplorer` / `ServerAdministrator`.
 
 ## APIs called
 
-- [Query Datasource (VDS)](https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/QueryDatasource) — single VDS call against the `Site Content` Admin Insights datasource
-- [Query Data Sources (REST)](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources) — used internally to resolve the `Site Content` dataset LUID
-- [Query Projects (REST)](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_projects.htm#query_projects) — used internally to resolve project LUIDs to names when a project scope is set
-- [Get User on Site (REST)](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#get_user_on_site) — used internally for the admin gate
+- [Query Datasource (VDS)](https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/QueryDatasource)
+  — single VDS call against the `Site Content` Admin Insights datasource
+- [Query Data Sources (REST)](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources)
+  — used internally to resolve the `Site Content` dataset LUID
+- [Query Projects (REST)](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_projects.htm#query_projects)
+  — used internally to resolve project LUIDs to names when a project scope is set
+- [Get User on Site (REST)](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#get_user_on_site)
+  — used internally for the admin gate
 
 ## Optional arguments
 
 ### `minAgeDays`
 
-Minimum days since last access for content to be considered stale. The server applies the
-condition `daysSinceLastUse > minAgeDays` (strict greater-than).
+Minimum days since last access for content to be considered stale. The server applies the condition
+`daysSinceLastUse > minAgeDays` (strict greater-than).
 
 If omitted, falls back to the server-configured threshold
-[`STALE_CONTENT_MIN_AGE_DAYS`](../../configuration/mcp-config/env-vars.md), which defaults to
-`90` — the Tableau Cloud TS Events lookback ceiling.
+[`STALE_CONTENT_MIN_AGE_DAYS`](../../configuration/mcp-config/env-vars.md), which defaults to `90` —
+the Tableau Cloud TS Events lookback ceiling.
 
 Range: `1`–`3650`.
 
@@ -50,6 +53,13 @@ If omitted, falls back to the server-configured
 [`INCLUDE_PROJECT_IDS`](../../configuration/mcp-config/env-vars.md) bound (if any). When both are
 set, the final scope is the intersection.
 
+Any requested LUID that does not exist on the site, or that falls outside the server-configured
+`INCLUDE_PROJECT_IDS` bound, is **ignored and reported** in `mcp.warnings` (rather than silently
+dropped). Each warning has `type: "PROJECT_IDS_IGNORED"`, a `reason` of `unknown-on-site` or
+`not-permitted-by-config`, and the list of ignored LUIDs. If **none** of the requested LUIDs resolve
+to a valid, permitted project, the tool returns an **empty report** (`rows: []`,
+`totalStaleItems: 0`) with the warning — it never widens to the full site.
+
 Example: `["af59ee84-a375-4cb4-84b9-eaa7864f59fb"]`
 
 <hr />
@@ -64,14 +74,14 @@ Example: `["Datasource"]`
 ## Notes and caveats
 
 - The Tableau-managed `Admin Insights` project is **excluded by design** — its datasources are
-  admin-owned and refreshed by Tableau, not user content. The exclusion is enforced as a
-  server-side VDS filter on `Item Parent Project Name`.
-- `Last Accessed At` is `null` for items that have never been accessed. The report ages those
-  items from `Created At` instead and flags them with `neverAccessed: true`.
+  admin-owned and refreshed by Tableau, not user content. The exclusion is enforced as a server-side
+  VDS filter on `Item Parent Project Name`.
+- `Last Accessed At` is `null` for items that have never been accessed. The report ages those items
+  from `Created At` instead and flags them with `neverAccessed: true`.
 - Rows are sorted descending by `daysSinceLastUse`, then by `size`.
 - Tableau Cloud `Last Accessed At` is populated whenever the underlying `TS Events` access stream
-  records an access — items beyond the 90-day Cloud event lookback may show `null` even if they
-  were accessed earlier. Items with `daysSinceLastUse ≥ 90` should be interpreted accordingly.
+  records an access — items beyond the 90-day Cloud event lookback may show `null` even if they were
+  accessed earlier. Items with `daysSinceLastUse ≥ 90` should be interpreted accordingly.
 
 ## Example result
 
