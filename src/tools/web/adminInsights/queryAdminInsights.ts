@@ -3,12 +3,13 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { AdminOnlyError } from '../../../errors/mcpToolError.js';
+import { AdminOnlyError, ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { querySchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { assertAdmin } from '../adminGate.js';
 import { WebTool } from '../tool.js';
+import { WebToolName } from '../toolName.js';
 import { executeAdminInsightsQuery, runAdminInsightsQuery } from './adminInsightsToolBase.js';
 import {
   _buildSiteContentQuery,
@@ -224,28 +225,26 @@ Notes:
         });
       }
 
-      // Raw VDS kinds — query is required. The runtime check surfaces a clear error rather than
-      // punting on an implicit Zod-optional violation.
-      if (!query) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: 'text',
-              text: `query is required when kind is "${kind}".`,
-            },
-          ],
-        };
-      }
-
       return await tool.logAndExecute({
         extra,
         args: { kind, query, limit },
         callback: async () => {
-          const maxResultLimit = configWithOverrides.getMaxResultLimit(tool.name);
-          const rowLimit = maxResultLimit
-            ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
-            : limit;
+          // Raw VDS kinds — query is required. Surfacing this from inside logAndExecute keeps the
+          // invocation logged and telemetry-emitted; a pre-callback early return would silently
+          // drop invocations that fail this check.
+          if (!query) {
+            return new ArgsValidationError(`query is required when kind is "${kind}".`).toErr();
+          }
+
+          // Take the tightest of the consolidated tool cap, the legacy per-kind tool cap, and the
+          // caller-provided limit — so operators who set `MAX_RESULT_LIMITS=<legacy-tool>:N` in
+          // their config keep that cap after migrating callers to the consolidated tool.
+          const consolidatedCap = configWithOverrides.getMaxResultLimit(tool.name);
+          const legacyCap = configWithOverrides.getMaxResultLimit(legacyToolByKind[kind]);
+          const caps = [consolidatedCap, legacyCap, limit].filter(
+            (v): v is number => typeof v === 'number' && v > 0,
+          );
+          const rowLimit = caps.length > 0 ? Math.min(...caps) : undefined;
 
           return await runAdminInsightsQuery({
             extra,
@@ -273,3 +272,9 @@ function kindToDataset(kind: Exclude<Kind, 'stale-content'>): AdminInsightsDatas
       return ADMIN_INSIGHTS_DATASETS.JOB_PERFORMANCE;
   }
 }
+
+const legacyToolByKind: Record<Exclude<Kind, 'stale-content'>, WebToolName> = {
+  'ts-events': 'query-admin-insights-ts-events',
+  'site-content': 'query-admin-insights-site-content',
+  'job-performance': 'query-admin-insights-job-performance',
+};

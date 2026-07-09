@@ -29,6 +29,7 @@ export type McpScope =
   | 'tableau:mcp:workbook:delete'
   | 'tableau:mcp:jobs:read'
   | 'tableau:mcp:datasource:delete'
+  | 'tableau:mcp:content:delete'
   | 'tableau:mcp:users:read';
 
 export type TableauApiScope =
@@ -68,6 +69,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:workbook:read',
   'tableau:mcp:workbook:delete',
   'tableau:mcp:content:read',
+  'tableau:mcp:content:delete',
   'tableau:mcp:view:read',
   'tableau:mcp:view:download',
   'tableau:mcp:pulse:read',
@@ -343,15 +345,14 @@ const toolScopeMap: Record<
     ]),
   },
   // Consolidated destructive-delete tool (W-23375797). Dispatches on `resourceType` to workbook,
-  // datasource, or extract-refresh-task. Union of the MCP + API scopes of the three legacy tools it
-  // replaces — any dispatch path may need any of these. Workbook and datasource paths still route
-  // through resourceAccessChecker.
+  // datasource, or extract-refresh-task. Gated on a single umbrella MCP scope
+  // (`tableau:mcp:content:delete`) that covers all three dispatch paths — declaring the three
+  // per-resource legacy scopes here would be AND-enforced by authMiddleware and lock out callers
+  // who only granted one of them. Callers who need per-resource granularity keep using the legacy
+  // `delete-{workbook,datasource,extract-refresh-task}` tools during the shim window. Workbook and
+  // datasource paths still route through resourceAccessChecker (union of API scopes preserved).
   'delete-content': {
-    mcp: [
-      'tableau:mcp:workbook:delete',
-      'tableau:mcp:datasource:delete',
-      'tableau:mcp:tasks:delete',
-    ],
+    mcp: ['tableau:mcp:content:delete'],
     api: new Set([
       'tableau:workbooks:delete',
       'tableau:workbook_tags:update',
