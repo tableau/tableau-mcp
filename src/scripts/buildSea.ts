@@ -1,14 +1,15 @@
 /* eslint-disable no-console */
 
 import { spawnSync } from 'child_process';
-import { createHash } from 'crypto';
 import { createWriteStream, existsSync } from 'fs';
-import { chmod, cp, mkdir, readdir, readFile, rm, writeFile } from 'fs/promises';
-import { dirname, join, posix, relative, sep } from 'path';
+import { chmod, cp, mkdir, rm, writeFile } from 'fs/promises';
+import { dirname, join } from 'path';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import type { ReadableStream as NodeReadableStream } from 'stream/web';
 import { fileURLToPath } from 'url';
+
+import { buildAssetsMap, DESKTOP_ASSET_DIRS } from './seaAssets.js';
 
 // @ts-expect-error - import.meta is not allowed in CommonJS output, this script is run with tsx as ESM
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -37,11 +38,9 @@ const seaVariants = {
     buildVariant: 'desktop',
     entry: 'build/index.desktop.js',
     binaryBase: 'tableau-mcp-desktop',
-    assetDirs: ['resources/desktop', 'desktop/data'],
+    assetDirs: DESKTOP_ASSET_DIRS,
   },
 } as const satisfies Record<string, SeaVariant>;
-
-const MANIFEST_KEY = 'asset-manifest.json';
 
 type VariantKey = keyof typeof seaVariants;
 
@@ -162,58 +161,6 @@ async function downloadNodeDist(platform: SeaPlatform, downloadDir: string): Pro
   return nodeBinary;
 }
 
-async function walkFiles(dir: string): Promise<string[]> {
-  const out: string[] = [];
-  const entries = await readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      out.push(...(await walkFiles(full)));
-    } else if (entry.isFile()) {
-      out.push(full);
-    }
-  }
-  return out;
-}
-
-// Builds the SEA assets map for a variant: every file under its assetDirs keyed
-// by its build-relative forward-slash path, plus a manifest mapping each key to its
-// sha256 + byte length. The runtime enumerates directory contents from the manifest
-// (node:sea can't) AND verifies each asset's bytes against these hashes. Hashing at
-// embed time means every embedded asset is automatically integrity-covered.
-async function buildAssetsMap(variant: SeaVariant): Promise<{
-  assets: Record<string, string>;
-  manifestPath: string | null;
-}> {
-  if (variant.assetDirs.length === 0) {
-    return { assets: {}, manifestPath: null };
-  }
-  const buildDir = join(repoRoot, 'build');
-  const assets: Record<string, string> = {};
-  for (const assetDir of variant.assetDirs) {
-    const absDir = join(buildDir, ...assetDir.split('/'));
-    if (!existsSync(absDir)) {
-      throw new Error(`Asset directory missing: build/${assetDir}. Run the build first.`);
-    }
-    for (const file of await walkFiles(absDir)) {
-      const key = relative(buildDir, file).split(sep).join(posix.sep);
-      assets[key] = file;
-    }
-  }
-  const manifest: Record<string, { sha256: string; bytes: number }> = {};
-  for (const key of Object.keys(assets).sort()) {
-    const buf = await readFile(assets[key]);
-    manifest[key] = {
-      sha256: createHash('sha256').update(buf).digest('hex'),
-      bytes: buf.byteLength,
-    };
-  }
-  const manifestPath = join(repoRoot, `asset-manifest.${variant.buildVariant}.generated.json`);
-  await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
-  assets[MANIFEST_KEY] = manifestPath;
-  return { assets, manifestPath };
-}
-
 async function generateBlob(variant: SeaVariant): Promise<string> {
   if (!existsSync(join(repoRoot, variant.entry))) {
     throw new Error(
@@ -222,7 +169,7 @@ async function generateBlob(variant: SeaVariant): Promise<string> {
   }
   const blobPath = join(repoRoot, `sea-prep.${variant.buildVariant}.blob`);
   const configPath = join(repoRoot, `sea-config.${variant.buildVariant}.generated.json`);
-  const { assets, manifestPath } = await buildAssetsMap(variant);
+  const { assets, manifestPath } = await buildAssetsMap(variant.assetDirs, variant.buildVariant);
   const config: Record<string, unknown> = {
     main: variant.entry,
     output: blobPath,
