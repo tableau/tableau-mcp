@@ -6,6 +6,7 @@ import { getSearchContentTool } from './contentExploration/searchContent.js';
 import { getConfirmDeleteDatasourceTool } from './datasources/confirmDeleteDatasource.js';
 import { getDeleteDatasourceTool } from './datasources/deleteDatasource.js';
 import { getListDatasourcesTool } from './datasources/listDatasources.js';
+import { getResolveDatasourceLuidTool } from './datasources/resolveDatasourceLuid.js';
 import { getConfirmDeleteExtractRefreshTaskTool } from './extractRefreshTasks/confirmDeleteExtractRefreshTask.js';
 import { getConfirmUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/confirmUpdateCloudExtractRefreshTask.js';
 import { getDeleteExtractRefreshTaskTool } from './extractRefreshTasks/deleteExtractRefreshTask.js';
@@ -15,6 +16,7 @@ import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasou
 import { getEmbedTokenTool } from './getEmbedToken/getEmbedToken.js';
 import { getListJobsTool } from './jobs/listJobs.js';
 import { getListProjectsTool } from './projects/listProjects.js';
+import { getGenerateChironInsightFromDatasourceContextTool } from './pulse/chiron/generateChironInsightFromDatasourceContextTool.js';
 import { getGeneratePulseInsightBriefTool } from './pulse/generateInsightBrief/generatePulseInsightBriefTool.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './pulse/generateMetricValueInsightBundle/generatePulseMetricValueInsightBundleTool.js';
 import { getListAllPulseMetricDefinitionsTool } from './pulse/listAllMetricDefinitions/listAllPulseMetricDefinitions.js';
@@ -42,6 +44,7 @@ export const webToolFactories = [
   getGetDatasourceMetadataTool,
   getEmbedTokenTool,
   getListDatasourcesTool,
+  getResolveDatasourceLuidTool,
   getDeleteDatasourceTool,
   getConfirmDeleteDatasourceTool,
   getListExtractRefreshTasksTool,
@@ -59,6 +62,7 @@ export const webToolFactories = [
   getListPulseMetricSubscriptionsTool,
   getGeneratePulseMetricValueInsightBundleTool,
   getGeneratePulseInsightBriefTool,
+  getGenerateChironInsightFromDatasourceContextTool,
   getGetWorkbookTool,
   getGetViewTool,
   getGetViewDataTool,

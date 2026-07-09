@@ -1,5 +1,6 @@
 export const webToolNames = [
   'list-datasources',
+  'resolve-datasource-luid',
   'delete-datasource',
   'confirm-delete-datasource',
   'list-extract-refresh-tasks',
@@ -31,6 +32,7 @@ export const webToolNames = [
   'list-pulse-metric-subscriptions',
   'generate-pulse-metric-value-insight-bundle',
   'generate-pulse-insight-brief',
+  'generate-chiron-insight-from-datasource-context',
   'search-content',
   'revoke-access-token',
   'reset-consent',
@@ -47,6 +49,7 @@ export const webToolGroupNames = [
   'project',
   'view',
   'pulse',
+  'chiron',
   'content-exploration',
   'tasks',
   'jobs',
@@ -59,6 +62,7 @@ export type WebToolGroupName = (typeof webToolGroupNames)[number];
 export const webToolGroups = {
   datasource: [
     'list-datasources',
+    'resolve-datasource-luid',
     'get-datasource-metadata',
     'query-datasource',
     'delete-datasource',
@@ -84,6 +88,7 @@ export const webToolGroups = {
     'generate-pulse-metric-value-insight-bundle',
     'generate-pulse-insight-brief',
   ],
+  chiron: ['generate-chiron-insight-from-datasource-context'],
   'content-exploration': ['search-content'],
   tasks: [
     'list-extract-refresh-tasks',

@@ -94,6 +94,10 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
+  'resolve-datasource-luid': {
+    mcp: ['tableau:mcp:datasource:read'],
+    api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
+  },
   'list-extract-refresh-tasks': {
     mcp: ['tableau:mcp:tasks:read'],
     api: new Set(['tableau:tasks:read', 'tableau:users:read']),
@@ -272,6 +276,14 @@ const toolScopeMap: Record<
   'generate-pulse-insight-brief': {
     mcp: ['tableau:mcp:insight:create'],
     api: new Set(['tableau:insight_brief:create', 'tableau:mcp_site_settings:read']),
+  },
+  'generate-chiron-insight-from-datasource-context': {
+    mcp: ['tableau:mcp:insight:create'],
+    api: new Set([
+      'tableau:insight_brief:create',
+      'tableau:insights:read',
+      'tableau:mcp_site_settings:read',
+    ]),
   },
   'search-content': {
     mcp: ['tableau:mcp:content:read'],
