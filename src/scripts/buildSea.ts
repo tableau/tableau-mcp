@@ -1,8 +1,9 @@
 /* eslint-disable no-console */
 
 import { spawnSync } from 'child_process';
+import { createHash } from 'crypto';
 import { createWriteStream, existsSync } from 'fs';
-import { chmod, cp, mkdir, readdir, rm, writeFile } from 'fs/promises';
+import { chmod, cp, mkdir, readdir, readFile, rm, writeFile } from 'fs/promises';
 import { dirname, join, posix, relative, sep } from 'path';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
@@ -176,8 +177,10 @@ async function walkFiles(dir: string): Promise<string[]> {
 }
 
 // Builds the SEA assets map for a variant: every file under its assetDirs keyed
-// by its build-relative forward-slash path, plus a manifest listing those keys
-// (so the runtime can enumerate directory contents, which node:sea can't).
+// by its build-relative forward-slash path, plus a manifest mapping each key to its
+// sha256 + byte length. The runtime enumerates directory contents from the manifest
+// (node:sea can't) AND verifies each asset's bytes against these hashes. Hashing at
+// embed time means every embedded asset is automatically integrity-covered.
 async function buildAssetsMap(variant: SeaVariant): Promise<{
   assets: Record<string, string>;
   manifestPath: string | null;
@@ -197,8 +200,16 @@ async function buildAssetsMap(variant: SeaVariant): Promise<{
       assets[key] = file;
     }
   }
+  const manifest: Record<string, { sha256: string; bytes: number }> = {};
+  for (const key of Object.keys(assets).sort()) {
+    const buf = await readFile(assets[key]);
+    manifest[key] = {
+      sha256: createHash('sha256').update(buf).digest('hex'),
+      bytes: buf.byteLength,
+    };
+  }
   const manifestPath = join(repoRoot, `asset-manifest.${variant.buildVariant}.generated.json`);
-  await writeFile(manifestPath, JSON.stringify(Object.keys(assets).sort(), null, 2));
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
   assets[MANIFEST_KEY] = manifestPath;
   return { assets, manifestPath };
 }

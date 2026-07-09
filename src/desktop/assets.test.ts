@@ -6,6 +6,10 @@ function sha256(text: string): string {
   return createHash('sha256').update(text).digest('hex');
 }
 
+function manifestEntry(text: string): { sha256: string; bytes: number } {
+  return { sha256: sha256(text), bytes: Buffer.byteLength(text) };
+}
+
 async function importWithSeaAssets(assets: SeaAssets): Promise<typeof import('./assets.js')> {
   vi.resetModules();
   const module = await import('./assets.js');
@@ -42,27 +46,24 @@ describe('desktop SEA asset access', () => {
     expect(() => listDataAssetNames('template-manifests')).toThrow(/asset-manifest\.json/i);
   });
 
-  it('verifies SEA desktop/data asset bytes against content-manifest.json', async () => {
-    const manifestText = JSON.stringify({
-      content_version: '2.24.0+content.2026-07-08',
-      schema_version: '1',
-      generated: '2026-07-08',
-      engine_compat: { server_min: '2.24.0', node: '>=22.7.5' },
-      resources: [
-        {
-          path: 'template-manifests/example.manifest.json',
+  it('fails closed when the SEA asset-manifest.json listing is not the { key: entry } shape', async () => {
+    const { listDataAssetNames } = await importWithSeaAssets({
+      'asset-manifest.json': JSON.stringify(['desktop/data/x.json']),
+    });
+
+    expect(() => listDataAssetNames('template-manifests')).toThrow(/asset-manifest\.json/i);
+  });
+
+  it('verifies SEA asset bytes against the asset-manifest.json hash', async () => {
+    const assetText = '{"template":"x"}';
+    const { readDataAsset } = await importWithSeaAssets({
+      'asset-manifest.json': JSON.stringify({
+        'desktop/data/template-manifests/example.manifest.json': {
           sha256: '0'.repeat(64),
           bytes: 16,
         },
-      ],
-    });
-    const { readDataAsset } = await importWithSeaAssets({
-      'asset-manifest.json': JSON.stringify([
-        'desktop/data/content-manifest.json',
-        'desktop/data/template-manifests/example.manifest.json',
-      ]),
-      'desktop/data/content-manifest.json': manifestText,
-      'desktop/data/template-manifests/example.manifest.json': '{"template":"x"}',
+      }),
+      'desktop/data/template-manifests/example.manifest.json': assetText,
     });
 
     expect(() => readDataAsset('template-manifests/example.manifest.json')).toThrow(
@@ -70,30 +71,35 @@ describe('desktop SEA asset access', () => {
     );
   });
 
-  it('returns SEA desktop/data asset bytes when the content hash matches', async () => {
+  it('returns SEA asset bytes when the content hash matches', async () => {
     const assetText = '{"template":"x"}';
-    const manifestText = JSON.stringify({
-      content_version: '2.24.0+content.2026-07-08',
-      schema_version: '1',
-      generated: '2026-07-08',
-      engine_compat: { server_min: '2.24.0', node: '>=22.7.5' },
-      resources: [
-        {
-          path: 'template-manifests/example.manifest.json',
-          sha256: sha256(assetText),
-          bytes: Buffer.byteLength(assetText),
-        },
-      ],
-    });
     const { readDataAsset } = await importWithSeaAssets({
-      'asset-manifest.json': JSON.stringify([
-        'desktop/data/content-manifest.json',
-        'desktop/data/template-manifests/example.manifest.json',
-      ]),
-      'desktop/data/content-manifest.json': manifestText,
+      'asset-manifest.json': JSON.stringify({
+        'desktop/data/template-manifests/example.manifest.json': manifestEntry(assetText),
+      }),
       'desktop/data/template-manifests/example.manifest.json': assetText,
     });
 
     expect(readDataAsset('template-manifests/example.manifest.json')).toBe(assetText);
+  });
+
+  it('returns null for a desktop/data asset that is not embedded (not in the manifest)', async () => {
+    const { readDataAsset } = await importWithSeaAssets({
+      'asset-manifest.json': JSON.stringify({}),
+    });
+
+    expect(readDataAsset('template-manifests/absent.manifest.json')).toBeNull();
+  });
+
+  it('verifies resources/desktop assets through the same manifest', async () => {
+    const assetText = '# knowledge';
+    const { readResourceAsset } = await importWithSeaAssets({
+      'asset-manifest.json': JSON.stringify({
+        'resources/desktop/knowledge/viz-design/chart-selection.md': manifestEntry(assetText),
+      }),
+      'resources/desktop/knowledge/viz-design/chart-selection.md': assetText,
+    });
+
+    expect(readResourceAsset('knowledge/viz-design/chart-selection.md')).toBe(assetText);
   });
 });
