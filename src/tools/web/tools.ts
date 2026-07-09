@@ -1,4 +1,6 @@
+import { getDeleteContentTool } from './_lib/deleteContent.js';
 import { getGetStaleContentReportTool } from './adminInsights/getStaleContentReport.js';
+import { getQueryAdminInsightsTool } from './adminInsights/queryAdminInsights.js';
 import { getQueryAdminInsightsJobPerformanceTool } from './adminInsights/queryJobPerformance.js';
 import { getQueryAdminInsightsSiteContentTool } from './adminInsights/querySiteContent.js';
 import { getQueryAdminInsightsTsEventsTool } from './adminInsights/queryTsEvents.js';
@@ -78,4 +80,6 @@ export const webToolFactories = [
   getQueryAdminInsightsSiteContentTool,
   getQueryAdminInsightsJobPerformanceTool,
   getGetStaleContentReportTool,
+  getQueryAdminInsightsTool,
+  getDeleteContentTool,
 ];

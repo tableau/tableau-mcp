@@ -330,6 +330,38 @@ const toolScopeMap: Record<
       'tableau:users:read',
     ]),
   },
+  // Consolidated admin-insights tool (W-23375797). Dispatches on `kind` to ts-events, site-content,
+  // job-performance (raw VDS) or stale-content (server-side anti-join). Union of the scopes required
+  // by the four legacy tools it replaces — any kind may need any of these.
+  'query-admin-insights': {
+    mcp: ['tableau:mcp:datasource:read'],
+    api: new Set([
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
+      'tableau:users:read',
+    ]),
+  },
+  // Consolidated destructive-delete tool (W-23375797). Dispatches on `resourceType` to workbook,
+  // datasource, or extract-refresh-task. Union of the MCP + API scopes of the three legacy tools it
+  // replaces — any dispatch path may need any of these. Workbook and datasource paths still route
+  // through resourceAccessChecker.
+  'delete-content': {
+    mcp: [
+      'tableau:mcp:workbook:delete',
+      'tableau:mcp:datasource:delete',
+      'tableau:mcp:tasks:delete',
+    ],
+    api: new Set([
+      'tableau:workbooks:delete',
+      'tableau:workbook_tags:update',
+      'tableau:datasources:delete',
+      'tableau:datasource_tags:update',
+      'tableau:tasks:delete',
+      'tableau:users:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
+  },
 };
 
 function getEnabledToolNames(): Set<WebToolName> {
@@ -354,6 +386,8 @@ function getEnabledToolNames(): Set<WebToolName> {
     enabledTools.delete('query-admin-insights-site-content');
     enabledTools.delete('query-admin-insights-job-performance');
     enabledTools.delete('get-stale-content-report');
+    enabledTools.delete('query-admin-insights');
+    enabledTools.delete('delete-content');
   }
 
   // Remove the MCP-Apps-only tools if the mcp-apps feature is disabled. The confirm-* tools are the

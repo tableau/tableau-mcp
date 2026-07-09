@@ -91,6 +91,7 @@ export async function guardMutation<TTarget>({
   confirmationToken,
   previewTool,
   binding,
+  fallbackTargetKind,
 }: {
   restApi: RestApi;
   extra: TableauWebRequestHandlerExtra;
@@ -111,6 +112,10 @@ export async function guardMutation<TTarget>({
   // Optional fingerprint of the caller-controlled parameters (see EvidenceContext.binding). Bound
   // into the evidence so a confirm applies exactly what was previewed, never a swapped-in payload.
   binding?: string;
+  // Optional override for the `target.kind` used in the DENIED audit fallback when `resolveTarget()`
+  // itself fails. Required for polymorphic tools like `delete-content` where the caller knows the
+  // dispatched resource kind but `targetKindHint(tool)` cannot derive it from the tool name alone.
+  fallbackTargetKind?: MutationTarget['kind'];
 }): Promise<Result<GuardOutcome, McpToolError>> {
   // (2) Build the actor identity up front so a denied attempt is still attributable in the audit.
   const actor: MutationActor = {
@@ -132,7 +137,7 @@ export async function guardMutation<TTarget>({
     try {
       deniedTarget = await resolveTarget();
     } catch {
-      deniedTarget = { id: 'unresolved', kind: targetKindHint(tool) };
+      deniedTarget = { id: 'unresolved', kind: fallbackTargetKind ?? targetKindHint(tool) };
     }
     emitAuditRecord({
       actor,
