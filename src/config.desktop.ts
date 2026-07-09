@@ -30,6 +30,14 @@ export class Config extends BaseConfig {
   /** Optional override for the External Client API discovery directory. */
   externalApiDiscoveryDir: string | undefined;
 
+  /**
+   * Session id (Desktop pid) the launching Tableau Desktop pinned via
+   * `TABLEAU_DESKTOP_SESSION_ID`. When set, every session-scoped tool defaults to
+   * this instance and `list-instances` is not registered, so the agent never has to
+   * discover which Desktop to control. Ignored unless it is a non-blank numeric pid.
+   */
+  desktopSessionId: string | undefined;
+
   constructor() {
     super();
 
@@ -42,6 +50,7 @@ export class Config extends BaseConfig {
       INLINE_XML_MAX_BYTES: inlineXmlMaxBytes,
       TABLEAU_EXTERNAL_API: externalApi,
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
+      TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
     } = cleansedVars;
 
     if (this.transport !== 'stdio') {
@@ -50,6 +59,8 @@ export class Config extends BaseConfig {
 
     this.externalApiEnabled = externalApi === '1' || externalApi === 'true';
     this.externalApiDiscoveryDir = externalApiDiscoveryDir || undefined;
+    this.desktopSessionId =
+      desktopSessionId && /^\d+$/.test(desktopSessionId) ? desktopSessionId : undefined;
     this.toolProfile = (toolProfile ?? '').trim().toLowerCase();
 
     this.inlineXmlMaxBytes = parseNumber(inlineXmlMaxBytes, {

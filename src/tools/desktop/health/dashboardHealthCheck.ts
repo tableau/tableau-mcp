@@ -35,6 +35,7 @@ import {
   summarizeSchema,
 } from '../../../desktop/binder/schema-summary.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
@@ -380,7 +381,7 @@ export function runDashboardHealthCheck({
 // ── Tool registration ────────────────────────────────────────────────────────
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   manifest: bindingRecordSchema.describe('Binding manifest from a prior bind.'),
 };
 
@@ -410,7 +411,12 @@ export const getDashboardHealthCheckTool = (
         extra,
         args: { session, manifest },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });
           if (xmlResult.isErr()) {
             return new DesktopCommandExecutionError(xmlResult.error).toErr();

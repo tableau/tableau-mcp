@@ -16,6 +16,7 @@ import {
   bundledIntelligenceProvider,
   type ProviderStatus,
 } from '../../../desktop/intelligence/provider.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
@@ -32,7 +33,7 @@ import { proposalSchema } from './proposalSchema.js';
 // manifest.template == filename, and listTemplateManifests() is [...loadManifests().values()]).
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   ask: z.string().describe('Natural-language chart request.'),
   // WATCH-CLASS (required): bind-template makes `proposal` OPTIONAL (Call-1 classify vs
   // Call-2 validate). validate-proposal has one job — validate a filled proposal — so the
@@ -101,7 +102,12 @@ export const getValidateProposalTool = (
         extra,
         args: { session, ask, proposal, minConfidence },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });
           if (xmlResult.isErr()) {
             return new DesktopCommandExecutionError(xmlResult.error).toErr();

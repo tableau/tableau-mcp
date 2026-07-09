@@ -7,6 +7,7 @@ import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXm
 import { injectViewpoints } from '../../../desktop/commands/workbook/injectViewpoints.js';
 import { loadDashboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
@@ -18,7 +19,7 @@ import { DesktopTool } from '../tool.js';
 import { buildDashboardXml, computeZones, layoutSpecSchema } from './dashboardZones.js';
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   dashboardName: z.string().describe('Name of the dashboard to build and apply.'),
   dashboardFile: z.string().describe('Cached dashboard XML file.'),
   workbookFile: z.string().describe('Cached workbook XML file.'),
@@ -79,7 +80,12 @@ export const getBuildAndApplyDashboardTool = (
           // both this tool and dashboard-auto-apply share one builder. Zero behavior change.
           const zones = computeZones(titleText, layoutSpec);
           const dashboardXml = buildDashboardXml(dashboardName, zones);
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
 
           // Fetch workbook, inject viewpoints, apply workbook
           const workbookResult = await getWorkbookXml({ executor, signal: extra.signal });

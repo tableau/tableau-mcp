@@ -56,6 +56,36 @@ describe('DesktopMcpServer', () => {
       spy.mockRestore();
     }
   });
+
+  it('does not register list-instances when a Desktop session is pinned', async () => {
+    const base = configModule.getDesktopConfig();
+    const spy = vi
+      .spyOn(configModule, 'getDesktopConfig')
+      .mockReturnValue({ ...base, desktopSessionId: '4242' });
+
+    try {
+      const server = getServer();
+      await server.registerTools();
+
+      const registeredNames = (
+        vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
+      ).map(([name]) => name);
+      expect(registeredNames).not.toContain('list-instances');
+      expect(registeredNames).toContain('list-worksheets');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('registers list-instances when no Desktop session is pinned', async () => {
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredNames = (
+      vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
+    ).map(([name]) => name);
+    expect(registeredNames).toContain('list-instances');
+  });
 });
 
 describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
@@ -175,7 +205,6 @@ describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
     expect(registeredNames.length).toBe(desktopToolFactories.length);
   });
 });
-
 
 function getServer(): DesktopMcpServer {
   const server = new DesktopMcpServer();

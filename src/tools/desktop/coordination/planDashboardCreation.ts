@@ -5,13 +5,14 @@ import { z } from 'zod';
 import { DesktopCache } from '../../../desktop/cache.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { resolveField } from '../../../desktop/metadata/index.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { listTemplateNames } from '../../../desktop/templates/templatePath.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   dashboardName: z.string().describe('Name of the dashboard to create.'),
   title: z.string().optional().describe('Optional dashboard title.'),
   layout: z
@@ -77,7 +78,12 @@ export const getPlanDashboardCreationTool = (
         extra,
         args: { session, dashboardName, title, layout, worksheets },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const signal = extra.signal;
           const workbookResult = await getWorkbookXml({ executor, signal });
 
@@ -89,7 +95,7 @@ export const getPlanDashboardCreationTool = (
           const templateFiles = listTemplateNames();
 
           // Resolve all requested fields
-          const cache = new DesktopCache(session);
+          const cache = new DesktopCache(resolvedSession);
           const fieldMap: Record<string, string | null> = {};
           const aggregationWarnings: string[] = [];
           const ambiguousFields: Array<{ field: string; candidates: string[] }> = [];

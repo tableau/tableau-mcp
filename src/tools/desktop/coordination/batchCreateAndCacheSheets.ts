@@ -9,6 +9,7 @@ import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXm
 import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { addDashboard, addSheet } from '../../../desktop/metadata/index.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   DesktopCommandExecutionError,
   WorkbookXmlLoadFailedError,
@@ -17,7 +18,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   worksheetNames: z.array(z.string()).describe('Names of worksheets to create.'),
   dashboardName: z.string().describe('Name of dashboard to create.'),
 };
@@ -51,9 +52,14 @@ export const getBatchCreateAndCacheSheetsTool = (
         extra,
         args: { session, worksheetNames, dashboardName },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const signal = extra.signal;
-          const cache = new DesktopCache(session);
+          const cache = new DesktopCache(resolvedSession);
 
           // Fetch current workbook
           const workbookResult = await getWorkbookXml({ executor, signal });

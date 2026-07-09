@@ -1,9 +1,11 @@
 import { desktopToolNames } from '../tools/desktop/toolName.js';
 import {
+  buildDesktopInstructions,
   DESKTOP_ROUTE_TABLE,
   DesktopInstructionRoute,
   generateDesktopInstructions,
   renderInstructionEntry,
+  SESSION_RESOLUTION_ID,
 } from './routeTable.js';
 
 const routes = DESKTOP_ROUTE_TABLE.filter(
@@ -63,5 +65,28 @@ describe('generateDesktopInstructions', () => {
   it('renders every entry in table order, one paragraph each, separated by blank lines', () => {
     const generated = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
     expect(generated.split('\n\n')).toEqual(DESKTOP_ROUTE_TABLE.map(renderInstructionEntry));
+  });
+});
+
+describe('buildDesktopInstructions', () => {
+  const sessionResolutionText = DESKTOP_ROUTE_TABLE.find(
+    (entry) => entry.id === SESSION_RESOLUTION_ID && entry.kind === 'prose',
+  );
+
+  it('keeps the session-resolution guidance when no session is pinned', () => {
+    const unpinned = buildDesktopInstructions({ sessionPinned: false });
+    expect(unpinned).toBe(generateDesktopInstructions(DESKTOP_ROUTE_TABLE));
+    expect(unpinned).toContain('list-instances');
+  });
+
+  it('drops the session-resolution guidance when a session is pinned', () => {
+    const pinned = buildDesktopInstructions({ sessionPinned: true });
+    expect(sessionResolutionText?.kind).toBe('prose');
+    if (sessionResolutionText?.kind === 'prose') {
+      expect(pinned).not.toContain(sessionResolutionText.text);
+    }
+    expect(pinned).not.toContain('list-instances');
+    // The other routes must survive the filter untouched.
+    expect(pinned).toContain('You are controlling Tableau Desktop.');
   });
 });

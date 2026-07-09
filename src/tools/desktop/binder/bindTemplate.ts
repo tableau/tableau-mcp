@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'crypto';
-import { Err, Ok, Result } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
@@ -18,17 +18,12 @@ import {
   loadWorkbookXml,
   type LoadWorkbookXmlError,
 } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
-import { DesktopDiscoverer } from '../../../desktop/desktopDiscoverer.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { ExecuteCommandError, ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  type McpToolError,
-  NoDesktopInstancesFoundError,
-} from '../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { DesktopTool } from '../tool.js';
@@ -166,40 +161,6 @@ function buildGuidance(res: BinderResult): string {
     case 'escalate':
       return renderEscalationGuidance(res.reason, res.blockers);
   }
-}
-
-/**
- * Session-default-when-unique (bind-template only): with an explicit `session` the
- * caller always wins; with none, resolve automatically ONLY when exactly one Desktop
- * instance is running. 0 or 2+ instances fail closed with an instance-listing error
- * so the caller must pick one — this deletes the list-instances turn from the common
- * single-Desktop case without ever guessing between multiple instances.
- *
- * Exported for reuse by dashboard-auto-apply (W60), which needs the identical
- * fail-closed session resolution — no reason for a second implementation.
- */
-export function resolveSession(session: string | undefined): Result<string, McpToolError> {
-  if (session !== undefined) {
-    return Ok(session);
-  }
-
-  const instances = new DesktopDiscoverer().getInstances();
-  if (instances.size === 0) {
-    return Err(new NoDesktopInstancesFoundError());
-  }
-  if (instances.size > 1) {
-    const ids = Array.from(instances.values())
-      .map((i) => i.pid)
-      .join(', ');
-    return Err(
-      new ArgsValidationError(
-        `Multiple Tableau Desktop instances are running (session IDs: ${ids}). Specify which one to use via the 'session' parameter (see list-instances for details).`,
-      ),
-    );
-  }
-
-  const [only] = Array.from(instances.values());
-  return Ok(String(only.pid));
 }
 
 /** Human-readable detail for a loadWorkbookXml failure, used in the apply-error text. */

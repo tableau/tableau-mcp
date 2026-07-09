@@ -21,6 +21,11 @@ export type DesktopInstructionProse = {
 
 export type DesktopInstructionEntry = DesktopInstructionRoute | DesktopInstructionProse;
 
+// The session-resolution prose points the agent at list-instances. When the launching
+// Desktop pins a session, that tool is unregistered, so this entry is dropped from the
+// instructions to avoid naming a tool the client cannot call.
+export const SESSION_RESOLUTION_ID = 'session-resolution';
+
 export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
@@ -70,7 +75,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'prose',
-    id: 'session-resolution',
+    id: SESSION_RESOLUTION_ID,
     text: 'Every session-scoped tool call needs the session id from list-instances — except bind-template and dashboard-auto-apply, which auto-resolve the session when exactly one Desktop instance is running.',
   },
   {
@@ -86,4 +91,15 @@ export function renderInstructionEntry(entry: DesktopInstructionEntry): string {
 
 export function generateDesktopInstructions(table: readonly DesktopInstructionEntry[]): string {
   return table.map(renderInstructionEntry).join('\n\n');
+}
+
+/**
+ * Instructions for a given session-pinning state. When a session is pinned the
+ * agent never calls list-instances, so the session-resolution guidance is dropped.
+ */
+export function buildDesktopInstructions({ sessionPinned }: { sessionPinned: boolean }): string {
+  const table = sessionPinned
+    ? DESKTOP_ROUTE_TABLE.filter((entry) => entry.id !== SESSION_RESOLUTION_ID)
+    : DESKTOP_ROUTE_TABLE;
+  return generateDesktopInstructions(table);
 }
