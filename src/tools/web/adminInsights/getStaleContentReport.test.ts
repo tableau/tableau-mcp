@@ -352,6 +352,7 @@ describe('buildProjectIdWarnings', () => {
       exportedForTesting.buildProjectIdWarnings({
         boundedOutOfScopeIds: [],
         unknownProjectIds: [],
+        hasRemainingScope: true,
       }),
     ).toEqual([]);
   });
@@ -360,6 +361,7 @@ describe('buildProjectIdWarnings', () => {
     const warnings = exportedForTesting.buildProjectIdWarnings({
       boundedOutOfScopeIds: [],
       unknownProjectIds: ['bad-1', 'bad-2'],
+      hasRemainingScope: true,
     });
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatchObject({
@@ -376,24 +378,48 @@ describe('buildProjectIdWarnings', () => {
     const warnings = exportedForTesting.buildProjectIdWarnings({
       boundedOutOfScopeIds: ['p-2'],
       unknownProjectIds: [],
+      hasRemainingScope: true,
     });
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatchObject({
       reason: 'not-permitted-by-config',
       ignoredProjectIds: ['p-2'],
     });
+    // Env-var name (INCLUDE_PROJECT_IDS) is not leaked into caller-facing output.
+    expect(warnings[0].message).not.toContain('INCLUDE_PROJECT_IDS');
   });
 
   it('emits both reasons (max two entries) when both drop paths fire', () => {
     const warnings = exportedForTesting.buildProjectIdWarnings({
       boundedOutOfScopeIds: ['p-2'],
       unknownProjectIds: ['bad-1'],
+      hasRemainingScope: true,
     });
     expect(warnings).toHaveLength(2);
     expect(warnings.map((w) => w.reason).sort()).toEqual([
       'not-permitted-by-config',
       'unknown-on-site',
     ]);
+  });
+
+  it('says a valid subset was scoped to when some scope remains', () => {
+    const warnings = exportedForTesting.buildProjectIdWarnings({
+      boundedOutOfScopeIds: [],
+      unknownProjectIds: ['bad-1'],
+      hasRemainingScope: true,
+    });
+    expect(warnings[0].message).toContain('remaining valid projects');
+  });
+
+  it('says an empty report was returned (never the full site) when no scope remains', () => {
+    const warnings = exportedForTesting.buildProjectIdWarnings({
+      boundedOutOfScopeIds: [],
+      unknownProjectIds: ['bad-1', 'bad-2'],
+      hasRemainingScope: false,
+    });
+    // The all-invalid message must not imply a valid subset existed.
+    expect(warnings[0].message).not.toContain('remaining valid projects');
+    expect(warnings[0].message).toContain('empty report');
   });
 });
 
@@ -715,6 +741,9 @@ describe('get-stale-content-report tool', () => {
       reason: 'unknown-on-site',
       ignoredProjectIds: ['bad-1', 'bad-2'],
     });
+    // The warning must not imply a valid subset was scoped to — it must say the report is empty.
+    expect(payload.mcp?.warnings?.[0].message).toContain('empty report');
+    expect(payload.mcp?.warnings?.[0].message).not.toContain('remaining valid projects');
   });
 
   it('warns (not-permitted-by-config) and scopes to the permitted subset when an ID is outside the bounded context', async () => {

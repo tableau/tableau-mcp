@@ -196,9 +196,14 @@ and the REST API rejects it (404). \`itemLuid\` is \`null\` only on older sites 
                 unknownProjectIds = namesResult.value.unknownIds;
               }
 
+              // Did any requested project survive both drop paths? Drives the warning wording:
+              // if nothing remains, the report is empty and the message must say so rather than
+              // implying a valid subset was scoped to.
+              const hasRemainingScope = !!(projectNameScope && projectNameScope.length > 0);
               const warnings = buildProjectIdWarnings({
                 boundedOutOfScopeIds,
                 unknownProjectIds,
+                hasRemainingScope,
               });
 
               // Widening guard (core fix for W-23202054): a scope WAS requested but nothing
@@ -418,15 +423,23 @@ function resolveProjectScopeIds({
 }
 
 // Assembles at most two structured warnings — one for IDs unknown on the site, one for IDs
-// dropped by the server-configured bounded context — for attachment to the successful result.
+// dropped by the server-configured project scope — for attachment to the successful result.
+// `hasRemainingScope` branches the wording: when no requested project survived, the message must
+// tell the caller the report is empty rather than implying a valid subset was scoped to — that
+// false premise is exactly the silent-widening confusion this fix targets.
 function buildProjectIdWarnings({
   boundedOutOfScopeIds,
   unknownProjectIds,
+  hasRemainingScope,
 }: {
   boundedOutOfScopeIds: ReadonlyArray<string>;
   unknownProjectIds: ReadonlyArray<string>;
+  hasRemainingScope: boolean;
 }): StaleReportWarning[] {
   const warnings: StaleReportWarning[] = [];
+  const outcome = hasRemainingScope
+    ? 'The report was scoped to the remaining valid projects.'
+    : 'None of the requested projectIds resolved to a project you can report on; an empty report (0 rows) was returned instead of the full site.';
 
   if (unknownProjectIds.length > 0) {
     warnings.push({
@@ -434,7 +447,7 @@ function buildProjectIdWarnings({
       severity: 'WARNING',
       message:
         `The following requested projectIds do not exist on this site and were ignored: ${unknownProjectIds.join(', ')}. ` +
-        'The report was scoped to the remaining valid projects.',
+        outcome,
       ignoredProjectIds: [...unknownProjectIds],
       reason: 'unknown-on-site',
     });
@@ -445,8 +458,8 @@ function buildProjectIdWarnings({
       type: 'PROJECT_IDS_IGNORED',
       severity: 'WARNING',
       message:
-        `The following requested projectIds are outside the server-configured project scope (INCLUDE_PROJECT_IDS) and were ignored: ${boundedOutOfScopeIds.join(', ')}. ` +
-        'The report was scoped to the remaining permitted projects.',
+        `The following requested projectIds are outside this server's configured project scope and were ignored: ${boundedOutOfScopeIds.join(', ')}. ` +
+        outcome,
       ignoredProjectIds: [...boundedOutOfScopeIds],
       reason: 'not-permitted-by-config',
     });
