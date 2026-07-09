@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
+import { OverridableConfig } from '../../../overridableConfig.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
@@ -308,36 +309,140 @@ describe('buildSiteContentQuery', () => {
 });
 
 describe('resolveProjectScopeIds', () => {
-  it('returns null when no scope is set', () => {
-    const ids = exportedForTesting.resolveProjectScopeIds({
+  it('returns null scope with no out-of-scope IDs when no scope is set', () => {
+    const resolution = exportedForTesting.resolveProjectScopeIds({
       argProjectIds: undefined,
       boundedProjectIds: null,
     });
-    expect(ids).toBeNull();
+    expect(resolution.scopeIds).toBeNull();
+    expect(resolution.boundedOutOfScopeIds).toEqual([]);
   });
 
   it('returns the arg LUIDs when no bounded context is set', () => {
-    const ids = exportedForTesting.resolveProjectScopeIds({
+    const resolution = exportedForTesting.resolveProjectScopeIds({
       argProjectIds: ['p-1', 'p-2'],
       boundedProjectIds: null,
     });
-    expect(ids).toEqual(['p-1', 'p-2']);
+    expect(resolution.scopeIds).toEqual(['p-1', 'p-2']);
+    expect(resolution.boundedOutOfScopeIds).toEqual([]);
   });
 
-  it('returns the intersection when both arg and bounded context are set', () => {
-    const ids = exportedForTesting.resolveProjectScopeIds({
+  it('returns the intersection and reports the bounded out-of-scope IDs', () => {
+    const resolution = exportedForTesting.resolveProjectScopeIds({
       argProjectIds: ['p-1', 'p-other'],
       boundedProjectIds: new Set(['p-1', 'p-allowed']),
     });
-    expect(ids).toEqual(['p-1']);
+    expect(resolution.scopeIds).toEqual(['p-1']);
+    expect(resolution.boundedOutOfScopeIds).toEqual(['p-other']);
   });
 
-  it('falls back to bounded context when arg is omitted', () => {
-    const ids = exportedForTesting.resolveProjectScopeIds({
+  it('falls back to bounded context (no out-of-scope IDs) when arg is omitted', () => {
+    const resolution = exportedForTesting.resolveProjectScopeIds({
       argProjectIds: undefined,
       boundedProjectIds: new Set(['p-bounded']),
     });
-    expect(ids).toEqual(['p-bounded']);
+    expect(resolution.scopeIds).toEqual(['p-bounded']);
+    expect(resolution.boundedOutOfScopeIds).toEqual([]);
+  });
+});
+
+describe('buildProjectIdWarnings', () => {
+  it('returns no warnings when nothing was dropped', () => {
+    expect(
+      exportedForTesting.buildProjectIdWarnings({
+        boundedOutOfScopeIds: [],
+        unknownProjectIds: [],
+      }),
+    ).toEqual([]);
+  });
+
+  it('emits one unknown-on-site warning listing the unknown IDs', () => {
+    const warnings = exportedForTesting.buildProjectIdWarnings({
+      boundedOutOfScopeIds: [],
+      unknownProjectIds: ['bad-1', 'bad-2'],
+    });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({
+      type: 'PROJECT_IDS_IGNORED',
+      severity: 'WARNING',
+      reason: 'unknown-on-site',
+      ignoredProjectIds: ['bad-1', 'bad-2'],
+    });
+    expect(warnings[0].message).toContain('bad-1');
+    expect(warnings[0].message).toContain('bad-2');
+  });
+
+  it('emits one not-permitted-by-config warning listing the out-of-scope IDs', () => {
+    const warnings = exportedForTesting.buildProjectIdWarnings({
+      boundedOutOfScopeIds: ['p-2'],
+      unknownProjectIds: [],
+    });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({
+      reason: 'not-permitted-by-config',
+      ignoredProjectIds: ['p-2'],
+    });
+  });
+
+  it('emits both reasons (max two entries) when both drop paths fire', () => {
+    const warnings = exportedForTesting.buildProjectIdWarnings({
+      boundedOutOfScopeIds: ['p-2'],
+      unknownProjectIds: ['bad-1'],
+    });
+    expect(warnings).toHaveLength(2);
+    expect(warnings.map((w) => w.reason).sort()).toEqual([
+      'not-permitted-by-config',
+      'unknown-on-site',
+    ]);
+  });
+});
+
+describe('resolveProjectIdsToNames', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearStaleContentReportCache();
+    mocks.mockQueryProjects.mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 2 },
+      projects: [
+        { id: 'p-1', name: 'Finance' },
+        { id: 'p-2', name: 'Sales' },
+      ],
+    });
+  });
+
+  const restApi = {
+    siteId: 'site-test',
+    projectsMethods: { queryProjects: mocks.mockQueryProjects },
+  } as unknown as Parameters<typeof exportedForTesting.resolveProjectIdsToNames>[0]['restApi'];
+
+  it('returns matched names with no unknown IDs when all resolve', async () => {
+    const result = await exportedForTesting.resolveProjectIdsToNames({
+      restApi,
+      projectIds: ['p-1', 'p-2'],
+    });
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().names.sort()).toEqual(['Finance', 'Sales']);
+    expect(result.unwrap().unknownIds).toEqual([]);
+  });
+
+  it('reports the unknown IDs that matched no site project', async () => {
+    const result = await exportedForTesting.resolveProjectIdsToNames({
+      restApi,
+      projectIds: ['p-1', 'nonexistent'],
+    });
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().names).toEqual(['Finance']);
+    expect(result.unwrap().unknownIds).toEqual(['nonexistent']);
+  });
+
+  it('reports all IDs as unknown when none match', async () => {
+    const result = await exportedForTesting.resolveProjectIdsToNames({
+      restApi,
+      projectIds: ['bad-1', 'bad-2'],
+    });
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().names).toEqual([]);
+    expect(result.unwrap().unknownIds).toEqual(['bad-1', 'bad-2']);
   });
 });
 
@@ -557,16 +662,144 @@ describe('get-stale-content-report tool', () => {
     expect(projectFilters).toHaveLength(1);
     expect(projectFilters[0].exclude).toBe(false);
   });
+
+  it('warns on partially-invalid projectIds and scopes to the valid subset (unknown-on-site)', async () => {
+    const { Ok } = await import('ts-results-es');
+    mocks.mockQueryDatasource.mockResolvedValueOnce(Ok({ data: [] }));
+
+    // Site has p-1 (Finance) and p-2 (Sales); 'nonexistent' matches nothing.
+    const result = await getToolResult({ minAgeDays: 90, projectIds: ['p-1', 'nonexistent'] });
+
+    expect(result.isError).toBeFalsy();
+
+    // Filter still applied for the valid project.
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
+    const vdsCall = mocks.mockQueryDatasource.mock.calls[0][0];
+    const filters = vdsCall.query.filters as Array<{
+      field?: { fieldCaption?: string };
+      filterType?: string;
+      values?: string[];
+      exclude?: boolean;
+    }>;
+    const includeFilter = filters.find(
+      (f) => f.field?.fieldCaption === 'Item Parent Project Name' && f.exclude === false,
+    );
+    expect(includeFilter?.values).toEqual(['Finance']);
+
+    const payload = parsePayload(result);
+    expect(payload.mcp?.warnings).toHaveLength(1);
+    expect(payload.mcp?.warnings?.[0]).toMatchObject({
+      type: 'PROJECT_IDS_IGNORED',
+      severity: 'WARNING',
+      reason: 'unknown-on-site',
+      ignoredProjectIds: ['nonexistent'],
+    });
+  });
+
+  it('returns an empty report (never the full site) when ALL projectIds are invalid (widening guard — W-23202054)', async () => {
+    const result = await getToolResult({ minAgeDays: 90, projectIds: ['bad-1', 'bad-2'] });
+
+    expect(result.isError).toBeFalsy();
+
+    // Core regression assertion: the widening guard must short-circuit BEFORE any
+    // Site Content query runs, so the unscoped full-site query can never fire.
+    expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+
+    const payload = parsePayload(result);
+    expect(payload.rows).toEqual([]);
+    expect(payload.totalStaleItems).toBe(0);
+    expect(payload.totalStaleSizeBytes).toBe(0);
+    expect(payload.thresholdDays).toBe(90);
+    expect(payload.mcp?.warnings).toHaveLength(1);
+    expect(payload.mcp?.warnings?.[0]).toMatchObject({
+      reason: 'unknown-on-site',
+      ignoredProjectIds: ['bad-1', 'bad-2'],
+    });
+  });
+
+  it('warns (not-permitted-by-config) and scopes to the permitted subset when an ID is outside the bounded context', async () => {
+    const { Ok } = await import('ts-results-es');
+    mocks.mockQueryDatasource.mockResolvedValueOnce(Ok({ data: [] }));
+
+    // Server bounded context permits only p-1; caller requests p-1 + p-2.
+    const result = await getToolResult({
+      minAgeDays: 90,
+      projectIds: ['p-1', 'p-2'],
+      includeProjectIds: 'p-1',
+    });
+
+    expect(result.isError).toBeFalsy();
+
+    const vdsCall = mocks.mockQueryDatasource.mock.calls[0][0];
+    const filters = vdsCall.query.filters as Array<{
+      field?: { fieldCaption?: string };
+      values?: string[];
+      exclude?: boolean;
+    }>;
+    const includeFilter = filters.find(
+      (f) => f.field?.fieldCaption === 'Item Parent Project Name' && f.exclude === false,
+    );
+    expect(includeFilter?.values).toEqual(['Finance']);
+
+    const payload = parsePayload(result);
+    expect(payload.mcp?.warnings).toHaveLength(1);
+    expect(payload.mcp?.warnings?.[0]).toMatchObject({
+      reason: 'not-permitted-by-config',
+      ignoredProjectIds: ['p-2'],
+    });
+  });
+
+  it('omits the mcp key entirely when all projectIds are valid (back-compat)', async () => {
+    const { Ok } = await import('ts-results-es');
+    mocks.mockQueryDatasource.mockResolvedValueOnce(Ok({ data: [] }));
+
+    const result = await getToolResult({ minAgeDays: 90, projectIds: ['p-1', 'p-2'] });
+
+    expect(result.isError).toBeFalsy();
+    const payload = parsePayload(result);
+    expect('mcp' in payload).toBe(false);
+  });
 });
+
+type StaleReportPayload = {
+  thresholdDays: number;
+  totalStaleItems: number;
+  totalStaleSizeBytes: number;
+  rows: Array<{ itemId: string }>;
+  mcp?: {
+    warnings: Array<{
+      type: string;
+      severity: string;
+      reason: string;
+      ignoredProjectIds: string[];
+      message: string;
+    }>;
+  };
+};
+
+function parsePayload(result: CallToolResult): StaleReportPayload {
+  if (result.content[0].type !== 'text') {
+    throw new Error('expected text content');
+  }
+  return JSON.parse(result.content[0].text) as StaleReportPayload;
+}
 
 async function getToolResult(params: {
   minAgeDays?: number;
   projectIds?: string[];
+  includeProjectIds?: string;
 }): Promise<CallToolResult> {
   const tool = getGetStaleContentReportTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
+  const extra = getMockRequestHandlerExtra();
+  if (params.includeProjectIds !== undefined) {
+    // Drive the server bounded context (INCLUDE_PROJECT_IDS) → boundedContext.projectIds.
+    extra.getConfigWithOverrides = vi
+      .fn()
+      .mockResolvedValue(new OverridableConfig({ INCLUDE_PROJECT_IDS: params.includeProjectIds }));
+  }
   return await callback(
     { minAgeDays: params.minAgeDays, projectIds: params.projectIds, itemTypes: undefined },
-    getMockRequestHandlerExtra(),
+    extra,
   );
 }

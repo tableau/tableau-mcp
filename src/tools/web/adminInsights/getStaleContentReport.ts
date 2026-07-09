@@ -32,7 +32,10 @@ const paramsSchema = {
     .optional()
     .describe(
       'Optional list of project LUIDs to scope the report to. ' +
-        'If omitted, returns all projects the caller can access.',
+        'If omitted, returns all projects the caller can access. ' +
+        'Any requested LUID that is unknown on the site or outside the server-configured ' +
+        'scope is reported in `mcp.warnings` and ignored; if none of the requested LUIDs ' +
+        'resolve, an empty report (0 rows) is returned — never the full site.',
     ),
   itemTypes: z
     .array(z.enum(['Workbook', 'Datasource']))
@@ -78,6 +81,18 @@ const siteContentRowSchema = z
   .passthrough();
 
 type SiteContentRow = z.infer<typeof siteContentRowSchema>;
+
+// Structured warning attached to a successful result when some requested projectIds were
+// ignored. Follows the `mcp.warnings` convention established by query-datasource
+// (see ContextFilterWarning in validators/validateContextFilters.ts). At most two entries
+// are produced — one per `reason`.
+type StaleReportWarning = {
+  type: 'PROJECT_IDS_IGNORED';
+  severity: 'WARNING';
+  message: string;
+  ignoredProjectIds: string[];
+  reason: 'unknown-on-site' | 'not-permitted-by-config';
+};
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -149,7 +164,7 @@ and the REST API rejects it (404). \`itemLuid\` is \`null\` only on older sites 
       const configWithOverrides = await extra.getConfigWithOverrides();
       const thresholdDays = minAgeDays ?? configWithOverrides.staleContentMinAgeDays;
       const types = itemTypes ?? ['Workbook', 'Datasource'];
-      const requestedProjectIds = resolveProjectScopeIds({
+      const { scopeIds: requestedProjectIds, boundedOutOfScopeIds } = resolveProjectScopeIds({
         argProjectIds: projectIds,
         boundedProjectIds: configWithOverrides.boundedContext.projectIds,
       });
@@ -168,6 +183,7 @@ and the REST API rejects it (404). \`itemLuid\` is \`null\` only on older sites 
               }
 
               let projectNameScope: ReadonlyArray<string> | null = null;
+              let unknownProjectIds: ReadonlyArray<string> = [];
               if (requestedProjectIds) {
                 const namesResult = await resolveProjectIdsToNames({
                   restApi,
@@ -176,7 +192,27 @@ and the REST API rejects it (404). \`itemLuid\` is \`null\` only on older sites 
                 if (namesResult.isErr()) {
                   return namesResult;
                 }
-                projectNameScope = namesResult.value;
+                projectNameScope = namesResult.value.names;
+                unknownProjectIds = namesResult.value.unknownIds;
+              }
+
+              const warnings = buildProjectIdWarnings({
+                boundedOutOfScopeIds,
+                unknownProjectIds,
+              });
+
+              // Widening guard (core fix for W-23202054): a scope WAS requested but nothing
+              // resolved to a real project name. Do NOT fall through to buildSiteContentQuery,
+              // which would emit the unscoped full-site query. Return an empty report + the
+              // warnings so a fully-invalid scope can never silently widen to the whole site.
+              if (requestedProjectIds && projectNameScope && projectNameScope.length === 0) {
+                return new Ok({
+                  thresholdDays,
+                  totalStaleItems: 0,
+                  totalStaleSizeBytes: 0,
+                  rows: [] as StaleContentRow[],
+                  ...(warnings.length > 0 ? { mcp: { warnings } } : {}),
+                });
               }
 
               const siteContentResult = await executeAdminInsightsQuery({
@@ -204,6 +240,7 @@ and the REST API rejects it (404). \`itemLuid\` is \`null\` only on older sites 
                 totalStaleItems: rows.length,
                 totalStaleSizeBytes: rows.reduce((sum, r) => sum + (r.size ?? 0), 0),
                 rows,
+                ...(warnings.length > 0 ? { mcp: { warnings } } : {}),
               });
             },
           });
@@ -280,11 +317,12 @@ async function resolveProjectIdsToNames({
 }: {
   restApi: RestApi;
   projectIds: ReadonlyArray<string>;
-}): Promise<Result<string[], McpToolError>> {
+}): Promise<Result<{ names: string[]; unknownIds: string[] }, McpToolError>> {
   const idSet = new Set(projectIds);
   const cache = getProjectNameCache();
 
-  // Cache hit: every requested ID is in the cache.
+  // Cache hit: every requested ID is in the cache. An all-hit means every requested ID
+  // resolved to a real project name, so there are no unknown IDs.
   const cachedNames = new Set<string>();
   let allHit = true;
   for (const id of idSet) {
@@ -296,7 +334,7 @@ async function resolveProjectIdsToNames({
     cachedNames.add(name);
   }
   if (allHit) {
-    return new Ok(Array.from(cachedNames));
+    return new Ok({ names: Array.from(cachedNames), unknownIds: [] });
   }
 
   // Cache miss for at least one ID: refresh the full project list for this site.
@@ -314,14 +352,19 @@ async function resolveProjectIdsToNames({
   });
 
   const out = new Set<string>();
+  const matchedIds = new Set<string>();
   for (const p of projects) {
     cache.set(`${restApi.siteId}:${p.id}`, p.name);
     if (idSet.has(p.id)) {
       out.add(p.name);
+      matchedIds.add(p.id);
     }
   }
 
-  return new Ok(Array.from(out));
+  // Requested IDs that matched no site project — silently dropped before W-23202054.
+  const unknownIds = projectIds.filter((id) => !matchedIds.has(id));
+
+  return new Ok({ names: Array.from(out), unknownIds });
 }
 
 // Lazy-initialized cache to avoid module-level parseNumber call.
@@ -345,23 +388,71 @@ function getProjectNameCache(): ExpiringMap<string, string> {
   return projectNameCache;
 }
 
+type ProjectScopeResolution = {
+  // null = no scope requested (all projects the caller can access).
+  scopeIds: ReadonlyArray<string> | null;
+  // Requested IDs dropped because they fall outside the server INCLUDE_PROJECT_IDS bound.
+  boundedOutOfScopeIds: ReadonlyArray<string>;
+};
+
 function resolveProjectScopeIds({
   argProjectIds,
   boundedProjectIds,
 }: {
   argProjectIds: ReadonlyArray<string> | undefined;
   boundedProjectIds: Set<string> | null;
-}): ReadonlyArray<string> | null {
+}): ProjectScopeResolution {
   if (argProjectIds && argProjectIds.length > 0) {
     if (boundedProjectIds) {
-      return argProjectIds.filter((id) => boundedProjectIds.has(id));
+      return {
+        scopeIds: argProjectIds.filter((id) => boundedProjectIds.has(id)),
+        boundedOutOfScopeIds: argProjectIds.filter((id) => !boundedProjectIds.has(id)),
+      };
     }
-    return [...argProjectIds];
+    return { scopeIds: [...argProjectIds], boundedOutOfScopeIds: [] };
   }
   if (boundedProjectIds) {
-    return Array.from(boundedProjectIds);
+    return { scopeIds: Array.from(boundedProjectIds), boundedOutOfScopeIds: [] };
   }
-  return null;
+  return { scopeIds: null, boundedOutOfScopeIds: [] };
+}
+
+// Assembles at most two structured warnings — one for IDs unknown on the site, one for IDs
+// dropped by the server-configured bounded context — for attachment to the successful result.
+function buildProjectIdWarnings({
+  boundedOutOfScopeIds,
+  unknownProjectIds,
+}: {
+  boundedOutOfScopeIds: ReadonlyArray<string>;
+  unknownProjectIds: ReadonlyArray<string>;
+}): StaleReportWarning[] {
+  const warnings: StaleReportWarning[] = [];
+
+  if (unknownProjectIds.length > 0) {
+    warnings.push({
+      type: 'PROJECT_IDS_IGNORED',
+      severity: 'WARNING',
+      message:
+        `The following requested projectIds do not exist on this site and were ignored: ${unknownProjectIds.join(', ')}. ` +
+        'The report was scoped to the remaining valid projects.',
+      ignoredProjectIds: [...unknownProjectIds],
+      reason: 'unknown-on-site',
+    });
+  }
+
+  if (boundedOutOfScopeIds.length > 0) {
+    warnings.push({
+      type: 'PROJECT_IDS_IGNORED',
+      severity: 'WARNING',
+      message:
+        `The following requested projectIds are outside the server-configured project scope (INCLUDE_PROJECT_IDS) and were ignored: ${boundedOutOfScopeIds.join(', ')}. ` +
+        'The report was scoped to the remaining permitted projects.',
+      ignoredProjectIds: [...boundedOutOfScopeIds],
+      reason: 'not-permitted-by-config',
+    });
+  }
+
+  return warnings;
 }
 
 export function computeStaleRows({
@@ -464,5 +555,7 @@ export function clearStaleContentReportCache(): void {
 export const exportedForTesting = {
   buildSiteContentQuery,
   resolveProjectScopeIds,
+  resolveProjectIdsToNames,
+  buildProjectIdWarnings,
   parseSize,
 };
