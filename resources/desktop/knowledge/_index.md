@@ -83,6 +83,7 @@ Entries show the tactics slug and, where one exists, its strategy companion.
 - Reviewing a dashboard before publishing (checklist) → `strategy/dashboard-design/dashboard-peer-review-checklist`
 
 ### "I'm choosing an approach / scoping the request"
+- Verify assumptions with a throwaway diagnostic view before committing to a design → `strategy/workflow/diagnostic-view-loop`
 - Native vs Exchange vs build a custom viz → `personalization/choosing-a-custom-viz-solution`
 - Discovery / alignment before building → `personalization/discovery-first-authoring`
 - Validate data availability & quality before building → `personalization/validate-data-before-building`

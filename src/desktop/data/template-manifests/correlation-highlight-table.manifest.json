@@ -143,6 +143,11 @@
       "xml": "correlation-highlight-table.xml:24-34"
     },
     {
+      "code": "hardcoded-member-inclusion",
+      "detail": "STRUCTURED hazard class read by the bind-time period guard (src/binder/period-guard.ts, W36-D-v1). The load-bearing filter here is a categorical MEMBER INCLUSION (a Sub-Category union of 7 members), NOT a date-part period exclusion \u2014 even though this template DOES bind a date (Order Date at Month + Year), the hardcoded filter is on Sub-Category, so the incomplete-period concern does not apply. The incomplete-period guard therefore DECLINES to veto on period grounds; the template stays ineligible via its HARDCODED_FILTER_MEMBERS blocker, and its v2 path is member parameterization (collapse to level-members), not a period trim. Classified explicitly so the period guard's non-fire is auditable rather than incidental.",
+      "xml": "correlation-highlight-table.xml:24-34"
+    },
+    {
       "code": "raw-formula-refs",
       "detail": "The Profit-Ratio calc references the bare bindable [Profit]/[Sales]; templates.ts rewriteFormulaFieldRefs repairs them on bind ONLY because both are bindable bare-key slots (same pattern as correlation-scatter-plot-chart). Gate #6 asserts both are bound.",
       "xml": "correlation-highlight-table.xml:10-11"

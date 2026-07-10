@@ -25,7 +25,7 @@ Both are silent: the apply returns "completed"; only the render (or a diagnostic
 ## Best Practices
 
 1. **Namespace template-internal calc names per apply.** When injecting a template, rename the template's OWN calc columns to per-apply-unique names (e.g. `Calculation_GanttSize` → `Calculation_GanttSize_tpl_<shorthash>`) consistently across the column definition, its column-instances, encodings, and any formula that references it. A stale same-named datasource calc then cannot capture the reference. This is default-on in the injector (see Implementation).
-2. **Keep captions human-readable.** Namespace only the internal `name` token; leave `caption` (what the user sees) untouched so pills stay legible.
+2. **Keep captions human-readable — but track a formula REBIND.** Per-apply NAME namespacing (the `_tpl_` suffix) touches only the internal `name` token; leave `caption` alone so pills stay legible. **Exception:** if the same apply also *rebinds* the formula's field-refs to different bound fields, a bracket-free caption then misnames the calc and must be re-derived — see `calc-caption-follows-formula-rebind.md`.
 3. **Never rename dataset-bound fields.** Only the template's derived calc columns get suffixed; mapped data fields keep their names.
 4. **Verify the render, not the status.** A "completed" apply with wrong numbers is the signature — inspect a text table of the calc, or capture the viz, before trusting a fast-path apply onto a reused datasource.
 
@@ -68,6 +68,7 @@ The substitution layer does this automatically: `replaceFieldReferences` (`src/s
 ## Related Knowledge
 
 - `tactics/data/calc-name-collides-with-field.md` — the sibling **field-collision** variant (calc name == a real data column → the calc is IGNORED → blank viz). This entry is the **calc-vs-calc** variant (stale formula kept → wrong result).
+- `tactics/data/calc-caption-follows-formula-rebind.md` — the **caption** counterpart: when a formula rebind is correct but the human caption is left stale (misleading label, right math). Refines this entry's "keep captions human-readable" rule.
 - `tactics/data/calc-fields.md` — calculated-field / parameter XML structure.
 - `tactics/data/round-trip-normalization.md` — what Tableau rewrites/drops on load.
 - `tactics/workflow/templates.md` — template injection workflow.

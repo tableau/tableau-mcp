@@ -84,6 +84,11 @@
       "xml": "bullet-variance-chart.xml:31"
     },
     {
+      "code": "multi-currency-raw-sum",
+      "detail": "Product evidence (product team, 2026-07) - has bitten someone: when the actual and/or target rows carry a MIXED currency_code (USD + EUR + GBP ...), neither measure may be summed raw. SUM([Actual]) on cols and the per-cell SUM([Target]) reference line add different currency units as one number, so the attainment gap is silently WRONG (a data-correctness bug, not a formatting one). The template has no currency awareness. Convert to a single reporting currency, or filter to one currency_code, before binding a revenue/quota measure.",
+      "xml": "bullet-variance-chart.xml:33"
+    },
+    {
       "code": "not-live-render-verified",
       "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop). portability_evidence.render_verified='none' and fast_path_eligible=false: the template binds the committed fixture (fixture_bind computed true \u2014 a dim + two distinct measures) but has NO live render-readback proof. A live-YYYY-MM-DD stamp is EARNED later by the golden-parity gate / a hand-stamp with render_evidence, never granted at compile time.",
       "xml": "bullet-variance-chart.xml:1"

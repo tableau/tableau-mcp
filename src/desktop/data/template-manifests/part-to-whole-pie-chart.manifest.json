@@ -26,7 +26,7 @@
   "calcs": [],
   "hazards": [
     { "code": "hidden-aggregate-role-from",
-      "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
+      "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so this hazard does not block the fast path; fast_path_eligible is false here pending live render-verification.",
       "xml": "part-to-whole-pie-chart.xml:10" }
   ]
 }

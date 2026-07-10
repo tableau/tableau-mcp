@@ -7,6 +7,7 @@
   "portability_evidence": {
     "fixture_bind": true,
     "render_verified": "live-2026-07-04",
+    "xml_sha256": "fe35111190516e789d2db3666a7f4f86899e149839b203079a4e42f297c80f44",
     "render_evidence": {
       "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
       "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
@@ -21,6 +22,9 @@
   "placeholders": ["TITLE", "DATASOURCE"],
   "intent_keywords": ["trend", "over-time", "line", "time-series", "timeline", "by-month", "sales-over-time", "year-over-year", "yoy", "prior-year", "current-year", "rolling", "moving-average", "moving-sum", "running-total", "month-over-month", "period-over-period", "forecast", "change-over-time"],
   "description": "A line of an aggregated measure over a truncated date on the x-axis; shows trend across time.",
+  "avoid_when": [
+    "The x-axis is a set of DISCRETE, non-temporal CATEGORIES (categorical members such as products or segments) instead of a continuous time axis. A line CONNECTS adjacent points and so IMPLIES CONTINUITY between them, drawing a misleading slope across unrelated categorical members; a cross-category breakdown with no time axis belongs on a bar chart. Keep this line template for a continuous time x-axis only \u2014 do not bind a discrete category to the x."
+  ],
   "slots": [
     { "slot_id": "order_date", "template_field": "Order Date", "derivation": "tmn",
       "role": ["cols"], "kind": "temporal", "bindable": true, "required": true,
@@ -35,6 +39,9 @@
   "hazards": [
     { "code": "month-trunc-short-form-ruling",
       "detail": "RULING (H3.2 tmn/tmo reconciliation): 'tmn' is the REAL Month-Trunc short-form live Tableau writes — confirmed in this template XML (derivation='Month-Trunc' name='[tmn:Order Date:qk]'), in real Tableau Public workbooks (data/twb-example-index.json: [sqlserver…].[tmn:Order Date:qk], [dataengine…].[tmn:DateTime (Days):ok]), in src/metadata/fields.ts:434, and in tactics/tree/column-instance-prefixes.md. The binder/manifests standardize on canonical 'tmn'; templates.ts derivationMap accepts BOTH 'tmn' and legacy 'tmo' as aliases → 'Month-Trunc'. XML is ground truth; no derivation normalization is applied.",
+      "xml": "trend-line-chart.xml:13" },
+    { "code": "line-implies-continuity-needs-time-axis",
+      "detail": "Product evidence (product team, 2026-07) — has bitten someone: a line mark connects adjacent points, so it IMPLIES CONTINUITY along the x-axis. The order_date slot must bind a real continuous time field; binding a DISCRETE category to the x draws a slope between unrelated members that reads as a trend where none exists (a 'compare X across categories' ask must route to a bar chart, not here). Tracked-hazard companion to the discrete-categories avoid_when: the classifier demotes an otherwise-clean line bind when the ask names a discrete categorical breakdown with no time axis.",
       "xml": "trend-line-chart.xml:13" }
   ]
 }
