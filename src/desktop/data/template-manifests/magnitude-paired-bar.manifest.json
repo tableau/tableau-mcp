@@ -70,6 +70,11 @@
       "xml": "magnitude-paired-bar.xml:17"
     },
     {
+      "code": "incomplete-period-exclusion",
+      "detail": "STRUCTURED hazard class read by the bind-time period guard (src/binder/period-guard.ts, W36-D-v1). The Year-of-Order-Date EXCLUSION above is a load-bearing incomplete-latest-period guard at the YEAR grain. At bind time only field metadata is visible (no row data), so the guard CANNOT prove the bound data's latest year is complete, nor that the hardcoded excluded members {2024, 2025} name the actual incomplete period. When a date is bound it therefore VETOES the fast path (escalate 'incomplete-period-unattested') unless the caller attests period-completeness (periodCompletenessAttested). The HARDCODED_FILTER_MEMBERS blocker and the hardcoded-filter-blocking prose hazard REMAIN — v1 documents the path and does not flip fast_path_eligible; v2 will compute a data-driven trim.",
+      "xml": "magnitude-paired-bar.xml:17"
+    },
+    {
       "code": "hidden-aggregate-role-from",
       "detail": "[Region] carries aggregate-role-from='[State/Province]', a cosmetic secondary-role hint that is not rewritten onto the bound field (same behavior as slope-chart / correlation-scatter-plot-chart). No binding impact.",
       "xml": "magnitude-paired-bar.xml:11"
