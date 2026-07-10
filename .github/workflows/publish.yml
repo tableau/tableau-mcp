@@ -14,9 +14,13 @@ jobs:
         with:
           node-version: '>=22.7.5'
           registry-url: https://registry.npmjs.org/
-      - run: |
+      - env:
+          # Passed via env (not inline ${{ }} in the script) — the tag name is
+          # release-author-controlled input; env keeps it out of shell parsing.
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
           git fetch --tags
-          git checkout -b publish ${{ github.event.release.tag_name }}
+          git checkout -b publish "$RELEASE_TAG"
           npm install -g npm@latest
           npm ci
           npm run build
@@ -37,6 +41,14 @@ jobs:
           VERSION="$(node -p "require('./package.json').version")"
           if [[ -z "$VERSION" || "$VERSION" == "undefined" ]]; then
             echo "::error::Could not read version from package.json — aborting publish (refusing to risk moving 'latest')"
+            exit 1
+          fi
+          # PREFLIGHT: the release tag must be exactly v<package.json version>.
+          # npm decides prerelease-vs-stable from package.json while Docker
+          # (docker-publish.yml) decides from the release tag name — a mismatch
+          # would let the two registries disagree about moving `latest`.
+          if [[ "$RELEASE_TAG" != "v$VERSION" ]]; then
+            echo "::error::Release tag '$RELEASE_TAG' != 'v$VERSION' (package.json) — aborting. Tag the exact commit whose package.json matches, or fix the release tag."
             exit 1
           fi
           if [[ "$VERSION" == *-* ]]; then
