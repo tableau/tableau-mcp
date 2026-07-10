@@ -89,9 +89,7 @@ export const getGetWorkbookXmlTool = (
           }
 
           // Save to cache file (requested file mode, or forced by the cap).
-          const cacheFile = new DesktopCache(resolvedSession).getCacheFilePath({
-            prefix: 'workbook',
-          });
+          const cacheFile = new DesktopCache().getCacheFilePath({ prefix: 'workbook' });
           writeFileSync(cacheFile, workbookXml, 'utf-8');
 
           if (capFired) {
