@@ -577,8 +577,10 @@ export const exportedForTesting = {
 // stale-content report uses; sharing them avoids a second implementation drifting out of sync while
 // the legacy get-stale-content-report shim remains registered.
 export {
+  buildProjectIdWarnings as _buildProjectIdWarnings,
   buildSiteContentQuery as _buildSiteContentQuery,
   resolveProjectIdsToNames as _resolveProjectIdsToNames,
   resolveProjectScopeIds as _resolveProjectScopeIds,
   siteContentRowSchema as _siteContentRowSchema,
 };
+export type { StaleReportWarning as _StaleReportWarning };

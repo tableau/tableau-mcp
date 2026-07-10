@@ -12,10 +12,12 @@ import { WebTool } from '../tool.js';
 import { WebToolName } from '../toolName.js';
 import { executeAdminInsightsQuery, runAdminInsightsQuery } from './adminInsightsToolBase.js';
 import {
+  _buildProjectIdWarnings,
   _buildSiteContentQuery,
   _resolveProjectIdsToNames,
   _resolveProjectScopeIds,
   _siteContentRowSchema,
+  _StaleReportWarning,
   computeStaleRows,
   StaleContentRow,
 } from './getStaleContentReport.js';
@@ -89,6 +91,7 @@ type StaleContentResult = {
   totalStaleItems: number;
   totalStaleSizeBytes: number;
   rows: StaleContentRow[];
+  mcp?: { warnings: _StaleReportWarning[] };
 };
 
 export const getQueryAdminInsightsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
@@ -166,7 +169,7 @@ Notes:
       if (kind === 'stale-content') {
         const thresholdDays = minAgeDays ?? configWithOverrides.staleContentMinAgeDays;
         const types = itemTypes ?? ['Workbook', 'Datasource'];
-        const requestedProjectIds = _resolveProjectScopeIds({
+        const { scopeIds: requestedProjectIds, boundedOutOfScopeIds } = _resolveProjectScopeIds({
           argProjectIds: projectIds,
           boundedProjectIds: configWithOverrides.boundedContext.projectIds,
         });
@@ -185,6 +188,7 @@ Notes:
                 }
 
                 let projectNameScope: ReadonlyArray<string> | null = null;
+                let unknownProjectIds: ReadonlyArray<string> = [];
                 if (requestedProjectIds) {
                   const namesResult = await _resolveProjectIdsToNames({
                     restApi,
@@ -193,7 +197,27 @@ Notes:
                   if (namesResult.isErr()) {
                     return namesResult;
                   }
-                  projectNameScope = namesResult.value;
+                  projectNameScope = namesResult.value.names;
+                  unknownProjectIds = namesResult.value.unknownIds;
+                }
+
+                const hasRemainingScope = !!(projectNameScope && projectNameScope.length > 0);
+                const warnings = _buildProjectIdWarnings({
+                  boundedOutOfScopeIds,
+                  unknownProjectIds,
+                  hasRemainingScope,
+                });
+
+                // Widening guard: a scope was requested but nothing resolved to a real project.
+                // Return an empty report + warnings instead of falling through to an unscoped query.
+                if (requestedProjectIds && projectNameScope && projectNameScope.length === 0) {
+                  return new Ok({
+                    thresholdDays,
+                    totalStaleItems: 0,
+                    totalStaleSizeBytes: 0,
+                    rows: [] as StaleContentRow[],
+                    ...(warnings.length > 0 ? { mcp: { warnings } } : {}),
+                  });
                 }
 
                 const siteContentResult = await executeAdminInsightsQuery({
@@ -217,6 +241,7 @@ Notes:
                   totalStaleItems: rows.length,
                   totalStaleSizeBytes: rows.reduce((sum, r) => sum + (r.size ?? 0), 0),
                   rows,
+                  ...(warnings.length > 0 ? { mcp: { warnings } } : {}),
                 });
               },
             });
