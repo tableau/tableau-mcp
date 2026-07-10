@@ -206,6 +206,11 @@
       "bytes": 3355
     },
     {
+      "path": "data-visualization-templates-xml/spatial-symbol-map-latlon.xml",
+      "sha256": "954fdf3343d0231c1dd8837a938b2193e123627c01aacbac01b7f26c7427db52",
+      "bytes": 2828
+    },
+    {
       "path": "data-visualization-templates-xml/spatial-symbol-map.xml",
       "sha256": "0e10814f07d32b7c4c1a9113f0b6d2db9e62119316d39630db43a3415fd424d0",
       "bytes": 2852
@@ -237,8 +242,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "88d48e47f756af9f15906c4cffddaab18febe97fe6836defe75e86822c403593",
-      "bytes": 230883
+      "sha256": "53044ebd360af8db39b40bad4d7d4573b8998ff031b86805b061289d287e4ce1",
+      "bytes": 234761
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -419,6 +424,11 @@
       "path": "template-manifests/spatial-choropleth-map.manifest.json",
       "sha256": "7655c768c1bb47d0a23d3c3ea793fd3d3259450a0bbcf7ba2f08c8c549abeb30",
       "bytes": 5913
+    },
+    {
+      "path": "template-manifests/spatial-symbol-map-latlon.manifest.json",
+      "sha256": "ea10b86fa91acd95f2d2decef3b1da46684028c3ebe203a82dd7360a7c1b2fb6",
+      "bytes": 3513
     },
     {
       "path": "template-manifests/spatial-symbol-map.manifest.json",
