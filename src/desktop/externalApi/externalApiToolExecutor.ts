@@ -198,9 +198,11 @@ export class ExternalApiToolExecutor extends ToolExecutor {
 
   private async resolveClient(): Promise<Result<ExternalApiClient, NoInstance>> {
     const instances = await this.deps.discover();
+    // A pinned pid must match exactly. Falling back to instances[0] here would silently
+    // retarget a different Desktop, which is the split-brain this pin exists to prevent.
     const chosen =
       this.deps.pid !== undefined
-        ? (instances.find((instance) => instance.pid === this.deps.pid) ?? instances[0])
+        ? instances.find((instance) => instance.pid === this.deps.pid)
         : instances[0];
 
     if (!chosen) {

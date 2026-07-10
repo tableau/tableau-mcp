@@ -6,8 +6,11 @@ import {
   McpToolError,
   NoDesktopInstancesFoundError,
 } from '../errors/mcpToolError.js';
+import { DesktopToolName } from '../tools/desktop/toolName.js';
 import { DesktopDiscoverer } from './desktopDiscoverer.js';
 import { discoverInstances } from './externalApi/discovery.js';
+
+const LIST_INSTANCES_TOOL: DesktopToolName = 'list-instances';
 
 /**
  * Resolve which Tableau Desktop session (pid) a session-scoped tool should target.
@@ -42,7 +45,7 @@ export function resolveSession(session: string | undefined): Result<string, McpT
   if (pids.length > 1) {
     return Err(
       new ArgsValidationError(
-        `Multiple Tableau Desktop instances are running (session IDs: ${pids.join(', ')}). Specify which one to use via the 'session' parameter (see list-instances for details).`,
+        `Multiple Tableau Desktop instances are running (session IDs: ${pids.join(', ')}). Specify which one to use via the 'session' parameter (see ${LIST_INSTANCES_TOOL} for details).`,
       ),
     );
   }
