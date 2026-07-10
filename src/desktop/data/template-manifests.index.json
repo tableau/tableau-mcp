@@ -3,7 +3,7 @@
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Edit data/template-manifests/*.manifest.json and re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
   "_source": "data/template-manifests/*.manifest.json",
-  "count": 41,
+  "count": 42,
   "fast_path_templates": [
     "box-plot-chart",
     "correlation-scatter-plot-chart",
@@ -31,6 +31,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-06",
+        "xml_sha256": "88884a946deae4555f31ab65c4063f1105e2a100a534cf494b3f55f10b1ad797",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-06",
@@ -219,6 +220,11 @@
           "xml": "bullet-variance-chart.xml:31"
         },
         {
+          "code": "multi-currency-raw-sum",
+          "detail": "Product evidence (product team, 2026-07) - has bitten someone: when the actual and/or target rows carry a MIXED currency_code (USD + EUR + GBP ...), neither measure may be summed raw. SUM([Actual]) on cols and the per-cell SUM([Target]) reference line add different currency units as one number, so the attainment gap is silently WRONG (a data-correctness bug, not a formatting one). The template has no currency awareness. Convert to a single reporting currency, or filter to one currency_code, before binding a revenue/quota measure.",
+          "xml": "bullet-variance-chart.xml:33"
+        },
+        {
           "code": "not-live-render-verified",
           "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop). portability_evidence.render_verified='none' and fast_path_eligible=false: the template binds the committed fixture (fixture_bind computed true — a dim + two distinct measures) but has NO live render-readback proof. A live-YYYY-MM-DD stamp is EARNED later by the golden-parity gate / a hand-stamp with render_evidence, never granted at compile time.",
           "xml": "bullet-variance-chart.xml:1"
@@ -290,8 +296,13 @@
       "hazards": [
         {
           "code": "hidden-aggregate-role-from",
-          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten by replaceFieldReferences; the target field inherits the template's secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding (cosmetic), so fast_path_eligible stays true.",
+          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten by replaceFieldReferences; the target field inherits the template's secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding (cosmetic), so this hazard does not block the fast path; fast_path_eligible is false here pending live render-verification.",
           "xml": "change-over-time-area-chart.xml:11"
+        },
+        {
+          "code": "line-implies-continuity-needs-time-axis",
+          "detail": "Product evidence (product team, 2026-07) — has bitten someone: the filled area connects adjacent points along the x, so it IMPLIES CONTINUITY over a continuous date axis. The order_date slot must bind a real continuous/truncated date ([tqr:Order Date:qk] on cols); binding a DISCRETE category to the x draws bands between unrelated members that read as change-over-time where none exists. A cross-category comparison with no time axis belongs on a bar chart — keep this template for a continuous time x only.",
+          "xml": "change-over-time-area-chart.xml:32"
         }
       ]
     },
@@ -438,8 +449,13 @@
       "hazards": [
         {
           "code": "hidden-aggregate-role-from",
-          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
+          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so this hazard does not block the fast path; fast_path_eligible is false here pending live render-verification.",
           "xml": "change-over-time-stacked-area-chart.xml:11"
+        },
+        {
+          "code": "line-implies-continuity-needs-time-axis",
+          "detail": "Product evidence (product team, 2026-07) — has bitten someone: the stacked filled areas connect adjacent points along the x, so they IMPLY CONTINUITY over a continuous date axis. The order_date slot must bind a real continuous/truncated date ([tqr:Order Date:qk] on cols); binding a DISCRETE category to the x draws bands between unrelated members that read as composition-over-time where none exists. A cross-category comparison with no time axis belongs on a bar chart — keep this template for a continuous time x only.",
+          "xml": "change-over-time-stacked-area-chart.xml:32"
         }
       ]
     },
@@ -992,6 +1008,11 @@
           "xml": "correlation-highlight-table.xml:24-34"
         },
         {
+          "code": "hardcoded-member-inclusion",
+          "detail": "STRUCTURED hazard class read by the bind-time period guard (src/binder/period-guard.ts, W36-D-v1). The load-bearing filter here is a categorical MEMBER INCLUSION (a Sub-Category union of 7 members), NOT a date-part period exclusion — even though this template DOES bind a date (Order Date at Month + Year), the hardcoded filter is on Sub-Category, so the incomplete-period concern does not apply. The incomplete-period guard therefore DECLINES to veto on period grounds; the template stays ineligible via its HARDCODED_FILTER_MEMBERS blocker, and its v2 path is member parameterization (collapse to level-members), not a period trim. Classified explicitly so the period guard's non-fire is auditable rather than incidental.",
+          "xml": "correlation-highlight-table.xml:24-34"
+        },
+        {
           "code": "raw-formula-refs",
           "detail": "The Profit-Ratio calc references the bare bindable [Profit]/[Sales]; templates.ts rewriteFormulaFieldRefs repairs them on bind ONLY because both are bindable bare-key slots (same pattern as correlation-scatter-plot-chart). Gate #6 asserts both are bound.",
           "xml": "correlation-highlight-table.xml:10-11"
@@ -1007,6 +1028,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-06",
+        "xml_sha256": "f50364bb90648c7ead3f6b7b247c4d6fa2082b7460e06a34b916ca4287ec3958",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-06",
@@ -1264,6 +1286,11 @@
         {
           "code": "hardcoded-filter-blocking",
           "detail": "The source workbook pins Region to a single INCLUSION member (function='member' Region='\"Central\"') kept on the Filters shelf (<slices>). This lane does NOT run the compile-time filter neutralizer (no XML edits), so the member rides along VERBATIM and is flagged HARDCODED_FILTER_MEMBERS: a bound dataset without a 'Central' region member renders empty. A follow-up can PARAMETERIZE it to unblock.",
+          "xml": "deviation-diverging-bar.xml:30-32"
+        },
+        {
+          "code": "hardcoded-member-inclusion",
+          "detail": "STRUCTURED hazard class read by the bind-time period guard (src/binder/period-guard.ts, W36-D-v1). The load-bearing filter here is a categorical MEMBER INCLUSION (Region='Central'), NOT a date-part period exclusion — so the incomplete-period guard deliberately DECLINES to veto this template on period grounds (it would be wrong to call a Region pin an 'incomplete period'). It stays ineligible via its HARDCODED_FILTER_MEMBERS blocker; its v2 path is member parameterization (collapse to level-members), not a period trim. Classified explicitly so the period guard's non-fire is auditable rather than incidental.",
           "xml": "deviation-diverging-bar.xml:30-32"
         },
         {
@@ -1543,6 +1570,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-05",
+        "xml_sha256": "cb23201e338af6c48b1bd63d35b136e96cbe77ccd2d89efcd9ae2de228cbb752",
         "render_evidence": {
           "basis": "hand-stamp: live tier1-smoke render + non-blank pixel-floor probe + human review (coverage-envelope extension from 4 to up to 7 families); no numeric structural-parity score was measured",
           "lane": "tier1-smoke live-verify 2026-07-05 (Tableau Desktop pid 36540, open 'Super Bowl by the Numbers' datasource; no-LLM binder: O/U Line(avg)->cols, Super Bowl->rows, Teams/Conference->detail)",
@@ -1636,7 +1664,27 @@
       ],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "none"
+        "render_verified": "live-2026-07-06",
+        "render_evidence": {
+          "method": "gate-composite",
+          "date": "2026-07-06",
+          "structural": 0.97297,
+          "critical_pass": "5/5",
+          "pixel": 0.91667,
+          "pixel_regions": 6,
+          "sanity": "sane",
+          "sanity_signals": [
+            "mark-count=pass reconciled=true (21=21 (live-measured twice, unpinned→21), Worksheet>Copy>Data on source and applied sheets)",
+            "caption-leak=pass"
+          ],
+          "run": "per-leg source-anchor replay (W38-LIVE-2) after the canonical Bar mark fidelity fix; width-500 bin rewrites; the invalid-column-instance-pivot bin exemption (W31-A/E) cleared the prior product-wide apply rejection live",
+          "artifacts": "local-only under ~/TableauGoldens/lab/ (distribution* renders, worksheet XMLs, w38l2 stamp JSON)",
+          "basis": "golden-parity gate run 2026-07-06 (source-anchor replay, W38-LIVE-2): structural 0.97297 (5/5 critical; sole miss = salience-1 resolved-title, sheet names differ by design), pixel 0.91667 (6 ROIs, same-geometry captures), composite 95, binding-sanity sane via reconciled Copy>Data mark counts 21=21 (live-measured twice, unpinned→21). STAMP EARNED, ELIGIBILITY WITHHELD: the DATASET_SPECIFIC_FORMULA blocker (bin width is data-dependent; the leg adapted 283→500 via rewrite) remains until a bind-time bin-width adapter computes it per-dataset — the render proof does not clear the blocker.",
+          "lane": "fable-direct stamp run 2026-07-06 (orchestrator gate run over W38-LIVE-2 per-leg evidence; grade scratchpad imports parity-grade.mjs verbatim)",
+          "gate_composite": 95,
+          "high_pass": "0/0",
+          "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 ROIs). Source and applied are two INDEPENDENT renders of the same data on the same instance."
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [
@@ -1651,7 +1699,7 @@
         "bins",
         "spread"
       ],
-      "description": "A histogram: one CONTINUOUS measure is binned into equal-width buckets on the X axis (cols) and the COUNT of records per bucket sets the bar heights on the Y axis (rows). The bin is a template-owned calc column ([Profit (bin)], class='bin') derived from the same measure that is counted. Factory-compiled hermetically from the repo distribution-histogram exemplar (Superstore Profit); structurally compiled, NOT render-verified.",
+      "description": "A histogram: one CONTINUOUS measure is binned into equal-width buckets on the X axis (cols) and the COUNT of records per bucket sets the bar heights on the Y axis (rows). The bin is a template-owned calc column ([Profit (bin)], class='bin') derived from the same measure that is counted. Factory-compiled hermetically from the repo distribution-histogram exemplar (Superstore Profit); live render-verified 2026-07-06 by the golden-parity gate (composite 95; see portability_evidence.render_evidence) BUT ELIGIBILITY WITHHELD (fast_path_eligible=false): the DATASET_SPECIFIC_FORMULA blocker (the bin width is dataset-derived — the leg adapted 283→500 by hand-rewrite) stands until a bind-time bin-width adapter computes it per dataset, and a render proof does not clear that blocker.",
       "avoid_when": [
         "The field is categorical / discrete — a histogram bins a CONTINUOUS measure; for counts per named category use a bar chart, not a histogram.",
         "The ask is to compare a metric across named categories or over time — a histogram shows the distribution SHAPE of one measure, not cross-category magnitude or a trend.",
@@ -1705,7 +1753,12 @@
       "hazards": [
         {
           "code": "bin-size-dataset-specific",
-          "detail": "The bin column carries size='283' / peg='0' baked from the source measure's (Profit's) value range. On bind the bin's formula ref [Profit] is rewritten to the bound measure, but the bin WIDTH attribute is NOT recomputed — a measure with a much smaller range collapses to one bar, a much larger range explodes into thousands of slivers. The bin width is the histogram's defining parameter, so this is a load-bearing, dataset-specific formula parameter (fast_path_blocker DATASET_SPECIFIC_FORMULA) that a human/data-aware step must retune after binding, not a cosmetic note. PRODUCT EVIDENCE (UC7 distribution analysis): bin width is STORY-CHANGING, not merely cosmetic — too few bins hide the shape, too many shatter it into noise, and the right count is dataset-dependent, so the retune is an analytical decision the author must own. Separately, OUTLIERS can SWAMP the chart: a long tail forces a wide domain so the bulk of the distribution crushes into the first bin or two; exclude/cap extremes or use a log axis when a few extreme values dominate the range.",
+          "detail": "The bin column carries size='283' / peg='0' baked from the source measure's (Profit's) value range. On bind the bin's formula ref [Profit] is rewritten to the bound measure, but the bin WIDTH attribute is NOT recomputed — a measure with a much smaller range collapses to one bar, a much larger range explodes into thousands of slivers. The bin width is the histogram's defining parameter, so this is a load-bearing, dataset-specific formula parameter (fast_path_blocker DATASET_SPECIFIC_FORMULA) that a human/data-aware step must retune after binding, not a cosmetic note. PRODUCT EVIDENCE (UC7 distribution analysis): bin width is STORY-CHANGING, not merely cosmetic — too few bins hide the shape, too many shatter it into noise, and the right count is dataset-dependent, so the retune is an analytical decision the author must own. Separately, OUTLIERS can SWAMP the chart: a long tail forces a wide domain so the bulk of the distribution crushes into the first bin or two; exclude/cap extremes or use a log axis when a few extreme values dominate the range. The baked size=283 is authored-dataset-specific — derived from the source measure's (Superstore Profit's) value range this template was compiled from — so it is a starting point to retune per dataset, never a portable constant (product team, 2026-07).",
+          "xml": "distribution-histogram.xml:11"
+        },
+        {
+          "code": "small-n-histogram-is-noise",
+          "detail": "Product evidence (product team, 2026-07) — has bitten someone: under ~30 rows a histogram's shape is statistical NOISE, not a distribution. A handful of records scattered across equal-width bins reads as a random staircase and invites over-interpretation of bumps that would vanish on the next data pull. Below roughly 30 observations prefer a BAR CHART of the individual values (or a dot/strip plot); a histogram earns its shape only once each bin holds enough observations to be stable.",
           "xml": "distribution-histogram.xml:11"
         },
         {
@@ -1715,7 +1768,7 @@
         },
         {
           "code": "not-live-render-verified",
-          "detail": "render_verified='none': this template was compiled HERMETICALLY via the factory route (no live Tableau Desktop, no stamp). fixture_bind=true proves the required measure slot binds against the committed schema fixture, but that is necessary-not-sufficient. The render_verified stamp is EARNED later by a live golden-parity render-readback leg, never granted at compile time.",
+          "detail": "render_verified='live-2026-07-06': this template was compiled HERMETICALLY via the factory route and then live render-verified by the golden-parity gate (composite 95: structural 0.97297, pixel 0.91667, binding-sanity sane via reconciled 21=21 Copy>Data mark counts + caption-leak pass). ELIGIBILITY IS WITHHELD NONETHELESS (fast_path_eligible=false): the DATASET_SPECIFIC_FORMULA blocker (the bin width is dataset-derived — the leg adapted 283→500 via rewrite) is NOT cleared by a render proof; it stands until a bind-time bin-width adapter computes the width per dataset. See portability_evidence.render_evidence for the auditable basis.",
           "xml": "distribution-histogram.xml"
         }
       ]
@@ -1729,6 +1782,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-06",
+        "xml_sha256": "09dd141149ed8ddc2c6161776f71efcb28a427582483a140fdc47cf74e0433d7",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-06",
@@ -2035,6 +2089,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-06",
+        "xml_sha256": "88a67da2a8703811cc32990bb04247cdd879bb5f0b3f10f6ae124f747c938dba",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-06",
@@ -2254,6 +2309,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-04",
+        "xml_sha256": "c949d0041cb100b30ab2845e53f3c4326c12bc018700869a9b10f4ddca881516",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
           "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
@@ -2377,6 +2433,11 @@
           "xml": "magnitude-paired-bar.xml:17"
         },
         {
+          "code": "incomplete-period-exclusion",
+          "detail": "STRUCTURED hazard class read by the bind-time period guard (src/binder/period-guard.ts, W36-D-v1). The Year-of-Order-Date EXCLUSION above is a load-bearing incomplete-latest-period guard at the YEAR grain. At bind time only field metadata is visible (no row data), so the guard CANNOT prove the bound data's latest year is complete, nor that the hardcoded excluded members {2024, 2025} name the actual incomplete period. When a date is bound it therefore VETOES the fast path (escalate 'incomplete-period-unattested') unless the caller attests period-completeness (periodCompletenessAttested). The HARDCODED_FILTER_MEMBERS blocker and the hardcoded-filter-blocking prose hazard REMAIN — v1 documents the path and does not flip fast_path_eligible; v2 will compute a data-driven trim.",
+          "xml": "magnitude-paired-bar.xml:17"
+        },
+        {
           "code": "hidden-aggregate-role-from",
           "detail": "[Region] carries aggregate-role-from='[State/Province]', a cosmetic secondary-role hint that is not rewritten onto the bound field (same behavior as slope-chart / correlation-scatter-plot-chart). No binding impact.",
           "xml": "magnitude-paired-bar.xml:11"
@@ -2452,6 +2513,11 @@
         {
           "code": "hardcoded-filter-blocking",
           "detail": "The source workbook filters Year of Order Date with an EXCLUSION (function='except') that removes {2024, 2025} — a partial/incomplete-recent-year guard (short partial-year columns would distort the paired-column magnitude read). The factory filter policy fails CLOSED on exclusions: dropping or neutralizing an exclusion WIDENS the data (re-includes the removed years) in a potentially result-corrupting direction, and the excluded years are source-calendar literals. Kept VERBATIM and flagged HARDCODED_FILTER_MEMBERS — not fast-path eligible until a follow-up re-expresses the exclusion as a declared 'exclude incomplete periods' slot.",
+          "xml": "magnitude-paired-column-chart.xml:17"
+        },
+        {
+          "code": "incomplete-period-exclusion",
+          "detail": "STRUCTURED hazard class read by the bind-time period guard (src/binder/period-guard.ts, W36-D-v1). The Year-of-Order-Date EXCLUSION above is a load-bearing incomplete-latest-period guard at the YEAR grain. At bind time only field metadata is visible (no row data), so the guard CANNOT prove the bound data's latest year is complete, nor that the hardcoded excluded members {2024, 2025} name the actual incomplete period. When a date is bound it therefore VETOES the fast path (escalate 'incomplete-period-unattested') unless the caller attests period-completeness (periodCompletenessAttested). The HARDCODED_FILTER_MEMBERS blocker and the hardcoded-filter-blocking prose hazard REMAIN — v1 documents the path and does not flip fast_path_eligible; v2 will compute a data-driven trim.",
           "xml": "magnitude-paired-column-chart.xml:17"
         },
         {
@@ -2612,7 +2678,7 @@
       "hazards": [
         {
           "code": "hidden-aggregate-role-from",
-          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
+          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so this hazard does not block the fast path; fast_path_eligible is false here pending live render-verification.",
           "xml": "part-to-whole-pie-chart.xml:10"
         }
       ]
@@ -2755,6 +2821,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-05",
+        "xml_sha256": "e137d910087d740f25fad4b6d6b485139e72b256e5c6e5fab26a488a7bed0f77",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review",
           "lane": "W2-R008 live-verify 2026-07-05",
@@ -2845,6 +2912,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-04",
+        "xml_sha256": "1dbfa890b4e36aff212910b8c2f0a22d6c7746856c8db0d26c39e5eae8b5bb73",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
           "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
@@ -3058,6 +3126,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-06",
+        "xml_sha256": "6a0dfe73ca8d106a296fff0d22a06870c893124adf2a7079f33663e2ac92a614",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-06",
@@ -3330,6 +3399,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-04",
+        "xml_sha256": "63040f0d4b4ee0f84f995a82ea0a7845453e078708e1cd55aa13f878ffc00d0e",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
           "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
@@ -3413,6 +3483,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-05",
+        "xml_sha256": "05c11de9177a6a48db4180669cbaec11d19a6c0a08c7379e418edbe0b1c61cf9",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review",
           "lane": "W2-R008 live-verify 2026-07-05",
@@ -3654,6 +3725,97 @@
       ]
     },
     {
+      "template": "spatial-symbol-map-latlon",
+      "family": "spatial",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "latlon-symbol-map",
+        "latitude-longitude-map",
+        "coordinate-map",
+        "point-map",
+        "symbol-map",
+        "bubble-map",
+        "spatial",
+        "map"
+      ],
+      "description": "A real latitude/longitude point symbol map: Longitude and Latitude measure columns are placed on Cols/Rows as AVG continuous axes, one Circle mark per detail dimension member, sized and colored by a measure. Use for datasets that already carry real coordinate columns rather than Tableau-generated geocoding fields.",
+      "slots": [
+        {
+          "slot_id": "longitude",
+          "template_field": "Longitude",
+          "derivation": "avg",
+          "role": [
+            "cols"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "Real longitude measure column, aggregated as AVG and placed on Columns as [avg:Longitude:qk]."
+        },
+        {
+          "slot_id": "latitude",
+          "template_field": "Latitude",
+          "derivation": "avg",
+          "role": [
+            "rows"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "Real latitude measure column, aggregated as AVG and placed on Rows as [avg:Latitude:qk]."
+        },
+        {
+          "slot_id": "detail",
+          "template_field": "Detail",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "Detail/grain dimension: one mark per member (e.g. City, Site, Team, or point name). Placed on the level-of-detail shelf as [none:Detail:nk]. Renamed from the draft's [Country] to a generic [Detail] because the XML declares no geographic semantic-role — calling it Country would imply geo behavior the template does not carry."
+        },
+        {
+          "slot_id": "size_color_measure",
+          "template_field": "Measure",
+          "derivation": "sum",
+          "role": [
+            "size",
+            "color"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "Measure used for BOTH symbol size and continuous color as [sum:Measure:qk]. REQUIRED (not optional): the XML hard-references [sum:Measure:qk] in the size encoding, the color encoding, and the datasource-level color style-rule; validateBinding SKIPS unbound optional slots, so leaving this optional would strand a dangling [Measure] template field on apply unless the target datasource happens to carry [Measure]. The current optional-slot apply glue is proven only for facets."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "coordinate-slot-affinity-unproven",
+          "detail": "UNKNOWN: current no-LLM quantitative binding is role-greedy, not latitude/longitude-name-affine; coordinate slots can swap unless a route/proposal test proves otherwise.",
+          "xml": "spatial-symbol-map-latlon.xml:rows-cols"
+        },
+        {
+          "code": "real-coordinate-map-unverified",
+          "detail": "UNKNOWN: shipped map templates use generated Latitude/Longitude with mapsources; no committed real-measure lat/lon map precedent proves map layer behavior before live render/readback.",
+          "xml": "spatial-symbol-map-latlon.xml:mapsources,rows,cols"
+        }
+      ]
+    },
+    {
       "template": "spatial-symbol-map",
       "family": "spatial",
       "readiness": "YELLOW",
@@ -3750,6 +3912,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-04",
+        "xml_sha256": "fe35111190516e789d2db3666a7f4f86899e149839b203079a4e42f297c80f44",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
           "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
@@ -3787,6 +3950,9 @@
         "change-over-time"
       ],
       "description": "A line of an aggregated measure over a truncated date on the x-axis; shows trend across time.",
+      "avoid_when": [
+        "The x-axis is a set of DISCRETE, non-temporal CATEGORIES (categorical members such as products or segments) instead of a continuous time axis. A line CONNECTS adjacent points and so IMPLIES CONTINUITY between them, drawing a misleading slope across unrelated categorical members; a cross-category breakdown with no time axis belongs on a bar chart. Keep this line template for a continuous time x-axis only — do not bind a discrete category to the x."
+      ],
       "slots": [
         {
           "slot_id": "order_date",
@@ -3829,6 +3995,11 @@
         {
           "code": "month-trunc-short-form-ruling",
           "detail": "RULING (H3.2 tmn/tmo reconciliation): 'tmn' is the REAL Month-Trunc short-form live Tableau writes — confirmed in this template XML (derivation='Month-Trunc' name='[tmn:Order Date:qk]'), in real Tableau Public workbooks (data/twb-example-index.json: [sqlserver…].[tmn:Order Date:qk], [dataengine…].[tmn:DateTime (Days):ok]), in src/metadata/fields.ts:434, and in tactics/tree/column-instance-prefixes.md. The binder/manifests standardize on canonical 'tmn'; templates.ts derivationMap accepts BOTH 'tmn' and legacy 'tmo' as aliases → 'Month-Trunc'. XML is ground truth; no derivation normalization is applied.",
+          "xml": "trend-line-chart.xml:13"
+        },
+        {
+          "code": "line-implies-continuity-needs-time-axis",
+          "detail": "Product evidence (product team, 2026-07) — has bitten someone: a line mark connects adjacent points, so it IMPLIES CONTINUITY along the x-axis. The order_date slot must bind a real continuous time field; binding a DISCRETE category to the x draws a slope between unrelated members that reads as a trend where none exists (a 'compare X across categories' ask must route to a bar chart, not here). Tracked-hazard companion to the discrete-categories avoid_when: the classifier demotes an otherwise-clean line bind when the ask names a discrete categorical breakdown with no time axis.",
           "xml": "trend-line-chart.xml:13"
         }
       ]
@@ -4055,7 +4226,8 @@
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "live-2026-07-05"
+        "render_verified": "live-2026-07-10",
+        "xml_sha256": "5db1a3b2cfec461045137ab393da8ae58fc972eddb54f4d1722d8082e260ec8f"
       },
       "datasource_placeholder": true,
       "placeholders": [

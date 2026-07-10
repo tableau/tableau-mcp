@@ -33,14 +33,16 @@ const xmlFiles = fs
   .sort();
 
 describe('validation/templates — no bundled template self-rejects on invalid-derivation-string', () => {
-  it('discovers the shipped template XML corpus (44 post day-1 vendor sync)', () => {
+  it('discovers the shipped template XML corpus (45: 44 day-1 sync + spatial-symbol-map-latlon)', () => {
     expect(
       xmlFiles.length,
       'expected the shipped template XML corpus to be non-empty',
     ).toBeGreaterThan(0);
     // Pin the count verified by hand tonight so a template added/removed without re-running
     // this invariant is caught (adjust deliberately when the corpus grows).
-    expect(xmlFiles.length).toBe(44);
+    // parity-port: +1 for spatial-symbol-map-latlon.xml (the per-file it.each below still
+    // proves it does not self-reject on invalid-derivation-string).
+    expect(xmlFiles.length).toBe(45);
   });
 
   it.each(xmlFiles)(
