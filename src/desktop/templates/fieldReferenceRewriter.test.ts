@@ -239,6 +239,64 @@ describe('rewriteFieldReferences — calc caption rewrite (synthetic; no shipped
   });
 });
 
+describe('rewriteFieldReferences — calc caption derivation when formula inputs are remapped (Ben regression)', () => {
+  // Live defect (Ben, 2026-07-09 test1.twbx): correlation-scatter calc kept its
+  // human caption "Profit Ratio" after its formula was rebound to SUM([Profit])/
+  // SUM([Discount]), creating a second, wrong "Profit Ratio" beside the real one.
+  // Fix: derive an honest caption when the formula field refs change.
+  const xml =
+    '<workbook><worksheets><worksheet><table><view>' +
+    "<datasource-dependencies datasource='{{DATASOURCE}}'>" +
+    "<column caption='Profit Ratio' datatype='real' name='[CalcRatio]' role='measure' type='quantitative'>" +
+    "<calculation class='tableau' formula='SUM([Profit])/SUM([Sales])' />" +
+    '</column>' +
+    "<column datatype='real' name='[Profit]' role='measure' type='quantitative' />" +
+    "<column datatype='real' name='[Sales]' role='measure' type='quantitative' />" +
+    "<column datatype='real' name='[Discount]' role='measure' type='quantitative' />" +
+    '</datasource-dependencies></view></table></worksheet></worksheets></workbook>';
+
+  it('derives an honest caption when the formula inputs are remapped (humanized formula)', () => {
+    // Bind Profit→Profit (identity), Sales→Discount (different) — caption should update.
+    const r = rewriteFieldReferences(
+      xml,
+      { Profit: '[DS].[sum:Profit:qk]', Sales: '[DS].[sum:Discount:qk]' },
+      'DS',
+    );
+    expect(r).toContain('formula="SUM([Profit])/SUM([Discount])"');
+    expect(r).toContain('caption="Profit / Discount"'); // humanized formula (strategy 2)
+    expect(r).not.toContain('caption="Profit Ratio"'); // stale caption is gone
+  });
+
+  it('keeps the original caption when the formula is NOT remapped (identity bind)', () => {
+    const r = rewriteFieldReferences(
+      xml,
+      { Profit: '[DS].[sum:Profit:qk]', Sales: '[DS].[sum:Sales:qk]' },
+      'DS',
+    );
+    expect(r).toContain('caption="Profit Ratio"'); // unchanged
+  });
+
+  it('leaves bracket-bearing captions alone (already handled by step 3b-ii)', () => {
+    const xmlBracket =
+      '<workbook><worksheets><worksheet><table><view>' +
+      "<datasource-dependencies datasource='{{DATASOURCE}}'>" +
+      "<column caption='[Profit]/[Sales]' datatype='real' name='[CalcRatio]' role='measure' type='quantitative'>" +
+      "<calculation class='tableau' formula='SUM([Profit])/SUM([Sales])' />" +
+      '</column>' +
+      "<column datatype='real' name='[Profit]' role='measure' type='quantitative' />" +
+      "<column datatype='real' name='[Sales]' role='measure' type='quantitative' />" +
+      '</datasource-dependencies></view></table></worksheet></worksheets></workbook>';
+    const r = rewriteFieldReferences(
+      xmlBracket,
+      { Profit: '[DS].[sum:Gains:qk]', Sales: '[DS].[sum:Revenue:qk]' },
+      'DS',
+    );
+    // Step 3b-ii handles bracket captions; step 3b (human caption) is skipped.
+    expect(r).toContain('caption="[Gains]/[Revenue]"');
+    expect(r).not.toContain('[Profit]');
+  });
+});
+
 describe('rewriteFieldReferences — per-apply calc namespacing (opt-in, deterministic)', () => {
   // Deviation from A: namespacing defaults OFF and never mints its own nonce; the
   // caller must pass `applyNonce`. This keeps the core pure/deterministic.
