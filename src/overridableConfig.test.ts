@@ -61,6 +61,8 @@ describe('OverridableConfig', () => {
         'list-workbooks',
         'get-workbook',
         'delete-workbook',
+        'create-and-publish-workbook',
+        'validate-workbook-package',
       ]);
     });
 
@@ -80,6 +82,8 @@ describe('OverridableConfig', () => {
         'list-workbooks',
         'get-workbook',
         'delete-workbook',
+        'create-and-publish-workbook',
+        'validate-workbook-package',
       ]);
     });
 

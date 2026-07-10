@@ -27,6 +27,7 @@ export type McpScope =
   | 'tableau:mcp:tasks:delete'
   | 'tableau:mcp:tasks:write'
   | 'tableau:mcp:workbook:delete'
+  | 'tableau:mcp:workbook:publish'
   | 'tableau:mcp:jobs:read'
   | 'tableau:mcp:datasource:delete'
   | 'tableau:mcp:users:read';
@@ -47,6 +48,8 @@ export type TableauApiScope =
   | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
   | 'tableau:workbooks:delete'
+  | 'tableau:workbooks:create'
+  | 'tableau:workbooks:update'
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
@@ -67,6 +70,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:users:read',
   'tableau:mcp:workbook:read',
   'tableau:mcp:workbook:delete',
+  'tableau:mcp:workbook:publish',
   'tableau:mcp:content:read',
   'tableau:mcp:view:read',
   'tableau:mcp:view:download',
@@ -117,6 +121,22 @@ const toolScopeMap: Record<
   'list-workbooks': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
+  },
+  // Builds a .twbx from HTML in memory and publishes it into a project (workbooks:create). An omitted
+  // projectId resolves the site's default project (content:read). workbooks:update is retained for the
+  // not-yet-enabled personal-space move (Update Workbook <location>) so re-enabling it needs no
+  // scope/consent change.
+  'create-and-publish-workbook': {
+    mcp: ['tableau:mcp:workbook:publish'],
+    api: new Set(['tableau:workbooks:create', 'tableau:workbooks:update', 'tableau:content:read']),
+  },
+  // Pure in-memory pre-flight: builds the .twbx and checks structure/size/asset-references WITHOUT
+  // publishing. No Tableau REST API call, so no API scopes are required (empty set). It also needs no
+  // MCP scope — any authenticated user may validate a package they are about to publish. Kept in the
+  // map because the WebTool constructor calls getRequiredApiScopesForTool for every tool name.
+  'validate-workbook-package': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
   },
   // Admin-only destructive tool. Two-phase: preview tags the workbook (workbook_tags:update) and
   // resolves the owner (users:read); confirm deletes it (workbooks:delete). getWorkbook → content:read.

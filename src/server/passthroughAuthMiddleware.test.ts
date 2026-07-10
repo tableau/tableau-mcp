@@ -21,6 +21,10 @@ const TOOLS_WITHOUT_API_SCOPES_WITH_PASSTHROUGH_GUARD: ReadonlyArray<WebToolName
   // Consent lifecycle tool: no Tableau REST API call. The tool callback explicitly returns an error
   // for non-Bearer auth types, so passthrough callers are rejected.
   'reset-consent',
+  // Pure in-memory pre-flight validator: builds a .twbx from the supplied HTML/assets and checks
+  // structure/size/asset-references. It makes NO Tableau REST API call and performs no auth-dependent
+  // work, so there is nothing for passthrough auth to reach — it is safe to invoke under any auth type.
+  'validate-workbook-package',
 ];
 
 describe('passthroughAuthMiddleware', () => {

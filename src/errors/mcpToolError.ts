@@ -263,3 +263,20 @@ export class FileReadError extends McpToolError {
     });
   }
 }
+
+// Publish preconditions that fail before any content is written (bad/missing/oversized file, or an
+// unresolvable publish target). statusCode 400: the request cannot be satisfied as given.
+export class PublishWorkbookError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'publish-workbook-error', message, statusCode: 400 });
+  }
+}
+
+// Bad input to the pure .twbx builder (illegal packageId, unsafe content path, or a .trex whose
+// source-location references a file that was not bundled). buildTwbx throws this; the tool wrappers
+// catch it and return .toErr() so it renders as a clean 400 tool error instead of a raw stack.
+export class BuildTwbxError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'build-twbx-error', message, statusCode: 400 });
+  }
+}

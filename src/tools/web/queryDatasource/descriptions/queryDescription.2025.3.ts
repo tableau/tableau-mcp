@@ -1,3 +1,5 @@
+import { publishExitClause } from '../../publishExitClause.js';
+
 export const queryDatasourceToolDescription20253 = `# Query Tableau Data Source Tool
 
 Executes VizQL queries against Tableau data sources to answer business questions from published data. This tool allows you to retrieve aggregated and filtered data with proper sorting and grouping.
@@ -639,4 +641,6 @@ Note: Calculated Fields created as part of a query cannot be referenced in other
 **Instead:**
 - Use metadata tools to understand available fields
 - Suggest alternative questions that can be answered with available data
-- Recommend appropriate aggregation levels for the business question`;
+- Recommend appropriate aggregation levels for the business question
+
+${publishExitClause}`;

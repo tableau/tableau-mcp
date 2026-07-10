@@ -38,3 +38,6 @@ src/web/apps/dist/
 .work/reports/*.md
 !.work/specs/TEMPLATE.md
 !.work/**/.gitkeep
+
+# Stashed tools kept for later (not part of the build)
+.stash/

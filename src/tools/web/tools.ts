@@ -3,6 +3,7 @@ import { getQueryAdminInsightsJobPerformanceTool } from './adminInsights/queryJo
 import { getQueryAdminInsightsSiteContentTool } from './adminInsights/querySiteContent.js';
 import { getQueryAdminInsightsTsEventsTool } from './adminInsights/queryTsEvents.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
+import { getCreateAndPublishWorkbookTool } from './createAndPublishWorkbook/createAndPublishWorkbook.js';
 import { getDeleteDatasourceTool } from './datasources/deleteDatasource.js';
 import { getListDatasourcesTool } from './datasources/listDatasources.js';
 import { getDeleteExtractRefreshTaskTool } from './extractRefreshTasks/deleteExtractRefreshTask.js';
@@ -23,6 +24,7 @@ import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
 import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
 import { getListUsersTool } from './users/listUsers.js';
+import { getValidateWorkbookPackageTool } from './validateWorkbookPackage/validateWorkbookPackage.js';
 import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
 import { getGetCustomViewImageTool } from './views/getCustomViewImage.js';
 import { getGetViewTool } from './views/getView.js';
@@ -58,6 +60,8 @@ export const webToolFactories = [
   getGetViewImageTool,
   getListWorkbooksTool,
   getDeleteWorkbookTool,
+  getCreateAndPublishWorkbookTool,
+  getValidateWorkbookPackageTool,
   getListProjectsTool,
   getListViewsTool,
   getListCustomViewsTool,

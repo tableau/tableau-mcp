@@ -8,6 +8,7 @@ import { DataSource } from '../../../sdks/tableau/types/dataSource.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { paginate } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
+import { publishExitClause } from '../publishExitClause.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateDatasourcesFilterString } from './datasourcesFilterUtils.js';
 
@@ -70,6 +71,8 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
       filter: "createdAt:gt:2023-01-01T00:00:00Z"
   - List data sources with the name "Project Views" in the "Finance" project and created after January 1, 2023:
       filter: "name:eq:Project Views,projectName:eq:Finance,createdAt:gt:2023-01-01T00:00:00Z"
+
+  ${publishExitClause}
   `,
     paramsSchema,
     annotations: {
