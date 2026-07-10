@@ -31,18 +31,34 @@ describe('resolveSession', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns an explicit session id verbatim, ahead of the pin and discovery', () => {
+  it('rejects an explicit session that conflicts with the pin', () => {
     mockConfig({ desktopSessionId: '4242', externalApiEnabled: false });
     const result = resolveSession('7');
-    expect(result.isOk()).toBe(true);
-    expect(result.unwrap()).toBe('7');
+    expect(result.isErr()).toBe(true);
+    const text = result.unwrapErr().getErrorText();
+    expect(text).toContain('4242');
+    expect(text).toContain('7');
   });
 
-  it('falls back to the pinned session id when no explicit session is given', () => {
+  it('honors an explicit session that matches the pin', () => {
+    mockConfig({ desktopSessionId: '4242', externalApiEnabled: false });
+    const result = resolveSession('4242');
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toBe('4242');
+  });
+
+  it('uses the pinned session id when no explicit session is given', () => {
     mockConfig({ desktopSessionId: '4242', externalApiEnabled: false });
     const result = resolveSession(undefined);
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toBe('4242');
+  });
+
+  it('returns an explicit session id verbatim when nothing is pinned', () => {
+    mockConfig({ desktopSessionId: undefined, externalApiEnabled: false });
+    const result = resolveSession('7');
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toBe('7');
   });
 
   it('auto-resolves the unique Agent API instance when nothing is pinned', () => {

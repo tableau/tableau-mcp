@@ -54,13 +54,26 @@ describe('ExternalApiToolExecutor', () => {
       expect(executor.isAvailable()).toBe(false);
     });
 
-    it('fails closed when a pinned pid is not among the discovered instances', async () => {
+    it('fails closed with a pid-named error when a pinned pid is not among the discovered instances', async () => {
       const executor = new ExternalApiToolExecutor({
         pid: 12345,
         discover: () => [instanceFor(server)], // pid 999 — not the pinned 12345
       });
       await executor.start();
       expect(executor.isAvailable()).toBe(false);
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'undo',
+        signal,
+      });
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('unknown');
+      if (error.type === 'unknown') {
+        expect(String(error.error)).toContain('pid 12345');
+      }
     });
 
     it('connects to the pinned instance when its pid is present', async () => {
@@ -232,7 +245,11 @@ describe('ExternalApiToolExecutor', () => {
         });
 
         expect(result.isErr()).toBe(true);
-        expect(result.unwrapErr().type).toBe('unknown');
+        const error = result.unwrapErr();
+        expect(error.type).toBe('unknown');
+        if (error.type === 'unknown') {
+          expect(String(error.error)).toContain('pid 999');
+        }
         expect(other.requests).toHaveLength(0);
       } finally {
         await other.close();

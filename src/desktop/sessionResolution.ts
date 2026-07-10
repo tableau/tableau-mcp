@@ -16,9 +16,12 @@ const LIST_INSTANCES_TOOL: DesktopToolName = 'list-instances';
  * Resolve which Tableau Desktop session (pid) a session-scoped tool should target.
  *
  * Precedence:
- *   1. Explicit `session` arg — the caller always wins.
- *   2. `config.desktopSessionId` — the launching Desktop pinned itself via
- *      `TABLEAU_DESKTOP_SESSION_ID`, so the agent never needs list-instances.
+ *   1. `config.desktopSessionId` — when the launching Desktop pinned itself via
+ *      `TABLEAU_DESKTOP_SESSION_ID`, the pin is an invariant: it always wins, and an
+ *      explicit `session` naming a different Desktop is rejected rather than honored.
+ *      (list-instances is hidden when pinned, so any conflicting explicit session can
+ *      only be stale model context.)
+ *   2. Explicit `session` arg — when unpinned, the caller chooses.
  *   3. Auto-resolve when exactly one Desktop instance is running. 0 or 2+ instances
  *      fail closed with an instance-listing error rather than guessing.
  *
@@ -26,13 +29,20 @@ const LIST_INSTANCES_TOOL: DesktopToolName = 'list-instances';
  * differently, so step 3 reads whichever the active transport uses.
  */
 export function resolveSession(session: string | undefined): Result<string, McpToolError> {
-  if (session !== undefined) {
-    return Ok(session);
-  }
-
   const config = getDesktopConfig();
   if (config.desktopSessionId !== undefined) {
+    if (session !== undefined && session !== config.desktopSessionId) {
+      return Err(
+        new ArgsValidationError(
+          `This agent is pinned to Tableau Desktop (pid ${config.desktopSessionId}), but session '${session}' was requested. Omit the 'session' parameter — the pinned Desktop is used automatically.`,
+        ),
+      );
+    }
     return Ok(config.desktopSessionId);
+  }
+
+  if (session !== undefined) {
+    return Ok(session);
   }
 
   const pids = config.externalApiEnabled
