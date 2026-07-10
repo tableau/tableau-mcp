@@ -86,7 +86,7 @@ export const getValidateProposalTool = (
     description: [
       "Dry-run a filled binding proposal through bind-template's deterministic Call-2 gate WITHOUT creating or applying a worksheet.",
       'Returns valid:true with would-be inject args, or valid:false with reason/blockers. When valid, call bind-template with the same proposal.',
-      'content_status reports content freshness (bundled snapshot, not a live fetch). Details: expertise://tableau/tableau-tactics/workflow/templates.',
+      'content_status reports content freshness (bundled snapshot, not a live fetch). Details: expertise://tableau/tactics/workflow/templates.',
     ].join(' '),
     paramsSchema,
     annotations: {

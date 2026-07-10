@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import { spliceBoundFacet } from '../../../desktop/templates/facetSplice.js';
+import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
@@ -52,7 +53,7 @@ export const getBuildAndApplyWorksheetTool = (
     title: toolTitle,
     description: [
       'Build worksheet XML from a template and immediately APPLY it to the live workbook.',
-      'Designed for parallel Phase-2 execution by subagents. Details: expertise://tableau/tableau-tactics/viz/worksheets.',
+      'Designed for parallel Phase-2 execution by subagents. Details: expertise://tableau/tactics/viz/worksheets.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -181,6 +182,7 @@ export const getBuildAndApplyWorksheetTool = (
           // W28-C: splice a BOUND facet pill onto the trellis shelf BEFORE the frozen
           // core rewrite (identity no-op when no facet is bound). The core then maps
           // [Facet] → the bound field so the facet actually renders.
+          templateXml = ensureUserNamespace(templateXml);
           templateXml = spliceBoundFacet(templateXml, fieldMapping);
           templateXml = rewriteFieldReferences(
             templateXml,

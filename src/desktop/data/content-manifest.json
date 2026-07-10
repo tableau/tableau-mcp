@@ -2,9 +2,9 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.11.0+content.2026-07-08",
+  "content_version": "2.11.0+content.2026-07-10",
   "schema_version": "1",
-  "generated": "2026-07-08",
+  "generated": "2026-07-10",
   "engine_compat": {
     "server_min": "2.11.0",
     "node": ">=22.7.5"
@@ -57,8 +57,8 @@
     },
     {
       "path": "data-visualization-templates-xml/correlation-highlight-table.xml",
-      "sha256": "688cbb4986529a36956dec2dddab714f18734e146a6231acaadee191d9988eaf",
-      "bytes": 5896
+      "sha256": "81c30f84e8583610b4e6b153edfaa79b32a3370a2bdfdcbc0181d29480e4a325",
+      "bytes": 5949
     },
     {
       "path": "data-visualization-templates-xml/correlation-scatter-plot-chart.xml",
@@ -67,8 +67,8 @@
     },
     {
       "path": "data-visualization-templates-xml/deviation-diverging-bar.xml",
-      "sha256": "a94fd1809cfd21594b250feb07cc6a1fe3c8bfa0de958430917ac832869334d5",
-      "bytes": 3675
+      "sha256": "dfd31d10c3c1cd0de8dd039334a33fcb536962d46afc58ab74db24e86fe6b356",
+      "bytes": 3728
     },
     {
       "path": "data-visualization-templates-xml/deviation-gain-loss-chart.xml",
@@ -77,8 +77,8 @@
     },
     {
       "path": "data-visualization-templates-xml/deviation-spine-chart.xml",
-      "sha256": "3994a391f450cbf250214e3ed46d0c7ff294b67353689170d20aca3f40f9390d",
-      "bytes": 5901
+      "sha256": "5a8c6598d05ca81a6b6ed5de9d22440bf24f4f9e68590c6117010523e39491bf",
+      "bytes": 5954
     },
     {
       "path": "data-visualization-templates-xml/distribution-bar-code-chart.xml",
@@ -87,8 +87,8 @@
     },
     {
       "path": "data-visualization-templates-xml/distribution-histogram.xml",
-      "sha256": "bc70eb365ebe8647a5118d31389fc25205a4ca2807cc2286b348b39e503ab8fc",
-      "bytes": 1822
+      "sha256": "e684e749d53be92701585affb2338d2e1ec788960ffaa8904db3a79b02482df1",
+      "bytes": 1836
     },
     {
       "path": "data-visualization-templates-xml/funnel-chart.xml",
@@ -117,13 +117,13 @@
     },
     {
       "path": "data-visualization-templates-xml/magnitude-paired-bar.xml",
-      "sha256": "7cfd1c10ecb46e630432afc9c91564bda16c50f1317ac8cc19217912dce08fb6",
-      "bytes": 2406
+      "sha256": "8dfd3a5f4cd2664a774c2a982427c3d148c6dfcf9f3de0ad68bc71b360d6aa5f",
+      "bytes": 2459
     },
     {
       "path": "data-visualization-templates-xml/magnitude-paired-column-chart.xml",
-      "sha256": "c481d9c89a318ca5eada06e0394599f252ee6479030b0340e83f61d4729c7b2c",
-      "bytes": 2406
+      "sha256": "54e13afb3c004b2b511fd25d84bfce712cc28e5f289f12e03e8cbedbedb569fa",
+      "bytes": 2459
     },
     {
       "path": "data-visualization-templates-xml/pareto-chart.xml",
@@ -151,6 +151,11 @@
       "bytes": 2087
     },
     {
+      "path": "data-visualization-templates-xml/part-to-whole-waterfall-chart.xml",
+      "sha256": "390e07f8e4d223dd5c4f2966e1e23b0f3bbf7838b7058bca348e5514f4957952",
+      "bytes": 4827
+    },
+    {
       "path": "data-visualization-templates-xml/part-to-whole-waterfall.xml",
       "sha256": "215d8fbe9970b79ecd46242799d600fd4775056d887571b5242b7b2726d00681",
       "bytes": 5083
@@ -159,6 +164,11 @@
       "path": "data-visualization-templates-xml/quota-attainment-bullet.xml",
       "sha256": "6a0dfe73ca8d106a296fff0d22a06870c893124adf2a7079f33663e2ac92a614",
       "bytes": 2032
+    },
+    {
+      "path": "data-visualization-templates-xml/ranking-bullet-chart.xml",
+      "sha256": "b92617e293bd67cb084f1706d3ca9f9fc1796b8f7228696e3a99dc48dac57de2",
+      "bytes": 4480
     },
     {
       "path": "data-visualization-templates-xml/ranking-bump-chart.xml",
@@ -182,13 +192,18 @@
     },
     {
       "path": "data-visualization-templates-xml/slope-chart.xml",
-      "sha256": "170c6c14aabba89a37209664ca3e15da163c4d83c0ff6e25a7efc976ee4e3b7b",
-      "bytes": 3076
+      "sha256": "01819256a825acdd3ad9b9478d2af036141d6f687831776fbed4b24e8b5b3a7e",
+      "bytes": 3124
     },
     {
       "path": "data-visualization-templates-xml/spatial-choropleth-map.xml",
       "sha256": "b75f203fdb787be456d1d37e74d3d292de8850ab3f304016e3ff5401dfc175ea",
       "bytes": 6220
+    },
+    {
+      "path": "data-visualization-templates-xml/spatial-filled-map.xml",
+      "sha256": "1cd0e7b46a9b93c3f253e7dac3bfc021cf8b8663d47e04b8119e3f0bb441bc9f",
+      "bytes": 3355
     },
     {
       "path": "data-visualization-templates-xml/spatial-symbol-map.xml",
@@ -207,8 +222,13 @@
     },
     {
       "path": "data-visualization-templates-xml/ww-ou-arrow.xml",
-      "sha256": "f822c0902be27773e93ab0a5f4e6b52063013a7347da7faf64ee23a73806b132",
-      "bytes": 19986
+      "sha256": "5db1a3b2cfec461045137ab393da8ae58fc972eddb54f4d1722d8082e260ec8f",
+      "bytes": 20039
+    },
+    {
+      "path": "data-visualization-templates-xml/ww-ou-diff.xml",
+      "sha256": "d8dd72a26c34d34117afcd9c8eb2a1a389d22f3904cce1906f077c246d6c7e8e",
+      "bytes": 16674
     },
     {
       "path": "template-manifests.fixture.json",

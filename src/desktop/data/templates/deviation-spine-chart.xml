@@ -1,4 +1,4 @@
-<workbook>
+<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
   <worksheets>
     <worksheet name='{{TITLE}}'>
   <layout-options>
