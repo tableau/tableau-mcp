@@ -2,12 +2,13 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { listDashboards } from '../../../desktop/commands/workbook/listDashboards.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Tableau instance Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
 };
 
 const title = 'List All Dashboards in Workbook';
@@ -33,7 +34,12 @@ export const getListDashboardsTool = (
         extra,
         args: { session },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const result = await listDashboards({ executor, signal: extra.signal });
 
           if (result.isErr()) {

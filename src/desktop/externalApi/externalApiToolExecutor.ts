@@ -39,7 +39,7 @@ export type ExternalApiToolExecutorDeps = {
   ) => ExternalApiClient;
 };
 
-type NoInstance = { type: 'no-instance' };
+type NoInstance = { type: 'no-instance'; pinnedPid?: number };
 
 /** Normalized shape shared by document + invokeCommand responses. */
 type RawOutcome = {
@@ -198,14 +198,16 @@ export class ExternalApiToolExecutor extends ToolExecutor {
 
   private async resolveClient(): Promise<Result<ExternalApiClient, NoInstance>> {
     const instances = await this.deps.discover();
+    // A pinned pid must match exactly. Falling back to instances[0] here would silently
+    // retarget a different Desktop, which is the split-brain this pin exists to prevent.
     const chosen =
       this.deps.pid !== undefined
-        ? (instances.find((instance) => instance.pid === this.deps.pid) ?? instances[0])
+        ? instances.find((instance) => instance.pid === this.deps.pid)
         : instances[0];
 
     if (!chosen) {
       this.client = undefined;
-      return Err({ type: 'no-instance' });
+      return Err({ type: 'no-instance', pinnedPid: this.deps.pid });
     }
 
     this.client = this.createClient(chosen);
@@ -358,7 +360,13 @@ function mapClientError(error: ExternalApiError | NoInstance): ExecuteCommandErr
     case 'network':
       return { type: 'unknown', error: error.error };
     case 'no-instance':
-      return { type: 'unknown', error: 'No External Client API instance available.' };
+      return {
+        type: 'unknown',
+        error:
+          error.pinnedPid !== undefined
+            ? `Pinned Tableau Desktop (pid ${error.pinnedPid}) is no longer running — relaunch the agent from the Desktop you want to control.`
+            : 'No External Client API instance available.',
+      };
   }
 }
 

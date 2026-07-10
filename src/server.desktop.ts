@@ -11,11 +11,12 @@ import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import { DATA_ROOT, readResourceAsset, RESOURCES_ROOT } from './desktop/assets.js';
 import { listKnowledgeResources, readKnowledgeResource } from './desktop/knowledge/index.js';
-import { DESKTOP_ROUTE_TABLE, generateDesktopInstructions } from './desktop/routeTable.js';
+import { buildDesktopInstructions } from './desktop/routeTable.js';
 import { SessionManager } from './desktop/sessionManager.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
 import { getCheckForUserChangesTool } from './tools/desktop/session/checkForUserChanges.js';
+import { getListInstancesTool } from './tools/desktop/session/listInstances.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { DesktopToolName } from './tools/desktop/toolName.js';
@@ -81,13 +82,21 @@ export { DATA_ROOT, RESOURCES_ROOT };
 // the demo build previously shipped NO instructions, so skill-less clients got zero
 // routing and the template fast path stayed dark in real sessions). Generated from the
 // typed route table so route edits are pinned by tests instead of drifting as prose.
-export const DESKTOP_INSTRUCTIONS = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
+export const DESKTOP_INSTRUCTIONS = buildDesktopInstructions({ sessionPinned: false });
 
 export class DesktopMcpServer extends Server {
   private readonly sessionManager = new SessionManager();
 
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
-    super({ mcpServer, clientInfo, serverName, serverVersion, instructions: DESKTOP_INSTRUCTIONS });
+    super({
+      mcpServer,
+      clientInfo,
+      serverName,
+      serverVersion,
+      instructions: buildDesktopInstructions({
+        sessionPinned: getDesktopConfig().desktopSessionId !== undefined,
+      }),
+    });
   }
 
   registerResources = async (): Promise<void> => {
@@ -146,13 +155,25 @@ export class DesktopMcpServer extends Server {
   };
 
   protected _getToolsToRegister = async (): Promise<Array<DesktopTool<any>>> => {
+    const config = getDesktopConfig();
+    const excluded = new Set<(server: DesktopMcpServer) => DesktopTool<any>>();
+
     // check-for-user-changes needs the events endpoint, which the External Client API does not
     // expose; don't advertise a tool that can only return an error on that transport.
-    const factories = getDesktopConfig().externalApiEnabled
-      ? desktopToolFactories.filter((factory) => factory !== getCheckForUserChangesTool)
-      : desktopToolFactories;
+    if (config.externalApiEnabled) {
+      excluded.add(getCheckForUserChangesTool);
+    }
+
+    // When the launching Desktop pinned a session, every tool defaults to it, so
+    // list-instances has nothing to add — dropping it keeps the agent from ever
+    // spending a turn discovering which instance to control.
+    if (config.desktopSessionId !== undefined) {
+      excluded.add(getListInstancesTool);
+    }
+
+    const factories = desktopToolFactories.filter((factory) => !excluded.has(factory));
     const allTools = factories.map((toolFactory) => toolFactory(this));
-    return selectToolsForProfile(allTools, getDesktopConfig().toolProfile);
+    return selectToolsForProfile(allTools, config.toolProfile);
   };
 
   private _registerKnowledgeResources = (): void => {

@@ -9,6 +9,7 @@ import {
   isOverInlineXmlCap,
   xmlByteLength,
 } from '../../../desktop/inlineXmlCap.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -20,7 +21,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   mode: z
     .enum(['file', 'inline'])
     .optional()
@@ -95,7 +96,12 @@ export const getApplyWorkbookTool = (
             }
           }
 
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const result = await loadWorkbookXml({
             xml: workbookXml,
             executor,

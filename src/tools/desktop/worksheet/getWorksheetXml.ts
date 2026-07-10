@@ -12,6 +12,7 @@ import {
   logInlineXmlCapHit,
   xmlByteLength,
 } from '../../../desktop/inlineXmlCap.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   DesktopCommandExecutionError,
   GetWorksheetXmlFailedError,
@@ -22,7 +23,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   worksheetName: z.string().describe('Existing worksheet name.'),
   mode: z
     .enum(['file', 'inline'])
@@ -67,7 +68,12 @@ export const getGetWorksheetXmlTool = (
         extra,
         args: { session, worksheetName, mode },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const result = await getWorksheetXml({ worksheetName, executor, signal: extra.signal });
 
           if (result.isErr()) {

@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { spliceBoundFacet } from '../../../desktop/templates/facetSplice.js';
 import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
@@ -30,7 +31,7 @@ function escapeXml(text: string): string {
 }
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   taskSpec: z
     .object({
       worksheetName: z.string(),
@@ -172,13 +173,19 @@ export const getBuildAndApplyWorksheetTool = (
             );
           }
 
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+
           // Inject title and replace field references. Per-apply calc namespacing is
           // wired at this tool boundary: the shared core defaults namespacing OFF and
           // never mints its own nonce, so derive one from session + apply timestamp
           // (randomUUID guards same-millisecond applies). Distinct nonces => distinct
           // calc-name suffixes => repeated applies into one workbook don't collide.
           templateXml = templateXml.replace(/\{\{TITLE\}\}/g, escapeXml(worksheetName));
-          const applyNonce = `${session}:${Date.now()}:${randomUUID()}`;
+          const applyNonce = `${resolvedSession}:${Date.now()}:${randomUUID()}`;
           // W28-C: splice a BOUND facet pill onto the trellis shelf BEFORE the frozen
           // core rewrite (identity no-op when no facet is bound). The core then maps
           // [Facet] → the bound field so the facet actually renders.
@@ -202,7 +209,7 @@ export const getBuildAndApplyWorksheetTool = (
           const worksheetXml = worksheetMatch[0];
 
           // Apply to Tableau
-          const executor = await extra.getExecutor(session);
+          const executor = await extra.getExecutor(resolvedSession);
           const signal = extra.signal;
           const applyResult = await loadWorksheetXml({
             worksheetName,

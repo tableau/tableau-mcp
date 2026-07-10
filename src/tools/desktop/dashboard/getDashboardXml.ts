@@ -12,6 +12,7 @@ import {
   logInlineXmlCapHit,
   xmlByteLength,
 } from '../../../desktop/inlineXmlCap.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   DesktopCommandExecutionError,
   GetDashboardXmlFailedError,
@@ -22,7 +23,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   dashboardName: z.string().describe('Existing dashboard name.'),
   mode: z
     .enum(['file', 'inline'])
@@ -60,7 +61,12 @@ export const getGetDashboardXmlTool = (
         extra,
         args: { session, dashboardName, mode },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const result = await getDashboardXml({ dashboardName, executor, signal: extra.signal });
 
           if (result.isErr()) {

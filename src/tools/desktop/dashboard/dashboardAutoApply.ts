@@ -25,6 +25,7 @@ import {
 } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import { deleteDashboard, listWorkbookDashboards } from '../../../desktop/metadata/dashboards.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
 import {
   buildInjectedWorkbookXml,
@@ -35,7 +36,6 @@ import { ExecuteCommandError } from '../../../desktop/toolExecutor/toolExecutor.
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { resolveSession } from '../binder/bindTemplate.js';
 import { DesktopTool } from '../tool.js';
 import { buildDashboardXml, computeZones } from './dashboardZones.js';
 
