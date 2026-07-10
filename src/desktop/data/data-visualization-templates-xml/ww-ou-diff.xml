@@ -1,0 +1,195 @@
+<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+      <table>
+        <view>
+          <datasources>
+            <datasource name='{{DATASOURCE}}' />
+          </datasources>
+          <datasource-dependencies datasource='{{DATASOURCE}}'>
+            <column caption='Total Score' datatype='integer' name='[Calculation_3985421010944000]' role='measure' type='quantitative'>
+              <calculation class='tableau' formula='[Final - Split 1 - Split 2]+[Final - Split 2]' />
+            </column>
+            <column caption='Over/Under Binary' datatype='integer' name='[Calculation_3985421012422657]' role='measure' type='quantitative'>
+              <calculation class='tableau' formula='sign(([Calculation_3985421010944000])-([Total Score Bet]))' />
+            </column>
+            <column caption='SB #' datatype='string' name='[Calculation_3985421141106695]' role='dimension' type='nominal'>
+              <calculation class='tableau' formula='&quot;SB &quot;+CASE int([Super Bowl - Split 1])&#10;    WHEN 2 THEN &quot;II&quot;&#10;    WHEN 3 THEN &quot;III&quot;&#10;    WHEN 4 THEN &quot;IV&quot;&#10;    WHEN 5 THEN &quot;V&quot;&#10;    WHEN 6 THEN &quot;VI&quot;&#10;    WHEN 7 THEN &quot;VII&quot;&#10;    WHEN 8 THEN &quot;VIII&quot;&#10;    WHEN 9 THEN &quot;IX&quot;&#10;    WHEN 10 THEN &quot;X&quot;&#10;    WHEN 11 THEN &quot;XI&quot;&#10;    WHEN 12 THEN &quot;XII&quot;&#10;    WHEN 13 THEN &quot;XIII&quot;&#10;    WHEN 14 THEN &quot;XIV&quot;&#10;    WHEN 15 THEN &quot;XV&quot;&#10;    WHEN 16 THEN &quot;XVI&quot;&#10;    WHEN 17 THEN &quot;XVII&quot;&#10;    WHEN 18 THEN &quot;XVIII&quot;&#10;    WHEN 19 THEN &quot;XIX&quot;&#10;    WHEN 20 THEN &quot;XX&quot;&#10;    WHEN 21 THEN &quot;XXI&quot;&#10;    WHEN 22 THEN &quot;XXII&quot;&#10;    WHEN 23 THEN &quot;XXIII&quot;&#10;    WHEN 24 THEN &quot;XXIV&quot;&#10;    WHEN 25 THEN &quot;XXV&quot;&#10;    WHEN 26 THEN &quot;XXVI&quot;&#10;    WHEN 27 THEN &quot;XXVII&quot;&#10;    WHEN 28 THEN &quot;XXVIII&quot;&#10;    WHEN 29 THEN &quot;XXIX&quot;&#10;    WHEN 30 THEN &quot;XXX&quot;&#10;    WHEN 31 THEN &quot;XXXI&quot;&#10;    WHEN 32 THEN &quot;XXXII&quot;&#10;    WHEN 33 THEN &quot;XXXIII&quot;&#10;    WHEN 34 THEN &quot;XXXIV&quot;&#10;    WHEN 35 THEN &quot;XXXV&quot;&#10;    WHEN 36 THEN &quot;XXXVI&quot;&#10;    WHEN 37 THEN &quot;XXXVII&quot;&#10;    WHEN 38 THEN &quot;XXXVIII&quot;&#10;    WHEN 39 THEN &quot;XXXIX&quot;&#10;    WHEN 40 THEN &quot;XL&quot;&#10;    WHEN 41 THEN &quot;XLI&quot;&#10;    WHEN 42 THEN &quot;XLII&quot;&#10;    WHEN 43 THEN &quot;XLIII&quot;&#10;    WHEN 44 THEN &quot;XLIV&quot;&#10;    WHEN 45 THEN &quot;XLV&quot;&#10;    WHEN 46 THEN &quot;XLVI&quot;&#10;    WHEN 47 THEN &quot;XLVII&quot;&#10;    WHEN 48 THEN &quot;XLVIII&quot;&#10;    WHEN 49 THEN &quot;XLIX&quot;&#10;    WHEN 50 THEN &quot;L&quot;&#10;    WHEN 51 THEN &quot;LI&quot;&#10;    WHEN 52 THEN &quot;LII&quot;&#10;    WHEN 53 THEN &quot;LIII&quot;&#10;    WHEN 54 THEN &quot;LIV&quot;&#10;    WHEN 55 THEN &quot;LV&quot;&#10;    WHEN 56 THEN &quot;LVI&quot;&#10;    WHEN 57 THEN &quot;LVII&quot;&#10;    WHEN 58 THEN &quot;LVIII&quot;&#10;    WHEN 59 THEN &quot;LIX&quot;&#10;    &#10;END' />
+            </column>
+            <column aggregation='Sum' caption='Winning Score' datatype='integer' name='[Final - Split 1 - Split 2]' role='dimension' type='ordinal' user:SplitFieldIndex='8' user:SplitFieldOrigin='[{{DATASOURCE}}].[Final - Split 1]'>
+              <calculation class='tableau' formula='INT( SPLIT( [Final - Split 1], &quot; &quot;, 2 ) )' />
+            </column>
+            <column caption='Final - Split 1' datatype='string' name='[Final - Split 1]' role='dimension' type='nominal' user:SplitFieldIndex='5' user:SplitFieldOrigin='[{{DATASOURCE}}].[Final]'>
+              <calculation class='tableau' formula='TRIM( SPLIT( [Final], &quot;-&quot;, 1 ) )' />
+            </column>
+            <column caption='Losing Score' datatype='integer' name='[Final - Split 2]' role='dimension' type='ordinal' user:SplitFieldIndex='6' user:SplitFieldOrigin='[{{DATASOURCE}}].[Final]'>
+              <calculation class='tableau' formula='int(TRIM( SPLIT( [Final], &quot;-&quot;, 2 ) ))' />
+            </column>
+            <column datatype='string' name='[Final]' role='dimension' type='nominal' />
+            <column caption='Over/Under Diff' datatype='real' name='[Over/Under Binary (copy)_3985421014155269]' role='measure' type='quantitative'>
+              <calculation class='tableau' formula='([Calculation_3985421010944000])-([Total Score Bet])' />
+            </column>
+            <column caption='Super Bowl #' datatype='string' name='[Super Bowl - Split 1]' role='dimension' type='nominal' user:SplitFieldIndex='3' user:SplitFieldOrigin='[{{DATASOURCE}}].[Super Bowl]'>
+              <calculation class='tableau' formula='TRIM( SPLIT( [Super Bowl], &quot;(&quot;, 1 ) )' />
+            </column>
+            <column caption='Season' datatype='integer' name='[Super Bowl - Split 2]' role='dimension' type='ordinal' user:SplitFieldIndex='4' user:SplitFieldOrigin='[{{DATASOURCE}}].[Super Bowl]'>
+              <calculation class='tableau' formula='int(TRIM( SPLIT( SPLIT( [Super Bowl], &quot;(&quot;, 2 ), &quot;)&quot;, 1 ) ))-1' />
+            </column>
+            <column datatype='string' name='[Super Bowl]' role='dimension' type='nominal' />
+            <column caption='O/U Line' datatype='real' name='[Total Score Bet]' role='measure' type='quantitative' />
+            <column-instance column='[Calculation_3985421141106695]' derivation='None' name='[none:Calculation_3985421141106695:nk]' pivot='key' type='nominal' />
+            <column-instance column='[Super Bowl - Split 2]' derivation='None' name='[none:Super Bowl - Split 2:ok]' pivot='key' type='ordinal' />
+            <column-instance column='[Calculation_3985421010944000]' derivation='Sum' name='[sum:Calculation_3985421010944000:qk]' pivot='key' type='quantitative' />
+            <column-instance column='[Calculation_3985421012422657]' derivation='Sum' name='[sum:Calculation_3985421012422657:ok]' pivot='key' type='ordinal' />
+            <column-instance column='[Over/Under Binary (copy)_3985421014155269]' derivation='Sum' name='[sum:Over/Under Binary (copy)_3985421014155269:qk]' pivot='key' type='quantitative' />
+            <column-instance column='[Total Score Bet]' derivation='Sum' name='[sum:Total Score Bet:ok]' pivot='key' type='ordinal' />
+            <column-instance column='[Total Score Bet]' derivation='Sum' name='[sum:Total Score Bet:qk]' pivot='key' type='quantitative' />
+          </datasource-dependencies>
+          <filter class='categorical' column='[{{DATASOURCE}}].[:Measure Names]'>
+            <groupfilter function='union' user:op='manual'>
+              <groupfilter function='member' level='[:Measure Names]' member='&quot;[{{DATASOURCE}}].[sum:Calculation_3985421010944000:qk]&quot;' />
+              <groupfilter function='member' level='[:Measure Names]' member='&quot;[{{DATASOURCE}}].[sum:Total Score Bet:qk]&quot;' />
+            </groupfilter>
+          </filter>
+          <filter class='categorical' column='[{{DATASOURCE}}].[none:Super Bowl - Split 2:ok]'>
+            <groupfilter function='except' user:ui-domain='relevant' user:ui-enumeration='exclusive' user:ui-marker='enumerate'>
+              <groupfilter function='level-members' level='[none:Super Bowl - Split 2:ok]' />
+              <groupfilter function='union'>
+                <groupfilter function='member' level='[none:Super Bowl - Split 2:ok]' member='1966' />
+                <groupfilter function='member' level='[none:Super Bowl - Split 2:ok]' member='2025' />
+              </groupfilter>
+            </groupfilter>
+          </filter>
+          <shelf-sorts>
+            <shelf-sort-v2 dimension-to-sort='[{{DATASOURCE}}].[none:Super Bowl - Split 2:ok]' direction='DESC' measure-to-sort-by='[{{DATASOURCE}}].[none:Super Bowl - Split 2:ok]' shelf='rows' />
+          </shelf-sorts>
+          <hide-sort-controls />
+          <slices>
+            <column>[{{DATASOURCE}}].[:Measure Names]</column>
+            <column>[{{DATASOURCE}}].[none:Super Bowl - Split 2:ok]</column>
+          </slices>
+          <aggregation value='true' />
+        </view>
+        <style>
+          <style-rule element='axis'>
+            <format attr='title' class='0' field='[{{DATASOURCE}}].[Multiple Values]' scope='cols' value='Points scored vs O/U' />
+            <encoding attr='space' class='0' field='[{{DATASOURCE}}].[sum:Calculation_3985421010944000:qk]' field-type='quantitative' fold='true' scope='cols' synchronized='true' type='space' />
+            <format attr='display' class='0' field='[{{DATASOURCE}}].[sum:Calculation_3985421010944000:qk]' scope='cols' value='true' />
+            <format attr='title' class='0' field='[{{DATASOURCE}}].[sum:Over/Under Binary (copy)_3985421014155269:qk]' scope='cols' value='O/U Diff' />
+            <format attr='display' class='0' field='[{{DATASOURCE}}].[Multiple Values]' scope='cols' value='true' />
+            <format attr='display' class='0' field='[{{DATASOURCE}}].[sum:Over/Under Binary (copy)_3985421014155269:qk]' scope='cols' value='true' />
+            <encoding attr='space' class='1' field='[{{DATASOURCE}}].[sum:Over/Under Binary (copy)_3985421014155269:qk]' field-type='quantitative' fold='true' scope='cols' type='space' />
+            <format attr='title' class='0' field='[{{DATASOURCE}}].[sum:Calculation_3985421010944000:qk]' scope='cols' value='Did they beat the O/U?' />
+            <format attr='title' class='1' field='[{{DATASOURCE}}].[sum:Over/Under Binary (copy)_3985421014155269:qk]' scope='cols' value='O/U Diff' />
+          </style-rule>
+          <style-rule element='header'>
+            <format attr='width' field='[{{DATASOURCE}}].[none:Calculation_3985421141106695:nk]' value='88' />
+            <format attr='width' field='[{{DATASOURCE}}].[none:Super Bowl - Split 2:ok]' value='60' />
+            <format attr='width' field='[{{DATASOURCE}}].[sum:Total Score Bet:ok]' value='52' />
+            <format attr='height-header' value='10' />
+          </style-rule>
+          <style-rule element='field-labels'>
+            <format attr='text-decoration' value='none' />
+            <format attr='font-family' value='Tableau Light' />
+          </style-rule>
+          <style-rule element='label'>
+            <format attr='font-weight' field='[{{DATASOURCE}}].[none:Super Bowl - Split 2:ok]' value='bold' />
+            <format attr='font-weight' field='[{{DATASOURCE}}].[none:Calculation_3985421141106695:nk]' value='bold' />
+            <format attr='color' field='[{{DATASOURCE}}].[none:Super Bowl - Split 2:ok]' value='#666666' />
+            <format attr='color' field='[{{DATASOURCE}}].[none:Calculation_3985421141106695:nk]' value='#666666' />
+            <format attr='font-weight' field='[{{DATASOURCE}}].[sum:Total Score Bet:ok]' value='bold' />
+            <format attr='text-align' field='[{{DATASOURCE}}].[sum:Total Score Bet:ok]' value='right' />
+            <format attr='font-size' field='[{{DATASOURCE}}].[none:Calculation_3985421141106695:nk]' value='10' />
+            <format attr='font-size' field='[{{DATASOURCE}}].[sum:Total Score Bet:ok]' value='10' />
+            <format attr='font-size' field='[{{DATASOURCE}}].[none:Super Bowl - Split 2:ok]' value='10' />
+          </style-rule>
+          <style-rule element='table'>
+            <format attr='band-size' scope='rows' value='1' />
+            <format attr='band-level' scope='rows' value='2' />
+            <format attr='background-color' value='#00000000' />
+          </style-rule>
+          <style-rule element='refline'>
+            <format attr='fill-above' id='refline0' value='#00000000' />
+            <format attr='fill-below' id='refline0' value='#00000000' />
+          </style-rule>
+          <style-rule element='refband'>
+            <format attr='fill-color' id='refline1' value='#00000000' />
+          </style-rule>
+          <style-rule element='gridline'>
+            <format attr='line-pattern-only' value='solid' />
+            <format attr='stroke-size' value='0' />
+            <format attr='line-visibility' value='off' />
+          </style-rule>
+          <style-rule element='table-div'>
+            <format attr='div-level' scope='rows' value='1' />
+            <format attr='stroke-size' scope='rows' value='0' />
+            <format attr='line-visibility' scope='rows' value='off' />
+            <format attr='stroke-size' scope='cols' value='0' />
+            <format attr='line-visibility' scope='cols' value='off' />
+          </style-rule>
+          <style-rule element='header-div'>
+            <format attr='stroke-size' scope='cols' value='0' />
+            <format attr='line-visibility' scope='cols' value='off' />
+          </style-rule>
+        </style>
+        <panes>
+                                        <pane id='6' selection-relaxation-option='selection-relaxation-allow' x-axis-name='[{{DATASOURCE}}].[sum:Over/Under Binary (copy)_3985421014155269:qk]'>
+            <view>
+              <breakdown value='auto' />
+            </view>
+            <mark class='Bar' />
+            <mark-sizing mark-sizing-setting='marks-scaling-off' />
+            <reference-line axis-column='[{{DATASOURCE}}].[sum:Over/Under Binary (copy)_3985421014155269:qk]' enable-instant-analytics='true' formula='constant' id='refline1' label-type='none' paired-id='refline2' scope='per-table' symmetric='false' tooltip-type='none' value='-43.0' value-column='[{{DATASOURCE}}].[sum:Over/Under Binary (copy)_3985421014155269:qk]' z-order='1' />
+            <reference-line axis-column='[{{DATASOURCE}}].[sum:Over/Under Binary (copy)_3985421014155269:qk]' enable-instant-analytics='true' formula='constant' id='refline2' label-type='none' paired-id='refline1' scope='per-table' symmetric='false' tooltip-type='none' value='43.0' value-column='[{{DATASOURCE}}].[sum:Over/Under Binary (copy)_3985421014155269:qk]' z-order='1' />
+            <style>
+              <style-rule element='mark'>
+                <format attr='mark-labels-show' value='false' />
+                <format attr='size' value='0.59270715713500977' />
+                <format attr='mark-transparency' value='255' />
+                <format attr='mark-color' value='#c0c0c0' />
+              </style-rule>
+              <style-rule element='pane'>
+                <format attr='minheight' value='-1' />
+                <format attr='maxheight' value='-1' />
+                <format attr='minheight' value='-1' />
+                <format attr='maxheight' value='-1' />
+              </style-rule>
+            </style>
+          </pane>
+          <pane id='7' selection-relaxation-option='selection-relaxation-allow' x-axis-name='[{{DATASOURCE}}].[sum:Over/Under Binary (copy)_3985421014155269:qk]' x-index='1'>
+            <view>
+              <breakdown value='auto' />
+            </view>
+            <mark class='Circle' />
+            <mark-sizing mark-sizing-setting='marks-scaling-off' />
+            <style>
+              <style-rule element='mark'>
+                <format attr='mark-labels-show' value='false' />
+                <format attr='size' value='0.53773480653762817' />
+                <format attr='mark-transparency' value='255' />
+                <format attr='mark-color' value='#c0c0c0' />
+              </style-rule>
+              <style-rule element='pane'>
+                <format attr='minheight' value='-1' />
+                <format attr='maxheight' value='-1' />
+                <format attr='minheight' value='-1' />
+                <format attr='maxheight' value='-1' />
+              </style-rule>
+            </style>
+          </pane>
+        </panes>
+        <rows>([{{DATASOURCE}}].[none:Super Bowl - Split 2:ok] / ([{{DATASOURCE}}].[none:Calculation_3985421141106695:nk] / [{{DATASOURCE}}].[sum:Total Score Bet:ok]))</rows>
+        <cols>([{{DATASOURCE}}].[sum:Over/Under Binary (copy)_3985421014155269:qk] + [{{DATASOURCE}}].[sum:Over/Under Binary (copy)_3985421014155269:qk])</cols>
+      </table>
+      <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+    </worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+      <viewpoint>
+        <zoom type='entire-view' />
+      </viewpoint>
+      <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+    </window>
+  </windows>
+</workbook>

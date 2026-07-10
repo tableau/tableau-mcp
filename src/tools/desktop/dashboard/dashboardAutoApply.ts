@@ -175,7 +175,7 @@ export const getDashboardAutoApplyTool = (
     description: [
       'Bind 2-6 chart asks to checked-in templates and APPLY one new/replaced dashboard in one call.',
       'Every ask must bind deterministically; otherwise NOTHING is applied and each outcome is returned.',
-      'All-or-nothing: duplicate/zone-used titles, user edits, or preflight failures refuse the WHOLE batch. Details: expertise://tableau/tableau-tactics/dashboard/zones.',
+      'All-or-nothing: duplicate/zone-used titles, user edits, or preflight failures refuse the WHOLE batch. Details: expertise://tableau/tactics/dashboard/zones.',
     ].join(' '),
     paramsSchema,
     annotations: {

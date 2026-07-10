@@ -395,7 +395,7 @@ export const getDashboardHealthCheckTool = (
     description: [
       'READ-ONLY drift detector for a previously-bound dashboard.',
       'Flags renamed/deleted sheets, changed fields, orphan zones, and datasource changes.',
-      'Flag-only: never repairs. D9 live render breakage is undetectable from XML and disclosed in reports. Details: expertise://tableau/tableau-tactics/workflow/recovery.',
+      'Flag-only: never repairs. D9 live render breakage is undetectable from XML and disclosed in reports. Details: expertise://tableau/tactics/workflow/recovery.',
     ].join(' '),
     paramsSchema,
     annotations: {

@@ -95,12 +95,12 @@ describe('desktop SEA asset access', () => {
     const assetText = '# knowledge';
     const { readResourceAsset } = await importWithSeaAssets({
       'asset-manifest.json': JSON.stringify({
-        'resources/desktop/knowledge/viz-design/chart-selection.md': manifestEntry(assetText),
+        'resources/desktop/knowledge/strategy/viz-design/chart-selection.md': manifestEntry(assetText),
       }),
-      'resources/desktop/knowledge/viz-design/chart-selection.md': assetText,
+      'resources/desktop/knowledge/strategy/viz-design/chart-selection.md': assetText,
     });
 
-    expect(readResourceAsset('knowledge/viz-design/chart-selection.md')).toBe(assetText);
+    expect(readResourceAsset('knowledge/strategy/viz-design/chart-selection.md')).toBe(assetText);
   });
 
   it('verifies raw bytes, so a non-UTF-8 asset passes when its build-time byte hash matches', async () => {

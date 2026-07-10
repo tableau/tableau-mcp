@@ -37,7 +37,7 @@ export const getBuildAndApplyDashboardTool = (
     title,
     description: [
       'Build dashboard layout XML from a layout spec and APPLY it to the live workbook; registers viewpoints. Use with worksheet builders.',
-      'Details: expertise://tableau/tableau-tactics/dashboard/zones.',
+      'Details: expertise://tableau/tactics/dashboard/zones.',
     ].join(' '),
     paramsSchema,
     annotations: {

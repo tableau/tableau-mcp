@@ -61,7 +61,7 @@ export const getPlanDashboardCreationTool = (
     title: toolTitle,
     description: [
       'Plan a dashboard build: Phase 1 caches sheets; Phase 2 builds/applies worksheets and dashboard in parallel.',
-      'Blocks planning if any field is ambiguous across datasources — caller must resolve ambiguity first. Details: expertise://tableau/dashboard-design/layout-patterns.',
+      'Blocks planning if any field is ambiguous across datasources — caller must resolve ambiguity first. Details: expertise://tableau/strategy/dashboard-design/layout-patterns.',
     ].join(' '),
     paramsSchema,
     annotations: {

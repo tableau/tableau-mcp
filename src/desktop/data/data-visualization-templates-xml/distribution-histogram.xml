@@ -8,7 +8,7 @@
       </datasources>
       <datasource-dependencies datasource='{{DATASOURCE}}'>
         <column aggregation='None' caption='Profit (bin)' datatype='integer' name='[Profit (bin)]' role='dimension' type='ordinal'>
-          <calculation class='bin' decimals='2' formula='[Profit]' peg='0' size='283' />
+          <calculation class='bin' decimals='2' formula='[Profit]' peg='0' size='{{HISTOGRAM_BIN_WIDTH}}' />
         </column>
         <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
         <column-instance column='[Profit]' derivation='Count' name='[cnt:Profit:qk]' pivot='key' type='quantitative' />
@@ -22,7 +22,7 @@
         <view>
           <breakdown value='auto' />
         </view>
-        <mark class='Automatic' />
+        <mark class='Bar' />
         <mark-sizing custom-mark-size-in-axis-units='1.0' mark-alignment='mark-alignment-left' mark-sizing-setting='marks-scaling-on' use-custom-mark-size='false' />
       </pane>
     </panes>

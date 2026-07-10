@@ -42,7 +42,7 @@ export const getApplyDashboardTool = (
     description: [
       'Apply modified dashboard XML to Tableau (mutating). mode=file is default; mode=inline is for small XML.',
       'IMPORTANT: can only UPDATE an existing dashboard, not create one — use apply-workbook to create.',
-      'See expertise://tableau/tableau-tactics/dashboard/zones for zone structure.',
+      'See expertise://tableau/tactics/dashboard/zones for zone structure.',
     ].join(' '),
     paramsSchema,
     annotations: {

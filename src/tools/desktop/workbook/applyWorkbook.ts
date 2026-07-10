@@ -40,7 +40,7 @@ export const getApplyWorkbookTool = (
     title,
     description: [
       'Apply modified workbook XML to Tableau (mutating). mode=file is default; mode=inline is for small XML.',
-      'See expertise://tableau/tableau-tactics/data/datasources before editing datasource XML.',
+      'See expertise://tableau/tactics/data/datasources before editing datasource XML.',
     ].join(' '),
     paramsSchema,
     annotations: {

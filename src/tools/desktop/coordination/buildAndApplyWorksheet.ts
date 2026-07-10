@@ -52,7 +52,7 @@ export const getBuildAndApplyWorksheetTool = (
     title: toolTitle,
     description: [
       'Build worksheet XML from a template and immediately APPLY it to the live workbook.',
-      'Designed for parallel Phase-2 execution by subagents. Details: expertise://tableau/tableau-tactics/viz/worksheets.',
+      'Designed for parallel Phase-2 execution by subagents. Details: expertise://tableau/tactics/viz/worksheets.',
     ].join(' '),
     paramsSchema,
     annotations: {

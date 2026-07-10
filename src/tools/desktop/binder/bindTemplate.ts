@@ -358,7 +358,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     description: [
       'Bind a checked-in chart template to an ask and return validated inject args. Model-free.',
       "Call 1 returns 'bound' or 'propose'; Call 2 returns 'bound' or 'escalate'.",
-      'auto_apply:true renders deterministic Call-1 binds in one call. Details: expertise://tableau/tableau-tactics/workflow/templates.',
+      'auto_apply:true renders deterministic Call-1 binds in one call. Details: expertise://tableau/tactics/workflow/templates.',
     ].join(' '),
     paramsSchema,
     annotations: {
