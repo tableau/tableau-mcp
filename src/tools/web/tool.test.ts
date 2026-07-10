@@ -389,6 +389,67 @@ describe('Tool', () => {
         }),
       );
     });
+
+    // Embedded OAuth normalizes tableauAuthInfo to 'X-Tableau-Auth' (see
+    // accessTokenValidator), but the MCP-level authInfo still carries the client id. This
+    // constructs that production shape rather than a synthetic Bearer.
+    const embeddedTableauAuthInfo: TableauAuthInfo = {
+      type: 'X-Tableau-Auth',
+      username: 'user@example.com',
+      server: 'https://my-tableau.example.com',
+      siteName: 'my-site',
+      userId: 'uid-1',
+    };
+
+    it('should populate oauth client telemetry from authInfo.clientId on the embedded-OAuth path', async () => {
+      const tool = new WebTool(mockParams);
+      const clientId = 'https://claude.ai/.well-known/oauth/client-metadata.json';
+
+      await tool.logAndExecute({
+        extra: {
+          ...mockExtra,
+          tableauAuthInfo: embeddedTableauAuthInfo,
+          authInfo: {
+            token: 'fake-mcp-access-token',
+            clientId,
+            scopes: [],
+            extra: embeddedTableauAuthInfo,
+          },
+        },
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          oauth_client_id: clientId,
+          oauth_client_display_name: 'Claude',
+        }),
+      );
+    });
+
+    it('should sanitize an attacker-influenceable Bearer client_id before emitting telemetry', async () => {
+      const tool = new WebTool(mockParams);
+      const rawClientId =
+        'https://user:secret@claude.ai/.well-known/oauth/client-metadata.json?token=abc#frag';
+
+      await tool.logAndExecute({
+        extra: { ...mockExtra, tableauAuthInfo: bearerAuthInfo(rawClientId) },
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          oauth_client_id: 'https://claude.ai/.well-known/oauth/client-metadata.json',
+          oauth_client_display_name: 'Claude',
+        }),
+      );
+    });
   });
 
   describe('recordMetric telemetry', () => {

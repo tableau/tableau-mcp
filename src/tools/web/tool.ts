@@ -6,7 +6,10 @@ import { ZodiosValidationError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { WebMcpServer } from '../../server.web.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../../server/oauth/scopes.js';
-import { getClientDisplayName } from '../../telemetry/clientDisplayName.js';
+import {
+  getClientDisplayName,
+  sanitizeClientIdForTelemetry,
+} from '../../telemetry/clientDisplayName.js';
 import { getTelemetryProvider } from '../../telemetry/init.js';
 import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
@@ -136,9 +139,13 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     const { config, requestId, sessionId, tableauAuthInfo } = extra;
     const username = tableauAuthInfo?.username;
 
-    // The OAuth client_id (a CIMD URL) is only present on the Bearer auth path. It stays the
-    // canonical raw value; the display name is an additive, best-effort friendly label.
-    const oauthClientId = tableauAuthInfo?.type === 'Bearer' ? tableauAuthInfo.clientId : undefined;
+    // The OAuth client_id (a CIMD URL) is carried on tableauAuthInfo only for the Bearer auth path.
+    // Embedded OAuth normalizes tableauAuthInfo to 'X-Tableau-Auth' (see accessTokenValidator), but
+    // the MCP-level authInfo still carries the client id, so fall back to it. The raw value is
+    // sanitized/bounded before it reaches telemetry (see sanitizeClientIdForTelemetry).
+    const oauthClientId =
+      (tableauAuthInfo?.type === 'Bearer' ? tableauAuthInfo.clientId : undefined) ??
+      extra.authInfo?.clientId;
 
     this.notifyInvocation({ requestId, args, username });
     log({
@@ -225,8 +232,9 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
         is_hyperforce: config.isHyperforce,
         success,
         error_code: errorCode,
-        oauth_client_id: oauthClientId ?? '',
-        oauth_client_display_name: getClientDisplayName(oauthClientId) ?? oauthClientId ?? '',
+        oauth_client_id: sanitizeClientIdForTelemetry(oauthClientId),
+        oauth_client_display_name:
+          getClientDisplayName(oauthClientId) ?? sanitizeClientIdForTelemetry(oauthClientId),
       });
       // Record custom metric for this tool call
       const telemetry = getTelemetryProvider();
