@@ -59,8 +59,11 @@ Point an MCP client at the entry over stdio:
 
 - **`list-templates`** works headless against the bundled snapshot.
 - **`propose-template`**, **`validate-proposal`**, and **`bind-template`** read/drive a
-  **running Tableau Desktop** instance. Discover the instance with **`list-instances`** and
-  pass its session id (the Tableau Desktop PID) as the `session` argument to those tools.
+  **running Tableau Desktop** instance. If **`list-instances`** is absent from the tool
+  list, the session is **pinned** to the launching Desktop — skip discovery; every
+  session-scoped tool targets that Desktop automatically. Otherwise (unpinned, or driving
+  from an external client), discover the instance with **`list-instances`** and pass its
+  session id (the Tableau Desktop PID) as the `session` argument to those tools.
 
 ## Template content
 
