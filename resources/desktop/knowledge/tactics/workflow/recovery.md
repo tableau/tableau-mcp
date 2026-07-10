@@ -89,8 +89,9 @@ Switching to any worksheet triggers a full view-context evaluation that complete
 If Tableau Desktop is stuck (commands time out, dialogs can't be dismissed, or the workbook is corrupted):
 1. Save the most recent working snapshot to a `.twb` file in a known location
 2. Use `execute_tableau_command` with `tabui:open-workbook` on the backup file, OR ask the user to open it manually
-3. After the new instance is running, call `tableau-list-instances` to discover its session ID
-4. Switch to the new session and continue work
+3. If `tableau-list-instances` is absent from the tool list, the session is pinned to the launching Desktop; open the backup in that Desktop, or restart the MCP session against the fresh Desktop
+4. Otherwise, after the new instance is running, call `tableau-list-instances` to discover its session ID
+5. Switch to the new session and continue work
 
 ## Common Mistakes
 

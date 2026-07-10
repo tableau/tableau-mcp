@@ -59,7 +59,7 @@ Offer this instead:
 
 The discovery-first preamble for a non-trivial build-a-viz request:
 
-1. **Bootstrap:** `tableau-list-instances` -> capture `_session`.
+1. **Bootstrap:** if `tableau-list-instances` is absent from the tool list, the session is pinned to the launching Desktop; skip discovery because session-scoped tools already target it. Otherwise, call `tableau-list-instances` -> capture `_session`.
 2. **Inventory cheap-first (budget 2-4 calls):** `tableau-list-available-fields` -> `tableau-list-worksheets` -> `tableau-list-dashboards`. Use `tableau-get-workbook` (mode=file) or `tableau-save-metadata-xml` only if you need exact XML/encodings.
 3. **Align:** restate the goal in one line; name the available fields/sheets; flag any mismatch (missing field, high cardinality, wrong grain); choose the authoring surface.
 4. **Clarify (bounded):** ask at most 1-2 `tableau-ask-user` questions, and only when a mismatch blocks safe building; otherwise proceed and state your assumptions.
