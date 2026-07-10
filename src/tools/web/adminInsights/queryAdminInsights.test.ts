@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
+import { OverridableConfig } from '../../../overridableConfig.js';
 import { Query } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
@@ -176,6 +177,29 @@ describe('query-admin-insights tool', () => {
     }
     expect(result.content[0].text).toContain('admin');
   });
+
+  // Locks in the tightest-cap fix: a per-tool cap keyed on the LEGACY tool name in
+  // MAX_RESULT_LIMITS must still bound raw-VDS queries issued through the consolidated
+  // tool, even when the caller supplies a larger `limit`. Regressing this would silently
+  // widen the ceiling for operators who migrate callers to `query-admin-insights` while
+  // keeping their existing MAX_RESULT_LIMITS config.
+  it('honors a legacy per-kind cap in MAX_RESULT_LIMITS over a larger caller limit', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok({ data: [] }));
+
+    const result = await getToolResult({
+      kind: 'ts-events',
+      query: validQuery,
+      limit: 100,
+      maxResultLimits: 'query-admin-insights-ts-events:5',
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({ rowLimit: 5 }),
+      }),
+    );
+  });
 });
 
 async function getToolResult(params: {
@@ -185,9 +209,16 @@ async function getToolResult(params: {
   minAgeDays?: number;
   projectIds?: string[];
   itemTypes?: Array<'Workbook' | 'Datasource'>;
+  maxResultLimits?: string;
 }): Promise<CallToolResult> {
   const tool = getQueryAdminInsightsTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
+  const extra = getMockRequestHandlerExtra();
+  if (params.maxResultLimits !== undefined) {
+    extra.getConfigWithOverrides = vi
+      .fn()
+      .mockResolvedValue(new OverridableConfig({ MAX_RESULT_LIMITS: params.maxResultLimits }));
+  }
   return await callback(
     {
       kind: params.kind,
@@ -197,6 +228,6 @@ async function getToolResult(params: {
       projectIds: params.projectIds,
       itemTypes: params.itemTypes,
     },
-    getMockRequestHandlerExtra(),
+    extra,
   );
 }
