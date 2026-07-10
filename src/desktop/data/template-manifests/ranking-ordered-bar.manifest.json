@@ -1,0 +1,42 @@
+{
+  "template": "ranking-ordered-bar",
+  "family": "ranking",
+  "readiness": "GREEN",
+  "fast_path_eligible": true,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "live-2026-07-04",
+    "render_evidence": {
+      "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
+      "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
+      "structural": null,
+      "critical_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
+      "high_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
+      "pixel_oracle": "none (generic template has no golden anchor; an anchor-only comparison is circular and is not credited)",
+      "gate_composite": null
+    }
+  },
+  "datasource_placeholder": true,
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["ranking", "sorted-bar", "bar", "top", "highest", "lowest"],
+  "description": "Horizontal bars, one per category; bar length = measure; sorted descending by the measure.",
+  "avoid_when": [
+    "The 'top' here is positional layering — marks drawn on top of a reference line or another chart layer — not a top-N ranking; a positional or annotation placement is not a sorted bar chart."
+  ],
+  "slots": [
+    { "slot_id": "region", "template_field": "Region", "derivation": "none",
+      "role": ["rows", "sort-dimension"], "kind": "categorical", "bindable": true, "required": true },
+    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
+      "role": ["cols", "sort-measure"], "kind": "quantitative", "bindable": true, "required": true },
+    { "slot_id": "facet_row", "template_field": "Facet", "derivation": "none",
+      "role": ["rows"], "kind": "categorical", "bindable": true, "required": false,
+      "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on rows AHEAD of the ranked category pill, trellising the ranking into stacked panes (one ranked bar set per member). Optional \u2192 EXCLUDED from the required-bindable fixture_bind set (only {region, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots \u2014 it never steals the ranked (region) dim, and a bare 'by <dim>' never facets (fail-closed). XML declares [Facet] as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the default sorted-bar render is byte-unchanged). Modeled on box-plot-chart's required:false facet." }
+  ],
+  "calcs": [],
+  "hazards": [
+    { "code": "computed-sort-pill-coupling",
+      "detail": "computed-sort binds the dimension instance to the measure instance; both slots must bind or the sort dangles (both are required, so this is satisfied by coverage).",
+      "xml": "ranking-ordered-bar.xml:24" }
+  ]
+}

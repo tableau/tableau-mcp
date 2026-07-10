@@ -25,7 +25,7 @@ export interface ValidationResult {
 }
 
 /** Which apply context the rule should run in */
-export type ValidationContext = 'workbook' | 'worksheet' | 'datasource';
+export type ValidationContext = 'workbook' | 'worksheet' | 'datasource' | 'dashboard';
 
 export interface ValidationRule {
   id: string;

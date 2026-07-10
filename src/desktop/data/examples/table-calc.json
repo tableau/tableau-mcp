@@ -1,0 +1,53 @@
+{
+  "_description": "Table calculation with Compute Using configuration. The table-calc node goes inside the column-instance in datasource-dependencies, NOT at the worksheet level.",
+  "_feature": "table-calc,calculation",
+  "calc_field_in_datasource": {
+    "_description": "Step 1: Define the calculated field in the datasource columns section",
+    "type": "column",
+    "attrs": {
+      "caption": "Rank by Sales",
+      "datatype": "integer",
+      "name": "[Calculation_20260306190005]",
+      "role": "measure",
+      "type": "quantitative"
+    },
+    "children": [
+      {
+        "type": "calculation",
+        "attrs": {
+          "class": "tableau",
+          "formula": "RANK(SUM([Sales]))"
+        }
+      }
+    ]
+  },
+  "column_instance_with_table_calc": {
+    "_description": "Step 2: Add column-instance in datasource-dependencies with table-calc child for Compute Using",
+    "_placement": "Inside worksheet > table > view > datasource-dependencies > datasource-dependency",
+    "type": "column-instance",
+    "attrs": {
+      "name": "[usr:Calculation_20260306190005:qk:2]",
+      "column": "[Calculation_20260306190005]",
+      "pivot": "key",
+      "type": "quantitative",
+      "derivation": "User"
+    },
+    "children": [
+      {
+        "type": "table-calc",
+        "attrs": {
+          "ordering-type": "Field",
+          "ordering-field": "[Sample - Superstore].[Sub-Category]"
+        }
+      }
+    ]
+  },
+  "notes": {
+    "column_instance_naming": "usr: prefix (User derivation), :2 suffix (table calc instance ID)",
+    "ordering_type_values_OrderingType-ST": ["None", "Table", "TableCol", "Rows", "Columns", "Pane", "PaneCol", "RowInPane", "ColumnInPane", "CellInPane", "Field"],
+    "compute_using_table_down": "ordering-type: 'Rows'",
+    "compute_using_specific_field": "ordering-type: 'Field', ordering-field: '[ds].[field]'",
+    "common_table_calc_functions": ["INDEX()", "RANK()", "RUNNING_SUM()", "RUNNING_AVG()", "WINDOW_SUM()", "WINDOW_AVG()", "FIRST()", "LAST()", "LOOKUP()", "SIZE()", "TOTAL()"],
+    "CRITICAL": "table-calc config MUST be in the column-instance in datasource-dependencies. Worksheet-level table-calculations section gets STRIPPED by loadMetadataFromXml."
+  }
+}

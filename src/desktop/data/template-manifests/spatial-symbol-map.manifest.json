@@ -1,0 +1,88 @@
+{
+  "template": "spatial-symbol-map",
+  "family": "spatial",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "symbol-map",
+    "proportional-symbol-map",
+    "bubble-map",
+    "point-map",
+    "spatial",
+    "map"
+  ],
+  "description": "A point (symbol) map: one Circle mark per geographic member, placed on generated Lat/Long, sized by a measure. Distinct from a choropleth (which fills regions); use when magnitude is encoded by symbol size rather than region shading.",
+  "slots": [
+    {
+      "slot_id": "country",
+      "template_field": "Country/Region",
+      "derivation": "none",
+      "role": [
+        "lod"
+      ],
+      "kind": "geo",
+      "bindable": true,
+      "required": true,
+      "notes": "template column carries semantic-role='[Country].[ISO3166_2]'; the LOD level drives generated Lat/Long. Portability is 'across the committed fixture classes + render-verified', not a blanket 'any dataset'."
+    },
+    {
+      "slot_id": "state",
+      "template_field": "State/Province",
+      "derivation": "none",
+      "role": [
+        "lod"
+      ],
+      "kind": "geo",
+      "bindable": true,
+      "required": true,
+      "notes": "template column carries semantic-role='[State].[Name]'."
+    },
+    {
+      "slot_id": "city",
+      "template_field": "City",
+      "derivation": "none",
+      "role": [
+        "lod"
+      ],
+      "kind": "geo",
+      "bindable": true,
+      "required": true,
+      "notes": "template column carries semantic-role='[City].[Name]'; finest geographic grain — one symbol per city."
+    },
+    {
+      "slot_id": "sales",
+      "template_field": "Sales",
+      "derivation": "sum",
+      "role": [
+        "size"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "aggregated measure driving symbol size (proportional-symbol encoding)."
+    }
+  ],
+  "calcs": [],
+  "hazards": [
+    {
+      "code": "generated-geo-required",
+      "detail": "Rows/Cols are [Latitude (generated)]/[Longitude (generated)] — Tableau auto-generates these ONLY when the bound LOD fields carry a recognized geographic semantic-role. Binding non-geo dimensions produces no map (empty generated coordinates).",
+      "xml": "spatial-symbol-map.xml:53-54"
+    },
+    {
+      "code": "geo-bind-not-geocodable",
+      "detail": "A geo-slot bind proves role==dimension, NOT that the bound field geocodes; the sanity/render leg is the backstop (same residual as spatial-choropleth-map).",
+      "xml": "spatial-symbol-map.xml:13-19"
+    }
+  ]
+}

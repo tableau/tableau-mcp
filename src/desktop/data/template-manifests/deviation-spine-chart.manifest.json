@@ -1,0 +1,156 @@
+{
+  "template": "deviation-spine-chart",
+  "family": "deviation",
+  "readiness": "RED",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [
+    "NO_DATASOURCE_PLACEHOLDER",
+    "DATASET_SPECIFIC_FORMULA"
+  ],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": false,
+  "placeholders": [
+    "TITLE"
+  ],
+  "intent_keywords": [
+    "spine-chart",
+    "spine",
+    "split-bar",
+    "two-component-split",
+    "deviation"
+  ],
+  "description": "A spine chart: one row per category (Nationality) split into two contrasting components that diverge left/right of a center line (e.g. Women | Men), each component a signed share-of-total template calc so the pair reads as a two-sided deviation. RED: the source worksheet has NO {{DATASOURCE}} placeholder (bound to a federated datasource id) and its component calcs bake dataset-specific member literals ([Gender]='Men'/'Women') \u2014 not injectable as-is.",
+  "slots": [
+    {
+      "slot_id": "nationality",
+      "template_field": "Nationality",
+      "derivation": "none",
+      "role": [
+        "rows"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "The comparison dimension on rows \u2014 one spine row per member. The only genuinely bindable structural field; the two component measures are template-owned baked calcs."
+    }
+  ],
+  "calcs": [
+    {
+      "slot_id": "component_positive",
+      "template_field": "Calculation_2084392578408062979",
+      "derivation": "usr",
+      "role": [
+        "measure-values"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "SUM(if [Gender]='Men' THEN [Value]\nEND)/SUM([Value])",
+      "formula_refs": [
+        "Gender",
+        "Value"
+      ],
+      "depends_on_slots": [],
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Gender",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        },
+        {
+          "ref": "Value",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        }
+      ],
+      "notes": "The right-side (positive) component: share of total contributed by the 'Men' member. BAKES the member literal [Gender]='Men' and references bare [Value]/[Gender] as template-INTERNAL (not declared slots), so it cannot be generically bound \u2014 the dataset must literally carry Gender/Value with a 'Men' member (see hazard baked-member-literals / blocker DATASET_SPECIFIC_FORMULA)."
+    },
+    {
+      "slot_id": "spine_label",
+      "template_field": "Calculation_2084392578409873414",
+      "derivation": "none",
+      "role": [
+        "label"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": false,
+      "formula": "\"Women     |     Men\"",
+      "formula_refs": [],
+      "depends_on_slots": [],
+      "result_role": "dimension",
+      "inputs": [],
+      "notes": "A constant nominal center-divider label ('Women | Men'). Template-owned decorative dimension; carries no bindable inputs."
+    },
+    {
+      "slot_id": "component_negative",
+      "template_field": "Men (copy)",
+      "derivation": "usr",
+      "role": [
+        "measure-values"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "-SUM(if [Gender]='Women' THEN [Value]\nEND)/SUM([Value])",
+      "formula_refs": [
+        "Gender",
+        "Value"
+      ],
+      "depends_on_slots": [],
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Gender",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        },
+        {
+          "ref": "Value",
+          "slot_id": null,
+          "slot_kind": "calc",
+          "required": true,
+          "template_internal": true
+        }
+      ],
+      "notes": "The left-side (NEGATIVE) component: share of total contributed by the 'Women' member, NEGATED so it extends left of the center line \u2014 the signed measure that makes this a deviation spine. Same baked-literal non-portability as component_positive."
+    }
+  ],
+  "hazards": [
+    {
+      "code": "no-datasource-placeholder",
+      "detail": "The worksheet has NO {{DATASOURCE}} placeholder: <datasources> and every field reference are bound to the literal federated datasource id 'federated.1ko0q9z0cybhx212227b819gayqi'. The inject/apply path fills {{DATASOURCE}} to retarget a template onto a new datasource \u2014 with none present the template cannot be retargeted and would carry the source datasource id verbatim. Flagged NO_DATASOURCE_PLACEHOLDER; a follow-up must re-parameterize the datasource id to make this template injectable.",
+      "xml": "deviation-spine-chart.xml:16-18"
+    },
+    {
+      "code": "baked-member-literals",
+      "detail": "The two component measures bake dataset-specific member literals into their formulas \u2014 SUM(if [Gender]='Men' ...) and -SUM(if [Gender]='Women' ...) \u2014 and reference bare [Value]/[Gender] that are NOT declared bindable slots (template-internal inputs). replaceFieldReferences cannot rewrite a string literal member ('Men'/'Women') and does not touch template-internal refs, so the calcs only compute on a dataset that literally carries Gender/Value with those members. Flagged DATASET_SPECIFIC_FORMULA (fail-closed): a portable spine would parameterize the split dimension + its two member values.",
+      "xml": "deviation-spine-chart.xml:19-31"
+    },
+    {
+      "code": "signed-measure",
+      "detail": "Deviation family: the 'Women' component is a NEGATED share (-SUM(...)/SUM([Value])) so the two components diverge left/right of a zero/center line \u2014 the defining signed-measure structure of a spine chart. The read requires exactly two complementary components whose signed shares oppose across the divider.",
+      "xml": "deviation-spine-chart.xml:29-30"
+    },
+    {
+      "code": "hardcoded-filter-members",
+      "detail": "Three categorical filters pin source members verbatim: Measure='\"Weighted Sample\"', a Measure-Names filter enumerating the two component measures, and the spine-label filter member='\"Women     |     Men\"'. These are source-specific pins kept on the Filters shelf (<slices>); on any other dataset they match nothing. Not separately blocked because the NO_DATASOURCE_PLACEHOLDER + DATASET_SPECIFIC_FORMULA blockers already gate this template far below fast-path.",
+      "xml": "deviation-spine-chart.xml:40-57"
+    },
+    {
+      "code": "measure-names-values-pseudo",
+      "detail": "cols is [Multiple Values] (Measure Values) carrying the two component calcs, and color is [:Measure Names] \u2014 Tableau pseudo fields generated by the two-measure layout, not bindable fields, so they ride along and need no slot.",
+      "xml": "deviation-spine-chart.xml:81,86"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "template": "part-to-whole-pie-chart",
+  "family": "part-to-whole",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": { "fixture_bind": true, "render_verified": "none" },
+  "datasource_placeholder": true,
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["pie", "part-to-whole", "composition", "proportion", "share", "percentage", "donut"],
+  "description": "A pie whose wedge angles are an aggregated measure, one wedge per category (color).",
+  "avoid_when": [
+    "More than ~3-5 categories - humans compare angles poorly; a sorted horizontal bar reads more precisely and scales to any count",
+    "Slice sizes are close in value - the differences become impossible to judge by angle",
+    "Showing change over time - use a line or stacked area instead",
+    "Any analytical context where parts must be compared precisely - prefer a stacked bar or treemap (pie is usually the wrong choice)",
+    "Never render as a 3D pie - perspective distorts the proportions"
+  ],
+  "slots": [
+    { "slot_id": "region", "template_field": "Region", "derivation": "none",
+      "role": ["color"], "kind": "categorical", "bindable": true, "required": true,
+      "notes": "template column has aggregate-role-from='[State/Province]'; cosmetic secondary-role hint carried onto the target (verification-report correction: GREEN -> YELLOW)." },
+    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
+      "role": ["wedge-size"], "kind": "quantitative", "bindable": true, "required": true }
+  ],
+  "calcs": [],
+  "hazards": [
+    { "code": "hidden-aggregate-role-from",
+      "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
+      "xml": "part-to-whole-pie-chart.xml:10" }
+  ]
+}

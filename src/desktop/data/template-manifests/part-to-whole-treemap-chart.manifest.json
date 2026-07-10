@@ -1,0 +1,39 @@
+{
+  "template": "part-to-whole-treemap-chart",
+  "family": "part-to-whole",
+  "readiness": "GREEN",
+  "fast_path_eligible": true,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "live-2026-07-04",
+    "render_evidence": {
+      "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
+      "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
+      "structural": null,
+      "critical_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
+      "high_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
+      "pixel_oracle": "none (generic template has no golden anchor; an anchor-only comparison is circular and is not credited)",
+      "gate_composite": null
+    }
+  },
+  "datasource_placeholder": true,
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["treemap", "part-to-whole", "composition", "proportion", "share", "nested"],
+  "description": "Nested rectangles sized by a measure and colored by a category; a second dimension adds detail grain.",
+  "slots": [
+    { "slot_id": "category", "template_field": "Category", "derivation": "none",
+      "role": ["color", "text"], "kind": "categorical", "bindable": true, "required": true },
+    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
+      "role": ["size", "text"], "kind": "quantitative", "bindable": true, "required": true },
+    { "slot_id": "sub_category", "template_field": "Sub-Category", "derivation": "none",
+      "role": ["detail"], "kind": "categorical", "bindable": true, "required": true,
+      "notes": "detail/grain dimension: defines the rectangle-per-member grain." }
+  ],
+  "calcs": [],
+  "hazards": [
+    { "code": "shared-instance-multi-encoding",
+      "detail": "Category's [none:Category:nk] instance appears on both color and text; Sales' [sum:Sales:qk] on both size and text. Single instance reused across encodings (same derivation) — no qualified key needed.",
+      "xml": "part-to-whole-treemap-chart.xml:27-31" }
+  ]
+}

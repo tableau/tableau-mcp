@@ -1,4 +1,16 @@
-import { DesktopMcpServer } from './server.desktop.js';
+import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
+import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
+
+import * as configModule from './config.desktop.js';
+import * as loggerModule from './logging/logger.js';
+import {
+  DEMO_TOOL_PROFILE,
+  DESKTOP_INSTRUCTIONS,
+  DesktopMcpServer,
+  selectToolsForProfile,
+} from './server.desktop.js';
+import { DesktopTool } from './tools/desktop/tool.js';
+import { desktopToolNames } from './tools/desktop/toolName.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
 import { Provider } from './utils/provider.js';
 
@@ -23,6 +35,144 @@ describe('DesktopMcpServer', () => {
         expect.any(Function),
       );
     }
+  });
+
+  it('does not register check-for-user-changes on the External Client API transport', async () => {
+    const base = configModule.getDesktopConfig();
+    const spy = vi
+      .spyOn(configModule, 'getDesktopConfig')
+      .mockReturnValue({ ...base, externalApiEnabled: true });
+
+    try {
+      const server = getServer();
+      await server.registerTools();
+
+      const registeredNames = (
+        vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
+      ).map(([name]) => name);
+      expect(registeredNames).not.toContain('check-for-user-changes');
+      expect(registeredNames).toContain('list-worksheets');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
+  // Snapshot-style pin: any route-table edit must surface here as a reviewable diff.
+  it('matches the pinned instructions string', () => {
+    expect(DESKTOP_INSTRUCTIONS).toBe(`You are controlling Tableau Desktop.
+
+For a plain chart ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot), FIRST call bind-template with the user's ask and auto_apply: true — a confident bind renders the chart in ONE call (~2s server-side, no further tool calls). On propose/escalate, fall back to the general authoring tools (get-workbook-xml -> edit -> apply-workbook, or inject-template for a known template).
+
+For a dashboard ask with 2-6 charts (e.g. "a dashboard with sales by region and profit by category"), FIRST call dashboard-auto-apply with one { ask, title? } per chart and a dashboardName — it binds and composes every chart into one dashboard in ONE call. If any ask fails to deterministically bind, nothing is applied and each ask's outcome is returned; fall back to bind-template per chart, or build-and-apply-dashboard for KPI strips / custom zone layouts.
+
+For a data-value question ("what was revenue in Q3?"), do NOT answer with a number — this server cannot read data values. Say so, then offer the chart that would show it (a plain chart ask via bind-template) instead.
+
+Every session-scoped tool call needs the session id from list-instances — except bind-template and dashboard-auto-apply, which auto-resolve the session when exactly one Desktop instance is running.
+
+If an apply is rejected by preflight validation, fix the XML per the FIX lines in the error and re-apply. Prefer file mode for large workbooks.`);
+  });
+});
+
+describe('desktop tools/list serialized surface', () => {
+  it('stays under the tool-search auto-deferral threshold budget', async () => {
+    const server = new DesktopMcpServer();
+    let total = DESKTOP_INSTRUCTIONS.length;
+
+    for (const toolFactory of desktopToolFactories) {
+      const tool = toolFactory(server);
+      const paramsSchema = await Provider.from(tool.paramsSchema);
+      const obj = normalizeObjectSchema(paramsSchema as any);
+      const inputSchema = obj
+        ? toJsonSchemaCompat(obj, { strictUnions: true, pipeStrategy: 'input' } as any)
+        : { type: 'object', properties: {} };
+
+      total += JSON.stringify({
+        name: tool.name,
+        title: await Provider.from(tool.title),
+        description: await Provider.from(tool.description),
+        inputSchema,
+        annotations: await Provider.from(tool.annotations),
+        execution: { taskSupport: 'forbidden' },
+      }).length;
+    }
+
+    expect(total).toBeLessThanOrEqual(46_000);
+  });
+});
+
+describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)', () => {
+  const allTools = (): Array<DesktopTool<any>> =>
+    desktopToolFactories.map((toolFactory) => toolFactory(new DesktopMcpServer()));
+
+  it('every slim-profile name is a real desktop tool name', () => {
+    for (const name of DEMO_TOOL_PROFILE) {
+      expect(desktopToolNames).toContain(name);
+    }
+  });
+
+  it('TOOL_PROFILE=demo registers exactly the slim set (nothing more, nothing less)', () => {
+    const selected = selectToolsForProfile(allTools(), 'demo');
+    expect(new Set(selected.map((t) => t.name))).toEqual(DEMO_TOOL_PROFILE);
+    // The escalation-fallback chain the preamble-hunt requires must survive the slim.
+    for (const fallback of [
+      'bind-template',
+      'get-workbook-xml',
+      'inject-template',
+      'apply-workbook',
+      'apply-worksheet',
+    ]) {
+      expect(selected.map((t) => t.name)).toContain(fallback);
+    }
+  });
+
+  it('unset ("") profile returns the full set unchanged, byte-identical order', () => {
+    const tools = allTools();
+    const selected = selectToolsForProfile(tools, '');
+    expect(selected).toBe(tools);
+    expect(selected.map((t) => t.name)).toEqual(tools.map((t) => t.name));
+  });
+
+  it('explicit "full" profile returns the full set unchanged', () => {
+    const tools = allTools();
+    expect(selectToolsForProfile(tools, 'full')).toBe(tools);
+  });
+
+  it('an unknown profile value falls back to the full set and logs a warning', () => {
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+    const tools = allTools();
+    const selected = selectToolsForProfile(tools, 'bogus');
+    expect(selected).toBe(tools);
+    expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({ level: 'warning' }));
+  });
+});
+
+describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
+  afterEach(() => {
+    // Reset to the unset (full) state so later tests in this file are unaffected.
+    vi.stubEnv('TOOL_PROFILE', '');
+  });
+
+  it('registers only the slim set end-to-end when TOOL_PROFILE=demo', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'demo');
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0]);
+    expect(new Set(registeredNames)).toEqual(DEMO_TOOL_PROFILE);
+  });
+
+  it('registers the full set when TOOL_PROFILE is unset', async () => {
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0]);
+    expect(registeredNames.length).toBe(desktopToolFactories.length);
   });
 });
 

@@ -50,6 +50,52 @@ The quickest way to run Tableau MCP locally. Requires [Node.js](https://nodejs.o
 
 For Docker, building from source, and other self-hosted options, see the [Getting Started guide](https://tableau.github.io/tableau-mcp/docs/getting-started).
 
+### Tableau Desktop Authoring Server (from source)
+
+The **desktop** build variant exposes a local authoring tool surface that drives a running Tableau Desktop instance over MCP stdio. It can inspect workbooks, list/inject chart templates, bind fields into worksheets, and work with dashboards.
+
+Build it from a clone with Node.js 22.7.5 or later:
+
+```bash
+npm run build:desktop
+```
+
+Point an MCP client at the desktop entry:
+
+```json
+{
+  "mcpServers": {
+    "tableau-desktop": {
+      "command": "node",
+      "args": ["/absolute/path/to/tableau-mcp/build/index.desktop.js"]
+    }
+  }
+}
+```
+
+Headless reference tools such as `list-templates` read the bundled snapshot. Tools that inspect or mutate a workbook require a running Tableau Desktop instance; use `list-instances` and pass the returned `session` id to those calls.
+
+See [`README.desktop.md`](README.desktop.md) for the full desktop authoring quickstart and known gaps.
+
+## Standalone Binaries (SEA)
+
+The server can be packaged as a [Node.js Single Executable Application](https://tableau.github.io/tableau-mcp/docs/extras/node-sea)
+so it runs without a Node.js install. Build them locally with:
+
+```bash
+npm run build:sea            # default (web) + desktop variants, host platform
+npm run build:sea:desktop    # desktop variant only
+
+# Pick variants/platforms explicitly:
+npm run build:sea -- --variant desktop --platform macos-arm64 macos-x64 win-x64
+```
+
+Output lands in `build/sea/<variant>/<platform>/`. Platforms: `macos-arm64`, `macos-x64`,
+`linux-x64`, `linux-arm64`, `win-x64`. macOS binaries are ad-hoc codesigned when built on a
+macOS host. Each binary is fully self-contained: the desktop variant's knowledge, data,
+templates, and examples are embedded into the executable as SEA assets, so it can be
+distributed and run as a single file with no sibling folders.
+
 ## Deploy to Heroku
 
 [![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://www.heroku.com/deploy?template=https://github.com/tableau/tableau-mcp)

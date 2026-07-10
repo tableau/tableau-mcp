@@ -1,0 +1,296 @@
+// Asset access for the desktop variant. When the server runs as a Node.js Single
+// Executable Application (SEA) there is no filesystem next to the binary, so the
+// data/resource files are embedded in the SEA blob and read via node:sea. When
+// running from a normal build or under tests, the same calls fall back to reading
+// the files from disk. SEA asset keys are forward-slash paths relative to the
+// build root, e.g. "desktop/data/corpus.json" or
+// "resources/desktop/knowledge/viz-design/chart-selection.md".
+
+import { createHash } from 'crypto';
+import { existsSync, readdirSync, readFileSync } from 'fs';
+import { join } from 'path';
+
+import { getDirname } from '../utils/getDirname.js';
+
+const MANIFEST_KEY = 'asset-manifest.json';
+
+function safeDirname(): string {
+  try {
+    const dir = getDirname();
+    return typeof dir === 'string' ? dir : process.cwd();
+  } catch {
+    return process.cwd();
+  }
+}
+
+// Roots are resolved lazily (not cached at module load) so tests that stub
+// getDirname after import, and SEA-vs-disk differences, both behave correctly.
+function resolveRoot(candidates: string[]): string {
+  return candidates.find(existsSync) ?? candidates[0];
+}
+
+export function getDataRoot(): string {
+  return resolveRoot([
+    join(safeDirname(), 'desktop', 'data'),
+    join(safeDirname(), '..', 'src', 'desktop', 'data'),
+    // Unbundled source/vitest: getDirname() is src/utils, so the data dir is a sibling.
+    join(safeDirname(), '..', 'desktop', 'data'),
+  ]);
+}
+
+export function getResourcesRoot(): string {
+  return resolveRoot([
+    join(safeDirname(), 'resources', 'desktop'),
+    join(safeDirname(), '..', 'resources', 'desktop'),
+  ]);
+}
+
+// Eager snapshots retained for call sites that still build absolute paths and
+// for the CORPUS_PATH/TEMPLATES_DIR-style env overrides used in tests.
+export const DATA_ROOT = getDataRoot();
+export const RESOURCES_ROOT = getResourcesRoot();
+
+type SeaApi = {
+  isSea: () => boolean;
+  getAsset: (key: string, encoding?: string) => string | ArrayBuffer;
+};
+
+let _seaApi: SeaApi | null | undefined;
+let _manifest: string[] | undefined;
+let _contentManifest: Map<string, { sha256: string; bytes: number }> | undefined;
+const _verifiedDataAssets = new Map<string, string>();
+
+function getSeaApi(): SeaApi | null {
+  if (_seaApi !== undefined) {
+    return _seaApi;
+  }
+  try {
+    // node:sea is only meaningful inside a SEA; require may be unavailable under
+    // some test runtimes, so guard it. isSea() returns false outside a SEA.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    _seaApi = require('node:sea') as SeaApi;
+  } catch {
+    _seaApi = null;
+  }
+  return _seaApi;
+}
+
+export function runningAsSea(): boolean {
+  try {
+    return getSeaApi()?.isSea() ?? false;
+  } catch {
+    return false;
+  }
+}
+
+function readSeaAssetText(key: string): string | null {
+  const sea = getSeaApi();
+  if (!sea) {
+    return null;
+  }
+  try {
+    const asset = sea.getAsset(key, 'utf8');
+    return typeof asset === 'string' ? asset : null;
+  } catch {
+    return null;
+  }
+}
+
+function getManifest(): string[] {
+  if (_manifest !== undefined) {
+    return _manifest;
+  }
+  const raw = readSeaAssetText(MANIFEST_KEY);
+  if (raw === null) {
+    throw new Error(`SEA asset listing '${MANIFEST_KEY}' is missing or unreadable`);
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || !parsed.every((key) => typeof key === 'string')) {
+      throw new Error('expected an array of asset keys');
+    }
+    _manifest = parsed;
+  } catch (error) {
+    throw new Error(`SEA asset listing '${MANIFEST_KEY}' is corrupt: ${(error as Error).message}`);
+  }
+  return _manifest;
+}
+
+function listSeaAssetKeys(dirKey: string): string[] {
+  const prefix = dirKey.endsWith('/') ? dirKey : `${dirKey}/`;
+  return getManifest().filter((key) => key.startsWith(prefix));
+}
+
+function toForwardSlash(value: string): string {
+  return value.split('\\').join('/');
+}
+
+function sha256(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+function getContentManifestEntries(): Map<string, { sha256: string; bytes: number }> {
+  if (_contentManifest) {
+    return _contentManifest;
+  }
+  const raw = readSeaAssetText('desktop/data/content-manifest.json');
+  if (raw === null) {
+    throw new Error(
+      "SEA desktop data integrity manifest 'desktop/data/content-manifest.json' is missing or unreadable",
+    );
+  }
+  try {
+    const parsed = JSON.parse(raw) as {
+      resources?: Array<{ path?: unknown; sha256?: unknown; bytes?: unknown }>;
+    };
+    if (!Array.isArray(parsed.resources)) {
+      throw new Error('missing resources array');
+    }
+    _contentManifest = new Map(
+      parsed.resources.map((resource) => {
+        if (
+          typeof resource.path !== 'string' ||
+          typeof resource.sha256 !== 'string' ||
+          typeof resource.bytes !== 'number'
+        ) {
+          throw new Error('resource entries must include path, sha256, and bytes');
+        }
+        return [resource.path, { sha256: resource.sha256, bytes: resource.bytes }];
+      }),
+    );
+    return _contentManifest;
+  } catch (error) {
+    throw new Error(
+      `SEA desktop data integrity manifest 'desktop/data/content-manifest.json' is corrupt: ${
+        (error as Error).message
+      }`,
+    );
+  }
+}
+
+function readVerifiedSeaDataAsset(rel: string): string | null {
+  if (_verifiedDataAssets.has(rel)) {
+    return _verifiedDataAssets.get(rel)!;
+  }
+  const key = `desktop/data/${rel}`;
+  if (!getManifest().includes(key)) {
+    return null;
+  }
+  const raw = readSeaAssetText(key);
+  if (raw === null) {
+    throw new Error(`SEA data asset '${key}' is listed but missing or unreadable`);
+  }
+  if (rel !== 'content-manifest.json') {
+    const expected = getContentManifestEntries().get(rel);
+    if (!expected) {
+      throw new Error(`SEA data asset '${rel}' is missing from content-manifest.json`);
+    }
+    const actualHash = sha256(raw);
+    const actualBytes = Buffer.byteLength(raw);
+    if (actualHash !== expected.sha256 || actualBytes !== expected.bytes) {
+      throw new Error(
+        `SEA data asset '${rel}' failed sha256 integrity check: expected ${expected.sha256} ` +
+          `(${expected.bytes} bytes), got ${actualHash} (${actualBytes} bytes)`,
+      );
+    }
+  }
+  _verifiedDataAssets.set(rel, raw);
+  return raw;
+}
+
+// --- Logical asset accessors (SEA-aware, disk fallback) ---
+
+export function readDataAsset(relPath: string): string | null {
+  const rel = toForwardSlash(relPath);
+  if (runningAsSea()) {
+    return readVerifiedSeaDataAsset(rel);
+  }
+  try {
+    return readFileSync(join(getDataRoot(), ...rel.split('/')), 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
+export function dataAssetExists(relPath: string): boolean {
+  const rel = toForwardSlash(relPath);
+  if (runningAsSea()) {
+    return getManifest().includes(`desktop/data/${rel}`);
+  }
+  return existsSync(join(getDataRoot(), ...rel.split('/')));
+}
+
+export function _setSeaApiForTest(seaApi: SeaApi | null): void {
+  _seaApi = seaApi;
+  _manifest = undefined;
+  _contentManifest = undefined;
+  _verifiedDataAssets.clear();
+}
+
+// File names (not full paths) of the entries under a desktop/data subdirectory.
+// Filtering by extension is left to the caller.
+export function listDataAssetNames(subDir: string): string[] {
+  const rel = toForwardSlash(subDir);
+  if (runningAsSea()) {
+    const prefix = `desktop/data/${rel}/`;
+    return listSeaAssetKeys(`desktop/data/${rel}`)
+      .map((key) => key.slice(prefix.length))
+      .filter((name) => name.length > 0);
+  }
+  try {
+    return readdirSync(join(getDataRoot(), ...rel.split('/')));
+  } catch {
+    return [];
+  }
+}
+
+export function readResourceAsset(relPath: string): string | null {
+  const rel = toForwardSlash(relPath);
+  if (runningAsSea()) {
+    return readSeaAssetText(`resources/desktop/${rel}`);
+  }
+  try {
+    return readFileSync(join(getResourcesRoot(), ...rel.split('/')), 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
+// Knowledge module slugs (forward-slash, no .md) under resources/desktop/knowledge.
+// SEA reads the manifest; disk walks the tree.
+export function listKnowledgeSlugs(): string[] {
+  if (runningAsSea()) {
+    const prefix = 'resources/desktop/knowledge/';
+    return listSeaAssetKeys('resources/desktop/knowledge')
+      .filter((key) => key.endsWith('.md'))
+      .map((key) => key.slice(prefix.length).replace(/\.md$/, ''))
+      .sort();
+  }
+  const root = join(getResourcesRoot(), 'knowledge');
+  const slugs: string[] = [];
+  const walk = (dir: string, prefixParts: string[]): void => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const next = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(next, [...prefixParts, entry.name]);
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        slugs.push([...prefixParts, entry.name.replace(/\.md$/, '')].join('/'));
+      }
+    }
+  };
+  walk(root, []);
+  return slugs.sort();
+}
+
+export function readKnowledgeBySlug(slug: string): string | null {
+  if (!slug || slug.includes('..') || slug.includes('\\') || slug.startsWith('/')) {
+    return null;
+  }
+  return readResourceAsset(`knowledge/${slug}.md`);
+}

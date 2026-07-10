@@ -1,0 +1,34 @@
+{
+  "template": "kpi-text",
+  "family": "kpi",
+  "readiness": "GREEN",
+  "fast_path_eligible": true,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "live-2026-07-04",
+    "render_evidence": {
+      "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
+      "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
+      "structural": null,
+      "critical_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
+      "high_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
+      "pixel_oracle": "none (generic template has no golden anchor; an anchor-only comparison is circular and is not credited)",
+      "gate_composite": null
+    }
+  },
+  "datasource_placeholder": true,
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["kpi", "metric", "big-number", "single-value", "total", "text", "scorecard", "ratio", "percent", "percentage", "number", "rate", "per-capita"],
+  "description": "A single big-number text card: one measure aggregated and shown as label text.",
+  "avoid_when": [
+    "The ask is for a grand total, a subtotal, or a running / cumulative 'percent of total' — a subtotaling or windowed running-sum aggregation across the rows of a table, not a single big-number KPI value."
+  ],
+  "slots": [
+    { "slot_id": "value", "template_field": "Value", "derivation": "sum",
+      "role": ["text"], "kind": "quantitative", "bindable": true, "required": true,
+      "notes": "template field is the generic name 'Value'; binds a single quantitative measure. Portability is 'across the committed fixture classes + render-verified' (see portability_evidence), not a blanket 'any dataset'." }
+  ],
+  "calcs": [],
+  "hazards": []
+}

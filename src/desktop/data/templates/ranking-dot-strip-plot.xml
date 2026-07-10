@@ -1,0 +1,100 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run>&lt;Sheet Name&gt;
+</run>
+        <run fontname='Tableau Light' fontsize='9'>Dots placed in order on a strip are a space-efficient method of laying out ranks across multiple categories.</run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column datatype='date' name='[Order Date]' role='dimension' type='ordinal' />
+        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Sub-Category]' role='dimension' type='nominal' />
+        <column-instance column='[Order Date]' derivation='Month' name='[mn:Order Date:ok]' pivot='key' type='ordinal' />
+        <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <filter class='categorical' column='[{{DATASOURCE}}].[mn:Order Date:ok]'>
+        <groupfilter function='level-members' level='[mn:Order Date:ok]' />
+      </filter>
+      <slices>
+        <column>[{{DATASOURCE}}].[mn:Order Date:ok]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <format attr='title' class='0' field='[{{DATASOURCE}}].[sum:Sales:qk]' scope='cols' value='' />
+      </style-rule>
+      <style-rule element='header'>
+        <format attr='band-color' scope='rows' value='#00000000' />
+      </style-rule>
+      <style-rule element='pane'>
+        <format attr='band-color' scope='rows' value='#00000000' />
+      </style-rule>
+      <style-rule element='table'>
+        <format attr='band-size' scope='rows' value='1' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='rows' value='false' />
+      </style-rule>
+      <style-rule element='refline'>
+        <format attr='fill-above' id='refline0' value='#00000000' />
+        <format attr='fill-below' id='refline0' value='#00000000' />
+        <format attr='stroke-color' id='refline0' value='#000000' />
+      </style-rule>
+      <style-rule element='gridline'>
+        <format attr='line-visibility' scope='rows' value='off' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+      <style-rule element='table-div'>
+        <format attr='line-visibility' scope='cols' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Circle' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <lod column='[{{DATASOURCE}}].[none:Sub-Category:nk]' />
+        </encodings>
+        <reference-line axis-column='[{{DATASOURCE}}].[sum:Sales:qk]' enable-instant-analytics='false' formula='average' id='refline0' label-type='none' probability='95' scope='per-cell' value-column='[{{DATASOURCE}}].[sum:Sales:qk]' z-order='1' />
+        <style>
+          <style-rule element='mark'>
+            <format attr='size' value='1.4172928333282471' />
+            <format attr='mark-color' value='#555555' />
+            <format attr='mark-transparency' value='129' />
+            <format attr='has-stroke' value='false' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[{{DATASOURCE}}].[mn:Order Date:ok]</rows>
+    <cols>[{{DATASOURCE}}].[sum:Sales:qk]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

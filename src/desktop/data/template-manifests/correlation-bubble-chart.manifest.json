@@ -1,0 +1,25 @@
+{
+  "template": "correlation-bubble-chart",
+  "family": "correlation",
+  "readiness": "GREEN",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": { "fixture_bind": true, "render_verified": "none" },
+  "datasource_placeholder": true,
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["bubble", "correlation", "scatter", "relationship", "three-measures", "sized-scatter"],
+  "description": "One bubble per detail-grain member; X and Y are two measures, bubble size is a third measure.",
+  "slots": [
+    { "slot_id": "discount", "template_field": "Discount", "derivation": "avg",
+      "role": ["rows"], "kind": "quantitative", "bindable": true, "required": true },
+    { "slot_id": "profit", "template_field": "Profit", "derivation": "sum",
+      "role": ["cols"], "kind": "quantitative", "bindable": true, "required": true },
+    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
+      "role": ["size"], "kind": "quantitative", "bindable": true, "required": true },
+    { "slot_id": "order_id", "template_field": "Order ID", "derivation": "none",
+      "role": ["detail"], "kind": "categorical", "bindable": true, "required": true,
+      "notes": "detail/grain dimension: one bubble per member." }
+  ],
+  "calcs": [],
+  "hazards": []
+}

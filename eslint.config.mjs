@@ -55,7 +55,15 @@ export default [
     },
   },
   {
-    ignores: ['node_modules/**', 'build/**', 'docs/.docusaurus/**', 'docs/build/**'],
+    ignores: [
+      'node_modules/**',
+      'build/**',
+      'docs/.docusaurus/**',
+      'docs/build/**',
+      // Migration snapshot workspace (local-only, git-excluded) — reference material
+      // only, never built or shipped.
+      '.a2td-snapshot/**',
+    ],
   },
   {
     plugins: {

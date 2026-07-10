@@ -1,0 +1,78 @@
+{
+  "template": "change-over-time-calendar-heatmap",
+  "family": "time-series",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": false,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "calendar-heatmap",
+    "calendar",
+    "heatmap",
+    "seasonality",
+    "month-over-year",
+    "time-series"
+  ],
+  "description": "A calendar heatmap: one date field split into Year (columns) and Month (rows), color-shaded by an aggregated measure to reveal seasonality / month-over-year patterns.",
+  "slots": [
+    {
+      "slot_id": "order_month",
+      "template_field": "Order Date",
+      "derivation": "mn",
+      "role": [
+        "rows"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "qualified_key_required": true,
+      "notes": "Month part of the SAME bound date field (rows axis / calendar cell height)."
+    },
+    {
+      "slot_id": "order_year",
+      "template_field": "Order Date",
+      "derivation": "yr",
+      "role": [
+        "cols"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "qualified_key_required": true,
+      "notes": "Year part of the SAME bound date field (cols axis). Reuses Order Date at a second derivation — see hazard single-date-two-derivations."
+    },
+    {
+      "slot_id": "sales",
+      "template_field": "Sales",
+      "derivation": "sum",
+      "role": [
+        "color"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "aggregated measure driving the cell color gradient."
+    }
+  ],
+  "calcs": [],
+  "hazards": [
+    {
+      "code": "single-date-two-derivations",
+      "detail": "The one [Order Date] field is used at BOTH Month (rows) and Year (cols). Against the single-date committed fixture the second temporal slot cannot bind a DISTINCT field, so fixture_bind=false — a valid, honest state. On a real dataset both slots bind the same date field via qualified keys; the false reflects the fixture's one-date shape, not a template defect.",
+      "xml": "change-over-time-calendar-heatmap.xml:12,14"
+    },
+    {
+      "code": "keyed-cell-style",
+      "detail": "A <style-rule element='cell'> sets fixed height keyed by name to [mn:Order Date:ok] (calendar squares). Cosmetic; it references the month instance by qualified name and rides along verbatim.",
+      "xml": "change-over-time-calendar-heatmap.xml:20"
+    }
+  ]
+}

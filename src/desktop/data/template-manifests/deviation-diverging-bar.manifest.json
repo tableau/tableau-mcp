@@ -1,0 +1,127 @@
+{
+  "template": "deviation-diverging-bar",
+  "family": "deviation",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [
+    "HARDCODED_FILTER_MEMBERS"
+  ],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "diverging-bar",
+    "diverging",
+    "deviation",
+    "above-below",
+    "positive-negative"
+  ],
+  "description": "A diverging bar chart: one Automatic bar per category (Sub-Category on rows) whose length is a signed Profit-Ratio template calc (SUM([Profit])/SUM([Sales])) on cols, so bars extend left/right of zero and are colored on a diverging orange-blue ramp; sorted DESC by the ratio. Shows deviation above/below a zero baseline. Structurally compiled, not render-verified; the source Region='Central' filter rides along verbatim (HARDCODED_FILTER_MEMBERS).",
+  "slots": [
+    {
+      "slot_id": "sub_category",
+      "template_field": "Sub-Category",
+      "derivation": "none",
+      "role": [
+        "rows",
+        "sort-dimension"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "One bar per member on rows; computed-sort orders these DESC by the Profit-Ratio calc."
+    },
+    {
+      "slot_id": "profit",
+      "template_field": "Profit",
+      "derivation": "sum",
+      "role": [
+        "calc-input"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "Not on a shelf directly \u2014 feeds the Profit-Ratio template calc (numerator). replaceFieldReferences rewrites [Profit] inside the formula on bind."
+    },
+    {
+      "slot_id": "sales",
+      "template_field": "Sales",
+      "derivation": "sum",
+      "role": [
+        "calc-input"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "Not on a shelf directly \u2014 feeds the Profit-Ratio template calc (denominator). replaceFieldReferences rewrites [Sales] inside the formula on bind."
+    }
+  ],
+  "calcs": [
+    {
+      "slot_id": "profit_ratio_calc",
+      "template_field": "Calculation_1368249927221915648",
+      "derivation": "usr",
+      "role": [
+        "cols",
+        "color",
+        "sort-measure"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "SUM([Profit])/SUM([Sales])",
+      "formula_refs": [
+        "Profit",
+        "Sales"
+      ],
+      "depends_on_slots": [
+        "profit",
+        "sales"
+      ],
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Profit",
+          "slot_id": "profit",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        },
+        {
+          "ref": "Sales",
+          "slot_id": "sales",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        }
+      ],
+      "prereqs": [
+        "raw-formula-refs"
+      ],
+      "notes": "The signed diverging measure: SUM([Profit])/SUM([Sales]) drives the bar length (cols), the diverging color, AND the computed-sort. A self-closing <calculation>, so parseTemplateCalcs sees it \u2014 a declared calc slot; both bare refs rewrite on bind."
+    }
+  ],
+  "hazards": [
+    {
+      "code": "signed-diverging-measure",
+      "detail": "Deviation family: the bar-length measure (Profit Ratio) can be NEGATIVE, so bars diverge left/right of a zero baseline and the color is a symmetric-around-zero diverging ramp. Bind a genuinely signed measure (a ratio, a variance, a delta) \u2014 a strictly-positive measure collapses to a one-sided ordinary bar and the diverging encoding wastes its palette.",
+      "xml": "deviation-diverging-bar.xml:68"
+    },
+    {
+      "code": "hardcoded-filter-blocking",
+      "detail": "The source workbook pins Region to a single INCLUSION member (function='member' Region='\"Central\"') kept on the Filters shelf (<slices>). This lane does NOT run the compile-time filter neutralizer (no XML edits), so the member rides along VERBATIM and is flagged HARDCODED_FILTER_MEMBERS: a bound dataset without a 'Central' region member renders empty. A follow-up can PARAMETERIZE it to unblock.",
+      "xml": "deviation-diverging-bar.xml:30-32"
+    },
+    {
+      "code": "raw-formula-refs",
+      "detail": "The Profit-Ratio calc references the bare bindable [Profit]/[Sales]; templates.ts rewriteFormulaFieldRefs repairs them on bind ONLY because both are bindable bare-key slots (same pattern as correlation-scatter-plot-chart). Gate #6 asserts both are bound.",
+      "xml": "deviation-diverging-bar.xml:19-20"
+    }
+  ]
+}

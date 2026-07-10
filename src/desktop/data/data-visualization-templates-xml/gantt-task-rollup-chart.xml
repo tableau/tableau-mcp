@@ -1,0 +1,48 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column datatype='string' name='[Task]' role='dimension' type='nominal' />
+        <column datatype='string' name='[Phase]' role='dimension' type='nominal' />
+        <column datatype='date' name='[Start Date]' role='dimension' type='ordinal' />
+        <column datatype='real' name='[Duration]' role='measure' type='quantitative' />
+        <column-instance column='[Task]' derivation='None' name='[none:Task:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Phase]' derivation='None' name='[none:Phase:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Duration]' derivation='Sum' name='[sum:Duration:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Start Date]' derivation='Min' name='[min:Start Date:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style />
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-disallow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='GanttBar' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[none:Phase:nk]' />
+          <size column='[{{DATASOURCE}}].[sum:Duration:qk]' />
+        </encodings>
+      </pane>
+    </panes>
+    <rows>[{{DATASOURCE}}].[none:Task:nk]</rows>
+    <cols>[{{DATASOURCE}}].[min:Start Date:qk]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

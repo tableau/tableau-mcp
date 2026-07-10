@@ -1,0 +1,96 @@
+{
+  "template": "gantt-timeline-chart",
+  "family": "time-series",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "gantt-timeline",
+    "timeline",
+    "project-timeline",
+    "gantt",
+    "schedule-timeline"
+  ],
+  "description": "A project timeline (Gantt): one GanttBar per task/activity on rows, positioned along a CONTINUOUS truncated-day date axis on cols (the timeline), sized by a duration measure (bar length) and colored by a phase/status dimension. Distinct from gantt-chart, whose schedule matrix uses DISCRETE Year/Month date parts and two DATEDIFF calcs across a start AND an end date (so it cannot bind a single-date schema); this single-start-date timeline binds the committed fixture. Factory-route template, generalized to placeholders + generic field names; structurally compiled, NOT live render-verified.",
+  "avoid_when": [
+    "The ask needs a schedule MATRIX broken out by discrete Year/Month columns with a computed ship/lead lag and Late/On-Time/Early status across a start AND an end date — that is gantt-chart; this timeline plots one continuous start-date axis and a plain duration measure.",
+    "The dataset has no numeric duration/length measure to size the bars — a GanttBar with no size collapses to zero-length ticks; bind a duration (days/periods) measure to the size slot or choose a dot/strip timeline instead."
+  ],
+  "slots": [
+    {
+      "slot_id": "task",
+      "template_field": "Task",
+      "derivation": "none",
+      "role": [
+        "rows"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "The activity/task/phase label on rows — one GanttBar row per member. XML column-instance [none:Task:nk]."
+    },
+    {
+      "slot_id": "start_date",
+      "template_field": "Start Date",
+      "derivation": "tdy",
+      "role": [
+        "cols"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "notes": "The bar's START position on the CONTINUOUS date axis (Day-Trunc, green [tdy:Start Date:qk]) — the timeline. A single date field; only one derivation, so no qualified key is required (contrast gantt-chart's two-date shape). See hazard continuous-date-axis-required."
+    },
+    {
+      "slot_id": "duration",
+      "template_field": "Duration",
+      "derivation": "sum",
+      "role": [
+        "size"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "The bar LENGTH (task duration in days/periods) on the size encoding — SUM([Duration]) → [sum:Duration:qk]. A plain measure, NOT a DATEDIFF calc, so the template binds a single-date schema. See hazard gantt-size-generic-measure."
+    },
+    {
+      "slot_id": "phase",
+      "template_field": "Phase",
+      "derivation": "none",
+      "role": [
+        "color"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "The phase/status dimension on color — one hue per member. XML column-instance [none:Phase:nk]."
+    }
+  ],
+  "calcs": [],
+  "hazards": [
+    {
+      "code": "not-live-render-verified",
+      "detail": "Compiled HERMETICALLY via the factory route (no live Tableau Desktop). portability_evidence.render_verified='none' and fast_path_eligible=false: the template binds the committed fixture (fixture_bind computed true) but has NO live render-readback proof. A live-YYYY-MM-DD stamp is EARNED later by the golden-parity gate / a hand-stamp with render_evidence, never granted at compile time.",
+      "xml": "gantt-timeline-chart.xml:1"
+    },
+    {
+      "code": "gantt-size-generic-measure",
+      "detail": "The GanttBar length is driven by SUM([Duration]), a plain quantitative measure, not a DATEDIFF(end,start) duration calc (contrast gantt-chart's Ship Lag). This is what lets the template bind a single-date schema, but the size slot must bind a real duration/length-in-days measure — binding an unrelated measure sizes the bars by that measure instead of task duration.",
+      "xml": "gantt-timeline-chart.xml:26"
+    },
+    {
+      "code": "continuous-date-axis-required",
+      "detail": "cols carries a CONTINUOUS truncated-day date [tdy:Start Date:qk] (green pill) — the timeline axis. The start_date slot must bind a real date/datetime field; binding a non-date field (or a discrete date part) collapses the timeline to categorical headers and the GanttBars lose their time positions.",
+      "xml": "gantt-timeline-chart.xml:31"
+    }
+  ]
+}

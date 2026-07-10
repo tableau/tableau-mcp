@@ -30,7 +30,7 @@ describe('DesktopDiscoverer', () => {
       vi.stubEnv('LOCALAPPDATA', mockLocalAppData);
       vi.mocked(existsSync).mockReturnValue(false);
 
-      const discoverer = new DesktopDiscoverer();
+      const discoverer = new DesktopDiscoverer({ isPidAlive: () => true });
       const instances = discoverer.getInstances();
       expect(instances.size).toBe(0);
 
@@ -45,7 +45,7 @@ describe('DesktopDiscoverer', () => {
       vi.mocked(homedir).mockReturnValue(mockWindowsHomedir);
       vi.mocked(existsSync).mockReturnValue(false);
 
-      const discoverer = new DesktopDiscoverer();
+      const discoverer = new DesktopDiscoverer({ isPidAlive: () => true });
       const instances = discoverer.getInstances();
       expect(instances.size).toBe(0);
 
@@ -58,7 +58,7 @@ describe('DesktopDiscoverer', () => {
       vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin');
       vi.mocked(existsSync).mockReturnValue(false);
 
-      const discoverer = new DesktopDiscoverer();
+      const discoverer = new DesktopDiscoverer({ isPidAlive: () => true });
       const instances = discoverer.getInstances();
       expect(instances.size).toBe(0);
 
@@ -72,7 +72,7 @@ describe('DesktopDiscoverer', () => {
     it('should return empty map when manifest file does not exist', () => {
       vi.mocked(existsSync).mockReturnValue(false);
 
-      const discoverer = new DesktopDiscoverer();
+      const discoverer = new DesktopDiscoverer({ isPidAlive: () => true });
       const instances = discoverer.getInstances();
 
       expect(instances.size).toBe(0);
@@ -87,7 +87,7 @@ describe('DesktopDiscoverer', () => {
         }),
       );
 
-      const discoverer = new DesktopDiscoverer();
+      const discoverer = new DesktopDiscoverer({ isPidAlive: () => true });
       const instances = discoverer.getInstances();
 
       expect(instances.size).toBe(0);
@@ -109,7 +109,7 @@ describe('DesktopDiscoverer', () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(mockManifest));
 
-      const discoverer = new DesktopDiscoverer();
+      const discoverer = new DesktopDiscoverer({ isPidAlive: () => true });
       const instances = discoverer.getInstances();
 
       expect(instances.size).toBe(1);
@@ -149,7 +149,7 @@ describe('DesktopDiscoverer', () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(mockManifest));
 
-      const discoverer = new DesktopDiscoverer();
+      const discoverer = new DesktopDiscoverer({ isPidAlive: () => true });
       const instances = discoverer.getInstances();
 
       expect(instances.size).toBe(3);
@@ -177,7 +177,7 @@ describe('DesktopDiscoverer', () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue('{ invalid json }');
 
-      const discoverer = new DesktopDiscoverer();
+      const discoverer = new DesktopDiscoverer({ isPidAlive: () => true });
       const instances = discoverer.getInstances();
 
       expect(instances.size).toBe(0);
@@ -206,7 +206,7 @@ describe('DesktopDiscoverer', () => {
         }),
       );
 
-      const discoverer = new DesktopDiscoverer();
+      const discoverer = new DesktopDiscoverer({ isPidAlive: () => true });
       const instances = discoverer.getInstances();
 
       expect(instances.size).toBe(0);
@@ -225,7 +225,7 @@ describe('DesktopDiscoverer', () => {
         throw new Error('File read error');
       });
 
-      const discoverer = new DesktopDiscoverer();
+      const discoverer = new DesktopDiscoverer({ isPidAlive: () => true });
       const instances = discoverer.getInstances();
 
       expect(instances.size).toBe(0);
@@ -258,10 +258,28 @@ describe('DesktopDiscoverer', () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(mockManifest));
 
-      const discoverer = new DesktopDiscoverer();
+      const discoverer = new DesktopDiscoverer({ isPidAlive: () => true });
       expect(() => discoverer.getInstance(99999)).toThrow(
         'No Desktop instance found with PID 99999',
       );
     });
+  });
+});
+
+describe('DesktopDiscoverer — dead-pid pruning (W60)', () => {
+  it('drops manifest entries whose pid is dead and keeps live ones', () => {
+    vi.mocked(homedir).mockReturnValue('/home/testuser');
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(
+      JSON.stringify({
+        instances: [
+          { pid: 111, port: 8765, secret: 's1', start_time: '2026-07-07T00:00:00Z' },
+          { pid: 222, port: 8766, secret: 's2', start_time: '2026-07-07T01:00:00Z' },
+        ],
+      }),
+    );
+    const discoverer = new DesktopDiscoverer({ isPidAlive: (pid) => pid === 222 });
+    const instances = discoverer.getInstances();
+    expect([...instances.keys()]).toEqual([222]);
   });
 });

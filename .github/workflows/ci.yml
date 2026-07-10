@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - feature/desktop
 
 jobs:
   build:
@@ -35,6 +36,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Build desktop variant
+        run: npm run build:desktop
 
       - name: Build Docker image
         run: npm run build:docker

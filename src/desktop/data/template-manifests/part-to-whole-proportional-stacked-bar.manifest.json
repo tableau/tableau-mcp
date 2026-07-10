@@ -1,0 +1,129 @@
+{
+  "template": "part-to-whole-proportional-stacked-bar",
+  "family": "part-to-whole",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "proportional-stacked-bar",
+    "proportional-bar",
+    "percent-of-total-bar",
+    "100-percent-stacked-bar",
+    "part-to-whole"
+  ],
+  "description": "A proportional (100%) stacked bar: one full-width bar per category (Region on rows) whose axis is percent-of-total Sales (a PctTotal table calc on cols), segmented by a second dimension (Category on color) and with mark size driven by a FIXED [Region] LOD of SUM([Sales]) so each region's absolute magnitude reads through its bar thickness. Shows each category's composition normalized to 100%. Structurally compiled, not render-verified.",
+  "slots": [
+    {
+      "slot_id": "region",
+      "template_field": "Region",
+      "derivation": "none",
+      "role": [
+        "rows",
+        "calc-input"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "The category on rows \u2014 one proportional bar per member; also the FIXED-LOD grain ({ FIXED [Region]: SUM([Sales]) }). Template column carries aggregate-role-from='[State/Province]' (cosmetic secondary-role hint). replaceFieldReferences rewrites [Region] on the shelf AND inside the LOD formula on bind."
+    },
+    {
+      "slot_id": "sales",
+      "template_field": "Sales",
+      "derivation": "sum",
+      "role": [
+        "cols",
+        "calc-input"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "The measure on cols as a percent-of-total ([pcto:sum:Sales:qk:3], a PctTotal table calc that rides along) AND the FIXED-LOD numerator. Used at a single base derivation (Sum) in both, so no qualified key is required."
+    },
+    {
+      "slot_id": "category",
+      "template_field": "Category",
+      "derivation": "none",
+      "role": [
+        "color"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "The stacking dimension on color \u2014 the segments composing each region's 100% bar."
+    }
+  ],
+  "calcs": [
+    {
+      "slot_id": "regional_sales_lod",
+      "template_field": "Calculation_3630088501878784",
+      "derivation": "sum",
+      "role": [
+        "size"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "{ FIXED [Region]: SUM([Sales]) }",
+      "formula_refs": [
+        "Region",
+        "Sales"
+      ],
+      "depends_on_slots": [
+        "region",
+        "sales"
+      ],
+      "result_role": "measure",
+      "inputs": [
+        {
+          "ref": "Region",
+          "slot_id": "region",
+          "slot_kind": "categorical",
+          "required": true,
+          "template_internal": false
+        },
+        {
+          "ref": "Sales",
+          "slot_id": "sales",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        }
+      ],
+      "prereqs": [
+        "raw-formula-refs"
+      ],
+      "notes": "The 'Regional Sales' FIXED LOD sizing each region's bar by its absolute total ({ FIXED [Region]: SUM([Sales]) }). A self-closing <calculation>, so parseTemplateCalcs sees it \u2014 a declared calc slot. Both refs are bindable slots (region, sales); replaceFieldReferences rewrites them on bind. The LOD grain assumes the bound row dimension IS the aggregation grain (see hazard fixed-lod-grain)."
+    }
+  ],
+  "hazards": [
+    {
+      "code": "fixed-lod-grain",
+      "detail": "The size measure is a FIXED [Region] LOD ({ FIXED [Region]: SUM([Sales]) }). replaceFieldReferences rewrites [Region] to the bound row dimension, so the LOD grain follows the binding \u2014 but the design ASSUMES the bound row dimension is the correct aggregation grain. Binding a row dimension finer/coarser than the intended magnitude grain makes the FIXED value (and thus the bar thickness) mismatch the visible bar's grain.",
+      "xml": "part-to-whole-proportional-stacked-bar.xml:10-11"
+    },
+    {
+      "code": "pct-of-total-table-calc-rides-along",
+      "detail": "The cols axis [pcto:sum:Sales:qk:3] is a <column-instance> of base [Sales] carrying a nested <table-calc type='PctTotal'> (Percent of Total). Because it is a column-INSTANCE with a nested table-calc (not a <column><calculation>), parseTemplateCalcs (self-closing <calculation> only) never sees it \u2014 it is NOT a declared calc slot and rides along verbatim on cols. Its base is the bindable 'sales' slot; replaceFieldReferences rewrites [Sales] inside the instance on bind. The PctTotal normalizes each bar to 100% across the addressed partition.",
+      "xml": "part-to-whole-proportional-stacked-bar.xml:18-20"
+    },
+    {
+      "code": "manual-sort-member-dictionary",
+      "detail": "Region carries a <manual-sort> whose <dictionary> lists source members ('South','Central','East','West'). The buckets are source-calendar literals; on a differently-membered bound dimension they do not match and the manual sort silently resets to default order (cosmetic \u2014 no binding break, no data change).",
+      "xml": "part-to-whole-proportional-stacked-bar.xml:23-30"
+    },
+    {
+      "code": "raw-formula-refs",
+      "detail": "The FIXED LOD references the bare bindable [Region]/[Sales]; templates.ts rewriteFormulaFieldRefs repairs them on bind ONLY because both are bindable bare-key slots. Gate #6 asserts both are bound.",
+      "xml": "part-to-whole-proportional-stacked-bar.xml:11"
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column caption='Regional Sales' datatype='real' name='[Calculation_3630088501878784]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='{ FIXED [Region]: SUM([Sales]) }' />
+        </column>
+        <column datatype='string' name='[Category]' role='dimension' type='nominal' />
+        <column aggregate-role-from='[State/Province]' datatype='string' name='[Region]' role='dimension' type='nominal' />
+        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Sales]' derivation='Sum' name='[pcto:sum:Sales:qk:3]' pivot='key' type='quantitative'>
+          <table-calc ordering-type='Rows' type='PctTotal' />
+        </column-instance>
+        <column-instance column='[Calculation_3630088501878784]' derivation='Sum' name='[sum:Calculation_3630088501878784:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <manual-sort column='[{{DATASOURCE}}].[none:Region:nk]' direction='ASC'>
+        <dictionary>
+          <bucket>&quot;South&quot;</bucket>
+          <bucket>&quot;Central&quot;</bucket>
+          <bucket>&quot;East&quot;</bucket>
+          <bucket>&quot;West&quot;</bucket>
+        </dictionary>
+      </manual-sort>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='cell'>
+        <format attr='height' field='[{{DATASOURCE}}].[none:Region:nk]' value='72' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[none:Category:nk]' />
+          <size column='[{{DATASOURCE}}].[sum:Calculation_3630088501878784:qk]' />
+        </encodings>
+        <style>
+          <style-rule element='mark'>
+            <format attr='size' value='1.7031491994857788' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[{{DATASOURCE}}].[none:Region:nk]</rows>
+    <cols>[{{DATASOURCE}}].[pcto:sum:Sales:qk:3]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

@@ -1,0 +1,105 @@
+{
+  "template": "deviation-gain-loss-chart",
+  "family": "deviation",
+  "readiness": "YELLOW",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": false,
+    "render_verified": "none"
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "gain-loss",
+    "gains-and-losses",
+    "improvement-decline",
+    "winners-losers",
+    "deviation"
+  ],
+  "description": "A gain/loss deviation chart: one custom Shape per member (Sub-Category on detail) placed on a signed y-axis where positive = rank-of-improvement and negative = rank-of-decline, over a Month/Year date on cols, colored by the period-over-period Sales difference. Every measure is a nested table-calc chain (difference-from-prior, if-positive/if-negative, rank, signed y-axis) that rides along verbatim. Structurally compiled, not render-verified.",
+  "slots": [
+    {
+      "slot_id": "sub_category",
+      "template_field": "Sub-Category",
+      "derivation": "none",
+      "role": [
+        "detail"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "The member grain on level-of-detail \u2014 one shape mark per member; also the addressing dimension the shelf table-calc instances partition/order by."
+    },
+    {
+      "slot_id": "order_date_month",
+      "template_field": "Order Date",
+      "derivation": "mn",
+      "role": [
+        "cols"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "qualified_key_required": true,
+      "notes": "Month part of the SAME bound date field (inner cols axis). Reuses Order Date at a second derivation \u2014 see hazard single-date-two-derivations."
+    },
+    {
+      "slot_id": "order_date_year",
+      "template_field": "Order Date",
+      "derivation": "yr",
+      "role": [
+        "cols"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "qualified_key_required": true,
+      "notes": "Year part of the SAME bound date field (outer cols axis, nested with Month) \u2014 also the ordering key of the difference/rank table calcs."
+    },
+    {
+      "slot_id": "sales",
+      "template_field": "Sales",
+      "derivation": "sum",
+      "role": [
+        "calc-input",
+        "tooltip"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "The base measure the gain/loss is computed from: ZN(SUM([Sales])) - LOOKUP(..., -1). It rides along inside the table-calc chain (not a declared calc slot); replaceFieldReferences rewrites [Sales] inside each formula on bind. Also on tooltip as [sum:Sales:qk]."
+    }
+  ],
+  "calcs": [],
+  "hazards": [
+    {
+      "code": "single-date-two-derivations",
+      "detail": "The one [Order Date] field is used at BOTH Month and Year on cols. Against the single-date committed fixture the second temporal slot cannot bind a DISTINCT field, so fixture_bind=false \u2014 a valid, honest state (same as change-over-time-calendar-heatmap). On a real dataset both slots bind the same date field via qualified keys.",
+      "xml": "deviation-gain-loss-chart.xml:151,61,95"
+    },
+    {
+      "code": "table-calc-chain-rides-along",
+      "detail": "Every measure is a table calc: Calculation_44402728363008000 (ZN(SUM([Sales])) - LOOKUP(..., -1), the diff-from-prior), if-negative / if-positive splits, RANK_UNIQUE of each, and the signed y-axis. Each <calculation> nests a <table-calc>, so it is NON-self-closing and parseTemplateCalcs (self-closing only) does NOT see it \u2014 NONE are declared calc slots; they ride along verbatim (same class as ranking-bump-chart table-calc-rank-rides-along). The bindable bare refs ([Sales]) rewrite on bind; the calc-to-calc references (Calculation_X -> Calculation_Y) are template-internal and stable.",
+      "xml": "deviation-gain-loss-chart.xml:18-96"
+    },
+    {
+      "code": "table-calc-addressing-refs-source-fields",
+      "detail": "The table-calc ordering/compute-using addresses reference source fields by name \u2014 <order field='[Category]'> and ordering-field='[Category]' inside the difference/rank calcs. [Category] is NOT a declared bindable slot (it is not on any shelf), so replaceFieldReferences does not rewrite it: the addressing rides along referencing a literal 'Category' the bound dataset may not carry, which can reset the table-calc partition/ordering. The shelf instances re-address by [Sub-Category]+[yr:Order Date:ok], so the primary grain is covered, but the vestigial [Category] ordering is a residual portability risk.",
+      "xml": "deviation-gain-loss-chart.xml:21,38,43"
+    },
+    {
+      "code": "custom-shape-asset",
+      "detail": "The Shape mark uses a workbook-local custom shape image (<format attr='shape' value='Custom/noun_585136.png'/>). That asset is not part of the template/worksheet fragment and is absent on apply, so marks fall back to the default shape \u2014 cosmetic fidelity loss, not a binding break.",
+      "xml": "deviation-gain-loss-chart.xml:144"
+    },
+    {
+      "code": "signed-diverging-yaxis",
+      "detail": "Deviation family: the y-axis is a SIGNED rank (positive = rank-of-improvement, negative = -rank-of-decline), so members split above/below a zero baseline (declining <- | -> improving). The read depends on the difference being meaningfully signed across the bound members; a strictly-positive series collapses the diverging axis.",
+      "xml": "deviation-gain-loss-chart.xml:46-56,150"
+    }
+  ]
+}
