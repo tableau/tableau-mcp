@@ -42,6 +42,8 @@ export function getResourcesRoot(): string {
   return resolveRoot([
     join(safeDirname(), 'resources', 'desktop'),
     join(safeDirname(), '..', 'resources', 'desktop'),
+    // Unbundled source/vitest: getDirname() is src/utils, so resources live two levels up.
+    join(safeDirname(), '..', '..', 'resources', 'desktop'),
   ]);
 }
 
