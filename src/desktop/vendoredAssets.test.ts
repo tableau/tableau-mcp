@@ -6,7 +6,7 @@
  * template's manifest without its XML, and the two loadable template dirs had
  * drifted. These tests make that drift class a CI failure instead of a live one.
  */
-import { existsSync, readdirSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
 
 import { getDataRoot, getResourcesRoot } from './assets.js';
@@ -64,6 +64,20 @@ describe('desktop vendored assets', () => {
       onlyInDataVisualizationTemplatesXml: diff(templateXmlNames, legacyTemplateNames),
       onlyInTemplates: diff(legacyTemplateNames, templateXmlNames),
     }).toEqual({ onlyInDataVisualizationTemplatesXml: [], onlyInTemplates: [] });
+  });
+
+  it('declares every shipped template XML in content-manifest.json (regenerate on sync)', () => {
+    // The provenance surface (BundledIntelligenceProvider.getContentManifest) must not
+    // under-report shipped content: rerun buildTemplateManifests.ts after any vendor copy.
+    const manifest = JSON.parse(
+      readFileSync(join(dataRoot, 'content-manifest.json'), 'utf-8'),
+    ) as { resources: Array<{ path: string }> };
+    const declared = new Set(manifest.resources.map((r) => r.path));
+    const undeclaredXml = listFileStems(templateXmlDir, '.xml')
+      .map((name) => `data-visualization-templates-xml/${name}.xml`)
+      .filter((p) => !declared.has(p));
+
+    expect(undeclaredXml).toEqual([]);
   });
 
   it('vendors a non-trivial knowledge corpus', () => {
