@@ -47,7 +47,7 @@ export const getGetWorkbookXmlTool = (
     title,
     description: [
       'Get current workbook XML. mode=file is default; mode=inline returns XML.',
-      'PREFERRED: use the field tools (add-field-to-*) or batch-create-and-cache-sheets instead of editing XML directly; edit XML only as a last resort. Use apply-workbook to apply changes.',
+      'PREFERRED: use the field tools (add-field/remove-field) or batch-create-and-cache-sheets instead of editing XML directly; edit XML only as a last resort. Use apply-workbook to apply changes.',
     ].join(' '),
     paramsSchema,
     annotations: {

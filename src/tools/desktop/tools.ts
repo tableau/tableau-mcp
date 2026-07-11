@@ -17,14 +17,10 @@ import { getBuildAndApplyDashboardTool } from './dashboard/buildAndApplyDashboar
 import { getDashboardAutoApplyTool } from './dashboard/dashboardAutoApply.js';
 import { getGetDashboardGuideTool } from './dashboard/getDashboardGuide.js';
 import { getGetDashboardXmlTool } from './dashboard/getDashboardXml.js';
-import { getAddFieldToColsTool } from './fields/addFieldToCols.js';
-import { getAddFieldToEncodingTool } from './fields/addFieldToEncoding.js';
-import { getAddFieldToRowsTool } from './fields/addFieldToRows.js';
+import { getAddFieldTool } from './fields/addField.js';
 import { getListAvailableFieldsTool } from './fields/listAvailableFields.js';
 import { getListFieldsTool } from './fields/listFields.js';
-import { getRemoveFieldFromColsTool } from './fields/removeFieldFromCols.js';
-import { getRemoveFieldFromEncodingTool } from './fields/removeFieldFromEncoding.js';
-import { getRemoveFieldFromRowsTool } from './fields/removeFieldFromRows.js';
+import { getRemoveFieldTool } from './fields/removeField.js';
 import { getResolveFieldTool } from './fields/resolveField.js';
 import { getDashboardHealthCheckTool } from './health/dashboardHealthCheck.js';
 import { getListKnowledgeResourcesTool } from './knowledge/listKnowledgeResources.js';
@@ -60,12 +56,8 @@ export const desktopToolFactories = [
   getBuildAndApplyDashboardTool,
   getListAvailableFieldsTool,
   getListFieldsTool,
-  getAddFieldToEncodingTool,
-  getAddFieldToRowsTool,
-  getAddFieldToColsTool,
-  getRemoveFieldFromEncodingTool,
-  getRemoveFieldFromRowsTool,
-  getRemoveFieldFromColsTool,
+  getAddFieldTool,
+  getRemoveFieldTool,
   getResolveFieldTool,
   getSearchExamplesTool,
   getSearchCommandsTool,
