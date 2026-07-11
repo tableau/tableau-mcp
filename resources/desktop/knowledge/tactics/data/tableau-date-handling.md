@@ -135,7 +135,7 @@ DATE(LEFT(STR([Order Date Key]), 4) + "-" + MID(STR([Order Date Key]), 5, 2) + "
 
 ### Tool-generated derivation bug
 
-The `tableau-add-field-to-*` tools may write the CI prefix as the `derivation` attribute (e.g. `derivation="mn"`) instead of the required capitalized string (`derivation="Month"`). Tableau silently falls back to the raw date field. Always read back and verify after adding a date field.
+The `add-field` tool may write the CI prefix as the `derivation` attribute (e.g. `derivation="mn"`) instead of the required capitalized string (`derivation="Month"`). Tableau silently falls back to the raw date field. Always read back and verify after adding a date field.
 
 ---
 

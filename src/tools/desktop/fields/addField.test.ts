@@ -1,0 +1,409 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { z } from 'zod';
+
+import * as metadataModule from '../../../desktop/metadata/index.js';
+import {
+  ArgsValidationError,
+  FileNotFoundError,
+  FileReadError,
+  XmlModificationError,
+} from '../../../errors/mcpToolError.js';
+import { DesktopMcpServer } from '../../../server.desktop.js';
+import invariant from '../../../utils/invariant.js';
+import { Provider } from '../../../utils/provider.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getAddFieldTool } from './addField.js';
+
+vi.mock('../../../desktop/metadata/index.js');
+vi.mock('fs');
+
+type EncodingType = 'color' | 'size' | 'lod' | 'detail' | 'text' | 'tooltip' | 'path' | 'angle';
+type Target = 'rows' | 'cols' | 'encoding';
+
+const resultSchema = z.object({
+  message: z.string(),
+  file: z.string(),
+});
+
+const WORKSHEET_FILE = '/cache/worksheet.xml';
+const WORKBOOK_FILE = '/cache/workbook.xml';
+const COLUMN_REF = '[Sample - Superstore].[sum:Profit:qk]';
+const MODIFIED_XML = '<worksheet name="Sheet 1"><table></table></worksheet>';
+
+describe('addFieldTool', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should create a tool instance with correct properties', () => {
+    const tool = getAddFieldTool(new DesktopMcpServer());
+    expect(tool.name).toBe('add-field');
+    expect(tool.description).toContain('rows shelf, columns shelf, or an encoding');
+    expect(tool.paramsSchema).toMatchObject({
+      worksheetFile: expect.any(Object),
+      target: expect.any(Object),
+      columnRef: expect.any(Object),
+      encodingType: expect.any(Object),
+      index: expect.any(Object),
+      workbookFile: expect.any(Object),
+    });
+    expect(tool.annotations).toMatchObject({ readOnlyHint: false });
+  });
+
+  it('should return error when worksheet file does not exist', async () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(new FileNotFoundError(WORKSHEET_FILE).message);
+  });
+
+  it('should return error when readFileSync throws', async () => {
+    const readError = new Error('Permission denied');
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockImplementation(() => {
+      throw readError;
+    });
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(new FileReadError(readError).message);
+  });
+
+  // --- target=rows (ported from addFieldToRows) ---
+  it('should return error when addFieldToRows throws (target=rows)', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.addFieldToRows).mockImplementation(() => {
+      throw new Error('Invalid format');
+    });
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(new XmlModificationError('Invalid format').message);
+  });
+
+  it('should write modified XML and return success (target=rows)', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(body.message).toContain('rows shelf');
+    expect(body.file).toBe(WORKSHEET_FILE);
+    expect(writeFileSync).toHaveBeenCalledWith(WORKSHEET_FILE, MODIFIED_XML, 'utf-8');
+  });
+
+  it('should pass index and workbookFile to addFieldToRows (target=rows)', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockImplementation((p) =>
+      p === WORKBOOK_FILE ? '<workbook/>' : '<worksheet/>',
+    );
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+      index: 2,
+      workbookFile: WORKBOOK_FILE,
+    });
+
+    expect(metadataModule.addFieldToRows).toHaveBeenCalledWith(
+      '<worksheet/>',
+      COLUMN_REF,
+      2,
+      '<workbook/>',
+    );
+  });
+
+  // --- target=cols (ported from addFieldToCols) ---
+  it('should return error when addFieldToCols throws (target=cols)', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.addFieldToCols).mockImplementation(() => {
+      throw new Error('Invalid format');
+    });
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'cols',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(new XmlModificationError('Invalid format').message);
+  });
+
+  it('should write modified XML and return success (target=cols)', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.addFieldToCols).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'cols',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(body.message).toContain('columns shelf');
+    expect(body.file).toBe(WORKSHEET_FILE);
+    expect(writeFileSync).toHaveBeenCalledWith(WORKSHEET_FILE, MODIFIED_XML, 'utf-8');
+  });
+
+  it('should pass index and workbookFile to addFieldToCols (target=cols)', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockImplementation((p) =>
+      p === WORKBOOK_FILE ? '<workbook/>' : '<worksheet/>',
+    );
+    vi.mocked(metadataModule.addFieldToCols).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'cols',
+      columnRef: COLUMN_REF,
+      index: 0,
+      workbookFile: WORKBOOK_FILE,
+    });
+
+    expect(metadataModule.addFieldToCols).toHaveBeenCalledWith(
+      '<worksheet/>',
+      COLUMN_REF,
+      0,
+      '<workbook/>',
+    );
+  });
+
+  // --- target=encoding (ported from addFieldToEncoding) ---
+  it('should return error when addFieldToEncoding throws (target=encoding)', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.addFieldToEncoding).mockImplementation(() => {
+      throw new Error('Invalid column ref');
+    });
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'encoding',
+      encodingType: 'color',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(new XmlModificationError('Invalid column ref').message);
+  });
+
+  it('should return error when modified XML is not well-formed (target=encoding)', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.addFieldToEncoding).mockReturnValue('<unclosed');
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'encoding',
+      encodingType: 'color',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('failed validation');
+  });
+
+  it('should write modified XML and return success (target=encoding)', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.addFieldToEncoding).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'encoding',
+      encodingType: 'color',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(body.message).toContain('color encoding');
+    expect(body.file).toBe(WORKSHEET_FILE);
+    expect(writeFileSync).toHaveBeenCalledWith(WORKSHEET_FILE, MODIFIED_XML, 'utf-8');
+  });
+
+  it('should pass optional workbookFile when it exists (target=encoding)', async () => {
+    vi.mocked(existsSync).mockImplementation((p) => p === WORKSHEET_FILE || p === WORKBOOK_FILE);
+    vi.mocked(readFileSync).mockImplementation((p) =>
+      p === WORKBOOK_FILE ? '<workbook/>' : '<worksheet/>',
+    );
+    vi.mocked(metadataModule.addFieldToEncoding).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'encoding',
+      encodingType: 'color',
+      columnRef: COLUMN_REF,
+      workbookFile: WORKBOOK_FILE,
+    });
+
+    expect(metadataModule.addFieldToEncoding).toHaveBeenCalledWith(
+      '<worksheet/>',
+      'color',
+      COLUMN_REF,
+      undefined,
+      '<workbook/>',
+    );
+  });
+
+  it('should pass index to addFieldToEncoding when provided (target=encoding)', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.addFieldToEncoding).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'encoding',
+      encodingType: 'size',
+      columnRef: COLUMN_REF,
+      index: 1,
+    });
+
+    expect(metadataModule.addFieldToEncoding).toHaveBeenCalledWith(
+      '<worksheet/>',
+      'size',
+      COLUMN_REF,
+      1,
+      undefined,
+    );
+  });
+
+  // --- new conditional-param behavior (consolidation) ---
+  it('errors clearly when encodingType is missing and target=encoding', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'encoding',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      new ArgsValidationError(
+        'encodingType is required when target=encoding. Provide one of: color, size, lod, detail, text, tooltip, path, angle.',
+      ).message,
+    );
+    expect(metadataModule.addFieldToEncoding).not.toHaveBeenCalled();
+  });
+
+  it('ignores encodingType for target=rows (routes to rows, not encoding)', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      encodingType: 'color',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(resultSchema.parse(JSON.parse(result.content[0].text)).message).toContain('rows shelf');
+    expect(metadataModule.addFieldToRows).toHaveBeenCalledWith(
+      '<worksheet/>',
+      COLUMN_REF,
+      undefined,
+      undefined,
+    );
+    expect(metadataModule.addFieldToEncoding).not.toHaveBeenCalled();
+  });
+
+  it('ignores encodingType for target=cols (routes to cols, not encoding)', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.addFieldToCols).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'cols',
+      encodingType: 'size',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(metadataModule.addFieldToCols).toHaveBeenCalledWith(
+      '<worksheet/>',
+      COLUMN_REF,
+      undefined,
+      undefined,
+    );
+    expect(metadataModule.addFieldToEncoding).not.toHaveBeenCalled();
+  });
+});
+
+async function getResult({
+  worksheetFile,
+  target,
+  columnRef,
+  encodingType,
+  index,
+  workbookFile,
+}: {
+  worksheetFile: string;
+  target: Target;
+  columnRef: string;
+  encodingType?: EncodingType;
+  index?: number;
+  workbookFile?: string;
+}): Promise<CallToolResult> {
+  const tool = getAddFieldTool(new DesktopMcpServer());
+  const callback = await Provider.from(tool.callback);
+  return await callback(
+    { worksheetFile, target, columnRef, encodingType, index, workbookFile },
+    getMockRequestHandlerExtra(),
+  );
+}

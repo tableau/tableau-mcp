@@ -452,7 +452,7 @@ To hide column/row field labels (the field name header above the values):
 
 ## Shelf changes — MCP tools vs direct XML
 
-**Modifying** an existing worksheet's `<rows>`/`<cols>` via direct XML edit causes `apply-worksheet` to fail. Use MCP tools (`add-field-to-cols/rows`) for incremental changes.
+**Modifying** an existing worksheet's `<rows>`/`<cols>` via direct XML edit causes `apply-worksheet` to fail. Use the `add-field` tool (target=cols/rows) for incremental changes.
 
 **However**, writing a COMPLETE worksheet XML (replacing the entire worksheet content) with direct `<rows>`/`<cols>` DOES work — even with complex nesting like `(dim / (KPI1 / KPI2 / ...)) * (measure1 + measure2)`. The key is writing the full worksheet, not editing just the shelf lines.
 
