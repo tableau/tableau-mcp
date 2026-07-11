@@ -433,6 +433,20 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   // specificity ranking (multi-token 'sales-over-time' &c.) governs instead, so
   // admitting it cannot create a cross-template flip later.
   'over-time',
+  // 'timeline' rides the same lone-winner contract as 'over-time': it is a
+  // deterministic time-axis chart noun carried by EXACTLY ONE fast-path-eligible
+  // template — trend-line-chart — so "timeline of X" names a line chart. Without
+  // it a noun-less timeline ask ("Timeline of Sales using Order Date") demotes to
+  // propose now that time-series is a TWO-member eligible family (trend-line-chart +
+  // gantt-task-rollup-chart) and strict-majority nativity has collapsed. Admitting
+  // it is safe because NO eligible template collides on it: gantt-task-rollup-chart's
+  // eligible intent_keywords are gantt-task-rollup / task-rollup / gantt-rollup /
+  // one-bar-per-task / gantt / task-schedule — no 'timeline'; the timeline-ish gantt
+  // templates (gantt-timeline-chart, gantt-chart) are NOT fast_path_eligible and
+  // classifyNoLlm ignores them. Lone-winner is the only path this admits; if a second
+  // eligible time-series template ever carries 'timeline', the TIE path's chart-noun
+  // specificity ranking governs, so admitting it cannot create a cross-template flip.
+  'timeline',
   // Second growth event same night: the 13th-15th stamps made deviation
   // (quota joins ww-ou-arrow) and distribution (box-plot joins bar-code)
   // two-member families, collapsing nativity for the incumbent members'
@@ -517,6 +531,54 @@ function familyNativeKeywords(
 }
 
 /**
+ * Every field name / caption / bare column name in the schema, lowercased. Feeds
+ * fieldNameMatchInAsk's EXACT-FIRST tie-break: a field's plural alias is suppressed
+ * at any token another field claims by its exact name (so with both "Region" and
+ * "Regions" present, ask "Regions" resolves to the exact "Regions" and "Region"'s
+ * alias yields nothing there). Built from the SAME name-variant set that
+ * matchFieldsInAsk / askNamesField test against, so suppression is exhaustive.
+ */
+function fieldExactNames(fields: SchemaField[]): Set<string> {
+  const out = new Set<string>();
+  for (const f of fields) {
+    for (const n of [bareName(f.columnName), f.caption, f.name]) {
+      if (n && n.length > 0) out.add(n.toLowerCase());
+    }
+  }
+  return out;
+}
+
+/**
+ * FIELD-NAME <-> ASK MATCH with a ONE-WAY, EXACT-FIRST trailing-`s` alias. Returns
+ * the index of the first whole-token occurrence of field name `name` in `ask`, else
+ * -1. This is the FIELD-ONLY matcher used by maskFieldNames / matchFieldsInAsk /
+ * askNamesField; it is deliberately DISTINCT from phraseIndexInAsk (the keyword
+ * matcher), which is UNCHANGED so keyword scoring is unaffected.
+ *
+ *   - EXACT FIRST: an exact whole-token occurrence always wins and is returned as-is.
+ *   - ONE-WAY PLURAL ALIAS: if `name` does NOT already end in `s`, its naive plural
+ *     `name + "s"` also matches — field "Region" matches ask token "Regions". A name
+ *     that already ends in `s` gains NO singular alias, so "Sales" never matches
+ *     "Sale", and "Species" / "Address" / "Tickets" / "Resolution Hours" stay
+ *     exact-only.
+ *   - NAIVE TRAILING-`s` ONLY: no ies / es / stemmer, so "Category" does NOT match
+ *     "Categories" (deliberately out of scope for this MR).
+ *   - EXACT-FIRST TIE-BREAK ACROSS FIELDS: the plural alias is suppressed whenever the
+ *     pluralized token is another field's EXACT name (`exactNames`), so "Region"'s
+ *     alias never claims a "Regions" span that a field literally named "Regions" owns
+ *     by exact match.
+ */
+function fieldNameMatchInAsk(ask: string, name: string, exactNames: ReadonlySet<string>): number {
+  const exact = phraseIndexInAsk(ask, name);
+  if (exact >= 0) return exact;
+  const n = name.toLowerCase().trim();
+  if (!n || n.endsWith('s')) return -1; // one-way: an `s`-final name gains no alias
+  const plural = `${n}s`;
+  if (exactNames.has(plural)) return -1; // exact-first: another field owns this token
+  return phraseIndexInAsk(ask, plural);
+}
+
+/**
  * Blank out whole-token occurrences of every field name/caption/bare column name
  * in the ask (replaced by spaces so token boundaries are preserved). Used for
  * TEMPLATE SELECTION and aggregation-word detection so a field NAME can never
@@ -527,6 +589,7 @@ function familyNativeKeywords(
  */
 function maskFieldNames(ask: string, s: SchemaSummary): string {
   let masked = ask;
+  const exactNames = fieldExactNames(s.fields);
   // LONGEST FIELD NAME FIRST. Schema-order masking fragments a compound field:
   // masking "Region" before "Country/Region" turns it into "Country/      " so the
   // compound's own regex no longer matches, and the surviving "Country" token trips
@@ -539,7 +602,14 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
       (n): n is string => !!n && n.length > 0,
     );
     for (const n of names) {
-      const re = new RegExp(`(^|[^a-z0-9])(${escapeRegex(n.toLowerCase())})([^a-z0-9]|$)`, 'gi');
+      const lower = n.toLowerCase();
+      // ONE-WAY plural alias, in lockstep with fieldNameMatchInAsk: a name not already
+      // ending in `s` also masks its naive plural token, so "Regions" is blanked WHOLE
+      // for a field "Region" — no partial "region"+leftover-"s" residue that could then
+      // keyword-match. Suppressed when the plural is another field's exact name (that
+      // field masks the token itself), preserving exact-first tie-breaking.
+      const pluralSuffix = !lower.endsWith('s') && !exactNames.has(`${lower}s`) ? 's?' : '';
+      const re = new RegExp(`(^|[^a-z0-9])(${escapeRegex(lower)}${pluralSuffix})([^a-z0-9]|$)`, 'gi');
       masked = masked.replace(
         re,
         (_whole, pre: string, mid: string, post: string) => pre + ' '.repeat(mid.length) + post,
@@ -551,6 +621,7 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
 
 /** Fields whose name/caption/bare column name appear in the ask, earliest-first. */
 function matchFieldsInAsk(ask: string, s: SchemaSummary): SchemaField[] {
+  const exactNames = fieldExactNames(s.fields);
   const hits: Array<{ field: SchemaField; index: number }> = [];
   for (const f of s.fields) {
     const names = [bareName(f.columnName), f.caption, f.name].filter(
@@ -558,7 +629,7 @@ function matchFieldsInAsk(ask: string, s: SchemaSummary): SchemaField[] {
     );
     let best = -1;
     for (const n of names) {
-      const idx = phraseIndexInAsk(ask, n);
+      const idx = fieldNameMatchInAsk(ask, n, exactNames);
       if (idx >= 0 && (best < 0 || idx < best)) best = idx;
     }
     if (best >= 0) hits.push({ field: f, index: best });
@@ -568,11 +639,11 @@ function matchFieldsInAsk(ask: string, s: SchemaSummary): SchemaField[] {
 }
 
 /** Whole-phrase test: does the ask NAME this field (by name, caption, or bare column)? */
-function askNamesField(ask: string, f: SchemaField): boolean {
+function askNamesField(ask: string, f: SchemaField, exactNames: ReadonlySet<string>): boolean {
   const names = [bareName(f.columnName), f.caption, f.name].filter(
     (n): n is string => !!n && n.length > 0,
   );
-  return names.some((n) => phraseIndexInAsk(ask, n) >= 0);
+  return names.some((n) => fieldNameMatchInAsk(ask, n, exactNames) >= 0);
 }
 
 /** Normalized content tokens of a field's name/caption/bare column name (for ask overlap). */
@@ -638,8 +709,9 @@ function narrowFields(
   if (fields.length <= maxFields) return { fields, withheld: 0 };
 
   const askTokens = contentTokens(ask);
+  const exactNames = fieldExactNames(fields);
   const ranked = fields.map((f, index) => {
-    const named = askNamesField(ask, f);
+    const named = askNamesField(ask, f, exactNames);
     let overlap = 0;
     if (askTokens.size > 0) {
       for (const t of fieldContentTokens(f)) if (askTokens.has(t)) overlap++;
@@ -816,6 +888,68 @@ function resolveGeoSlots(
 }
 
 /**
+ * EXPLICIT TIME-AXIS INTENT (unique-date temporal completion). Conservative
+ * allowlist of phrases that UNAMBIGUOUSLY ask for a time axis, so a required
+ * temporal slot the ask did not name may be auto-completed with the schema's lone
+ * date field. Matched as WHOLE tokens against the MASKED ask (field names blanked),
+ * so a field literally named "Trend"/"Calendar"/"Period" can never arm completion.
+ * Hyphenated cues also match their natural spaced form via phraseIndexInAsk's
+ * `-`→[\s-]+ transform ("over-time" hits "over time"; "by-month" hits "by month").
+ * DELIBERATELY excludes bare 'line' (a mark type, not a time axis) and vague filter
+ * phrases like "right now" — they do not name a time axis, so must not trigger a
+ * date auto-completion. Mirrors FACET_CUES: a tight, explicit-cue-only allowlist.
+ */
+const TIME_INTENT_CUES: readonly string[] = [
+  'trend',
+  'timeline',
+  'time-series',
+  'over-time',
+  'by-month',
+  'by-week',
+  'by-quarter',
+  'by-year',
+  'calendar',
+  'period',
+  'change-over-time',
+  'month-over-month',
+  'year-over-year',
+  'yoy',
+];
+
+/** True when the (masked) ask carries an explicit time-axis cue from the allowlist. */
+function askHasExplicitTimeIntent(maskedAsk: string): boolean {
+  return TIME_INTENT_CUES.some((cue) => phraseIndexInAsk(maskedAsk, cue) >= 0);
+}
+
+/**
+ * UNIQUE-DATE TEMPORAL COMPLETION (mirrors the W60 geo-slot completion). When a
+ * chosen template's lone required temporal slot was NOT filled by an ask-named
+ * field, complete it with the schema's SINGLE date/datetime field — but only under
+ * strict, fail-closed preconditions so it can never introduce ambiguity:
+ *   - the masked ask carries EXPLICIT time-axis intent (`TIME_INTENT_CUES`) — a bare
+ *     mark word like 'line' is not enough;
+ *   - the ask names EXACTLY ONE compatible measure (0 ⇒ nothing to plot; 2+ ⇒ not a
+ *     plain single-measure trend, e.g. a dual-axis combo, so fail closed);
+ *   - the schema has EXACTLY ONE temporal field total passing `isTemporal` (0 ⇒
+ *     nothing to complete; 2+ ⇒ ambiguous which date, so fail closed — the strict
+ *     one-candidate floor, exactly like geo's unique-max rule).
+ * Any miss ⇒ null. The caller runs this ONLY in the FINAL bind pass (never in
+ * selectWithinFamily's slot-fit probes), so completion can never make an extra
+ * candidate look bindable during tie-breaking.
+ */
+function completeTemporalSlot(
+  maskedAsk: string,
+  matched: SchemaField[],
+  schemaFields: SchemaField[],
+): SchemaField | null {
+  if (!askHasExplicitTimeIntent(maskedAsk)) return null;
+  if (matched.filter(isMeasure).length !== 1) return null;
+  const temporals = schemaFields.filter(isTemporal);
+  if (temporals.length !== 1) return null;
+  return temporals[0];
+}
+
+/**
  * Role-greedy field assignment (design §3.5 step 2): fill each required, bindable
  * slot with the first still-unused matched field of the compatible role/kind —
  * measures → quantitative, dimensions → categorical/temporal. GEO slots are the
@@ -828,12 +962,19 @@ function resolveGeoSlots(
  * Shared machinery: classifyNoLlm emits with it, and the intra-family tiebreak's
  * slot-fit test calls it to answer "do the ask's fields satisfy this candidate?"
  * with the exact assignment that would be emitted — no separate approximation.
+ *
+ * `temporalCompletion` is supplied ONLY by classifyNoLlm's FINAL bind pass (the
+ * masked ask + full schema fields for unique-date completion). selectWithinFamily's
+ * slot-fit probes omit it, so a required temporal slot the ask did not name can be
+ * auto-completed from the schema's lone date field ONLY in the final bind — never
+ * during tie-breaking, where it could make an extra candidate look bindable.
  */
 function roleGreedyBind(
   m: TemplateManifest,
   matched: SchemaField[],
   aggOverride: Derivation | null,
   schemaDims: SchemaField[],
+  temporalCompletion?: { maskedAsk: string; schemaFields: SchemaField[] } | null,
 ): {
   bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>;
   provenance: string[];
@@ -861,6 +1002,10 @@ function roleGreedyBind(
   let geoPicks: Map<string, SchemaField> | null = null;
   let geoAutoCompleted = new Map<string, SchemaField>();
   let geoResolved = false;
+  // Active required temporal slots. Unique-date completion arms ONLY when there is
+  // exactly ONE (a multi-temporal template never auto-fills a date, fail closed).
+  const temporalSlots = m.slots.filter((s) => isActive(s) && s.kind === 'temporal');
+  const temporalAutoCompleted = new Map<string, SchemaField>();
 
   for (const slot of m.slots) {
     if (!isActive(slot)) continue;
@@ -874,6 +1019,24 @@ function roleGreedyBind(
         break;
       case 'temporal':
         chosen = take(isTemporal);
+        // UNIQUE-DATE TEMPORAL COMPLETION (final bind pass only; mirrors W60 geo): a
+        // lone required temporal slot the ask did not name is completed with the
+        // schema's single date field, under the strict preconditions in
+        // completeTemporalSlot. `temporalCompletion` is passed ONLY by classifyNoLlm's
+        // final bind — selectWithinFamily's slot-fit probes omit it, so completion can
+        // never make an extra candidate look bindable during tie-breaking.
+        if (!chosen && temporalCompletion && temporalSlots.length === 1) {
+          const completed = completeTemporalSlot(
+            temporalCompletion.maskedAsk,
+            matched,
+            temporalCompletion.schemaFields,
+          );
+          if (completed) {
+            used.add(completed);
+            temporalAutoCompleted.set(slot.slot_id, completed);
+            chosen = completed;
+          }
+        }
         break;
       case 'geo': {
         // Resolve ALL geo slots together on first encounter, over the dimensions not
@@ -914,6 +1077,14 @@ function roleGreedyBind(
     provenance.push(
       `Using '${f.name}' for the required geo slot '${slotId}' — auto-completed from the ` +
         'datasource because the ask named no matching field.',
+    );
+  }
+  // Surface a temporal slot AUTO-COMPLETED from the schema's lone date field (unique-
+  // date completion, W60 geo sibling) so the caller can tell the agent which field it
+  // chose for a required time axis the ask did not name.
+  for (const [slotId, f] of temporalAutoCompleted) {
+    provenance.push(
+      `Using '${f.name}' for required temporal slot '${slotId}' because it is the only date field in the datasource.`,
     );
   }
 
@@ -1124,7 +1295,14 @@ export function classifyNoLlm(
   // the hazard notes + avoid_when and judges the actual schema.
   if (hasDeterministicPathBlockingHazard(chosen)) return null;
 
-  const rgb = roleGreedyBind(chosen, matched, aggOverride, schemaDims);
+  // FINAL bind pass — the ONLY place unique-date temporal completion is armed (pass
+  // the masked ask + full schema so a lone required date slot the ask did not name
+  // can complete with the schema's single date field). selectWithinFamily's earlier
+  // slot-fit probes deliberately omit this context (no completion during tie-break).
+  const rgb = roleGreedyBind(chosen, matched, aggOverride, schemaDims, {
+    maskedAsk,
+    schemaFields: summary.fields,
+  });
   if (!rgb) return null; // required slot unfilled → fail closed
   const bindings = rgb.bindings;
   // OPTIONAL small-multiples facet (W23-SM1): additively bind a simple-trellis facet

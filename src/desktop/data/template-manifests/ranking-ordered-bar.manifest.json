@@ -20,7 +20,7 @@
   },
   "datasource_placeholder": true,
   "placeholders": ["TITLE", "DATASOURCE"],
-  "intent_keywords": ["ranking", "sorted-bar", "bar", "top", "highest", "lowest"],
+  "intent_keywords": ["ranking", "rank", "sorted-bar", "bar", "top", "highest", "lowest"],
   "description": "Horizontal bars, one per category; bar length = measure; sorted descending by the measure.",
   "avoid_when": [
     "The 'top' here is positional layering — marks drawn on top of a reference line or another chart layer — not a top-N ranking; a positional or annotation placement is not a sorted bar chart."
