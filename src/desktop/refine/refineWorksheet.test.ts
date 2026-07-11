@@ -258,6 +258,20 @@ describe('confirmTopNApplied', () => {
     expect(confirmTopNApplied(r.xml, r.filterColumn)).toBe(true);
     expect(confirmTopNApplied(BASE, r.filterColumn)).toBe(false);
   });
+
+  it("neither throws nor false-positives on a column ref containing a quote ([none:O'Brien:nk])", () => {
+    const quoted = "[none:O'Brien:nk]";
+    const withFilter = `<worksheet name='q' xmlns:user='http://www.tableausoftware.com/xml/user'>
+      <table><view>
+        <filter class='categorical' column="${quoted}"><groupfilter function='end' /></filter>
+      </view></table>
+    </worksheet>`;
+    expect(confirmTopNApplied(withFilter, quoted)).toBe(true);
+    expect(confirmTopNApplied(withFilter, '[none:Other:nk]')).toBe(false);
+    // The injection shape: a value engineered to alter an interpolated XPath
+    // predicate must simply not match (it is compared as a plain string).
+    expect(confirmTopNApplied(withFilter, "x' or @column!='")).toBe(false);
+  });
 });
 
 describe('planSortDirection', () => {
@@ -326,5 +340,17 @@ describe('confirmSortDirectionApplied', () => {
     if (!r.ok) return;
     expect(confirmSortDirectionApplied(r.xml, r.column, 'ASC')).toBe(true);
     expect(confirmSortDirectionApplied(BASE, r.column, 'ASC')).toBe(false);
+  });
+
+  it('neither throws nor false-positives on a column ref containing a quote', () => {
+    const quoted = "[sum:O'Brien Sales:qk]";
+    const withSort = `<worksheet name='q' xmlns:user='http://www.tableausoftware.com/xml/user'>
+      <table><view>
+        <computed-sort column="${quoted}" direction='ASC' />
+      </view></table>
+    </worksheet>`;
+    expect(confirmSortDirectionApplied(withSort, quoted, 'ASC')).toBe(true);
+    expect(confirmSortDirectionApplied(withSort, quoted, 'DESC')).toBe(false);
+    expect(confirmSortDirectionApplied(withSort, "x' or @column!='", 'ASC')).toBe(false);
   });
 });

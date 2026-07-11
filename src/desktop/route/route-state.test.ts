@@ -105,4 +105,20 @@ describe('SessionRouteStateStore', () => {
     expect(store.get('S-5')?.deflections).toHaveLength(1);
     expect(store.get(`S-${cap + 4}`)?.deflections).toHaveLength(1);
   });
+
+  it('per-session cap: each record array FIFO-evicts past MAX_ENTRIES_PER_SESSION', () => {
+    const store = new SessionRouteStateStore();
+    const cap = SessionRouteStateStore.MAX_ENTRIES_PER_SESSION;
+    for (let i = 0; i < cap + 3; i++) {
+      store.recordDeflection('S1', mkDeflection({ ask: `ask-${i}` }));
+      store.recordOverride('S1', { tool: 'x', ts: '', ask: `ask-${i}` });
+    }
+    const s = store.get('S1')!;
+    expect(s.deflections).toHaveLength(cap);
+    expect(s.route_overrides).toHaveLength(cap);
+    // Oldest evicted, newest retained — the one-shot invariant weakens to
+    // at-most-twice only for evicted asks.
+    expect(store.hasDeflection('S1', 'ask-0')).toBe(false);
+    expect(store.hasDeflection('S1', `ask-${cap + 2}`)).toBe(true);
+  });
 });

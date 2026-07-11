@@ -72,6 +72,14 @@ export class SessionRouteStateStore {
    */
   static readonly MAX_STATES = 500;
 
+  /**
+   * Per-session cap on each record array. A marathon session with enforcement on would
+   * otherwise grow one entry per unique ask, unbounded. FIFO eviction: past the cap, the
+   * one-shot invariant weakens to "at most twice" for the evicted (oldest) asks — benign
+   * next to unbounded memory.
+   */
+  static readonly MAX_ENTRIES_PER_SESSION = 200;
+
   private ensure(sessionId: string): SessionRouteState {
     let state = this.bySession.get(sessionId);
     if (!state) {
@@ -119,6 +127,9 @@ export class SessionRouteStateStore {
     if (!sessionId) return undefined;
     const state = this.ensure(sessionId);
     state.deflections.push(deflection);
+    while (state.deflections.length > SessionRouteStateStore.MAX_ENTRIES_PER_SESSION) {
+      state.deflections.shift();
+    }
     return state;
   }
 
@@ -133,6 +144,9 @@ export class SessionRouteStateStore {
     if (!sessionId) return undefined;
     const state = this.ensure(sessionId);
     state.route_overrides.push(override);
+    while (state.route_overrides.length > SessionRouteStateStore.MAX_ENTRIES_PER_SESSION) {
+      state.route_overrides.shift();
+    }
     return state;
   }
 

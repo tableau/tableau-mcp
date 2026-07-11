@@ -347,8 +347,11 @@ export function planSortDirection(
 export function confirmTopNApplied(readbackXml: string, filterColumn: string): boolean {
   const doc = parseXml(readbackXml);
   if (!doc) return false;
-  const expr = filterColumn ? `//filter[@column='${filterColumn}']` : '//filter';
-  const filters = xpath.select(expr, doc as unknown as Node) as Element[];
+  // Column refs legally contain quotes (e.g. [none:O'Brien:nk]) — never
+  // interpolate them into an XPath literal; compare attributes in JS.
+  const filters = (xpath.select('//filter', doc as unknown as Node) as Element[]).filter(
+    (f) => !filterColumn || f.getAttribute('column') === filterColumn,
+  );
   return filters.some(
     (f) =>
       (xpath.select("count(.//groupfilter[@function='end'])", f as unknown as Node) as number) > 0,
@@ -366,7 +369,9 @@ export function confirmSortDirectionApplied(
 ): boolean {
   const doc = parseXml(readbackXml);
   if (!doc) return false;
-  const expr = column ? `//computed-sort[@column='${column}']` : '//computed-sort';
-  const sorts = xpath.select(expr, doc as unknown as Node) as Element[];
+  // Same quote-safety rule as confirmTopNApplied: attribute match in JS.
+  const sorts = (xpath.select('//computed-sort', doc as unknown as Node) as Element[]).filter(
+    (s) => !column || s.getAttribute('column') === column,
+  );
   return sorts.some((s) => (s.getAttribute('direction') ?? '') === direction);
 }
