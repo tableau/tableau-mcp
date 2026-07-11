@@ -3,7 +3,7 @@
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Edit data/template-manifests/*.manifest.json and re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
   "_source": "data/template-manifests/*.manifest.json",
-  "count": 42,
+  "count": 44,
   "fast_path_templates": [
     "box-plot-chart",
     "correlation-scatter-plot-chart",
@@ -64,7 +64,8 @@
         "box-and-whisker",
         "whisker",
         "quartile",
-        "distribution"
+        "distribution",
+        "spread-out"
       ],
       "description": "A box-and-whisker plot showing the DISTRIBUTION of a measure: Circle marks at one point per grain member (the level dimension on the level-of-detail shelf), a continuous measure axis on rows ([sum:Measure:qk]), and a per-cell box-plot reference line (boxplot-whisker-type='standard') that draws the median / IQR box + whiskers over those points; an OPTIONAL facet dimension on cols splits the distribution into side-by-side boxes. Serves UC7 (distribution analysis) and the UC4 ranged/uncertainty view. Generalized from the repo distribution-bar-code-chart (a live-stamped strip plot: detail-grain dim on lod + aggregated measure axis) plus the distribution-box-whisker catalog exemplar's box-plot reference-line + Circle marks. Live render-verified 2026-07-06 by the golden-parity gate (composite 98; see portability_evidence.render_evidence): structural 0.97297 (5/5 critical), pixel 1.0, binding-sanity sane via reconciled 800=800=EXPECTED_COUNT Copy>Data mark counts (grain live-corrected from the disproven Segment-FD assumption) and caption-leak pass.",
       "avoid_when": [
@@ -1165,6 +1166,134 @@
           "code": "hidden-aggregate-role-from",
           "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target field inherits the template's secondary-role hint (verification-report correction).",
           "xml": "correlation-scatter-plot-chart.xml:15"
+        }
+      ]
+    },
+    {
+      "template": "deviation-arrow",
+      "family": "deviation",
+      "readiness": "GREEN",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "deviation-arrow",
+        "over-under"
+      ],
+      "description": "A GENERIC over/under deviation arrow: one row per member, with a Line-mark shaft spanning the reference LINE value to the ACTUAL value on a shared measure axis (both measures folded via Measure Values, connected by a path on Measure Names) and a Shape-mark arrowhead at the actual end, colored by SIGN(SUM([Actual]) - SUM([Line])) so an over/actual-beats-line reads as one hue and an under as another. Three plain slots {member, actual, line} bound as ordinary categorical + two quantitative measures; the ONLY calc is the aggregate sign, which references the two bindable measure slots with plain arithmetic (SUM + subtraction + SIGN) and is rewritten on bind. Cloned from ww-ou-arrow's dual-mark (Line shaft + Shape arrowhead) arrow grammar but with EVERY compound-string-parse calc removed: no SPLIT/TRIM of a '<prefix> <winner>-<loser>' score string, no '<name> (<year>)' member-label parse, no season/id/roman-numeral text columns, and no inline O/U-diff spine. Intent keywords are deliberately DISTINCT from ww-ou-arrow's 'arrow-chart'/'over-under-arrow' chart-nouns (this template uses 'over-under' + the unique slug 'deviation-arrow'): those two nouns live in classify.ts CHART_NOUN_KEYWORDS, and a SECOND fast_path_eligible carrier of a chart-noun trips the lone-winner uniqueness contract (manifest.test.ts 'every classify.ts CHART_NOUN_KEYWORD is carried by <=1 fast_path_eligible manifest'), so carrying them would make this template un-stampable. Stamp-ready but deliberately UNSTAMPED (render_verified 'none' -> fast_path_eligible false) until the orchestrator live-verifies it.",
+      "avoid_when": [
+        "The actual and/or reference values arrive as COMPOUND score/label strings that must be SPLIT-parsed (e.g. a 'KC 25-22' combined-score string, or a '<name> (<year>)' member label) - use ww-ou-arrow, whose calcs parse exactly those Super-Bowl-style shapes; this generic template takes two PLAIN numeric measures and does no string parsing, so a compound-string field binds the wrong value.",
+        "The framing is quota / attainment / actual-vs-goal (a rep or region measured against a quota or target as 'how much of goal attained'), where a bar with a per-cell reference line reads better - use quota-attainment-bullet; this arrow shows the directional over/under gap between two peer measures, not quota attainment.",
+        "A distinct over/under hue (e.g. teal over, red under) and left/right arrowhead GLYPHS are required on first render - that value->hue and value->glyph mapping is datasource-level style NOT carried by this worksheet-only template (see hazard datasource-style-dropped); the encodings' driving field is carried, but the marks fall back to the default palette + default shape until the style is re-injected at stamp time."
+      ],
+      "slots": [
+        {
+          "slot_id": "member",
+          "template_field": "Member",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "One arrow row per member on rows ([none:Member:nk]). The categorical the deviation is compared across (region / segment / rep)."
+        },
+        {
+          "slot_id": "actual",
+          "template_field": "Actual",
+          "derivation": "sum",
+          "role": [
+            "cols",
+            "measure-values",
+            "calc-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The ACTUAL measure, SUM([Actual]) -> [sum:Actual:qk]. The far (arrowhead) endpoint of the shaft: it is the Shape pane's cols axis AND one of the two measures folded onto the shared Measure Values axis, AND the minuend of the sign calc. replaceFieldReferences rewrites [Actual] in the calc formula on bind."
+        },
+        {
+          "slot_id": "line",
+          "template_field": "Line",
+          "derivation": "sum",
+          "role": [
+            "measure-values",
+            "calc-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The reference/target LINE measure, SUM([Line]) -> [sum:Line:qk]. The near endpoint of the shaft (the second measure folded onto the shared Measure Values axis via the Measure Names filter) and the subtrahend of the sign calc. replaceFieldReferences rewrites [Line] in the calc formula on bind. Superstore has no natural target column, so at stamp time bind a second real measure as the reference (e.g. Profit) or a genuine plan/target measure."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "over_under_sign_calc",
+          "template_field": "Over-Under Sign",
+          "derivation": "usr",
+          "role": [
+            "color",
+            "shape"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "SIGN(SUM([Actual])-SUM([Line]))",
+          "formula_refs": [
+            "Actual",
+            "Line"
+          ],
+          "depends_on_slots": [
+            "actual",
+            "line"
+          ],
+          "result_role": "measure",
+          "inputs": [
+            {
+              "ref": "Actual",
+              "slot_id": "actual",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            },
+            {
+              "ref": "Line",
+              "slot_id": "line",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ],
+          "prereqs": [
+            "raw-formula-refs"
+          ],
+          "notes": "SIGN(SUM([Actual])-SUM([Line])) -> +1 over / 0 tie / -1 under. Drives BOTH the arrow color and the arrowhead shape encoding. A generic, PLAIN-arithmetic aggregate calc (SUM + subtraction + SIGN) referencing only the two bindable measure slots - NO SPLIT/TRIM/parse; the compound-string-parse hazard of ww-ou-arrow is intentionally absent. Both bare refs rewrite on bind (raw-formula-refs). The discrete over/under hue + left/right glyph MAP is datasource-level style (see hazard datasource-style-dropped); this calc only supplies the driving field."
+        }
+      ],
+      "hazards": [
+        {
+          "code": "signed-deviation-measure",
+          "detail": "Deviation family: the encoding reads as an OVER/UNDER direction, so bind a genuine actual measure and a genuine reference/target measure whose difference is meaningfully signed. If the reference is not a comparable peer measure (same unit, same grain), the over/under hue and the shaft length are not interpretable. Superstore has no built-in target column, so pick a real second measure (e.g. Profit as the reference) or a plan/target measure at stamp time.",
+          "xml": "deviation-arrow.xml:19"
+        },
+        {
+          "code": "datasource-style-dropped",
+          "detail": "The distinct over/under COLOR palette (e.g. teal over / red under) and the left/right arrowhead SHAPE glyph map are datasource-level <style> in the ww-ou-arrow golden, NOT expressible in a worksheet-only template. This template carries the color + shape ENCODINGS (which field drives them: the sign calc) but not the value->hue / value->glyph MAP, so on first apply the marks fall back to the default palette + default shape. Advisory only (surfaced via avoid_when), NOT a deterministic-path-blocking hazard; faithful hue/glyph is re-injected at stamp time.",
+          "xml": "deviation-arrow.xml:56"
+        },
+        {
+          "code": "raw-formula-refs",
+          "detail": "The sign calc references the bare bindable [Actual]/[Line]; templates.ts rewriteFormulaFieldRefs repairs them on bind because each is a bindable bare-key slot (same pattern as deviation-diverging-bar / correlation-scatter-plot-chart). Gate #6 asserts both are bound. There are NO template-internal calc-to-calc refs and NO parse coercions (contrast ww-ou-arrow, whose INT(SPLIT(...)) chain is the compound-string-parse blocker this template removes).",
+          "xml": "deviation-arrow.xml:20"
         }
       ]
     },
@@ -2528,6 +2657,65 @@
       ]
     },
     {
+      "template": "magnitude-simple-bar",
+      "family": "magnitude",
+      "readiness": "GREEN",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "magnitude",
+        "absolute"
+      ],
+      "description": "Horizontal bars, one per category; bar length = the measure's ABSOLUTE magnitude (a size comparison across categories). Bars are sorted descending by the measure purely as a READING AID — the sort is not a ranking contract (no top-N, best/worst, or positional semantics). The magnitude family's generic {category, measure} bar: cloned from ranking-ordered-bar's two-slot categorical+quantitative bar shape, but with ranking-specific keywords, subtitle, and sort-role labels removed, and NO period/temporal slot or hardcoded incomplete-period filter (the HARDCODED_FILTER_MEMBERS blocker that keeps magnitude-paired-bar / magnitude-paired-column-chart off the fast path). Stamp-ready but not yet live-verified: render_verified 'none' -> fast_path_eligible false until the orchestrator live-stamps it.",
+      "avoid_when": [
+        "The user explicitly wants a ranked or top-N / bottom-N ordering as the point of the chart (best/worst, leaders/laggards) - reach for ranking-ordered-bar or ranking-ordered-column, where the sort order IS the contract; here the descending sort is only a reading aid.",
+        "The comparison is period-over-period (this year vs last year, before vs after) - use the magnitude paired-bar or paired-column family, which pairs a measure over two or more time periods per group."
+      ],
+      "slots": [
+        {
+          "slot_id": "category",
+          "template_field": "Category",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "One horizontal bar per member on rows. Also the dimension instance the computed-sort orders (DESC by the measure) - a reading aid, not a ranking contract."
+        },
+        {
+          "slot_id": "measure",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "cols"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "Bar length on cols = the measure's magnitude, aggregated as SUM. Template_field 'Sales' is just the placeholder column the field-swap injector renames to the bound measure; the computed-sort's using= references this instance."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "computed-sort-pill-coupling",
+          "detail": "The computed-sort binds the category dimension instance ([none:Category:nk]) to the measure instance ([sum:Sales:qk]); both slots must bind or the sort dangles. Both are required, so this is satisfied by coverage. (This is the ONLY carry-over from the ranking donor's sort mechanic; unlike ranking, the sort here is presentational, not a top-N contract.)",
+          "xml": "magnitude-simple-bar.xml:24"
+        }
+      ]
+    },
+    {
       "template": "pareto-chart",
       "family": "specialized",
       "readiness": "YELLOW",
@@ -3417,6 +3605,7 @@
       ],
       "intent_keywords": [
         "ranking",
+        "rank",
         "sorted-bar",
         "bar",
         "top",
@@ -3501,6 +3690,7 @@
       ],
       "intent_keywords": [
         "ranking",
+        "rank",
         "sorted-column",
         "column",
         "vertical-bar",
@@ -3742,7 +3932,10 @@
       "intent_keywords": [
         "latlon-symbol-map",
         "latitude-longitude-map",
+        "lat-long-map",
+        "lat-lon-map",
         "coordinate-map",
+        "gps-map",
         "point-map",
         "symbol-map",
         "bubble-map",
@@ -3833,8 +4026,11 @@
       "intent_keywords": [
         "symbol-map",
         "proportional-symbol-map",
+        "graduated-symbol-map",
         "bubble-map",
         "point-map",
+        "dot-map",
+        "pin-map",
         "spatial",
         "map"
       ],
@@ -3947,7 +4143,9 @@
         "month-over-month",
         "period-over-period",
         "forecast",
-        "change-over-time"
+        "change-over-time",
+        "calendar-year",
+        "across-the-calendar"
       ],
       "description": "A line of an aggregated measure over a truncated date on the x-axis; shows trend across time.",
       "avoid_when": [

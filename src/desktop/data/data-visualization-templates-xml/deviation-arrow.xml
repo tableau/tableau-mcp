@@ -1,0 +1,97 @@
+<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <layout-options>
+    <title>
+      <formatted-text>
+        <run>&lt;Sheet Name&gt;
+</run>
+        <run fontname='Tableau Light' fontsize='9'>One row per member: the shaft spans the reference line value to the actual value on a shared measure axis, and the arrowhead at the actual end is colored by whether the actual finished OVER the line (one hue) or UNDER it (another) via SIGN(actual - line).</run>
+      </formatted-text>
+    </title>
+  </layout-options>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column caption='Over/Under Sign' datatype='integer' name='[Over-Under Sign]' role='measure' type='quantitative'>
+          <calculation class='tableau' formula='SIGN(SUM([Actual])-SUM([Line]))' />
+        </column>
+        <column datatype='string' name='[Member]' role='dimension' type='nominal' />
+        <column datatype='real' name='[Actual]' role='measure' type='quantitative' />
+        <column datatype='real' name='[Line]' role='measure' type='quantitative' />
+        <column-instance column='[Member]' derivation='None' name='[none:Member:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Actual]' derivation='Sum' name='[sum:Actual:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Line]' derivation='Sum' name='[sum:Line:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Over-Under Sign]' derivation='User' name='[usr:Over-Under Sign:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <filter class='categorical' column='[{{DATASOURCE}}].[:Measure Names]'>
+        <groupfilter function='union' user:op='manual'>
+          <groupfilter function='member' level='[:Measure Names]' member='&quot;[{{DATASOURCE}}].[sum:Line:qk]&quot;' />
+          <groupfilter function='member' level='[:Measure Names]' member='&quot;[{{DATASOURCE}}].[sum:Actual:qk]&quot;' />
+        </groupfilter>
+      </filter>
+      <slices>
+        <column>[{{DATASOURCE}}].[:Measure Names]</column>
+      </slices>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='rows' value='false' />
+      </style-rule>
+      <style-rule element='zeroline'>
+        <format attr='line-visibility' value='off' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow' x-axis-name='[{{DATASOURCE}}].[Multiple Values]'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Line' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[usr:Over-Under Sign:qk]' />
+          <path column='[{{DATASOURCE}}].[:Measure Names]' />
+        </encodings>
+        <style>
+          <style-rule element='mark'>
+            <format attr='mark-labels-show' value='false' />
+          </style-rule>
+        </style>
+      </pane>
+      <pane selection-relaxation-option='selection-relaxation-allow' x-axis-name='[{{DATASOURCE}}].[sum:Actual:qk]'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Shape' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[usr:Over-Under Sign:qk]' />
+          <shape column='[{{DATASOURCE}}].[usr:Over-Under Sign:qk]' />
+        </encodings>
+        <style>
+          <style-rule element='mark'>
+            <format attr='mark-labels-show' value='false' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[{{DATASOURCE}}].[none:Member:nk]</rows>
+    <cols>([{{DATASOURCE}}].[Multiple Values] + [{{DATASOURCE}}].[sum:Actual:qk])</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

@@ -2,9 +2,9 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.11.0+content.2026-07-10",
+  "content_version": "2.11.0+content.2026-07-11",
   "schema_version": "1",
-  "generated": "2026-07-10",
+  "generated": "2026-07-11",
   "engine_compat": {
     "server_min": "2.11.0",
     "node": ">=22.7.5"
@@ -66,6 +66,11 @@
       "bytes": 3250
     },
     {
+      "path": "data-visualization-templates-xml/deviation-arrow.xml",
+      "sha256": "338b99d6780fe108781e51a202fb1dc2cb0562106a8300b9c92e72bf5ccc8cfa",
+      "bytes": 4318
+    },
+    {
       "path": "data-visualization-templates-xml/deviation-diverging-bar.xml",
       "sha256": "dfd31d10c3c1cd0de8dd039334a33fcb536962d46afc58ab74db24e86fe6b356",
       "bytes": 3728
@@ -124,6 +129,11 @@
       "path": "data-visualization-templates-xml/magnitude-paired-column-chart.xml",
       "sha256": "54e13afb3c004b2b511fd25d84bfce712cc28e5f289f12e03e8cbedbedb569fa",
       "bytes": 2459
+    },
+    {
+      "path": "data-visualization-templates-xml/magnitude-simple-bar.xml",
+      "sha256": "86822337c84088ead4638cbdcb7259a90225acfd9ff8ee6578ee3f4209a773c9",
+      "bytes": 2474
     },
     {
       "path": "data-visualization-templates-xml/pareto-chart.xml",
@@ -242,13 +252,13 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "cb9726caa03efca21f396c74ece9af7942135e09a16513bf2e94b15c1f4bfa46",
-      "bytes": 246333
+      "sha256": "1069eee776c2e976368c8180d1031ba59e9555fcd0a47147ff8464a3ccde8cb0",
+      "bytes": 258585
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
-      "sha256": "a9c331defeb1acfb11a48bed01692a8cdcbfa3fa9b9e8b51c632a58d4830fea5",
-      "bytes": 7607
+      "sha256": "a1c5f0a48aaf7f30963e20b569b7179167bf0e3fafcb11dc99acbc3aad050fde",
+      "bytes": 7623
     },
     {
       "path": "template-manifests/bullet-variance-chart.manifest.json",
@@ -299,6 +309,11 @@
       "path": "template-manifests/correlation-scatter-plot-chart.manifest.json",
       "sha256": "516262563717665ed80cb52d3f87331cbb78a18561c7acfa17c8c46a3a767fb9",
       "bytes": 4773
+    },
+    {
+      "path": "template-manifests/deviation-arrow.manifest.json",
+      "sha256": "0cc9fea66b80778aa4e1d6df0900b5d7e00f0c8bde0f22f4f8e95bcd287d1c47",
+      "bytes": 8164
     },
     {
       "path": "template-manifests/deviation-diverging-bar.manifest.json",
@@ -361,6 +376,11 @@
       "bytes": 4120
     },
     {
+      "path": "template-manifests/magnitude-simple-bar.manifest.json",
+      "sha256": "7288c37cd87d1b9817590ba11b01f35a635d4a7641a99803a63db62ecbbec6ed",
+      "bytes": 2946
+    },
+    {
       "path": "template-manifests/pareto-chart.manifest.json",
       "sha256": "0c81718e05d2e10bde0909f26b7c1ab92383625ab8af0f8f98b7aa83548a8651",
       "bytes": 4714
@@ -407,13 +427,13 @@
     },
     {
       "path": "template-manifests/ranking-ordered-bar.manifest.json",
-      "sha256": "bf80efd2313e097d268758a6dcb0d4c3e82502c812ecbd3b4d538de133ac19d8",
-      "bytes": 3300
+      "sha256": "1ef1517c621eacd37c289328a95852d41afa5ccad41ec2b8d5b3bd65780b648e",
+      "bytes": 3308
     },
     {
       "path": "template-manifests/ranking-ordered-column.manifest.json",
-      "sha256": "94c3b50eb80c294ea8d0c1046e3d09cb95570c34891cfd9b0459c8aef928ee27",
-      "bytes": 1914
+      "sha256": "90e4e6d009fe9cf7ca006241bf610db69348b8e133d13da67380ea156adabd7a",
+      "bytes": 1926
     },
     {
       "path": "template-manifests/slope-chart.manifest.json",
@@ -427,18 +447,18 @@
     },
     {
       "path": "template-manifests/spatial-symbol-map-latlon.manifest.json",
-      "sha256": "ea10b86fa91acd95f2d2decef3b1da46684028c3ebe203a82dd7360a7c1b2fb6",
-      "bytes": 3513
+      "sha256": "8bc4cb6b55dccc4176489fdc14feb11c3bd0e679684c00f4eb1b0e506b8b2850",
+      "bytes": 3567
     },
     {
       "path": "template-manifests/spatial-symbol-map.manifest.json",
-      "sha256": "21276c67b45d5a515a91ea061fe3654b6153e3f10f5bae809c7274e6fd3e0ee9",
-      "bytes": 2763
+      "sha256": "990940cedc79e801a2285ae382dd2531261f8cd4530fd4bacd1ccae35c5b5c01",
+      "bytes": 2821
     },
     {
       "path": "template-manifests/trend-line-chart.manifest.json",
-      "sha256": "5fc22f9bcb36191730a41da9eff272de748c59a014d07c80459bf68aa765451b",
-      "bytes": 5182
+      "sha256": "cd915dd51cc7dea5e2e1fea757522019f0c147f1d0d3399d0cd771f7fdd51e4f",
+      "bytes": 5222
     },
     {
       "path": "template-manifests/ww-floating-bars.manifest.json",

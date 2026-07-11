@@ -16,7 +16,10 @@
   "intent_keywords": [
     "latlon-symbol-map",
     "latitude-longitude-map",
+    "lat-long-map",
+    "lat-lon-map",
     "coordinate-map",
+    "gps-map",
     "point-map",
     "symbol-map",
     "bubble-map",
