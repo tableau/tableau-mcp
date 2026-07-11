@@ -9,6 +9,8 @@
 //
 // In-memory, per-server-process (a module singleton, same lifetime as SessionManager). The
 // gate (`route-gate.ts`) is the only writer; readers are tests and any future receipt surface.
+// `current_ask` additionally records the most recent bind-template ask classification for a
+// session so no-ask scratch-entry tools can fail-open or one-shot-deflect without reclassifying.
 
 import type { AskShape, RouteClass } from '../binder/route-spec.js';
 
@@ -53,6 +55,25 @@ export interface RouteOverride {
   shape?: AskShape;
 }
 
+/** Terminal dispositions a bind-template call can produce (mirrors BinderResult.status). */
+export type BindOutcome = 'bound' | 'propose' | 'escalate';
+
+/**
+ * The MOST RECENT ask bind-template classified for this session (most-recent-ask-wins).
+ * `last_outcome` is null between classification and the concluded bind-template outcome.
+ */
+export interface SessionAskClassification {
+  /** Normalized ask key (via normalizeAskForMatch), the one-shot dedup key. */
+  ask: string;
+  route: RouteClass;
+  shape: AskShape;
+  template: string | null;
+  /** ISO timestamp classification was recorded. */
+  ts: string;
+  /** null until recordAskOutcome fills it in. */
+  last_outcome: BindOutcome | null;
+}
+
 export interface SessionRouteState {
   /** The resolved Desktop session id this state is keyed by. */
   session_id: string;
@@ -60,6 +81,8 @@ export interface SessionRouteState {
   deflections: RouteDeflection[];
   /** Route overrides recorded for this session (one per (session, ask) post-deflection). */
   route_overrides: RouteOverride[];
+  /** Most recent bind-template ask classification for this session, if any. */
+  current_ask?: SessionAskClassification;
 }
 
 export class SessionRouteStateStore {
@@ -147,6 +170,39 @@ export class SessionRouteStateStore {
     while (state.route_overrides.length > SessionRouteStateStore.MAX_ENTRIES_PER_SESSION) {
       state.route_overrides.shift();
     }
+    return state;
+  }
+
+  /**
+   * Record the classification of an ask just received by bind-template. Overwrites any prior
+   * current_ask (most-recent-ask-wins). No-op on a missing session id (fail-open).
+   */
+  recordAskClassification(
+    sessionId: string | undefined,
+    classification: Omit<SessionAskClassification, 'ts' | 'last_outcome'>,
+  ): SessionRouteState | undefined {
+    if (!sessionId) return undefined;
+    const state = this.ensure(sessionId);
+    state.current_ask = {
+      ...classification,
+      ts: new Date().toISOString(),
+      last_outcome: null,
+    };
+    return state;
+  }
+
+  /**
+   * Record the concluded outcome for the CURRENT current_ask. If a later ask overwrote the slot,
+   * silently drop the stale outcome instead of mutating the wrong ask's record.
+   */
+  recordAskOutcome(
+    sessionId: string | undefined,
+    ask: string,
+    outcome: BindOutcome,
+  ): SessionRouteState | undefined {
+    const state = this.get(sessionId);
+    if (!state?.current_ask || state.current_ask.ask !== ask) return undefined;
+    state.current_ask.last_outcome = outcome;
     return state;
   }
 

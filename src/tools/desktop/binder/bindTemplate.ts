@@ -13,12 +13,14 @@ import {
   type EscalateReason,
 } from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
+import { classifyAskRoute, normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import {
   loadWorkbookXml,
   type LoadWorkbookXmlError,
 } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
+import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
@@ -389,6 +391,21 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               .listTemplateManifests()
               .map((m): [string, TemplateManifest] => [m.template, m]),
           );
+          // Route-state recording is OBSERVATIONAL — a route-layer fault must never break a
+          // bind (fail-open, the gate's own discipline): a swallowed classification simply
+          // leaves the ask unrecorded and the gate later fail-opens on absent state.
+          const askKey = normalizeAskForMatch(ask);
+          try {
+            const routeDecision = classifyAskRoute(ask, [...manifests.values()]);
+            sessionRouteState.recordAskClassification(resolvedSession, {
+              ask: askKey,
+              route: routeDecision.route,
+              shape: routeDecision.shape,
+              template: routeDecision.template,
+            });
+          } catch {
+            /* fail-open */
+          }
           const res = await bindTemplate({
             ask,
             workbookXml: xmlResult.value,
@@ -396,6 +413,11 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             ...(proposal ? { proposal: proposal as BindingProposal } : {}),
             ...(minConfidence !== undefined ? { minConfidence } : {}),
           });
+          try {
+            sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
+          } catch {
+            /* fail-open */
+          }
           const bindMs = Date.now() - bindStart;
 
           const base: BindTemplateToolResultBase = { ...res, guidance: buildGuidance(res) };

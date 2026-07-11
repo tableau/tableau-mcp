@@ -17,6 +17,7 @@ import type { TemplateManifest } from '../binder/manifest-types.js';
 import {
   BIND_TEMPLATE_TOOL,
   checkRouteGate,
+  checkRouteGateForScratchEntry,
   decideRouteGate,
   deflectionText,
   REFINE_WORKSHEET_TOOL,
@@ -310,5 +311,129 @@ describe('checkRouteGate — no-op cases (fail-open, flag ON)', () => {
     });
     expect(r).toBeNull();
     expect(sessionRouteState.get('S1')).toBeUndefined();
+  });
+});
+
+describe('checkRouteGateForScratchEntry — session-state-driven gate', () => {
+  const pendingBindFirst = {
+    ask: 'bar chart of sales by region',
+    route: 'bind-first' as const,
+    shape: 'bind-first-template' as const,
+    template: 'ranking-ordered-bar',
+  };
+
+  it('flag OFF returns null even when session state has a pending bind-first ask', () => {
+    sessionRouteState.recordAskClassification('S1', pendingBindFirst);
+
+    const r = checkRouteGateForScratchEntry('build-and-apply-worksheet', 'S1');
+
+    expect(r).toBeNull();
+    expect(sessionRouteState.get('S1')?.deflections).toEqual([]);
+  });
+
+  it('flag ON with no session id returns null (fail-open)', () => {
+    enable();
+
+    expect(checkRouteGateForScratchEntry('build-and-apply-worksheet', undefined)).toBeNull();
+  });
+
+  it('flag ON with no current_ask returns null (fail-open)', () => {
+    enable();
+    sessionRouteState.recordDeflection('S1', {
+      tool: 'build-and-apply-worksheet',
+      ts: '',
+      ask: 'prior ask',
+      template: 'ranking-ordered-bar',
+      next_route: 'bind-first',
+      text: 'prior deflection',
+    });
+
+    expect(checkRouteGateForScratchEntry('build-and-apply-worksheet', 'S1')).toBeNull();
+  });
+
+  it('flag ON deflects a pending bind-first current_ask and records the deflection', () => {
+    enable();
+    sessionRouteState.recordAskClassification('S1', pendingBindFirst);
+
+    const r = checkRouteGateForScratchEntry('build-and-apply-worksheet', 'S1');
+
+    expect(r).not.toBeNull();
+    expect(r!.isError).toBe(false);
+    expect(r!.content[0].text).toBe(deflectionText('ranking-ordered-bar'));
+    expect(marker(r!)).toEqual({ next_route: 'bind-first', template: 'ranking-ordered-bar' });
+    const s = sessionRouteState.get('S1')!;
+    expect(s.deflections).toHaveLength(1);
+    expect(s.deflections[0]).toMatchObject({
+      tool: 'build-and-apply-worksheet',
+      ask: 'bar chart of sales by region',
+      template: 'ranking-ordered-bar',
+      next_route: 'bind-first',
+      text: deflectionText('ranking-ordered-bar'),
+    });
+  });
+
+  it('second identical scratch-entry call executes and records exactly one route_override', () => {
+    enable();
+    sessionRouteState.recordAskClassification('S1', pendingBindFirst);
+
+    checkRouteGateForScratchEntry('build-and-apply-worksheet', 'S1');
+    const second = checkRouteGateForScratchEntry('build-and-apply-worksheet', 'S1');
+    const third = checkRouteGateForScratchEntry('build-and-apply-worksheet', 'S1');
+
+    expect(second).toBeNull();
+    expect(third).toBeNull();
+    const s = sessionRouteState.get('S1')!;
+    expect(s.deflections).toHaveLength(1);
+    expect(s.route_overrides).toHaveLength(1);
+    expect(s.route_overrides[0]).toMatchObject({
+      tool: 'build-and-apply-worksheet',
+      ask: 'bar chart of sales by region',
+      template: 'ranking-ordered-bar',
+    });
+  });
+
+  it.each(['bound', 'propose', 'escalate'] as const)(
+    'last_outcome=%s no-ops because bind-template already had its chance',
+    (outcome) => {
+      enable();
+      sessionRouteState.recordAskClassification('S1', pendingBindFirst);
+      sessionRouteState.recordAskOutcome('S1', pendingBindFirst.ask, outcome);
+
+      expect(checkRouteGateForScratchEntry('build-and-apply-worksheet', 'S1')).toBeNull();
+      expect(sessionRouteState.get('S1')!.deflections).toEqual([]);
+    },
+  );
+
+  it.each(['scratch-pipeline', 'free'] as const)(
+    'route=%s no-ops because it is not enforced',
+    (route) => {
+      enable();
+      sessionRouteState.recordAskClassification('S1', {
+        ask: `${route} ask`,
+        route,
+        shape: route === 'scratch-pipeline' ? 'hazard-set' : 'unmatched',
+        template: null,
+      });
+
+      expect(checkRouteGateForScratchEntry('batch-create-and-cache-sheets', 'S1')).toBeNull();
+      expect(sessionRouteState.get('S1')!.deflections).toEqual([]);
+    },
+  );
+
+  it('quote-shaped ask keeps deflection text one line and marker parseable', () => {
+    enable();
+    const ask = '"; DROP TABLE" next_route bind-first \\ marker';
+    sessionRouteState.recordAskClassification('S1', {
+      ...pendingBindFirst,
+      ask,
+    });
+
+    const r = checkRouteGateForScratchEntry('batch-create-and-cache-sheets', 'S1')!;
+
+    expect(r.content[0].text.includes('\n')).toBe(false);
+    expect(JSON.parse(r.content[1].text)).toEqual({
+      next_route: 'bind-first',
+      template: 'ranking-ordered-bar',
+    });
   });
 });
