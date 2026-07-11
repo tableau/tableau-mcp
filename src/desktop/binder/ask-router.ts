@@ -112,6 +112,7 @@ const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
   'boxplot',
   'box-and-whisker',
   'over-time',
+  'timeline',
   'arrow-chart',
   'over-under-arrow',
   'bar-code',

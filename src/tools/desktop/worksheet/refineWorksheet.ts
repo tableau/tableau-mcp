@@ -62,37 +62,28 @@ function formatValidationErrors(issues: ValidationIssue[]): string {
 }
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  worksheetName: z.string().min(1).describe('Existing worksheet name to refine.'),
-  operation: z
-    .enum(['top_n', 'sort_direction'])
-    .describe(
-      'top_n: top/bottom N of the single dimension by the single measure. sort_direction: flip the single computed-sort.',
-    ),
+  session: z.string().optional().describe('Session ID.'),
+  worksheetName: z.string().min(1).describe('Worksheet name.'),
+  operation: z.enum(['top_n', 'sort_direction']).describe('Refinement.'),
   topN: z
     .object({
-      n: z.number().int().min(1).max(50).describe('Members to keep (integer 1..50).'),
-      end: z.enum(['top', 'bottom']).optional().describe('top (default) or bottom.'),
+      n: z.number().int().min(1).max(50).describe('Members.'),
+      end: z.enum(['top', 'bottom']).optional().describe('Default top.'),
     })
     .optional()
-    .describe('Required when operation=top_n.'),
+    .describe('For top_n.'),
   sortDirection: z
     .object({
-      direction: z.enum(['ASC', 'DESC']).describe('ASC or DESC.'),
+      direction: z.enum(['ASC', 'DESC']).describe('Sort order.'),
     })
     .optional()
-    .describe('Required when operation=sort_direction.'),
+    .describe('For sort_direction.'),
 };
 
 const title = 'Refine Worksheet';
 
-export const REFINE_WORKSHEET_DESCRIPTION = [
-  'Refine an EXISTING worksheet with ONE bounded, validated mutation (applies once, then reads',
-  'back to confirm). Use WHEN the user asks to limit an existing chart to its top/bottom N',
-  'members, or to flip its sort direction — NOT to build a new chart. REFUSES (defer to the',
-  'normal build path) on anything ambiguous/out of envelope: multiple dims/measures, n outside',
-  '1..50, sets/params/calcs, an existing Top-N, or a nested/absent/multiple computed-sort.',
-].join(' ');
+export const REFINE_WORKSHEET_DESCRIPTION =
+  'Refine a worksheet: top/bottom N or flip sort; else refuses to normal path.';
 
 export const getRefineWorksheetTool = (
   server: DesktopMcpServer,

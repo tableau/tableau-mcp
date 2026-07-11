@@ -137,9 +137,10 @@ describe('desktop tools/list serialized surface', () => {
     }
 
     // 46_000 is the ToolSearch auto-deferral cliff on MCP hosts, not a tunable constant — past it
-    // the whole desktop surface gets deferred behind ToolSearch. refine-worksheet (~1_798 bytes on
-    // a 45_810 base) intentionally leaves this RED on this branch: it is the merge blocker until
-    // the shelf-tool consolidation lands and frees the headroom. Never raise the cap to ship a tool.
+    // the whole desktop surface gets deferred behind ToolSearch. The shelf-tool consolidation has
+    // landed, so this is GREEN: the serialized surface is 44_015 bytes, ~1_985 under the cliff.
+    // That headroom is the ENTIRE budget for future tools — trim tools to fit it; NEVER raise the
+    // cap to ship a tool (raising it just re-buries the whole surface behind ToolSearch).
     expect(total).toBeLessThanOrEqual(46_000);
   });
 });

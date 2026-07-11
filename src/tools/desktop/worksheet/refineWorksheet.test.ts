@@ -107,7 +107,7 @@ describe('refineWorksheetTool — instance', () => {
   it('creates a tool instance with the expected properties', () => {
     const tool = getRefineWorksheetTool(new DesktopMcpServer());
     expect(tool.name).toBe('refine-worksheet');
-    expect(tool.description).toContain('Refine an EXISTING worksheet');
+    expect(tool.description).toContain('Refine a worksheet');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),
