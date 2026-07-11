@@ -39,6 +39,7 @@ import { getListWorksheetsTool } from './workbook/listWorksheets.js';
 import { getApplyWorksheetTool } from './worksheet/applyWorksheet.js';
 import { getDeleteWorksheetTool } from './worksheet/deleteWorksheet.js';
 import { getGetWorksheetXmlTool } from './worksheet/getWorksheetXml.js';
+import { getRefineWorksheetTool } from './worksheet/refineWorksheet.js';
 
 export const desktopToolFactories = [
   getListInstancesTool,
@@ -50,6 +51,7 @@ export const desktopToolFactories = [
   getGetWorksheetXmlTool,
   getApplyWorksheetTool,
   getDeleteWorksheetTool,
+  getRefineWorksheetTool,
   getGetDashboardXmlTool,
   getApplyDashboardTool,
   getApplyDashboardWithViewpointsTool,

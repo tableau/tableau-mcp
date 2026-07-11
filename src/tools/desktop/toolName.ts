@@ -8,6 +8,7 @@ export const desktopToolNames = [
   'get-worksheet-xml',
   'apply-worksheet',
   'delete-worksheet',
+  'refine-worksheet',
   'get-dashboard-xml',
   'apply-dashboard',
   'apply-dashboard-with-viewpoints',

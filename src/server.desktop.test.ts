@@ -136,6 +136,11 @@ describe('desktop tools/list serialized surface', () => {
       total += (await serializeDesktopToolSurface(toolFactory(server))).length;
     }
 
+    // 46_000 is the ToolSearch auto-deferral cliff on MCP hosts, not a tunable constant — past it
+    // the whole desktop surface gets deferred behind ToolSearch. The shelf-tool consolidation has
+    // landed, so this is GREEN: the serialized surface is 44_015 bytes, ~1_985 under the cliff.
+    // That headroom is the ENTIRE budget for future tools — trim tools to fit it; NEVER raise the
+    // cap to ship a tool (raising it just re-buries the whole surface behind ToolSearch).
     expect(total).toBeLessThanOrEqual(46_000);
   });
 });
