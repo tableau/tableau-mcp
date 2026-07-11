@@ -230,5 +230,34 @@ describe('SessionRouteStateStore', () => {
         store.recordAskOutcome(undefined, 'bar chart of sales by region', 'bound'),
       ).toBeUndefined();
     });
+
+    it('clearCurrentAsk drops a matching pending ask and fail-opens on everything else', () => {
+      const store = new SessionRouteStateStore();
+      const classify = (ask: string): void => {
+        store.recordAskClassification('S1', {
+          ask,
+          route: 'bind-first',
+          shape: 'bind-first-template',
+          template: 'ranking-ordered-bar',
+        });
+      };
+
+      // ask-scoped clear: only the matching ask is dropped.
+      classify('ask A');
+      expect(store.clearCurrentAsk('S1', 'ask B')).toBe(false);
+      expect(store.get('S1')!.current_ask).toMatchObject({ ask: 'ask A' });
+      expect(store.clearCurrentAsk('S1', 'ask A')).toBe(true);
+      expect(store.get('S1')!.current_ask).toBeUndefined();
+
+      // unconditional clear: whatever is pending goes.
+      classify('ask C');
+      expect(store.clearCurrentAsk('S1')).toBe(true);
+      expect(store.get('S1')!.current_ask).toBeUndefined();
+
+      // fail-open: absent slot, unknown/missing session.
+      expect(store.clearCurrentAsk('S1')).toBe(false);
+      expect(store.clearCurrentAsk('NOPE')).toBe(false);
+      expect(store.clearCurrentAsk(undefined)).toBe(false);
+    });
   });
 });

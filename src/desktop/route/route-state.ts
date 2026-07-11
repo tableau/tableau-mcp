@@ -206,6 +206,22 @@ export class SessionRouteStateStore {
     return state;
   }
 
+  /**
+   * Drop the current_ask slot — bind-template's fail-open escape hatch. A bind that THREW
+   * (outcome unknowable) or a classification fault must never leave a pending
+   * "no bind attempt yet" record for the gate to deflect on later; absent state fail-opens.
+   * With `ask` supplied, clears only when the slot still holds that ask (a later ask's
+   * record is never clobbered); without it, clears unconditionally (a new ask arriving on a
+   * classification fault invalidates whatever was pending). No-op on a missing session.
+   */
+  clearCurrentAsk(sessionId: string | undefined, ask?: string): boolean {
+    const state = this.get(sessionId);
+    if (!state?.current_ask) return false;
+    if (ask !== undefined && state.current_ask.ask !== ask) return false;
+    delete state.current_ask;
+    return true;
+  }
+
   /** Evict a session's route state. No-op (false) on a missing/unknown id (fail-open). */
   evict(sessionId: string | undefined): boolean {
     if (!sessionId) return false;

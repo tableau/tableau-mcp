@@ -6,6 +6,7 @@ import type { BinderResult, BindingProposal } from '../../../desktop/binder/bind
 import * as binderModule from '../../../desktop/binder/binder.js';
 import { loadManifests } from '../../../desktop/binder/manifest.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
+import * as routeSpecModule from '../../../desktop/binder/route-spec.js';
 import { normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { DesktopDiscoverer } from '../../../desktop/desktopDiscoverer.js';
@@ -854,5 +855,51 @@ describe('bindTemplateTool route-state recording', () => {
     expect(body.next_route).toBeUndefined();
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
     expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('a THROWN bind clears the pending ask so the gate cannot read "no bind attempt yet"', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockRejectedValue(new Error('binder exploded'));
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: false,
+    });
+
+    // The error path is unchanged (the tool reports the failure)...
+    expect(result.isError).toBe(true);
+    // ...and the classification recorded BEFORE the throw is gone: a bind WAS attempted,
+    // so a pending "no bind attempt yet" record would let the scratch gate deflect a
+    // second time for an ask the agent already tried (review finding, 2026-07-11).
+    expect(sessionRouteState.get('1')?.current_ask).toBeUndefined();
+  });
+
+  it('a classification fault on a NEW ask clears a stale pending ask (no cross-ask leak)', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(boundResult);
+
+    // Seed pending ask A (never concluded).
+    sessionRouteState.recordAskClassification('1', {
+      ask: normalizeAskForMatch('ask A that is still pending'),
+      route: 'bind-first',
+      shape: 'bind-first-template',
+      template: 'ranking-ordered-bar',
+    });
+    // Make classification throw for ask B (the route layer faulting mid-classification).
+    vi.spyOn(routeSpecModule, 'classifyAskRoute').mockImplementation(() => {
+      throw new TypeError('keywords is not iterable');
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'completely different ask B',
+      auto_apply: false,
+    });
+
+    // Bind B still succeeds (fail-open)...
+    expect(result.isError).toBe(false);
+    // ...and pending ask A did NOT survive to mislead the scratch gate about ask B's turn.
+    expect(sessionRouteState.get('1')?.current_ask).toBeUndefined();
   });
 });

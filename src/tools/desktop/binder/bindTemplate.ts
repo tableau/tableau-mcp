@@ -404,15 +404,35 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               template: routeDecision.template,
             });
           } catch {
-            /* fail-open */
+            // A classification fault on a NEW ask also invalidates whatever ask was
+            // pending — leaving it would hand the gate a stale "no bind attempt yet"
+            // record for a different ask (cross-ask leak).
+            try {
+              sessionRouteState.clearCurrentAsk(resolvedSession);
+            } catch {
+              /* fail-open */
+            }
           }
-          const res = await bindTemplate({
-            ask,
-            workbookXml: xmlResult.value,
-            manifests,
-            ...(proposal ? { proposal: proposal as BindingProposal } : {}),
-            ...(minConfidence !== undefined ? { minConfidence } : {}),
-          });
+          let res;
+          try {
+            res = await bindTemplate({
+              ask,
+              workbookXml: xmlResult.value,
+              manifests,
+              ...(proposal ? { proposal: proposal as BindingProposal } : {}),
+              ...(minConfidence !== undefined ? { minConfidence } : {}),
+            });
+          } catch (e) {
+            // A THROWN bind has no recordable outcome; clear the pending record (only if
+            // it is still this ask's) so the gate can never read "no bind attempt yet"
+            // for an ask whose bind WAS attempted. The error path itself is unchanged.
+            try {
+              sessionRouteState.clearCurrentAsk(resolvedSession, askKey);
+            } catch {
+              /* fail-open */
+            }
+            throw e;
+          }
           try {
             sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
           } catch {
