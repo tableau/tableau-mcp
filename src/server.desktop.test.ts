@@ -105,30 +105,127 @@ If an apply is rejected by preflight validation, fix the XML per the FIX lines i
   });
 });
 
+/**
+ * Serialize a single desktop tool's tools/list entry exactly as the sum-budget
+ * test below does, so the per-tool accounting numbers reconcile against the sum
+ * (Σ per-tool bytes + DESKTOP_INSTRUCTIONS.length === the sum test's total).
+ */
+async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<string> {
+  const paramsSchema = await Provider.from(tool.paramsSchema);
+  const obj = normalizeObjectSchema(paramsSchema as any);
+  const inputSchema = obj
+    ? toJsonSchemaCompat(obj, { strictUnions: true, pipeStrategy: 'input' } as any)
+    : { type: 'object', properties: {} };
+
+  return JSON.stringify({
+    name: tool.name,
+    title: await Provider.from(tool.title),
+    description: await Provider.from(tool.description),
+    inputSchema,
+    annotations: await Provider.from(tool.annotations),
+    execution: { taskSupport: 'forbidden' },
+  });
+}
+
 describe('desktop tools/list serialized surface', () => {
   it('stays under the tool-search auto-deferral threshold budget', async () => {
     const server = new DesktopMcpServer();
     let total = DESKTOP_INSTRUCTIONS.length;
 
     for (const toolFactory of desktopToolFactories) {
-      const tool = toolFactory(server);
-      const paramsSchema = await Provider.from(tool.paramsSchema);
-      const obj = normalizeObjectSchema(paramsSchema as any);
-      const inputSchema = obj
-        ? toJsonSchemaCompat(obj, { strictUnions: true, pipeStrategy: 'input' } as any)
-        : { type: 'object', properties: {} };
-
-      total += JSON.stringify({
-        name: tool.name,
-        title: await Provider.from(tool.title),
-        description: await Provider.from(tool.description),
-        inputSchema,
-        annotations: await Provider.from(tool.annotations),
-        execution: { taskSupport: 'forbidden' },
-      }).length;
+      total += (await serializeDesktopToolSurface(toolFactory(server))).length;
     }
 
     expect(total).toBeLessThanOrEqual(46_000);
+  });
+});
+
+describe('desktop tools/list per-tool byte accounting', () => {
+  // Per-tool ceiling. The sum test above pins the SURFACE; this pins ATTRIBUTION:
+  // when the sum reddens it names WHICH tool got fat, with numbers. Kept well
+  // under the sum's slack so a single tool can't silently eat the whole budget.
+  const PER_TOOL_BUDGET = 1_200;
+
+  // Tools already over PER_TOOL_BUDGET at this base (feature/authoring @ 241a67e7).
+  // Each value is the tool's CURRENT serialized size — a ceiling, NOT a target.
+  // DO NOT GROW these: trim them down and lower/remove the entry. Never raise a
+  // cap, and never add a new entry to dodge the budget without explicit sign-off.
+  const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
+    ['bind-template', 2139], // do not grow
+    ['plan-dashboard-creation', 2075], // do not grow
+    ['build-and-apply-dashboard', 2042], // do not grow
+    ['validate-proposal', 2035], // do not grow
+    ['dashboard-auto-apply', 1870], // do not grow
+    ['dashboard-health-check', 1826], // do not grow
+    ['inject-template', 1445], // do not grow
+    ['build-and-apply-worksheet', 1284], // do not grow
+  ]);
+
+  const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {
+    const server = new DesktopMcpServer();
+    const table: Array<{ name: string; bytes: number }> = [];
+    for (const toolFactory of desktopToolFactories) {
+      const tool = toolFactory(server);
+      table.push({ name: tool.name, bytes: (await serializeDesktopToolSurface(tool)).length });
+    }
+    return table.sort((a, b) => b.bytes - a.bytes);
+  };
+
+  const renderTable = (table: Array<{ name: string; bytes: number }>): string => {
+    const width = Math.max(...table.map(({ bytes }) => String(bytes).length));
+    return table.map(({ name, bytes }) => `  ${String(bytes).padStart(width)}  ${name}`).join('\n');
+  };
+
+  it('every tool is within budget (grandfathered offenders must not grow)', async () => {
+    const table = await measure();
+
+    const violations: string[] = [];
+    for (const { name, bytes } of table) {
+      const cap = GRANDFATHERED.get(name);
+      if (cap !== undefined) {
+        if (bytes > cap) {
+          violations.push(
+            `${name}: ${bytes} bytes — grew past its grandfathered cap of ${cap} (shrink it; do NOT raise the cap)`,
+          );
+        }
+      } else if (bytes > PER_TOOL_BUDGET) {
+        violations.push(
+          `${name}: ${bytes} bytes — exceeds the ${PER_TOOL_BUDGET}-byte per-tool budget (trim description/schema)`,
+        );
+      }
+    }
+
+    if (violations.length > 0) {
+      throw new Error(
+        `Desktop per-tool tools/list byte budget exceeded:\n${violations.join('\n')}\n\n` +
+          `Full per-tool byte table (bytes desc):\n${renderTable(table)}`,
+      );
+    }
+  });
+
+  it('grandfather allowlist has no stale entries (keeps the ratchet honest)', async () => {
+    const table = await measure();
+    const bytesByName = new Map(table.map(({ name, bytes }) => [name, bytes]));
+
+    const stale: string[] = [];
+    for (const [name, cap] of GRANDFATHERED) {
+      const bytes = bytesByName.get(name);
+      if (bytes === undefined) {
+        stale.push(`${name}: no longer a desktop tool — remove it from GRANDFATHERED`);
+      } else if (bytes <= PER_TOOL_BUDGET) {
+        stale.push(
+          `${name}: now ${bytes} bytes (<= ${PER_TOOL_BUDGET}) — trimmed under budget, remove it from GRANDFATHERED`,
+        );
+      } else if (bytes < cap) {
+        stale.push(
+          `${name}: now ${bytes} bytes (< pinned ${cap}) — lower its cap to ratchet the win in`,
+        );
+      }
+    }
+
+    if (stale.length > 0) {
+      throw new Error(`Grandfather allowlist is stale:\n${stale.join('\n')}`);
+    }
   });
 });
 
