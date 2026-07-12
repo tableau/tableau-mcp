@@ -1,18 +1,20 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { readFileSync } from 'fs';
-import path from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { readDataAsset } from '../../../desktop/assets.js';
 import { Corpus, searchDiffCorpusFormatted } from '../../../desktop/search/diffCorpus.js';
 import { searchWorkbookExamples } from '../../../desktop/search/searchLibrary.js';
-import { DATA_ROOT, DesktopMcpServer } from '../../../server.desktop.js';
+import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 function loadCorpus(): Corpus | null {
-  const corpusPath = process.env.CORPUS_PATH || path.join(DATA_ROOT, 'corpus.json');
   try {
-    return JSON.parse(readFileSync(corpusPath, 'utf8')) as Corpus;
+    const raw = process.env.CORPUS_PATH
+      ? readFileSync(process.env.CORPUS_PATH, 'utf8')
+      : readDataAsset('corpus.json');
+    return raw ? (JSON.parse(raw) as Corpus) : null;
   } catch {
     return null;
   }
@@ -26,20 +28,9 @@ function getCorpus(): Corpus | null {
 }
 
 const paramsSchema = {
-  feature: z
-    .string()
-    .optional()
-    .describe(
-      "Feature tag for curated/indexed examples (e.g., 'sort', 'filter-categorical', 'encoding-color'). Also used as a fallback diff-corpus query when `query` is omitted.",
-    ),
-  query: z
-    .string()
-    .optional()
-    .describe('Diff-corpus query string. When source=diff-corpus, provide query or feature.'),
-  max_results: z
-    .number()
-    .optional()
-    .describe('Max diff-corpus examples when source includes diff-corpus (default 5).'),
+  feature: z.string().optional().describe('Feature tag; also fallback diff-corpus query.'),
+  query: z.string().optional().describe('Diff-corpus query string.'),
+  max_results: z.number().optional().describe('Max diff-corpus examples; default 5.'),
   source: z
     .enum(['curated', 'diff-corpus', 'both'])
     .optional()
@@ -56,7 +47,7 @@ export const getSearchWorkbookExamplesTool = (
     name: 'search-workbook-examples',
     title,
     description:
-      'Search curated examples and/or the transformation diff corpus. Default (source=curated) matches historical behavior. Use source=diff-corpus for the same corpus as search-examples, or source=both to return two sections.',
+      'Search curated workbook examples and/or the diff corpus. Default source=curated; use diff-corpus or both for XML diffs.',
     paramsSchema,
     annotations: {
       title,

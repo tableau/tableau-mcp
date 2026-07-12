@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 
-type ArtifactKind = 'workbook' | 'worksheet' | 'dashboard';
+export type ArtifactKind = 'workbook' | 'worksheet' | 'dashboard';
 
 function attr(tag: string, name: string): string | null {
   const re = new RegExp(`${name}\\s*=\\s*(['"])(.*?)\\1`, 'i');

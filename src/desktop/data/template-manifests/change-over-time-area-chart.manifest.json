@@ -22,7 +22,10 @@
   "calcs": [],
   "hazards": [
     { "code": "hidden-aggregate-role-from",
-      "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten by replaceFieldReferences; the target field inherits the template's secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding (cosmetic), so fast_path_eligible stays true.",
-      "xml": "change-over-time-area-chart.xml:11" }
+      "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten by replaceFieldReferences; the target field inherits the template's secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding (cosmetic), so this hazard does not block the fast path; fast_path_eligible is false here pending live render-verification.",
+      "xml": "change-over-time-area-chart.xml:11" },
+    { "code": "line-implies-continuity-needs-time-axis",
+      "detail": "Product evidence (product team, 2026-07) — has bitten someone: the filled area connects adjacent points along the x, so it IMPLIES CONTINUITY over a continuous date axis. The order_date slot must bind a real continuous/truncated date ([tqr:Order Date:qk] on cols); binding a DISCRETE category to the x draws bands between unrelated members that read as change-over-time where none exists. A cross-category comparison with no time axis belongs on a bar chart — keep this template for a continuous time x only.",
+      "xml": "change-over-time-area-chart.xml:32" }
   ]
 }

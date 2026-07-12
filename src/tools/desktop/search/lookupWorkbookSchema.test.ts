@@ -17,7 +17,7 @@ describe('lookupWorkbookSchemaTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getLookupWorkbookSchemaTool(new DesktopMcpServer());
     expect(tool.name).toBe('lookup-workbook-schema');
-    expect(tool.description).toContain('XSD schema');
+    expect(tool.description).toContain('TWB XSD');
     expect(tool.paramsSchema).toMatchObject({
       enumType: expect.any(Object),
       elementType: expect.any(Object),

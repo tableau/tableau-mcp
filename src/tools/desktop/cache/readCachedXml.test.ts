@@ -105,10 +105,132 @@ describe('readCachedXmlTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Permission denied');
   });
+
+  describe('slice selectors (no-dead-end read)', () => {
+    const WORKBOOK =
+      '<workbook><worksheets>' +
+      "<worksheet name='Sales'><table><rows>[Sales]</rows></table></worksheet>" +
+      "<worksheet name='Profit'><table><rows>[Profit]</rows></table></worksheet>" +
+      '</worksheets>' +
+      "<dashboards><dashboard name='Main'><zones><zone name='Sales'/></zones></dashboard></dashboards>" +
+      '</workbook>';
+
+    beforeEach(() => {
+      vi.mocked(readFileSync).mockReturnValue(WORKBOOK);
+    });
+
+    it('returns only the selected worksheet element, not the whole file', async () => {
+      const result = await getResult(CACHED_FILE, { worksheet: 'Sales' });
+
+      expect(result.isError).toBeFalsy();
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('[Sales]');
+      expect(result.content[0].text).not.toContain('[Profit]');
+    });
+
+    it('returns only the selected dashboard element', async () => {
+      const result = await getResult(CACHED_FILE, { dashboard: 'Main' });
+
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain("<zone name='Sales'/>");
+      expect(result.content[0].text).not.toContain('[Profit]');
+    });
+
+    it('returns a byte range slice', async () => {
+      const result = await getResult(CACHED_FILE, { startByte: 0, endByte: 10 });
+
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(WORKBOOK.slice(0, 10));
+    });
+
+    it('errors when the selected worksheet is absent', async () => {
+      const result = await getResult(CACHED_FILE, { worksheet: 'Nope' });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Nope');
+    });
+  });
+
+  describe('ambiguous selector rejection (Andy-lens "please")', () => {
+    beforeEach(() => {
+      vi.mocked(readFileSync).mockReturnValue(SAMPLE_XML);
+    });
+
+    it('rejects worksheet + dashboard, naming both selectors, without reading', async () => {
+      const result = await getResult(CACHED_FILE, { worksheet: 'Sales', dashboard: 'Main' });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('worksheet');
+      expect(result.content[0].text).toContain('dashboard');
+      expect(readFileSync).not.toHaveBeenCalled();
+    });
+
+    it('rejects worksheet + byte range, naming both selectors received', async () => {
+      const result = await getResult(CACHED_FILE, {
+        worksheet: 'Sales',
+        startByte: 0,
+        endByte: 10,
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('worksheet');
+      expect(result.content[0].text).toMatch(/byte/i);
+    });
+
+    it('rejects dashboard + byte range', async () => {
+      const result = await getResult(CACHED_FILE, { dashboard: 'Main', endByte: 10 });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('dashboard');
+      expect(result.content[0].text).toMatch(/byte/i);
+    });
+
+    it('leaves the single worksheet selector path unchanged', async () => {
+      vi.mocked(readFileSync).mockReturnValue(
+        '<workbook><worksheets>' +
+          "<worksheet name='Sales'><rows>[Sales]</rows></worksheet>" +
+          '</worksheets></workbook>',
+      );
+      const result = await getResult(CACHED_FILE, { worksheet: 'Sales' });
+
+      expect(result.isError).toBeFalsy();
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('[Sales]');
+    });
+
+    it('leaves the single byte-range selector path (startByte + endByte) unchanged', async () => {
+      const result = await getResult(CACHED_FILE, { startByte: 0, endByte: 5 });
+
+      expect(result.isError).toBeFalsy();
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(SAMPLE_XML.slice(0, 5));
+    });
+  });
 });
 
-async function getResult(filePath: string): Promise<CallToolResult> {
+async function getResult(
+  filePath: string,
+  selectors: {
+    worksheet?: string;
+    dashboard?: string;
+    startByte?: number;
+    endByte?: number;
+  } = {},
+): Promise<CallToolResult> {
   const tool = getReadCachedXmlTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
-  return await callback({ filePath }, getMockRequestHandlerExtra());
+  return await callback(
+    {
+      filePath,
+      worksheet: selectors.worksheet,
+      dashboard: selectors.dashboard,
+      startByte: selectors.startByte,
+      endByte: selectors.endByte,
+    },
+    getMockRequestHandlerExtra(),
+  );
 }

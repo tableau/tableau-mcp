@@ -6,20 +6,21 @@ import {
   ServerNotification,
   ServerRequest,
 } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync } from 'fs';
-import { join } from 'path';
 
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
+import { DATA_ROOT, readResourceAsset, RESOURCES_ROOT } from './desktop/assets.js';
 import { listKnowledgeResources, readKnowledgeResource } from './desktop/knowledge/index.js';
+import { buildDesktopInstructions } from './desktop/routeTable.js';
 import { SessionManager } from './desktop/sessionManager.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
+import { getCheckForUserChangesTool } from './tools/desktop/session/checkForUserChanges.js';
+import { getListInstancesTool } from './tools/desktop/session/listInstances.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { DesktopToolName } from './tools/desktop/toolName.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
-import { getDirname } from './utils/getDirname';
 import { Provider } from './utils/provider.js';
 
 const serverName = 'tableau-desktop-mcp';
@@ -75,36 +76,27 @@ export function selectToolsForProfile<T extends { name: DesktopToolName }>(
   return tools;
 }
 
-const DATA_ROOTS = [
-  join(getDirname(), 'desktop', 'data'),
-  join(getDirname(), '..', 'src', 'desktop', 'data'),
-];
-const RESOURCE_ROOTS = [
-  join(getDirname(), 'resources', 'desktop'),
-  join(getDirname(), '..', 'resources', 'desktop'),
-];
-
-export const DATA_ROOT = DATA_ROOTS.find(existsSync) ?? DATA_ROOTS[0];
-export const RESOURCES_ROOT = RESOURCE_ROOTS.find(existsSync) ?? RESOURCE_ROOTS[0];
+export { DATA_ROOT, RESOURCES_ROOT };
 
 // Routing guidance every connecting client receives at initialize (W60 adoption P5 —
 // the demo build previously shipped NO instructions, so skill-less clients got zero
-// routing and the template fast path stayed dark in real sessions).
-const DESKTOP_INSTRUCTIONS = `You are controlling Tableau Desktop.
-
-For a plain chart ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot), FIRST call bind-template with the user's ask and auto_apply: true — a confident bind renders the chart in ONE call (~2s server-side, no further tool calls). On propose/escalate, fall back to the general authoring tools (get-workbook-xml -> edit -> apply-workbook, or inject-template for a known template).
-
-For a dashboard ask with 2-6 charts (e.g. "a dashboard with sales by region and profit by category"), FIRST call dashboard-auto-apply with one { ask, title? } per chart and a dashboardName — it binds and composes every chart into one dashboard in ONE call. If any ask fails to deterministically bind, nothing is applied and each ask's outcome is returned; fall back to bind-template per chart, or build-and-apply-dashboard for KPI strips / custom zone layouts.
-
-Every session-scoped tool call needs the session id from list-instances — except bind-template and dashboard-auto-apply, which auto-resolve the session when exactly one Desktop instance is running.
-
-If an apply is rejected by preflight validation, fix the XML per the FIX lines in the error and re-apply. Prefer file mode for large workbooks.`;
+// routing and the template fast path stayed dark in real sessions). Generated from the
+// typed route table so route edits are pinned by tests instead of drifting as prose.
+export const DESKTOP_INSTRUCTIONS = buildDesktopInstructions({ sessionPinned: false });
 
 export class DesktopMcpServer extends Server {
   private readonly sessionManager = new SessionManager();
 
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
-    super({ mcpServer, clientInfo, serverName, serverVersion, instructions: DESKTOP_INSTRUCTIONS });
+    super({
+      mcpServer,
+      clientInfo,
+      serverName,
+      serverVersion,
+      instructions: buildDesktopInstructions({
+        sessionPinned: getDesktopConfig().desktopSessionId !== undefined,
+      }),
+    });
   }
 
   registerResources = async (): Promise<void> => {
@@ -114,6 +106,15 @@ export class DesktopMcpServer extends Server {
 
   registerTools = async (): Promise<void> => {
     const config = getDesktopConfig();
+
+    log({
+      message: config.externalApiEnabled
+        ? 'Desktop transport ACTIVE: External Client API (Athena V0) — TABLEAU_EXTERNAL_API enabled'
+        : 'Desktop transport ACTIVE: Agent API (default)',
+      level: 'info',
+      logger: 'DesktopMcpServer',
+      data: { externalApiEnabled: config.externalApiEnabled },
+    });
 
     for (const {
       name,
@@ -154,8 +155,25 @@ export class DesktopMcpServer extends Server {
   };
 
   protected _getToolsToRegister = async (): Promise<Array<DesktopTool<any>>> => {
-    const allTools = desktopToolFactories.map((toolFactory) => toolFactory(this));
-    return selectToolsForProfile(allTools, getDesktopConfig().toolProfile);
+    const config = getDesktopConfig();
+    const excluded = new Set<(server: DesktopMcpServer) => DesktopTool<any>>();
+
+    // check-for-user-changes needs the events endpoint, which the External Client API does not
+    // expose; don't advertise a tool that can only return an error on that transport.
+    if (config.externalApiEnabled) {
+      excluded.add(getCheckForUserChangesTool);
+    }
+
+    // When the launching Desktop pinned a session, every tool defaults to it, so
+    // list-instances has nothing to add — dropping it keeps the agent from ever
+    // spending a turn discovering which instance to control.
+    if (config.desktopSessionId !== undefined) {
+      excluded.add(getListInstancesTool);
+    }
+
+    const factories = desktopToolFactories.filter((factory) => !excluded.has(factory));
+    const allTools = factories.map((toolFactory) => toolFactory(this));
+    return selectToolsForProfile(allTools, config.toolProfile);
   };
 
   private _registerKnowledgeResources = (): void => {
@@ -193,12 +211,19 @@ export class DesktopMcpServer extends Server {
   };
 
   private _registerDashboardXmlGuide = async (): Promise<void> => {
+    const text = readResourceAsset('dashboard-xml-guide.md');
+    if (text === null) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        'Dashboard XML guide asset not found: dashboard-xml-guide.md',
+      );
+    }
     this.registerResource({
       name: 'dashboard-xml-guide',
       uri: 'tableau://docs/dashboard-xml-guide',
       title: 'Dashboard XML manipulation guide',
       description: 'Zone positioning, layouts, best practices for dashboard XML editing',
-      path: join(RESOURCES_ROOT, 'dashboard-xml-guide.md'),
+      text,
       mimeType: 'text/markdown',
     });
   };

@@ -16,6 +16,7 @@ import {
   bundledIntelligenceProvider,
   type ProviderStatus,
 } from '../../../desktop/intelligence/provider.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
@@ -32,23 +33,21 @@ import { proposalSchema } from './proposalSchema.js';
 // manifest.template == filename, and listTemplateManifests() is [...loadManifests().values()]).
 
 const paramsSchema = {
-  session: z.string().describe('Tableau instance Session ID from list-instances.'),
-  ask: z.string().describe("Natural-language chart request, e.g. 'bar chart of Sales by Region'."),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+  ask: z.string().describe('Natural-language chart request.'),
   // WATCH-CLASS (required): bind-template makes `proposal` OPTIONAL (Call-1 classify vs
   // Call-2 validate). validate-proposal has one job — validate a filled proposal — so the
   // proposal is REQUIRED. Left optional, an omitted proposal would drive bindTemplate down
   // the Call-1 classify path and silently return a propose payload instead of a validation
   // (fail-open). Requiring it at the schema fails closed. The proposal shape itself is the
   // SHARED proposalSchema (confidence required, title <= 80, derivation closed enum).
-  proposal: proposalSchema.describe(
-    'The filled binding proposal to validate (must match propose-template / bind-template output_schema).',
-  ),
+  proposal: proposalSchema.describe('Filled binding proposal to validate.'),
   minConfidence: z
     .number()
     .min(0)
     .max(1)
     .optional()
-    .describe('Confidence floor for the proposal (default 0.6). Below this, validation fails.'),
+    .describe('Proposal confidence floor; default 0.6.'),
 };
 
 /** Result of a validate-proposal call: a dry-run verdict, never an applied change. */
@@ -86,11 +85,9 @@ export const getValidateProposalTool = (
     name: 'validate-proposal',
     title,
     description: [
-      "Validate a filled binding proposal against the live workbook through the binder's deterministic gate WITHOUT creating or applying a worksheet — a dry run of bind-template's Call-2 validate leg.",
-      'Reads the live workbook XML for the session, loads the bundled template manifests, and runs the same gate bind-template uses: template exists + is fast-path eligible, slot coverage, field resolution, kind/role compatibility, derivation legality, base-column + single-datasource closure, calc-dependency closure, and the confidence floor.',
-      'Returns valid:true with the inject args it WOULD produce (nothing is applied), or valid:false with the escalation reason and structured blockers naming the exact slot(s) to fix.',
-      'Use this to check a proposal (e.g. one built from propose-template output_schema) before committing; when valid, call bind-template with the same { session, ask, proposal } to actually bind and get the apply instruction.',
-      'content_status carries the content source freshness: "bundled-snapshot" with satisfies_exec_freshness=false — an in-package snapshot, not a live remote fetch.',
+      "Dry-run a filled binding proposal through bind-template's deterministic Call-2 gate WITHOUT creating or applying a worksheet.",
+      'Returns valid:true with would-be inject args, or valid:false with reason/blockers. When valid, call bind-template with the same proposal.',
+      'content_status reports content freshness (bundled snapshot, not a live fetch). Details: expertise://tableau/tactics/workflow/templates.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -105,7 +102,12 @@ export const getValidateProposalTool = (
         extra,
         args: { session, ask, proposal, minConfidence },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });
           if (xmlResult.isErr()) {
             return new DesktopCommandExecutionError(xmlResult.error).toErr();

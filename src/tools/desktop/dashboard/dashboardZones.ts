@@ -15,14 +15,11 @@ export const customZoneSchema = z.object({
 });
 
 export const layoutSpecSchema = z.object({
-  kpis: z.array(z.string()).describe('Worksheet names for KPI strip'),
-  charts: z.array(z.string()).describe('Worksheet names for chart grid'),
+  kpis: z.array(z.string()).describe('KPI worksheet names'),
+  charts: z.array(z.string()).describe('Chart worksheet names'),
   layoutType: z.enum(['auto-grid', 'rows', 'columns', 'custom']).optional().default('auto-grid'),
-  gridColumns: z.number().optional().describe('Number of columns for auto-grid layout'),
-  kpiStripHeight: z
-    .number()
-    .optional()
-    .describe('KPI strip height as a percentage of total height (0-100)'),
+  gridColumns: z.number().optional().describe('Auto-grid column count'),
+  kpiStripHeight: z.number().optional().describe('KPI strip height percent'),
   customZones: z.array(customZoneSchema).optional(),
 });
 

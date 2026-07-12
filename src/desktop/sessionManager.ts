@@ -1,8 +1,11 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
+import { getDesktopConfig } from '../config.desktop.js';
 import { log } from '../logging/logger.js';
 import { DesktopDiscoverer } from './desktopDiscoverer.js';
 import { DesktopInstance } from './desktopInstance.js';
+import { discoverInstances } from './externalApi/discovery.js';
+import { ExternalApiToolExecutor } from './externalApi/externalApiToolExecutor.js';
 import { LocalExecutor } from './toolExecutor/localToolExecutor.js';
 import { ToolExecutor } from './toolExecutor/toolExecutor.js';
 
@@ -10,7 +13,7 @@ export type DesktopConnection = {
   sessionId: string;
   executor: ToolExecutor;
   lastAccess: number;
-  desktopInstance: DesktopInstance;
+  desktopInstance?: DesktopInstance;
 };
 
 export class SessionManager {
@@ -26,13 +29,27 @@ export class SessionManager {
       }
 
       const pid = sessionIdResult.value;
-      const desktopDiscoverer = new DesktopDiscoverer();
-      const desktopInstance = desktopDiscoverer.getInstance(pid);
-      const executor = new LocalExecutor({
-        agentApiBase: `http://127.0.0.1:${desktopInstance.port}/api/v1`,
-        authToken: desktopInstance.secret,
-      });
-      await executor.start();
+      const config = getDesktopConfig();
+
+      let executor: ToolExecutor;
+      let desktopInstance: DesktopInstance | undefined;
+
+      if (config.externalApiEnabled) {
+        // External Client API (Athena V0) transport — flag-gated; default is unchanged.
+        executor = new ExternalApiToolExecutor({
+          pid,
+          discover: () => discoverInstances({ discoveryDir: config.externalApiDiscoveryDir }),
+        });
+        await executor.start();
+      } else {
+        const desktopDiscoverer = new DesktopDiscoverer();
+        desktopInstance = desktopDiscoverer.getInstance(pid);
+        executor = new LocalExecutor({
+          agentApiBase: `http://127.0.0.1:${desktopInstance.port}/api/v1`,
+          authToken: desktopInstance.secret,
+        });
+        await executor.start();
+      }
 
       session = {
         sessionId,
@@ -48,8 +65,9 @@ export class SessionManager {
         logger: 'SessionManager',
         data: {
           sessionId,
-          pid: desktopInstance.pid,
-          port: desktopInstance.port,
+          pid,
+          port: desktopInstance?.port,
+          transport: config.externalApiEnabled ? 'external-client-api' : 'agent-api',
         },
       });
     }

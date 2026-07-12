@@ -35,6 +35,7 @@ import {
   summarizeSchema,
 } from '../../../desktop/binder/schema-summary.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
@@ -42,22 +43,18 @@ import { DesktopTool } from '../tool.js';
 // ── Binding manifest (input) ─────────────────────────────────────────────────
 
 const boundSheetSchema = z.object({
-  title: z.string().describe('Worksheet title, matching the dashboard <zone name>.'),
-  templateName: z.string().describe('template_name from the bind that produced this sheet.'),
-  fieldMapping: z
-    .record(z.string())
-    .describe('slot -> column_ref (e.g. "[Superstore].[sum:Sales:qk]") from the bind.'),
-  schemaHash: z
-    .string()
-    .describe('sha256 of the stable-stringified SchemaSummary at bind time (memo.ts primitive).'),
-  primaryDatasource: z.string().describe('SchemaSummary.datasource at bind time.'),
+  title: z.string().describe('Worksheet title.'),
+  templateName: z.string().describe('Bound template name.'),
+  fieldMapping: z.record(z.string()).describe('slot -> column_ref.'),
+  schemaHash: z.string().describe('Bind-time schema hash.'),
+  primaryDatasource: z.string().describe('Bind-time datasource.'),
 });
 
 const bindingRecordSchema = z.object({
-  dashboardName: z.string().describe('Dashboard the bound sheets belong to.'),
-  sheets: z.array(boundSheetSchema).describe('One entry per bound worksheet in the dashboard.'),
-  workbookHashAtBind: z.string().describe('sha256 of the raw workbook XML at bind time.'),
-  recordedAt: z.string().describe('ISO timestamp of when the bind happened.'),
+  dashboardName: z.string().describe('Dashboard name.'),
+  sheets: z.array(boundSheetSchema).describe('Bound worksheets.'),
+  workbookHashAtBind: z.string().describe('Bind-time workbook hash.'),
+  recordedAt: z.string().describe('Bind timestamp.'),
 });
 
 export type DashboardBoundSheet = z.infer<typeof boundSheetSchema>;
@@ -384,11 +381,8 @@ export function runDashboardHealthCheck({
 // ── Tool registration ────────────────────────────────────────────────────────
 
 const paramsSchema = {
-  session: z.string().describe('Tableau instance Session ID from list-instances.'),
-  manifest: bindingRecordSchema.describe(
-    'Binding manifest captured from a prior bind (caller-held state): what the bind believed ' +
-      'to be true at apply time. Pass back the sheets/hashes recorded when the dashboard was built.',
-  ),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+  manifest: bindingRecordSchema.describe('Binding manifest from a prior bind.'),
 };
 
 const title = 'Dashboard Health Check (Flag-Only)';
@@ -401,11 +395,8 @@ export const getDashboardHealthCheckTool = (
     title,
     description: [
       'READ-ONLY drift detector for a previously-bound dashboard.',
-      'Diffs a caller-held binding manifest against the current workbook XML and flags drift:',
-      'D1 renamed referenced worksheet, D2 deleted worksheet, D3 removed field, D4 retyped field,',
-      'D7 orphan zone, D10 primary-datasource change.',
-      'Flag-only: it never repairs anything — wouldBeRepair is prose, not an action.',
-      'Live render breakage (D9) is undetectable from XML and disclosed in every report.',
+      'Flags renamed/deleted sheets, changed fields, orphan zones, and datasource changes.',
+      'Flag-only: never repairs. D9 live render breakage is undetectable from XML and disclosed in reports. Details: expertise://tableau/tactics/workflow/recovery.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -420,7 +411,12 @@ export const getDashboardHealthCheckTool = (
         extra,
         args: { session, manifest },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });
           if (xmlResult.isErr()) {
             return new DesktopCommandExecutionError(xmlResult.error).toErr();

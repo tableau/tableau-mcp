@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import {
-  DERIVATION_OVERRIDE_INSTRUCTION,
   DERIVATION_SHORT_FORMS,
   TITLE_CONTROL_CHAR_MESSAGE,
   TITLE_CONTROL_CHAR_RE,
@@ -26,26 +25,18 @@ import {
 // closed instead of being quietly accepted with the extra dropped.
 export const bindingSchema = z
   .object({
-    slot_id: z
-      .string()
-      .describe(
-        "A slot_id from the chosen template's bindable slots (see llm_input.candidate_templates).",
-      ),
-    field: z
-      .string()
-      .describe('The exact field NAME (from llm_input.fields) to bind to this slot.'),
+    slot_id: z.string().describe('Template slot id.'),
+    field: z.string().describe('Exact field name.'),
     derivation: z
       .enum(DERIVATION_SHORT_FORMS)
       .optional()
-      .describe(
-        `Optional per-slot aggregation/date-grain override (canonical short form). ${DERIVATION_OVERRIDE_INSTRUCTION}.`,
-      ),
+      .describe('Optional aggregation/date-grain override.'),
   })
   .strict();
 
 export const proposalSchema = z
   .object({
-    template: z.string().describe('The chosen template name (from llm_input.candidate_templates).'),
+    template: z.string().describe('Chosen template name.'),
     // WATCH-CLASS (length): the library copies proposal.title VERBATIM on the validate path
     // (validateAndBuild -> InjectTemplateArgs.title, escaped-only) with NO truncation — only
     // the no-LLM Call-1 title is capped (makeTitle). The library's own declared contract
@@ -59,14 +50,12 @@ export const proposalSchema = z
       .string()
       .max(80)
       .refine((t) => !TITLE_CONTROL_CHAR_RE.test(t), { message: TITLE_CONTROL_CHAR_MESSAGE })
-      .describe('Worksheet title (<= 80 chars, no control characters).'),
-    bindings: z
-      .array(bindingSchema)
-      .describe('One entry per bindable slot: slot_id -> field name.'),
+      .describe('Worksheet title.'),
+    bindings: z.array(bindingSchema).describe('Slot bindings.'),
     // WATCH-CLASS (required): required, matching PROPOSAL_OUTPUT_SCHEMA. The binder's floor
     // check SKIPS an undefined confidence, so an optional field here would let a proposal
     // bypass the low-confidence escalation entirely (fail-open). The source implementation's own tool schema left
     // this optional; the repo hardens it to required.
-    confidence: z.number().min(0).max(1).describe('0..1 self-rated confidence.'),
+    confidence: z.number().min(0).max(1).describe('Confidence 0..1.'),
   })
   .strict();

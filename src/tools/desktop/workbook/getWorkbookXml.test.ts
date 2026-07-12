@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -33,7 +34,7 @@ describe('getWorkbookXmlTool', () => {
   it('should create a tool instance with correct properties', () => {
     const getWorkbookXmlTool = getGetWorkbookXmlTool(new DesktopMcpServer());
     expect(getWorkbookXmlTool.name).toBe('get-workbook-xml');
-    expect(getWorkbookXmlTool.description).toContain('Gets the current workbook');
+    expect(getWorkbookXmlTool.description).toContain('Get current workbook XML');
     expect(getWorkbookXmlTool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       mode: expect.any(Object),
@@ -126,7 +127,7 @@ describe('getWorkbookXmlTool', () => {
     );
   });
 
-  it('should handle large workbook XML correctly', async () => {
+  it('should return under-cap XML inline byte-identically', async () => {
     const largeXml = '<?xml version="1.0"?><workbook>' + 'x'.repeat(10000) + '</workbook>';
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(largeXml));
 
@@ -144,6 +145,68 @@ describe('getWorkbookXmlTool', () => {
     const resultObj = inlineResultSchema.parse(JSON.parse(result.content[0].text));
     expect(resultObj.workbookXml).toBe(largeXml);
   });
+
+  it('forces file mode when inline XML exceeds the cap, regardless of requested mode', async () => {
+    const overCapXml =
+      '<workbook><worksheets><worksheet name="Sales"/></worksheets>' +
+      '<datasources><datasource caption="Superstore" name="ds1"/></datasources>' +
+      'x'.repeat(20000) +
+      '</workbook>';
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(overCapXml));
+
+    const result = await getToolResult({
+      session: '12345',
+      mode: 'inline',
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+
+    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    // File mode: a path, no inline XML, and a summary + how-to.
+    expect(parsed.workbookXml).toBeUndefined();
+    const resultObj = fileResultSchema.parse(parsed);
+    expect(resultObj.file).toContain('workbook');
+    expect(resultObj.message).toContain('inline cap');
+    expect(resultObj.message).toContain('Sales');
+    expect(resultObj.message).toContain('Superstore');
+    expect(resultObj.instructions).toContain('read-cached-xml');
+  });
+
+  it('logs a cap-hit receipt when the cap fires', async () => {
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
+    const overCapXml = '<workbook>' + 'x'.repeat(20000) + '</workbook>';
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(overCapXml));
+
+    await getToolResult({ session: '12345', mode: 'inline', mockExecutor: vi.fn() });
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warning',
+        data: expect.objectContaining({ capHit: true, tool: 'get-workbook-xml' }),
+      }),
+    );
+  });
+
+  it('respects a smaller cap overridden via config', async () => {
+    const smallXml = '<workbook><worksheet name="A"/></workbook>';
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(smallXml));
+
+    const result = await getToolResult({
+      session: '12345',
+      mode: 'inline',
+      mockExecutor: vi.fn().mockResolvedValue({}),
+      capBytes: 8,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+
+    const parsed = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(parsed.workbookXml).toBeUndefined();
+    expect(parsed.file).toBeDefined();
+  });
 });
 
 async function getToolResult({
@@ -151,19 +214,23 @@ async function getToolResult({
   mode,
   mockExecutor,
   customSignal,
+  capBytes,
 }: {
   session: string;
   mode: 'file' | 'inline';
   mockExecutor: TableauDesktopToolContext['getExecutor'];
   customSignal?: AbortSignal;
+  capBytes?: number;
 }): Promise<CallToolResult> {
   const getWorkbookXmlTool = getGetWorkbookXmlTool(new DesktopMcpServer());
   const callback = await Provider.from(getWorkbookXmlTool.callback);
 
+  const base = getMockRequestHandlerExtra();
   const extra = {
-    ...getMockRequestHandlerExtra(),
+    ...base,
     getExecutor: mockExecutor,
     ...(customSignal && { signal: customSignal }),
+    ...(capBytes !== undefined && { config: { ...base.config, inlineXmlMaxBytes: capBytes } }),
   };
 
   return await callback({ session, mode }, extra);

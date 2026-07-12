@@ -7,6 +7,7 @@ import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXm
 import { injectViewpoints } from '../../../desktop/commands/workbook/injectViewpoints.js';
 import { loadDashboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
@@ -18,22 +19,13 @@ import { DesktopTool } from '../tool.js';
 import { buildDashboardXml, computeZones, layoutSpecSchema } from './dashboardZones.js';
 
 const paramsSchema = {
-  session: z.string().describe('Tableau instance Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   dashboardName: z.string().describe('Name of the dashboard to build and apply.'),
-  dashboardFile: z
-    .string()
-    .describe('Path to the cached empty dashboard XML (obtained from get-dashboard-xml).'),
-  workbookFile: z
-    .string()
-    .describe('Path to the cached workbook XML (obtained from get-workbook-xml).'),
-  title: z
-    .string()
-    .optional()
-    .describe('Optional title text to display at the top of the dashboard.'),
-  layoutSpec: layoutSpecSchema.describe('Layout specification for KPI strip and chart grid.'),
-  worksheetNames: z
-    .array(z.string())
-    .describe('All worksheet names to register as viewpoints in the dashboard window.'),
+  dashboardFile: z.string().describe('Cached dashboard XML file.'),
+  workbookFile: z.string().describe('Cached workbook XML file.'),
+  title: z.string().optional().describe('Optional dashboard title.'),
+  layoutSpec: layoutSpecSchema.describe('KPI/chart layout specification.'),
+  worksheetNames: z.array(z.string()).describe('Worksheet viewpoints to register.'),
 };
 
 const title = 'Build and Apply Dashboard';
@@ -45,9 +37,8 @@ export const getBuildAndApplyDashboardTool = (
     name: 'build-and-apply-dashboard',
     title,
     description: [
-      'Build dashboard layout XML from a layout spec and immediately apply it to Tableau.',
-      'Constructs zones for a KPI strip and chart grid, registers viewpoints, then applies both the workbook and dashboard in one call.',
-      'Designed for parallel execution alongside worksheet builders.',
+      'Build dashboard layout XML from a layout spec and APPLY it to the live workbook; registers viewpoints. Use with worksheet builders.',
+      'Details: expertise://tableau/tactics/dashboard/zones.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -89,7 +80,12 @@ export const getBuildAndApplyDashboardTool = (
           // both this tool and dashboard-auto-apply share one builder. Zero behavior change.
           const zones = computeZones(titleText, layoutSpec);
           const dashboardXml = buildDashboardXml(dashboardName, zones);
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
 
           // Fetch workbook, inject viewpoints, apply workbook
           const workbookResult = await getWorkbookXml({ executor, signal: extra.signal });

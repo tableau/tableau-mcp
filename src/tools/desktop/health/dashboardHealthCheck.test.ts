@@ -237,6 +237,7 @@ describe('dashboardHealthCheck read-only proof (import audit)', () => {
       '../../../desktop/binder/memo.js',
       '../../../desktop/binder/schema-summary.js',
       '../../../desktop/commands/workbook/getWorkbookXml.js',
+      '../../../desktop/sessionResolution.js',
       '../../../errors/mcpToolError.js',
       '../../../server.desktop.js',
       '../tool.js',

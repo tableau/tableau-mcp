@@ -55,7 +55,7 @@ describe('binder/manifest-validation — pure module surface', () => {
 describe('binder/manifest-validation — superset is backward-compatible with the bundled manifests', () => {
   const bundled = readBundledManifestFiles();
 
-  it('there are 41 bundled manifests to check', () => {
+  it('there are 44 bundled manifests to check', () => {
     // W26-B re-snapshot: the shipped supply was resynced to the factory's full 39-template
     // set (17 → 39; +22 new manifests copied verbatim, trust fields unchanged).
     // W28-D true byte-for-byte mirror: the remaining stale factory manifests were resynced
@@ -64,9 +64,14 @@ describe('binder/manifest-validation — superset is backward-compatible with th
     // W59 template-sync: the seven missing fast-path XMLs ported from the factory with
     // manifests copied verbatim (six overwrote stale copies; ww-ou-arrow's manifest was
     // net-new), taking the count 40 → 41.
+    // parity-port: the factory's spatial-symbol-map-latlon (render_verified 'none',
+    // fast_path_eligible false) was the last missing template manifest; its XML + manifest
+    // were ported verbatim, taking the count 41 → 42.
+    // classifier-lockstep-port: the a2td parity sync added deviation-arrow + magnitude-simple-bar
+    // (both render_verified 'none' → fast_path_eligible false) verbatim, taking 42 → 44.
     // Pinned in lockstep with the on-disk count so a silent add/drop of a bundled manifest
     // fails here.
-    expect(bundled.length).toBe(41);
+    expect(bundled.length).toBe(44);
   });
 
   it('every bundled manifest validates through the new types’ validator (no errors)', () => {

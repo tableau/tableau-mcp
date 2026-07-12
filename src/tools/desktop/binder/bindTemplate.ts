@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'crypto';
-import { readFileSync } from 'fs';
-import { Err, Ok, Result } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
@@ -14,22 +13,19 @@ import {
   type EscalateReason,
 } from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
+import { classifyAskRoute, normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import {
   loadWorkbookXml,
   type LoadWorkbookXmlError,
 } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
-import { DesktopDiscoverer } from '../../../desktop/desktopDiscoverer.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
+import { sessionRouteState } from '../../../desktop/route/route-state.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
-import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
+import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { ExecuteCommandError, ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  type McpToolError,
-  NoDesktopInstancesFoundError,
-} from '../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { DesktopTool } from '../tool.js';
@@ -44,26 +40,22 @@ const paramsSchema = {
   session: z
     .string()
     .optional()
-    .describe(
-      'Tableau instance Session ID from list-instances. Optional: when omitted and exactly one Desktop instance is running, it is resolved automatically; with 0 or 2+ instances the tool fails closed and lists the instances.',
-    ),
-  ask: z.string().describe("Natural-language chart request, e.g. 'bar chart of Sales by Region'."),
+    .describe('Session ID. Optional only when exactly one Desktop instance is running.'),
+  ask: z.string().describe('Natural-language chart request.'),
   proposal: proposalSchema
     .optional()
-    .describe(
-      "Call 2 only: the binding proposal you produced from a Call-1 'propose' payload (must match its output_schema).",
-    ),
+    .describe("Call 2 only: filled proposal from a Call-1 'propose' payload."),
   minConfidence: z
     .number()
     .min(0)
     .max(1)
     .optional()
-    .describe('Confidence floor for a proposal (default 0.6). Below this, the binder escalates.'),
+    .describe('Proposal confidence floor; default 0.6.'),
   auto_apply: z
     .boolean()
     .optional()
     .describe(
-      'When true AND this is a deterministic Call-1 bind (no proposal) of a fast-path-eligible template, apply the bound template server-side (get workbook XML → inject → validated apply) and return { applied, sheet_name, phase_ms }. On any inject/apply failure the bound args are returned intact with { applied:false, apply_error } so you can fall back to the manual inject/apply chain. Never auto-applies a Call-2 proposal. Default false (read-only).',
+      'When true, deterministic Call-1 binds apply server-side. Never auto-applies Call-2 proposals. Default false/read-only.',
     ),
 };
 
@@ -173,40 +165,6 @@ function buildGuidance(res: BinderResult): string {
   }
 }
 
-/**
- * Session-default-when-unique (bind-template only): with an explicit `session` the
- * caller always wins; with none, resolve automatically ONLY when exactly one Desktop
- * instance is running. 0 or 2+ instances fail closed with an instance-listing error
- * so the caller must pick one — this deletes the list-instances turn from the common
- * single-Desktop case without ever guessing between multiple instances.
- *
- * Exported for reuse by dashboard-auto-apply (W60), which needs the identical
- * fail-closed session resolution — no reason for a second implementation.
- */
-export function resolveSession(session: string | undefined): Result<string, McpToolError> {
-  if (session !== undefined) {
-    return Ok(session);
-  }
-
-  const instances = new DesktopDiscoverer().getInstances();
-  if (instances.size === 0) {
-    return Err(new NoDesktopInstancesFoundError());
-  }
-  if (instances.size > 1) {
-    const ids = Array.from(instances.values())
-      .map((i) => i.pid)
-      .join(', ');
-    return Err(
-      new ArgsValidationError(
-        `Multiple Tableau Desktop instances are running (session IDs: ${ids}). Specify which one to use via the 'session' parameter (see list-instances for details).`,
-      ),
-    );
-  }
-
-  const [only] = Array.from(instances.values());
-  return Ok(String(only.pid));
-}
-
 /** Human-readable detail for a loadWorkbookXml failure, used in the apply-error text. */
 function describeApplyError(
   error:
@@ -217,6 +175,9 @@ function describeApplyError(
     const inner = error.error;
     if (inner.type === 'validation-failed') {
       return `preflight validation failed: ${inner.issues.map((i) => i.message).join('; ')}`;
+    }
+    if (inner.type === 'load-rejected') {
+      return `Tableau rejected the load: ${inner.message}`;
     }
     return 'invalid workbook XML';
   }
@@ -305,7 +266,11 @@ async function performAutoApply({
   const injectStart = Date.now();
   let injected: ReturnType<typeof buildInjectedWorkbookXml>;
   try {
-    const templateXml = readFileSync(getTemplatePath(args.template_name), 'utf-8');
+    // SEA-aware template read (#433 seam): embedded asset in a SEA binary, disk otherwise.
+    const templateXml = readTemplate(args.template_name);
+    if (!templateXml) {
+      throw new Error(`template "${args.template_name}" not found in template assets`);
+    }
     // Per-apply calc-namespacing identity: session + apply timestamp (randomUUID
     // guards same-millisecond applies), mirroring the inject-template tool's nonce.
     const applyNonce = `${session}:${Date.now()}:${randomUUID()}`;
@@ -354,11 +319,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     name: 'bind-template',
     title,
     description: [
-      'Deterministically bind a checked-in chart template to a natural-language ask and return validated inject args — a fast one-shot alternative to authoring a worksheet from scratch.',
-      'Reads the live workbook XML for the given session, loads the bundled template manifests, and runs the two-call binder (this server is model-free — it never calls a small model):',
-      "Call 1 { session, ask }: no-LLM keyword classification + role-greedy field binding. Returns status 'bound' with inject args, or status 'propose' with an llm_input (candidate templates + fields) and a strict output_schema for YOU to fill.",
-      "Call 2 { session, ask, proposal }: validates your proposal through the deterministic gate and returns status 'bound' or status 'escalate' with actionable guidance.",
-      "'bound' returns the args and an apply_instruction; 'propose' and 'escalate' are normal outcomes (not tool errors) carrying next-step guidance.",
+      'Bind a checked-in chart template to an ask and return validated inject args. Model-free.',
+      "Call 1 returns 'bound' or 'propose'; Call 2 returns 'bound' or 'escalate'.",
+      'auto_apply:true renders deterministic Call-1 binds in one call. Details: expertise://tableau/tactics/workflow/templates.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -428,13 +391,53 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               .listTemplateManifests()
               .map((m): [string, TemplateManifest] => [m.template, m]),
           );
-          const res = await bindTemplate({
-            ask,
-            workbookXml: xmlResult.value,
-            manifests,
-            ...(proposal ? { proposal: proposal as BindingProposal } : {}),
-            ...(minConfidence !== undefined ? { minConfidence } : {}),
-          });
+          // Route-state recording is OBSERVATIONAL — a route-layer fault must never break a
+          // bind (fail-open, the gate's own discipline): a swallowed classification simply
+          // leaves the ask unrecorded and the gate later fail-opens on absent state.
+          const askKey = normalizeAskForMatch(ask);
+          try {
+            const routeDecision = classifyAskRoute(ask, [...manifests.values()]);
+            sessionRouteState.recordAskClassification(resolvedSession, {
+              ask: askKey,
+              route: routeDecision.route,
+              shape: routeDecision.shape,
+              template: routeDecision.template,
+            });
+          } catch {
+            // A classification fault on a NEW ask also invalidates whatever ask was
+            // pending — leaving it would hand the gate a stale "no bind attempt yet"
+            // record for a different ask (cross-ask leak).
+            try {
+              sessionRouteState.clearCurrentAsk(resolvedSession);
+            } catch {
+              /* fail-open */
+            }
+          }
+          let res;
+          try {
+            res = await bindTemplate({
+              ask,
+              workbookXml: xmlResult.value,
+              manifests,
+              ...(proposal ? { proposal: proposal as BindingProposal } : {}),
+              ...(minConfidence !== undefined ? { minConfidence } : {}),
+            });
+          } catch (e) {
+            // A THROWN bind has no recordable outcome; clear the pending record (only if
+            // it is still this ask's) so the gate can never read "no bind attempt yet"
+            // for an ask whose bind WAS attempted. The error path itself is unchanged.
+            try {
+              sessionRouteState.clearCurrentAsk(resolvedSession, askKey);
+            } catch {
+              /* fail-open */
+            }
+            throw e;
+          }
+          try {
+            sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
+          } catch {
+            /* fail-open */
+          }
           const bindMs = Date.now() - bindStart;
 
           const base: BindTemplateToolResultBase = { ...res, guidance: buildGuidance(res) };

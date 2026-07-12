@@ -112,3 +112,49 @@ export function listSheets(workbookXml: string): string[] {
   const worksheets = normalizeArray(workbook.workbook?.worksheets?.worksheet);
   return worksheets.map((ws) => ws['@_name']).filter((name): name is string => !!name);
 }
+
+// Returns a standalone `<worksheet>` fragment (not a whole workbook), or null if absent.
+export function extractSheetXml(workbookXml: string, sheetName: string): string | null {
+  const workbook = parseXML(workbookXml);
+  const worksheet = findWorksheet(workbook, sheetName);
+  if (!worksheet) {
+    return null;
+  }
+  return serializeXML({ worksheet });
+}
+
+// Builds a whole-workbook document carrying only the one edited worksheet (and its window).
+// The workbook POST upserts by name: it overwrites the colliding live sheet and, because the
+// doc carries no other sheets, leaves the rest of the live workbook untouched.
+export function buildMinimalSheetDoc(
+  workbookXml: string,
+  sheetName: string,
+  editedWorksheetXml: string,
+): string {
+  const workbook = parseXML(workbookXml);
+  const editedParsed = parseXML(editedWorksheetXml);
+  const editedWorksheet = normalizeArray(editedParsed.worksheet as ParsedWorksheet | undefined)[0];
+  if (!editedWorksheet || editedWorksheet['@_name'] !== sheetName) {
+    throw new Error(`Edited XML does not contain a <worksheet name="${sheetName}">`);
+  }
+
+  if (workbook.workbook?.worksheets) {
+    workbook.workbook.worksheets.worksheet = editedWorksheet;
+  }
+
+  if (workbook.workbook?.windows) {
+    const windows = normalizeArray(workbook.workbook.windows.window);
+    const targetWindow = windows.find(
+      (win) => win['@_class'] === 'worksheet' && win['@_name'] === sheetName,
+    );
+    if (targetWindow) {
+      workbook.workbook.windows.window = targetWindow;
+    } else {
+      delete workbook.workbook.windows.window;
+    }
+  }
+
+  delete workbook.workbook?.dashboards;
+
+  return serializeXML(workbook);
+}

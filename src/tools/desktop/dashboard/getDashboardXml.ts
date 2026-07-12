@@ -7,6 +7,13 @@ import { formatArtifactSummary } from '../../../desktop/artifactSummary.js';
 import { DesktopCache } from '../../../desktop/cache.js';
 import { getDashboardXml } from '../../../desktop/commands/workbook/getDashboardXml.js';
 import {
+  buildInlineCapFileMessage,
+  isOverInlineXmlCap,
+  logInlineXmlCapHit,
+  xmlByteLength,
+} from '../../../desktop/inlineXmlCap.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
+import {
   DesktopCommandExecutionError,
   GetDashboardXmlFailedError,
   UnknownError,
@@ -16,15 +23,13 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Tableau instance Session ID from list-instances.'),
-  dashboardName: z.string().describe('Name of the dashboard to get (must exist in the workbook).'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+  dashboardName: z.string().describe('Existing dashboard name.'),
   mode: z
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe(
-      'file: write cache and return path (default). inline: return dashboard XML in the tool result.',
-    ),
+    .describe('file writes cache path; inline returns XML.'),
 };
 
 type InlineResult = { dashboardXml: string };
@@ -40,12 +45,8 @@ export const getGetDashboardXmlTool = (
     name: 'get-dashboard-xml',
     title,
     description: [
-      'Gets the XML for a specific dashboard.',
-      'Default mode writes a cache file and returns the path (recommended).',
-      'Use mode=inline to return XML in the response.',
-      'IMPORTANT: This only works for existing dashboards — use list-dashboards to see available dashboards.',
-      'To create new dashboards, use apply-workbook.',
-      'Use apply-dashboard to apply changes.',
+      'Get XML for an existing dashboard. mode=file is default; mode=inline returns XML.',
+      'IMPORTANT: only works for an existing dashboard (see list-dashboards); to create one use apply-workbook. Use apply-dashboard to apply changes.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -60,7 +61,12 @@ export const getGetDashboardXmlTool = (
         extra,
         args: { session, dashboardName, mode },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const result = await getDashboardXml({ dashboardName, executor, signal: extra.signal });
 
           if (result.isErr()) {
@@ -78,36 +84,54 @@ export const getGetDashboardXmlTool = (
           }
 
           const dashboardXml = result.value;
-          const bytes = new TextEncoder().encode(dashboardXml).byteLength;
+          const bytes = xmlByteLength(dashboardXml);
+          const capBytes = extra.config.inlineXmlMaxBytes;
+          const capFired = mode === 'inline' && isOverInlineXmlCap(bytes, capBytes);
 
-          switch (mode) {
-            case 'inline': {
-              return new Ok({
-                message: `Dashboard XML returned inline (${bytes} bytes)`,
-                dashboardXml,
-              });
-            }
-            case 'file': {
-              const safeName = dashboardName.replace(/[^a-zA-Z0-9]/g, '_');
-              const cacheFile = new DesktopCache().getCacheFilePath({
-                prefix: `dashboard-${safeName}`,
-              });
-              writeFileSync(cacheFile, dashboardXml, 'utf-8');
-              log({
-                message: `Saved dashboard XML to cache file: ${cacheFile}`,
-                level: 'info',
-                logger: 'tool',
-                data: { file: cacheFile, size: bytes },
-              });
-
-              return Ok({
-                message: `Dashboard "${dashboardName}" saved to cache file (${bytes} bytes)\n\nArtifact summary:\n${formatArtifactSummary('dashboard', dashboardXml)}`,
-                file: cacheFile,
-                instructions:
-                  'Use this file path with apply-dashboard instead of passing XML directly.',
-              });
-            }
+          if (mode === 'inline' && !capFired) {
+            return new Ok({
+              message: `Dashboard XML returned inline (${bytes} bytes)`,
+              dashboardXml,
+            });
           }
+
+          const safeName = dashboardName.replace(/[^a-zA-Z0-9]/g, '_');
+          const cacheFile = new DesktopCache().getCacheFilePath({
+            prefix: `dashboard-${safeName}`,
+          });
+          writeFileSync(cacheFile, dashboardXml, 'utf-8');
+
+          if (capFired) {
+            logInlineXmlCapHit({ tool: 'get-dashboard-xml', bytes, capBytes, file: cacheFile });
+            return Ok({
+              message: buildInlineCapFileMessage({
+                kind: 'dashboard',
+                label: `Dashboard "${dashboardName}"`,
+                bytes,
+                capBytes,
+                xml: dashboardXml,
+              }),
+              file: cacheFile,
+              instructions:
+                'This dashboard exceeds the inline cap. Use read-cached-xml (with a dashboard ' +
+                'selector or startByte/endByte to read a slice), write-cached-xml (same selector to ' +
+                'splice edits back), then apply-dashboard with mode=file. Do not request mode=inline.',
+            });
+          }
+
+          log({
+            message: `Saved dashboard XML to cache file: ${cacheFile}`,
+            level: 'info',
+            logger: 'tool',
+            data: { file: cacheFile, size: bytes },
+          });
+
+          return Ok({
+            message: `Dashboard "${dashboardName}" saved to cache file (${bytes} bytes)\n\nArtifact summary:\n${formatArtifactSummary('dashboard', dashboardXml)}`,
+            file: cacheFile,
+            instructions:
+              'Use this file path with apply-dashboard instead of passing XML directly.',
+          });
         },
       });
     },

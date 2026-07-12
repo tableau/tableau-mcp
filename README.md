@@ -41,6 +41,25 @@ Standard config works in most MCP clients:
 }
 ```
 
+## Standalone Binaries (SEA)
+
+The server can be packaged as a [Node.js Single Executable Application](https://tableau.github.io/tableau-mcp/docs/extras/node-sea)
+so it runs without a Node.js install. Build them locally with:
+
+```bash
+npm run build:sea            # default (web) + desktop variants, host platform
+npm run build:sea:desktop    # desktop variant only
+
+# Pick variants/platforms explicitly:
+npm run build:sea -- --variant desktop --platform macos-arm64 macos-x64 win-x64
+```
+
+Output lands in `build/sea/<variant>/<platform>/`. Platforms: `macos-arm64`, `macos-x64`,
+`linux-x64`, `linux-arm64`, `win-x64`. macOS binaries are ad-hoc codesigned when built on a
+macOS host. Each binary is fully self-contained: the desktop variant's knowledge, data,
+templates, and examples are embedded into the executable as SEA assets, so it can be
+distributed and run as a single file with no sibling folders.
+
 ## Deploy to Heroku
 
 [![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://www.heroku.com/deploy?template=https://github.com/tableau/tableau-mcp)

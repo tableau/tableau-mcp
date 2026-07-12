@@ -59,6 +59,19 @@ describe('FileLogger', () => {
     expect(logObject.logger).toBe(logger);
   });
 
+  it('should prefix log file names when fileNamePrefix is set', async () => {
+    const prefixedLogger = new FileLogger({
+      logDirectory: testLogDirectory,
+      fileNamePrefix: 'desktop-mcp-',
+    });
+
+    await prefixedLogger.log({ message: 'Prefixed message', level: 'info', logger });
+
+    const files = readdirSync(testLogDirectory);
+    expect(files.length).toBe(1);
+    expect(files[0]).toMatch(/^desktop-mcp-.*\.log$/);
+  });
+
   it('should handle concurrent log writes to the same file', async () => {
     const message1 = 'First concurrent message';
     const message2 = 'Second concurrent message';

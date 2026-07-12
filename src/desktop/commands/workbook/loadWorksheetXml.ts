@@ -1,30 +1,42 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
+import { getDesktopConfig } from '../../../config.desktop.js';
 import { log } from '../../../logging/logger.js';
 import { sanitizeValue } from '../../../logging/sanitize.js';
+import { buildMinimalSheetDoc } from '../../metadata/sheets.js';
 import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
+import { withApplyLock } from './applyMutex.js';
+import { getWorkbookXml } from './getWorkbookXml.js';
+import { applyWorkbookText, interpretLoadOutcome } from './loadWorkbookXml.js';
 
 export type LoadWorksheetXmlError =
   | { type: 'invalid-xml' }
-  | { type: 'validation-failed'; issues: Array<ValidationIssue> };
+  | { type: 'validation-failed'; issues: Array<ValidationIssue> }
+  // The load-worksheet command reported command-level completion, but Tableau
+  // rejected the actual document load (surfaced in the response payload, not in
+  // `status`). `message` carries Desktop's own error text.
+  | { type: 'load-rejected'; message: string };
+
+type LoadWorksheetXmlResult = Result<
+  void,
+  | { type: 'execute-command-error'; error: ExecuteCommandError }
+  | { type: 'load-worksheet-xml-error'; error: LoadWorksheetXmlError }
+>;
 
 export async function loadWorksheetXml({
   worksheetName,
   xml,
   executor,
   signal,
-}: { worksheetName: string; xml: string } & WithExecutorAndAbortSignal): Promise<
-  Result<
-    void,
-    | { type: 'execute-command-error'; error: ExecuteCommandError }
-    | { type: 'load-worksheet-xml-error'; error: LoadWorksheetXmlError }
-  >
-> {
+}: {
+  worksheetName: string;
+  xml: string;
+} & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
     return Err({ type: 'load-worksheet-xml-error', error: { type: 'invalid-xml' } });
@@ -62,6 +74,23 @@ export async function loadWorksheetXml({
     });
   }
 
+  // External Client API ("Athena V0") exposes no per-sheet route — tabui:load-worksheet is not in
+  // its command registry, so applying a single sheet re-posts a minimal whole-workbook document.
+  // The POST upserts by name: it overwrites the colliding sheet in place and leaves the rest live.
+  return getDesktopConfig().externalApiEnabled
+    ? loadWorksheetXmlViaExternalApi({ worksheetName, xml, executor, signal })
+    : loadWorksheetXmlViaAgentApi({ worksheetName, xml, executor, signal });
+}
+
+async function loadWorksheetXmlViaAgentApi({
+  worksheetName,
+  xml,
+  executor,
+  signal,
+}: {
+  worksheetName: string;
+  xml: string;
+} & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   const result = await executor.executeCommand({
     namespace: 'tabui',
     command: 'load-worksheet',
@@ -76,6 +105,25 @@ export async function loadWorksheetXml({
     return Err({ type: 'execute-command-error', error: result.error });
   }
 
+  // Command completed — but "completed" means the command ran, not that Tableau
+  // accepted the document load. A content rejection is surfaced in the payload,
+  // so verify the actual load outcome before claiming success (mirrors the
+  // workbook path). Otherwise a rejected load would be relayed as success.
+  const outcome = interpretLoadOutcome(result.value);
+  if (!outcome.ok) {
+    log({
+      level: 'error',
+      message: 'load-worksheet completed but Tableau rejected the load',
+      logger: 'worksheetCommands',
+      data: { worksheetName, message: outcome.message },
+    });
+
+    return Err({
+      type: 'load-worksheet-xml-error',
+      error: { type: 'load-rejected', message: outcome.message },
+    });
+  }
+
   log({
     level: 'info',
     message: 'load-worksheet completed',
@@ -87,6 +135,44 @@ export async function loadWorksheetXml({
   });
 
   return Ok.EMPTY;
+}
+
+async function loadWorksheetXmlViaExternalApi({
+  worksheetName,
+  xml,
+  executor,
+  signal,
+}: {
+  worksheetName: string;
+  xml: string;
+} & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
+  return withApplyLock(async () => {
+    const workbookResult = await getWorkbookXml({ executor, signal });
+    if (workbookResult.isErr()) {
+      return Err({ type: 'execute-command-error', error: workbookResult.error });
+    }
+
+    let minimalDoc: string;
+    try {
+      minimalDoc = buildMinimalSheetDoc(workbookResult.value, worksheetName, xml);
+    } catch (error) {
+      return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
+    }
+
+    const applyResult = await applyWorkbookText({ xml: minimalDoc, executor, signal });
+    if (applyResult.isErr()) {
+      return Err({ type: 'execute-command-error', error: applyResult.error });
+    }
+
+    log({
+      level: 'info',
+      message: 'load-worksheet completed',
+      logger: 'worksheetCommands',
+      data: { worksheetName },
+    });
+
+    return Ok.EMPTY;
+  });
 }
 
 function sanitize(value: unknown): unknown {

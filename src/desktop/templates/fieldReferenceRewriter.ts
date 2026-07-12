@@ -309,13 +309,26 @@ export function rewriteFieldReferences(
     }
   }
 
-  // 3b. Rewrite bare [FieldName] refs inside calc formula bodies.
+  // 3b. Rewrite bare [FieldName] refs inside calc formula bodies. When the
+  //   remap changed the formula and the owning column carries a purely human
+  //   caption (no `[..]` token), the template's caption now misnames the calc
+  //   (and can duplicate an existing datasource caption) — derive an honest one.
   const calcElements = selectElements('//calculation[@formula]', doc);
   for (const calc of calcElements) {
     const formula = calc.getAttribute('formula');
     if (formula) {
       const rewritten = rewriteFormulaFieldRefs(formula, baseTarget);
-      if (rewritten !== formula) calc.setAttribute('formula', rewritten);
+      if (rewritten !== formula) {
+        calc.setAttribute('formula', rewritten);
+        const col = calc.parentNode as Element | null;
+        if (col && col.nodeType === 1 && (col as Element).tagName === 'column') {
+          const caption = (col as Element).getAttribute('caption');
+          if (caption && !caption.includes('[')) {
+            const derived = deriveRemappedCalcCaption(caption, formula, rewritten, baseTarget);
+            if (derived && derived !== caption) (col as Element).setAttribute('caption', derived);
+          }
+        }
+      }
     }
   }
 
@@ -512,6 +525,50 @@ function rewriteFormulaFieldRefs(formula: string, baseTarget: Record<string, str
     const target = baseTarget[innerName];
     return target ? `[${target}]` : whole;
   });
+}
+
+/**
+ * Derive an honest caption for a calc column whose FORMULA field refs were
+ * remapped to different base fields while its human caption still names the
+ * template's original fields. Live defect (Ben, 2026-07-09 test1.twbx): the
+ * correlation-scatter calc kept caption "Profit Ratio" after its formula was
+ * rebound to SUM([Profit])/SUM([Discount]) — a second, wrong "Profit Ratio"
+ * beside the datasource's real one. Strategy, first hit wins:
+ *   1. whole-word-replace remapped old field names inside the caption;
+ *   2. humanize the rewritten formula (AGG([X]) → X) when the result is a
+ *      short, plain field expression;
+ *   3. append the distinct new field names to the original caption.
+ * Returns null when nothing was remapped (identity binds keep their caption).
+ */
+function deriveRemappedCalcCaption(
+  caption: string,
+  originalFormula: string,
+  rewrittenFormula: string,
+  baseTarget: Record<string, string>,
+): string | null {
+  const changedPairs = new Map<string, string>();
+  for (const m of originalFormula.matchAll(/\[([^\]]+)\]/g)) {
+    const target = baseTarget[m[1]];
+    if (target && target !== m[1]) changedPairs.set(m[1], target);
+  }
+  if (changedPairs.size === 0) return null;
+
+  let replaced = caption;
+  for (const [oldName, newName] of changedPairs) {
+    const escaped = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    replaced = replaced.replace(new RegExp(`\\b${escaped}\\b`, 'g'), newName);
+  }
+  if (replaced !== caption) return replaced;
+
+  const humanized = rewrittenFormula
+    .replace(/\b(?:SUM|AVG|MIN|MAX|MEDIAN|ATTR|COUNTD|COUNT|STDEVP|STDEV|VARP|VAR)\s*\(\s*\[([^\]]+)\]\s*\)/gi, '$1')
+    .replace(/\[([^\]]+)\]/g, '$1')
+    .replace(/\s*([+\-*/])\s*/g, ' $1 ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!/[[\]()]/.test(humanized) && humanized.length <= 60) return humanized;
+
+  return `${caption} (${Array.from(new Set(changedPairs.values())).join(', ')})`;
 }
 
 /**

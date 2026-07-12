@@ -1,94 +1,119 @@
 {
-  "template": "distribution-histogram",
-  "family": "distribution",
-  "readiness": "YELLOW",
-  "fast_path_eligible": false,
-  "fast_path_blockers": [
-    "DATASET_SPECIFIC_FORMULA"
-  ],
-  "portability_evidence": {
-    "fixture_bind": true,
-    "render_verified": "none"
+ "template": "distribution-histogram",
+ "family": "distribution",
+ "readiness": "YELLOW",
+ "fast_path_eligible": false,
+ "fast_path_blockers": [
+  "DATASET_SPECIFIC_FORMULA"
+ ],
+ "portability_evidence": {
+  "fixture_bind": true,
+  "render_verified": "live-2026-07-06",
+  "render_evidence": {
+   "method": "gate-composite",
+   "date": "2026-07-06",
+   "structural": 0.97297,
+   "critical_pass": "5/5",
+   "pixel": 0.91667,
+   "pixel_regions": 6,
+   "sanity": "sane",
+   "sanity_signals": [
+    "mark-count=pass reconciled=true (21=21 (live-measured twice, unpinned→21), Worksheet>Copy>Data on source and applied sheets)",
+    "caption-leak=pass"
+   ],
+   "run": "per-leg source-anchor replay (W38-LIVE-2) after the canonical Bar mark fidelity fix; width-500 bin rewrites; the invalid-column-instance-pivot bin exemption (W31-A/E) cleared the prior product-wide apply rejection live",
+   "artifacts": "local-only under ~/TableauGoldens/lab/ (distribution* renders, worksheet XMLs, w38l2 stamp JSON)",
+   "basis": "golden-parity gate run 2026-07-06 (source-anchor replay, W38-LIVE-2): structural 0.97297 (5/5 critical; sole miss = salience-1 resolved-title, sheet names differ by design), pixel 0.91667 (6 ROIs, same-geometry captures), composite 95, binding-sanity sane via reconciled Copy>Data mark counts 21=21 (live-measured twice, unpinned→21). STAMP EARNED, ELIGIBILITY WITHHELD: the DATASET_SPECIFIC_FORMULA blocker (bin width is data-dependent; the leg adapted 283→500 via rewrite) remains until a bind-time bin-width adapter computes it per-dataset — the render proof does not clear the blocker.",
+   "lane": "fable-direct stamp run 2026-07-06 (orchestrator gate run over W38-LIVE-2 per-leg evidence; grade scratchpad imports parity-grade.mjs verbatim)",
+   "gate_composite": 95,
+   "high_pass": "0/0",
+   "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 ROIs). Source and applied are two INDEPENDENT renders of the same data on the same instance."
+  }
+ },
+ "datasource_placeholder": true,
+ "placeholders": [
+  "TITLE",
+  "DATASOURCE"
+ ],
+ "intent_keywords": [
+  "histogram",
+  "distribution",
+  "frequency",
+  "binned",
+  "bins",
+  "spread"
+ ],
+ "description": "A histogram: one CONTINUOUS measure is binned into equal-width buckets on the X axis (cols) and the COUNT of records per bucket sets the bar heights on the Y axis (rows). The bin is a template-owned calc column ([Profit (bin)], class='bin') derived from the same measure that is counted. Factory-compiled hermetically from the repo distribution-histogram exemplar (Superstore Profit); live render-verified 2026-07-06 by the golden-parity gate (composite 95; see portability_evidence.render_evidence) BUT ELIGIBILITY WITHHELD (fast_path_eligible=false): the DATASET_SPECIFIC_FORMULA blocker (the bin width is dataset-derived — the leg adapted 283→500 by hand-rewrite) stands until a bind-time bin-width adapter computes it per dataset, and a render proof does not clear that blocker.",
+ "avoid_when": [
+  "The field is categorical / discrete — a histogram bins a CONTINUOUS measure; for counts per named category use a bar chart, not a histogram.",
+  "The ask is to compare a metric across named categories or over time — a histogram shows the distribution SHAPE of one measure, not cross-category magnitude or a trend.",
+  "The bound measure's range differs greatly from the source measure's — the template's hardcoded bin width (size=283) does not auto-recompute on bind and must be reviewed, or the viz over/under-bins (one giant bar or thousands of slivers)."
+ ],
+ "slots": [
+  {
+   "slot_id": "measure",
+   "template_field": "Profit",
+   "derivation": "cnt",
+   "role": [
+    "rows"
+   ],
+   "kind": "quantitative",
+   "bindable": true,
+   "required": true,
+   "notes": "The single bindable measure. It is COUNTed on rows (Y axis) as [cnt:Profit:qk] AND is the input the bin calc [Profit (bin)] buckets on cols — the classic Tableau histogram default (one field, binned + counted). Binds to any measure; base column [Profit], shelf instance [cnt:Profit:qk]."
+  }
+ ],
+ "calcs": [
+  {
+   "slot_id": "measure_bin",
+   "template_field": "Profit (bin)",
+   "derivation": "none",
+   "role": [
+    "cols"
+   ],
+   "kind": "calc",
+   "bindable": false,
+   "required": true,
+   "formula": "[Profit]",
+   "formula_refs": [
+    "Profit"
+   ],
+   "depends_on_slots": [
+    "measure"
+   ],
+   "result_role": "dimension",
+   "inputs": [
+    {
+     "ref": "Profit",
+     "slot_id": "measure",
+     "slot_kind": "quantitative",
+     "required": true,
+     "template_internal": false
+    }
+   ],
+   "notes": "The DEFINING distribution slot: a template-owned bin column (<calculation class='bin' size='283' peg='0' decimals='2' formula='[Profit]'/>) placed on cols as [none:Profit (bin):qk] (with a show-full-range). It is treated as a first-class calc — its formula ref [Profit] is rewritten to the bound measure on apply (forcing the 'measure' slot to bind) — but its bin WIDTH (size) is a dataset-derived parameter that does NOT recompute on bind (see the bin-size-dataset-specific hazard / DATASET_SPECIFIC_FORMULA blocker)."
+  }
+ ],
+ "hazards": [
+  {
+   "code": "bin-size-dataset-specific",
+   "detail": "The bin column carries size='283' / peg='0' baked from the source measure's (Profit's) value range. On bind the bin's formula ref [Profit] is rewritten to the bound measure, but the bin WIDTH attribute is NOT recomputed — a measure with a much smaller range collapses to one bar, a much larger range explodes into thousands of slivers. The bin width is the histogram's defining parameter, so this is a load-bearing, dataset-specific formula parameter (fast_path_blocker DATASET_SPECIFIC_FORMULA) that a human/data-aware step must retune after binding, not a cosmetic note. PRODUCT EVIDENCE (UC7 distribution analysis): bin width is STORY-CHANGING, not merely cosmetic — too few bins hide the shape, too many shatter it into noise, and the right count is dataset-dependent, so the retune is an analytical decision the author must own. Separately, OUTLIERS can SWAMP the chart: a long tail forces a wide domain so the bulk of the distribution crushes into the first bin or two; exclude/cap extremes or use a log axis when a few extreme values dominate the range. The baked size=283 is authored-dataset-specific — derived from the source measure's (Superstore Profit's) value range this template was compiled from — so it is a starting point to retune per dataset, never a portable constant (product team, 2026-07).",
+   "xml": "distribution-histogram.xml:11"
   },
-  "datasource_placeholder": true,
-  "placeholders": [
-    "TITLE",
-    "DATASOURCE"
-  ],
-  "intent_keywords": [
-    "histogram",
-    "distribution",
-    "frequency",
-    "binned",
-    "bins",
-    "spread"
-  ],
-  "description": "A histogram: one CONTINUOUS measure is binned into equal-width buckets on the X axis (cols) and the COUNT of records per bucket sets the bar heights on the Y axis (rows). The bin is a template-owned calc column ([Profit (bin)], class='bin') derived from the same measure that is counted. Factory-compiled hermetically from the repo distribution-histogram exemplar (Superstore Profit); structurally compiled, NOT render-verified.",
-  "avoid_when": [
-    "The field is categorical / discrete — a histogram bins a CONTINUOUS measure; for counts per named category use a bar chart, not a histogram.",
-    "The ask is to compare a metric across named categories or over time — a histogram shows the distribution SHAPE of one measure, not cross-category magnitude or a trend.",
-    "The bound measure's range differs greatly from the source measure's — the template's hardcoded bin width (size=283) does not auto-recompute on bind and must be reviewed, or the viz over/under-bins (one giant bar or thousands of slivers)."
-  ],
-  "slots": [
-    {
-      "slot_id": "measure",
-      "template_field": "Profit",
-      "derivation": "cnt",
-      "role": [
-        "rows"
-      ],
-      "kind": "quantitative",
-      "bindable": true,
-      "required": true,
-      "notes": "The single bindable measure. It is COUNTed on rows (Y axis) as [cnt:Profit:qk] AND is the input the bin calc [Profit (bin)] buckets on cols — the classic Tableau histogram default (one field, binned + counted). Binds to any measure; base column [Profit], shelf instance [cnt:Profit:qk]."
-    }
-  ],
-  "calcs": [
-    {
-      "slot_id": "measure_bin",
-      "template_field": "Profit (bin)",
-      "derivation": "none",
-      "role": [
-        "cols"
-      ],
-      "kind": "calc",
-      "bindable": false,
-      "required": true,
-      "formula": "[Profit]",
-      "formula_refs": [
-        "Profit"
-      ],
-      "depends_on_slots": [
-        "measure"
-      ],
-      "result_role": "dimension",
-      "inputs": [
-        {
-          "ref": "Profit",
-          "slot_id": "measure",
-          "slot_kind": "quantitative",
-          "required": true,
-          "template_internal": false
-        }
-      ],
-      "notes": "The DEFINING distribution slot: a template-owned bin column (<calculation class='bin' size='283' peg='0' decimals='2' formula='[Profit]'/>) placed on cols as [none:Profit (bin):qk] (with a show-full-range). It is treated as a first-class calc — its formula ref [Profit] is rewritten to the bound measure on apply (forcing the 'measure' slot to bind) — but its bin WIDTH (size) is a dataset-derived parameter that does NOT recompute on bind (see the bin-size-dataset-specific hazard / DATASET_SPECIFIC_FORMULA blocker)."
-    }
-  ],
-  "hazards": [
-    {
-      "code": "bin-size-dataset-specific",
-      "detail": "The bin column carries size='283' / peg='0' baked from the source measure's (Profit's) value range. On bind the bin's formula ref [Profit] is rewritten to the bound measure, but the bin WIDTH attribute is NOT recomputed — a measure with a much smaller range collapses to one bar, a much larger range explodes into thousands of slivers. The bin width is the histogram's defining parameter, so this is a load-bearing, dataset-specific formula parameter (fast_path_blocker DATASET_SPECIFIC_FORMULA) that a human/data-aware step must retune after binding, not a cosmetic note. PRODUCT EVIDENCE (UC7 distribution analysis): bin width is STORY-CHANGING, not merely cosmetic — too few bins hide the shape, too many shatter it into noise, and the right count is dataset-dependent, so the retune is an analytical decision the author must own. Separately, OUTLIERS can SWAMP the chart: a long tail forces a wide domain so the bulk of the distribution crushes into the first bin or two; exclude/cap extremes or use a log axis when a few extreme values dominate the range.",
-      "xml": "distribution-histogram.xml:11"
-    },
-    {
-      "code": "bin-caption-not-rewritten",
-      "detail": "The bin column ([Profit (bin)], kind=calc, bindable=false) and its instance [none:Profit (bin):qk] are template-owned and are NOT rewritten on bind — only the bin's formula ref [Profit] is. So after binding to e.g. Sales the X-axis caption still reads 'Profit (bin)'. Cosmetic (the viz renders correctly); relabel the bin field/axis on the bound sheet if the source-measure name must not leak.",
-      "xml": "distribution-histogram.xml:10"
-    },
-    {
-      "code": "not-live-render-verified",
-      "detail": "render_verified='none': this template was compiled HERMETICALLY via the factory route (no live Tableau Desktop, no stamp). fixture_bind=true proves the required measure slot binds against the committed schema fixture, but that is necessary-not-sufficient. The render_verified stamp is EARNED later by a live golden-parity render-readback leg, never granted at compile time.",
-      "xml": "distribution-histogram.xml"
-    }
-  ]
+  {
+   "code": "small-n-histogram-is-noise",
+   "detail": "Product evidence (product team, 2026-07) — has bitten someone: under ~30 rows a histogram's shape is statistical NOISE, not a distribution. A handful of records scattered across equal-width bins reads as a random staircase and invites over-interpretation of bumps that would vanish on the next data pull. Below roughly 30 observations prefer a BAR CHART of the individual values (or a dot/strip plot); a histogram earns its shape only once each bin holds enough observations to be stable.",
+   "xml": "distribution-histogram.xml:11"
+  },
+  {
+   "code": "bin-caption-not-rewritten",
+   "detail": "The bin column ([Profit (bin)], kind=calc, bindable=false) and its instance [none:Profit (bin):qk] are template-owned and are NOT rewritten on bind — only the bin's formula ref [Profit] is. So after binding to e.g. Sales the X-axis caption still reads 'Profit (bin)'. Cosmetic (the viz renders correctly); relabel the bin field/axis on the bound sheet if the source-measure name must not leak.",
+   "xml": "distribution-histogram.xml:10"
+  },
+  {
+   "code": "not-live-render-verified",
+   "detail": "render_verified='live-2026-07-06': this template was compiled HERMETICALLY via the factory route and then live render-verified by the golden-parity gate (composite 95: structural 0.97297, pixel 0.91667, binding-sanity sane via reconciled 21=21 Copy>Data mark counts + caption-leak pass). ELIGIBILITY IS WITHHELD NONETHELESS (fast_path_eligible=false): the DATASET_SPECIFIC_FORMULA blocker (the bin width is dataset-derived — the leg adapted 283→500 via rewrite) is NOT cleared by a render proof; it stands until a bind-time bin-width adapter computes the width per dataset. See portability_evidence.render_evidence for the auditable basis.",
+   "xml": "distribution-histogram.xml"
+  }
+ ]
 }
