@@ -7,6 +7,8 @@ import { categoricalFilterSlicesRule } from './categoricalFilterSlices.js';
 import { computedSortCrashRule } from './computedSortCrash.js';
 import { connectionsNotAuthorableRule } from './connectionsNotAuthorable.js';
 import { dashboardZonesReferenceIncludedWorksheetsRule } from './dashboardZonesReferenceIncludedWorksheets.js';
+import { dateFieldBoundAsStringRule } from './dateFieldBoundAsString.js';
+import { dateLikeStringOnTimeAxisRule } from './dateLikeStringOnTimeAxis.js';
 import { duplicateEmptyParameterRule } from './duplicateEmptyParameter.js';
 import { duplicateParameterActionRule } from './duplicateParameterAction.js';
 import { filterAllInListRule } from './filterAllInList.js';
@@ -60,4 +62,6 @@ export const validationRules = [
   redundantColorEncodingRule,
   invalidColumnInstancePivotRule,
   parameterFieldOnShelfRule,
+  dateFieldBoundAsStringRule,
+  dateLikeStringOnTimeAxisRule,
 ];
