@@ -122,6 +122,31 @@ describe('addFieldTool', () => {
     expect(writeFileSync).toHaveBeenCalledWith(WORKSHEET_FILE, MODIFIED_XML, 'utf-8');
   });
 
+  it('does not use the Tableau command channel after a successful field edit', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+    const extra = getMockRequestHandlerExtra();
+    const tool = getAddFieldTool(new DesktopMcpServer());
+    const callback = await Provider.from(tool.callback);
+
+    const result = await callback(
+      {
+        worksheetFile: WORKSHEET_FILE,
+        target: 'rows',
+        columnRef: COLUMN_REF,
+        encodingType: undefined,
+        index: undefined,
+        workbookFile: undefined,
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(extra.getExecutor).not.toHaveBeenCalled();
+  });
+
   it('should pass index and workbookFile to addFieldToRows (target=rows)', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockImplementation((p) =>
