@@ -19,6 +19,7 @@ export function getKnowledgeDir(): string {
   const candidates = [
     join(getDirname(), 'resources', 'desktop', 'knowledge'),
     join(getDirname(), '..', 'resources', 'desktop', 'knowledge'),
+    join(getDirname(), '..', '..', 'resources', 'desktop', 'knowledge'),
   ];
   return candidates.find(existsSync) ?? candidates[0];
 }
