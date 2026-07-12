@@ -1,6 +1,7 @@
 import { Err, Ok } from 'ts-results-es';
 
 import * as configModule from '../../../config.desktop.js';
+import * as loggerModule from '../../../logging/logger.js';
 import invariant from '../../../utils/invariant.js';
 import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
 import { loadDashboardXml } from './loadDashboardXml.js';
@@ -14,6 +15,11 @@ describe('loadDashboardXml (Agent API transport, default)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('should successfully load dashboard XML', async () => {
@@ -36,6 +42,64 @@ describe('loadDashboardXml (Agent API transport, default)', () => {
         namespace: 'tabui',
         command: 'load-dashboard',
         args: { dashboardName, dashboardXml: validXml },
+      }),
+    );
+  });
+
+  it('focuses the dashboard after a successful apply', async () => {
+    const mockExecutor = {
+      executeCommand: vi
+        .fn()
+        .mockResolvedValueOnce(Ok({ command_id: 'cmd-123', status: 'completed', submitted_at: '' }))
+        .mockResolvedValueOnce(
+          Ok({ command_id: 'cmd-goto', status: 'completed', submitted_at: '' }),
+        ),
+    } as unknown as LocalExecutor;
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: validXml,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(mockExecutor.executeCommand).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        namespace: 'tabdoc',
+        command: 'goto-sheet',
+        args: { sheet: dashboardName },
+        signal: mockSignal,
+      }),
+    );
+  });
+
+  it('keeps dashboard apply successful when focusing the dashboard throws', async () => {
+    const mockExecutor = {
+      executeCommand: vi
+        .fn()
+        .mockResolvedValueOnce(Ok({ command_id: 'cmd-123', status: 'completed', submitted_at: '' }))
+        .mockRejectedValueOnce(new Error('navigation failed')),
+    } as unknown as LocalExecutor;
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: validXml,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(loggerModule.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warning',
+        message: expect.stringContaining('goto-sheet'),
+        data: expect.objectContaining({
+          sheetName: dashboardName,
+          appliedVia: 'load-dashboard',
+          error: 'navigation failed',
+        }),
       }),
     );
   });
@@ -224,6 +288,7 @@ describe('loadDashboardXml (External Client API transport, TABLEAU_EXTERNAL_API 
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
     const base = configModule.getDesktopConfig();
     vi.spyOn(configModule, 'getDesktopConfig').mockReturnValue({
       ...base,
@@ -259,6 +324,26 @@ describe('loadDashboardXml (External Client API transport, TABLEAU_EXTERNAL_API 
     expect(applied).not.toContain('Other DB');
     // Worksheets are stripped so the POST leaves the live sheets untouched.
     expect(applied).not.toContain('<worksheet');
+  });
+
+  it('focuses the dashboard after a successful minimal-doc apply', async () => {
+    const { executor, calls } = dispatchingExecutor(
+      liveWorkbook(['Sales Dashboard', 'Other DB'], ['Sheet 1']),
+    );
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(calls.at(-1)).toEqual({
+      namespace: 'tabdoc',
+      command: 'goto-sheet',
+      args: { sheet: dashboardName },
+    });
   });
 
   it('does not reject a per-dashboard apply whose minimal document omits live worksheets referenced by zones', async () => {
