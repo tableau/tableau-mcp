@@ -39,9 +39,11 @@ const paramsSchema = {
     .array(
       z.object({
         name: z.string().describe('Worksheet name.'),
-        type: z.enum(['kpi', 'chart']).describe('Worksheet type.'),
+        type: z
+          .enum(['kpi', 'chart'])
+          .describe("Worksheet type: 'kpi' or 'chart' for viz worksheets."),
         template: z.string().optional().describe('Optional template name.'),
-        fields: z.array(z.string()).describe('Visualization field names.'),
+        fields: z.array(z.string()).describe('Viz field names.'),
       }),
     )
     .describe('List of worksheets to create.'),
@@ -61,8 +63,8 @@ export const getPlanDashboardCreationTool = (
     name: 'plan-dashboard-creation',
     title: toolTitle,
     description: [
-      'Plan a dashboard build: Phase 1 caches sheets; Phase 2 builds/applies worksheets and dashboard in parallel.',
-      'Blocks planning if any field is ambiguous across datasources — caller must resolve ambiguity first. Details: expertise://tableau/strategy/dashboard-design/layout-patterns.',
+      'Plan a dashboard build: Phase 1 caches sheets; Phase 2 builds/applies sheets and dashboard in parallel.',
+      'Blocks ambiguous fields; resolve them first. Details: expertise://tableau/strategy/dashboard-design/layout-patterns.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -228,7 +230,7 @@ export const getPlanDashboardCreationTool = (
             },
             phase1Prework: {
               description:
-                'Batch create all sheets + dashboard and cache empty XMLs (single tool call)',
+                'Batch create all sheets + dashboard and cache empty working copies (single tool call)',
               tool: 'batch-create-and-cache-sheets',
               params: {
                 worksheetNames: worksheets.map((ws) => ws.name),
@@ -268,7 +270,7 @@ export const getPlanDashboardCreationTool = (
           if (canParallelize) {
             lines.push(
               `Spawn ${allTasks.length} subagents in parallel (${worksheetTasks.length} worksheets + 1 dashboard).`,
-              'Each subagent: reads cached file, builds XML, applies immediately.',
+              'Each subagent: reads cached file, builds the worksheet or dashboard, applies immediately.',
               'Tool: build-and-apply-worksheet (worksheets), build-and-apply-dashboard (dashboard)',
             );
           } else {

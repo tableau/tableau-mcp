@@ -44,7 +44,7 @@ const paramsSchema = {
   dashboardName: z.string().describe('Name of dashboard to create.'),
 };
 
-const toolTitle = 'Batch Create Sheets and Cache XMLs';
+const toolTitle = 'Batch Create Sheets and Cache Working Copies';
 export const getBatchCreateAndCacheSheetsTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
@@ -53,7 +53,7 @@ export const getBatchCreateAndCacheSheetsTool = (
     name: 'batch-create-and-cache-sheets',
     title: toolTitle,
     description: [
-      'Create multiple worksheet sheets and one dashboard in one operation, then cache all empty XMLs.',
+      'Create multiple worksheet sheets and one dashboard in one operation, then cache all empty working copies.',
       'Phase 1 of the parallel dashboard creation workflow.',
       'Returns file paths for use in build-and-apply-worksheet and build-and-apply-dashboard.',
     ].join(' '),
@@ -127,7 +127,7 @@ export const getBatchCreateAndCacheSheetsTool = (
           });
           writeFileSync(workbookFile, workbookXml, 'utf-8');
 
-          // Fetch and cache all worksheet XMLs
+          // Fetch and cache all worksheet working copies.
           const worksheetFiles: Record<string, string> = {};
           const worksheetWarnings: string[] = [];
           for (const name of worksheetNames) {
@@ -147,7 +147,7 @@ export const getBatchCreateAndCacheSheetsTool = (
             worksheetFiles[name] = file;
           }
 
-          // Fetch and cache dashboard XML
+          // Fetch and cache the dashboard working copy.
           let dashboardFile: string | null = null;
           const dashResult = await getDashboardXml({ dashboardName, executor, signal });
           if (dashResult.isErr()) {

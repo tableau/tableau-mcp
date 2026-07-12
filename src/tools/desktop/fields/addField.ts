@@ -34,8 +34,8 @@ const ENCODING_TYPES = [
 const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
 const paramsSchema = {
-  worksheetFile: z.string().describe('Worksheet XML cache file.'),
-  target: z.enum(FIELD_TARGETS).describe('Destination: rows, cols, or encoding.'),
+  worksheetFile: z.string().describe('Worksheet cache file.'),
+  target: z.enum(FIELD_TARGETS).describe('Destination: rows=Rows, cols=Columns, or encoding.'),
   columnRef: z.string().describe('Column reference.'),
   encodingType: z
     .enum(ENCODING_TYPES)
@@ -52,7 +52,7 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
     name: 'add-field',
     title,
     description:
-      'Add a field to the rows shelf, columns shelf, or an encoding (mutates cache; adds missing datasource dependency). Apply with apply-worksheet.',
+      'Add a field to Rows, Columns, or an encoding (mutates cache; adds missing datasource dependency). Apply with apply-worksheet.',
     paramsSchema,
     annotations: {
       title,
@@ -103,11 +103,11 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             switch (target) {
               case 'rows':
                 modifiedXml = addFieldToRows(worksheetXml, columnRef, index, workbookXml);
-                placement = 'rows shelf';
+                placement = 'Rows shelf';
                 break;
               case 'cols':
                 modifiedXml = addFieldToCols(worksheetXml, columnRef, index, workbookXml);
-                placement = 'columns shelf';
+                placement = 'Columns shelf';
                 break;
               case 'encoding':
                 modifiedXml = addFieldToEncoding(

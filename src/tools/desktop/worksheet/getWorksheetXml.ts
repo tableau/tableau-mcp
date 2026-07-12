@@ -29,7 +29,7 @@ const paramsSchema = {
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe('file writes cache path; inline returns XML.'),
+    .describe('file writes cache path; inline returns worksheet content.'),
 };
 
 type InlineResult = {
@@ -43,7 +43,7 @@ type FileResult = {
 
 type GetWorksheetXmlToolResult = { message: string } & (InlineResult | FileResult);
 
-const title = 'Get Worksheet XML';
+const title = 'Get Worksheet Structure';
 export const getGetWorksheetXmlTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
@@ -52,8 +52,8 @@ export const getGetWorksheetXmlTool = (
     name: 'get-worksheet-xml',
     title,
     description: [
-      'Get XML for an existing worksheet. mode=file is default; mode=inline returns XML.',
-      'IMPORTANT: only works for an existing worksheet (see list-worksheets). Prefer the field tools over editing XML directly. Use apply-worksheet to apply changes.',
+      'Get structure for an existing worksheet. mode=file is default; mode=inline returns worksheet content.',
+      'IMPORTANT: only works for an existing worksheet (see list-worksheets). Prefer the field tools over editing worksheet content directly. Use apply-worksheet to apply changes.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -97,7 +97,7 @@ export const getGetWorksheetXmlTool = (
 
           if (mode === 'inline' && !capFired) {
             return new Ok({
-              message: `Worksheet XML returned inline (${bytes} bytes)`,
+              message: `Worksheet content returned inline (${bytes} bytes)`,
               worksheetXml,
             });
           }
@@ -120,14 +120,14 @@ export const getGetWorksheetXmlTool = (
               }),
               file: cacheFile,
               instructions:
-                'This worksheet exceeds the inline cap. Use read-cached-xml (with a worksheet ' +
-                'selector or startByte/endByte to read a slice), write-cached-xml (same selector to ' +
+                'This worksheet exceeds the inline cap. Use the cache read tool (with a worksheet ' +
+                'selector or startByte/endByte to read a slice), the cache write tool (same selector to ' +
                 'splice edits back), then apply-worksheet with mode=file. Do not request mode=inline.',
             });
           }
 
           log({
-            message: `Saved worksheet XML to cache file: ${cacheFile}`,
+            message: `Saved worksheet content to cache file: ${cacheFile}`,
             level: 'info',
             logger: 'tool',
             data: {
@@ -140,7 +140,7 @@ export const getGetWorksheetXmlTool = (
             message: `Worksheet "${worksheetName}" saved to cache file (${bytes} bytes)\n\nArtifact summary:\n${formatArtifactSummary('worksheet', worksheetXml)}`,
             file: cacheFile,
             instructions:
-              'Use this file path with modification tools instead of passing XML directly.',
+              'Use this file path with modification tools instead of passing content directly.',
           });
         },
       });

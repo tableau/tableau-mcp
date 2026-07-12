@@ -56,7 +56,7 @@ const MIN_ASKS = 2;
 const MAX_ASKS = 6;
 
 const askSchema = z.object({
-  ask: z.string().min(1).describe('Natural-language chart request.'),
+  ask: z.string().min(1).describe('Natural-language viz request.'),
   title: z.string().min(1).max(80).optional().describe('Optional sheet title override.'),
 });
 
@@ -79,7 +79,7 @@ const paramsSchema = {
     .min(MIN_ASKS)
     .max(MAX_ASKS)
     .describe(
-      `2-${MAX_ASKS} chart asks; every ask must bind deterministically or the whole batch is refused.`,
+      `2-${MAX_ASKS} viz asks; every ask must bind deterministically or the whole batch is refused.`,
     ),
   dashboardName: z.string().min(1).describe('Name of the dashboard to build and apply.'),
   title: z.string().optional().describe('Optional dashboard title text.'),
@@ -135,7 +135,7 @@ function describeApplyError(
     if (inner.type === 'load-rejected') {
       return `Tableau rejected the load: ${inner.message}`;
     }
-    return 'invalid workbook XML';
+    return 'invalid workbook content';
   }
   return `workbook load command failed: ${JSON.stringify(error.error)}`;
 }
@@ -163,7 +163,7 @@ function isReferencedByDashboardZone(workbookXml: string, title: string): boolea
   return new RegExp(`<zone [^>]*name=['"]${nameAttr}['"]`).test(workbookXml);
 }
 
-const title = 'Build a Dashboard From N Asks in One Call (Fast Path)';
+const title = 'Build Dashboard From Viz Asks (Fast Path)';
 
 export const getDashboardAutoApplyTool = (
   server: DesktopMcpServer,
@@ -173,7 +173,7 @@ export const getDashboardAutoApplyTool = (
     name: 'dashboard-auto-apply',
     title,
     description: [
-      'Bind 2-6 chart asks to checked-in templates and APPLY one new/replaced dashboard in one call.',
+      'Bind 2-6 viz asks to templates and APPLY one new/replaced dashboard in one call.',
       'Every ask must bind deterministically; otherwise NOTHING is applied and each outcome is returned.',
       'All-or-nothing: duplicate/zone-used titles, user edits, or preflight failures refuse the WHOLE batch. Details: expertise://tableau/tactics/dashboard/zones.',
     ].join(' '),
@@ -249,7 +249,7 @@ export const getDashboardAutoApplyTool = (
               'One or more asks did not deterministically bind (Call-1, no-LLM). Nothing was applied to ' +
                 'the live workbook. Each ask carries its own bind-template-shaped outcome below: for ' +
                 '"propose", fill its output_schema and call bind-template again; for "escalate", follow its ' +
-                'guidance. Once every ask binds, retry dashboard-auto-apply, or fall back to the per-chart ' +
+                'guidance. Once every ask binds, retry dashboard-auto-apply, or fall back to the per-viz ' +
                 'bind-template(auto_apply:true) flow using each already-bound ask.',
             );
           }
@@ -268,7 +268,7 @@ export const getDashboardAutoApplyTool = (
             return refusal(
               outcomes,
               'One or more bound asks are not eligible for server-side auto-apply (used_llm or ' +
-                'fast_path_eligible gate failed). Nothing was applied. Fall back to the per-chart flow.',
+                'fast_path_eligible gate failed). Nothing was applied. Fall back to the per-viz flow.',
             );
           }
 
@@ -438,7 +438,7 @@ export const getDashboardAutoApplyTool = (
             return refusal(
               outcomes,
               `Server-side auto-apply did not complete (${describeApplyError(applyResult.error)}). Nothing ` +
-                'was applied — fall back to the per-chart bind-template(auto_apply:true) flow using each ' +
+                'was applied — fall back to the per-viz bind-template(auto_apply:true) flow using each ' +
                 "ask's bound args.",
               describeApplyError(applyResult.error),
             );

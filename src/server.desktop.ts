@@ -213,16 +213,13 @@ export class DesktopMcpServer extends Server {
   private _registerDashboardXmlGuide = async (): Promise<void> => {
     const text = readResourceAsset('dashboard-xml-guide.md');
     if (text === null) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        'Dashboard XML guide asset not found: dashboard-xml-guide.md',
-      );
+      throw new McpError(ErrorCode.InternalError, 'Dashboard layout guide asset not found.');
     }
     this.registerResource({
       name: 'dashboard-xml-guide',
       uri: 'tableau://docs/dashboard-xml-guide',
-      title: 'Dashboard XML manipulation guide',
-      description: 'Zone positioning, layouts, best practices for dashboard XML editing',
+      title: 'Dashboard layout editing guide',
+      description: 'Zone positioning, layouts, and best practices for dashboard editing',
       text,
       mimeType: 'text/markdown',
     });

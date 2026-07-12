@@ -38,7 +38,7 @@ describe('removeFieldTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getRemoveFieldTool(new DesktopMcpServer());
     expect(tool.name).toBe('remove-field');
-    expect(tool.description).toContain('rows shelf, columns shelf, or an encoding');
+    expect(tool.description).toContain('Rows shelf, Columns shelf, or an encoding');
     expect(tool.paramsSchema).toMatchObject({
       worksheetFile: expect.any(Object),
       target: expect.any(Object),
@@ -116,7 +116,7 @@ describe('removeFieldTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const body = resultSchema.parse(JSON.parse(result.content[0].text));
-    expect(body.message).toContain('rows shelf');
+    expect(body.message).toContain('Rows shelf');
     expect(body.file).toBe(WORKSHEET_FILE);
     expect(writeFileSync).toHaveBeenCalledWith(WORKSHEET_FILE, MODIFIED_XML, 'utf-8');
     expect(metadataModule.removeFieldFromRows).toHaveBeenCalledWith('<worksheet/>', COLUMN_REF);
@@ -158,7 +158,7 @@ describe('removeFieldTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const body = resultSchema.parse(JSON.parse(result.content[0].text));
-    expect(body.message).toContain('columns shelf');
+    expect(body.message).toContain('Columns shelf');
     expect(body.file).toBe(WORKSHEET_FILE);
     expect(writeFileSync).toHaveBeenCalledWith(WORKSHEET_FILE, MODIFIED_XML, 'utf-8');
     expect(metadataModule.removeFieldFromCols).toHaveBeenCalledWith('<worksheet/>', COLUMN_REF);

@@ -127,7 +127,7 @@ describe('bindTemplateTool', () => {
       minConfidence: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Bind a Chart Template to an Ask (Fast Path)',
+      title: 'Bind a Viz Template to an Ask (Fast Path)',
       readOnlyHint: true,
       openWorldHint: false,
     });

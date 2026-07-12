@@ -39,7 +39,7 @@ describe('addFieldTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getAddFieldTool(new DesktopMcpServer());
     expect(tool.name).toBe('add-field');
-    expect(tool.description).toContain('rows shelf, columns shelf, or an encoding');
+    expect(tool.description).toContain('Rows, Columns, or an encoding');
     expect(tool.paramsSchema).toMatchObject({
       worksheetFile: expect.any(Object),
       target: expect.any(Object),
@@ -117,7 +117,7 @@ describe('addFieldTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const body = resultSchema.parse(JSON.parse(result.content[0].text));
-    expect(body.message).toContain('rows shelf');
+    expect(body.message).toContain('Rows shelf');
     expect(body.file).toBe(WORKSHEET_FILE);
     expect(writeFileSync).toHaveBeenCalledWith(WORKSHEET_FILE, MODIFIED_XML, 'utf-8');
   });
@@ -180,7 +180,7 @@ describe('addFieldTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const body = resultSchema.parse(JSON.parse(result.content[0].text));
-    expect(body.message).toContain('columns shelf');
+    expect(body.message).toContain('Columns shelf');
     expect(body.file).toBe(WORKSHEET_FILE);
     expect(writeFileSync).toHaveBeenCalledWith(WORKSHEET_FILE, MODIFIED_XML, 'utf-8');
   });
@@ -351,7 +351,7 @@ describe('addFieldTool', () => {
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(resultSchema.parse(JSON.parse(result.content[0].text)).message).toContain('rows shelf');
+    expect(resultSchema.parse(JSON.parse(result.content[0].text)).message).toContain('Rows shelf');
     expect(metadataModule.addFieldToRows).toHaveBeenCalledWith(
       '<worksheet/>',
       COLUMN_REF,

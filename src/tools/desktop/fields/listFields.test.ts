@@ -88,7 +88,7 @@ describe('listFieldsTool', () => {
     invariant(result.content[0].type === 'text');
     const body = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(body.message).toContain('Found 2 field(s)');
-    expect(body.message).toContain('rows:');
+    expect(body.message).toContain('Rows:');
     expect(body.message).toContain('encodings:color:');
     expect(body.fields).toHaveLength(2);
   });

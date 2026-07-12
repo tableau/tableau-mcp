@@ -28,7 +28,7 @@ const paramsSchema = {
     .default('file')
     .describe('file reads workbookFile; inline uses workbookXml.'),
   workbookFile: z.string().optional().describe('Modified workbook cache file for mode=file.'),
-  workbookXml: z.string().optional().describe('Full workbook XML for mode=inline.'),
+  workbookXml: z.string().optional().describe('Full workbook content for mode=inline.'),
 };
 
 const title = 'Apply Workbook';
@@ -40,8 +40,8 @@ export const getApplyWorkbookTool = (
     name: 'apply-workbook',
     title,
     description: [
-      'Apply modified workbook XML to Tableau (mutating). mode=file is default; mode=inline is for small XML.',
-      'See expertise://tableau/tactics/data/datasources before editing datasource XML.',
+      'Apply modified workbook content to Tableau (mutating). mode=file is default; mode=inline is for small workbooks.',
+      'See expertise://tableau/tactics/data/datasources before editing datasource structure.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -63,7 +63,7 @@ export const getApplyWorkbookTool = (
             case 'inline': {
               if (!workbookXml?.trim()) {
                 return new ArgsValidationError(
-                  'When mode=inline, a non-empty workbook TWB XML string is required.',
+                  'When mode=inline, non-empty workbook content is required.',
                 ).toErr();
               }
               break;
@@ -73,7 +73,7 @@ export const getApplyWorkbookTool = (
                 return new ArgsValidationError(
                   [
                     'When mode=file, a non-empty workbook file path is required.',
-                    'The path can be determined using any of the tools that get or modify workbook XML.',
+                    'The path can be determined using any of the tools that get or modify workbook content.',
                   ].join(' '),
                 ).toErr();
               }
@@ -82,7 +82,7 @@ export const getApplyWorkbookTool = (
                 return new WorkbookNotFoundError(
                   [
                     `Cached workbook file not found: ${workbookFile}`,
-                    'Provide a path determined by any of the tools that get or modify workbook XML.',
+                    'Provide a path determined by any of the tools that get or modify workbook content.',
                   ].join(' '),
                 ).toErr();
               }
@@ -131,7 +131,7 @@ export const getApplyWorkbookTool = (
               : '';
 
           return new Ok({
-            message: `Successfully applied workbook XML. The workbook has been updated.${note}`,
+            message: `Successfully applied workbook update. The workbook has been updated.${note}`,
           });
         },
       });

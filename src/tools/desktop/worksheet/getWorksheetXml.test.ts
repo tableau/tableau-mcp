@@ -37,14 +37,14 @@ describe('getWorksheetXmlTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getGetWorksheetXmlTool(new DesktopMcpServer());
     expect(tool.name).toBe('get-worksheet-xml');
-    expect(tool.description).toContain('Get XML for an existing worksheet');
+    expect(tool.description).toContain('Get structure for an existing worksheet');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),
       mode: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Get Worksheet XML',
+      title: 'Get Worksheet Structure',
       readOnlyHint: false,
       openWorldHint: false,
     });
@@ -188,7 +188,7 @@ describe('getWorksheetXmlTool', () => {
     const resultObj = fileResultSchema.parse(parsed);
     expect(resultObj.message).toContain('inline cap');
     expect(resultObj.message).toContain('Sales');
-    expect(resultObj.instructions).toContain('read-cached-xml');
+    expect(resultObj.instructions).toContain('cache read tool');
   });
 
   it('logs a cap-hit receipt when the cap fires', async () => {

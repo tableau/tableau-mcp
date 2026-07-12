@@ -91,17 +91,25 @@ describe('DesktopMcpServer', () => {
 describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
   // Snapshot-style pin: any route-table edit must surface here as a reviewable diff.
   it('matches the pinned instructions string', () => {
-    expect(DESKTOP_INSTRUCTIONS).toBe(`You are controlling Tableau Desktop.
+    expect(DESKTOP_INSTRUCTIONS).toBe(
+      `You are controlling Tableau Desktop. Use Tableau vocabulary in your narration: say workbook, viz, sheet, or field rather than implementation formats; shelf names are Columns and Rows. Use product data type names like Number (whole), Number (decimal), Text, and True/False.
 
-For a plain chart ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot), FIRST call bind-template with the user's ask and auto_apply: true — a confident bind renders the chart in ONE call (~2s server-side, no further tool calls). On propose/escalate, fall back to the general authoring tools (get-workbook-xml -> edit -> apply-workbook, or inject-template for a known template).
+For a plain viz ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot), FIRST call bind-template with the user's ask and auto_apply: true — a confident bind renders the viz in ONE call (~2s server-side, no further tool calls). On propose/escalate, fall back to the general authoring tools (get-workbook-xml -> edit -> apply-workbook, or inject-template for a known template).
 
-For a dashboard ask with 2-6 charts (e.g. "a dashboard with sales by region and profit by category"), FIRST call dashboard-auto-apply with one { ask, title? } per chart and a dashboardName — it binds and composes every chart into one dashboard in ONE call. If any ask fails to deterministically bind, nothing is applied and each ask's outcome is returned; fall back to bind-template per chart, or build-and-apply-dashboard for KPI strips / custom zone layouts.
+For a dashboard ask with 2-6 vizzes (e.g. "a dashboard with sales by region and profit by category"), FIRST call dashboard-auto-apply with one { ask, title? } per viz and a dashboardName — it binds and composes every viz into one dashboard in ONE call. If any ask fails to deterministically bind, nothing is applied and each ask's outcome is returned; fall back to bind-template per viz, or build-and-apply-dashboard for KPI strips / custom zone layouts.
 
-For a data-value question ("what was revenue in Q3?"), do NOT answer with a number — this server cannot read data values. Say so, then offer the chart that would show it (a plain chart ask via bind-template) instead.
+For a data-value question ("what was revenue in Q3?"), do NOT answer with a number — this server cannot read data values. Say so, then offer the viz that would show it (a plain viz ask via bind-template) instead.
 
 Every session-scoped tool call needs the session id from list-instances — except bind-template and dashboard-auto-apply, which auto-resolve the session when exactly one Desktop instance is running.
 
-If an apply is rejected by preflight validation, fix the XML per the FIX lines in the error and re-apply. Prefer file mode for large workbooks.`);
+If an apply is rejected by preflight validation, fix the workbook content per the FIX lines in the error and re-apply. Prefer file mode for large workbooks.`,
+    );
+  });
+
+  it('tells agents to narrate with Tableau vocabulary', () => {
+    expect(DESKTOP_INSTRUCTIONS).toContain(
+      'Use Tableau vocabulary in your narration: say workbook, viz, sheet, or field rather than implementation formats; shelf names are Columns and Rows.',
+    );
   });
 });
 
@@ -145,6 +153,49 @@ describe('desktop tools/list serialized surface', () => {
   });
 });
 
+async function collectDesktopToolVocabularySurface(): Promise<string[]> {
+  const server = new DesktopMcpServer();
+  const values: string[] = [];
+
+  const collectSchemaDescriptions = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const item of value) collectSchemaDescriptions(item);
+      return;
+    }
+    if (typeof value !== 'object' || value === null) return;
+
+    const record = value as Record<string, unknown>;
+    if (typeof record.description === 'string') values.push(record.description);
+    for (const nested of Object.values(record)) collectSchemaDescriptions(nested);
+  };
+
+  for (const toolFactory of desktopToolFactories) {
+    const tool = toolFactory(server);
+    const title = await Provider.from(tool.title);
+    const description = await Provider.from(tool.description);
+    if (typeof title === 'string') values.push(title);
+    values.push(description);
+    const paramsSchema = await Provider.from(tool.paramsSchema);
+    const obj = normalizeObjectSchema(paramsSchema as any);
+    const inputSchema = obj
+      ? toJsonSchemaCompat(obj, { strictUnions: true, pipeStrategy: 'input' } as any)
+      : { type: 'object', properties: {} };
+    collectSchemaDescriptions(inputSchema);
+  }
+
+  return values;
+}
+
+describe('desktop tools/list Tableau vocabulary', () => {
+  it('does not expose XML in tool titles, descriptions, or parameter descriptions', async () => {
+    const offenders = (await collectDesktopToolVocabularySurface())
+      .filter((value) => /\bxml\b/i.test(value))
+      .sort();
+
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe('desktop tools/list per-tool byte accounting', () => {
   // Per-tool ceiling. The sum test above pins the SURFACE; this pins ATTRIBUTION:
   // when the sum reddens it names WHICH tool got fat, with numbers. Kept well
@@ -156,14 +207,14 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // DO NOT GROW these: trim them down and lower/remove the entry. Never raise a
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
-    ['bind-template', 2139], // do not grow
-    ['plan-dashboard-creation', 2075], // do not grow
-    ['build-and-apply-dashboard', 2042], // do not grow
+    ['bind-template', 2131], // do not grow
+    ['plan-dashboard-creation', 2043], // do not grow
+    ['build-and-apply-dashboard', 2033], // do not grow
     ['validate-proposal', 2035], // do not grow
-    ['dashboard-auto-apply', 1870], // do not grow
-    ['dashboard-health-check', 1826], // do not grow
-    ['inject-template', 1445], // do not grow
-    ['build-and-apply-worksheet', 1284], // do not grow
+    ['dashboard-auto-apply', 1829], // do not grow
+    ['dashboard-health-check', 1821], // do not grow
+    ['inject-template', 1404], // do not grow
+    ['build-and-apply-worksheet', 1274], // do not grow
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {

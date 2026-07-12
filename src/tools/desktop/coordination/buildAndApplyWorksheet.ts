@@ -56,11 +56,11 @@ const paramsSchema = {
   taskSpec: z
     .object({
       worksheetName: z.string(),
-      worksheetFile: z.string().describe('Cached worksheet XML file.'),
+      worksheetFile: z.string().describe('Cached worksheet file.'),
       type: z.enum(['kpi', 'chart']),
       template: z.string().optional().describe('Template name.'),
       fields: z.array(z.string()).describe('Column refs to use.'),
-      workbookFile: z.string().describe('Cached workbook XML file.'),
+      workbookFile: z.string().describe('Cached workbook file.'),
     })
     .describe('Task spec from plan-dashboard-creation.'),
 };
@@ -74,7 +74,7 @@ export const getBuildAndApplyWorksheetTool = (
     name: 'build-and-apply-worksheet',
     title: toolTitle,
     description: [
-      'Build worksheet XML from a template and immediately APPLY it to the live workbook.',
+      'Build a worksheet from a template and immediately APPLY it to the live workbook.',
       'Designed for parallel Phase-2 execution by subagents. Details: expertise://tableau/tactics/viz/worksheets.',
     ].join(' '),
     paramsSchema,
@@ -99,7 +99,7 @@ export const getBuildAndApplyWorksheetTool = (
 
           if (!template) {
             return new ArgsValidationError(
-              'taskSpec.template is required. KPIs default to "kpi-text"; charts should use a chart-specific template (e.g., "ranking-ordered-bar"). Re-run plan-dashboard-creation to get a plan with templates populated.',
+              'taskSpec.template is required. KPIs default to "kpi-text"; viz worksheets should use a viz-specific template (e.g., "ranking-ordered-bar"). Re-run plan-dashboard-creation to get a plan with templates populated.',
             ).toErr();
           }
 
@@ -107,7 +107,7 @@ export const getBuildAndApplyWorksheetTool = (
           let templateXml = readTemplate(template);
           if (!templateXml) {
             return new ArgsValidationError(
-              `Template not found: "${template}". Check available templates with list-xml-templates.`,
+              `Template not found: "${template}". Check available templates with the template list tool.`,
             ).toErr();
           }
 

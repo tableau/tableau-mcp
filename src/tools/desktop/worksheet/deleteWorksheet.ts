@@ -211,7 +211,7 @@ export const getDeleteWorksheetTool = (
           const removal = removeWorksheetFromWorkbook(xmlResult.value, worksheetName);
           if (removal.status === 'parse-failed') {
             return new XmlModificationError(
-              `Could not parse the live workbook XML: ${removal.message}`,
+              `Could not parse the live workbook structure: ${removal.message}`,
             ).toErr();
           }
           if (removal.status === 'not-found') {

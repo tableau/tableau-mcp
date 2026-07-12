@@ -29,14 +29,14 @@ const paramsSchema = {
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe('file writes cache path; inline returns XML.'),
+    .describe('file writes cache path; inline returns dashboard layout content.'),
 };
 
 type InlineResult = { dashboardXml: string };
 type FileResult = { file: string; instructions: string };
 type GetDashboardXmlToolResult = { message: string } & (InlineResult | FileResult);
 
-const title = 'Get Dashboard XML';
+const title = 'Get Dashboard Layout';
 export const getGetDashboardXmlTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
@@ -45,7 +45,7 @@ export const getGetDashboardXmlTool = (
     name: 'get-dashboard-xml',
     title,
     description: [
-      'Get XML for an existing dashboard. mode=file is default; mode=inline returns XML.',
+      'Get layout for an existing dashboard. mode=file is default; mode=inline returns dashboard layout content.',
       'IMPORTANT: only works for an existing dashboard (see list-dashboards); to create one use apply-workbook. Use apply-dashboard to apply changes.',
     ].join(' '),
     paramsSchema,
@@ -90,7 +90,7 @@ export const getGetDashboardXmlTool = (
 
           if (mode === 'inline' && !capFired) {
             return new Ok({
-              message: `Dashboard XML returned inline (${bytes} bytes)`,
+              message: `Dashboard layout returned inline (${bytes} bytes)`,
               dashboardXml,
             });
           }
@@ -113,14 +113,14 @@ export const getGetDashboardXmlTool = (
               }),
               file: cacheFile,
               instructions:
-                'This dashboard exceeds the inline cap. Use read-cached-xml (with a dashboard ' +
-                'selector or startByte/endByte to read a slice), write-cached-xml (same selector to ' +
+                'This dashboard exceeds the inline cap. Use the cache read tool (with a dashboard ' +
+                'selector or startByte/endByte to read a slice), the cache write tool (same selector to ' +
                 'splice edits back), then apply-dashboard with mode=file. Do not request mode=inline.',
             });
           }
 
           log({
-            message: `Saved dashboard XML to cache file: ${cacheFile}`,
+            message: `Saved dashboard layout to cache file: ${cacheFile}`,
             level: 'info',
             logger: 'tool',
             data: { file: cacheFile, size: bytes },
@@ -130,7 +130,7 @@ export const getGetDashboardXmlTool = (
             message: `Dashboard "${dashboardName}" saved to cache file (${bytes} bytes)\n\nArtifact summary:\n${formatArtifactSummary('dashboard', dashboardXml)}`,
             file: cacheFile,
             instructions:
-              'Use this file path with apply-dashboard instead of passing XML directly.',
+              'Use this file path with apply-dashboard instead of passing content directly.',
           });
         },
       });
