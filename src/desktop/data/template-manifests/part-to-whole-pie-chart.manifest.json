@@ -2,12 +2,46 @@
   "template": "part-to-whole-pie-chart",
   "family": "part-to-whole",
   "readiness": "YELLOW",
-  "fast_path_eligible": false,
+  "fast_path_eligible": true,
   "fast_path_blockers": [],
-  "portability_evidence": { "fixture_bind": true, "render_verified": "none" },
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "live-2026-07-11",
+    "xml_sha256": "c4db7330b9cb223795d1dbf230a15f4b482b540fa792f57c7599e0dc75dcff11",
+    "render_evidence": {
+      "method": "gate-composite",
+      "date": "2026-07-11",
+      "structural": 0.97297,
+      "critical_pass": "5/5",
+      "high_pass": "3/3",
+      "pixel": 0.95833,
+      "pixel_regions": 6,
+      "sanity": "sane",
+      "sanity_signals": [
+        "mark-count=pass reconciled=true (4=4=EXPECTED_COUNT, Worksheet>Copy>Data on source and applied sheets)",
+        "caption-leak=pass"
+      ],
+      "run": "oracle-leg replay (W62 stamp batch): independent authored oracle on bundled Sample - Superstore ([Region] authored plain -- the template's cosmetic aggregate-role-from hint is a deliberate authoring divergence); bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity placeholder fill (no rewrites -- native Superstore names); all 12 config facets green on the applied readback",
+      "basis": "golden-parity gate run 2026-07-11 (oracle-leg): structural 0.97297 (5/5 critical, 3/3 high; sole miss = salience-1 resolved-title cosmetic -- applied sheet name differs from oracle sheet name by design), pixel 0.95833 (6 counted ROIs, same-geometry back-to-back captures), composite 97, binding-sanity sane via reconciled Copy>Data mark counts 4=4=EXPECTED_COUNT (COUNTD([Region]) -- EXACT offline-pinned absolute). Wedge angles are a rendering fact the readback cannot assert; the pixel leg is the backstop.",
+      "lane": "fable-direct stamp batch 2026-07-11 (orchestrator live gate run; oracle-stamp.mjs CONFIG=pie PID=85641)",
+      "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
+      "gate_composite": 97
+    }
+  },
   "datasource_placeholder": true,
-  "placeholders": ["TITLE", "DATASOURCE"],
-  "intent_keywords": ["pie", "part-to-whole", "composition", "proportion", "share", "percentage", "donut"],
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "pie",
+    "part-to-whole",
+    "composition",
+    "proportion",
+    "share",
+    "percentage",
+    "donut"
+  ],
   "description": "A pie whose wedge angles are an aggregated measure, one wedge per category (color).",
   "avoid_when": [
     "More than ~3-5 categories - humans compare angles poorly; a sorted horizontal bar reads more precisely and scales to any count",
@@ -17,16 +51,34 @@
     "Never render as a 3D pie - perspective distorts the proportions"
   ],
   "slots": [
-    { "slot_id": "region", "template_field": "Region", "derivation": "none",
-      "role": ["color"], "kind": "categorical", "bindable": true, "required": true,
-      "notes": "template column has aggregate-role-from='[State/Province]'; cosmetic secondary-role hint carried onto the target (verification-report correction: GREEN -> YELLOW)." },
-    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
-      "role": ["wedge-size"], "kind": "quantitative", "bindable": true, "required": true }
+    {
+      "slot_id": "region",
+      "template_field": "Region",
+      "derivation": "none",
+      "role": [
+        "color"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "template column has aggregate-role-from='[State/Province]'; cosmetic secondary-role hint carried onto the target (verification-report correction: GREEN -> YELLOW)."
+    },
+    {
+      "slot_id": "sales",
+      "template_field": "Sales",
+      "derivation": "sum",
+      "role": [
+        "wedge-size"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true
+    }
   ],
   "calcs": [],
   "hazards": [
     { "code": "hidden-aggregate-role-from",
-      "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so this hazard does not block the fast path; fast_path_eligible is false here pending live render-verification.",
+      "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so this hazard does not block the fast path; live render-verified 2026-07-11 (oracle-leg composite 97) -- the hint carried through apply without blocking, and fast_path_eligible is now true.",
       "xml": "part-to-whole-pie-chart.xml:10" }
   ]
 }

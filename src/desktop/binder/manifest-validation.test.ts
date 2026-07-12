@@ -69,6 +69,8 @@ describe('binder/manifest-validation — superset is backward-compatible with th
     // were ported verbatim, taking the count 41 → 42.
     // classifier-lockstep-port: the a2td parity sync added deviation-arrow + magnitude-simple-bar
     // (both render_verified 'none' → fast_path_eligible false) verbatim, taking 42 → 44.
+    // W62 render-stamp evidence port: five now-shipped manifests were stamped in place,
+    // leaving the manifest count at 44.
     // Pinned in lockstep with the on-disk count so a silent add/drop of a bundled manifest
     // fails here.
     expect(bundled.length).toBe(44);

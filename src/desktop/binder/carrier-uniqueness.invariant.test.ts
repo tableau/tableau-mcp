@@ -111,6 +111,11 @@ describe('binder/carrier-uniqueness — CHART_NOUN_KEYWORDS ↔ eligible manifes
     expect(carriersOf('dot-strip')).toEqual(['distribution-bar-code-chart']);
   });
 
+  it("the newly stamped pie nouns (pie/donut) are each single-carrier", () => {
+    expect(carriersOf('pie')).toEqual(['part-to-whole-pie-chart']);
+    expect(carriersOf('donut')).toEqual(['part-to-whole-pie-chart']);
+  });
+
   it("the generic 'map' is DELIBERATELY absent from CHART_NOUN_KEYWORDS (dual-carrier hazard)", () => {
     // 'map' is an intent_keyword of BOTH spatial-choropleth-map and spatial-symbol-map,
     // so admitting it would make the lone-winner exemption ambiguous the moment
@@ -132,9 +137,7 @@ describe('binder/carrier-uniqueness — CHART_NOUN_KEYWORDS ↔ eligible manifes
   // re-review — which is the intended tripwire, not a false alarm.
   it('pins the zero-carrier nouns (templates present but not yet stamped eligible)', () => {
     const zeroCarrier = [...new Set(nouns)].filter((n) => carriersOf(n).length === 0).sort();
-    expect(zeroCarrier).toEqual(
-      ['donut', 'histogram', 'pie', 'slope', 'slope-chart', 'slope-graph'].sort(),
-    );
+    expect(zeroCarrier).toEqual(['histogram', 'slope', 'slope-chart', 'slope-graph'].sort());
   });
 
   it('every non-zero-carrier noun has exactly one carrier (no >1 slips past the split)', () => {
