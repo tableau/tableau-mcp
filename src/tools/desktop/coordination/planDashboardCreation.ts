@@ -9,6 +9,7 @@ import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { listTemplateNames } from '../../../desktop/templates/templatePath.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { attachNextAction, prefillNextAction } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
@@ -158,7 +159,10 @@ export const getPlanDashboardCreationTool = (
               '  • Use resolve-field with an explicit datasource.',
               '  • For not_found fields, call list-available-fields to see valid names.',
             );
-            return new ArgsValidationError(lines.join('\n')).toErr();
+            return attachNextAction(
+              new ArgsValidationError(lines.join('\n')),
+              prefillNextAction('Disambiguate each field before re-planning'),
+            ).toErr();
           }
 
           // Cache workbook for subagents
