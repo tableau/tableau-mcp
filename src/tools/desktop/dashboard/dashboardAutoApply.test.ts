@@ -422,7 +422,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
         'One or more asks did not deterministically bind (Call-1, no-LLM). Nothing was applied to ' +
         'the live workbook. Each ask carries its own bind-template-shaped outcome below: for ' +
         '"propose", fill its output_schema and call bind-template again; for "escalate", follow its ' +
-        'guidance. Once every ask binds, retry dashboard-auto-apply, or fall back to the per-chart ' +
+        'guidance. Once every ask binds, retry dashboard-auto-apply, or fall back to the per-viz ' +
         'bind-template(auto_apply:true) flow using each already-bound ask.',
     };
     expect(result.content[0].text).toBe(JSON.stringify(expectedBody));

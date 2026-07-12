@@ -463,7 +463,7 @@ export const getDashboardAutoApplyTool = (
                 'was applied — fall back to the per-viz bind-template(auto_apply:true) flow using each ' +
                 "ask's bound args.",
               describeApplyError(applyResult.error),
-              prefillNextAction('Fall back to per-chart auto-apply'),
+              prefillNextAction('Fall back to per-viz auto-apply'),
             );
           }
           const applyMs = Date.now() - applyStart;
