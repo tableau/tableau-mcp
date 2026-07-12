@@ -2,9 +2,9 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.11.0+content.2026-07-08",
+  "content_version": "2.11.0+content.2026-07-12",
   "schema_version": "1",
-  "generated": "2026-07-08",
+  "generated": "2026-07-12",
   "engine_compat": {
     "server_min": "2.11.0",
     "node": ">=22.7.5"
@@ -126,6 +126,11 @@
       "bytes": 2406
     },
     {
+      "path": "data-visualization-templates-xml/magnitude-simple-bar.xml",
+      "sha256": "86822337c84088ead4638cbdcb7259a90225acfd9ff8ee6578ee3f4209a773c9",
+      "bytes": 2474
+    },
+    {
       "path": "data-visualization-templates-xml/pareto-chart.xml",
       "sha256": "319452a70c9eb83c85d0620fdfa2486e852bd84049bbae20f550cc47897e50a6",
       "bytes": 4971
@@ -217,8 +222,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "88d48e47f756af9f15906c4cffddaab18febe97fe6836defe75e86822c403593",
-      "bytes": 230883
+      "sha256": "c527c59e3810e1cdbf6e8e27ded30b8357b6ef697c01ff04b88a14d110265eef",
+      "bytes": 244275
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -252,13 +257,13 @@
     },
     {
       "path": "template-manifests/control-chart-xmr.manifest.json",
-      "sha256": "21ae86a46d3d627c08eae93d6b7989cbecf06c32a7d52f9670b0f1002589ff8e",
-      "bytes": 4727
+      "sha256": "3a7ea0153afd3919e012d91bbdcf54fbe37d32ba74d1edc6eb57934c1c772d1c",
+      "bytes": 7222
     },
     {
       "path": "template-manifests/correlation-bubble-chart.manifest.json",
-      "sha256": "203c00c85d5bd840b7ed41e01f8ca030ed05e794815615b96817eda0e8e469d1",
-      "bytes": 1305
+      "sha256": "35131c04e8e37130345d533a6eabd2cbd70cbf68c79646982be8107585351953",
+      "bytes": 3283
     },
     {
       "path": "template-manifests/correlation-dual-axis-chart.manifest.json",
@@ -336,14 +341,19 @@
       "bytes": 3206
     },
     {
+      "path": "template-manifests/magnitude-simple-bar.manifest.json",
+      "sha256": "9b9212c38781d332becc5aa02c30eb3ce9828f536d3c8a61c47aff161e3a981f",
+      "bytes": 4986
+    },
+    {
       "path": "template-manifests/pareto-chart.manifest.json",
       "sha256": "0c81718e05d2e10bde0909f26b7c1ab92383625ab8af0f8f98b7aa83548a8651",
       "bytes": 4714
     },
     {
       "path": "template-manifests/part-to-whole-pie-chart.manifest.json",
-      "sha256": "e611193d1eec140c576879eab88ac9529c52a866f9fda394ec46d7f113ecdb6e",
-      "bytes": 1950
+      "sha256": "1a92f0db744a71985559148e10187639df6f8095aeeebb089915d427375d65b8",
+      "bytes": 4086
     },
     {
       "path": "template-manifests/part-to-whole-proportional-stacked-bar.manifest.json",
@@ -402,8 +412,8 @@
     },
     {
       "path": "template-manifests/spatial-symbol-map.manifest.json",
-      "sha256": "21276c67b45d5a515a91ea061fe3654b6153e3f10f5bae809c7274e6fd3e0ee9",
-      "bytes": 2763
+      "sha256": "fb1556fab3c8f234d879de57291d78ab90307125beaf86eb08394998fd9df053",
+      "bytes": 4599
     },
     {
       "path": "template-manifests/trend-line-chart.manifest.json",

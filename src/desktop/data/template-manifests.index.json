@@ -3,14 +3,18 @@
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Edit data/template-manifests/*.manifest.json and re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
   "_source": "data/template-manifests/*.manifest.json",
-  "count": 41,
+  "count": 42,
   "fast_path_templates": [
     "box-plot-chart",
+    "control-chart-xmr",
+    "correlation-bubble-chart",
     "correlation-scatter-plot-chart",
     "distribution-bar-code-chart",
     "funnel-chart",
     "gantt-task-rollup-chart",
     "kpi-text",
+    "magnitude-simple-bar",
+    "part-to-whole-pie-chart",
     "part-to-whole-stacked-bar-chart",
     "part-to-whole-treemap-chart",
     "part-to-whole-waterfall",
@@ -18,6 +22,7 @@
     "ranking-ordered-bar",
     "ranking-ordered-column",
     "spatial-choropleth-map",
+    "spatial-symbol-map",
     "trend-line-chart",
     "ww-ou-arrow"
   ],
@@ -576,11 +581,31 @@
       "template": "control-chart-xmr",
       "family": "deviation",
       "readiness": "GREEN",
-      "fast_path_eligible": false,
+      "fast_path_eligible": true,
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "none"
+        "render_verified": "live-2026-07-11",
+        "xml_sha256": "130bce6e869a4f662fbeb061487cfb8a5296c51254fa9767cd47600fcf671510",
+        "render_evidence": {
+          "method": "gate-composite",
+          "date": "2026-07-11",
+          "structural": 0.89189,
+          "critical_pass": "5/5",
+          "high_pass": "2/3",
+          "pixel": 1,
+          "pixel_regions": 6,
+          "sanity": "sane",
+          "sanity_signals": [
+            "mark-count=pass reconciled=true (1242=1242, Worksheet>Copy>Data on source and applied sheets -- distinct MDY order days on the bundled xls, measured live)",
+            "caption-leak=pass"
+          ],
+          "run": "oracle-leg replay (W62 stamp batch): independent authored oracle on bundled Sample - Superstore; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity fill (native names + the template's own out-of-control calc, no rewrites); all 15 config facets green on the applied readback -- BOTH reference lines (per-pane average refline0 + stdev +/-3 band refline1) and the User-derivation table-calc color instance SURVIVED tableau-apply-worksheet mode=inline (the quota-refline/slope-table-calc survival class this leg existed to prove)",
+          "basis": "golden-parity gate run 2026-07-11 (oracle-leg): structural 0.89189 (5/5 critical; 2/3 high -- the sole s3 miss is label-column-instances on the calc ID, the oracle's DISTINCT authored calc id ...034 vs the template's 20260705120000, i.e. the ORACLE-CONTRACT independence divergence itself, same honest-miss class as ww-ou-arrow's; s1 resolved-title cosmetic), pixel 1.0 (6 counted ROIs, same-geometry back-to-back captures), composite 94, binding-sanity sane via reconciled Copy>Data 1242=1242 (grain = distinct MDY days; data-dependent, measured live; reflines added no rows).",
+          "lane": "fable-direct stamp batch 2026-07-11 (orchestrator live gate run; oracle-stamp.mjs CONFIG=xmr PID=96600)",
+          "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
+          "gate_composite": 94
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [
@@ -665,7 +690,7 @@
         },
         {
           "code": "color-violation-calc-window-addressing",
-          "detail": "Color is driven by control_status_calc, a WINDOW_AVG/WINDOW_STDEV table calc (the ±3-sigma beyond-limits flag). The column-instance carries no explicit <table-calc> Compute Using, so on live apply the window addressing defaults to the natural table partition (the Order Date series on cols). RESIDUAL RISK: the exact Compute Using must be confirmed on a live render — render_verified stays 'none' until then. This lane is a code-only structural fix (unblock the redundant-color-encoding gate); no live apply/parity has run.",
+          "detail": "Color is driven by control_status_calc, a WINDOW_AVG/WINDOW_STDEV table calc (the +/-3-sigma beyond-limits flag). The column-instance carries no explicit <table-calc> Compute Using, so on live apply the window addressing defaults to the natural table partition (the Order Date series on cols). RESOLVED LIVE 2026-07-11 (oracle-leg composite 94): the default natural-table addressing computed on the applied render -- the User-derivation color instance and BOTH reference lines survived tableau-apply-worksheet mode=inline and reconciled 1242=1242 (see portability_evidence.render_evidence).",
           "xml": "control-chart-xmr.xml:14"
         },
         {
@@ -679,11 +704,31 @@
       "template": "correlation-bubble-chart",
       "family": "correlation",
       "readiness": "GREEN",
-      "fast_path_eligible": false,
+      "fast_path_eligible": true,
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "none"
+        "render_verified": "live-2026-07-11",
+        "xml_sha256": "b246e150b97c2a897bb5434abf7c1957e7f0f92b1ac5ce8e26d8b6c219ca061c",
+        "render_evidence": {
+          "method": "gate-composite",
+          "date": "2026-07-11",
+          "structural": 0.97297,
+          "critical_pass": "5/5",
+          "high_pass": "3/3",
+          "pixel": 0.95833,
+          "pixel_regions": 6,
+          "sanity": "sane",
+          "sanity_signals": [
+            "mark-count=pass reconciled=true (5111=5111, Worksheet>Copy>Data on source and applied sheets -- COUNTD([Order ID]) on the bundled xls, measured live)",
+            "caption-leak=pass"
+          ],
+          "run": "oracle-leg replay (W62 stamp batch): independent authored oracle on bundled Sample - Superstore; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity placeholder fill (no rewrites -- native Superstore names); all 12 config facets green on the applied readback incl. the non-Sum AVG(Discount) derivation on rows",
+          "basis": "golden-parity gate run 2026-07-11 (oracle-leg): structural 0.97297 (5/5 critical, 3/3 high; sole miss = salience-1 resolved-title cosmetic -- applied sheet name differs from oracle sheet name by design), pixel 0.95833 (6 counted ROIs, same-geometry back-to-back captures), composite 97, binding-sanity sane via reconciled Copy>Data mark counts 5111=5111 (grain [Order ID]; data-dependent so measured live, no absolute pin).",
+          "lane": "fable-direct stamp batch 2026-07-11 (orchestrator live gate run; oracle-stamp.mjs CONFIG=bubble PID=90826)",
+          "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
+          "gate_composite": 97
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [
@@ -2462,6 +2507,85 @@
       ]
     },
     {
+      "template": "magnitude-simple-bar",
+      "family": "magnitude",
+      "readiness": "GREEN",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-11",
+        "xml_sha256": "86822337c84088ead4638cbdcb7259a90225acfd9ff8ee6578ee3f4209a773c9",
+        "render_evidence": {
+          "method": "gate-composite",
+          "date": "2026-07-11",
+          "structural": 0.97297,
+          "critical_pass": "5/5",
+          "high_pass": "3/3",
+          "pixel": 0.91667,
+          "pixel_regions": 6,
+          "sanity": "sane",
+          "sanity_signals": [
+            "mark-count=pass reconciled=true (3=3=EXPECTED_COUNT, Worksheet>Copy>Data on source and applied sheets -- COUNTD([Category]), EXACT offline-pinned)",
+            "caption-leak=pass"
+          ],
+          "run": "oracle-leg replay (W62 stamp batch): independent authored oracle on bundled Sample - Superstore; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity fill (native names, no rewrites); all 12 config facets green on the applied readback incl. computed-sort DESC survival (the sort NODE came through apply)",
+          "basis": "golden-parity gate run 2026-07-11 (oracle-leg): structural 0.97297 (5/5 critical, 3/3 high; sole miss = salience-1 resolved-title cosmetic), pixel 0.91667 (6 counted ROIs -- the template ships a layout-options subtitle + axis/zeroline trims the oracle deliberately omits, an expected cosmetic divergence), composite 95, binding-sanity sane via reconciled Copy>Data 3=3=EXPECTED_COUNT. Oracle authoring note: computed-sort requires the SortTagCleanup document-format flag (tactics/tree/twb-xml-grammar.md) -- omitted first emit failed Desktop load D2E8DA72, fixed in the generator.",
+          "lane": "fable-direct stamp batch 2026-07-11 (orchestrator live gate run; oracle-stamp.mjs CONFIG=magbar PID=52932)",
+          "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
+          "gate_composite": 95
+        }
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "magnitude",
+        "absolute"
+      ],
+      "description": "Horizontal bars, one per category; bar length = the measure's ABSOLUTE magnitude (a size comparison across categories). Bars are sorted descending by the measure purely as a READING AID -- the sort is not a ranking contract (no top-N, best/worst, or positional semantics). The magnitude family's generic {category, measure} bar: cloned from ranking-ordered-bar's two-slot categorical+quantitative bar shape, but with ranking-specific keywords, subtitle, and sort-role labels removed, and NO period/temporal slot or hardcoded incomplete-period filter (the HARDCODED_FILTER_MEMBERS blocker that keeps magnitude-paired-bar / magnitude-paired-column-chart off the fast path). Live-stamped 2026-07-11 (oracle-leg composite 95, 3=3 reconciled, computed-sort survived apply): fast_path_eligible true -- the magnitude family's first fast-path template.",
+      "avoid_when": [
+        "The user explicitly wants a ranked or top-N / bottom-N ordering as the point of the chart (best/worst, leaders/laggards) - reach for ranking-ordered-bar or ranking-ordered-column, where the sort order IS the contract; here the descending sort is only a reading aid.",
+        "The comparison is period-over-period (this year vs last year, before vs after) - use the magnitude paired-bar or paired-column family, which pairs a measure over two or more time periods per group."
+      ],
+      "slots": [
+        {
+          "slot_id": "category",
+          "template_field": "Category",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "One horizontal bar per member on rows. Also the dimension instance the computed-sort orders (DESC by the measure) - a reading aid, not a ranking contract."
+        },
+        {
+          "slot_id": "measure",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "cols"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "Bar length on cols = the measure's magnitude, aggregated as SUM. Template_field 'Sales' is just the placeholder column the field-swap injector renames to the bound measure; the computed-sort's using= references this instance."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "computed-sort-pill-coupling",
+          "detail": "The computed-sort binds the category dimension instance ([none:Category:nk]) to the measure instance ([sum:Sales:qk]); both slots must bind or the sort dangles. Both are required, so this is satisfied by coverage. (This is the ONLY carry-over from the ranking donor's sort mechanic; unlike ranking, the sort here is presentational, not a top-N contract.)",
+          "xml": "magnitude-simple-bar.xml:24"
+        }
+      ]
+    },
+    {
       "template": "pareto-chart",
       "family": "specialized",
       "readiness": "YELLOW",
@@ -2555,11 +2679,31 @@
       "template": "part-to-whole-pie-chart",
       "family": "part-to-whole",
       "readiness": "YELLOW",
-      "fast_path_eligible": false,
+      "fast_path_eligible": true,
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "none"
+        "render_verified": "live-2026-07-11",
+        "xml_sha256": "c4db7330b9cb223795d1dbf230a15f4b482b540fa792f57c7599e0dc75dcff11",
+        "render_evidence": {
+          "method": "gate-composite",
+          "date": "2026-07-11",
+          "structural": 0.97297,
+          "critical_pass": "5/5",
+          "high_pass": "3/3",
+          "pixel": 0.95833,
+          "pixel_regions": 6,
+          "sanity": "sane",
+          "sanity_signals": [
+            "mark-count=pass reconciled=true (4=4=EXPECTED_COUNT, Worksheet>Copy>Data on source and applied sheets)",
+            "caption-leak=pass"
+          ],
+          "run": "oracle-leg replay (W62 stamp batch): independent authored oracle on bundled Sample - Superstore ([Region] authored plain -- the template's cosmetic aggregate-role-from hint is a deliberate authoring divergence); bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity placeholder fill (no rewrites -- native Superstore names); all 12 config facets green on the applied readback",
+          "basis": "golden-parity gate run 2026-07-11 (oracle-leg): structural 0.97297 (5/5 critical, 3/3 high; sole miss = salience-1 resolved-title cosmetic -- applied sheet name differs from oracle sheet name by design), pixel 0.95833 (6 counted ROIs, same-geometry back-to-back captures), composite 97, binding-sanity sane via reconciled Copy>Data mark counts 4=4=EXPECTED_COUNT (COUNTD([Region]) -- EXACT offline-pinned absolute). Wedge angles are a rendering fact the readback cannot assert; the pixel leg is the backstop.",
+          "lane": "fable-direct stamp batch 2026-07-11 (orchestrator live gate run; oracle-stamp.mjs CONFIG=pie PID=85641)",
+          "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
+          "gate_composite": 97
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [
@@ -2612,7 +2756,7 @@
       "hazards": [
         {
           "code": "hidden-aggregate-role-from",
-          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
+          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so this hazard does not block the fast path; live render-verified 2026-07-11 (oracle-leg composite 97) -- the hint carried through apply without blocking, and fast_path_eligible is now true.",
           "xml": "part-to-whole-pie-chart.xml:10"
         }
       ]
@@ -3657,11 +3801,31 @@
       "template": "spatial-symbol-map",
       "family": "spatial",
       "readiness": "YELLOW",
-      "fast_path_eligible": false,
+      "fast_path_eligible": true,
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "none"
+        "render_verified": "live-2026-07-11",
+        "xml_sha256": "0e10814f07d32b7c4c1a9113f0b6d2db9e62119316d39630db43a3415fd424d0",
+        "render_evidence": {
+          "method": "gate-composite",
+          "date": "2026-07-11",
+          "structural": 0.97297,
+          "critical_pass": "5/5",
+          "high_pass": "3/3",
+          "pixel": 1,
+          "pixel_regions": 6,
+          "sanity": "sane",
+          "sanity_signals": [
+            "mark-count=pass reconciled=true (616=616, Worksheet>Copy>Data on source and applied sheets)",
+            "caption-leak=pass"
+          ],
+          "run": "oracle-leg replay (W44-STAMP-PORT config): independent authored oracle on bundled Sample - Superstore; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity placeholder fill (no rewrites -- native Superstore geo names); all 12 config facets green on the applied readback",
+          "basis": "golden-parity gate run 2026-07-11 (oracle-leg): structural 0.97297 (5/5 critical, 3/3 high; sole miss = salience-1 resolved-title cosmetic -- applied sheet name differs from oracle sheet name by design), pixel 1.0 (6 counted ROIs, same-geometry back-to-back captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 616=616. Geocoding proven live: generated Lat/Long materialized on the bundled xls (manifest hazards generated-geo-required + geo-bind-not-geocodable closed for this datasource); bundled-xls geo grain measured 616 (CookBook Superstore's was 605 -- different data vintage, both internally reconciled).",
+          "lane": "fable-direct stamp batch 2026-07-11 (orchestrator live gate run; oracle-stamp.mjs CONFIG=spatial-symbol-map PID=65652)",
+          "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
+          "gate_composite": 98
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [

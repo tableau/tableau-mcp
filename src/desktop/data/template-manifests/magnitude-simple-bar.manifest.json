@@ -1,0 +1,79 @@
+{
+  "template": "magnitude-simple-bar",
+  "family": "magnitude",
+  "readiness": "GREEN",
+  "fast_path_eligible": true,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "live-2026-07-11",
+    "xml_sha256": "86822337c84088ead4638cbdcb7259a90225acfd9ff8ee6578ee3f4209a773c9",
+    "render_evidence": {
+      "method": "gate-composite",
+      "date": "2026-07-11",
+      "structural": 0.97297,
+      "critical_pass": "5/5",
+      "high_pass": "3/3",
+      "pixel": 0.91667,
+      "pixel_regions": 6,
+      "sanity": "sane",
+      "sanity_signals": [
+        "mark-count=pass reconciled=true (3=3=EXPECTED_COUNT, Worksheet>Copy>Data on source and applied sheets -- COUNTD([Category]), EXACT offline-pinned)",
+        "caption-leak=pass"
+      ],
+      "run": "oracle-leg replay (W62 stamp batch): independent authored oracle on bundled Sample - Superstore; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity fill (native names, no rewrites); all 12 config facets green on the applied readback incl. computed-sort DESC survival (the sort NODE came through apply)",
+      "basis": "golden-parity gate run 2026-07-11 (oracle-leg): structural 0.97297 (5/5 critical, 3/3 high; sole miss = salience-1 resolved-title cosmetic), pixel 0.91667 (6 counted ROIs -- the template ships a layout-options subtitle + axis/zeroline trims the oracle deliberately omits, an expected cosmetic divergence), composite 95, binding-sanity sane via reconciled Copy>Data 3=3=EXPECTED_COUNT. Oracle authoring note: computed-sort requires the SortTagCleanup document-format flag (tactics/tree/twb-xml-grammar.md) -- omitted first emit failed Desktop load D2E8DA72, fixed in the generator.",
+      "lane": "fable-direct stamp batch 2026-07-11 (orchestrator live gate run; oracle-stamp.mjs CONFIG=magbar PID=52932)",
+      "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
+      "gate_composite": 95
+    }
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "magnitude",
+    "absolute"
+  ],
+  "description": "Horizontal bars, one per category; bar length = the measure's ABSOLUTE magnitude (a size comparison across categories). Bars are sorted descending by the measure purely as a READING AID -- the sort is not a ranking contract (no top-N, best/worst, or positional semantics). The magnitude family's generic {category, measure} bar: cloned from ranking-ordered-bar's two-slot categorical+quantitative bar shape, but with ranking-specific keywords, subtitle, and sort-role labels removed, and NO period/temporal slot or hardcoded incomplete-period filter (the HARDCODED_FILTER_MEMBERS blocker that keeps magnitude-paired-bar / magnitude-paired-column-chart off the fast path). Live-stamped 2026-07-11 (oracle-leg composite 95, 3=3 reconciled, computed-sort survived apply): fast_path_eligible true -- the magnitude family's first fast-path template.",
+  "avoid_when": [
+    "The user explicitly wants a ranked or top-N / bottom-N ordering as the point of the chart (best/worst, leaders/laggards) - reach for ranking-ordered-bar or ranking-ordered-column, where the sort order IS the contract; here the descending sort is only a reading aid.",
+    "The comparison is period-over-period (this year vs last year, before vs after) - use the magnitude paired-bar or paired-column family, which pairs a measure over two or more time periods per group."
+  ],
+  "slots": [
+    {
+      "slot_id": "category",
+      "template_field": "Category",
+      "derivation": "none",
+      "role": [
+        "rows"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "One horizontal bar per member on rows. Also the dimension instance the computed-sort orders (DESC by the measure) - a reading aid, not a ranking contract."
+    },
+    {
+      "slot_id": "measure",
+      "template_field": "Sales",
+      "derivation": "sum",
+      "role": [
+        "cols"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "Bar length on cols = the measure's magnitude, aggregated as SUM. Template_field 'Sales' is just the placeholder column the field-swap injector renames to the bound measure; the computed-sort's using= references this instance."
+    }
+  ],
+  "calcs": [],
+  "hazards": [
+    {
+      "code": "computed-sort-pill-coupling",
+      "detail": "The computed-sort binds the category dimension instance ([none:Category:nk]) to the measure instance ([sum:Sales:qk]); both slots must bind or the sort dangles. Both are required, so this is satisfied by coverage. (This is the ONLY carry-over from the ranking donor's sort mechanic; unlike ranking, the sort here is presentational, not a top-N contract.)",
+      "xml": "magnitude-simple-bar.xml:24"
+    }
+  ]
+}

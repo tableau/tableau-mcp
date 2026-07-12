@@ -384,7 +384,7 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
     }
   });
 
-  it('the render-verified set is exactly the fifteen live-proven factory templates', () => {
+  it('the render-verified set is exactly the twenty live-proven factory templates', () => {
     // W59 template-sync: the seven missing fast-path XMLs were ported from the factory
     // (a2td) with their manifests. fast_path_eligible / render_verified TRAVEL UNCHANGED
     // from the factory (no stamps minted in transit): the factory's 2026-07-06 stamp wave
@@ -394,6 +394,9 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
     // quota-attainment-bullet.
     // W60 parity port: correlation-scatter-plot-chart's factory stamp crossed (it was
     // stamped in a2td all along and dark here) — 14 → 15.
+    // W62 render-stamp evidence port: spatial-symbol-map, part-to-whole-pie-chart,
+    // correlation-bubble-chart, control-chart-xmr, and magnitude-simple-bar crossed with
+    // live 2026-07-11 evidence and XML hashes — 15 → 20.
     // Everything else ships propose-only (render_verified none) and honestly surfaces
     // the not-live-render-verified blocker via deriveFastPathBlockers.
     const eligible = [...manifests.values()]
@@ -403,11 +406,15 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
     expect(eligible).toEqual(
       [
         'box-plot-chart',
+        'control-chart-xmr',
+        'correlation-bubble-chart',
         'correlation-scatter-plot-chart',
         'distribution-bar-code-chart',
         'funnel-chart',
         'gantt-task-rollup-chart',
         'kpi-text',
+        'magnitude-simple-bar',
+        'part-to-whole-pie-chart',
         'part-to-whole-stacked-bar-chart',
         'part-to-whole-treemap-chart',
         'part-to-whole-waterfall',
@@ -415,6 +422,7 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
         'ranking-ordered-bar',
         'ranking-ordered-column',
         'spatial-choropleth-map',
+        'spatial-symbol-map',
         'trend-line-chart',
         'ww-ou-arrow',
       ].sort(),

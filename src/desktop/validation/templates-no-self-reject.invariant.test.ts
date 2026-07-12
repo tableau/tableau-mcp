@@ -33,14 +33,14 @@ const xmlFiles = fs
   .sort();
 
 describe('validation/templates — no bundled template self-rejects on invalid-derivation-string', () => {
-  it('discovers the shipped template XML corpus (40/40 verified tonight)', () => {
+  it('discovers the shipped template XML corpus (41/41 verified tonight)', () => {
     expect(
       xmlFiles.length,
       'expected the shipped template XML corpus to be non-empty',
     ).toBeGreaterThan(0);
     // Pin the count verified by hand tonight so a template added/removed without re-running
     // this invariant is caught (adjust deliberately when the corpus grows).
-    expect(xmlFiles.length).toBe(40);
+    expect(xmlFiles.length).toBe(41);
   });
 
   it.each(xmlFiles)(
