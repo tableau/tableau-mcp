@@ -3,14 +3,21 @@ import { describe, expect, it } from 'vitest';
 import { runValidation } from '../registry.js';
 import { undeclaredAggregateOkRefRule } from './undeclaredAggregateOkRef.js';
 
+/**
+ * Tests for undeclared-aggregate-ok-ref.
+ *
+ * Source of truth: tactics/tree/column-instance-prefixes.md — aggregate measure
+ * instances are `:qk`; a `:ok` aggregate is valid only when deliberately declared.
+ * Live incident: 21× "Unknown column [sum:Sales:ok]" (Laulima day-1, 2026-07-09).
+ */
 function worksheetWith(shelf: string, deps = ''): string {
-  return `<?xml version="1.0" encoding="UTF-8"?>
+  return `<?xml version='1.0' encoding='utf-8' ?>
 <workbook>
   <worksheets>
-    <worksheet name="Sheet 1">
+    <worksheet name='Sheet 1'>
       <table>
         <view>
-          <datasource-dependencies datasource="ds">${deps}</datasource-dependencies>
+          <datasource-dependencies datasource='ds'>${deps}</datasource-dependencies>
         </view>
         <rows>${shelf}</rows>
       </table>

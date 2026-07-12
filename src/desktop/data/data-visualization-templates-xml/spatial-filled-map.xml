@@ -1,0 +1,85 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <mapsources>
+        <mapsource name='Tableau' />
+      </mapsources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column datatype='string' name='[Country/Region]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+        <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column datatype='string' name='[State/Province]' role='dimension' semantic-role='[State].[Name]' type='nominal' />
+        <column-instance column='[Country/Region]' derivation='None' name='[none:Country/Region:nk]' pivot='key' type='nominal' />
+        <column-instance column='[State/Province]' derivation='None' name='[none:State/Province:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='mark'>
+        <encoding attr='color' field='[{{DATASOURCE}}].[sum:Profit:qk]' symmetric='false' type='custom-interpolated'>
+          <color-palette custom='true' name='' type='ordered-diverging'>
+            <color>#9e3d22</color>
+            <color>#ad4523</color>
+            <color>#bc4d23</color>
+            <color>#cb5522</color>
+            <color>#d95e21</color>
+            <color>#e76820</color>
+            <color>#ee7725</color>
+            <color>#f58a30</color>
+            <color>#fa9e3f</color>
+            <color>#fdb053</color>
+            <color>#ffc171</color>
+            <color>#d9d5c9</color>
+            <color>#d9d8d8</color>
+            <color>#d9d7d7</color>
+            <color>#d9d7d7</color>
+            <color>#d9d6d6</color>
+            <color>#d9d6d6</color>
+            <color>#d9d5d5</color>
+            <color>#d9d5d5</color>
+            <color>#d9d4d4</color>
+            <color>#d9d4d4</color>
+            <color>#d9d3d3</color>
+            <color>#dad3d3</color>
+          </color-palette>
+        </encoding>
+      </style-rule>
+      <style-rule element='map'>
+        <format attr='washout' value='0.0' />
+        <format attr='map-snap-zoom' value='true' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-disallow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Multipolygon' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[sum:Profit:qk]' />
+          <lod column='[{{DATASOURCE}}].[none:Country/Region:nk]' />
+          <lod column='[{{DATASOURCE}}].[none:State/Province:nk]' />
+          <geometry column='[{{DATASOURCE}}].[Geometry (generated)]' />
+        </encodings>
+      </pane>
+    </panes>
+    <rows>[{{DATASOURCE}}].[Latitude (generated)]</rows>
+    <cols>[{{DATASOURCE}}].[Longitude (generated)]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

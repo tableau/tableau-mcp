@@ -40,7 +40,13 @@ function findDependencyBlocks(s: string): DepBlock[] {
     }
     const close = s.indexOf(DEP_CLOSE, tagEnd);
     if (close === -1) break;
-    blocks.push({ start: open, end: close + DEP_CLOSE.length, ds, binCols: new Set(), exempt: new Set() });
+    blocks.push({
+      start: open,
+      end: close + DEP_CLOSE.length,
+      ds,
+      binCols: new Set(),
+      exempt: new Set(),
+    });
     i = close + DEP_CLOSE.length;
   }
   return blocks;
@@ -60,7 +66,14 @@ function collectBinColumns(s: string, blocks: DepBlock[], topBinCols: Set<string
     i = s.indexOf('<column', i);
     if (i === -1) break;
     const after = s[i + '<column'.length];
-    if (after !== ' ' && after !== '\t' && after !== '\n' && after !== '\r' && after !== '>' && after !== '/') {
+    if (
+      after !== ' ' &&
+      after !== '\t' &&
+      after !== '\n' &&
+      after !== '\r' &&
+      after !== '>' &&
+      after !== '/'
+    ) {
       i += '<column'.length;
       continue;
     }

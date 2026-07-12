@@ -1,4 +1,4 @@
-<workbook>
+<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
   <worksheets>
     <worksheet name='{{TITLE}}'>
   <table>
@@ -36,7 +36,7 @@
         <view>
           <breakdown value='auto' />
         </view>
-        <mark class='Automatic' />
+        <mark class='Line' />
         <encodings>
           <color column='[{{DATASOURCE}}].[none:Region:nk]' />
           <text column='[{{DATASOURCE}}].[none:Region:nk]' />

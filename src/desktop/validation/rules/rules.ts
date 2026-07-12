@@ -6,7 +6,7 @@ import { categoricalFilterProliferationRule } from './categoricalFilterProlifera
 import { categoricalFilterSlicesRule } from './categoricalFilterSlices.js';
 import { computedSortCrashRule } from './computedSortCrash.js';
 import { connectionsNotAuthorableRule } from './connectionsNotAuthorable.js';
-import { dashboardZoneWorksheetReferencesRule } from './dashboardZoneWorksheetReferences.js';
+import { dashboardZonesReferenceIncludedWorksheetsRule } from './dashboardZonesReferenceIncludedWorksheets.js';
 import { duplicateEmptyParameterRule } from './duplicateEmptyParameter.js';
 import { duplicateParameterActionRule } from './duplicateParameterAction.js';
 import { filterAllInListRule } from './filterAllInList.js';
@@ -17,6 +17,7 @@ import { malformedSetGroupfilterRule } from './malformedSetGroupfilter.js';
 import { mixedAggregationCalcRule } from './mixedAggregationCalc.js';
 import { parameterFieldOnShelfRule } from './parameterFieldOnShelf.js';
 import { placeholderDatasourceRefRule } from './placeholderDatasourceRef.js';
+import { qualifiedNameBracketsRule } from './qualifiedNameBrackets.js';
 import { rankAsMembershipRule } from './rankAsMembership.js';
 import { redundantColorEncodingRule } from './redundantColorEncoding.js';
 import { selfReferentialFixedLodRule } from './selfReferentialFixedLod.js';
@@ -38,7 +39,8 @@ export const validationRules = [
   undeclaredCalcReferenceRule,
   undeclaredSetReferenceRule,
   undeclaredAggregateOkRefRule,
-  dashboardZoneWorksheetReferencesRule,
+  dashboardZonesReferenceIncludedWorksheetsRule,
+  qualifiedNameBracketsRule,
   worksheetMissingWindowRule,
   actionNestedInDashboardRule,
   duplicateParameterActionRule,

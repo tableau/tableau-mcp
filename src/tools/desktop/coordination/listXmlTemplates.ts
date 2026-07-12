@@ -1,8 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, readdirSync } from 'fs';
 import { Ok } from 'ts-results-es';
 
-import { getTemplatesDir } from '../../../desktop/templates/templatePath.js';
+import { listTemplateNames } from '../../../desktop/templates/templatePath.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
@@ -29,21 +28,10 @@ export const getListXmlTemplatesTool = (
         extra,
         args: {},
         callback: async () => {
-          const templatesDir = getTemplatesDir();
-          if (!existsSync(templatesDir)) {
-            return new Ok({
-              message: `No templates directory found at ${templatesDir}.`,
-              templates: [],
-            });
-          }
-
-          const files = readdirSync(templatesDir)
-            .filter((f) => f.endsWith('.xml'))
-            .map((f) => f.replace('.xml', ''))
-            .sort();
+          const files = listTemplateNames();
 
           if (files.length === 0) {
-            return new Ok({ message: `No templates found in ${templatesDir}.`, templates: [] });
+            return new Ok({ message: 'No templates found.', templates: [] });
           }
 
           return new Ok({

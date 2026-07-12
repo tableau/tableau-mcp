@@ -29,7 +29,10 @@ export const computedSortCrashRule: ValidationRule = {
         : 'sort-expression';
     const comp =
       (xpath.select('string(.//sort-computation/@field)', sort as unknown as Node) as string) ||
-      (xpath.select('string(.//sort-expression//expression[not(*)])', sort as unknown as Node) as string) ||
+      (xpath.select(
+        'string(.//sort-expression//expression[not(*)])',
+        sort as unknown as Node,
+      ) as string) ||
       '';
     const dir = sort.getAttribute('direction') || 'DESC';
 
@@ -42,7 +45,8 @@ export const computedSortCrashRule: ValidationRule = {
           (cls === 'computed-sort' && nestedChild === 'sort-computation'
             ? 'This form CRASHES Tableau Desktop on apply (internal logic-assert) — the whole session is lost, not just a failed apply.'
             : 'Tableau cannot resolve the sort-by from the nested child and reports "sorted on undefined field, ignoring sort" — a blocking "Unable to complete action" popup that silently drops the sort.'),
-        xpath: "//sort[(@class='computed-sort' or @class='computed')][.//sort-computation or .//sort-expression]",
+        xpath:
+          "//sort[(@class='computed-sort' or @class='computed')][.//sort-computation or .//sort-expression]",
         suggestion:
           'Use the self-closing inline form instead: ' +
           `<computed-sort column="${column}" direction="${dir}" using="${comp || '[ds].[agg:Field:qk]'}"/> ` +

@@ -81,7 +81,7 @@ describe('executeTableauCommandTool', () => {
       .mockResolvedValue(new Ok({ command_id: 'c1', result: commandResult }));
     const extra = makeExtra(executeCommand);
 
-    const result = await getResult({ session: SESSION, command: 'tabui:save-workbook' }, extra);
+    const result = await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
 
     expect(result.isError).toBeFalsy();
     invariant(result.content[0].type === 'text');
@@ -93,7 +93,7 @@ describe('executeTableauCommandTool', () => {
     const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
     const extra = makeExtra(executeCommand);
 
-    const result = await getResult({ session: SESSION, command: 'tabui:save-workbook' }, extra);
+    const result = await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
 
     expect(result.isError).toBeFalsy();
     invariant(result.content[0].type === 'text');
@@ -119,7 +119,7 @@ describe('executeTableauCommandTool', () => {
     const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
     const extra = makeExtra(executeCommand);
 
-    await getResult({ session: SESSION, command: 'tabui:save-workbook' }, extra);
+    await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
 
     expect(executeCommand).toHaveBeenCalledWith(expect.objectContaining({ args: {} }));
   });
@@ -128,11 +128,11 @@ describe('executeTableauCommandTool', () => {
     const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
     const extra = makeExtra(executeCommand);
 
-    const result = await getResult({ session: SESSION, command: 'tabui:save-workbook' }, extra);
+    const result = await getResult({ session: SESSION, command: 'tabui:export-theme' }, extra);
 
     expect(result.isError).toBeFalsy();
     expect(executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({ namespace: 'tabui', command: 'save-workbook' }),
+      expect.objectContaining({ namespace: 'tabui', command: 'export-theme' }),
     );
   });
 });

@@ -38,9 +38,14 @@ describe('categorical-filter-slices rule', () => {
     ['date derivation', '[ds].[tmn:Order Date:ok]', '[ds].[[Order Date]]'],
     ['Measure Names', '[ds].[:Measure Names]', '[ds].[:Measure Names]'],
     ['Top-N-like categorical', '[ds].[none:Artist:nk]', '[ds].[[Artist]]'],
-  ])('emits no warning when %s categorical filter has a matching slice', (_label, filterColumn, sliceColumn) => {
-    expect(categoricalFilterSlicesRule.validate(workbook(filterColumn, sliceColumn))).toHaveLength(0);
-  });
+  ])(
+    'emits no warning when %s categorical filter has a matching slice',
+    (_label, filterColumn, sliceColumn) => {
+      expect(
+        categoricalFilterSlicesRule.validate(workbook(filterColumn, sliceColumn)),
+      ).toHaveLength(0);
+    },
+  );
 
   it('emits a non-blocking warning when a categorical filter has no matching slice', () => {
     const issues = categoricalFilterSlicesRule.validate(workbook('[ds].[none:Region:nk]'));
@@ -92,7 +97,9 @@ function quantWorkbook(filterColumn: string, sliceColumn?: string): string {
 
 describe('categorical-filter-slices rule quantitative table-calc extension', () => {
   it('warns when a table-calc quantitative filter has no matching slice', () => {
-    const issues = categoricalFilterSlicesRule.validate(quantWorkbook('[ds].[usr:Calculation_Rank:qk]'));
+    const issues = categoricalFilterSlicesRule.validate(
+      quantWorkbook('[ds].[usr:Calculation_Rank:qk]'),
+    );
     expect(issues).toHaveLength(1);
     expect(issues[0].severity).toBe('warning');
     expect(issues[0].message.toLowerCase()).toContain('slices');
@@ -106,6 +113,8 @@ describe('categorical-filter-slices rule quantitative table-calc extension', () 
   });
 
   it('does not fire on a plain measure quantitative filter', () => {
-    expect(categoricalFilterSlicesRule.validate(quantWorkbook('[ds].[sum:Sales:qk]'))).toHaveLength(0);
+    expect(categoricalFilterSlicesRule.validate(quantWorkbook('[ds].[sum:Sales:qk]'))).toHaveLength(
+      0,
+    );
   });
 });

@@ -27,10 +27,15 @@ export const categoricalFilterSlicesRule: ValidationRule = {
     if (!doc) return [];
 
     const sliceColumns = [
-      ...(xpath.select('//slices/column/@column | //slices/column/@name', doc as unknown as Node) as Attr[]).map(
-        (a) => a.value,
+      ...(
+        xpath.select(
+          '//slices/column/@column | //slices/column/@name',
+          doc as unknown as Node,
+        ) as Attr[]
+      ).map((a) => a.value),
+      ...(xpath.select('//slices/column/text()', doc as unknown as Node) as Node[]).map(
+        (node) => node.nodeValue ?? '',
       ),
-      ...(xpath.select('//slices/column/text()', doc as unknown as Node) as Node[]).map((node) => node.nodeValue ?? ''),
     ]
       .filter(Boolean)
       .map((value) => localFieldName(value));

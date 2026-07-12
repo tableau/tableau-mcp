@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { rankAsMembershipRule } from './rankAsMembership.js';
 
-const wb = (formula: string) =>
+const wb = (formula: string): string =>
   `<workbook><datasources><datasource name="ds"><column name="[C]"><calculation class="tableau" formula='${formula}'/></column></datasource></datasources></workbook>`;
 
 describe('rank-as-membership rule', () => {
@@ -38,10 +38,14 @@ describe('rank-as-membership rule', () => {
 
   it('flags the FIRST()/LAST() membership variants', () => {
     expect(
-      rankAsMembershipRule.validate(wb('IF FIRST() <= [Parameters].[N] THEN "Top" ELSE "Rest" END')),
+      rankAsMembershipRule.validate(
+        wb('IF FIRST() <= [Parameters].[N] THEN "Top" ELSE "Rest" END'),
+      ),
     ).toHaveLength(1);
     expect(
-      rankAsMembershipRule.validate(wb('IF LAST() <= [Parameters].[N] THEN "Bottom" ELSE "Rest" END')),
+      rankAsMembershipRule.validate(
+        wb('IF LAST() <= [Parameters].[N] THEN "Bottom" ELSE "Rest" END'),
+      ),
     ).toHaveLength(1);
   });
 
@@ -84,13 +88,17 @@ describe('rank-as-membership rule', () => {
   });
 
   it('does not flag RANK returning a number from an IF', () => {
-    expect(rankAsMembershipRule.validate(wb('IF RANK(SUM([Sales])) <= 10 THEN RANK(SUM([Sales])) END'))).toHaveLength(0);
+    expect(
+      rankAsMembershipRule.validate(wb('IF RANK(SUM([Sales])) <= 10 THEN RANK(SUM([Sales])) END')),
+    ).toHaveLength(0);
   });
 
   it('does not flag a measure-threshold tiering calc', () => {
     expect(
       rankAsMembershipRule.validate(
-        wb('IF SUM([Profit]) &gt;= 10000 THEN &quot;High&quot; ELSEIF SUM([Profit]) &gt;= 0 THEN &quot;Mid&quot; ELSE &quot;Low&quot; END'),
+        wb(
+          'IF SUM([Profit]) &gt;= 10000 THEN &quot;High&quot; ELSEIF SUM([Profit]) &gt;= 0 THEN &quot;Mid&quot; ELSE &quot;Low&quot; END',
+        ),
       ),
     ).toHaveLength(0);
   });
@@ -100,30 +108,42 @@ describe('rank-as-membership rule', () => {
   });
 
   it('does not flag FIRST()=0 first-mark label idiom', () => {
-    expect(rankAsMembershipRule.validate(wb('IF FIRST() = 0 THEN &quot;First&quot; END'))).toHaveLength(0);
     expect(
-      rankAsMembershipRule.validate(wb('IF FIRST() &lt;= 0 THEN &quot;First mark&quot; ELSE &quot;&quot; END')),
+      rankAsMembershipRule.validate(wb('IF FIRST() = 0 THEN &quot;First&quot; END')),
+    ).toHaveLength(0);
+    expect(
+      rankAsMembershipRule.validate(
+        wb('IF FIRST() &lt;= 0 THEN &quot;First mark&quot; ELSE &quot;&quot; END'),
+      ),
     ).toHaveLength(0);
   });
 
   it('does not flag LAST()<=0 latest-mark label idiom', () => {
     expect(
-      rankAsMembershipRule.validate(wb('IF LAST() &lt;= 0 THEN &quot;Latest&quot; ELSE &quot;&quot; END')),
+      rankAsMembershipRule.validate(
+        wb('IF LAST() &lt;= 0 THEN &quot;Latest&quot; ELSE &quot;&quot; END'),
+      ),
     ).toHaveLength(0);
-    expect(rankAsMembershipRule.validate(wb('IF LAST() = 0 THEN &quot;Last&quot; END'))).toHaveLength(0);
+    expect(
+      rankAsMembershipRule.validate(wb('IF LAST() = 0 THEN &quot;Last&quot; END')),
+    ).toHaveLength(0);
   });
 
   it('still flags real membership when FIRST()/LAST()-vs-0 co-occurs', () => {
     expect(
       rankAsMembershipRule.validate(
-        wb('IF FIRST() = 0 THEN &quot;First&quot; ELSEIF INDEX() &lt;= [Parameters].[N] THEN &quot;Top&quot; ELSE &quot;Rest&quot; END'),
+        wb(
+          'IF FIRST() = 0 THEN &quot;First&quot; ELSEIF INDEX() &lt;= [Parameters].[N] THEN &quot;Top&quot; ELSE &quot;Rest&quot; END',
+        ),
       ),
     ).toHaveLength(1);
   });
 
   it('still flags FIRST()/LAST() compared to a parameter', () => {
     expect(
-      rankAsMembershipRule.validate(wb('IF FIRST() &lt;= [Parameters].[N] THEN &quot;Top&quot; ELSE &quot;Rest&quot; END')),
+      rankAsMembershipRule.validate(
+        wb('IF FIRST() &lt;= [Parameters].[N] THEN &quot;Top&quot; ELSE &quot;Rest&quot; END'),
+      ),
     ).toHaveLength(1);
   });
 

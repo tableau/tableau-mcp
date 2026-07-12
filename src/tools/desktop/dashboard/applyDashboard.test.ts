@@ -29,7 +29,7 @@ describe('applyDashboardTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getApplyDashboardTool(new DesktopMcpServer());
     expect(tool.name).toBe('apply-dashboard');
-    expect(tool.description).toContain('Apply modified dashboard XML back to Tableau');
+    expect(tool.description).toContain('Apply modified dashboard XML to Tableau');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       dashboardName: expect.any(Object),
@@ -132,6 +132,21 @@ describe('applyDashboardTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(new DesktopCommandExecutionError(error.error).message);
+  });
+
+  it('accepts an over-cap inline apply but appends the file-mode note', async () => {
+    const overCapXml =
+      '<dashboard name="Sales Dashboard"><zones>' + 'x'.repeat(20000) + '</zones></dashboard>';
+    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(Ok.EMPTY);
+
+    const result = await getToolResult({ mode: 'inline', dashboardXml: overCapXml });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const message = JSON.parse(result.content[0].text).message as string;
+    expect(message).toContain('Successfully applied dashboard XML');
+    expect(message).toContain('inline cap');
+    expect(message).toContain('mode=file');
   });
 
   it('should pass the abort signal to loadDashboardXml', async () => {

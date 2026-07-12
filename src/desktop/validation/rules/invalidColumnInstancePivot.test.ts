@@ -4,7 +4,8 @@ import { invalidColumnInstancePivotRule as rule } from './invalidColumnInstanceP
 
 describe('invalid-column-instance-pivot rule', () => {
   it('errors on the none:...:qk signature', () => {
-    const xml = '<worksheet><filter column="[Sample - Superstore].[none:Order Date:qk]"/></worksheet>';
+    const xml =
+      '<worksheet><filter column="[Sample - Superstore].[none:Order Date:qk]"/></worksheet>';
     const issues = rule.validate(xml);
     expect(issues).toHaveLength(1);
     expect(issues[0].ruleId).toBe('invalid-column-instance-pivot');

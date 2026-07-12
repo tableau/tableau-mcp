@@ -1,6 +1,28 @@
+/**
+ * Validation rule: undeclared-aggregate-ok-ref
+ *
+ * An aggregate column-instance uses the quantitative-key pivot — the canonical
+ * measure reference is `[sum:Sales:qk]` (knowledge: tactics/tree/column-instance-prefixes).
+ * An aggregate ref with the ORDINAL suffix (`[sum:Sales:ok]`) is only valid when a
+ * matching `<column-instance name='[sum:Sales:ok]' … type='ordinal'>` is deliberately
+ * declared. An UNDECLARED aggregate `:ok` ref makes Desktop log "Unknown column
+ * [sum:Sales:ok]" and render the pill wrong or blank, with no load error.
+ *
+ * Isolated 2026-07-09 (Laulima day-1 live dogfood): Desktop logged the unknown-column
+ * error 21× during an agent-built dashboard whose heatmap rendered wrong values.
+ * Ported from agent-to-tableau-desktop (a2td 028f87d + bcdf057 review fixups).
+ *
+ * Severity: WARNING — a declared discrete aggregate instance is legitimate, and
+ * Tableau tolerates some undeclared shelf refs by deriving the instance; only the
+ * undeclared shape is flagged, as the strong "Unknown column" predictor. Declarations
+ * are matched payload-wide, not per-datasource (false-negative direction only).
+ */
 import type { ValidationIssue, ValidationRule } from '../types.js';
 
+// Aggregate CI prefixes from the authoritative derivation table.
 const AGG_OK_REF = /\[(sum|avg|cnt|ctd|med|min|max|std|stp|var|vrp):([^:\]]+):ok\]/gi;
+
+// <column-instance …> open tags; only the open tag carries name=.
 const COLUMN_INSTANCE_TAG = /<column-instance\b[^>]*>/gi;
 const NAME_ATTR = /\bname\s*=\s*(?:'([^']*)'|"([^"]*)")/;
 
@@ -14,23 +36,23 @@ export const undeclaredAggregateOkRefRule: ValidationRule = {
 
   validate(xml: string): ValidationIssue[] {
     const s = String(xml ?? '');
+    const issues: ValidationIssue[] = [];
+
     const declared = new Set<string>();
-    for (const match of s.matchAll(COLUMN_INSTANCE_TAG)) {
-      const nameMatch = NAME_ATTR.exec(match[0]);
-      const name = nameMatch ? (nameMatch[1] ?? nameMatch[2]) : '';
+    for (const m of s.matchAll(COLUMN_INSTANCE_TAG)) {
+      const nm = NAME_ATTR.exec(m[0]);
+      const name = nm ? (nm[1] ?? nm[2]) : '';
       if (name) declared.add(name.toLowerCase());
     }
 
-    const issues: ValidationIssue[] = [];
     const issued = new Set<string>();
-    for (const match of s.matchAll(AGG_OK_REF)) {
-      const ref = match[0];
+    for (const m of s.matchAll(AGG_OK_REF)) {
+      const ref = m[0];
       const key = ref.toLowerCase();
       if (declared.has(key) || issued.has(key)) continue;
       issued.add(key);
-
-      const prefix = match[1];
-      const field = match[2].trim();
+      const prefix = m[1];
+      const field = m[2].trim();
       issues.push({
         ruleId: 'undeclared-aggregate-ok-ref',
         severity: 'warning',
@@ -45,7 +67,6 @@ export const undeclaredAggregateOkRefRule: ValidationRule = {
           'datasource-dependencies block.',
       });
     }
-
     return issues;
   },
 };

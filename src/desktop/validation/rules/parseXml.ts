@@ -9,7 +9,10 @@ export function parseXml(xml: string): Document | undefined {
   });
 
   try {
-    const doc = parser.parseFromString(String(xml ?? '').trim() || '<empty/>', 'text/xml') as unknown as Document;
+    const doc = parser.parseFromString(
+      String(xml ?? '').trim() || '<empty/>',
+      'text/xml',
+    ) as unknown as Document;
     return malformed ? undefined : doc;
   } catch {
     return undefined;

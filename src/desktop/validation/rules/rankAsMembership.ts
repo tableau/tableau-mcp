@@ -1,13 +1,15 @@
 import type { ValidationIssue, ValidationRule } from '../types.js';
 
-const POSITIONAL_TABLECALC = /\b(RANK(_DENSE|_MODIFIED|_PERCENTILE|_UNIQUE)?|INDEX|FIRST|LAST)\s*\(/i;
+const POSITIONAL_TABLECALC =
+  /\b(RANK(_DENSE|_MODIFIED|_PERCENTILE|_UNIQUE)?|INDEX|FIRST|LAST)\s*\(/i;
 const CMP_OP = /(?:<=|>=|<|>|&lt;=|&gt;=|&lt;|&gt;)/;
 const POSITIONAL_VS_THRESHOLD = new RegExp(
   `\\b(RANK(_DENSE|_MODIFIED|_PERCENTILE|_UNIQUE)?|INDEX|FIRST|LAST)\\s*\\([\\s\\S]*?\\)\\s*${CMP_OP.source}\\s*[\\s\\S]{0,40}?(\\[Parameters\\]\\.\\[[^\\]]+\\]|\\bSIZE\\s*\\(\\s*\\)|\\d+)`,
   'i',
 );
 const THEN_STRING_LABEL = /\bTHEN\s*(&quot;|["'])/i;
-const FIRST_LAST_VS_ZERO_LABEL = /\b(FIRST|LAST)\s*\(\s*\)\s*(?:<=|>=|<|>|=|&lt;=|&gt;=|&lt;|&gt;)\s*0\b/i;
+const FIRST_LAST_VS_ZERO_LABEL =
+  /\b(FIRST|LAST)\s*\(\s*\)\s*(?:<=|>=|<|>|=|&lt;=|&gt;=|&lt;|&gt;)\s*0\b/i;
 const FIELD_VS_THRESHOLD = new RegExp(
   `\\[([^\\]]+)\\]\\s*${CMP_OP.source}\\s*[\\s\\S]{0,40}?(\\[Parameters\\]\\.\\[[^\\]]+\\]|\\bSIZE\\s*\\(\\s*\\)|\\d+)`,
   'gi',
@@ -41,13 +43,22 @@ export const rankAsMembershipRule: ValidationRule = {
     for (const formula of formulas) {
       if (!THEN_STRING_LABEL.test(formula)) continue;
       if (FIRST_LAST_VS_ZERO_LABEL.test(formula)) {
-        const withoutZeroForm = formula.replace(new RegExp(FIRST_LAST_VS_ZERO_LABEL.source, 'gi'), ' ');
-        if (!(POSITIONAL_TABLECALC.test(withoutZeroForm) && POSITIONAL_VS_THRESHOLD.test(withoutZeroForm))) {
+        const withoutZeroForm = formula.replace(
+          new RegExp(FIRST_LAST_VS_ZERO_LABEL.source, 'gi'),
+          ' ',
+        );
+        if (
+          !(
+            POSITIONAL_TABLECALC.test(withoutZeroForm) &&
+            POSITIONAL_VS_THRESHOLD.test(withoutZeroForm)
+          )
+        ) {
           continue;
         }
       }
 
-      const inlineRank = POSITIONAL_TABLECALC.test(formula) && POSITIONAL_VS_THRESHOLD.test(formula);
+      const inlineRank =
+        POSITIONAL_TABLECALC.test(formula) && POSITIONAL_VS_THRESHOLD.test(formula);
       let splitRank = false;
       if (!inlineRank) {
         for (const m of formula.matchAll(FIELD_VS_THRESHOLD)) {

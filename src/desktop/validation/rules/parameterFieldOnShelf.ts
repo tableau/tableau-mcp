@@ -40,7 +40,7 @@ export const parameterFieldOnShelfRule: ValidationRule = {
           "and place a real discrete dimension whose members map to the parameter's options (e.g. " +
           '[Sample - Superstore].[:Measure Names] filtered to the period members, or a small string-dimension calc), ' +
           "then map THAT field to the parameter via a parameter action's source-field — the parameter is the action's " +
-          'TARGET, never the source mark\'s field. See expertise://tableau/tactics/dashboard/parameter-actions.',
+          "TARGET, never the source mark's field. See expertise://tableau/tactics/dashboard/parameter-actions.",
       });
     }
     return issues;

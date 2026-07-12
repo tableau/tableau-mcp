@@ -38,7 +38,9 @@ function buildWorkbookWithFilters(n: number, klass = 'categorical'): string {
 describe('categorical-filter-proliferation rule', () => {
   it('emits nothing for 3 categorical filters even when enabled', () => {
     enable();
-    expect(categoricalFilterProliferationRule.validate(buildWorkbookWithFilters(3))).toHaveLength(0);
+    expect(categoricalFilterProliferationRule.validate(buildWorkbookWithFilters(3))).toHaveLength(
+      0,
+    );
   });
 
   it('emits an error for 7 categorical filters when ENABLE_FILTER_GUARDRAIL is set', () => {
@@ -65,7 +67,9 @@ describe('categorical-filter-proliferation rule', () => {
 
   it('is inert when the flag is off even with 7 filters', () => {
     disable();
-    expect(categoricalFilterProliferationRule.validate(buildWorkbookWithFilters(7))).toHaveLength(0);
+    expect(categoricalFilterProliferationRule.validate(buildWorkbookWithFilters(7))).toHaveLength(
+      0,
+    );
     const result = runValidation(buildWorkbookWithFilters(7), 'workbook', [
       categoricalFilterProliferationRule,
     ]);
@@ -74,6 +78,8 @@ describe('categorical-filter-proliferation rule', () => {
 
   it('does not trigger on 7 non-categorical filters when enabled', () => {
     enable();
-    expect(categoricalFilterProliferationRule.validate(buildWorkbookWithFilters(7, 'relational'))).toHaveLength(0);
+    expect(
+      categoricalFilterProliferationRule.validate(buildWorkbookWithFilters(7, 'relational')),
+    ).toHaveLength(0);
   });
 });

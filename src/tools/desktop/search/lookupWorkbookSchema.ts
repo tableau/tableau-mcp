@@ -7,15 +7,10 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  enumType: z.string().optional().describe("Enum type name (e.g., 'PrimitiveType-ST')"),
-  elementType: z.string().optional().describe("Element type name (e.g., 'Zone-G')"),
-  keywords: z.array(z.string()).optional().describe('Keywords for fuzzy search'),
-  expandRefs: z
-    .boolean()
-    .optional()
-    .describe(
-      'When true, recursively expand ref types inline (up to 3 levels deep). Use this to see the full structure of complex elements like ObjectGraph-G without chaining multiple lookups.',
-    ),
+  enumType: z.string().optional().describe('Enum type name.'),
+  elementType: z.string().optional().describe('Element type name.'),
+  keywords: z.array(z.string()).optional().describe('Fuzzy search keywords.'),
+  expandRefs: z.boolean().optional().describe('When true, recursively expand ref types inline.'),
 };
 
 const title = 'Lookup Workbook Schema (XSD)';
@@ -27,7 +22,7 @@ export const getLookupWorkbookSchemaTool = (
     name: 'lookup-workbook-schema',
     title,
     description:
-      'Search the TWB XSD schema for valid enum values, element definitions, and attribute specs. Returns matching entries with parentPaths showing all valid placements in the workbook tree.',
+      'Search the TWB XSD for enum values, element definitions, attributes, and parentPaths.',
     paramsSchema,
     annotations: {
       title,

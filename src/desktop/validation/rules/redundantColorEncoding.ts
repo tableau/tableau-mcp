@@ -24,15 +24,18 @@ export const redundantColorEncodingRule: ValidationRule = {
 
     for (const wsNode of scope) {
       const shelfFields = new Set<string>();
-      for (const n of xpath.select('.//rows/text() | .//cols/text()', wsNode as unknown as Node) as Node[]) {
+      for (const n of xpath.select(
+        './/rows/text() | .//cols/text()',
+        wsNode as unknown as Node,
+      ) as Node[]) {
         const v = norm(n.nodeValue ?? '');
         if (v) shelfFields.add(v);
       }
       if (shelfFields.size === 0) continue;
 
-      const colorRefs = (xpath.select('.//encodings/color/@column', wsNode as unknown as Node) as Attr[]).map((a) =>
-        norm(a.value),
-      );
+      const colorRefs = (
+        xpath.select('.//encodings/color/@column', wsNode as unknown as Node) as Attr[]
+      ).map((a) => norm(a.value));
       const seen = new Set<string>();
       for (const colorRef of colorRefs) {
         if (!colorRef || seen.has(colorRef) || !shelfFields.has(colorRef)) continue;

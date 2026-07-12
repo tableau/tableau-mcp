@@ -59,7 +59,9 @@ describe('computed-sort-crash rule', () => {
   });
 
   it('does not flag a worksheet with no sort', () => {
-    expect(computedSortCrashRule.validate('<worksheet name="W"><table><view/></table></worksheet>')).toHaveLength(0);
+    expect(
+      computedSortCrashRule.validate('<worksheet name="W"><table><view/></table></worksheet>'),
+    ).toHaveLength(0);
   });
 
   it('does not flag a plain manual sort', () => {

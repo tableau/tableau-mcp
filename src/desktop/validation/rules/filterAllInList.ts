@@ -9,7 +9,7 @@ const HAS_MEMBER_ENUMERATION = ".//groupfilter[@function='member']";
 export const filterAllInListRule: ValidationRule = {
   id: 'filter-all-in-list',
   description:
-    'Errors when a categorical filter is an enumerated \'All in list\' snapshot (ui-enumeration=\'all\' over a frozen ' +
+    "Errors when a categorical filter is an enumerated 'All in list' snapshot (ui-enumeration='all' over a frozen " +
     "list of members) instead of a dynamic '(All)' level-members filter. 'All in list' silently excludes new data.",
   contexts: ['workbook', 'worksheet'],
 

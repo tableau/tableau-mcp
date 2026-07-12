@@ -64,7 +64,11 @@ describe('aggregate-calc-derivation rule', () => {
 
   it('does not fire on a string/boolean IF calc used as none:', () => {
     const issues = aggregateCalcDerivationRule.validate(
-      calcWithCi("IF ISNULL([track]) THEN 'Podcast' ELSE 'Music' END", 'None', '[none:Calculation_1:nk]'),
+      calcWithCi(
+        "IF ISNULL([track]) THEN 'Podcast' ELSE 'Music' END",
+        'None',
+        '[none:Calculation_1:nk]',
+      ),
     );
     expect(issues).toHaveLength(0);
   });

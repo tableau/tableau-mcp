@@ -36,7 +36,9 @@ describe('redundant-color-encoding rule', () => {
   });
 
   it('does not flag color by a discrete tier calc', () => {
-    expect(redundantColorEncodingRule.validate(ws('[DS].[none:Performance Group:nk]'))).toHaveLength(0);
+    expect(
+      redundantColorEncodingRule.validate(ws('[DS].[none:Performance Group:nk]')),
+    ).toHaveLength(0);
   });
 
   it('does not flag when there is no color encoding', () => {

@@ -121,7 +121,7 @@ export const aggregateCalcDerivationRule: ValidationRule = {
         message:
           `Aggregate/table-calc calculated field ${colRef} is referenced by a none:/derivation="None" ` +
           `column-instance (${ciName || '(unnamed)'}). An aggregate or table-calc calc must use derivation="User" ` +
-          `with the usr: prefix; with none: the viz renders blank (Tableau accepts the XML but produces no marks). ` +
+          'with the usr: prefix; with none: the viz renders blank (Tableau accepts the XML but produces no marks). ' +
           `Change the column-instance to derivation="User" and name it [usr:${colRef.replace(/^\[|\]$/g, '')}:qk].`,
         xpath: `//column-instance[@column="${colRef}"]`,
         suggestion:

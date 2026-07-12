@@ -5,6 +5,12 @@ import { z } from 'zod';
 
 import { loadDashboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
 import {
+  buildApplyOverCapNote,
+  isOverInlineXmlCap,
+  xmlByteLength,
+} from '../../../desktop/inlineXmlCap.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
+import {
   ArgsValidationError,
   DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
@@ -15,21 +21,15 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Tableau instance Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   dashboardName: z.string().describe('Name of the dashboard to update (must already exist).'),
   mode: z
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe('file: read dashboardFile from disk (default). inline: use dashboardXml string.'),
-  dashboardFile: z
-    .string()
-    .optional()
-    .describe('Path to the cache file containing the modified dashboard (required when mode=file)'),
-  dashboardXml: z
-    .string()
-    .optional()
-    .describe('Dashboard TWB XML string (required when mode=inline)'),
+    .describe('file reads dashboardFile; inline uses dashboardXml.'),
+  dashboardFile: z.string().optional().describe('Modified dashboard cache file for mode=file.'),
+  dashboardXml: z.string().optional().describe('Dashboard XML for mode=inline.'),
 };
 
 const title = 'Apply Dashboard';
@@ -41,12 +41,9 @@ export const getApplyDashboardTool = (
     name: 'apply-dashboard',
     title,
     description: [
-      'Apply modified dashboard XML back to Tableau.',
-      'Default mode reads from a cache file (recommended).',
-      'Use mode=inline with dashboardXml for small dashboards.',
-      'IMPORTANT: Can only update existing dashboards, cannot create new ones.',
-      'Use apply-workbook to create new dashboards.',
-      'See expertise://tableau/tableau-tactics/dashboard/zones for zone structure.',
+      'Apply modified dashboard XML to Tableau (mutating). mode=file is default; mode=inline is for small XML.',
+      'IMPORTANT: can only UPDATE an existing dashboard, not create one — use apply-workbook to create.',
+      'See expertise://tableau/tactics/dashboard/zones for zone structure.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -101,7 +98,12 @@ export const getApplyDashboardTool = (
             }
           }
 
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const result = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,
@@ -122,8 +124,15 @@ export const getApplyDashboardTool = (
             }
           }
 
+          const capBytes = extra.config.inlineXmlMaxBytes;
+          const inlineBytes = mode === 'inline' ? xmlByteLength(dashboardXml ?? '') : 0;
+          const note =
+            mode === 'inline' && isOverInlineXmlCap(inlineBytes, capBytes)
+              ? `\n\n${buildApplyOverCapNote(inlineBytes, capBytes)}`
+              : '';
+
           return new Ok({
-            message: `Successfully applied dashboard XML for "${dashboardName}". The dashboard has been updated.`,
+            message: `Successfully applied dashboard XML for "${dashboardName}". The dashboard has been updated.${note}`,
           });
         },
       });

@@ -1,17 +1,19 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { readFileSync } from 'fs';
-import path from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { readDataAsset } from '../../../desktop/assets.js';
 import { Corpus, searchDiffCorpusFormatted } from '../../../desktop/search/diffCorpus.js';
-import { DATA_ROOT, DesktopMcpServer } from '../../../server.desktop.js';
+import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 function loadCorpus(): Corpus | null {
-  const corpusPath = process.env.CORPUS_PATH || path.join(DATA_ROOT, 'corpus.json');
   try {
-    return JSON.parse(readFileSync(corpusPath, 'utf8')) as Corpus;
+    const raw = process.env.CORPUS_PATH
+      ? readFileSync(process.env.CORPUS_PATH, 'utf8')
+      : readDataAsset('corpus.json');
+    return raw ? (JSON.parse(raw) as Corpus) : null;
   } catch {
     return null;
   }
@@ -25,12 +27,8 @@ function getCorpus(): Corpus | null {
 }
 
 const paramsSchema = {
-  query: z
-    .string()
-    .describe(
-      "What you want to do (e.g., 'add field to view', 'create dashboard', 'bar chart', 'filter')",
-    ),
-  max_results: z.number().optional().describe('Maximum number of examples to return (default 5)'),
+  query: z.string().describe('What workbook change you want to do.'),
+  max_results: z.number().optional().describe('Maximum examples; default 5.'),
 };
 
 const title = 'Search Workbook Transformation Examples';
@@ -42,7 +40,7 @@ export const getSearchExamplesTool = (
     name: 'search-examples',
     title,
     description:
-      "Search for before/after examples of workbook changes. Returns XML diffs at multiple granularity levels: worksheet-level diffs (5-20 lines, focused on one sheet), dashboard-level diffs, or full workbook diffs. Worksheet/dashboard-level diffs are preferred when available as they're easier to understand and apply. Search for: 'worksheet', 'dashboard', 'field', 'filter', 'chart', 'map', 'color', 'sort', etc.",
+      'Search before/after workbook-change examples. Returns worksheet, dashboard, or workbook XML diffs; prefer focused diffs when available.',
     paramsSchema,
     annotations: {
       title,

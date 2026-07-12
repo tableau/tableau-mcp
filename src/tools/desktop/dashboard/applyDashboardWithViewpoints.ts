@@ -7,6 +7,7 @@ import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXm
 import { injectViewpoints } from '../../../desktop/commands/workbook/injectViewpoints.js';
 import { loadDashboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   ArgsValidationError,
   DashboardXmlLoadFailedError,
@@ -19,12 +20,10 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Tableau instance Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   dashboardName: z.string().describe('Name of the dashboard.'),
-  dashboardFile: z.string().describe('Path to the cached dashboard XML file to apply.'),
-  worksheetNames: z
-    .array(z.string())
-    .describe('Worksheet names to register as viewpoints in the dashboard window.'),
+  dashboardFile: z.string().describe('Cached dashboard XML file to apply.'),
+  worksheetNames: z.array(z.string()).describe('Worksheet viewpoints to register.'),
 };
 
 const title = 'Apply Dashboard with Viewpoints';
@@ -36,9 +35,7 @@ export const getApplyDashboardWithViewpointsTool = (
     name: 'apply-dashboard-with-viewpoints',
     title,
     description: [
-      'Apply a pre-built dashboard XML file and register worksheets as viewpoints in the workbook.',
-      'Viewpoints control which worksheets are accessible through the dashboard window.',
-      'Steps: fetches the current workbook, injects viewpoints into the dashboard window, applies the workbook, then applies the dashboard XML.',
+      'Apply dashboard XML and register worksheet viewpoints (mutating).',
       'Use after all worksheet files have been applied.',
     ].join(' '),
     paramsSchema,
@@ -74,7 +71,12 @@ export const getApplyDashboardWithViewpointsTool = (
             return new ArgsValidationError(`Dashboard file is empty: ${dashboardFile}`).toErr();
           }
 
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
 
           // Fetch current workbook, inject viewpoints, apply workbook
           const workbookResult = await getWorkbookXml({ executor, signal: extra.signal });

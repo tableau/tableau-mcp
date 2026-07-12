@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { checkFormula, mixedAggregationCalcRule } from './mixedAggregationCalc.js';
 
-const wb = (formula: string) =>
+const wb = (formula: string): string =>
   `<workbook><datasources><datasource name="ds"><column name="[C]"><calculation class="tableau" formula="${formula}"/></column></datasource></datasources></workbook>`;
 
 describe('mixed-aggregation-calc rule', () => {

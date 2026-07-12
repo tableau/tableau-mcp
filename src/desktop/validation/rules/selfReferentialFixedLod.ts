@@ -12,7 +12,9 @@ export const selfReferentialFixedLodRule: ValidationRule = {
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    const formulas = [...String(xml ?? '').matchAll(/formula=(['"])([\s\S]*?)\1/gi)].map((m) => m[2] ?? '');
+    const formulas = [...String(xml ?? '').matchAll(/formula=(['"])([\s\S]*?)\1/gi)].map(
+      (m) => m[2] ?? '',
+    );
     const issues: ValidationIssue[] = [];
 
     for (const formula of formulas) {

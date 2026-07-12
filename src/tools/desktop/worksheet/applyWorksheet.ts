@@ -5,6 +5,12 @@ import { z } from 'zod';
 
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import {
+  buildApplyOverCapNote,
+  isOverInlineXmlCap,
+  xmlByteLength,
+} from '../../../desktop/inlineXmlCap.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
+import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   FileReadError,
@@ -15,21 +21,15 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Tableau instance Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   worksheetName: z.string().describe('Name of the worksheet to update (must already exist).'),
   mode: z
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe('file: read worksheetFile from disk (default). inline: use worksheetXml string.'),
-  worksheetFile: z
-    .string()
-    .optional()
-    .describe('Path to the cache file containing the modified worksheet (required when mode=file)'),
-  worksheetXml: z
-    .string()
-    .optional()
-    .describe('Worksheet TWB XML string (required when mode=inline)'),
+    .describe('file reads worksheetFile; inline uses worksheetXml.'),
+  worksheetFile: z.string().optional().describe('Modified worksheet cache file for mode=file.'),
+  worksheetXml: z.string().optional().describe('Worksheet XML for mode=inline.'),
 };
 
 const title = 'Apply Worksheet';
@@ -41,11 +41,8 @@ export const getApplyWorksheetTool = (
     name: 'apply-worksheet',
     title,
     description: [
-      'Apply modified worksheet XML back to Tableau.',
-      'Default mode reads from a cache file (recommended).',
-      'Use mode=inline with worksheetXml for small worksheets.',
-      'IMPORTANT: Can only update existing worksheets, cannot create new ones.',
-      'Use apply-workbook to create new worksheets.',
+      'Apply modified worksheet XML to Tableau (mutating). mode=file is default; mode=inline is for small XML.',
+      'IMPORTANT: can only UPDATE an existing worksheet, not create one — use apply-workbook to create.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -100,7 +97,12 @@ export const getApplyWorksheetTool = (
             }
           }
 
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const result = await loadWorksheetXml({
             worksheetName,
             xml: worksheetXml,
@@ -121,8 +123,15 @@ export const getApplyWorksheetTool = (
             }
           }
 
+          const capBytes = extra.config.inlineXmlMaxBytes;
+          const inlineBytes = mode === 'inline' ? xmlByteLength(worksheetXml ?? '') : 0;
+          const note =
+            mode === 'inline' && isOverInlineXmlCap(inlineBytes, capBytes)
+              ? `\n\n${buildApplyOverCapNote(inlineBytes, capBytes)}`
+              : '';
+
           return new Ok({
-            message: `Successfully applied worksheet XML for "${worksheetName}". The worksheet has been updated.`,
+            message: `Successfully applied worksheet XML for "${worksheetName}". The worksheet has been updated.${note}`,
           });
         },
       });

@@ -12,13 +12,13 @@ import { listKnowledgeResources } from '../../../desktop/knowledge/index.js';
 
 const MOCK_RESOURCES = [
   {
-    uri: 'expertise://tableau/viz-design/chart-selection',
+    uri: 'expertise://tableau/strategy/viz-design/chart-selection',
     name: 'Chart Selection',
     description: 'Choose the right chart type.',
     mimeType: 'text/markdown' as const,
   },
   {
-    uri: 'expertise://tableau/tableau-tactics/viz/filters',
+    uri: 'expertise://tableau/tactics/viz/filters',
     name: 'Filters',
     description: 'How to use filters.',
     mimeType: 'text/markdown' as const,
@@ -44,7 +44,7 @@ describe('listKnowledgeResourcesTool', () => {
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.resources).toHaveLength(2);
-    expect(parsed.resources[0].uri).toBe('expertise://tableau/viz-design/chart-selection');
+    expect(parsed.resources[0].uri).toBe('expertise://tableau/strategy/viz-design/chart-selection');
   });
 
   it('should return empty list when no resources exist', async () => {

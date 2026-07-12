@@ -18,7 +18,10 @@ export const categoricalFilterProliferationRule: ValidationRule = {
     const doc = parseXml(xml);
     if (!doc) return [];
 
-    const categorical = xpath.select("//filter[@class='categorical']", doc as unknown as Node) as Element[];
+    const categorical = xpath.select(
+      "//filter[@class='categorical']",
+      doc as unknown as Node,
+    ) as Element[];
     const count = categorical.length;
     if (count <= MAX_CATEGORICAL_FILTERS) return [];
 

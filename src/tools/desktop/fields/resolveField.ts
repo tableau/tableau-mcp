@@ -13,16 +13,9 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  workbookFile: z.string().describe('Path to workbook cache file from get-workbook-xml.'),
-  query: z
-    .string()
-    .describe(
-      "User-friendly field reference. Examples: 'Profit', 'sum of Profit Ratio', '[Order Date]'.",
-    ),
-  datasource: z
-    .string()
-    .optional()
-    .describe('Optional datasource name to restrict resolution to (use this to break ambiguity).'),
+  workbookFile: z.string().describe('Workbook cache file.'),
+  query: z.string().describe('User-friendly field reference.'),
+  datasource: z.string().optional().describe('Optional datasource name to break ambiguity.'),
 };
 
 const title = 'Resolve Field Name to column_ref';
@@ -32,14 +25,9 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
     name: 'resolve-field',
     title,
     description: [
-      "Resolve a free-form field reference like 'Profit', 'sum of Profit', or '[Profit Ratio]' to an exact column_ref.",
-      'Unlike list-available-fields, this tool ALWAYS reports ambiguity instead of silently picking the first match.',
-      'Outcomes (returned in JSON):',
-      '- exact: one unambiguous match → use the returned column_ref directly.',
-      '- rewritten: matched after a known transformation → use the returned column_ref AND surface the reason to the user.',
-      '- ambiguous: more than one match → DO NOT GUESS. Use to disambiguate, or call again with an explicit datasource.',
-      '- not_found: no match → fuzzy did-you-mean candidates are returned.',
-      'Use this BEFORE any add-field-* call when the column_ref did not come straight from list-available-fields.',
+      'Resolve a free-form field reference to an exact column_ref.',
+      'ALWAYS reports ambiguity; DO NOT GUESS. Re-call with datasource or use list-available-fields.',
+      'Use before add-field-* when column_ref did not come from list-available-fields.',
     ].join(' '),
     paramsSchema,
     annotations: {

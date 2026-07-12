@@ -358,7 +358,11 @@ function hasMixedAggregationShape(formula: string): boolean {
   const sanitized = stripStringsAndComments(raw);
   if (!/\b(IF|CASE|IIF)\b/i.test(sanitized)) return false;
 
-  const blocks = [...findIfBlocks(sanitized), ...findCaseBlocks(sanitized), ...findIifBlocks(sanitized)];
+  const blocks = [
+    ...findIfBlocks(sanitized),
+    ...findCaseBlocks(sanitized),
+    ...findIifBlocks(sanitized),
+  ];
 
   for (const block of blocks) {
     if (extractBareFieldsFromCondition(block.condition).length === 0) continue;
@@ -385,7 +389,9 @@ export const mixedAggregationCalcRule: ValidationRule = {
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    const formulas = [...String(xml ?? '').matchAll(/formula=(['"])([\s\S]*?)\1/gi)].map((m) => m[2] ?? '');
+    const formulas = [...String(xml ?? '').matchAll(/formula=(['"])([\s\S]*?)\1/gi)].map(
+      (m) => m[2] ?? '',
+    );
     const issues: ValidationIssue[] = [];
     let fired = false;
 
