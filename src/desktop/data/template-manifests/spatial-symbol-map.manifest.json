@@ -36,8 +36,11 @@
   "intent_keywords": [
     "symbol-map",
     "proportional-symbol-map",
+    "graduated-symbol-map",
     "bubble-map",
     "point-map",
+    "dot-map",
+    "pin-map",
     "spatial",
     "map"
   ],

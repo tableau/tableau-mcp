@@ -22,7 +22,7 @@ import type { TemplateManifest } from './manifest-types.js';
 // Discount and (dims) Sub-Category/Category/Segment/Region/State-Province/Country-Region/
 // Order Date(temporal)/... .
 //
-// bindTemplate is called with loadManifests() (NATIVE eligibility — the render-verified
+// bindTemplate is called with loadManifests() (NATIVE eligibility — the 20 render-verified
 // templates, no forced-eligible cloning) and NO proposal / NO llmPropose, so every result
 // is the pure Call-1 no-LLM decision: 'bound' (used_llm=false) or 'propose'.
 

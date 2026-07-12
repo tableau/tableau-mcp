@@ -6,7 +6,8 @@
   "fast_path_blockers": [],
   "portability_evidence": {
     "fixture_bind": true,
-    "render_verified": "live-2026-07-05"
+    "render_verified": "live-2026-07-10",
+    "xml_sha256": "5db1a3b2cfec461045137ab393da8ae58fc972eddb54f4d1722d8082e260ec8f"
   },
   "datasource_placeholder": true,
   "placeholders": [

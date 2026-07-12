@@ -4,13 +4,17 @@ import { z } from 'zod';
 
 import type { BinderResult, BindingProposal } from '../../../desktop/binder/binder.js';
 import * as binderModule from '../../../desktop/binder/binder.js';
+import { loadManifests } from '../../../desktop/binder/manifest.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
+import * as routeSpecModule from '../../../desktop/binder/route-spec.js';
+import { normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { DesktopDiscoverer } from '../../../desktop/desktopDiscoverer.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
+import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
-import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
+import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import * as validationRegistry from '../../../desktop/validation/registry.js';
 import {
   DesktopCommandExecutionError,
@@ -48,21 +52,15 @@ vi.mock('../../../desktop/templates/injectTemplateCore.js', () => ({
 }));
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('../../../desktop/validation/registry.js');
-// Partial fs mock: bind-template reads the bound template via the NAMED `readFileSync`
-// import, so stub ONLY the sentinel mock-template path. Real manifest/content reads go
-// through the DEFAULT fs import (manifest.ts / provider.ts) and stay live, so the
-// existing tests that exercise the bundled provider for real are unaffected.
+// Partial fs mock: the bound template is read via the mocked SEA-aware
+// `readTemplate` seam (templatePath.js above), so fs reads stay live for the real
+// manifest/content loads (manifest.ts / provider.ts via the assets seam); only
+// writes are stubbed so no test touches disk.
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
   return {
     ...actual,
     default: (actual as unknown as { default?: typeof actual }).default ?? actual,
-    readFileSync: vi.fn((path: unknown, ...rest: unknown[]) => {
-      if (typeof path === 'string' && path.includes('mock-templates')) {
-        return '<template/>';
-      }
-      return (actual.readFileSync as (...a: unknown[]) => unknown)(path, ...rest);
-    }),
     writeFileSync: vi.fn(),
   };
 });
@@ -121,7 +119,7 @@ describe('bindTemplateTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getBindTemplateTool(new DesktopMcpServer());
     expect(tool.name).toBe('bind-template');
-    expect(tool.description).toContain('two-call binder');
+    expect(tool.description).toContain("Call 1 returns 'bound' or 'propose'");
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       ask: expect.any(Object),
@@ -347,7 +345,7 @@ function setupAutoApplyMocks({
   vi.spyOn(bundledIntelligenceProvider, 'listTemplateManifests').mockReturnValue([
     { template: 'bar-basic', fast_path_eligible: fastPathEligible } as unknown as TemplateManifest,
   ]);
-  vi.mocked(getTemplatePath).mockReturnValue('/mock-templates/bar-basic.xml');
+  vi.mocked(readTemplate).mockReturnValue('<template/>');
   vi.mocked(buildInjectedWorkbookXml).mockReturnValue(inject);
   // Force loadWorkbookXml down its text branch so the real validated path runs
   // without touching the on-disk JSON cache (DesktopCache mkdirs in its ctor).
@@ -802,5 +800,106 @@ describe('bindTemplateTool auto_apply — events-clean gate (W60 blind-spot #1)'
     const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
     expect(body.applied).toBe(true);
     expect(executeCommand).toHaveBeenCalled();
+  });
+});
+
+describe('bindTemplateTool route-state recording', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionRouteState.clear();
+    vi.spyOn(bundledIntelligenceProvider, 'listTemplateManifests').mockReturnValue([
+      ...loadManifests().values(),
+    ]);
+  });
+
+  it('records classification and final bind outcome with ROUTE_ENFORCEMENT unset', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(boundResult);
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: false,
+    });
+
+    expect(result.isError).toBe(false);
+    const state = sessionRouteState.get('1');
+    expect(state?.current_ask).toMatchObject({
+      ask: normalizeAskForMatch('bar chart of Sales by Region'),
+      route: 'bind-first',
+      shape: 'bind-first-template',
+      template: 'ranking-ordered-bar',
+      last_outcome: 'bound',
+    });
+    expect(typeof state?.current_ask?.ts).toBe('string');
+  });
+
+  it('does not leak route-state recording into the returned CallToolResult', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks();
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: false,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body).toEqual({
+      ...boundResult,
+      guidance: boundResult.status === 'bound' ? boundResult.apply_instruction : '',
+    });
+    expect(body.current_ask).toBeUndefined();
+    expect(body.next_route).toBeUndefined();
+    expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('a THROWN bind clears the pending ask so the gate cannot read "no bind attempt yet"', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockRejectedValue(new Error('binder exploded'));
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: false,
+    });
+
+    // The error path is unchanged (the tool reports the failure)...
+    expect(result.isError).toBe(true);
+    // ...and the classification recorded BEFORE the throw is gone: a bind WAS attempted,
+    // so a pending "no bind attempt yet" record would let the scratch gate deflect a
+    // second time for an ask the agent already tried (review finding, 2026-07-11).
+    expect(sessionRouteState.get('1')?.current_ask).toBeUndefined();
+  });
+
+  it('a classification fault on a NEW ask clears a stale pending ask (no cross-ask leak)', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(boundResult);
+
+    // Seed pending ask A (never concluded).
+    sessionRouteState.recordAskClassification('1', {
+      ask: normalizeAskForMatch('ask A that is still pending'),
+      route: 'bind-first',
+      shape: 'bind-first-template',
+      template: 'ranking-ordered-bar',
+    });
+    // Make classification throw for ask B (the route layer faulting mid-classification).
+    vi.spyOn(routeSpecModule, 'classifyAskRoute').mockImplementation(() => {
+      throw new TypeError('keywords is not iterable');
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'completely different ask B',
+      auto_apply: false,
+    });
+
+    // Bind B still succeeds (fail-open)...
+    expect(result.isError).toBe(false);
+    // ...and pending ask A did NOT survive to mislead the scratch gate about ask B's turn.
+    expect(sessionRouteState.get('1')?.current_ask).toBeUndefined();
   });
 });

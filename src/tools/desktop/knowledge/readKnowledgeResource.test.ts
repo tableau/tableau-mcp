@@ -27,7 +27,7 @@ describe('readKnowledgeResourceTool', () => {
   it('should return markdown content for a valid URI', async () => {
     vi.mocked(readKnowledgeResource).mockReturnValue(SAMPLE_CONTENT);
 
-    const result = await getResult('expertise://tableau/viz-design/chart-selection');
+    const result = await getResult('expertise://tableau/strategy/viz-design/chart-selection');
 
     expect(result.isError).toBeFalsy();
     invariant(result.content[0].type === 'text');
@@ -47,7 +47,7 @@ describe('readKnowledgeResourceTool', () => {
 
   it('should pass the URI directly to readKnowledgeResource', async () => {
     vi.mocked(readKnowledgeResource).mockReturnValue(SAMPLE_CONTENT);
-    const uri = 'expertise://tableau/tableau-tactics/viz/filters';
+    const uri = 'expertise://tableau/tactics/viz/filters';
 
     await getResult(uri);
 

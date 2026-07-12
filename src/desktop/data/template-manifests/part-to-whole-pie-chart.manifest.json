@@ -77,10 +77,8 @@
   ],
   "calcs": [],
   "hazards": [
-    {
-      "code": "hidden-aggregate-role-from",
+    { "code": "hidden-aggregate-role-from",
       "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so this hazard does not block the fast path; live render-verified 2026-07-11 (oracle-leg composite 97) -- the hint carried through apply without blocking, and fast_path_eligible is now true.",
-      "xml": "part-to-whole-pie-chart.xml:10"
-    }
+      "xml": "part-to-whole-pie-chart.xml:10" }
   ]
 }

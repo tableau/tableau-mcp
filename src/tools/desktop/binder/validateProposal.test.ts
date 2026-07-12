@@ -73,7 +73,7 @@ describe('validateProposalTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getValidateProposalTool(new DesktopMcpServer());
     expect(tool.name).toBe('validate-proposal');
-    expect(tool.description).toContain('dry run');
+    expect(tool.description).toContain('Dry-run');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       ask: expect.any(Object),

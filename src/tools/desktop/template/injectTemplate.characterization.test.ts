@@ -24,7 +24,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
-import { getTemplatePath, getTemplatesDir } from '../../../desktop/templates/templatePath.js';
+import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 
 const WORKBOOK_FILE = resolve('/cache/workbook.xml');
@@ -52,13 +52,10 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   const extra = getMockRequestHandlerExtra();
   extra.getExecutor = vi.fn().mockResolvedValue({});
   vi.mocked(existsSync).mockReturnValue(true);
-  vi.mocked(readFileSync).mockImplementation((p) => {
-    if (String(p).includes('ranking')) return TEMPLATE_XML;
-    return WORKBOOK_XML;
-  });
+  vi.mocked(readFileSync).mockReturnValue(WORKBOOK_XML);
   vi.mocked(writeFileSync).mockImplementation(() => {});
-  vi.mocked(getTemplatePath).mockReturnValue('/templates/ranking-ordered-bar.xml');
-  vi.mocked(getTemplatesDir).mockReturnValue('/templates');
+  vi.mocked(readTemplate).mockReturnValue(TEMPLATE_XML);
+  vi.mocked(listTemplateNames).mockReturnValue(['kpi-text', 'ranking-ordered-bar']);
   // Echo the (already placeholder-substituted) template so injectTemplate receives
   // a valid <worksheets>/<window> structure.
   vi.mocked(rewriteFieldReferences).mockImplementation((xml) => xml);

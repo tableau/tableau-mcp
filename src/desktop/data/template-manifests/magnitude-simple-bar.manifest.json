@@ -29,51 +29,25 @@
     }
   },
   "datasource_placeholder": true,
-  "placeholders": [
-    "TITLE",
-    "DATASOURCE"
-  ],
-  "intent_keywords": [
-    "magnitude",
-    "absolute"
-  ],
-  "description": "Horizontal bars, one per category; bar length = the measure's ABSOLUTE magnitude (a size comparison across categories). Bars are sorted descending by the measure purely as a READING AID -- the sort is not a ranking contract (no top-N, best/worst, or positional semantics). The magnitude family's generic {category, measure} bar: cloned from ranking-ordered-bar's two-slot categorical+quantitative bar shape, but with ranking-specific keywords, subtitle, and sort-role labels removed, and NO period/temporal slot or hardcoded incomplete-period filter (the HARDCODED_FILTER_MEMBERS blocker that keeps magnitude-paired-bar / magnitude-paired-column-chart off the fast path). Live-stamped 2026-07-11 (oracle-leg composite 95, 3=3 reconciled, computed-sort survived apply): fast_path_eligible true -- the magnitude family's first fast-path template.",
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["magnitude", "absolute"],
+  "description": "Horizontal bars, one per category; bar length = the measure's ABSOLUTE magnitude (a size comparison across categories). Bars are sorted descending by the measure purely as a READING AID — the sort is not a ranking contract (no top-N, best/worst, or positional semantics). The magnitude family's generic {category, measure} bar: cloned from ranking-ordered-bar's two-slot categorical+quantitative bar shape, but with ranking-specific keywords, subtitle, and sort-role labels removed, and NO period/temporal slot or hardcoded incomplete-period filter (the HARDCODED_FILTER_MEMBERS blocker that keeps magnitude-paired-bar / magnitude-paired-column-chart off the fast path). Live-stamped 2026-07-11 (oracle-leg composite 95, 3=3 reconciled, computed-sort survived apply): fast_path_eligible true -- the magnitude family's first fast-path template.",
   "avoid_when": [
     "The user explicitly wants a ranked or top-N / bottom-N ordering as the point of the chart (best/worst, leaders/laggards) - reach for ranking-ordered-bar or ranking-ordered-column, where the sort order IS the contract; here the descending sort is only a reading aid.",
     "The comparison is period-over-period (this year vs last year, before vs after) - use the magnitude paired-bar or paired-column family, which pairs a measure over two or more time periods per group."
   ],
   "slots": [
-    {
-      "slot_id": "category",
-      "template_field": "Category",
-      "derivation": "none",
-      "role": [
-        "rows"
-      ],
-      "kind": "categorical",
-      "bindable": true,
-      "required": true,
-      "notes": "One horizontal bar per member on rows. Also the dimension instance the computed-sort orders (DESC by the measure) - a reading aid, not a ranking contract."
-    },
-    {
-      "slot_id": "measure",
-      "template_field": "Sales",
-      "derivation": "sum",
-      "role": [
-        "cols"
-      ],
-      "kind": "quantitative",
-      "bindable": true,
-      "required": true,
-      "notes": "Bar length on cols = the measure's magnitude, aggregated as SUM. Template_field 'Sales' is just the placeholder column the field-swap injector renames to the bound measure; the computed-sort's using= references this instance."
-    }
+    { "slot_id": "category", "template_field": "Category", "derivation": "none",
+      "role": ["rows"], "kind": "categorical", "bindable": true, "required": true,
+      "notes": "One horizontal bar per member on rows. Also the dimension instance the computed-sort orders (DESC by the measure) - a reading aid, not a ranking contract." },
+    { "slot_id": "measure", "template_field": "Sales", "derivation": "sum",
+      "role": ["cols"], "kind": "quantitative", "bindable": true, "required": true,
+      "notes": "Bar length on cols = the measure's magnitude, aggregated as SUM. Template_field 'Sales' is just the placeholder column the field-swap injector renames to the bound measure; the computed-sort's using= references this instance." }
   ],
   "calcs": [],
   "hazards": [
-    {
-      "code": "computed-sort-pill-coupling",
+    { "code": "computed-sort-pill-coupling",
       "detail": "The computed-sort binds the category dimension instance ([none:Category:nk]) to the measure instance ([sum:Sales:qk]); both slots must bind or the sort dangles. Both are required, so this is satisfied by coverage. (This is the ONLY carry-over from the ranking donor's sort mechanic; unlike ranking, the sort here is presentational, not a top-N contract.)",
-      "xml": "magnitude-simple-bar.xml:24"
-    }
+      "xml": "magnitude-simple-bar.xml:24" }
   ]
 }

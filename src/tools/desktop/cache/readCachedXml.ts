@@ -4,6 +4,7 @@ import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { findElement, sliceBytes } from '../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
   FileNotFoundError,
@@ -14,9 +15,14 @@ import { DesktopTool } from '../tool.js';
 import { getCacheDir, isWithinCacheDir } from './cachePath.js';
 
 const paramsSchema = {
-  filePath: z
+  filePath: z.string().describe('Cached XML file path.'),
+  worksheet: z
     .string()
-    .describe('Path to cached XML file (e.g., returned by batch-create-and-cache-sheets).'),
+    .optional()
+    .describe('Optional worksheet slice selector. One selector at a time.'),
+  dashboard: z.string().optional().describe('Optional dashboard slice selector.'),
+  startByte: z.number().int().min(0).optional().describe('Optional raw byte-slice start.'),
+  endByte: z.number().int().min(0).optional().describe('Optional raw byte-slice end.'),
 };
 
 const toolTitle = 'Read Cached XML';
@@ -28,17 +34,21 @@ export const getReadCachedXmlTool = (
     name: 'read-cached-xml',
     title: toolTitle,
     description:
-      'Read an XML file from the cache directory. Use this to inspect worksheet, dashboard, or workbook XML from cache files before or after modifications.',
+      'Read cached worksheet/dashboard/workbook XML. For large files, pass exactly ONE selector: ' +
+      'worksheet, dashboard, or startByte/endByte range.',
     paramsSchema,
     annotations: {
       title: toolTitle,
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filePath }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { filePath, worksheet, dashboard, startByte, endByte },
+      extra,
+    ): Promise<CallToolResult> => {
       return await tool.logAndExecute({
         extra,
-        args: { filePath },
+        args: { filePath, worksheet, dashboard, startByte, endByte },
         callback: async () => {
           const absolutePath = resolve(filePath);
           const cacheDir = getCacheDir();
@@ -49,19 +59,66 @@ export const getReadCachedXmlTool = (
             ).toErr();
           }
 
+          // Reject ambiguous slice requests instead of silently prioritizing one selector.
+          const selectorsReceived: string[] = [];
+          if (worksheet !== undefined) selectorsReceived.push(`worksheet="${worksheet}"`);
+          if (dashboard !== undefined) selectorsReceived.push(`dashboard="${dashboard}"`);
+          if (startByte !== undefined || endByte !== undefined) {
+            selectorsReceived.push(
+              `byte range (startByte=${startByte ?? 0}, endByte=${endByte ?? 'end'})`,
+            );
+          }
+          if (selectorsReceived.length > 1) {
+            return new ArgsValidationError(
+              `Multiple selectors provided: ${selectorsReceived.join(', ')}. Pass exactly one of ` +
+                'worksheet, dashboard, or a startByte/endByte byte range so the slice is unambiguous — ' +
+                're-call with a single selector.',
+            ).toErr();
+          }
+
           if (!existsSync(absolutePath)) {
             return new FileNotFoundError(filePath).toErr();
           }
 
+          let fileContent: string;
           try {
-            const xmlContent = readFileSync(absolutePath, 'utf-8');
-            return new Ok({ filePath, bytes: xmlContent.length, xml: xmlContent });
+            fileContent = readFileSync(absolutePath, 'utf-8');
           } catch (err) {
             return new FileReadError(err).toErr();
           }
+
+          // Optional slice selectors keep large cached files out of context.
+          let slice = fileContent;
+          let sliceLabel = '';
+          if (worksheet !== undefined) {
+            const match = findElement(fileContent, 'worksheet', worksheet);
+            if (!match) {
+              return new ArgsValidationError(
+                `No <worksheet name="${worksheet}"> element found in ${filePath}.`,
+              ).toErr();
+            }
+            slice = match.text;
+            sliceLabel = ` (worksheet "${worksheet}")`;
+          } else if (dashboard !== undefined) {
+            const match = findElement(fileContent, 'dashboard', dashboard);
+            if (!match) {
+              return new ArgsValidationError(
+                `No <dashboard name="${dashboard}"> element found in ${filePath}.`,
+              ).toErr();
+            }
+            slice = match.text;
+            sliceLabel = ` (dashboard "${dashboard}")`;
+          } else if (startByte !== undefined || endByte !== undefined) {
+            slice = sliceBytes(fileContent, startByte, endByte);
+            sliceLabel = ` (bytes ${startByte ?? 0}-${endByte ?? 'end'})`;
+          }
+
+          return new Ok({ filePath, bytes: slice.length, xml: slice, sliceLabel });
         },
-        getSuccessResult: ({ filePath, bytes, xml }) => ({
-          content: [{ type: 'text', text: `Read ${bytes} bytes from ${filePath}\n\n${xml}` }],
+        getSuccessResult: ({ filePath, bytes, xml, sliceLabel }) => ({
+          content: [
+            { type: 'text', text: `Read ${bytes} bytes from ${filePath}${sliceLabel}\n\n${xml}` },
+          ],
         }),
       });
     },

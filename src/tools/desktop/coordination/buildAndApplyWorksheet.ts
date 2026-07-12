@@ -6,10 +6,16 @@ import { z } from 'zod';
 
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
+import {
+  checkRouteGateForScratchEntry,
+  type RouteGateResult,
+} from '../../../desktop/route/route-gate.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { spliceBoundFacet } from '../../../desktop/templates/facetSplice.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
+import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
-import { getTemplatePath } from '../../../desktop/templates/templatePath.js';
+import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -18,6 +24,23 @@ import {
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
+
+function isRouteGateResult(result: unknown): result is RouteGateResult {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    Array.isArray((result as { content?: unknown }).content) &&
+    typeof (result as { isError?: unknown }).isError === 'boolean'
+  );
+}
+
+function getSuccessResult(result: unknown): CallToolResult {
+  if (isRouteGateResult(result)) return result;
+  return {
+    isError: false,
+    content: [{ type: 'text', text: JSON.stringify(result) }],
+  };
+}
 
 function escapeXml(text: string): string {
   return text
@@ -29,24 +52,17 @@ function escapeXml(text: string): string {
 }
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   taskSpec: z
     .object({
       worksheetName: z.string(),
-      worksheetFile: z.string().describe('Path to cached empty worksheet XML (from Phase 1).'),
+      worksheetFile: z.string().describe('Cached worksheet XML file.'),
       type: z.enum(['kpi', 'chart']),
-      template: z
-        .string()
-        .optional()
-        .describe('Template name (e.g., "ranking-ordered-bar", "kpi-text").'),
-      fields: z
-        .array(z.string())
-        .describe(
-          "List of column refs (e.g., '[Sample - Superstore].[sum:Sales:qk]') to use in this worksheet.",
-        ),
-      workbookFile: z.string().describe('Path to cached workbook XML.'),
+      template: z.string().optional().describe('Template name.'),
+      fields: z.array(z.string()).describe('Column refs to use.'),
+      workbookFile: z.string().describe('Cached workbook XML file.'),
     })
-    .describe('Task specification from plan-dashboard-creation.'),
+    .describe('Task spec from plan-dashboard-creation.'),
 };
 
 const toolTitle = 'Build and Apply Worksheet';
@@ -58,9 +74,8 @@ export const getBuildAndApplyWorksheetTool = (
     name: 'build-and-apply-worksheet',
     title: toolTitle,
     description: [
-      'Build worksheet XML from a template and immediately apply it to Tableau.',
-      'Designed for parallel execution by subagents in Phase 2 of the dashboard creation workflow.',
-      'Reads template, maps provided fields to template placeholders, generates XML, and applies immediately.',
+      'Build worksheet XML from a template and immediately APPLY it to the live workbook.',
+      'Designed for parallel Phase-2 execution by subagents. Details: expertise://tableau/tactics/viz/worksheets.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -74,6 +89,7 @@ export const getBuildAndApplyWorksheetTool = (
       return await tool.logAndExecute({
         extra,
         args: { session, taskSpec },
+        getSuccessResult,
         callback: async () => {
           const { worksheetName, workbookFile, template, fields } = taskSpec;
 
@@ -87,15 +103,29 @@ export const getBuildAndApplyWorksheetTool = (
             ).toErr();
           }
 
-          const templatePath = getTemplatePath(template);
-          if (!existsSync(templatePath)) {
+          // SEA-aware template read (#433 seam): embedded asset in a SEA binary, disk otherwise.
+          let templateXml = readTemplate(template);
+          if (!templateXml) {
             return new ArgsValidationError(
               `Template not found: "${template}". Check available templates with list-xml-templates.`,
             ).toErr();
           }
 
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+
+          const gateResult = checkRouteGateForScratchEntry(
+            'build-and-apply-worksheet',
+            resolvedSession,
+          );
+          if (gateResult) {
+            return new Ok(gateResult);
+          }
+
           const workbookXml = readFileSync(workbookFile, 'utf-8');
-          let templateXml = readFileSync(templatePath, 'utf-8');
 
           // Determine datasource name from workbook
           let datasourceName = 'Unknown';
@@ -185,10 +215,11 @@ export const getBuildAndApplyWorksheetTool = (
           // (randomUUID guards same-millisecond applies). Distinct nonces => distinct
           // calc-name suffixes => repeated applies into one workbook don't collide.
           templateXml = templateXml.replace(/\{\{TITLE\}\}/g, escapeXml(worksheetName));
-          const applyNonce = `${session}:${Date.now()}:${randomUUID()}`;
+          const applyNonce = `${resolvedSession}:${Date.now()}:${randomUUID()}`;
           // W28-C: splice a BOUND facet pill onto the trellis shelf BEFORE the frozen
           // core rewrite (identity no-op when no facet is bound). The core then maps
           // [Facet] → the bound field so the facet actually renders.
+          templateXml = ensureUserNamespace(templateXml);
           templateXml = spliceBoundFacet(templateXml, fieldMapping);
           templateXml = rewriteFieldReferences(
             templateXml,
@@ -208,7 +239,7 @@ export const getBuildAndApplyWorksheetTool = (
           const worksheetXml = worksheetMatch[0];
 
           // Apply to Tableau
-          const executor = await extra.getExecutor(session);
+          const executor = await extra.getExecutor(resolvedSession);
           const signal = extra.signal;
           const applyResult = await loadWorksheetXml({
             worksheetName,
