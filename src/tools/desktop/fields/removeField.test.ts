@@ -122,6 +122,29 @@ describe('removeFieldTool', () => {
     expect(metadataModule.removeFieldFromRows).toHaveBeenCalledWith('<worksheet/>', COLUMN_REF);
   });
 
+  it('does not use the Tableau command channel after a successful field edit', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+    const extra = getMockRequestHandlerExtra();
+    const tool = getRemoveFieldTool(new DesktopMcpServer());
+    const callback = await Provider.from(tool.callback);
+
+    const result = await callback(
+      {
+        worksheetFile: WORKSHEET_FILE,
+        target: 'rows',
+        columnRef: COLUMN_REF,
+        encodingType: undefined,
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(extra.getExecutor).not.toHaveBeenCalled();
+  });
+
   // --- target=cols (ported from removeFieldFromCols) ---
   it('should return error when removeFieldFromCols throws (target=cols)', async () => {
     vi.mocked(existsSync).mockReturnValue(true);

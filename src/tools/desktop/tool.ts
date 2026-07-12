@@ -6,6 +6,7 @@ import { log } from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { LogAndExecuteParams, Tool } from '../tool.js';
+import { getStructuredContent } from './structuredContent.js';
 import { TableauDesktopRequestHandlerExtra, TableauDesktopToolCallback } from './toolContext.js';
 import { DesktopToolName } from './toolName.js';
 
@@ -51,9 +52,11 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         return toolResult;
       }
 
+      const structuredContent = getStructuredContent(result.error);
       toolResult = {
         isError: true,
         content: [{ type: 'text', text: result.error.getErrorText() }],
+        ...(structuredContent ? { structuredContent } : {}),
       };
       return toolResult;
     } catch (error) {

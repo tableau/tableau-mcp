@@ -36,6 +36,13 @@ import { ExecuteCommandError } from '../../../desktop/toolExecutor/toolExecutor.
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import {
+  jsonToolResult,
+  type NextAction,
+  prefillNextAction,
+  type StructuredResult,
+  withNextAction,
+} from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import { buildDashboardXml, computeZones } from './dashboardZones.js';
 
@@ -120,6 +127,7 @@ type DashboardAutoApplyToolResult =
   | DashboardAutoApplyRefusalResult
   | DashboardAutoApplySuccessResult
   | DashboardAutoApplyPartialResult;
+type StructuredDashboardAutoApplyToolResult = StructuredResult<DashboardAutoApplyToolResult>;
 
 /** Human-readable detail for a loadWorkbookXml failure (mirrors bindTemplate.ts). */
 function describeApplyError(
@@ -144,8 +152,15 @@ function refusal(
   results: AskOutcome[],
   guidance: string,
   apply_error?: string,
-): Ok<DashboardAutoApplyToolResult> {
-  return new Ok({ applied: false, results, guidance, ...(apply_error ? { apply_error } : {}) });
+  nextAction?: NextAction,
+): Ok<StructuredDashboardAutoApplyToolResult> {
+  const result: DashboardAutoApplyRefusalResult = {
+    applied: false,
+    results,
+    guidance,
+    ...(apply_error ? { apply_error } : {}),
+  };
+  return new Ok(nextAction ? withNextAction(result, nextAction) : result);
 }
 
 /** Quote-agnostic (matches injectTemplateCore.ts's own conventions): true when `title`
@@ -189,7 +204,7 @@ export const getDashboardAutoApplyTool = (
       { session, asks, dashboardName, title: titleText, layout },
       extra,
     ): Promise<CallToolResult> => {
-      return await dashboardAutoApplyTool.logAndExecute<DashboardAutoApplyToolResult>({
+      return await dashboardAutoApplyTool.logAndExecute<StructuredDashboardAutoApplyToolResult>({
         extra,
         args: { session, asks, dashboardName, title: titleText, layout },
         callback: async () => {
@@ -251,6 +266,8 @@ export const getDashboardAutoApplyTool = (
                 '"propose", fill its output_schema and call bind-template again; for "escalate", follow its ' +
                 'guidance. Once every ask binds, retry dashboard-auto-apply, or fall back to the per-viz ' +
                 'bind-template(auto_apply:true) flow using each already-bound ask.',
+              undefined,
+              prefillNextAction('Resolve each ask before retrying'),
             );
           }
 
@@ -269,6 +286,8 @@ export const getDashboardAutoApplyTool = (
               outcomes,
               'One or more bound asks are not eligible for server-side auto-apply (used_llm or ' +
                 'fast_path_eligible gate failed). Nothing was applied. Fall back to the per-viz flow.',
+              undefined,
+              prefillNextAction('Use the per-viz flow'),
             );
           }
 
@@ -291,6 +310,7 @@ export const getDashboardAutoApplyTool = (
               `Duplicate resolved title(s) within the batch: ${detail}. Give each ask a distinct 'title' ` +
                 'and retry — nothing was applied.',
               `duplicate title(s): ${detail}`,
+              prefillNextAction('Give each ask a distinct title'),
             );
           }
 
@@ -319,6 +339,7 @@ export const getDashboardAutoApplyTool = (
                 'Applying this batch would silently rewire that dashboard to a replaced sheet. Rename the ' +
                 "ask's title and retry — nothing was applied.",
               `title referenced by existing dashboard zone: ${detail}`,
+              prefillNextAction('Rename the colliding worksheet titles'),
             );
           }
 
@@ -422,6 +443,7 @@ export const getDashboardAutoApplyTool = (
                   'current workbook — do NOT re-apply, the binds were computed against the pre-edit workbook ' +
                   'and re-applying could revert their changes.',
                 `user changed the workbook during the batch (${events.value.count} event(s) since read)`,
+                prefillNextAction('Re-run dashboard-auto-apply'),
               );
             }
           }
@@ -441,6 +463,7 @@ export const getDashboardAutoApplyTool = (
                 'was applied — fall back to the per-viz bind-template(auto_apply:true) flow using each ' +
                 "ask's bound args.",
               describeApplyError(applyResult.error),
+              prefillNextAction('Fall back to per-chart auto-apply'),
             );
           }
           const applyMs = Date.now() - applyStart;
@@ -469,17 +492,22 @@ export const getDashboardAutoApplyTool = (
                 err.type === 'load-dashboard-xml-error'
                   ? JSON.stringify(err.error)
                   : `workbook load command failed: ${JSON.stringify(err.error)}`;
-              return new Ok({
-                applied: 'partial',
-                dashboard: dashboardName,
-                sheets,
-                apply_error: message,
-                guidance:
-                  `The workbook (sheets + an empty "${dashboardName}" dashboard) was applied, but laying ` +
-                  `in the zones failed (${message}). Re-issue the zones via build-and-apply-dashboard — the ` +
-                  'dashboard exists with a valid empty layout, nothing is corrupted.',
-                ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
-              });
+              return new Ok(
+                withNextAction(
+                  {
+                    applied: 'partial',
+                    dashboard: dashboardName,
+                    sheets,
+                    apply_error: message,
+                    guidance:
+                      `The workbook (sheets + an empty "${dashboardName}" dashboard) was applied, but laying ` +
+                      `in the zones failed (${message}). Re-issue the zones via build-and-apply-dashboard — the ` +
+                      'dashboard exists with a valid empty layout, nothing is corrupted.',
+                    ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
+                  },
+                  prefillNextAction('Re-issue the zones'),
+                ),
+              );
             }
           }
 
@@ -492,6 +520,7 @@ export const getDashboardAutoApplyTool = (
             ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
           });
         },
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });
     },
   });

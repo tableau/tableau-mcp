@@ -11,6 +11,7 @@ import {
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { withApplyLock } from './applyMutex.js';
+import { focusAppliedSheetBestEffort } from './focusAppliedSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { applyWorkbookText, interpretLoadOutcome } from './loadWorkbookXml.js';
 
@@ -134,6 +135,13 @@ async function loadDashboardXmlViaAgentApi({
     },
   });
 
+  await focusAppliedSheetBestEffort({
+    sheetName: dashboardName,
+    appliedVia: 'load-dashboard',
+    executor,
+    signal,
+  });
+
   return Ok.EMPTY;
 }
 
@@ -169,6 +177,13 @@ async function loadDashboardXmlViaExternalApi({
       message: 'load-dashboard completed',
       logger: 'dashboardCommands',
       data: { dashboardName },
+    });
+
+    await focusAppliedSheetBestEffort({
+      sheetName: dashboardName,
+      appliedVia: 'load-dashboard',
+      executor,
+      signal,
     });
 
     return Ok.EMPTY;

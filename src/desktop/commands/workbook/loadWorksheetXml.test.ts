@@ -1,6 +1,7 @@
 import { Err, Ok } from 'ts-results-es';
 
 import * as configModule from '../../../config.desktop.js';
+import * as loggerModule from '../../../logging/logger.js';
 import invariant from '../../../utils/invariant.js';
 import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
 import * as validationRegistry from '../../validation/registry.js';
@@ -16,7 +17,12 @@ describe('loadWorksheetXml (Agent API transport, default)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
     vi.spyOn(validationRegistry, 'runValidation').mockReturnValue({ valid: true, issues: [] });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('should successfully load worksheet XML', async () => {
@@ -46,6 +52,68 @@ describe('loadWorksheetXml (Agent API transport, default)', () => {
           worksheetName,
           worksheetXml: validXml,
         },
+      }),
+    );
+  });
+
+  it('focuses the worksheet after a successful apply', async () => {
+    const mockExecutor = {
+      executeCommand: vi
+        .fn()
+        .mockResolvedValueOnce(Ok({ command_id: 'cmd-123', status: 'completed', submitted_at: '' }))
+        .mockResolvedValueOnce(
+          Ok({ command_id: 'cmd-goto', status: 'completed', submitted_at: '' }),
+        ),
+    } as unknown as LocalExecutor;
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(mockExecutor.executeCommand).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        namespace: 'tabdoc',
+        command: 'goto-sheet',
+        args: { sheet: worksheetName },
+        signal: mockSignal,
+      }),
+    );
+  });
+
+  it('keeps worksheet apply successful when focusing the worksheet fails', async () => {
+    const error = {
+      type: 'command-failed' as const,
+      error: { code: 'GOTO_FAILED', message: 'could not navigate', recoverable: true },
+    };
+    const mockExecutor = {
+      executeCommand: vi
+        .fn()
+        .mockResolvedValueOnce(Ok({ command_id: 'cmd-123', status: 'completed', submitted_at: '' }))
+        .mockResolvedValueOnce(Err(error)),
+    } as unknown as LocalExecutor;
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(loggerModule.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warning',
+        message: expect.stringContaining('goto-sheet'),
+        data: expect.objectContaining({
+          sheetName: worksheetName,
+          appliedVia: 'load-worksheet',
+          error,
+        }),
       }),
     );
   });
@@ -270,6 +338,7 @@ describe('loadWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API 
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
     vi.spyOn(validationRegistry, 'runValidation').mockReturnValue({ valid: true, issues: [] });
     const base = configModule.getDesktopConfig();
     vi.spyOn(configModule, 'getDesktopConfig').mockReturnValue({
@@ -303,6 +372,24 @@ describe('loadWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API 
     // The applied minimal doc carries the edited sheet but not the untouched "Other".
     expect(applyCall?.args?.text).toContain('name="Sheet 1"');
     expect(applyCall?.args?.text).not.toContain('Other');
+  });
+
+  it('focuses the worksheet after a successful minimal-doc apply', async () => {
+    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Sheet 1', 'Other']));
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(calls.at(-1)).toEqual({
+      namespace: 'tabdoc',
+      command: 'goto-sheet',
+      args: { sheet: worksheetName },
+    });
   });
 
   it('should apply a minimal document for a brand-new sheet', async () => {

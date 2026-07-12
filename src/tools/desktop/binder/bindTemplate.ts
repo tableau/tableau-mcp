@@ -28,6 +28,13 @@ import { ExecuteCommandError, ToolExecutor } from '../../../desktop/toolExecutor
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import {
+  jsonToolResult,
+  type NextAction,
+  prefillNextAction,
+  type StructuredResult,
+  withNextAction,
+} from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 // The nested `proposal` mirrors the binder library's public data contract
 // (`BindingProposal` / `PROPOSAL_OUTPUT_SCHEMA`) verbatim so a Call-1 `propose` payload
@@ -90,6 +97,7 @@ type AppliedFastPathResult = {
 };
 
 type BindTemplateToolResult = BindTemplateToolResultBase | AppliedFastPathResult;
+type StructuredBindTemplateToolResult = StructuredResult<BindTemplateToolResult>;
 
 /** Escalation reasons that route back to the general (non-fast-path) authoring flow. */
 const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
@@ -105,6 +113,19 @@ const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
   // route to the general authoring flow.
   'schema-too-large',
 ]);
+
+function nextActionForEscalation(reason: EscalateReason): NextAction {
+  if (reason === 'ambiguous-field' || reason === 'field-not-found') {
+    return prefillNextAction('Resolve the fields first');
+  }
+  if (reason === 'low-confidence') {
+    return prefillNextAction('Pick a higher-confidence proposal');
+  }
+  if (TIER2_REASONS.has(reason)) {
+    return prefillNextAction('Use the general worksheet build tools');
+  }
+  return prefillNextAction('Build the worksheet manually');
+}
 
 function renderBlockers(blockers: Blocker[]): string {
   if (blockers.length === 0) {
@@ -440,7 +461,13 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
           const bindMs = Date.now() - bindStart;
 
-          const base: BindTemplateToolResultBase = { ...res, guidance: buildGuidance(res) };
+          const base: StructuredBindTemplateToolResult =
+            res.status === 'escalate'
+              ? withNextAction(
+                  { ...res, guidance: buildGuidance(res) },
+                  nextActionForEscalation(res.reason),
+                )
+              : { ...res, guidance: buildGuidance(res) };
 
           // ── Auto-apply gate (defense in depth) ───────────────────────────
           // Only a deterministic Call-1 bind (used_llm === false) of a fast-path-
@@ -472,6 +499,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             }),
           );
         },
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });
     },
   });
