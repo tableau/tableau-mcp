@@ -64,16 +64,16 @@ describe('dashboard-zones-reference-included-worksheets rule', () => {
           },
           {
             name: 'Executive Dashboard',
-            zones: ["<zone h='98000' id='6' name='Missing Executive' w='98000' x='1000' y='1000' />"],
+            zones: [
+              "<zone h='98000' id='6' name='Missing Executive' w='98000' x='1000' y='1000' />",
+            ],
           },
         ],
       }),
       'workbook',
     );
 
-    const messages = result.issues
-      .filter((i) => i.ruleId === RULE_ID)
-      .map((i) => i.message);
+    const messages = result.issues.filter((i) => i.ruleId === RULE_ID).map((i) => i.message);
     expect(messages).toHaveLength(2);
     expect(messages).toEqual(
       expect.arrayContaining([

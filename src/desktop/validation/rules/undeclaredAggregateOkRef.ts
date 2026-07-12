@@ -59,12 +59,12 @@ export const undeclaredAggregateOkRefRule: ValidationRule = {
         message:
           `Aggregate column-instance reference ${ref} uses the ordinal suffix (:ok) but no matching ` +
           `<column-instance name="${ref}"> is declared — Desktop logs "Unknown column ${ref}" and the field ` +
-          `renders wrong or blank, with no load error.`,
+          'renders wrong or blank, with no load error.',
         xpath: `//*[contains(text(),'${ref}')] | //@*[contains(.,'${ref}')]`,
         suggestion:
           `Use the canonical quantitative measure instance [${prefix}:${field}:qk], or — if a discrete aggregate ` +
           `is intended — declare <column-instance name='${ref}' … type='ordinal'> in the owning ` +
-          `datasource-dependencies block.`,
+          'datasource-dependencies block.',
       });
     }
     return issues;
