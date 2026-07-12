@@ -6,10 +6,14 @@ import { z } from 'zod';
 
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
+import {
+  checkRouteGateForScratchEntry,
+  type RouteGateResult,
+} from '../../../desktop/route/route-gate.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { spliceBoundFacet } from '../../../desktop/templates/facetSplice.js';
-import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
+import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import {
@@ -20,6 +24,23 @@ import {
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
+
+function isRouteGateResult(result: unknown): result is RouteGateResult {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    Array.isArray((result as { content?: unknown }).content) &&
+    typeof (result as { isError?: unknown }).isError === 'boolean'
+  );
+}
+
+function getSuccessResult(result: unknown): CallToolResult {
+  if (isRouteGateResult(result)) return result;
+  return {
+    isError: false,
+    content: [{ type: 'text', text: JSON.stringify(result) }],
+  };
+}
 
 function escapeXml(text: string): string {
   return text
@@ -68,6 +89,7 @@ export const getBuildAndApplyWorksheetTool = (
       return await tool.logAndExecute({
         extra,
         args: { session, taskSpec },
+        getSuccessResult,
         callback: async () => {
           const { worksheetName, workbookFile, template, fields } = taskSpec;
 
@@ -87,6 +109,20 @@ export const getBuildAndApplyWorksheetTool = (
             return new ArgsValidationError(
               `Template not found: "${template}". Check available templates with list-xml-templates.`,
             ).toErr();
+          }
+
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+
+          const gateResult = checkRouteGateForScratchEntry(
+            'build-and-apply-worksheet',
+            resolvedSession,
+          );
+          if (gateResult) {
+            return new Ok(gateResult);
           }
 
           const workbookXml = readFileSync(workbookFile, 'utf-8');
@@ -172,12 +208,6 @@ export const getBuildAndApplyWorksheetTool = (
               `Measure field "${dropped}" was dropped: template "${template}" exposes only ${templateMeasures.length} measure slot(s).`,
             );
           }
-
-          const sessionResult = resolveSession(session);
-          if (sessionResult.isErr()) {
-            return sessionResult.error.toErr();
-          }
-          const resolvedSession = sessionResult.value;
 
           // Inject title and replace field references. Per-apply calc namespacing is
           // wired at this tool boundary: the shared core defaults namespacing OFF and

@@ -9,6 +9,10 @@ import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXm
 import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { addDashboard, addSheet } from '../../../desktop/metadata/index.js';
+import {
+  checkRouteGateForScratchEntry,
+  type RouteGateResult,
+} from '../../../desktop/route/route-gate.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   DesktopCommandExecutionError,
@@ -16,6 +20,23 @@ import {
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
+
+function isRouteGateResult(result: unknown): result is RouteGateResult {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    Array.isArray((result as { content?: unknown }).content) &&
+    typeof (result as { isError?: unknown }).isError === 'boolean'
+  );
+}
+
+function getSuccessResult(result: unknown): CallToolResult {
+  if (isRouteGateResult(result)) return result;
+  return {
+    isError: false,
+    content: [{ type: 'text', text: JSON.stringify(result) }],
+  };
+}
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
@@ -51,12 +72,22 @@ export const getBatchCreateAndCacheSheetsTool = (
       return await tool.logAndExecute({
         extra,
         args: { session, worksheetNames, dashboardName },
+        getSuccessResult,
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
           }
           const resolvedSession = sessionResult.value;
+
+          const gateResult = checkRouteGateForScratchEntry(
+            'batch-create-and-cache-sheets',
+            resolvedSession,
+          );
+          if (gateResult) {
+            return new Ok(gateResult);
+          }
+
           const executor = await extra.getExecutor(resolvedSession);
           const signal = extra.signal;
           const cache = new DesktopCache(resolvedSession);

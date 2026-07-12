@@ -15,12 +15,10 @@
 // for the same (session, ask) after a deflection executes and records a `route_override` —
 // never a loop.
 //
-// WIRING: this module is complete and self-contained but is NOT yet called from a live tool
-// handler. tmcp's slow-path tools (build-and-apply-worksheet, batch-create-and-cache-sheets,
-// plan-dashboard-creation) carry STRUCTURED specs, not a free-text ask, and there is no
-// begin-episode entry point at which an ask is captured against a session; adding an ask param
-// would grow the frozen tools/list surface. Wiring therefore requires a product decision on
-// where the ask enters (see the Slice B report). Flag-off inertness holds regardless.
+// WIRING: `checkRouteGate` remains the ask-driven entry point. `checkRouteGateForScratchEntry`
+// is the no-ask wiring path for structured slow-path tools: it reads the most recent
+// bind-template classification from session state and never classifies at the scratch tool, so
+// no ask param is added to the frozen tools/list surface. Flag-off inertness holds regardless.
 
 import { loadManifests } from '../binder/manifest.js';
 import type { TemplateManifest } from '../binder/manifest-types.js';
@@ -205,6 +203,96 @@ export function checkRouteGate(input: RouteGateInput): RouteGateResult | null {
     text,
   };
   sessionRouteState.recordDeflection(input.sessionId, deflection);
+  return {
+    content: [
+      { type: 'text', text },
+      { type: 'text', text: JSON.stringify({ next_route: 'bind-first', template }) },
+    ],
+    isError: false,
+  };
+}
+
+/**
+ * The scratch-entry gate for tools that have NO ask text of their own
+ * (build-and-apply-worksheet, batch-create-and-cache-sheets). Unlike checkRouteGate, this
+ * NEVER classifies — it only reads whatever bind-template already recorded into session route
+ * state. Fail-open when the flag is off, no session/current ask exists, or bind-template has
+ * already concluded for the current ask.
+ */
+export function checkRouteGateForScratchEntry(
+  toolName: string,
+  sessionId: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): RouteGateResult | null {
+  if (!routeEnforcementEnabled(env)) return null;
+  if (!sessionId) return null;
+
+  const currentAsk = sessionRouteState.get(sessionId)?.current_ask;
+  if (!currentAsk || currentAsk.last_outcome !== null) return null;
+
+  const gate = decideRouteGate({
+    route: currentAsk.route,
+    shape: currentAsk.shape,
+    alreadyDeflected: sessionRouteState.hasDeflection(sessionId, currentAsk.ask),
+  });
+  if (gate === 'noop') return null;
+
+  const ts = new Date().toISOString();
+
+  if (gate === 'override') {
+    if (!sessionRouteState.hasOverride(sessionId, currentAsk.ask)) {
+      const override: RouteOverride =
+        currentAsk.route === 'refine-op'
+          ? { tool: toolName, ts, ask: currentAsk.ask, shape: currentAsk.shape }
+          : {
+              tool: toolName,
+              ts,
+              ask: currentAsk.ask,
+              template: currentAsk.template ?? '(the matched template)',
+            };
+      sessionRouteState.recordOverride(sessionId, override);
+    }
+    return null;
+  }
+
+  if (currentAsk.route === 'refine-op') {
+    const text = refineDeflectionText();
+    const deflection: RouteDeflection = {
+      tool: toolName,
+      ts,
+      ask: currentAsk.ask,
+      shape: currentAsk.shape,
+      next_route: 'refine-op',
+      text,
+    };
+    sessionRouteState.recordDeflection(sessionId, deflection);
+    return {
+      content: [
+        { type: 'text', text },
+        {
+          type: 'text',
+          text: JSON.stringify({
+            next_route: 'refine-op',
+            tool: REFINE_WORKSHEET_TOOL,
+            shape: currentAsk.shape,
+          }),
+        },
+      ],
+      isError: false,
+    };
+  }
+
+  const template = currentAsk.template ?? '(the matched template)';
+  const text = deflectionText(template);
+  const deflection: RouteDeflection = {
+    tool: toolName,
+    ts,
+    ask: currentAsk.ask,
+    template,
+    next_route: 'bind-first',
+    text,
+  };
+  sessionRouteState.recordDeflection(sessionId, deflection);
   return {
     content: [
       { type: 'text', text },

@@ -121,4 +121,143 @@ describe('SessionRouteStateStore', () => {
     expect(store.hasDeflection('S1', 'ask-0')).toBe(false);
     expect(store.hasDeflection('S1', `ask-${cap + 2}`)).toBe(true);
   });
+
+  describe('current ask classification state', () => {
+    it('recordAskClassification lazy-inits state and sets current_ask with a pending outcome', () => {
+      const store = new SessionRouteStateStore();
+
+      const s = store.recordAskClassification('S1', {
+        ask: 'bar chart of sales by region',
+        route: 'bind-first',
+        shape: 'bind-first-template',
+        template: 'ranking-ordered-bar',
+      })!;
+
+      expect(s.session_id).toBe('S1');
+      expect(s.deflections).toEqual([]);
+      expect(s.route_overrides).toEqual([]);
+      expect(s.current_ask).toMatchObject({
+        ask: 'bar chart of sales by region',
+        route: 'bind-first',
+        shape: 'bind-first-template',
+        template: 'ranking-ordered-bar',
+        last_outcome: null,
+      });
+      expect(typeof s.current_ask!.ts).toBe('string');
+      expect(store.get('S1')).toBe(s);
+    });
+
+    it('recordAskClassification overwrites the prior current_ask (most-recent-ask-wins)', () => {
+      const store = new SessionRouteStateStore();
+      store.recordAskClassification('S1', {
+        ask: 'bar chart of sales by region',
+        route: 'bind-first',
+        shape: 'bind-first-template',
+        template: 'ranking-ordered-bar',
+      });
+
+      store.recordAskClassification('S1', {
+        ask: 'line chart of profit over time',
+        route: 'free',
+        shape: 'unmatched',
+        template: null,
+      });
+
+      expect(store.get('S1')!.current_ask).toMatchObject({
+        ask: 'line chart of profit over time',
+        route: 'free',
+        shape: 'unmatched',
+        template: null,
+        last_outcome: null,
+      });
+    });
+
+    it('recordAskOutcome fills last_outcome when the ask key matches current_ask.ask', () => {
+      const store = new SessionRouteStateStore();
+      store.recordAskClassification('S1', {
+        ask: 'bar chart of sales by region',
+        route: 'bind-first',
+        shape: 'bind-first-template',
+        template: 'ranking-ordered-bar',
+      });
+
+      const s = store.recordAskOutcome('S1', 'bar chart of sales by region', 'bound')!;
+
+      expect(s.current_ask?.last_outcome).toBe('bound');
+    });
+
+    it('recordAskOutcome no-ops when current_ask is absent', () => {
+      const store = new SessionRouteStateStore();
+
+      expect(store.recordAskOutcome('S1', 'bar chart of sales by region', 'bound')).toBeUndefined();
+      expect(store.get('S1')).toBeUndefined();
+    });
+
+    it('recordAskOutcome no-ops when a later ask overwrote current_ask before outcome landed', () => {
+      const store = new SessionRouteStateStore();
+      store.recordAskClassification('S1', {
+        ask: 'first ask',
+        route: 'bind-first',
+        shape: 'bind-first-template',
+        template: 'ranking-ordered-bar',
+      });
+      store.recordAskClassification('S1', {
+        ask: 'second ask',
+        route: 'free',
+        shape: 'unmatched',
+        template: null,
+      });
+
+      expect(store.recordAskOutcome('S1', 'first ask', 'bound')).toBeUndefined();
+      expect(store.get('S1')!.current_ask).toMatchObject({
+        ask: 'second ask',
+        last_outcome: null,
+      });
+    });
+
+    it('recordAskClassification / recordAskOutcome no-op without a session id (fail-open)', () => {
+      const store = new SessionRouteStateStore();
+
+      expect(
+        store.recordAskClassification(undefined, {
+          ask: 'bar chart of sales by region',
+          route: 'bind-first',
+          shape: 'bind-first-template',
+          template: 'ranking-ordered-bar',
+        }),
+      ).toBeUndefined();
+      expect(
+        store.recordAskOutcome(undefined, 'bar chart of sales by region', 'bound'),
+      ).toBeUndefined();
+    });
+
+    it('clearCurrentAsk drops a matching pending ask and fail-opens on everything else', () => {
+      const store = new SessionRouteStateStore();
+      const classify = (ask: string): void => {
+        store.recordAskClassification('S1', {
+          ask,
+          route: 'bind-first',
+          shape: 'bind-first-template',
+          template: 'ranking-ordered-bar',
+        });
+      };
+
+      // ask-scoped clear: only the matching ask is dropped.
+      classify('ask A');
+      expect(store.clearCurrentAsk('S1', 'ask B')).toBe(false);
+      expect(store.get('S1')!.current_ask).toMatchObject({ ask: 'ask A' });
+      expect(store.clearCurrentAsk('S1', 'ask A')).toBe(true);
+      expect(store.get('S1')!.current_ask).toBeUndefined();
+
+      // unconditional clear: whatever is pending goes.
+      classify('ask C');
+      expect(store.clearCurrentAsk('S1')).toBe(true);
+      expect(store.get('S1')!.current_ask).toBeUndefined();
+
+      // fail-open: absent slot, unknown/missing session.
+      expect(store.clearCurrentAsk('S1')).toBe(false);
+      expect(store.clearCurrentAsk('NOPE')).toBe(false);
+      expect(store.clearCurrentAsk(undefined)).toBe(false);
+    });
+  });
 });
