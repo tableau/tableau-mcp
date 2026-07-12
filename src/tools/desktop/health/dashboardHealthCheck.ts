@@ -106,7 +106,7 @@ export interface DashboardHealthReport {
 }
 
 const D9_REASON =
-  'Live render/visual breakage is not detectable from workbook XML alone; the Desktop Agent ' +
+  'Live render/visual breakage is not detectable from workbook structure alone; the Desktop Agent ' +
   'API exposes no render-diagnostics or screenshot-diff surface today.';
 
 function makeUndetectable(): DashboardHealthReport['undetectable'] {
@@ -396,7 +396,7 @@ export const getDashboardHealthCheckTool = (
     description: [
       'READ-ONLY drift detector for a previously-bound dashboard.',
       'Flags renamed/deleted sheets, changed fields, orphan zones, and datasource changes.',
-      'Flag-only: never repairs. D9 live render breakage is undetectable from XML and disclosed in reports. Details: expertise://tableau/tactics/workflow/recovery.',
+      'Flag-only: never repairs. D9 live render breakage is not structure-detectable and is disclosed. Details: expertise://tableau/tactics/workflow/recovery.',
     ].join(' '),
     paramsSchema,
     annotations: {

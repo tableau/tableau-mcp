@@ -34,8 +34,10 @@ const ENCODING_TYPES = [
 const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
 const paramsSchema = {
-  worksheetFile: z.string().describe('Worksheet XML cache file (from get-worksheet-xml).'),
-  target: z.enum(FIELD_TARGETS).describe("Source: 'rows' shelf, 'cols' shelf, or 'encoding'."),
+  worksheetFile: z.string().describe('Worksheet cache file.'),
+  target: z
+    .enum(FIELD_TARGETS)
+    .describe("Source: 'rows' for Rows, 'cols' for Columns, or 'encoding'."),
   columnRef: z.string().describe('Column reference to remove.'),
   encodingType: z
     .enum(ENCODING_TYPES)
@@ -50,7 +52,7 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
     name: 'remove-field',
     title,
     description:
-      'Remove a field from the rows shelf, columns shelf, or an encoding on a worksheet XML locally. Reads from and writes to cache file. Use apply-worksheet to apply changes.',
+      'Remove a field from the Rows shelf, Columns shelf, or an encoding on a worksheet locally. Reads from and writes to cache file. Use apply-worksheet to apply changes.',
     paramsSchema,
     annotations: {
       title,
@@ -92,11 +94,11 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
             switch (target) {
               case 'rows':
                 modifiedXml = removeFieldFromRows(worksheetXml, columnRef);
-                placement = 'rows shelf';
+                placement = 'Rows shelf';
                 break;
               case 'cols':
                 modifiedXml = removeFieldFromCols(worksheetXml, columnRef);
-                placement = 'columns shelf';
+                placement = 'Columns shelf';
                 break;
               case 'encoding':
                 modifiedXml = removeFieldFromEncoding(worksheetXml, encodingType!, columnRef);

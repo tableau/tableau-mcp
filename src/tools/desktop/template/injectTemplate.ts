@@ -18,7 +18,7 @@ import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
   workbookFile: z.string().describe('Workbook cache file path.'),
-  templateName: z.string().describe('Template name, without .xml.'),
+  templateName: z.string().describe('Template name.'),
   title: z.string().describe('New sheet name; replaces {{TITLE}}.'),
   sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe('Type of sheet being injected.'),
   templateParameters: z
@@ -42,9 +42,9 @@ export const getInjectTemplateTool = (
     name: 'inject-template',
     title: toolTitle,
     description: [
-      'Inject a worksheet/dashboard/story template into cached workbook XML (mutates the file).',
-      'Use list-xml-templates for names; supports placeholders including {{TITLE}}.',
-      'Workflow: get-workbook-xml (mode=file) → inject-template → apply-workbook.',
+      'Inject a worksheet/dashboard/story template into a cached workbook (mutates file).',
+      'Use template list for names; supports {{TITLE}}.',
+      'Workflow: get workbook structure in file mode → inject-template → apply-workbook.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -87,7 +87,7 @@ export const getInjectTemplateTool = (
             const files = listTemplateNames();
             const available = files.length > 0 ? files.join(', ') : 'none';
             return new ArgsValidationError(
-              `Template "${templateName}" not found.\n\nAvailable templates: ${available}\n\nUse list-xml-templates to see all options.`,
+              `Template "${templateName}" not found.\n\nAvailable templates: ${available}\n\nUse the template list tool to see all options.`,
             ).toErr();
           }
 

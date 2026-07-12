@@ -32,7 +32,7 @@ describe('applyWorksheetTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getApplyWorksheetTool(new DesktopMcpServer());
     expect(tool.name).toBe('apply-worksheet');
-    expect(tool.description).toContain('Apply modified worksheet XML to Tableau');
+    expect(tool.description).toContain('Apply modified worksheet content to Tableau');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),
@@ -65,7 +65,7 @@ describe('applyWorksheetTool', () => {
     invariant(result.content[0].type === 'text');
 
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
-    expect(resultObj.message).toContain('Successfully applied worksheet XML');
+    expect(resultObj.message).toContain('Successfully applied worksheet update');
   });
 
   it('should successfully apply worksheet XML in file mode', async () => {
@@ -90,7 +90,7 @@ describe('applyWorksheetTool', () => {
     invariant(result.content[0].type === 'text');
 
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
-    expect(resultObj.message).toContain('Successfully applied worksheet XML');
+    expect(resultObj.message).toContain('Successfully applied worksheet update');
 
     expect(existsSync).toHaveBeenCalledWith(mockFilePath);
     expect(readFileSync).toHaveBeenCalledWith(mockFilePath, 'utf-8');
@@ -109,8 +109,7 @@ describe('applyWorksheetTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
-      new ArgsValidationError('When mode=inline, a non-empty worksheet XML string is required.')
-        .message,
+      new ArgsValidationError('When mode=inline, non-empty worksheet content is required.').message,
     );
   });
 
@@ -271,7 +270,7 @@ describe('applyWorksheetTool over-cap note', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const message = JSON.parse(result.content[0].text).message as string;
-    expect(message).toContain('Successfully applied worksheet XML');
+    expect(message).toContain('Successfully applied worksheet update');
     expect(message).toContain('inline cap');
     expect(message).toContain('mode=file');
   });

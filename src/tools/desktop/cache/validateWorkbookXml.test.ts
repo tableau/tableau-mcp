@@ -14,7 +14,7 @@ describe('validateWorkbookXmlTool', () => {
     expect(tool.paramsSchema).toMatchObject({ xml: expect.any(Object) });
   });
 
-  it('should return success for well-formed XML', async () => {
+  it('should return success for well-formed workbook content', async () => {
     const result = await getResult('<?xml version="1.0"?><workbook><worksheets/></workbook>');
 
     expect(result.isError).toBeFalsy();
@@ -22,12 +22,12 @@ describe('validateWorkbookXmlTool', () => {
     expect(result.content[0].text).toContain('well-formed');
   });
 
-  it('should return error for malformed XML', async () => {
+  it('should return error for malformed workbook content', async () => {
     const result = await getResult('<workbook><worksheets></workbook>');
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('malformed');
+    expect(result.content[0].text).toContain('Workbook structure has');
   });
 
   it('should include fix suggestion referencing apply-workbook', async () => {

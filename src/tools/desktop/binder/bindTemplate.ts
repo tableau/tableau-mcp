@@ -48,7 +48,7 @@ const paramsSchema = {
     .string()
     .optional()
     .describe('Session ID. Optional only when exactly one Desktop instance is running.'),
-  ask: z.string().describe('Natural-language chart request.'),
+  ask: z.string().describe('Natural-language viz request.'),
   proposal: proposalSchema
     .optional()
     .describe("Call 2 only: filled proposal from a Call-1 'propose' payload."),
@@ -153,7 +153,7 @@ function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): 
     next =
       'This ask is not a fast-path template bind. Author the worksheet with the general field/worksheet build tools instead. ' +
       'If a blocker names a real but not-fast-path-eligible template, that template can still be applied via the manual chain: ' +
-      'get-workbook-xml -> inject-template (that template_name + an explicit field_mapping) -> apply-workbook.';
+      'get workbook structure in file mode -> inject-template (that template_name + an explicit field_mapping) -> apply-workbook.';
   } else {
     next = 'Author the worksheet with the general build tools instead.';
   }
@@ -173,10 +173,10 @@ function buildGuidance(res: BinderResult): string {
         'then call bind-template again with { session, ask, proposal } matching output_schema. ' +
         // W60 pie-anyway gap: candidates carry ONLY fast-path-eligible templates, so an ask naming an
         // unstamped shape (canonically pie) dead-ended here with no honest route — name both exits.
-        'If the asked chart shape is not among the candidates (e.g. pie/donut — no pie template is ' +
+        'If the asked viz shape is not among the candidates (e.g. pie/donut — no pie template is ' +
         'fast-path eligible), do not force a mismatched proposal: bind the nearest candidate and tell the ' +
         'user in one sentence why (for a pie ask, a sorted bar or treemap compares shares more precisely); ' +
-        'if they explicitly want the exact shape anyway, use the manual chain — get-workbook-xml -> ' +
+        'if they explicitly want the exact shape anyway, use the manual chain — get workbook structure in file mode -> ' +
         "inject-template with template_name 'part-to-whole-pie-chart' (field_mapping: Region -> the " +
         'category dimension, Sales -> the measure) -> apply-workbook. ' +
         `${DERIVATION_OVERRIDE_INSTRUCTION}.`
@@ -200,7 +200,7 @@ function describeApplyError(
     if (inner.type === 'load-rejected') {
       return `Tableau rejected the load: ${inner.message}`;
     }
-    return 'invalid workbook XML';
+    return 'invalid workbook content';
   }
   return `workbook load command failed: ${JSON.stringify(error.error)}`;
 }
@@ -224,7 +224,7 @@ function applyFallback(
     ...base,
     guidance:
       guidance ??
-      `Server-side auto-apply did not complete (${apply_error}). The bound args are intact — fall back to the manual chain: get-workbook-xml → inject-template → apply-workbook using the returned args.`,
+      `Server-side auto-apply did not complete (${apply_error}). The bound args are intact — fall back to the manual chain: get workbook structure in file mode → inject-template → apply-workbook using the returned args.`,
     applied: false,
     apply_error,
   };
@@ -332,7 +332,7 @@ async function performAutoApply({
   };
 }
 
-const title = 'Bind a Chart Template to an Ask (Fast Path)';
+const title = 'Bind a Viz Template to an Ask (Fast Path)';
 
 export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const bindTemplateTool = new DesktopTool({
@@ -340,7 +340,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     name: 'bind-template',
     title,
     description: [
-      'Bind a checked-in chart template to an ask and return validated inject args. Model-free.',
+      'Bind a checked-in viz template to an ask and return validated inject args. Model-free.',
       "Call 1 returns 'bound' or 'propose'; Call 2 returns 'bound' or 'escalate'.",
       'auto_apply:true renders deterministic Call-1 binds in one call. Details: expertise://tableau/tactics/workflow/templates.',
     ].join(' '),

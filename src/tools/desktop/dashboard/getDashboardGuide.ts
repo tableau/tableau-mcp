@@ -8,7 +8,7 @@ import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {};
 
-const toolTitle = 'Get Dashboard XML Guide';
+const toolTitle = 'Get Dashboard Layout Editing Guide';
 export const getGetDashboardGuideTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
@@ -17,7 +17,7 @@ export const getGetDashboardGuideTool = (
     name: 'get-dashboard-guide',
     title: toolTitle,
     description:
-      'Get comprehensive documentation on how to manually edit dashboard XML: zones, layouts, viewpoints, sizing, and best practices. Use this before hand-editing dashboard XML.',
+      'Get comprehensive documentation on how to manually edit dashboard layouts: zones, viewpoints, sizing, and best practices. Use this before hand-editing dashboard layouts.',
     paramsSchema,
     annotations: {
       title: toolTitle,
@@ -31,7 +31,7 @@ export const getGetDashboardGuideTool = (
         callback: async () => {
           const guide = readResourceAsset('dashboard-xml-guide.md');
           if (guide === null) {
-            return new FileNotFoundError('dashboard-xml-guide.md').toErr();
+            return new FileNotFoundError('dashboard layout guide').toErr();
           }
           return new Ok(guide);
         },

@@ -40,7 +40,7 @@ export const getSearchExamplesTool = (
     name: 'search-examples',
     title,
     description:
-      'Search before/after workbook-change examples. Returns worksheet, dashboard, or workbook XML diffs; prefer focused diffs when available.',
+      'Search before/after workbook-change examples. Returns worksheet, dashboard, or workbook diffs; prefer focused diffs when available.',
     paramsSchema,
     annotations: {
       title,

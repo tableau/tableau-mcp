@@ -29,7 +29,7 @@ describe('applyDashboardTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getApplyDashboardTool(new DesktopMcpServer());
     expect(tool.name).toBe('apply-dashboard');
-    expect(tool.description).toContain('Apply modified dashboard XML to Tableau');
+    expect(tool.description).toContain('Apply modified dashboard layout to Tableau');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       dashboardName: expect.any(Object),
@@ -52,7 +52,7 @@ describe('applyDashboardTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
-    expect(resultObj.message).toContain('Successfully applied dashboard XML');
+    expect(resultObj.message).toContain('Successfully applied dashboard update');
   });
 
   it('should successfully apply dashboard XML in file mode', async () => {
@@ -68,7 +68,7 @@ describe('applyDashboardTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
-    expect(resultObj.message).toContain('Successfully applied dashboard XML');
+    expect(resultObj.message).toContain('Successfully applied dashboard update');
     expect(existsSync).toHaveBeenCalledWith(mockFilePath);
     expect(readFileSync).toHaveBeenCalledWith(mockFilePath, 'utf-8');
   });
@@ -79,7 +79,7 @@ describe('applyDashboardTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
-      new ArgsValidationError('When mode=inline, a non-empty dashboard XML string is required.')
+      new ArgsValidationError('When mode=inline, non-empty dashboard layout content is required.')
         .message,
     );
   });
@@ -144,7 +144,7 @@ describe('applyDashboardTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const message = JSON.parse(result.content[0].text).message as string;
-    expect(message).toContain('Successfully applied dashboard XML');
+    expect(message).toContain('Successfully applied dashboard update');
     expect(message).toContain('inline cap');
     expect(message).toContain('mode=file');
   });

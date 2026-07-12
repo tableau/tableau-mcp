@@ -29,7 +29,7 @@ const paramsSchema = {
     .default('file')
     .describe('file reads dashboardFile; inline uses dashboardXml.'),
   dashboardFile: z.string().optional().describe('Modified dashboard cache file for mode=file.'),
-  dashboardXml: z.string().optional().describe('Dashboard XML for mode=inline.'),
+  dashboardXml: z.string().optional().describe('Dashboard layout content for mode=inline.'),
 };
 
 const title = 'Apply Dashboard';
@@ -41,7 +41,7 @@ export const getApplyDashboardTool = (
     name: 'apply-dashboard',
     title,
     description: [
-      'Apply modified dashboard XML to Tableau (mutating). mode=file is default; mode=inline is for small XML.',
+      'Apply modified dashboard layout to Tableau (mutating). mode=file is default; mode=inline is for small dashboards.',
       'IMPORTANT: can only UPDATE an existing dashboard, not create one — use apply-workbook to create.',
       'See expertise://tableau/tactics/dashboard/zones for zone structure.',
     ].join(' '),
@@ -65,7 +65,7 @@ export const getApplyDashboardTool = (
             case 'inline': {
               if (!dashboardXml?.trim()) {
                 return new ArgsValidationError(
-                  'When mode=inline, a non-empty dashboard XML string is required.',
+                  'When mode=inline, non-empty dashboard layout content is required.',
                 ).toErr();
               }
               break;
@@ -75,7 +75,7 @@ export const getApplyDashboardTool = (
                 return new ArgsValidationError(
                   [
                     'When mode=file, a non-empty dashboard file path is required.',
-                    'The path can be determined using get-dashboard-xml.',
+                    'The path can be determined using the dashboard layout retrieval tool.',
                   ].join(' '),
                 ).toErr();
               }
@@ -84,7 +84,7 @@ export const getApplyDashboardTool = (
                 return new WorkbookNotFoundError(
                   [
                     `Cached dashboard file not found: ${dashboardFile}`,
-                    'Provide a path determined by get-dashboard-xml.',
+                    'Provide a path determined by the dashboard layout retrieval tool.',
                   ].join(' '),
                 ).toErr();
               }
@@ -132,7 +132,7 @@ export const getApplyDashboardTool = (
               : '';
 
           return new Ok({
-            message: `Successfully applied dashboard XML for "${dashboardName}". The dashboard has been updated.${note}`,
+            message: `Successfully applied dashboard update for "${dashboardName}". The dashboard has been updated.${note}`,
           });
         },
       });

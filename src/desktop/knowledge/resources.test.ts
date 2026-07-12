@@ -25,4 +25,20 @@ describe('desktop knowledge resources', () => {
     expect(content).toContain('get-worksheet-xml');
     expect(content).toContain('apply-worksheet');
   });
+
+  it('surfaces the Tableau vocabulary entry for user-facing narration prompts', () => {
+    const resource = listKnowledgeResources().find(
+      (entry) => entry.uri === 'expertise://tableau/tactics/workflow/tableau-vocabulary',
+    );
+
+    expect(resource?.name).toBe('Tableau Vocabulary for User-Facing Narration');
+    expect(resource?.description).toContain('Tableau users should hear product vocabulary');
+
+    const content = readKnowledgeResource(resource!.uri);
+    expect(content).toContain('never say XML');
+    expect(content).toContain('Columns');
+    expect(content).toContain('Rows');
+    expect(content).toContain('Number (whole)');
+    expect(content).toContain('True/False');
+  });
 });
