@@ -56,6 +56,35 @@ describe('buildTwbx', () => {
     expect(files['Packages/com.example.myviz/content/index.html']).toContain('<!doctype html>');
   });
 
+  it('binds the bundled extension to a dashboard so the published workbook is NOT empty', () => {
+    // Regression guard for the empty-publish bug: the .twb must carry the full render chain —
+    // a dashboard, a dashboard-object zone, an <add-in>, and an inline <referenced-extension> —
+    // or the bundled package is orphaned and the workbook publishes blank.
+    const twb = entries(buildTwbx(base).bytes)['My Viz.twb'];
+    expect(twb).toContain('<dashboards>');
+    expect(twb).toContain("<dashboard name='My Viz'>");
+    expect(twb).toContain("type-v2='dashboard-object'");
+    expect(twb).toContain("<add-in add-in-id='com.example.myviz'");
+    expect(twb).toContain("<dashboard-extension extension-version='1.0.0' id='com.example.myviz'>");
+    // referenced-view viewId must equal the dashboard name so the extension binds to that view.
+    expect(twb).toContain("<referenced-view instances='1' viewId='My Viz' />");
+    // A dashboard window (not merely a lone worksheet window) so the view opens on the dashboard.
+    expect(twb).toContain("<window class='dashboard'");
+  });
+
+  it('points the render chain at the FULL tableaulocalext:///<id>/content/index.html form', () => {
+    // The reader keeps a scheme'd URL verbatim; a bare "content/index.html" would mis-resolve with
+    // packageId="content". All three chain sites (zone param, add-in extension-url, referenced-
+    // extension <url>) must carry the explicit triple-slash + packageId.
+    const twb = entries(buildTwbx(base).bytes)['My Viz.twb'];
+    const url = 'tableaulocalext:///com.example.myviz/content/index.html';
+    expect(twb).toContain(`param='[com.example.myviz].[1.0.0].[${url}]'`);
+    expect(twb).toContain(`extension-url='${url}'`);
+    expect(twb).toContain(`<url>${url}</url>`);
+    // Never emit a bare-relative source in the .twb render chain.
+    expect(twb).not.toContain("extension-url='content/index.html'");
+  });
+
   it('warns (does not throw) on a content extension outside the serve-time allow-list', () => {
     const { warnings } = buildTwbx({
       ...base,

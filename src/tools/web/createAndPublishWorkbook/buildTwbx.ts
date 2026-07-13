@@ -32,7 +32,7 @@ export function buildTwbx(input: BuildTwbxInput): BuildTwbxResult {
   const fileBase = sanitizeFileNameBase(input.workbookName);
   const zip: Record<string, Uint8Array> = {
     // 1) workbook XML at archive ROOT
-    [`${fileBase}.twb`]: strToU8(renderTwb(input.workbookName)),
+    [`${fileBase}.twb`]: strToU8(renderTwb(input)),
     // 2) manifest.json — its "id" MUST equal the Packages/<id>/ folder name
     [`Packages/${id}/manifest.json`]: strToU8(renderManifest(input)),
     // 3) the .trex — bare-relative <source-location>index.html</source-location>
@@ -124,21 +124,110 @@ function renderTrex(i: BuildTwbxInput): string {
 </manifest>`;
 }
 
-function renderTwb(name: string): string {
-  // Minimal single-worksheet shell. No package reference needed: publish associates by workbook_id.
-  // Deferred: real <datasources>. See the doc's Phase-4 caveat — fall back to vendored SDMWorkbook.twb
-  // if the publish pipeline rejects this minimized form.
+// Deterministic 32-hex-char instance id (a GUID's worth of entropy, no dashes/braces) for the
+// dashboard-object's <add-in>. Deterministic ON PURPOSE: buildTwbx output must be byte-stable
+// (the golden/determinism tests depend on it), so a random GUID is not an option. There is exactly
+// one extension per built workbook, so instance-id only has to be unique *within* the workbook —
+// trivially satisfied — while still varying by packageId so distinct workbooks differ.
+function instanceIdFor(packageId: string): string {
+  const fnv1a = (s: string): number => {
+    let h = 0x811c9dc5;
+    for (let idx = 0; idx < s.length; idx++) {
+      h ^= s.charCodeAt(idx);
+      h = Math.imul(h, 0x01000193);
+    }
+    return h >>> 0;
+  };
+  let out = '';
+  for (let i = 0; i < 4; i++) {
+    out += fnv1a(`${i}:${packageId}`).toString(16).padStart(8, '0');
+  }
+  return out.toUpperCase();
+}
+
+function renderTwb(i: BuildTwbxInput): string {
+  // The workbook display name doubles as the DASHBOARD name (the view the user opens) and the
+  // referenced-view viewId. A placeholder "Sheet 1" worksheet is kept so <worksheets> is non-empty
+  // (a workbook whose only view is an extension-hosting dashboard — exactly like WB1's Dashboard 3);
+  // it is unreferenced by the dashboard and harmless.
+  const name = esc(i.workbookName);
+  const id = esc(i.packageId);
+  // Bundled-package URL: the FULL tableaulocalext:///<id>/content/index.html form. The reader's
+  // GetRuntimeExtensionUrl keeps a scheme'd URL verbatim (a bare "content/index.html" would be
+  // mis-resolved with packageId="content"), so the explicit triple-slash + packageId is required.
+  const url = esc(`tableaulocalext:///${i.packageId}/content/index.html`);
+  const instanceId = instanceIdFor(i.packageId);
+  const icon = i.toolbar?.iconPngBase64 ?? DEFAULT_ICON_PNG_B64;
+
+  // The render chain that makes the published workbook NON-EMPTY. Three parts must agree on
+  // id/version/url: (1) the dashboard-object <zone param='[id].[ver].[url]'>, (2) its <add-in>, and
+  // (3) the inline <referenced-extension> dashboard-extension. Omit any and the bundled extension is
+  // orphaned — which is the empty-publish bug this replaces. Modeled on WB1's verified Dashboard 3.
   return `<?xml version="1.0" encoding="utf-8"?>
 <workbook version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
   <datasources />
   <worksheets>
-    <worksheet name='${esc(name)}'>
+    <worksheet name='Sheet 1'>
       <table><view><datasources /></view></table>
     </worksheet>
   </worksheets>
+  <dashboards>
+    <dashboard name='${name}'>
+      <style />
+      <size maxheight='800' maxwidth='1000' minheight='800' minwidth='1000' />
+      <zones>
+        <zone h='100000' id='4' type-v2='layout-basic' w='100000' x='0' y='0'>
+          <zone forceUpdate='true' h='98000' id='3' param='[${id}].[1.0.0].[${url}]' type-v2='dashboard-object' w='98400' x='800' y='1000'>
+            <add-in add-in-id='${id}' extension-url='${url}' extension-version='1.0.0' instance-id='${instanceId}'>
+              <instance-settings />
+              <type-settings>
+                <dashboard />
+              </type-settings>
+            </add-in>
+            <zone-style>
+              <format attr='border-color' value='#444444' />
+              <format attr='border-style' value='none' />
+              <format attr='border-width' value='0' />
+              <format attr='margin' value='4' />
+            </zone-style>
+          </zone>
+          <zone-style>
+            <format attr='border-color' value='#444444' />
+            <format attr='border-style' value='none' />
+            <format attr='border-width' value='0' />
+            <format attr='margin' value='8' />
+          </zone-style>
+        </zone>
+      </zones>
+    </dashboard>
+  </dashboards>
   <windows>
-    <window class='worksheet' name='${esc(name)}' />
+    <window class='worksheet' name='Sheet 1' />
+    <window class='dashboard' maximized='true' name='${name}'>
+      <viewpoints />
+      <active id='3' />
+    </window>
   </windows>
+  <referenced-extensions>
+    <referenced-extension>
+      <manifest manifest-version='0.1'>
+        <dashboard-extension extension-version='1.0.0' id='${id}'>
+          <default-locale>en_US</default-locale>
+          <name>${name}</name>
+          <description>Embedded workbook extension.</description>
+          <author email='noreply@tableau.com' name='Claude' organization='Tableau' website='https://www.tableau.com' />
+          <min-api-version>1.4</min-api-version>
+          <source-location>
+            <url>${url}</url>
+          </source-location>
+          <icon>${icon}</icon>
+        </dashboard-extension>
+      </manifest>
+      <referenced-views>
+        <referenced-view instances='1' viewId='${name}' />
+      </referenced-views>
+    </referenced-extension>
+  </referenced-extensions>
 </workbook>`;
 }
 
