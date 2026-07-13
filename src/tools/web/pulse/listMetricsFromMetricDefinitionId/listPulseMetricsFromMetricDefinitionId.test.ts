@@ -35,7 +35,7 @@ describe('listPulseMetricsFromMetricDefinitionIdTool', () => {
     const listPulseMetricsFromMetricDefinitionIdTool =
       getListPulseMetricsFromMetricDefinitionIdTool(new WebMcpServer());
     expect(listPulseMetricsFromMetricDefinitionIdTool.name).toBe(
-      'list-pulse-metrics-from-metric-definition-id',
+      'list-pulse-metrics-from-metric-def-id',
     );
     expect(listPulseMetricsFromMetricDefinitionIdTool.description).toContain(
       'Retrieves a list of published Pulse Metrics from a Pulse Metric Definition',

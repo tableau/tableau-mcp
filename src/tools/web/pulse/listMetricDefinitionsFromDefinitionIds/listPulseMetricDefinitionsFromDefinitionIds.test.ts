@@ -34,7 +34,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
     const listPulseMetricDefinitionsFromDefinitionIdsTool =
       getListPulseMetricDefinitionsFromDefinitionIdsTool(new WebMcpServer());
     expect(listPulseMetricDefinitionsFromDefinitionIdsTool.name).toBe(
-      'list-pulse-metric-definitions-from-definition-ids',
+      'list-pulse-metric-defs-from-def-ids',
     );
     expect(listPulseMetricDefinitionsFromDefinitionIdsTool.description).toContain(
       'Retrieves a list of specific Pulse Metric Definitions',
@@ -121,7 +121,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
     mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockRejectedValue({
       errorCode: '-32602',
       message:
-        'Invalid arguments for tool list-pulse-metric-definitions-from-definition-ids: Enumeration value must be one of: DEFINITION_VIEW_BASIC, DEFINITION_VIEW_FULL, DEFINITION_VIEW_DEFAULT "path": "view"',
+        'Invalid arguments for tool list-pulse-metric-defs-from-def-ids: Enumeration value must be one of: DEFINITION_VIEW_BASIC, DEFINITION_VIEW_FULL, DEFINITION_VIEW_DEFAULT "path": "view"',
     });
     // Intentionally passing invalid value for testing
     const result = await getToolResult({
@@ -140,7 +140,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
   it('should return an error for missing metricDefinitionIds', async () => {
     mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockRejectedValue({
       errorCode: '-32602',
-      message: `MCP error -32602: MCP error -32602: Invalid arguments for tool list-pulse-metric-definitions-from-definition-ids: [
+      message: `MCP error -32602: MCP error -32602: Invalid arguments for tool list-pulse-metric-defs-from-def-ids: [
         {
           "code": "too_small",
           "minimum": 1,
@@ -165,7 +165,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
   it('should return an error for is metricDefinitionId is too small', async () => {
     mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockRejectedValue({
       errorCode: '-32602',
-      message: `MCP error -32602: MCP error -32602: Invalid arguments for tool list-pulse-metric-definitions-from-definition-ids: [
+      message: `MCP error -32602: MCP error -32602: Invalid arguments for tool list-pulse-metric-defs-from-def-ids: [
         {
           "code": "too_small",
           "minimum": 36,

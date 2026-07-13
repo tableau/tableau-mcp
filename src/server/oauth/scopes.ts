@@ -243,11 +243,11 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_definitions_metrics:read', 'tableau:mcp_site_settings:read']),
   },
-  'list-pulse-metric-definitions-from-definition-ids': {
+  'list-pulse-metric-defs-from-def-ids': {
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_definitions_metrics:read', 'tableau:mcp_site_settings:read']),
   },
-  'list-pulse-metrics-from-metric-definition-id': {
+  'list-pulse-metrics-from-metric-def-id': {
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_definitions_metrics:read', 'tableau:mcp_site_settings:read']),
   },
@@ -265,7 +265,7 @@ const toolScopeMap: Record<
       'tableau:mcp_site_settings:read',
     ]),
   },
-  'generate-pulse-metric-value-insight-bundle': {
+  'generate-pulse-insight-bundle': {
     mcp: ['tableau:mcp:insight:create'],
     api: new Set(['tableau:insights:read', 'tableau:mcp_site_settings:read']),
   },
