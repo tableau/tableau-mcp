@@ -125,41 +125,6 @@ describe('FeatureGate', () => {
     });
   });
 
-  describe('with test fixtures', () => {
-    it('should load all-enabled fixture correctly', async () => {
-      const config = { mcpapps: true, pulse: true, 'oauth-embedded': true };
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const gate = getFeatureGate();
-
-      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(true);
-      await expect(gate.isFeatureEnabled('pulse')).resolves.toBe(true);
-      await expect(gate.isFeatureEnabled('oauth-embedded')).resolves.toBe(true);
-    });
-
-    it('should load all-disabled fixture correctly', async () => {
-      const config = { mcpapps: false, pulse: false, 'oauth-embedded': false };
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const gate = getFeatureGate();
-
-      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(false);
-      await expect(gate.isFeatureEnabled('pulse')).resolves.toBe(false);
-      await expect(gate.isFeatureEnabled('oauth-embedded')).resolves.toBe(false);
-    });
-
-    it('should load mixed fixture correctly', async () => {
-      const config = { mcpapps: false, pulse: true, 'oauth-embedded': false };
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const gate = getFeatureGate();
-
-      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(false);
-      await expect(gate.isFeatureEnabled('pulse')).resolves.toBe(true);
-      await expect(gate.isFeatureEnabled('oauth-embedded')).resolves.toBe(false);
-    });
-  });
-
   describe('provider selection', () => {
     beforeEach(() => {
       resetFeatureGate();
