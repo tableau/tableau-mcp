@@ -632,24 +632,23 @@ describe('binder/buildLlmInput — family-aware truncation (attack 2)', () => {
 
 describe('binder/bindTemplate — evidence gate escalation (attacks 5+10)', () => {
   it('a render-unverified template escalates not-fast-path', async () => {
-    // correlation-scatter-plot-chart binds the fixture but is render_verified:'none'
+    // pareto-chart binds the fixture (Sub-Category + Sales) but is render_verified:'none'
     // ⇒ fast_path_eligible:false ⇒ the binder must refuse it (honest shrink).
-    // W60: fixture swapped correlation-scatter-plot-chart → connected-scatterplot when the
-    // former's factory stamp crossed (it is now legitimately eligible). connected-scatterplot
-    // carries the SAME slot_ids and remains render-unverified — the gate under test.
+    // W60 used correlation-scatter-plot-chart, then connected-scatterplot, as the gate
+    // target; W63's live-2026-07-13 stamp made connected-scatterplot legitimately eligible,
+    // so this swaps to pareto-chart — still genuinely render-unverified — to keep the
+    // not-fast-path escalation exercised.
     const proposal: BindingProposal = {
-      template: 'connected-scatterplot',
-      title: 'Scatter',
+      template: 'pareto-chart',
+      title: 'Pareto',
       bindings: [
+        { slot_id: 'sub_category', field: 'Sub-Category' },
         { slot_id: 'sales', field: 'Sales' },
-        { slot_id: 'profit', field: 'Profit' },
-        { slot_id: 'customer_name', field: 'Customer Name' },
-        { slot_id: 'region', field: 'Region' },
       ],
       confidence: 0.9,
     };
     const res = await bindTemplate({
-      ask: 'scatter of Profit vs Sales',
+      ask: 'pareto chart of Sales by Sub-Category',
       workbookXml: WORKBOOK_XML,
       manifests,
       proposal,

@@ -38,6 +38,7 @@ const EXPECTED_DATASOURCE = 'Sample - Superstore';
 // extended (per the discover-and-pin contract) rather than silently under-covering.
 const EXPECTED_ELIGIBLE = [
   'box-plot-chart',
+  'connected-scatterplot', // W63 render-stamp port: live-2026-07-13
   'control-chart-xmr',
   'correlation-bubble-chart',
   'correlation-scatter-plot-chart', // W60 parity port: factory stamp crossed
@@ -51,8 +52,10 @@ const EXPECTED_ELIGIBLE = [
   'part-to-whole-treemap-chart',
   'part-to-whole-waterfall',
   'quota-attainment-bullet',
+  'ranking-dot-strip-plot', // W63 render-stamp port: live-2026-07-13
   'ranking-ordered-bar',
   'ranking-ordered-column',
+  'slope-chart', // W63 render-stamp port: live-2026-07-13
   'spatial-choropleth-map',
   'spatial-symbol-map',
   'trend-line-chart',
@@ -89,10 +92,15 @@ const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
   // from PINNED_PROPOSE (was fail-closed pre-W60) — see resolveGeoSlots widening.
   ['filled map of Profit by State/Province', 'spatial-choropleth-map'],
   ['pie chart of Sales by Segment', 'part-to-whole-pie-chart'],
-  [
-    'symbol map of Sales by Country/Region, State/Province, and City',
-    'spatial-symbol-map',
-  ],
+  ['symbol map of Sales by Country/Region, State/Province, and City', 'spatial-symbol-map'],
+  // W63 render-stamp port: connected-scatterplot one-shots on the 'connected' qualifier +
+  // two measures + a detail dim + a color dim (the 'vs ... by ... and ...' phrasing fills
+  // X/Profit-Ratio/detail/color). The bare 'scatter' noun stays with
+  // correlation-scatter-plot-chart (W63 dropped connected-scatterplot's 'scatter' alias).
+  ['connected scatterplot of Profit vs Sales by Customer Name and Region', 'connected-scatterplot'],
+  // W63 render-stamp port: slope-chart one-shots on the 'slope' chart noun + measure + dim
+  // + temporal [Order Date] filling the endpoint-period slots.
+  ['slope chart of Sales by Region over Order Date', 'slope-chart'],
 ];
 
 // ── KNOWN SAFE-PROPOSES (NOT bound — fail-closed by design; WHY each) ──────────
@@ -177,6 +185,10 @@ const PINNED_PROPOSE: ReadonlyArray<readonly [ask: string, note: string]> = [
   [
     'bubble chart of Profit, Discount, and Sales by Order ID',
     'pinned-current-behavior: W62 stamp made correlation-bubble-chart eligible, but no-LLM classifier still proposes on this phrasing',
+  ],
+  [
+    'dot strip plot of Sales by Sub-Category over Order Date',
+    'pinned-current-behavior: W63 stamp made ranking-dot-strip-plot eligible, but its rows slot needs a MONTH-derivation temporal (deriv=mn) that this phrasing does not fill deterministically → propose (fail-open to the LLM path)',
   ],
   // NB (W60): 'filled map of Profit by State/Province' MOVED to the ONE_SHOTS table — the
   // required country geo slot now auto-completes from the schema (Country/Region) when the

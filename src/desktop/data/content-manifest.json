@@ -2,9 +2,9 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.11.0+content.2026-07-12",
+  "content_version": "2.11.0+content.2026-07-13",
   "schema_version": "1",
-  "generated": "2026-07-12",
+  "generated": "2026-07-13",
   "engine_compat": {
     "server_min": "2.11.0",
     "node": ">=22.7.5"
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "598c864c218ddabf0d65e175dd7c5b05376c56b8646366d434d6899eac342af3",
-      "bytes": 268571
+      "sha256": "1f38d342199e480d74fe72b822fb3851c6595aac1e33d0ac00d16c8a330140e1",
+      "bytes": 274432
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -282,8 +282,8 @@
     },
     {
       "path": "template-manifests/connected-scatterplot.manifest.json",
-      "sha256": "6569269ee10409cd4ce2173cf41ed49050a50f89486ad97e8bb34d59462c8b54",
-      "bytes": 3468
+      "sha256": "a9f5bdfdad0d1358a05a3e47ffbc6590c99350c9b1a083ab3047f00e1c18ae7c",
+      "bytes": 5372
     },
     {
       "path": "template-manifests/control-chart-xmr.manifest.json",
@@ -422,8 +422,8 @@
     },
     {
       "path": "template-manifests/ranking-dot-strip-plot.manifest.json",
-      "sha256": "df44680d837235cd32bf25b4e949b2115d23307cec73ae3f820f13e53c6bee06",
-      "bytes": 2661
+      "sha256": "69f658dab12b0f343e720df1cedee7e2db1c6d7753073fe49b53d85e86e5650e",
+      "bytes": 4487
     },
     {
       "path": "template-manifests/ranking-ordered-bar.manifest.json",
@@ -437,8 +437,8 @@
     },
     {
       "path": "template-manifests/slope-chart.manifest.json",
-      "sha256": "d810b3d3a77af18685d03410faad8b6a51c0186bb109734a5be2aeef7625626b",
-      "bytes": 2689
+      "sha256": "14fb83590611238b4b189135961c3916014551b9af3beb660591e47ad1689df9",
+      "bytes": 4510
     },
     {
       "path": "template-manifests/spatial-choropleth-map.manifest.json",

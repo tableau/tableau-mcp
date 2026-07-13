@@ -43,6 +43,7 @@ const ADVERSARIAL = loadFixture('adversarial.xml');
 // (a natural ask targeting the new template) rather than silently under-covering.
 const EXPECTED_ELIGIBLE = [
   'box-plot-chart',
+  'connected-scatterplot',
   'control-chart-xmr',
   'correlation-bubble-chart',
   'correlation-scatter-plot-chart',
@@ -56,8 +57,10 @@ const EXPECTED_ELIGIBLE = [
   'part-to-whole-treemap-chart',
   'part-to-whole-waterfall',
   'quota-attainment-bullet',
+  'ranking-dot-strip-plot',
   'ranking-ordered-bar',
   'ranking-ordered-column',
+  'slope-chart',
   'spatial-choropleth-map',
   'spatial-symbol-map',
   'trend-line-chart',
@@ -252,6 +255,27 @@ const SAAS_ASKS: Ask[] = [
     mayBind: null,
     pinned: 'not-bound',
     note: 'GEO REFUSAL #3: symbol map is stamped but SaaS Region Name is not geocodable',
+  },
+  {
+    ask: 'connected scatterplot of ARR vs Seats by Account Name colored by Industry',
+    targets: 'connected-scatterplot',
+    mayBind: 'connected-scatterplot',
+    pinned: 'bound',
+    note: "W63 coverage: two measures (X/Profit-Ratio) + a color dim + a detail dim one-shot the connected-scatterplot; the 'connected' qualifier disambiguates it from the plain correlation-scatter-plot-chart (which owns the bare 'scatter' noun after W63 dropped connected-scatterplot's 'scatter' alias)",
+  },
+  {
+    ask: 'slope chart of ARR by Industry over Renewal Date',
+    targets: 'slope-chart',
+    mayBind: 'slope-chart',
+    pinned: 'bound',
+    note: "W63 coverage: 'slope' chart noun + measure + dim + temporal [Renewal Date] fills the endpoint-period slope slots",
+  },
+  {
+    ask: 'dot strip plot of ARR by Industry over Renewal Date',
+    targets: 'ranking-dot-strip-plot',
+    mayBind: null,
+    pinned: 'not-bound',
+    note: 'W63 coverage: ranking-dot-strip-plot requires a MONTH-derivation temporal on rows (deriv=mn) + measure on cols + a detail dim; the SaaS phrasing does not fill the month-grain rows slot deterministically -> honest propose (fail-open to the LLM path), not a wrong one-shot',
   },
 ];
 
