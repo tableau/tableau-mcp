@@ -12,7 +12,7 @@ const DEFAULT_PENDING_DELETION_TAG = 'pending-deletion';
  *
  * SOFT GUARD: this is enforced only via prompt text (Step 1 below), so the guarantee is only as
  * strong as the model's compliance — a model that ignores the instruction can still resolve every
- * row. Making it hard would require enforcing the cap server-side inside get-stale-content-report;
+ * row. Making it hard would require enforcing the cap server-side inside query-admin-insights;
  * tracked as a follow-up.
  */
 const LARGE_REPORT_THRESHOLD = 100;
@@ -23,7 +23,7 @@ const LARGE_REPORT_THRESHOLD = 100;
  * (e.g. flows) plug in by adding a row plus their delete tool — the workflow text below is written
  * against this table, so no prompt rewrite is needed.
  *
- * Keys match the `itemType` values emitted by get-stale-content-report (and its `itemTypes` arg).
+ * Keys match the `itemType` values emitted by query-admin-insights (kind: stale-content).
  */
 const CONTENT_TYPE_REGISTRY = {
   Workbook: { listTool: 'list-workbooks', deleteTool: 'delete-content', resourceType: 'workbook' },

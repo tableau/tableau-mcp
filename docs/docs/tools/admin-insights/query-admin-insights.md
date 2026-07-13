@@ -91,12 +91,14 @@ The maximum number of rows to return. Applied when `kind` is `ts-events`, `site-
 `job-performance`; **ignored** for `stale-content`.
 
 The effective row limit is the **tightest** of:
-1. The consolidated tool cap (`MAX_RESULT_LIMITS=query-admin-insights:N`)
-2. The legacy per-kind tool cap (`MAX_RESULT_LIMITS=query-admin-insights-ts-events:N`)
-3. The caller-supplied `limit`
+1. The tool cap (`MAX_RESULT_LIMITS=query-admin-insights:N`)
+2. The caller-supplied `limit`
 
-This ensures operators who set per-kind limits in their config keep those caps after migrating
-callers to the consolidated tool.
+:::note[Breaking change in v3.0.0]
+Legacy per-kind caps (e.g. `MAX_RESULT_LIMITS=query-admin-insights-ts-events:N`) are no longer
+recognized. Use `query-admin-insights:N` to cap all kinds, or remove per-kind entries from your
+configuration.
+:::
 
 See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
 
