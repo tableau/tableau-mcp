@@ -120,35 +120,15 @@ export const getDeleteContentTool = (server: WebMcpServer): WebTool<typeof param
     disabled: !config.adminToolsEnabled,
     ...(mcpAppsEnabled ? { app: getAppConfig('delete-content', 'hitl-confirm') } : {}),
     description: `
-Permanently deletes a Tableau resource — a **workbook**, **published data source**, or **extract
-refresh task** — from the current site. Restricted to Tableau site administrators and requires the
-\`ADMIN_TOOLS_ENABLED\` feature flag.
+Permanently deletes a workbook, published data source, or extract refresh task. Restricted to
+site administrators (\`ADMIN_TOOLS_ENABLED\`). Dispatches on \`resourceType\`.
 
-This is the consolidated form of \`delete-workbook\`, \`delete-datasource\`, and
-\`delete-extract-refresh-task\`. Dispatches on \`resourceType\`:
+Two-phase: preview (\`confirm\` omitted) tags/tokens what would be deleted; confirm (\`confirm:
+true\`) permanently deletes after verifying that evidence. Human confirmation is REQUIRED between
+the two phases — do not auto-confirm.
 
-- **\`workbook\`** — pass \`resourceId\` = workbook LUID. Optional \`tag\` (defaults to
-  \`${DEFAULT_PENDING_DELETION_TAG}\`).
-- **\`datasource\`** — pass \`resourceId\` = data source LUID. Optional \`tag\`. Preview additionally
-  reports dependent workbooks and flows.
-- **\`extract-refresh-task\`** — pass \`resourceId\` = task UUID. On confirm, requires
-  \`confirmationToken\` from the prior preview call.
-
-Two-phase (preview → confirm), same as the underlying tools:
-
-1. **Preview (default — \`confirm\` omitted or false):** tags the workbook/data source as pending
-   deletion (reversible) or mints a single-use \`confirmationToken\` for extract refresh tasks.
-   Reports what would be deleted. Does NOT delete anything.
-2. **Delete (\`confirm: true\`):** permanently deletes. Server verifies the pending-deletion tag
-   (workbook/datasource) or consumes the confirmationToken (task) — a confirm without a valid
-   prior preview is rejected.
-
-**Required human confirmation:** After preview, present the resource details to the user and get
-explicit approval before calling again with \`confirm: true\`. Do not auto-confirm.
-
-Workbooks and data sources on Tableau Cloud go to the recycle bin and can be restored for a
-limited time (${RECYCLE_BIN_DOC_URL}); on Tableau Server datasource deletion is permanent. Extract
-refresh task deletion is always permanent.
+Workbooks/datasources go to the recycle bin on Tableau Cloud; extract refresh task deletion is
+permanent.
 `.trim(),
     paramsSchema,
     annotations: {
@@ -325,8 +305,10 @@ async function runWorkbookBranch({
   }
 
   if (mcpAppsEnabled) {
-    // Establish approval under the LEGACY 'delete-workbook' namespace so the iframe's Confirm click
-    // (which fires the legacy confirm-delete-workbook tool) sees this approval as valid.
+    // Flag-ON preview: the pending-deletion tag was already written by guardMutation above
+    // (TagEvidence). Here we additionally establish AppApprovalEvidence under the LEGACY
+    // 'delete-workbook' namespace so the iframe's Confirm click (which fires the legacy
+    // confirm-delete-workbook tool) sees this approval as valid.
     await new AppApprovalEvidence('delete-workbook').establish({
       restApi,
       siteId,
@@ -442,7 +424,8 @@ async function runDatasourceBranch({
   }
 
   if (mcpAppsEnabled) {
-    // Legacy 'delete-datasource' namespace (see workbook branch for rationale).
+    // Flag-ON preview: pending-deletion tag already written by guardMutation; additionally
+    // establish AppApprovalEvidence under legacy 'delete-datasource' namespace (see workbook branch).
     await new AppApprovalEvidence('delete-datasource').establish({
       restApi,
       siteId,
@@ -540,7 +523,8 @@ async function runExtractRefreshTaskBranch({
   }
 
   if (mcpAppsEnabled) {
-    // Legacy 'delete-extract-refresh-task' namespace (see workbook branch for rationale).
+    // Flag-ON preview: confirmationToken already minted by guardMutation; additionally establish
+    // AppApprovalEvidence under legacy 'delete-extract-refresh-task' namespace (see workbook branch).
     await new AppApprovalEvidence('delete-extract-refresh-task').establish({
       restApi,
       siteId,

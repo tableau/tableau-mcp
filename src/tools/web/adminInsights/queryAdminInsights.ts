@@ -10,7 +10,11 @@ import { WebMcpServer } from '../../../server.web.js';
 import { assertAdmin } from '../adminGate.js';
 import { WebTool } from '../tool.js';
 import { WebToolName } from '../toolName.js';
-import { executeAdminInsightsQuery, runAdminInsightsQuery } from './adminInsightsToolBase.js';
+import {
+  executeAdminInsightsQuery,
+  QueryOutput,
+  runAdminInsightsQuery,
+} from './adminInsightsToolBase.js';
 import {
   _buildProjectIdWarnings,
   _buildSiteContentQuery,
@@ -101,56 +105,16 @@ export const getQueryAdminInsightsTool = (server: WebMcpServer): WebTool<typeof 
     name: 'query-admin-insights',
     disabled: !config.adminToolsEnabled,
     description: `
-Queries the Tableau Admin Insights datasources on the current site. Restricted to Tableau site
+Queries the Tableau Admin Insights datasources on the current site. Restricted to site
 administrators on Tableau Cloud sites with Admin Insights enabled.
 
-Dispatches on the required \`kind\` parameter:
+Dispatches on \`kind\`:
+- \`ts-events\` / \`site-content\` / \`job-performance\` — raw VDS query. Pass \`query\` (required)
+  and optional \`limit\`.
+- \`stale-content\` — server-side stale-content report. Pass optional \`minAgeDays\`, \`projectIds\`,
+  \`itemTypes\`; do NOT pass \`query\` or \`limit\`.
 
-- **\`ts-events\`** — Raw VDS query against the "TS Events" published datasource (access events,
-  publishes, sign-ins). Pass a fully-formed VDS \`query\`.
-- **\`site-content\`** — Raw VDS query against the "Site Content" datasource (workbooks,
-  datasources, projects and their metadata). Pass a fully-formed VDS \`query\`.
-- **\`job-performance\`** — Raw VDS query against the "Job Performance" datasource (extract
-  refresh jobs, subscription jobs, flow runs, bridge jobs). Pass a fully-formed VDS \`query\`.
-- **\`stale-content\`** — Server-side anti-join that returns already-filtered stale content
-  rows. Pass optional \`minAgeDays\`, \`projectIds\`, \`itemTypes\`. Do NOT pass \`query\` or \`limit\`.
-
-**Parameter reference by \`kind\`:**
-- \`ts-events\` | \`site-content\` | \`job-performance\`: \`query\` (required), \`limit\` (optional).
-- \`stale-content\`: \`minAgeDays\`, \`projectIds\`, \`itemTypes\` (all optional).
-
-**Stale-content output schema (JSON):**
-\`\`\`json
-{
-  "thresholdDays": 90,
-  "totalStaleItems": <number>,
-  "totalStaleSizeBytes": <number>,
-  "rows": [
-    {
-      "itemId": "...",
-      "itemLuid": "..." | null,
-      "itemType": "Workbook" | "Datasource",
-      "itemName": "...",
-      "project": "..." | null,
-      "ownerEmail": "..." | null,
-      "createdAt": "ISO date" | null,
-      "updatedAt": "ISO date" | null,
-      "lastUsedDate": "ISO date",
-      "daysSinceLastUse": <number>,
-      "size": <number> | null,
-      "neverAccessed": <boolean>
-    }
-  ]
-}
-\`\`\`
-
-Notes:
-- The Tableau-managed "Admin Insights" project is excluded from stale-content by design.
-- \`Last Accessed At\` is \`null\` for items that have never been accessed; the report ages those
-  items from \`Created At\` instead.
-- The underlying datasource LUIDs are resolved automatically; callers do not pass \`datasourceLuid\`.
-- This tool bypasses the standard datasource access checker because Admin Insights datasources
-  are internal and admin-gated.
+Datasource LUIDs are resolved automatically; callers do not pass \`datasourceLuid\`.
 `.trim(),
     paramsSchema,
     annotations: {
@@ -250,7 +214,7 @@ Notes:
         });
       }
 
-      return await tool.logAndExecute({
+      return await tool.logAndExecute<QueryOutput>({
         extra,
         args: { kind, query, limit },
         callback: async () => {
