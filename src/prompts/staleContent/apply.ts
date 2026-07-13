@@ -97,7 +97,7 @@ export const getStaleContentCleanupApplyPrompt: WebPromptFactory = () => ({
   title: 'Stale content cleanup — report, confirm, tag, and delete',
   description:
     'Tableau Cloud admin workflow (destructive Apply phase): find stale workbooks and published ' +
-    'datasources via the deterministic `get-stale-content-report` tool and report owners to notify ' +
+    'datasources via `query-admin-insights` (kind: stale-content) and report owners to notify ' +
     '(all read-only), then — only after a required human-in-the-loop approval — tag the approved ' +
     'items pending-deletion (reversible) and delete them to the recycle bin. Admin-only.',
   argsSchema,

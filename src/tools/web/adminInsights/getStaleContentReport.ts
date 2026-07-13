@@ -378,9 +378,7 @@ export const exportedForTesting = {
   parseSize,
 };
 
-// Exported for reuse by query-admin-insights (kind=stale-content). These are the same helpers the
-// stale-content report uses; sharing them avoids a second implementation drifting out of sync while
-// the legacy get-stale-content-report shim remains registered.
+// Exported for reuse by query-admin-insights (kind=stale-content).
 export {
   buildProjectIdWarnings as _buildProjectIdWarnings,
   buildSiteContentQuery as _buildSiteContentQuery,

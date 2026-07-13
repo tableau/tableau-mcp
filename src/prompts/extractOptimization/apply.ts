@@ -48,10 +48,10 @@ const argsSchema = {
 } as const;
 
 /**
- * Builds the VDS query the model sends to `query-admin-insights-job-performance`. The job-type
- * filter is always present (locks the read to the four extract-refresh variants); the `Started At`
- * filter is added only when the caller supplied `lookbackDays`, so the prompt body still produces
- * a deterministic JSON blob for the no-arg default.
+ * Builds the VDS query the model sends to `query-admin-insights` (kind: job-performance). The
+ * job-type filter is always present (locks the read to the four extract-refresh variants); the
+ * `Started At` filter is added only when the caller supplied `lookbackDays`, so the prompt body
+ * still produces a deterministic JSON blob for the no-arg default.
  */
 const buildPerformanceToolArgs = (lookbackDays?: number): Record<string, unknown> => {
   const filters: Array<Record<string, unknown>> = [
