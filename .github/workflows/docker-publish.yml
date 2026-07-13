@@ -19,6 +19,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Preflight — release tag must match package.json version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        # The `latest` guard below keys off the release TAG NAME while the npm
+        # side (publish.yml) keys off package.json — this preflight (same check
+        # in both workflows) makes a mismatch fail loudly instead of letting the
+        # two registries disagree about moving `latest`.
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if [[ -z "$VERSION" || "$VERSION" == "undefined" ]]; then
+            echo "::error::Could not read version from package.json — aborting"
+            exit 1
+          fi
+          if [[ "$RELEASE_TAG" != "v$VERSION" ]]; then
+            echo "::error::Release tag '$RELEASE_TAG' != 'v$VERSION' (package.json) — aborting. Tag the exact commit whose package.json matches, or fix the release tag."
+            exit 1
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -38,7 +56,10 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+            # Move `latest` only for STABLE releases — a prerelease/hotfix tag
+            # (one containing a `-`, e.g. v2.18.0-hotfix.1) gets its exact-version
+            # Docker tag but must NOT steal `latest`, mirroring the npm publish guard.
+            type=raw,value=latest,enable=${{ github.event_name == 'release' && !contains(github.event.release.tag_name, '-') }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
