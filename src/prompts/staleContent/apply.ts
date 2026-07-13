@@ -26,11 +26,11 @@ const LARGE_REPORT_THRESHOLD = 100;
  * Keys match the `itemType` values emitted by get-stale-content-report (and its `itemTypes` arg).
  */
 const CONTENT_TYPE_REGISTRY = {
-  Workbook: { listTool: 'list-workbooks', deleteTool: 'delete-workbook', idArg: 'workbookId' },
+  Workbook: { listTool: 'list-workbooks', deleteTool: 'delete-content', resourceType: 'workbook' },
   Datasource: {
     listTool: 'list-datasources',
-    deleteTool: 'delete-datasource',
-    idArg: 'datasourceId',
+    deleteTool: 'delete-content',
+    resourceType: 'datasource',
   },
 } as const;
 
@@ -139,7 +139,7 @@ export const getStaleContentCleanupApplyPrompt: WebPromptFactory = () => ({
     const tag = args.tag?.trim() ? args.tag.trim() : DEFAULT_PENDING_DELETION_TAG;
     const dryRun = args.dryRun !== 'false';
 
-    const reportArgs: Record<string, unknown> = { minAgeDays, itemTypes };
+    const reportArgs: Record<string, unknown> = { kind: 'stale-content', minAgeDays, itemTypes };
     if (projectIds.length > 0) {
       reportArgs.projectIds = projectIds;
     }
@@ -182,7 +182,7 @@ export const getStaleContentCleanupApplyPrompt: WebPromptFactory = () => ({
       JSON.stringify(routing, null, 2),
       '```',
       '',
-      '**Step 1 — Report (read-only).** Call `get-stale-content-report` exactly once with the arguments below. ' +
+      '**Step 1 — Report (read-only).** Call `query-admin-insights` with `kind: "stale-content"` and the arguments below. ' +
         'Use the rows it returns verbatim — do **not** add or remove rows and do **not** recompute `daysSinceLastUse`.',
       '',
       '```json',
@@ -216,8 +216,8 @@ export const getStaleContentCleanupApplyPrompt: WebPromptFactory = () => ({
           ]
         : [
             '**Step 5 — Tag approved items (reversible).** ONLY for the items the user explicitly approved above, ' +
-              "call each item's `deleteTool` with `confirm` omitted " +
-              `and \`tag: "${tag}"\` (and the resolved \`idArg\` value). This tags the item '${tag}' (reversible, visible in the ` +
+              'call `delete-content` with `confirm` omitted, `resourceType` from the routing table, ' +
+              `\`resourceId\` set to the resolved LUID, and \`tag: "${tag}"\`. This tags the item '${tag}' (reversible, visible in the ` +
               'Tableau UI). Nothing is deleted in this step. The tag is the server-side record that the preview ran; ' +
               'the delete step verifies it. Do NOT tag any item the user did not approve.',
             '',

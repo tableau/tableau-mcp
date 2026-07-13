@@ -144,8 +144,8 @@ export function renderDeleteWorkbookConfirm(app: App, result: unknown): void {
     confirmBtn.disabled = true;
     void app
       .callServerTool({
-        name: 'confirm-delete-workbook',
-        arguments: { workbookId: panel.workbookId },
+        name: 'delete-content',
+        arguments: { resourceType: 'workbook', resourceId: panel.workbookId, confirm: true },
       })
       .then((res) => {
         const text = callToolResultSchema.safeParse(res).success

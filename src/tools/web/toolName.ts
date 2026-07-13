@@ -1,17 +1,11 @@
 export const webToolNames = [
   'list-datasources',
-  'delete-datasource',
-  'confirm-delete-datasource',
   'list-extract-refresh-tasks',
-  'delete-extract-refresh-task',
-  'confirm-delete-extract-refresh-task',
   'update-cloud-extract-refresh-task',
   'confirm-update-cloud-extract-refresh-task',
   'list-jobs',
   'list-users',
   'list-workbooks',
-  'delete-workbook',
-  'confirm-delete-workbook',
   'list-projects',
   'list-views',
   'list-custom-views',
@@ -34,10 +28,6 @@ export const webToolNames = [
   'search-content',
   'revoke-access-token',
   'reset-consent',
-  'query-admin-insights-ts-events',
-  'query-admin-insights-site-content',
-  'query-admin-insights-job-performance',
-  'get-stale-content-report',
   'query-admin-insights',
   'delete-content',
 ] as const;
@@ -60,14 +50,8 @@ export const webToolGroupNames = [
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
 export const webToolGroups = {
-  datasource: [
-    'list-datasources',
-    'get-datasource-metadata',
-    'query-datasource',
-    'delete-datasource',
-    'confirm-delete-datasource',
-  ],
-  workbook: ['list-workbooks', 'get-workbook', 'delete-workbook', 'confirm-delete-workbook'],
+  datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
+  workbook: ['list-workbooks', 'get-workbook'],
   project: ['list-projects'],
   view: [
     'list-views',
@@ -90,21 +74,13 @@ export const webToolGroups = {
   'content-exploration': ['search-content'],
   tasks: [
     'list-extract-refresh-tasks',
-    'delete-extract-refresh-task',
-    'confirm-delete-extract-refresh-task',
     'update-cloud-extract-refresh-task',
     'confirm-update-cloud-extract-refresh-task',
   ],
   jobs: ['list-jobs'],
   users: ['list-users'],
   'token-management': ['get-embed-token', 'revoke-access-token', 'reset-consent'],
-  'admin-insights': [
-    'query-admin-insights',
-    'query-admin-insights-ts-events',
-    'query-admin-insights-site-content',
-    'query-admin-insights-job-performance',
-    'get-stale-content-report',
-  ],
+  'admin-insights': ['query-admin-insights'],
   content: ['delete-content'],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 

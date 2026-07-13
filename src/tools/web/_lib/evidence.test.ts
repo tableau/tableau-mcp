@@ -42,7 +42,7 @@ function makeCtx(overrides: Partial<EvidenceContext> = {}): EvidenceContext {
     restApi: makeRestApi(),
     siteId: 'test-site-id',
     target,
-    tool: 'delete-datasource',
+    tool: 'delete-content',
     userLuid: 'user-1',
     ...overrides,
   };
@@ -84,7 +84,7 @@ describe('TagEvidence', () => {
 
   it('establish tags the workbook with a caller-supplied label', async () => {
     const evidence = new TagEvidence({ tag: 'stale-pending', kind: 'workbook' });
-    const ctx = makeCtx({ target: { id: 'wb-1', kind: 'workbook' }, tool: 'delete-workbook' });
+    const ctx = makeCtx({ target: { id: 'wb-1', kind: 'workbook' }, tool: 'delete-content' });
     await evidence.establish(ctx);
     expect(mocks.mockAddTagsToWorkbook).toHaveBeenCalledWith({
       workbookId: 'wb-1',
@@ -217,7 +217,7 @@ describe('RegistryEvidence', () => {
     await evidence.establish(
       makeCtx({
         target: { id: 'task-X', kind: 'extract-refresh-task' },
-        tool: 'delete-extract-refresh-task',
+        tool: 'delete-content',
       }),
     );
     const nonce = evidence.getEstablishedNonce()!;
@@ -293,7 +293,7 @@ describe('AppApprovalEvidence', () => {
   function appCtx(overrides: Partial<EvidenceContext> = {}): EvidenceContext {
     return makeCtx({
       target: { id: 'wb-app', kind: 'workbook' },
-      tool: 'delete-workbook',
+      tool: 'delete-content',
       userLuid: 'user-1',
       ...overrides,
     });
@@ -441,16 +441,16 @@ describe('AppApprovalEvidence', () => {
     });
 
     it('namespace key ignores ctx.tool entirely (preview/confirm tool names differ but namespace matches)', async () => {
-      // Establish as the preview tool would (ctx.tool = 'delete-datasource') and verify as the
-      // confirm tool would (ctx.tool = 'confirm-delete-datasource'); the differing ctx.tool must NOT
+      // Establish as the preview tool would (ctx.tool = 'delete-content') and verify as the
+      // confirm tool would (ctx.tool = 'delete-content'); the differing ctx.tool must NOT
       // break the match because the fixed namespace is what keys the entry.
       const target = { id: 'tool-irrelevant', kind: 'datasource' as const };
-      await new AppApprovalEvidence('delete-datasource').establish(
-        appCtx({ target, tool: 'delete-datasource' }),
+      await new AppApprovalEvidence('delete-content').establish(
+        appCtx({ target, tool: 'delete-content' }),
       );
       await expect(
-        new AppApprovalEvidence('delete-datasource').verify(
-          appCtx({ target, tool: 'confirm-delete-datasource' }),
+        new AppApprovalEvidence('delete-content').verify(
+          appCtx({ target, tool: 'delete-content' }),
         ),
       ).resolves.toBe(true);
     });
@@ -459,13 +459,15 @@ describe('AppApprovalEvidence', () => {
       // A rejected cross-namespace verify must be a pure no-op on the real entry — it must not
       // single-use-consume the approval that belongs to the correct namespace.
       const ctx = appCtx({ target: { id: 'no-cross-consume', kind: 'datasource' } });
-      await new AppApprovalEvidence('delete-datasource').establish(ctx);
+      await new AppApprovalEvidence('delete-content').establish(ctx);
       // Wrong namespace probe (rejected, and must not touch the real entry).
-      await expect(new AppApprovalEvidence('delete-workbook').verify(ctx)).resolves.toBe(false);
+      await expect(
+        new AppApprovalEvidence('update-cloud-extract-refresh-task').verify(ctx),
+      ).resolves.toBe(false);
       // The genuine namespace still verifies once...
-      await expect(new AppApprovalEvidence('delete-datasource').verify(ctx)).resolves.toBe(true);
+      await expect(new AppApprovalEvidence('delete-content').verify(ctx)).resolves.toBe(true);
       // ...and is single-use thereafter.
-      await expect(new AppApprovalEvidence('delete-datasource').verify(ctx)).resolves.toBe(false);
+      await expect(new AppApprovalEvidence('delete-content').verify(ctx)).resolves.toBe(false);
     });
   });
 
@@ -530,7 +532,7 @@ describe('AllEvidence (AND-composition)', () => {
   });
 
   function appCtx(id: string): EvidenceContext {
-    return makeCtx({ target: { id, kind: 'workbook' }, tool: 'confirm-delete-workbook' });
+    return makeCtx({ target: { id, kind: 'workbook' }, tool: 'delete-content' });
   }
 
   it('verify is true only when EVERY strategy verifies (tag present AND approval present)', async () => {

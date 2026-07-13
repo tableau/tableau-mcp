@@ -145,8 +145,8 @@ export function renderDeleteDatasourceConfirm(app: App, result: unknown): void {
     confirmBtn.disabled = true;
     void app
       .callServerTool({
-        name: 'confirm-delete-datasource',
-        arguments: { datasourceId: panel.datasourceId },
+        name: 'delete-content',
+        arguments: { resourceType: 'datasource', resourceId: panel.datasourceId, confirm: true },
       })
       .then((res) => {
         const text = callToolResultSchema.safeParse(res).success

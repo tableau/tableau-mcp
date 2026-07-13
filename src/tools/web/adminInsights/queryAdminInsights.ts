@@ -9,7 +9,6 @@ import { querySchema } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { assertAdmin } from '../adminGate.js';
 import { WebTool } from '../tool.js';
-import { WebToolName } from '../toolName.js';
 import {
   executeAdminInsightsQuery,
   QueryOutput,
@@ -34,11 +33,6 @@ import { ADMIN_INSIGHTS_DATASETS, AdminInsightsDataset } from './resolver.js';
  * - `site-content` — raw VDS query against the "Site Content" datasource
  * - `job-performance` — raw VDS query against the "Job Performance" datasource
  * - `stale-content` — server-side anti-join that returns already-filtered stale rows
- *
- * This is a superset of the four legacy admin-insights tools it replaces
- * (`query-admin-insights-ts-events`, `query-admin-insights-site-content`,
- * `query-admin-insights-job-performance`, `get-stale-content-report`), which remain registered as
- * additive back-compat shims for one release cycle and share the underlying implementation.
  */
 
 const kindSchema = z.enum(['ts-events', 'site-content', 'job-performance', 'stale-content']);
@@ -225,12 +219,8 @@ Datasource LUIDs are resolved automatically; callers do not pass \`datasourceLui
             return new ArgsValidationError(`query is required when kind is "${kind}".`).toErr();
           }
 
-          // Take the tightest of the consolidated tool cap, the legacy per-kind tool cap, and the
-          // caller-provided limit — so operators who set `MAX_RESULT_LIMITS=<legacy-tool>:N` in
-          // their config keep that cap after migrating callers to the consolidated tool.
           const consolidatedCap = configWithOverrides.getMaxResultLimit(tool.name);
-          const legacyCap = configWithOverrides.getMaxResultLimit(legacyToolByKind[kind]);
-          const caps = [consolidatedCap, legacyCap, limit].filter(
+          const caps = [consolidatedCap, limit].filter(
             (v): v is number => typeof v === 'number' && v > 0,
           );
           const rowLimit = caps.length > 0 ? Math.min(...caps) : undefined;
@@ -261,9 +251,3 @@ function kindToDataset(kind: Exclude<Kind, 'stale-content'>): AdminInsightsDatas
       return ADMIN_INSIGHTS_DATASETS.JOB_PERFORMANCE;
   }
 }
-
-const legacyToolByKind: Record<Exclude<Kind, 'stale-content'>, WebToolName> = {
-  'ts-events': 'query-admin-insights-ts-events',
-  'site-content': 'query-admin-insights-site-content',
-  'job-performance': 'query-admin-insights-job-performance',
-};

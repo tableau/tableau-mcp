@@ -240,11 +240,8 @@ export async function guardMutation<TTarget>({
  */
 function targetKindHint(tool: WebToolName): MutationTarget['kind'] {
   switch (tool) {
-    case 'delete-datasource':
+    case 'delete-content':
       return 'datasource';
-    case 'delete-workbook':
-      return 'workbook';
-    case 'delete-extract-refresh-task':
     case 'update-cloud-extract-refresh-task':
       return 'extract-refresh-task';
     default:

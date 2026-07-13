@@ -159,8 +159,12 @@ export function renderDeleteExtractRefreshTaskConfirm(app: App, result: unknown)
     confirmBtn.disabled = true;
     void app
       .callServerTool({
-        name: 'confirm-delete-extract-refresh-task',
-        arguments: { taskId: panel.taskId },
+        name: 'delete-content',
+        arguments: {
+          resourceType: 'extract-refresh-task',
+          resourceId: panel.taskId,
+          confirm: true,
+        },
       })
       .then((res) => {
         const text = callToolResultSchema.safeParse(res).success

@@ -5,9 +5,9 @@ import { EXTRACT_REFRESH_JOB_TYPES, JOB_PERFORMANCE_FIELDS } from '../_lib/jobPe
 import { WebPromptFactory } from '../registry.js';
 
 const INVENTORY_TOOL = 'list-extract-refresh-tasks';
-const PERFORMANCE_TOOL = 'query-admin-insights-job-performance';
+const PERFORMANCE_TOOL = 'query-admin-insights';
 const UPDATE_TOOL = 'update-cloud-extract-refresh-task';
-const DELETE_TOOL = 'delete-extract-refresh-task';
+const DELETE_TOOL = 'delete-content';
 
 const argsSchema = {
   lookbackDays: z
@@ -72,6 +72,7 @@ const buildPerformanceToolArgs = (lookbackDays?: number): Record<string, unknown
     });
   }
   return {
+    kind: 'job-performance',
     query: {
       fields: JOB_PERFORMANCE_FIELDS.map((fieldCaption) => ({ fieldCaption })),
       filters,
@@ -117,7 +118,7 @@ export const getExtractOptimizationApplyPrompt: WebPromptFactory = () => ({
       presentColumns: ['Task ID', 'Item', 'Current Frequency', 'Recommendation', 'New Schedule'],
     });
     // Single confirm-instruction block that covers both apply tools — the recommendation table
-    // already routes each row to `update-cloud-extract-refresh-task` or `delete-extract-refresh-task`
+    // already routes each row to `update-cloud-extract-refresh-task` or `delete-content`
     // via its `Recommendation` column, so one block points back at that routing rather than
     // duplicating per tool.
     // Extract refresh tasks have no Tableau-tag affordance in the REST API, so we use the
@@ -155,7 +156,7 @@ export const getExtractOptimizationApplyPrompt: WebPromptFactory = () => ({
           ]
         : []),
       '',
-      `**Step 2 — Performance signals (read-only).** Call \`${PERFORMANCE_TOOL}\` exactly once with the arguments below. The tool returns the already-filtered rows for extract refresh job types. Do **not** add or remove rows. Do **not** recompute durations.`,
+      `**Step 2 — Performance signals (read-only).** Call \`${PERFORMANCE_TOOL}\` with \`kind: "job-performance"\` and the arguments below. The tool returns the already-filtered rows for extract refresh job types. Do **not** add or remove rows. Do **not** recompute durations.`,
       '',
       '```json',
       JSON.stringify(performanceToolArgs, null, 2),
@@ -190,14 +191,14 @@ export const getExtractOptimizationApplyPrompt: WebPromptFactory = () => ({
         : [
             '**Step 5 — Preview (per approved task, read-only).** ONLY for the tasks the user explicitly approved above, in order:',
             `- For \`downgrade\` rows: call \`${UPDATE_TOOL}\` with \`{ taskId, schedule: <proposed schedule> }\` and \`confirm\` omitted. The schedule must satisfy the constraints documented on the tool (5-minute boundary; Hourly minute match and end > start; Daily/Weekly/Monthly omit \`end\`; Hourly/Daily require ≥1 \`weekDay\` interval; Weekly requires ≥1 \`weekDay\`; Monthly requires ≥1 \`monthDay\`). The tool validates the schedule and returns a per-task \`confirmationToken\` without calling the Tableau update endpoint. Keep each task's \`confirmationToken\`.`,
-            `- For \`delete\` rows: call \`${DELETE_TOOL}\` with \`{ taskId }\` and \`confirm\` omitted. The tool returns a per-task \`confirmationToken\` without deleting. Keep each task's \`confirmationToken\`.`,
+            `- For \`delete\` rows: call \`${DELETE_TOOL}\` with \`{ resourceType: "extract-refresh-task", resourceId: <taskId> }\` and \`confirm\` omitted. The tool returns a per-task \`confirmationToken\` without deleting. Keep each task's \`confirmationToken\`.`,
             '- Do **not** parallelize. Wait for each preview to complete before the next. Nothing is updated or deleted in this step.',
             '',
             '**Step 6 — Apply (confirmed).**',
             confirmInstructions,
             '',
             `- For \`downgrade\` rows: call \`${UPDATE_TOOL}\` again with \`{ taskId, schedule, confirm: true, confirmationToken: <the token Step 5 returned for this task> }\`.`,
-            `- For \`delete\` rows: call \`${DELETE_TOOL}\` again with \`{ taskId, confirm: true, confirmationToken: <the token Step 5 returned for this task> }\`. **This is irreversible.**`,
+            `- For \`delete\` rows: call \`${DELETE_TOOL}\` again with \`{ resourceType: "extract-refresh-task", resourceId: <taskId>, confirm: true, confirmationToken: <the token Step 5 returned for this task> }\`. **This is irreversible.**`,
             '- Do **not** parallelize. Wait for each call to complete before the next.',
             '- If a single call returns an error, stop immediately, record the failure, and report the partial state in the final report — do **not** continue with the remaining changes.',
           ]),

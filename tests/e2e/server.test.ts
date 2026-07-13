@@ -36,16 +36,9 @@ describe('server', () => {
       const oauthOnlyTools: ReadonlyArray<WebToolName> = ['revoke-access-token', 'reset-consent'];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
         'list-extract-refresh-tasks',
-        'delete-extract-refresh-task',
         'update-cloud-extract-refresh-task',
         'list-jobs',
         'list-users',
-        'delete-workbook',
-        'delete-datasource',
-        'query-admin-insights-ts-events',
-        'query-admin-insights-site-content',
-        'query-admin-insights-job-performance',
-        'get-stale-content-report',
         'query-admin-insights',
         'delete-content',
       ];
@@ -53,10 +46,7 @@ describe('server', () => {
       // get-embed-token, plus the app-only confirm-* tools.
       const mcpAppsTools: ReadonlyArray<WebToolName> = [
         'get-embed-token',
-        'confirm-delete-datasource',
-        'confirm-delete-extract-refresh-task',
         'confirm-update-cloud-extract-refresh-task',
-        'confirm-delete-workbook',
       ];
 
       let expectedToolNames = [...webToolNames];
@@ -132,16 +122,9 @@ describe('server', () => {
       const oauthOnlyTools: ReadonlyArray<WebToolName> = ['revoke-access-token', 'reset-consent'];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
         'list-extract-refresh-tasks',
-        'delete-extract-refresh-task',
         'update-cloud-extract-refresh-task',
         'list-jobs',
         'list-users',
-        'delete-workbook',
-        'delete-datasource',
-        'query-admin-insights-ts-events',
-        'query-admin-insights-site-content',
-        'query-admin-insights-job-performance',
-        'get-stale-content-report',
         'query-admin-insights',
         'delete-content',
       ];
@@ -149,10 +132,7 @@ describe('server', () => {
       // get-embed-token, plus the app-only confirm-* tools.
       const mcpAppsTools: ReadonlyArray<WebToolName> = [
         'get-embed-token',
-        'confirm-delete-datasource',
-        'confirm-delete-extract-refresh-task',
         'confirm-update-cloud-extract-refresh-task',
-        'confirm-delete-workbook',
       ];
 
       let expectedWebToolNames = [...webToolNames];
