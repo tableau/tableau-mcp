@@ -46,6 +46,8 @@ describe('server', () => {
         'query-admin-insights-site-content',
         'query-admin-insights-job-performance',
         'get-stale-content-report',
+        'query-admin-insights',
+        'delete-content',
       ];
       // These tools are gated by the mcp-apps feature (disabled by default in features.json):
       // get-embed-token, plus the app-only confirm-* tools.
@@ -140,6 +142,8 @@ describe('server', () => {
         'query-admin-insights-site-content',
         'query-admin-insights-job-performance',
         'get-stale-content-report',
+        'query-admin-insights',
+        'delete-content',
       ];
       // These tools are gated by the mcp-apps feature (disabled by default in features.json):
       // get-embed-token, plus the app-only confirm-* tools.

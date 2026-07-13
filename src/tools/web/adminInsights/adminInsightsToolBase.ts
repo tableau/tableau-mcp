@@ -11,9 +11,11 @@ import { useRestApi } from '../../../restApiInstance.js';
 import {
   Datasource,
   Query,
-  QueryOutput,
+  type QueryOutput,
   QueryRequest,
 } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+
+export type { QueryOutput };
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { TableauApiScope } from '../../../server/oauth/scopes.js';
 import { assertAdmin } from '../adminGate.js';

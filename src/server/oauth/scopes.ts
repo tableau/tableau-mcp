@@ -29,6 +29,7 @@ export type McpScope =
   | 'tableau:mcp:workbook:delete'
   | 'tableau:mcp:jobs:read'
   | 'tableau:mcp:datasource:delete'
+  | 'tableau:mcp:content:delete'
   | 'tableau:mcp:users:read';
 
 export type TableauApiScope =
@@ -68,6 +69,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:workbook:read',
   'tableau:mcp:workbook:delete',
   'tableau:mcp:content:read',
+  'tableau:mcp:content:delete',
   'tableau:mcp:view:read',
   'tableau:mcp:view:download',
   'tableau:mcp:pulse:read',
@@ -330,6 +332,37 @@ const toolScopeMap: Record<
       'tableau:users:read',
     ]),
   },
+  // Consolidated admin-insights tool (W-23375797). Dispatches on `kind` to ts-events, site-content,
+  // job-performance (raw VDS) or stale-content (server-side anti-join). Union of the scopes required
+  // by the four legacy tools it replaces — any kind may need any of these.
+  'query-admin-insights': {
+    mcp: ['tableau:mcp:datasource:read'],
+    api: new Set([
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
+      'tableau:users:read',
+    ]),
+  },
+  // Consolidated destructive-delete tool (W-23375797). Dispatches on `resourceType` to workbook,
+  // datasource, or extract-refresh-task. Gated on a single umbrella MCP scope
+  // (`tableau:mcp:content:delete`) that covers all three dispatch paths — declaring the three
+  // per-resource legacy scopes here would be AND-enforced by authMiddleware and lock out callers
+  // who only granted one of them. Callers who need per-resource granularity keep using the legacy
+  // `delete-{workbook,datasource,extract-refresh-task}` tools during the shim window. Workbook and
+  // datasource paths still route through resourceAccessChecker (union of API scopes preserved).
+  'delete-content': {
+    mcp: ['tableau:mcp:content:delete'],
+    api: new Set([
+      'tableau:workbooks:delete',
+      'tableau:workbook_tags:update',
+      'tableau:datasources:delete',
+      'tableau:datasource_tags:update',
+      'tableau:tasks:delete',
+      'tableau:users:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
+  },
 };
 
 function getEnabledToolNames(): Set<WebToolName> {
@@ -354,6 +387,8 @@ function getEnabledToolNames(): Set<WebToolName> {
     enabledTools.delete('query-admin-insights-site-content');
     enabledTools.delete('query-admin-insights-job-performance');
     enabledTools.delete('get-stale-content-report');
+    enabledTools.delete('query-admin-insights');
+    enabledTools.delete('delete-content');
   }
 
   // Remove the MCP-Apps-only tools if the mcp-apps feature is disabled. The confirm-* tools are the
