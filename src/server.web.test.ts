@@ -86,7 +86,9 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools();
 
-    const allTools = webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
+    const allTools = await Promise.all(
+      webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
+    );
     const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
     const tools = allTools.filter((_, i) => !disabledFlags[i]);
     for (const tool of tools) {
@@ -111,8 +113,8 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools();
 
-    const allDisabledTools = webToolFactories.map((toolFactory) =>
-      toolFactory(server, testProductVersion),
+    const allDisabledTools = await Promise.all(
+      webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
     );
     const disabledToolFlags = await Promise.all(
       allDisabledTools.map((tool) => Provider.from(tool.disabled)),
@@ -150,7 +152,9 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools();
 
-    const tools = webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
+    const tools = await Promise.all(
+      webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion)),
+    );
     const excludeDisabledFlags = await Promise.all(
       tools.map((tool) => Provider.from(tool.disabled)),
     );

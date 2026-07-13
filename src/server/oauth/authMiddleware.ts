@@ -54,8 +54,8 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       const { enforceScopes, advertiseApiScopes, resourceUri } = getConfig().oauth;
       const baseUrl = new URL(resourceUri).origin;
       const resourceMetadataUrl = `${baseUrl}${protectedResourceMetadataPath}`;
-      const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
-      const requiredApiScopes = getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
+      const requiredMcpScopes = await getRequiredMcpScopesForRequest(req.body);
+      const requiredApiScopes = await getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
       const scopeParam =
         enforceScopes && requiredMcpScopes.length > 0
           ? `, scope="${formatScopes([...requiredMcpScopes, ...requiredApiScopes])}"`
@@ -105,8 +105,8 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
     const authInfo = result.value;
     const { enforceScopes, advertiseApiScopes } = getConfig().oauth;
     if (enforceScopes) {
-      const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
-      const requiredApiScopes = getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
+      const requiredMcpScopes = await getRequiredMcpScopesForRequest(req.body);
+      const requiredApiScopes = await getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
       const missingMcpScopes = requiredMcpScopes.filter(
         (scope) => !authInfo.scopes.includes(scope),
       );
@@ -160,7 +160,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
   };
 }
 
-function getRequiredMcpScopesForRequest(body: unknown): string[] {
+async function getRequiredMcpScopesForRequest(body: unknown): Promise<string[]> {
   if (isInitializeRequest(body)) {
     return getSupportedMcpScopes();
   }
@@ -178,7 +178,10 @@ function getRequiredMcpScopesForRequest(body: unknown): string[] {
   return Array.from(scopes);
 }
 
-function getRequiredApiScopesForRequest(body: unknown, includeApiScopes: boolean): string[] {
+async function getRequiredApiScopesForRequest(
+  body: unknown,
+  includeApiScopes: boolean,
+): Promise<string[]> {
   if (!includeApiScopes) {
     return [];
   }

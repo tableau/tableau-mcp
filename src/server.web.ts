@@ -44,7 +44,7 @@ export class WebMcpServer extends Server {
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
     const config = getConfig();
 
-    const mcpAppsEnabled = getFeatureGate().isFeatureEnabled('mcp-apps');
+    const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
 
     for (const tool of await this._getToolsToRegister(tableauAuthInfo)) {
       const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
@@ -127,8 +127,8 @@ export class WebMcpServer extends Server {
 
     const { includeTools, excludeTools } = configOverrides;
 
-    const allTools = webToolFactories.map((toolFactory) =>
-      toolFactory(this, tableauServerInfo.productVersion),
+    const allTools = await Promise.all(
+      webToolFactories.map((toolFactory) => toolFactory(this, tableauServerInfo.productVersion)),
     );
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {

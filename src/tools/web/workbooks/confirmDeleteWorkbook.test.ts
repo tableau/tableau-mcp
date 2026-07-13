@@ -116,7 +116,7 @@ describe('confirmDeleteWorkbookTool', () => {
       email: 'owner@example.com',
     });
     mocks.mockDeleteWorkbook.mockResolvedValue(undefined);
-    mocks.mockIsFeatureEnabled.mockReturnValue(true);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   it('creates a tool instance with the app-only confirm name and workbookId param', () => {
@@ -144,7 +144,7 @@ describe('confirmDeleteWorkbookTool', () => {
   });
 
   it('is disabled when the mcp-apps feature flag is off', async () => {
-    mocks.mockIsFeatureEnabled.mockReturnValue(false);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
     const tool = getConfirmDeleteWorkbookTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
   });

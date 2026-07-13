@@ -118,7 +118,7 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
     mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
     mocks.mockQueryUserOnSite.mockResolvedValue({ siteRole: 'SiteAdministratorCreator' });
     mocks.mockUpdateCloudExtractRefreshTask.mockResolvedValue(new Ok(updatedTask));
-    mocks.mockIsFeatureEnabled.mockReturnValue(true);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   it('is a model-invisible app-only tool gated on adminToolsEnabled && mcp-apps', () => {
@@ -139,7 +139,7 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
   });
 
   it('is disabled when the mcp-apps flag is OFF', async () => {
-    mocks.mockIsFeatureEnabled.mockReturnValue(false);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
     const tool = getConfirmUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
   });

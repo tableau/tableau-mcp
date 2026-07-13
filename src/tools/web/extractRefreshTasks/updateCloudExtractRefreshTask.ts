@@ -102,15 +102,15 @@ export function scheduleBinding(schedule: UpdateCloudExtractRefreshSchedule): st
     .digest('hex');
 }
 
-export const getUpdateCloudExtractRefreshTaskTool = (
+export const getUpdateCloudExtractRefreshTaskTool = async (
   server: WebMcpServer,
-): WebTool<typeof paramsSchema> => {
+): Promise<WebTool<typeof paramsSchema>> => {
   const config = getConfig();
   // MCP-Apps HITL: when the flag is ON, the preview carries an app so the host renders an iframe
   // confirm panel and the schedule change is applied as a human gesture
   // (confirm-update-cloud-extract-refresh-task). Flag OFF → no `app`, byte-identical to today's
   // confirm-only behavior.
-  const mcpAppsEnabled = getFeatureGate().isFeatureEnabled('mcp-apps');
+  const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
 
   const updateCloudExtractRefreshTaskTool = new WebTool({
     server,

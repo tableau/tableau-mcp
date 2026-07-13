@@ -84,8 +84,8 @@ export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauA
 /**
  * Validates that a scope string is a valid MCP scope
  */
-export function isValidScope(scope: string): scope is McpScope {
-  return getSupportedMcpScopes().some((supported) => supported === scope);
+export async function isValidScope(scope: string): Promise<boolean> {
+  return (await getSupportedMcpScopes()).some((supported) => supported === scope);
 }
 
 const toolScopeMap: Record<
@@ -365,10 +365,11 @@ const toolScopeMap: Record<
   },
 };
 
-function getEnabledToolNames(): Set<WebToolName> {
+async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   const config = getConfig();
   const featureGate = getFeatureGate();
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
+  const mcpAppsEnabled = await featureGate.isFeatureEnabled('mcp-apps');
 
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
@@ -393,7 +394,7 @@ function getEnabledToolNames(): Set<WebToolName> {
 
   // Remove the MCP-Apps-only tools if the mcp-apps feature is disabled. The confirm-* tools are the
   // human-gesture confirm steps for their preview tools and only exist when the iframe can render.
-  if (!featureGate.isFeatureEnabled('mcp-apps')) {
+  if (!mcpAppsEnabled) {
     enabledTools.delete('get-embed-token');
     enabledTools.delete('confirm-delete-workbook');
     enabledTools.delete('confirm-delete-datasource');
@@ -404,8 +405,8 @@ function getEnabledToolNames(): Set<WebToolName> {
   return enabledTools;
 }
 
-export function getSupportedMcpScopes(): McpScope[] {
-  const enabledTools = getEnabledToolNames();
+export async function getSupportedMcpScopes(): Promise<McpScope[]> {
+  const enabledTools = await getEnabledToolNames();
   const scopes = new Set<McpScope>();
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
@@ -419,8 +420,8 @@ export function getSupportedMcpScopes(): McpScope[] {
   return Array.from(scopes);
 }
 
-export function getSupportedApiScopes(): TableauApiScope[] {
-  const enabledTools = getEnabledToolNames();
+export async function getSupportedApiScopes(): Promise<TableauApiScope[]> {
+  const enabledTools = await getEnabledToolNames();
   const scopes = new Set<TableauApiScope>();
 
   for (const [toolName, scopeConfig] of Object.entries(toolScopeMap)) {
@@ -434,9 +435,13 @@ export function getSupportedApiScopes(): TableauApiScope[] {
   return Array.from(scopes);
 }
 
-export function getSupportedScopes({ includeApiScopes }: { includeApiScopes: boolean }): string[] {
-  const mcpScopes = getSupportedMcpScopes();
-  const apiScopes = getSupportedApiScopes();
+export async function getSupportedScopes({
+  includeApiScopes,
+}: {
+  includeApiScopes: boolean;
+}): Promise<string[]> {
+  const mcpScopes = await getSupportedMcpScopes();
+  const apiScopes = await getSupportedApiScopes();
   return includeApiScopes ? [...mcpScopes, ...apiScopes] : mcpScopes;
 }
 

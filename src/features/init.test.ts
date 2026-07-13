@@ -44,19 +44,19 @@ describe('FeatureGate', () => {
       );
     });
 
-    it('should load valid feature config file', () => {
+    it('should load valid feature config file', async () => {
       const config = { mcpapps: true, pulse: false };
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
 
       const gate = getFeatureGate();
 
-      expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
-      expect(gate.isFeatureEnabled('pulse')).toBe(false);
+      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(true);
+      await expect(gate.isFeatureEnabled('pulse')).resolves.toBe(false);
     });
   });
 
   describe('missing file handling', () => {
-    it('should handle missing file gracefully', () => {
+    it('should handle missing file gracefully', async () => {
       const error: NodeJS.ErrnoException = new Error('ENOENT: no such file or directory');
       error.code = 'ENOENT';
       vi.mocked(readFileSync).mockImplementation(() => {
@@ -65,21 +65,21 @@ describe('FeatureGate', () => {
 
       const gate = getFeatureGate();
 
-      expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
-      expect(gate.isFeatureEnabled('pulse')).toBe(false);
+      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(false);
+      await expect(gate.isFeatureEnabled('pulse')).resolves.toBe(false);
     });
   });
 
   describe('invalid JSON handling', () => {
-    it('should handle invalid JSON gracefully', () => {
+    it('should handle invalid JSON gracefully', async () => {
       vi.mocked(readFileSync).mockReturnValue('{ invalid json }');
 
       const gate = getFeatureGate();
 
-      expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
+      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(false);
     });
 
-    it('should skip invalid values and load valid ones', () => {
+    it('should skip invalid values and load valid ones', async () => {
       const config = {
         mcpapps: true,
         validFeature: false,
@@ -93,70 +93,70 @@ describe('FeatureGate', () => {
       const gate = getFeatureGate();
 
       // Valid features should be loaded
-      expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
-      expect(gate.isFeatureEnabled('validFeature')).toBe(false);
+      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(true);
+      await expect(gate.isFeatureEnabled('validFeature')).resolves.toBe(false);
 
       // Invalid features should be skipped (disabled)
-      expect(gate.isFeatureEnabled('invalidString')).toBe(false);
-      expect(gate.isFeatureEnabled('invalidNull')).toBe(false);
-      expect(gate.isFeatureEnabled('invalidNumber')).toBe(false);
-      expect(gate.isFeatureEnabled('invalidArray')).toBe(false);
+      await expect(gate.isFeatureEnabled('invalidString')).resolves.toBe(false);
+      await expect(gate.isFeatureEnabled('invalidNull')).resolves.toBe(false);
+      await expect(gate.isFeatureEnabled('invalidNumber')).resolves.toBe(false);
+      await expect(gate.isFeatureEnabled('invalidArray')).resolves.toBe(false);
     });
   });
 
   describe('edge cases', () => {
-    it('should handle empty JSON object', () => {
+    it('should handle empty JSON object', async () => {
       vi.mocked(readFileSync).mockReturnValue('{}');
 
       const gate = getFeatureGate();
 
-      expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
-      expect(gate.isFeatureEnabled('any-feature')).toBe(false);
+      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(false);
+      await expect(gate.isFeatureEnabled('any-feature')).resolves.toBe(false);
     });
 
-    it('should return false for unknown features', () => {
+    it('should return false for unknown features', async () => {
       const config = { mcpapps: true };
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
 
       const gate = getFeatureGate();
 
-      expect(gate.isFeatureEnabled('unknown-feature')).toBe(false);
-      expect(gate.isFeatureEnabled('nonexistent')).toBe(false);
+      await expect(gate.isFeatureEnabled('unknown-feature')).resolves.toBe(false);
+      await expect(gate.isFeatureEnabled('nonexistent')).resolves.toBe(false);
     });
   });
 
   describe('with test fixtures', () => {
-    it('should load all-enabled fixture correctly', () => {
+    it('should load all-enabled fixture correctly', async () => {
       const config = { mcpapps: true, pulse: true, 'oauth-embedded': true };
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
 
       const gate = getFeatureGate();
 
-      expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
-      expect(gate.isFeatureEnabled('pulse')).toBe(true);
-      expect(gate.isFeatureEnabled('oauth-embedded')).toBe(true);
+      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(true);
+      await expect(gate.isFeatureEnabled('pulse')).resolves.toBe(true);
+      await expect(gate.isFeatureEnabled('oauth-embedded')).resolves.toBe(true);
     });
 
-    it('should load all-disabled fixture correctly', () => {
+    it('should load all-disabled fixture correctly', async () => {
       const config = { mcpapps: false, pulse: false, 'oauth-embedded': false };
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
 
       const gate = getFeatureGate();
 
-      expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
-      expect(gate.isFeatureEnabled('pulse')).toBe(false);
-      expect(gate.isFeatureEnabled('oauth-embedded')).toBe(false);
+      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(false);
+      await expect(gate.isFeatureEnabled('pulse')).resolves.toBe(false);
+      await expect(gate.isFeatureEnabled('oauth-embedded')).resolves.toBe(false);
     });
 
-    it('should load mixed fixture correctly', () => {
+    it('should load mixed fixture correctly', async () => {
       const config = { mcpapps: false, pulse: true, 'oauth-embedded': false };
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
 
       const gate = getFeatureGate();
 
-      expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
-      expect(gate.isFeatureEnabled('pulse')).toBe(true);
-      expect(gate.isFeatureEnabled('oauth-embedded')).toBe(false);
+      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(false);
+      await expect(gate.isFeatureEnabled('pulse')).resolves.toBe(true);
+      await expect(gate.isFeatureEnabled('oauth-embedded')).resolves.toBe(false);
     });
   });
 
@@ -166,7 +166,7 @@ describe('FeatureGate', () => {
       vi.clearAllMocks();
     });
 
-    it('should use server provider by default and load from file', () => {
+    it('should use server provider by default and load from file', async () => {
       const config = { mcpapps: true, pulse: false };
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
       vi.mocked(getConfig).mockReturnValue({ featureGate: { provider: 'server' } } as any);
@@ -174,12 +174,12 @@ describe('FeatureGate', () => {
       initializeFeatureGate();
       const gate = getFeatureGate();
 
-      expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
-      expect(gate.isFeatureEnabled('pulse')).toBe(false);
+      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(true);
+      await expect(gate.isFeatureEnabled('pulse')).resolves.toBe(false);
       expect(readFileSync).toHaveBeenCalled();
     });
 
-    it('should fall back to server provider when custom provider module fails to load', () => {
+    it('should fall back to server provider when custom provider module fails to load', async () => {
       const config = { mcpapps: true };
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
       vi.mocked(getConfig).mockReturnValue({
@@ -193,11 +193,11 @@ describe('FeatureGate', () => {
       const gate = getFeatureGate();
 
       // Should fall back to server provider
-      expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
+      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(true);
       expect(readFileSync).toHaveBeenCalled();
     });
 
-    it('should fall back to server provider on error', () => {
+    it('should fall back to server provider on error', async () => {
       const config = { mcpapps: true };
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
       vi.mocked(getConfig).mockImplementation(() => {
@@ -207,18 +207,34 @@ describe('FeatureGate', () => {
       initializeFeatureGate();
       const gate = getFeatureGate();
 
-      expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
+      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(true);
       expect(readFileSync).toHaveBeenCalled();
     });
 
-    it('should support lazy initialization without initializeFeatureGate call', () => {
+    it('should support lazy initialization without initializeFeatureGate call', async () => {
       const config = { mcpapps: true };
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
       vi.mocked(getConfig).mockReturnValue({ featureGate: { provider: 'server' } } as any);
 
       const gate = getFeatureGate();
 
-      expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
+      await expect(gate.isFeatureEnabled('mcpapps')).resolves.toBe(true);
+    });
+
+    it('should expose an async isFeatureEnabled that must be awaited', async () => {
+      // Proves the async contract end-to-end: isFeatureEnabled returns a Promise<boolean>
+      // (not a bare boolean), so a downstream cloud provider can do a real async lookup
+      // per invocation. The server provider resolves its in-memory value.
+      const config = { mcpapps: true, pulse: false };
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
+      vi.mocked(getConfig).mockReturnValue({ featureGate: { provider: 'server' } } as any);
+
+      const gate = getFeatureGate();
+
+      const pending = gate.isFeatureEnabled('mcpapps');
+      expect(pending).toBeInstanceOf(Promise);
+      await expect(pending).resolves.toBe(true);
+      await expect(gate.isFeatureEnabled('pulse')).resolves.toBe(false);
     });
   });
 

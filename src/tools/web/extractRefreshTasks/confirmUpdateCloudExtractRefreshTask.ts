@@ -8,6 +8,7 @@ import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { updateCloudExtractRefreshScheduleSchema } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
 import { AppApprovalEvidence } from '../_lib/evidence.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
 import { WebTool } from '../tool.js';
@@ -46,7 +47,10 @@ export const getConfirmUpdateCloudExtractRefreshTaskTool = (
   const confirmUpdateCloudExtractRefreshTaskTool = new WebTool({
     server,
     name: 'confirm-update-cloud-extract-refresh-task',
-    disabled: !config.adminToolsEnabled || !getFeatureGate().isFeatureEnabled('mcp-apps'),
+    disabled: new Provider(
+      async () =>
+        !config.adminToolsEnabled || !(await getFeatureGate().isFeatureEnabled('mcp-apps')),
+    ),
     description: `
 Confirms and applies a schedule change to an extract refresh task on Tableau Cloud, previously
 previewed by \`update-cloud-extract-refresh-task\`. This tool is **not visible to the model** — it is

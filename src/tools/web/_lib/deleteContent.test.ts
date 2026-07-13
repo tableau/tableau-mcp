@@ -132,11 +132,11 @@ describe('deleteContentTool', () => {
     mocks.mockDeleteDatasource.mockResolvedValue(undefined);
     mocks.mockDeleteExtractRefreshTask.mockResolvedValue(undefined);
     mocks.mockGraphql.mockResolvedValue({ publishedDatasources: [] });
-    mocks.mockIsFeatureEnabled.mockReturnValue(false);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
   });
 
-  it('exposes the consolidated tool name and paramsSchema', () => {
-    const tool = getDeleteContentTool(new WebMcpServer());
+  it('exposes the consolidated tool name and paramsSchema', async () => {
+    const tool = await getDeleteContentTool(new WebMcpServer());
     expect(tool.name).toBe('delete-content');
     expect(tool.paramsSchema).toHaveProperty('resourceType');
     expect(tool.paramsSchema).toHaveProperty('resourceId');
@@ -150,12 +150,12 @@ describe('deleteContentTool', () => {
     vi.mocked(getConfig).mockReturnValueOnce({
       adminToolsEnabled: false,
     } as ReturnType<typeof getConfig>);
-    const tool = getDeleteContentTool(new WebMcpServer());
+    const tool = await getDeleteContentTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
-  it('carries destructive annotations', () => {
-    const tool = getDeleteContentTool(new WebMcpServer());
+  it('carries destructive annotations', async () => {
+    const tool = await getDeleteContentTool(new WebMcpServer());
     expect(tool.annotations).toEqual({
       title: 'Delete Tableau Content',
       readOnlyHint: false,
@@ -359,11 +359,11 @@ describe('deleteContentTool', () => {
 
   describe('with mcp-apps flag ON', () => {
     beforeEach(() => {
-      mocks.mockIsFeatureEnabled.mockReturnValue(true);
+      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
     });
 
-    it('carries the delete-content app config', () => {
-      const tool = getDeleteContentTool(new WebMcpServer());
+    it('carries the delete-content app config', async () => {
+      const tool = await getDeleteContentTool(new WebMcpServer());
       expect(tool.app).toBeDefined();
       expect(tool.app?.resourceUri).toContain('delete-content');
     });
@@ -431,7 +431,7 @@ async function getToolResult(args: {
   tag?: string;
   confirmationToken?: string;
 }): Promise<CallToolResult> {
-  const tool = getDeleteContentTool(new WebMcpServer());
+  const tool = await getDeleteContentTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
     {
