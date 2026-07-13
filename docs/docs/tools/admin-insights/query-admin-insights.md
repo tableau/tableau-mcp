@@ -22,12 +22,6 @@ time it verifies the caller's site role and rejects anything below
 `SiteAdministratorCreator` / `SiteAdministratorExplorer` / `ServerAdministrator`. Admin Insights
 datasource LUIDs are resolved automatically; callers do not pass `datasourceLuid`.
 
-:::note[Replaces legacy tools]
-This tool is a superset of the four legacy admin-insights tools
-(`query-admin-insights-ts-events`, `query-admin-insights-site-content`,
-`query-admin-insights-job-performance`, `get-stale-content-report`), which remain registered as
-back-compat shims for one release cycle and share the underlying implementation.
-:::
 
 ## APIs called
 
@@ -94,11 +88,6 @@ The effective row limit is the **tightest** of:
 1. The tool cap (`MAX_RESULT_LIMITS=query-admin-insights:N`)
 2. The caller-supplied `limit`
 
-:::note[Breaking change in v3.0.0]
-Legacy per-kind caps (e.g. `MAX_RESULT_LIMITS=query-admin-insights-ts-events:N`) are no longer
-recognized. Use `query-admin-insights:N` to cap all kinds, or remove per-kind entries from your
-configuration.
-:::
 
 See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
 

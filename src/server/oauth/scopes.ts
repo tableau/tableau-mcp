@@ -220,9 +220,8 @@ const toolScopeMap: Record<
     mcp: [],
     api: new Set<TableauApiScope>(),
   },
-  // Consolidated admin-insights tool (W-23375797). Dispatches on `kind` to ts-events, site-content,
-  // job-performance (raw VDS) or stale-content (server-side anti-join). Union of the scopes required
-  // by the four legacy tools it replaces — any kind may need any of these.
+  // Dispatches on `kind` to ts-events, site-content, job-performance (raw VDS) or stale-content
+  // (server-side anti-join). Union of the scopes required by all four kinds.
   'query-admin-insights': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set([
@@ -232,10 +231,9 @@ const toolScopeMap: Record<
       'tableau:users:read',
     ]),
   },
-  // Consolidated destructive-delete tool (W-23375797). Dispatches on `resourceType` to workbook,
-  // datasource, or extract-refresh-task. Gated on a single umbrella MCP scope
-  // (`tableau:mcp:content:delete`) that covers all three dispatch paths. Workbook and datasource
-  // paths still route through resourceAccessChecker (union of API scopes preserved).
+  // Dispatches on `resourceType` to workbook, datasource, or extract-refresh-task. Gated on a
+  // single umbrella MCP scope (`tableau:mcp:content:delete`). Workbook and datasource paths still
+  // route through resourceAccessChecker.
   'delete-content': {
     mcp: ['tableau:mcp:content:delete'],
     api: new Set([

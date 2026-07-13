@@ -15,11 +15,6 @@ The tool is **admin-only** — it is registered only when `ADMIN_TOOLS_ENABLED=t
 request time it verifies the caller's site role and rejects anything below
 `SiteAdministratorCreator` / `SiteAdministratorExplorer` / `ServerAdministrator`.
 
-:::note[Replaces legacy tools]
-This tool is a superset of the three legacy delete tools (`delete-workbook`,
-`delete-datasource`, `delete-extract-refresh-task`), which remain registered as back-compat
-shims for one release cycle and share the underlying implementation.
-:::
 
 ## Two-phase safety
 
