@@ -1,0 +1,8 @@
+{
+  "label": "Content Management",
+  "position": 8,
+  "link": {
+    "type": "generated-index",
+    "description": "Admin-only tools for managing content lifecycle on Tableau Cloud — deletion, archival, and recycle-bin operations. Gated by the `ADMIN_TOOLS_ENABLED` environment variable and a request-time site-role check."
+  }
+}
