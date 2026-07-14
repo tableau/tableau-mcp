@@ -24,6 +24,7 @@ import { rankAsMembershipRule } from './rankAsMembership.js';
 import { redundantColorEncodingRule } from './redundantColorEncoding.js';
 import { selfReferentialFixedLodRule } from './selfReferentialFixedLod.js';
 import { setCountMalformedParameterRule } from './setCountMalformedParameter.js';
+import { tooltipDimensionRequiresAttrRule } from './tooltipDimensionRequiresAttr.js';
 import { undeclaredAggregateOkRefRule } from './undeclaredAggregateOkRef.js';
 import { undeclaredCalcReferenceRule } from './undeclaredCalcReference.js';
 import { undeclaredSetReferenceRule } from './undeclaredSetReference.js';
@@ -52,6 +53,7 @@ export const validationRules = [
   calcNameFieldCollisionRule,
   mixedAggregationCalcRule,
   aggregateCalcDerivationRule,
+  tooltipDimensionRequiresAttrRule,
   selfReferentialFixedLodRule,
   rankAsMembershipRule,
   hardcodedDateFilterRule,

@@ -1,6 +1,6 @@
 # Workbook XML: Encodings and Mark Types
 
-Enforced-by: computed-sort-crash, redundant-color-encoding
+Enforced-by: computed-sort-crash, redundant-color-encoding, tooltip-dimension-requires-attr
 
 Expert reference for all Tableau marks card encodings, mark types, label styling, color palettes, and chart-type-specific patterns (Gantt, map, aggregation, sorting). All patterns confirmed via `tableau-get-workbook` observation after manual authoring.
 
@@ -618,6 +618,8 @@ A single pane can have **multiple elements of the same encoding type** — this 
 ```
 
 Each referenced field still needs a column def + column-instance in `<datasource-dependencies>`.
+
+Tooltip dimensions in aggregated views need `attr:`, not `none:` — see `tactics/viz/tooltip.md`.
 
 ---
 

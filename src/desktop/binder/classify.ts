@@ -531,6 +531,60 @@ function familyNativeKeywords(
 }
 
 /**
+ * FAMILY-LEVEL spatial intent guard vocabulary (W-23447710, Cluster A selection half).
+ * The source of truth is the manifest set itself: any keyword carried by a
+ * spatial-family manifest is spatial intent — INCLUDING non-eligible spatial supply,
+ * so a lat/lon ask is protected even while spatial-symbol-map-latlon is unproven.
+ * The alias set covers bare words users say that are not standalone manifest keywords.
+ * Bare "map" stays OUT of CHART_NOUN_KEYWORDS (dual-carrier within spatial); this
+ * guard operates only at family granularity, never picking a template.
+ */
+const SPATIAL_INTENT_ALIASES: ReadonlySet<string> = new Set([
+  'geo',
+  'geographic',
+  'geographical',
+  'geographically',
+  'coordinate',
+  'coordinates',
+  'gps',
+  'lat/long',
+  'lat/lon',
+  'lat-long',
+  'lat-lon',
+]);
+
+function spatialIntentPhrases(manifests: Map<string, TemplateManifest>): Set<string> {
+  const phrases = new Set<string>(SPATIAL_INTENT_ALIASES);
+  for (const m of manifests.values()) {
+    if (m.family !== 'spatial') continue;
+    for (const kw of m.intent_keywords) phrases.add(kw.toLowerCase());
+  }
+  return phrases;
+}
+
+/** Lat+lon named together is coordinate intent even without a map noun. */
+function hasCoordinatePairIntent(rawAsk: string): boolean {
+  const hasLat = phraseIndexInAsk(rawAsk, 'latitude') >= 0 || phraseIndexInAsk(rawAsk, 'lat') >= 0;
+  const hasLon =
+    phraseIndexInAsk(rawAsk, 'longitude') >= 0 ||
+    phraseIndexInAsk(rawAsk, 'lon') >= 0 ||
+    phraseIndexInAsk(rawAsk, 'lng') >= 0 ||
+    phraseIndexInAsk(rawAsk, 'long') >= 0;
+  return hasLat && hasLon;
+}
+
+function askCarriesSpatialIntent(
+  rawAsk: string,
+  maskedAsk: string,
+  manifests: Map<string, TemplateManifest>,
+): boolean {
+  for (const phrase of spatialIntentPhrases(manifests)) {
+    if (phraseIndexInAsk(maskedAsk, phrase) >= 0) return true;
+  }
+  return hasCoordinatePairIntent(rawAsk);
+}
+
+/**
  * Every field name / caption / bare column name in the schema, lowercased. Feeds
  * fieldNameMatchInAsk's EXACT-FIRST tie-break: a field's plural alias is suppressed
  * at any token another field claims by its exact name (so with both "Region" and
@@ -1277,6 +1331,13 @@ export function classifyNoLlm(
 
   const chosen = selectWithinFamily(top, maskedAsk, matched, aggOverride, manifests, schemaDims);
   if (!chosen) return null;
+
+  // DEMOTE (family guard, W-23447710): a spatial-intent ask must never bind a
+  // non-spatial keyword-count winner. Bare "map" stays out of CHART_NOUN_KEYWORDS
+  // because it is dual-carrier within spatial; this guard is family-granular only.
+  if (askCarriesSpatialIntent(ask, maskedAsk, manifests) && chosen.family !== 'spatial') {
+    return null;
+  }
 
   // DEMOTE (never hard-block): when the selected winner carries avoid_when
   // guidance whose terms appear in the ask, fall through to the propose leg so

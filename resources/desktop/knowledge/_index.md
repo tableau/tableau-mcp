@@ -39,6 +39,7 @@ Entries show the tactics slug and, where one exists, its strategy companion.
 - Overlaying / stacking / nesting multiple pie charts (readability pushback + alternatives) → `strategy/viz-design/overlaid-and-stacked-pie-readability`
 - Filters → `tactics/viz/filters` · strategy: `strategy/viz-design/filter-strategy`
 - Marks, encodings, color/size/label, sorts → `tactics/viz/marks-and-encodings` · strategy: `strategy/viz-design/encoding-strategy`
+- Tooltip encodings (dimensions need `attr:` in aggregated views — blank-render hazard) → `tactics/viz/tooltip`
 - Discrete groups vs. gradient (color "which group", not the raw measure) → strategy: `strategy/viz-design/discrete-groups-vs-gradient` · tactics: `tactics/viz/marks-and-encodings` ("Discrete-tier color")
 - Worksheet + window structure → `tactics/viz/worksheets` · strategy: `strategy/viz-design/worksheet-strategy`
 - Year-over-year / period comparison → `tactics/viz/workbook-date-yoy-comparison`
