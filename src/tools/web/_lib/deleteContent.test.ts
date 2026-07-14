@@ -135,7 +135,7 @@ describe('deleteContentTool', () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
   });
 
-  it('exposes the consolidated tool name and paramsSchema', async () => {
+  it('exposes the tool name and paramsSchema', async () => {
     const tool = await getDeleteContentTool(new WebMcpServer());
     expect(tool.name).toBe('delete-content');
     expect(tool.paramsSchema).toHaveProperty('resourceType');

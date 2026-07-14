@@ -4,9 +4,8 @@ sidebar_position: 5
 
 # Query Admin Insights
 
-Consolidated admin-insights tool that queries all three Tableau Cloud Admin Insights datasources
-and the deterministic stale-content report through a single entry point. Dispatches on `kind` to
-one of four backends:
+Queries all three Tableau Cloud Admin Insights datasources and the deterministic stale-content
+report through a single entry point. Dispatches on `kind` to one of four backends:
 
 - `ts-events` — raw VDS query against the `TS Events` datasource (audit events: access, publish,
   update, delete)
@@ -175,7 +174,4 @@ Example: `["Datasource"]`
 
 ## Related
 
-- [`query-admin-insights-ts-events`](./query-admin-insights-ts-events.md) — legacy TS Events tool (shim)
-- [`query-admin-insights-site-content`](./query-admin-insights-site-content.md) — legacy Site Content tool (shim)
-- [`query-admin-insights-job-performance`](./query-admin-insights-job-performance.md) — legacy Job Performance tool (shim)
-- [`get-stale-content-report`](./get-stale-content-report.md) — legacy stale-content tool (shim)
+- [`delete-content`](../content/delete-content.md) — destructive-delete tool

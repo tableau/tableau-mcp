@@ -4,8 +4,8 @@ sidebar_position: 1
 
 # Delete Content
 
-Consolidated destructive-delete tool that permanently deletes a workbook, published data source,
-or extract refresh task. Dispatches on `resourceType`:
+Permanently deletes a workbook, published data source, or extract refresh task. Dispatches on
+`resourceType`:
 
 - `workbook` — deletes a workbook (recoverable via recycle bin on Tableau Cloud)
 - `datasource` — deletes a published data source (recoverable via recycle bin; warns on downstream dependents)
@@ -144,6 +144,4 @@ preview call. Required when `confirm` is `true`; ignored otherwise.
 
 ## Related
 
-- [`delete-workbook`](../workbooks/delete-workbook.md) — legacy workbook-only delete (shim)
-- [`delete-datasource`](../data-qna/delete-datasource.md) — legacy datasource-only delete (shim)
-- [`delete-extract-refresh-task`](../tasks/delete-extract-refresh-task.md) — legacy task-only delete (shim)
+- [`query-admin-insights`](../admin-insights/query-admin-insights.md) — admin-insights query tool

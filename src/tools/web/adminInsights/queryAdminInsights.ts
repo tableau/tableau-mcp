@@ -27,7 +27,7 @@ import {
 import { ADMIN_INSIGHTS_DATASETS, AdminInsightsDataset } from './resolver.js';
 
 /**
- * Consolidated admin-insights tool (W-23375797). Dispatches on `kind` to one of four backends:
+ * Dispatches on `kind` to one of four backends:
  *
  * - `ts-events` — raw VDS query against the "TS Events" datasource
  * - `site-content` — raw VDS query against the "Site Content" datasource
@@ -219,10 +219,8 @@ Datasource LUIDs are resolved automatically; callers do not pass \`datasourceLui
             return new ArgsValidationError(`query is required when kind is "${kind}".`).toErr();
           }
 
-          const consolidatedCap = configWithOverrides.getMaxResultLimit(tool.name);
-          const caps = [consolidatedCap, limit].filter(
-            (v): v is number => typeof v === 'number' && v > 0,
-          );
+          const toolCap = configWithOverrides.getMaxResultLimit(tool.name);
+          const caps = [toolCap, limit].filter((v): v is number => typeof v === 'number' && v > 0);
           const rowLimit = caps.length > 0 ? Math.min(...caps) : undefined;
 
           return await runAdminInsightsQuery({
