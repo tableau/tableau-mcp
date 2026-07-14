@@ -9,7 +9,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { WebTool } from '../tool.js';
 import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
-import { AppApprovalEvidence } from './evidence.js';
+import { AllEvidence, AppApprovalEvidence, TagEvidence } from './evidence.js';
 import { guardMutation, MutationTarget } from './mutationGuard.js';
 
 const resourceTypeSchema = z.enum(['workbook', 'datasource', 'extract-refresh-task']);
@@ -104,7 +104,10 @@ allowed time window. If the check fails the deletion is rejected and the user mu
                     action: 'delete',
                     mode: 'preview-confirm',
                     phase: 'confirm',
-                    evidence: new AppApprovalEvidence('delete-content'),
+                    evidence: new AllEvidence([
+                      new TagEvidence({ tag: args.tag ?? '', kind: 'workbook' }),
+                      new AppApprovalEvidence('delete-content'),
+                    ]),
                     resolveTarget,
                     fallbackTargetKind: 'workbook',
                   });
@@ -161,7 +164,10 @@ allowed time window. If the check fails the deletion is rejected and the user mu
                     action: 'delete',
                     mode: 'preview-confirm',
                     phase: 'confirm',
-                    evidence: new AppApprovalEvidence('delete-content'),
+                    evidence: new AllEvidence([
+                      new TagEvidence({ tag: args.tag ?? '', kind: 'datasource' }),
+                      new AppApprovalEvidence('delete-content'),
+                    ]),
                     resolveTarget,
                     fallbackTargetKind: 'datasource',
                   });
