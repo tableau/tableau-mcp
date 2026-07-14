@@ -1,15 +1,15 @@
 /**
- * @file MCP-Apps HITL confirm panel for delete-datasource (W-23202047, mirroring delete-workbook).
+ * @file MCP-Apps HITL confirm panel for datasource deletion.
  *
- * The delete-datasource preview returns an AppToolResult whose `data.kind` is
- * 'delete-datasource-confirm'. This module renders that into a confirm panel inside the iframe:
+ * The `delete-content` (resourceType: datasource) preview returns an AppToolResult whose `data.kind`
+ * is 'delete-datasource-confirm'. This module renders that into a confirm panel inside the iframe:
  * data source name/project/owner, a live countdown to the approval expiry, and Confirm/Cancel
  * buttons.
  *
- * Clicking Confirm invokes the model-invisible `confirm-delete-datasource` tool via
- * `app.callServerTool` — that human gesture IS the approval the server's AppApprovalEvidence
- * verifies. The countdown is advisory only: the server independently rejects an expired approval, so
- * disabling the button past expiry is a UX nicety, not the security boundary.
+ * Clicking Confirm invokes `delete-content` with `confirm: true` via `app.callServerTool` — that
+ * human gesture IS the approval the server's AppApprovalEvidence verifies. The countdown is advisory
+ * only: the server independently rejects an expired approval, so disabling the button past expiry is
+ * a UX nicety, not the security boundary.
  */
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { z } from 'zod';

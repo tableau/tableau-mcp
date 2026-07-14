@@ -1,8 +1,8 @@
 /**
  * Common mutation-tool safety layer for the TMCP server (W-23125362).
  *
- * Every in-scope mutation tool (delete-datasource, delete-workbook, delete-extract-refresh-task,
- * update-cloud-extract-refresh-task) routes its mutation through `guardMutation` instead of
+ * Every in-scope mutation tool (delete-content, update-cloud-extract-refresh-task) routes its
+ * mutation through `guardMutation` instead of
  * re-implementing its own admin check, identity resolution, confirmation gate, and audit. The guard:
  *
  *   1. Enforces the admin gate (assertAdmin) uniformly.
@@ -240,6 +240,8 @@ export async function guardMutation<TTarget>({
  */
 function targetKindHint(tool: WebToolName): MutationTarget['kind'] {
   switch (tool) {
+    // Defensive default — callers pass fallbackTargetKind which takes precedence; this only fires
+    // if that arg is ever dropped from a call site.
     case 'delete-content':
       return 'datasource';
     case 'update-cloud-extract-refresh-task':
