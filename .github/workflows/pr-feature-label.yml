@@ -2,8 +2,6 @@ name: PR Feature Label
 
 on:
   pull_request:
-    branches:
-      - 'feature/**'
     types: [opened]
 
 jobs:
@@ -19,36 +17,40 @@ jobs:
         with:
           script: |
             const prefix = 'feature/';
-            const baseRef = context.payload.pull_request.base.ref;
+            const pr = context.payload.pull_request;
 
-            // The `branches` filter already scopes to feature/** base branches;
-            // guard defensively in case the trigger scope ever changes.
-            if (!baseRef.startsWith(prefix)) {
-              console.log(`Base branch "${baseRef}" is not a feature branch; nothing to do.`);
+            // Label whichever side of the PR is a feature branch:
+            //  - base is feature/* : a PR merging INTO a long-lived feature branch
+            //  - head is feature/* : a feature branch being merged into main (or elsewhere)
+            // Both produce a "feature:<name>" label; if both sides qualify, both are applied.
+            const labels = [...new Set(
+              [pr.base.ref, pr.head.ref]
+                .filter((ref) => ref.startsWith(prefix))
+                .map((ref) => `feature:${ref.slice(prefix.length)}`)
+            )];
+
+            if (labels.length === 0) {
+              console.log(`Neither base "${pr.base.ref}" nor head "${pr.head.ref}" is a feature branch; nothing to do.`);
               return;
             }
 
-            const label = `feature:${baseRef.slice(prefix.length)}`;
-
-            // Create the label on the fly if it doesn't exist yet.
-            try {
-              await github.rest.issues.getLabel({ ...context.repo, name: label });
-            } catch (error) {
-              if (error.status === 404) {
-                await github.rest.issues.createLabel({
-                  ...context.repo,
-                  name: label,
-                  color: 'ededed',
-                });
-                console.log(`Created label "${label}"`);
-              } else {
-                throw error;
+            // Create any labels that don't exist yet (auto-created gray).
+            for (const label of labels) {
+              try {
+                await github.rest.issues.getLabel({ ...context.repo, name: label });
+              } catch (error) {
+                if (error.status === 404) {
+                  await github.rest.issues.createLabel({ ...context.repo, name: label, color: 'ededed' });
+                  console.log(`Created label "${label}"`);
+                } else {
+                  throw error;
+                }
               }
             }
 
             await github.rest.issues.addLabels({
               ...context.repo,
-              issue_number: context.payload.pull_request.number,
-              labels: [label],
+              issue_number: pr.number,
+              labels,
             });
-            console.log(`Applied label "${label}" to PR #${context.payload.pull_request.number}`);
+            console.log(`Applied label(s) ${labels.map((l) => `"${l}"`).join(', ')} to PR #${pr.number}`);
