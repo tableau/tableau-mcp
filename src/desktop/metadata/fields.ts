@@ -8,6 +8,18 @@ import { normalizeArray, parseXML, serializeXML } from './parser.js';
 import type { EncodingType, FieldInfo, ParsedEncoding, ParsedWorksheet } from './types.js';
 
 /**
+ * Tableau's Marks card labels the level-of-detail shelf "Detail", so an agent
+ * naturally picks encoding_type="detail" — but Tableau persists LOD only as the
+ * `<lod>` tag and SILENTLY STRIPS `<detail>` on apply (W-23447710 follow-up: a
+ * lat/lon symbol map lost its Location pill this way and collapsed to a single
+ * AVG-coordinate centroid — a blank map with a green apply). Normalize the alias
+ * to the round-trip-stable tag so add/remove/move all address the same shelf.
+ */
+function canonicalEncodingType(encodingType: EncodingType): EncodingType {
+  return encodingType === 'detail' ? 'lod' : encodingType;
+}
+
+/**
  * Helper to get worksheet from parsed XML
  */
 function getWorksheet(parsed: any): ParsedWorksheet | null {
@@ -46,6 +58,7 @@ export function addFieldToEncoding(
   index?: number,
   workbookXml?: string,
 ): string {
+  encodingType = canonicalEncodingType(encodingType);
   const parsed = parseXML(worksheetXml);
   const worksheet = getWorksheet(parsed);
 
@@ -208,6 +221,7 @@ export function removeFieldFromEncoding(
   encodingType: EncodingType,
   columnRef: string,
 ): string {
+  encodingType = canonicalEncodingType(encodingType);
   const parsed = parseXML(worksheetXml);
   const worksheet = getWorksheet(parsed);
 
@@ -257,6 +271,7 @@ export function moveFieldInEncoding(
   columnRef: string,
   newIndex: number,
 ): string {
+  encodingType = canonicalEncodingType(encodingType);
   const parsed = parseXML(worksheetXml);
   const worksheet = getWorksheet(parsed);
 
