@@ -199,6 +199,10 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
+  'resolve-datasource-luid': {
+    mcp: ['tableau:mcp:datasource:read'],
+    api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
+  },
   'get-embed-token': {
     mcp: [],
     api: new Set<TableauApiScope>(['tableau:views:embed']),
@@ -260,6 +264,15 @@ const toolScopeMap: Record<
   'generate-pulse-insight-brief': {
     mcp: ['tableau:mcp:insight:create'],
     api: new Set(['tableau:insight_brief:create', 'tableau:mcp_site_settings:read']),
+  },
+  'generate-chiron-insight-cards': {
+    mcp: ['tableau:mcp:insight:create', 'tableau:mcp:datasource:read'],
+    api: new Set([
+      'tableau:insights:read',
+      'tableau:content:read',
+      'tableau:viz_data_service:read',
+      'tableau:mcp_site_settings:read',
+    ]),
   },
   'search-content': {
     mcp: ['tableau:mcp:content:read'],
