@@ -46,6 +46,7 @@ describe('server', () => {
       // get-embed-token, plus the app-only confirm-* tools.
       const mcpAppsTools: ReadonlyArray<WebToolName> = [
         'get-embed-token',
+        'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
 
@@ -132,6 +133,7 @@ describe('server', () => {
       // get-embed-token, plus the app-only confirm-* tools.
       const mcpAppsTools: ReadonlyArray<WebToolName> = [
         'get-embed-token',
+        'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
 
