@@ -96,11 +96,11 @@ describe('deleteExtractRefreshTaskTool', () => {
     mocks.mockQueryUserOnSite.mockResolvedValue({ siteRole: 'SiteAdministratorCreator' });
     mocks.mockDeleteExtractRefreshTask.mockResolvedValue(undefined);
     // Default: mcp-apps flag OFF → today's exact nonce/confirmationToken behavior.
-    mocks.mockIsFeatureEnabled.mockReturnValue(false);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
   });
 
-  it('should create a tool instance with correct properties', () => {
-    const tool = getDeleteExtractRefreshTaskTool(new WebMcpServer());
+  it('should create a tool instance with correct properties', async () => {
+    const tool = await getDeleteExtractRefreshTaskTool(new WebMcpServer());
     expect(tool.name).toBe('delete-extract-refresh-task');
     expect(tool.description).toContain('Deletes an extract refresh task from the Tableau site');
     expect(tool.paramsSchema).toHaveProperty('taskId');
@@ -108,8 +108,8 @@ describe('deleteExtractRefreshTaskTool', () => {
     expect(tool.paramsSchema).toHaveProperty('confirmationToken');
   });
 
-  it('should have correct annotations for destructive operation', () => {
-    const tool = getDeleteExtractRefreshTaskTool(new WebMcpServer());
+  it('should have correct annotations for destructive operation', async () => {
+    const tool = await getDeleteExtractRefreshTaskTool(new WebMcpServer());
     expect(tool.annotations).toEqual({
       title: 'Delete Extract Refresh Task',
       readOnlyHint: false,
@@ -269,8 +269,8 @@ describe('deleteExtractRefreshTaskTool', () => {
     expect(failed.failureDetail).toContain(errorMessage);
   });
 
-  it('should reject a non-UUID taskId at the schema boundary', () => {
-    const tool = getDeleteExtractRefreshTaskTool(new WebMcpServer());
+  it('should reject a non-UUID taskId at the schema boundary', async () => {
+    const tool = await getDeleteExtractRefreshTaskTool(new WebMcpServer());
     const taskIdSchema = (
       tool.paramsSchema as { taskId: { safeParse: (v: unknown) => { success: boolean } } }
     ).taskId;
@@ -278,8 +278,8 @@ describe('deleteExtractRefreshTaskTool', () => {
     expect(taskIdSchema.safeParse(validTaskId).success).toBe(true);
   });
 
-  it('should reject a non-UUID taskId at the schema boundary', () => {
-    const tool = getDeleteExtractRefreshTaskTool(new WebMcpServer());
+  it('should reject a non-UUID taskId at the schema boundary', async () => {
+    const tool = await getDeleteExtractRefreshTaskTool(new WebMcpServer());
     const taskIdSchema = (
       tool.paramsSchema as { taskId: { safeParse: (v: unknown) => { success: boolean } } }
     ).taskId;
@@ -291,11 +291,11 @@ describe('deleteExtractRefreshTaskTool', () => {
 
   describe('with mcp-apps flag ON', () => {
     beforeEach(() => {
-      mocks.mockIsFeatureEnabled.mockReturnValue(true);
+      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
     });
 
-    it('carries the delete-extract-refresh-task app config so the host renders the confirm iframe', () => {
-      const tool = getDeleteExtractRefreshTaskTool(new WebMcpServer());
+    it('carries the delete-extract-refresh-task app config so the host renders the confirm iframe', async () => {
+      const tool = await getDeleteExtractRefreshTaskTool(new WebMcpServer());
       expect(tool.app).toBeDefined();
       expect(tool.app?.resourceUri).toContain('delete-extract-refresh-task');
     });
@@ -340,7 +340,7 @@ async function getToolResult(args: {
   confirm?: boolean;
   confirmationToken?: string;
 }): Promise<CallToolResult> {
-  const tool = getDeleteExtractRefreshTaskTool(new WebMcpServer());
+  const tool = await getDeleteExtractRefreshTaskTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
     {

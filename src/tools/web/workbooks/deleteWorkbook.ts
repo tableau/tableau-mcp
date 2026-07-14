@@ -71,12 +71,14 @@ const paramsSchema = {
     ),
 };
 
-export const getDeleteWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+export const getDeleteWorkbookTool = async (
+  server: WebMcpServer,
+): Promise<WebTool<typeof paramsSchema>> => {
   const config = getConfig();
   // MCP-Apps HITL (AC-5): when the flag is ON, the preview carries an app so the host renders an
   // iframe confirm panel and the destructive step runs as a human gesture (confirm-delete-workbook).
   // Flag OFF → no `app`, byte-identical to today's tag/confirm behavior.
-  const mcpAppsEnabled = getFeatureGate().isFeatureEnabled('mcp-apps');
+  const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
 
   const deleteWorkbookTool = new WebTool({
     server,

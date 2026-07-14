@@ -744,8 +744,10 @@ async function getEnabledTools(): Promise<Array<string>> {
     // Best effort to get enabled tools.
     // Won't work if any tools are disabled based off some user config value,
     // like Tableau Server version. This script should fail if there was ever the case.
-    const tools = webToolFactories.map((toolFactory) =>
-      toolFactory({} as unknown as WebMcpServer, { value: '0.0.0', build: '0.0.0' }),
+    const tools = await Promise.all(
+      webToolFactories.map((toolFactory) =>
+        toolFactory({} as unknown as WebMcpServer, { value: '0.0.0', build: '0.0.0' }),
+      ),
     );
 
     const disabledResults = await Promise.all(tools.map((tool) => Provider.from(tool.disabled)));

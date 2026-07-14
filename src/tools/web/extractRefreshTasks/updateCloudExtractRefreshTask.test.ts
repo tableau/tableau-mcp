@@ -123,19 +123,19 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     mocks.mockQueryUserOnSite.mockResolvedValue({ siteRole: 'SiteAdministratorCreator' });
     mocks.mockUpdateCloudExtractRefreshTask.mockResolvedValue(new Ok(updatedTask));
     // Default: mcp-apps flag OFF → today's exact confirm-only behavior.
-    mocks.mockIsFeatureEnabled.mockReturnValue(false);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
   });
 
-  it('should create a tool instance with correct properties', () => {
-    const tool = getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+  it('should create a tool instance with correct properties', async () => {
+    const tool = await getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
     expect(tool.name).toBe('update-cloud-extract-refresh-task');
     expect(tool.description).toContain('Updates the schedule of an extract refresh task');
     expect(tool.paramsSchema).toHaveProperty('taskId');
     expect(tool.paramsSchema).toHaveProperty('schedule');
   });
 
-  it('should have correct annotations', () => {
-    const tool = getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+  it('should have correct annotations', async () => {
+    const tool = await getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
     expect(tool.annotations).toEqual({
       title: 'Update Cloud Extract Refresh Task',
       readOnlyHint: false,
@@ -150,7 +150,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     vi.mocked(getConfig).mockReturnValueOnce({
       adminToolsEnabled: false,
     } as ReturnType<typeof getConfig>);
-    const tool = getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+    const tool = await getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
@@ -680,11 +680,11 @@ describe('updateCloudExtractRefreshTaskTool', () => {
 
   describe('with mcp-apps flag ON', () => {
     beforeEach(() => {
-      mocks.mockIsFeatureEnabled.mockReturnValue(true);
+      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
     });
 
-    it('carries the update-cloud-extract-refresh-task app config so the host renders the confirm iframe', () => {
-      const tool = getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+    it('carries the update-cloud-extract-refresh-task app config so the host renders the confirm iframe', async () => {
+      const tool = await getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
       expect(tool.app).toBeDefined();
       expect(tool.app?.resourceUri).toContain('update-cloud-extract-refresh-task');
     });
@@ -739,7 +739,7 @@ async function getToolResult(args: {
   confirm?: boolean;
   confirmationToken?: string;
 }): Promise<CallToolResult> {
-  const tool = getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+  const tool = await getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
     {

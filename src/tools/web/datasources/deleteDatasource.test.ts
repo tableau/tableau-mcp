@@ -141,11 +141,11 @@ describe('deleteDatasourceTool', () => {
     mocks.mockAddTagsToDatasource.mockResolvedValue(undefined);
     mocks.mockDeleteDatasource.mockResolvedValue(undefined);
     // Default: mcp-apps flag OFF → today's exact tag/confirm behavior (no iframe, no approval).
-    mocks.mockIsFeatureEnabled.mockReturnValue(false);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
   });
 
-  it('should create a tool instance with correct properties', () => {
-    const tool = getDeleteDatasourceTool(new WebMcpServer());
+  it('should create a tool instance with correct properties', async () => {
+    const tool = await getDeleteDatasourceTool(new WebMcpServer());
     expect(tool.name).toBe('delete-datasource');
     expect(tool.description).toContain('deletes a published data source');
     expect(tool.paramsSchema).toHaveProperty('datasourceId');
@@ -157,12 +157,12 @@ describe('deleteDatasourceTool', () => {
     vi.mocked(getConfig).mockReturnValueOnce({
       adminToolsEnabled: false,
     } as ReturnType<typeof getConfig>);
-    const tool = getDeleteDatasourceTool(new WebMcpServer());
+    const tool = await getDeleteDatasourceTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
-  it('should have correct annotations for destructive operation', () => {
-    const tool = getDeleteDatasourceTool(new WebMcpServer());
+  it('should have correct annotations for destructive operation', async () => {
+    const tool = await getDeleteDatasourceTool(new WebMcpServer());
     expect(tool.annotations).toEqual({
       title: 'Delete Datasource',
       readOnlyHint: false,
@@ -339,15 +339,15 @@ describe('deleteDatasourceTool', () => {
     });
   });
 
-  it('should reject a tag that exceeds the schema length cap', () => {
-    const tool = getDeleteDatasourceTool(new WebMcpServer());
+  it('should reject a tag that exceeds the schema length cap', async () => {
+    const tool = await getDeleteDatasourceTool(new WebMcpServer());
     const tagSchema = (tool.paramsSchema as { tag: z.ZodOptional<z.ZodString> }).tag;
     expect(tagSchema.safeParse('a'.repeat(200)).success).toBe(true);
     expect(tagSchema.safeParse('a'.repeat(201)).success).toBe(false);
   });
 
-  it('should reject a tag with characters outside the safe class (prompt-injection guard)', () => {
-    const tool = getDeleteDatasourceTool(new WebMcpServer());
+  it('should reject a tag with characters outside the safe class (prompt-injection guard)', async () => {
+    const tool = await getDeleteDatasourceTool(new WebMcpServer());
     const tagSchema = (tool.paramsSchema as { tag: z.ZodOptional<z.ZodString> }).tag;
     // Allowed: letters, numbers, spaces, underscores, dashes.
     expect(tagSchema.safeParse('stale pending-deletion_2024').success).toBe(true);
@@ -601,11 +601,11 @@ describe('deleteDatasourceTool', () => {
 
   describe('with mcp-apps flag ON', () => {
     beforeEach(() => {
-      mocks.mockIsFeatureEnabled.mockReturnValue(true);
+      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
     });
 
-    it('carries the delete-datasource app config so the host renders the confirm iframe', () => {
-      const tool = getDeleteDatasourceTool(new WebMcpServer());
+    it('carries the delete-datasource app config so the host renders the confirm iframe', async () => {
+      const tool = await getDeleteDatasourceTool(new WebMcpServer());
       expect(tool.app).toBeDefined();
       expect(tool.app?.resourceUri).toContain('delete-datasource');
     });
@@ -670,7 +670,7 @@ async function getToolResult(args: {
   confirm?: boolean;
   tag?: string;
 }): Promise<CallToolResult> {
-  const tool = getDeleteDatasourceTool(new WebMcpServer());
+  const tool = await getDeleteDatasourceTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
     {

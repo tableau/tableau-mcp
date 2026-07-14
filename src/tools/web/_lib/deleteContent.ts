@@ -110,9 +110,11 @@ type DeleteContentResult =
   | AppToolResult<DeleteDatasourceConfirmPanel>
   | AppToolResult<DeleteExtractRefreshTaskConfirmPanel>;
 
-export const getDeleteContentTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+export const getDeleteContentTool = async (
+  server: WebMcpServer,
+): Promise<WebTool<typeof paramsSchema>> => {
   const config = getConfig();
-  const mcpAppsEnabled = getFeatureGate().isFeatureEnabled('mcp-apps');
+  const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
 
   const tool = new WebTool({
     server,

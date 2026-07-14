@@ -78,12 +78,14 @@ const paramsSchema = {
     ),
 };
 
-export const getDeleteDatasourceTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+export const getDeleteDatasourceTool = async (
+  server: WebMcpServer,
+): Promise<WebTool<typeof paramsSchema>> => {
   const config = getConfig();
   // MCP-Apps HITL: when the flag is ON, the preview carries an app so the host renders an iframe
   // confirm panel and the destructive step runs as a human gesture (confirm-delete-datasource).
   // Flag OFF → no `app`, byte-identical to today's tag/confirm behavior.
-  const mcpAppsEnabled = getFeatureGate().isFeatureEnabled('mcp-apps');
+  const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
 
   const deleteDatasourceTool = new WebTool({
     server,

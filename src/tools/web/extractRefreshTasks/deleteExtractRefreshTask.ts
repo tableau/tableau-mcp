@@ -49,14 +49,14 @@ const paramsSchema = {
     ),
 };
 
-export const getDeleteExtractRefreshTaskTool = (
+export const getDeleteExtractRefreshTaskTool = async (
   server: WebMcpServer,
-): WebTool<typeof paramsSchema> => {
+): Promise<WebTool<typeof paramsSchema>> => {
   const config = getConfig();
   // MCP-Apps HITL: when the flag is ON, the preview carries an app so the host renders an iframe
   // confirm panel and the destructive step runs as a human gesture (confirm-delete-extract-refresh-task).
   // Flag OFF → no `app`, byte-identical to today's nonce/confirmationToken behavior.
-  const mcpAppsEnabled = getFeatureGate().isFeatureEnabled('mcp-apps');
+  const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
 
   const deleteExtractRefreshTaskTool = new WebTool({
     server,

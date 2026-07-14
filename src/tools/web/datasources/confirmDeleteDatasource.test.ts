@@ -125,7 +125,7 @@ describe('confirmDeleteDatasourceTool', () => {
     });
     mocks.mockDeleteDatasource.mockResolvedValue(undefined);
     // The confirm tool is gated on mcp-apps ON (+ admin); registration tests flip this.
-    mocks.mockIsFeatureEnabled.mockReturnValue(true);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   it('is a model-invisible app-only tool gated on adminToolsEnabled && mcp-apps', () => {
@@ -152,7 +152,7 @@ describe('confirmDeleteDatasourceTool', () => {
   });
 
   it('is disabled when the mcp-apps flag is OFF', async () => {
-    mocks.mockIsFeatureEnabled.mockReturnValue(false);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
     const tool = getConfirmDeleteDatasourceTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
