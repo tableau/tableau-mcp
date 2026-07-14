@@ -72,6 +72,22 @@ describe('buildTwbx', () => {
     expect(twb).toContain("<window class='dashboard'");
   });
 
+  it('sizes the dashboard as automatic (fit-to-window) rather than a fixed pixel box', () => {
+    // The dashboard must fill the browser window, not render as a fixed 1000×800 box. In the .twb
+    // schema that is the <size sizing-mode='automatic' /> element (DashboardSizingMode::Automatic).
+    // Source of truth: monolith DashboardSizingEncoder.cpp maps Automatic → 'automatic', and the
+    // parser (DashboardSizeOptionsParser.cpp) treats min/max as optional — a bare
+    // <size sizing-mode='automatic' /> decodes cleanly to Automatic. Verified against the real
+    // Tableau-authored fixture PerformanceViz.twb, whose automatic dashboards emit exactly this.
+    const twb = entries(buildTwbx(base).bytes)['My Viz.twb'];
+    expect(twb).toContain("<size sizing-mode='automatic' />");
+    // And NOT the old fixed-size form (equal min==max with no sizing-mode → parsed as fixed).
+    expect(twb).not.toContain('maxheight=');
+    expect(twb).not.toContain('minwidth=');
+    // The outer layout zone still spans the full 100000×100000 canvas so content fills the dashboard.
+    expect(twb).toContain("type-v2='layout-basic' w='100000'");
+  });
+
   it('points the render chain at the FULL tableaulocalext:///<id>/content/index.html form', () => {
     // The reader keeps a scheme'd URL verbatim; a bare "content/index.html" would mis-resolve with
     // packageId="content". All three chain sites (zone param, add-in extension-url, referenced-

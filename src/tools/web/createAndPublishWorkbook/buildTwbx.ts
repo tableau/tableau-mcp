@@ -174,7 +174,11 @@ function renderTwb(i: BuildTwbxInput): string {
   <dashboards>
     <dashboard name='${name}'>
       <style />
-      <size maxheight='800' maxwidth='1000' minheight='800' minwidth='1000' />
+      <!-- Automatic sizing: the dashboard fits the browser window instead of a fixed pixel box.
+           Encodes DashboardSizingMode::Automatic (monolith DashboardSizingEncoder.cpp). min/max are
+           optional for this mode (DashboardSizeOptionsParser.cpp), so we emit the bare element —
+           matching real Tableau-authored automatic dashboards (e.g. PerformanceViz.twb). -->
+      <size sizing-mode='automatic' />
       <zones>
         <zone h='100000' id='4' type-v2='layout-basic' w='100000' x='0' y='0'>
           <zone forceUpdate='true' h='98000' id='3' param='[${id}].[1.0.0].[${url}]' type-v2='dashboard-object' w='98400' x='800' y='1000'>
