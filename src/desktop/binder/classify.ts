@@ -1335,7 +1335,9 @@ export function classifyNoLlm(
   // DEMOTE (family guard, W-23447710): a spatial-intent ask must never bind a
   // non-spatial keyword-count winner. Bare "map" stays out of CHART_NOUN_KEYWORDS
   // because it is dual-carrier within spatial; this guard is family-granular only.
-  if (askCarriesSpatialIntent(ask, maskedAsk, manifests) && chosen.family !== 'spatial') return null;
+  if (askCarriesSpatialIntent(ask, maskedAsk, manifests) && chosen.family !== 'spatial') {
+    return null;
+  }
 
   // DEMOTE (never hard-block): when the selected winner carries avoid_when
   // guidance whose terms appear in the ask, fall through to the propose leg so

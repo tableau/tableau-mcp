@@ -64,15 +64,21 @@ describe('tooltip-dimension-requires-attr rule', () => {
   });
 
   it('does not fire when the tooltip dimension is already an attr: instance', () => {
-    expect(tooltipDimensionRequiresAttrRule.validate(ws({ tooltipRef: '[DS].[attr:Segment:nk]' }))).toEqual([]);
+    expect(
+      tooltipDimensionRequiresAttrRule.validate(ws({ tooltipRef: '[DS].[attr:Segment:nk]' })),
+    ).toEqual([]);
   });
 
   it('does not fire when the tooltip carries a measure aggregate', () => {
-    expect(tooltipDimensionRequiresAttrRule.validate(ws({ tooltipRef: '[DS].[sum:Sales:qk]' }))).toEqual([]);
+    expect(
+      tooltipDimensionRequiresAttrRule.validate(ws({ tooltipRef: '[DS].[sum:Sales:qk]' })),
+    ).toEqual([]);
   });
 
   it('does not fire in a disaggregated view (no aggregate refs anywhere)', () => {
-    const issues = tooltipDimensionRequiresAttrRule.validate(ws({ cols: '[DS].[none:Region:nk]', rows: '' }));
+    const issues = tooltipDimensionRequiresAttrRule.validate(
+      ws({ cols: '[DS].[none:Region:nk]', rows: '' }),
+    );
     expect(issues).toEqual([]);
   });
 
@@ -81,11 +87,16 @@ describe('tooltip-dimension-requires-attr rule', () => {
   });
 
   it('skips none:...:qk refs (bins / exact-date quantitative instances)', () => {
-    expect(tooltipDimensionRequiresAttrRule.validate(ws({ tooltipRef: '[DS].[none:Sales (bin):qk]' }))).toEqual([]);
+    expect(
+      tooltipDimensionRequiresAttrRule.validate(ws({ tooltipRef: '[DS].[none:Sales (bin):qk]' })),
+    ).toEqual([]);
   });
 
   it('dedupes repeated identical tooltip refs to one issue', () => {
-    const xml = ws().replace('</encodings>', '<tooltip column="[DS].[none:Segment:nk]"/></encodings>');
+    const xml = ws().replace(
+      '</encodings>',
+      '<tooltip column="[DS].[none:Segment:nk]"/></encodings>',
+    );
     expect(tooltipDimensionRequiresAttrRule.validate(xml).length).toBe(1);
   });
 });

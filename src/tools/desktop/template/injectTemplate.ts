@@ -5,6 +5,11 @@ import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import {
+  bindExplicitTemplate,
+  formatExplicitBindErrors,
+} from '../../../desktop/binder/explicit-bind.js';
+import { summarizeSchema } from '../../../desktop/binder/schema-summary.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import {
@@ -100,6 +105,33 @@ export const getInjectTemplateTool = (
             // one. inject-template has no session, so the per-apply identity is the
             // target workbook file + apply timestamp; a randomUUID guards against
             // same-millisecond collisions.
+            // Manifest enforcement (P0 W-23447710): a caller-supplied mapping for a
+            // manifest-backed template is validated/corrected through the binder
+            // contract — slot derivations come from the manifest, not the caller.
+            let appliedFieldMapping = fieldMapping;
+            const explicitTemplateWarnings: string[] = [];
+            if (
+              templateParameters?.DATASOURCE &&
+              fieldMapping &&
+              Object.keys(fieldMapping).length > 0
+            ) {
+              const explicitBind = bindExplicitTemplate(
+                templateName,
+                fieldMapping,
+                summarizeSchema(workbookXml),
+                { title, datasource: templateParameters.DATASOURCE },
+              );
+
+              if (!explicitBind.ok) {
+                return new ArgsValidationError(
+                  formatExplicitBindErrors(templateName, explicitBind.errors),
+                ).toErr();
+              }
+
+              if (!explicitBind.passthrough) appliedFieldMapping = explicitBind.fieldMapping;
+              explicitTemplateWarnings.push(...explicitBind.warnings);
+            }
+
             const applyNonce = `${workbookFile}:${Date.now()}:${randomUUID()}`;
             const result = buildInjectedWorkbookXml({
               workbookXml,
@@ -107,7 +139,7 @@ export const getInjectTemplateTool = (
               title,
               sheetType,
               templateParameters,
-              fieldMapping,
+              fieldMapping: appliedFieldMapping,
               insertPosition,
               relativeSheetName,
               applyNonce,
@@ -119,16 +151,27 @@ export const getInjectTemplateTool = (
 
             writeFileSync(resolve(workbookFile), result.xml, 'utf-8');
 
-            return new Ok({ workbookFile, templateName, title, sheetType });
+            return new Ok({
+              workbookFile,
+              templateName,
+              title,
+              sheetType,
+              warnings: explicitTemplateWarnings,
+            });
           } catch (err) {
             return new FileReadError(err).toErr();
           }
         },
-        getSuccessResult: ({ workbookFile, templateName, title, sheetType }) => ({
+        getSuccessResult: ({ workbookFile, templateName, title, sheetType, warnings }) => ({
           content: [
             {
               type: 'text',
-              text: `Injected template "${templateName}" as "${title}" (${sheetType}).\n\nUpdated file: ${workbookFile}\n\nUse apply-workbook to apply changes to Tableau.`,
+              text:
+                `Injected template "${templateName}" as "${title}" (${sheetType}).` +
+                (warnings.length > 0
+                  ? `\n\nTemplate advisory warnings:\n${warnings.map((w) => `  - ${w}`).join('\n')}`
+                  : '') +
+                `\n\nUpdated file: ${workbookFile}\n\nUse apply-workbook to apply changes to Tableau.`,
             },
           ],
         }),

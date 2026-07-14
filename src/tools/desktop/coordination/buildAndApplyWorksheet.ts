@@ -4,6 +4,11 @@ import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import {
+  bindExplicitTemplate,
+  formatExplicitBindErrors,
+  schemaSummaryFromAvailableFields,
+} from '../../../desktop/binder/explicit-bind.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import {
@@ -169,15 +174,17 @@ export const getBuildAndApplyWorksheetTool = (
           const templateDimensions = templateRequirements.filter((c) => c.role === 'dimension');
           const templateMeasures = templateRequirements.filter((c) => c.role === 'measure');
 
-          const fieldMapping: Record<string, string> = {};
-          const fieldMetadata: Record<string, { datatype: string; type: string }> = {};
+          // Legacy positional mapping — kept ONLY as the no-manifest passthrough.
+          // Manifest-backed templates get their mapping from bindExplicitTemplate below.
+          const passthroughFieldMapping: Record<string, string> = {};
+          const passthroughFieldMetadata: Record<string, { datatype: string; type: string }> = {};
 
           for (let i = 0; i < templateDimensions.length && i < dimensionFields.length; i++) {
             const columnRef = dimensionFields[i];
             const field = availableFields.find((f) => f.column_ref === columnRef);
-            fieldMapping[templateDimensions[i].name] = columnRef;
+            passthroughFieldMapping[templateDimensions[i].name] = columnRef;
             if (field?.datatype && field.type) {
-              fieldMetadata[templateDimensions[i].name] = {
+              passthroughFieldMetadata[templateDimensions[i].name] = {
                 datatype: field.datatype,
                 type: field.type,
               };
@@ -187,9 +194,9 @@ export const getBuildAndApplyWorksheetTool = (
           for (let i = 0; i < templateMeasures.length && i < measureFields.length; i++) {
             const columnRef = measureFields[i];
             const field = availableFields.find((f) => f.column_ref === columnRef);
-            fieldMapping[templateMeasures[i].name] = columnRef;
+            passthroughFieldMapping[templateMeasures[i].name] = columnRef;
             if (field?.datatype && field.type) {
-              fieldMetadata[templateMeasures[i].name] = {
+              passthroughFieldMetadata[templateMeasures[i].name] = {
                 datatype: field.datatype,
                 type: field.type,
               };
@@ -208,6 +215,33 @@ export const getBuildAndApplyWorksheetTool = (
               `Measure field "${dropped}" was dropped: template "${template}" exposes only ${templateMeasures.length} measure slot(s).`,
             );
           }
+
+          // Manifest enforcement (P0 W-23447710): slot derivations/keys come from the
+          // manifest, never the caller's positional refs. Blockers stop the apply —
+          // stricter than the old behavior, which left sample fields in unmapped slots.
+          const explicitBind = bindExplicitTemplate(
+            template,
+            fields,
+            schemaSummaryFromAvailableFields(availableFields),
+            {
+              title: worksheetName,
+              datasource: datasourceName,
+              passthroughFieldMapping,
+            },
+          );
+
+          if (!explicitBind.ok) {
+            return new ArgsValidationError(
+              formatExplicitBindErrors(template, explicitBind.errors),
+            ).toErr();
+          }
+
+          warnings.push(...explicitBind.warnings);
+          const fieldMapping = explicitBind.fieldMapping;
+          const fieldMetadata =
+            Object.keys(explicitBind.fieldMetadata).length > 0
+              ? explicitBind.fieldMetadata
+              : passthroughFieldMetadata;
 
           // Inject title and replace field references. Per-apply calc namespacing is
           // wired at this tool boundary: the shared core defaults namespacing OFF and

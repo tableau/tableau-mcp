@@ -114,7 +114,11 @@ describe('ask-router — CHART_NOUN_KEYWORDS lockstep parity with classify.ts', 
 describe('ask-router — spatial-intent family guard (W-23447710)', () => {
   it('selectEligible refuses a non-spatial winner when the ask carries map intent', () => {
     const ms = [
-      mkManifest({ template: 'rank-map-trap', family: 'ranking', intent_keywords: ['top', 'highest'] }),
+      mkManifest({
+        template: 'rank-map-trap',
+        family: 'ranking',
+        intent_keywords: ['top', 'highest'],
+      }),
       mkManifest({ template: 'spatial-carrier', family: 'spatial', intent_keywords: ['map'] }),
     ];
     const ask = 'map of top sales by region, highest first';
@@ -138,8 +142,12 @@ describe('ask-router — spatial-intent family guard (W-23447710)', () => {
       const body = m![1].replace(/\/\/[^\n]*/g, '');
       return new Set([...body.matchAll(/['"]([^'"]+)['"]/g)].map((x) => x[1].toLowerCase()));
     }
-    const askRouterAliases = extractAliases(path.join(repoRoot, 'src', 'desktop', 'binder', 'ask-router.ts'));
-    const classifyAliases = extractAliases(path.join(repoRoot, 'src', 'desktop', 'binder', 'classify.ts'));
+    const askRouterAliases = extractAliases(
+      path.join(repoRoot, 'src', 'desktop', 'binder', 'ask-router.ts'),
+    );
+    const classifyAliases = extractAliases(
+      path.join(repoRoot, 'src', 'desktop', 'binder', 'classify.ts'),
+    );
     expect([...askRouterAliases].sort()).toEqual([...classifyAliases].sort());
   });
 });

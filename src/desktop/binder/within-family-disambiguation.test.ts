@@ -442,7 +442,9 @@ describe('classifyNoLlm — spatial-intent family guard (W-23447710)', () => {
   });
 
   it('does not demote a spatial winner — choropleth binds as before', () => {
-    const m = mapOf(synth('choropleth', 'spatial', ['choropleth', 'filled-map', 'map'], geoTriple()));
+    const m = mapOf(
+      synth('choropleth', 'spatial', ['choropleth', 'filled-map', 'map'], geoTriple()),
+    );
     const res = classifyNoLlm(
       'Build a choropleth filled map of Profit by State/Province within Country/Region.',
       m,
@@ -472,11 +474,15 @@ describe('classifyNoLlm — spatial-intent family guard (W-23447710)', () => {
       ],
     };
     const m = mapOf(
-      synth('scatter-latlon-trap', 'correlation', ['scatter', 'plot'], [
-        slot('x', 'quantitative'),
-        slot('y', 'quantitative'),
-      ]),
+      synth(
+        'scatter-latlon-trap',
+        'correlation',
+        ['scatter', 'plot'],
+        [slot('x', 'quantitative'), slot('y', 'quantitative')],
+      ),
     );
-    expect(classifyNoLlm('scatter plot of Latitude and Longitude by Location', m, coordSummary)).toBeNull();
+    expect(
+      classifyNoLlm('scatter plot of Latitude and Longitude by Location', m, coordSummary),
+    ).toBeNull();
   });
 });
