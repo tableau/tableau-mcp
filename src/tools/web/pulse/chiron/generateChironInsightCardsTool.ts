@@ -44,6 +44,50 @@ type PeriodComparison = {
   prior: PeriodValue;
 };
 
+// TOP CONTRIBUTING FACTORS: a dimension member + its raw contribution and the
+// share of the total swing it accounts for (the "% of lift" in the mockup).
+type Contributor = {
+  label: string;
+  value: number;
+  formatted: string;
+  sharePct: number | null;
+};
+
+// WHERE IT'S MOST / LEAST PRONOUNCED: a single dimension member and its own
+// period-over-period change (not its contribution to the aggregate).
+type Extreme = {
+  label: string;
+  value: number;
+  formatted: string;
+};
+
+type Pronounced = {
+  strongest: Extreme;
+  weakest: Extreme;
+};
+
+// WHAT'S UNUSUAL: the anomaly/unusual-change insight text plus the numeric
+// deviation from the baseline when Pulse provides it.
+type UnusualInsight = {
+  text: string;
+  factor: number | null;
+  baselineWindow: string | null;
+};
+
+// AVAILABLE ACTIONS: app-defined buttons the UI renders under the card. These
+// are the only non-governed part of the payload (labels, not data).
+type InsightAction = {
+  id: string;
+  label: string;
+  primary: boolean;
+};
+
+const DEFAULT_ACTIONS: InsightAction[] = [
+  { id: 'drill', label: 'Drill into this', primary: true },
+  { id: 'filter-top-driver', label: 'Filter to top driver', primary: false },
+  { id: 'build-viz', label: 'Build a viz from this', primary: false },
+];
+
 type InsightCard = {
   id: string;
   measure: string;
@@ -53,9 +97,25 @@ type InsightCard = {
   deltaPct: number | null;
   direction: InsightDirection;
   explanation: string;
+  // Block 2 in the detail mockup: "3× the trailing average of +4%".
+  context: string | null;
   comparison: PeriodComparison | null;
   series: SeriesPoint[];
   breakdown: BreakdownItem[];
+  // The primary dimension the contributors belong to, so the UI can build
+  // member-filter drills ("what's driving <member>?"). Best-effort: the first
+  // allowed dimension sent to Pulse for this card.
+  breakdownDimension: string | null;
+  // Block 3: TOP CONTRIBUTING FACTORS (breakdown + share of lift).
+  contributors: Contributor[];
+  // Block 4: WHERE IT'S MOST / LEAST PRONOUNCED.
+  pronounced: Pronounced | null;
+  // Block 5: WHAT'S UNUSUAL.
+  unusual: UnusualInsight | null;
+  // Block 6: SUGGESTED FOLLOW-UPS (generated from drivers + dimensions).
+  followUps: string[];
+  // Block 7: AVAILABLE ACTIONS (static button set).
+  actions: InsightAction[];
   provenance: 'governed';
   briefConfig: {
     tool: 'generate-pulse-metric-value-insight-bundle';
@@ -71,6 +131,12 @@ const paramsSchema = {
   measures: z.array(z.string().nonempty()).optional(),
   timeField: z.string().nonempty().optional(),
   maxCards: z.number().int().positive().max(10).optional(),
+  // Drill-down controls. `breakdownDimension` scopes the breakdown group to a
+  // single dimension; `filters` restrict the metric to specific members.
+  breakdownDimension: z.string().nonempty().optional(),
+  filters: z
+    .array(z.object({ field: z.string().nonempty(), value: z.string() }))
+    .optional(),
 };
 
 export const getGenerateChironInsightCardsTool = (
@@ -90,12 +156,12 @@ export const getGenerateChironInsightCardsTool = (
       openWorldHint: false,
     },
     callback: async (
-      { datasource, measures, timeField, maxCards },
+      { datasource, measures, timeField, maxCards, breakdownDimension, filters },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute({
         extra,
-        args: { datasource, measures, timeField, maxCards },
+        args: { datasource, measures, timeField, maxCards, breakdownDimension, filters },
         callback: async () => {
           const cardLimit = maxCards ?? 4;
           return await useRestApi({
@@ -137,7 +203,13 @@ export const getGenerateChironInsightCardsTool = (
                 ).toErr();
               }
 
-              const selectedDimensions = pickDimensions(metadataResult.value.data ?? []);
+              // The full set of categorical dimensions is always returned to the
+              // client so every (including drilled) insight can propose fresh
+              // "break down by <other dimension>" follow-ups. A drill request
+              // only narrows the *active* set used for this bundle's breakdown.
+              const allDimensions = pickDimensions(metadataResult.value.data ?? []);
+              const activeDimensions = breakdownDimension ? [breakdownDimension] : allDimensions;
+              const primaryDimension = activeDimensions[0] ?? null;
 
               const cards: InsightCard[] = [];
               for (const measure of selectedMeasures) {
@@ -146,7 +218,8 @@ export const getGenerateChironInsightCardsTool = (
                   datasourceName: resolved.name,
                   measure,
                   timeField: selectedTimeField,
-                  allowedDimensions: selectedDimensions,
+                  allowedDimensions: activeDimensions,
+                  filters,
                 });
                 const bundle = await runChironBundle({
                   extra,
@@ -163,6 +236,8 @@ export const getGenerateChironInsightCardsTool = (
                     datasourceLuid: resolved.luid,
                     measure,
                     timeField: selectedTimeField,
+                    dimensions: allDimensions,
+                    primaryDimension,
                     bundleResponse: bundle.value as PulseBundleResponse,
                     bundleRequest: request,
                   }),
@@ -175,6 +250,7 @@ export const getGenerateChironInsightCardsTool = (
                   contentUrl: resolved.contentUrl,
                   name: resolved.name,
                 },
+                dimensions: allDimensions,
                 cards,
                 generatedAt: new Date().toISOString(),
               });
@@ -271,12 +347,16 @@ function mapBundleToCard({
   datasourceLuid,
   measure,
   timeField,
+  dimensions,
+  primaryDimension,
   bundleResponse,
   bundleRequest,
 }: {
   datasourceLuid: string;
   measure: string;
   timeField: string;
+  dimensions: string[];
+  primaryDimension: string | null;
   bundleResponse: PulseBundleResponse;
   bundleRequest: z.infer<typeof pulseBundleRequestSchema>;
 }): InsightCard {
@@ -286,6 +366,7 @@ function mapBundleToCard({
 
   const markup = popcInsight?.result.markup ?? '';
   const parsed = parseFactsAndMarkup(popcInsight?.result.facts, markup);
+  const contributors = extractContributors(bundleResponse);
 
   return {
     id: `${datasourceLuid}:${measure}:trend`,
@@ -296,9 +377,16 @@ function mapBundleToCard({
     deltaPct: parsed.deltaPct,
     direction: parsed.direction,
     explanation: markup || 'No insight text available',
+    context: extractContext(popcInsight?.result.facts),
     comparison: extractComparison(popcInsight?.result.facts),
     series: extractSeries(bundleResponse),
-    breakdown: extractBreakdown(bundleResponse),
+    breakdown: contributors.map(({ label, value }) => ({ label, value })),
+    breakdownDimension: primaryDimension,
+    contributors,
+    pronounced: extractPronounced(bundleResponse),
+    unusual: extractUnusual(bundleResponse),
+    followUps: buildFollowUps({ contributors, dimensions }),
+    actions: DEFAULT_ACTIONS,
     provenance: 'governed',
     briefConfig: {
       tool: 'generate-pulse-metric-value-insight-bundle',
@@ -373,8 +461,9 @@ function extractSeries(bundleResponse: PulseBundleResponse): SeriesPoint[] {
 }
 
 // The detail bundle's breakdown group carries top-contributor bars per
-// filterable dimension. Shape varies, so detect a string label + numeric value.
-function extractBreakdown(bundleResponse: PulseBundleResponse): BreakdownItem[] {
+// filterable dimension. Shape varies, so detect a string label + numeric value,
+// then compute each member's share of the total swing ("% of lift").
+function extractContributors(bundleResponse: PulseBundleResponse): Contributor[] {
   const breakdownGroup = bundleResponse.bundle_response.result.insight_groups.find(
     (group) => group.type === 'breakdown',
   );
@@ -386,10 +475,7 @@ function extractBreakdown(bundleResponse: PulseBundleResponse): BreakdownItem[] 
     if (!values || values.length === 0) {
       continue;
     }
-    const rows = values.filter(
-      (row): row is Record<string, unknown> =>
-        !!row && typeof row === 'object' && !Array.isArray(row),
-    );
+    const rows = values.filter(isRecord);
     const sample = rows[0] ?? {};
     const keys = Object.keys(sample);
     const valueKey =
@@ -398,8 +484,12 @@ function extractBreakdown(bundleResponse: PulseBundleResponse): BreakdownItem[] 
     const labelKey =
       keys.find(
         (k) =>
-          typeof sample[k] === 'string' && /name|label|dim|category|member|caption|contributor/i.test(k),
+          typeof sample[k] === 'string' &&
+          /name|label|dim|category|member|caption|contributor/i.test(k),
       ) ?? keys.find((k) => typeof sample[k] === 'string');
+    const formattedKey = keys.find(
+      (k) => typeof sample[k] === 'string' && /formatted/i.test(k),
+    );
     if (!valueKey || !labelKey) {
       continue;
     }
@@ -407,14 +497,146 @@ function extractBreakdown(bundleResponse: PulseBundleResponse): BreakdownItem[] 
       .map((row) => ({
         label: typeof row[labelKey] === 'string' ? (row[labelKey] as string) : '',
         value: coerceNum(row[valueKey]),
+        formatted:
+          formattedKey && typeof row[formattedKey] === 'string'
+            ? (row[formattedKey] as string)
+            : null,
       }))
-      .filter((item): item is BreakdownItem => item.label !== '' && item.value !== null)
+      .filter((item): item is { label: string; value: number; formatted: string | null } =>
+        item.label !== '' && item.value !== null,
+      )
       .slice(0, 6);
-    if (items.length > 0) {
-      return items;
+    if (items.length === 0) {
+      continue;
     }
+    const total = items.reduce((sum, item) => sum + Math.abs(item.value), 0);
+    return items.map((item) => ({
+      label: item.label,
+      value: item.value,
+      formatted: item.formatted ?? `${item.value}`,
+      sharePct: total > 0 ? Math.round((Math.abs(item.value) / total) * 100) : null,
+    }));
   }
   return [];
+}
+
+// WHERE IT'S MOST / LEAST PRONOUNCED: scan viz value arrays for rows carrying a
+// per-member percentage/delta field, then pick the strongest and weakest member.
+function extractPronounced(bundleResponse: PulseBundleResponse): Pronounced | null {
+  for (const values of collectVizValues(bundleResponse)) {
+    const rows = values.filter(isRecord);
+    const sample = rows[0] ?? {};
+    const keys = Object.keys(sample);
+    const pctKey = keys.find(
+      (k) => typeof sample[k] === 'number' && /percent|delta|change|pct/i.test(k),
+    );
+    const labelKey =
+      keys.find(
+        (k) =>
+          typeof sample[k] === 'string' && /name|label|dim|category|member|caption/i.test(k),
+      ) ?? keys.find((k) => typeof sample[k] === 'string');
+    if (!pctKey || !labelKey) {
+      continue;
+    }
+    const formattedKey = keys.find(
+      (k) => typeof sample[k] === 'string' && /formatted/i.test(k),
+    );
+    const members = rows
+      .map((row) => ({
+        label: typeof row[labelKey] === 'string' ? (row[labelKey] as string) : '',
+        value: coerceNum(row[pctKey]),
+        formatted:
+          formattedKey && typeof row[formattedKey] === 'string'
+            ? (row[formattedKey] as string)
+            : null,
+      }))
+      .filter((m): m is { label: string; value: number; formatted: string | null } =>
+        m.label !== '' && m.value !== null,
+      );
+    if (members.length === 0) {
+      continue;
+    }
+    const sorted = [...members].sort((a, b) => b.value - a.value);
+    const toExtreme = (m: { label: string; value: number; formatted: string | null }): Extreme => ({
+      label: m.label,
+      value: m.value,
+      formatted: m.formatted ?? formatSignedPct(m.value),
+    });
+    return {
+      strongest: toExtreme(sorted[0]),
+      weakest: toExtreme(sorted[sorted.length - 1]),
+    };
+  }
+  return null;
+}
+
+// WHAT'S UNUSUAL: the anomaly / unusual-change insight text plus, when present,
+// the numeric deviation factor and baseline window from its facts.
+function extractUnusual(bundleResponse: PulseBundleResponse): UnusualInsight | null {
+  const insight = bundleResponse.bundle_response.result.insight_groups
+    .flatMap((group) => group.insights ?? [])
+    .find((i) => /unusual|anomaly/i.test(i.insight_type));
+  const text = insight?.result.markup ?? '';
+  if (!text) {
+    return null;
+  }
+  const facts = insight?.result.facts;
+  const record = isRecord(facts) ? facts : {};
+  const baselineWindow =
+    typeof record.baseline_window === 'string'
+      ? record.baseline_window
+      : typeof record.baseline === 'string'
+        ? record.baseline
+        : null;
+  return {
+    text,
+    factor: coerceNum(record.deviation_factor ?? record.factor ?? record.std_devs),
+    baselineWindow,
+  };
+}
+
+// Block 2: "3× the trailing average of +4%". Built from popc facts when Pulse
+// exposes the relative-to-average ratio and typical change; otherwise null.
+function extractContext(facts: unknown): string | null {
+  const record = isRecord(facts) ? facts : {};
+  const ratio = coerceNum(record.relative_to_average ?? record.average_multiple);
+  const typical = coerceNum(record.typical_delta_percent ?? record.average_delta_percent);
+  if (ratio !== null && typical !== null) {
+    return `${ratio}× the trailing average of ${formatSignedPct(typical)}`;
+  }
+  const formatted = record.average_comparison ?? record.context;
+  return typeof formatted === 'string' && formatted !== '' ? formatted : null;
+}
+
+// Block 6: SUGGESTED FOLLOW-UPS. Deterministic prompts derived from the top
+// driver and the datasource's categorical dimensions (not from Pulse).
+function buildFollowUps({
+  contributors,
+  dimensions,
+}: {
+  contributors: Contributor[];
+  dimensions: string[];
+}): string[] {
+  const followUps: string[] = [];
+  const topDriver = contributors[0]?.label;
+  if (topDriver) {
+    followUps.push(`What's driving ${topDriver}?`);
+  }
+  if (dimensions[0]) {
+    followUps.push(`Compare across ${dimensions[0]}`);
+  }
+  if (dimensions[1]) {
+    followUps.push(`Break down by ${dimensions[1]}`);
+  }
+  return followUps;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function formatSignedPct(value: number): string {
+  return `${value > 0 ? '+' : ''}${value}%`;
 }
 
 // The popc insight's facts hold the exact period-over-period comparison that the

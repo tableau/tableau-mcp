@@ -1,11 +1,14 @@
 import { PulseBundleRequest } from '../../../../sdks/tableau/apis/pulseApi.js';
 
+type ChironFilter = { field: string; value: string };
+
 type BuildChironBundleRequestArgs = {
   datasourceLuid: string;
   datasourceName: string;
   measure: string;
   timeField: string;
   allowedDimensions?: string[];
+  filters?: ChironFilter[];
 };
 
 export function buildChironBundleRequest({
@@ -14,7 +17,20 @@ export function buildChironBundleRequest({
   measure,
   timeField,
   allowedDimensions = [],
+  filters = [],
 }: BuildChironBundleRequestArgs): PulseBundleRequest {
+  // Categorical equality filters scope the metric to specific dimension members
+  // (drill-down). Shape matches pulseFilterSchema.
+  // Categorical equality filter scoping the metric to a dimension member.
+  // Confirmed against the live Pulse API: the operator must be the enum
+  // 'OPERATOR_EQUAL' (not '='), and each categorical value must carry ONLY
+  // string_value — sending bool_value/null_value alongside triggers HTTP 400.
+  const pulseFilters = filters.map((f) => ({
+    field: f.field,
+    operator: 'OPERATOR_EQUAL',
+    categorical_values: [{ string_value: f.value }],
+  }));
+
   return {
     bundle_request: {
       version: 1,
@@ -44,7 +60,9 @@ export function buildChironBundleRequest({
             is_running_total: false,
           },
           metric_specification: {
-            filters: [],
+            // Member filters scope the metric *instance* (drill-down), so they
+            // belong here rather than in the definition's basic_specification.
+            filters: pulseFilters,
             // Current month-to-date vs the prior period (period-over-period change).
             // The card renders this comparison directly so the chart matches the
             // insight's wording ("... month to date ... compared to the prior period").
