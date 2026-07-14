@@ -5,10 +5,10 @@
  * is 'delete-workbook-confirm'. This module renders that into a confirm panel inside the iframe:
  * workbook name/project/owner, a live countdown to the approval expiry, and Confirm/Cancel buttons.
  *
- * Clicking Confirm invokes `delete-content` with `confirm: true` via `app.callServerTool` — that
- * human gesture IS the approval the server's AppApprovalEvidence verifies. The countdown is advisory
- * only: the server independently rejects an expired approval, so disabling the button past expiry is
- * a UX nicety, not the security boundary.
+ * Clicking Confirm invokes the app-only `confirm-delete-content` tool via `app.callServerTool` —
+ * that human gesture IS the approval the server's AppApprovalEvidence verifies. The countdown is
+ * advisory only: the server independently rejects an expired approval, so disabling the button past
+ * expiry is a UX nicety, not the security boundary.
  */
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { z } from 'zod';
@@ -66,8 +66,8 @@ function row(label: string, value: string | undefined): string {
 
 /**
  * Renders the confirm panel into #root (or document.body) and wires Confirm/Cancel + the countdown.
- * Confirm calls delete-content(confirm: true) — the single human gesture that authorizes the
- * destructive delete server-side.
+ * Confirm calls confirm-delete-content(resourceType, resourceId) — the single human gesture that
+ * authorizes the destructive delete server-side.
  */
 export function renderDeleteWorkbookConfirm(app: App, result: unknown): void {
   const panel = parseDeleteWorkbookConfirmResult(result);
@@ -144,8 +144,8 @@ export function renderDeleteWorkbookConfirm(app: App, result: unknown): void {
     confirmBtn.disabled = true;
     void app
       .callServerTool({
-        name: 'delete-content',
-        arguments: { resourceType: 'workbook', resourceId: panel.workbookId, confirm: true },
+        name: 'confirm-delete-content',
+        arguments: { resourceType: 'workbook', resourceId: panel.workbookId },
       })
       .then((res) => {
         const text = callToolResultSchema.safeParse(res).success

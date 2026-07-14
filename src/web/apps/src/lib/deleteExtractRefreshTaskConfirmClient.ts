@@ -6,10 +6,10 @@
  * panel inside the iframe: the task id, a live countdown to the approval expiry, and Confirm/Cancel
  * buttons. (A task has no name/project/owner.)
  *
- * Clicking Confirm invokes `delete-content` with `confirm: true` via `app.callServerTool` — that
- * human gesture IS the approval the server's AppApprovalEvidence verifies. The countdown is advisory
- * only: the server independently rejects an expired approval, so disabling the button past expiry is
- * a UX nicety, not the security boundary.
+ * Clicking Confirm invokes the app-only `confirm-delete-content` tool via `app.callServerTool` —
+ * that human gesture IS the approval the server's AppApprovalEvidence verifies. The countdown is
+ * advisory only: the server independently rejects an expired approval, so disabling the button past
+ * expiry is a UX nicety, not the security boundary.
  *
  * The panel is built entirely with DOM APIs (createElement + textContent) — never innerHTML — so no
  * server-derived string is ever interpreted as markup.
@@ -158,11 +158,10 @@ export function renderDeleteExtractRefreshTaskConfirm(app: App, result: unknown)
     confirmBtn.disabled = true;
     void app
       .callServerTool({
-        name: 'delete-content',
+        name: 'confirm-delete-content',
         arguments: {
           resourceType: 'extract-refresh-task',
           resourceId: panel.taskId,
-          confirm: true,
         },
       })
       .then((res) => {

@@ -7,6 +7,7 @@ import {
   ArgsValidationError,
   DatasourceNotAllowedError,
   McpToolError,
+  PreviewNotRunError,
   WorkbookNotAllowedError,
 } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
@@ -179,6 +180,14 @@ permanent.
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
+              if (confirm && mcpAppsEnabled) {
+                return new PreviewNotRunError(
+                  `Mutation blocked: deleting a ${resourceType} requires a human ` +
+                    'confirmation in the approval panel. Run delete-content in preview (omit ' +
+                    'confirm) to open the panel; the deletion is performed only when a person ' +
+                    "clicks Delete. The assistant cannot confirm on the user's behalf.",
+                ).toErr();
+              }
               switch (resourceType) {
                 case 'workbook':
                   return await runWorkbookBranch({

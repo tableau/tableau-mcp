@@ -271,6 +271,25 @@ This means that:
   [`MAX_RESULT_LIMIT`](#max_result_limit) variable will be used instead.
 - Each limit must be a positive number, or `*` to indicate unbounded results.
 
+:::warning v3.0.0 Migration
+
+In v3.0.0, the following tool names were removed and consolidated into `query-admin-insights` and `delete-content`:
+
+- `query-admin-insights-ts-events`
+- `query-admin-insights-site-content`
+- `query-admin-insights-job-performance`
+- `get-stale-content-report`
+- `delete-workbook`
+- `delete-datasource`
+- `delete-extract-refresh-task`
+- `confirm-delete-workbook`
+- `confirm-delete-datasource`
+- `confirm-delete-extract-refresh-task`
+
+If your `MAX_RESULT_LIMITS`, `INCLUDE_TOOLS`, or `EXCLUDE_TOOLS` configuration references any of these names, update them to use the consolidated tool names. Unrecognized names are silently ignored.
+
+:::
+
 <hr />
 
 ## `DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`

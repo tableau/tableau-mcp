@@ -30,6 +30,7 @@ export const webToolNames = [
   'reset-consent',
   'query-admin-insights',
   'delete-content',
+  'confirm-delete-content',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
@@ -81,7 +82,7 @@ export const webToolGroups = {
   users: ['list-users'],
   'token-management': ['get-embed-token', 'revoke-access-token', 'reset-consent'],
   'admin-insights': ['query-admin-insights'],
-  content: ['delete-content'],
+  content: ['delete-content', 'confirm-delete-content'],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 
 export function isWebToolName(value: unknown): value is WebToolName {

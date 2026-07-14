@@ -6,10 +6,10 @@
  * data source name/project/owner, a live countdown to the approval expiry, and Confirm/Cancel
  * buttons.
  *
- * Clicking Confirm invokes `delete-content` with `confirm: true` via `app.callServerTool` — that
- * human gesture IS the approval the server's AppApprovalEvidence verifies. The countdown is advisory
- * only: the server independently rejects an expired approval, so disabling the button past expiry is
- * a UX nicety, not the security boundary.
+ * Clicking Confirm invokes the app-only `confirm-delete-content` tool via `app.callServerTool` —
+ * that human gesture IS the approval the server's AppApprovalEvidence verifies. The countdown is
+ * advisory only: the server independently rejects an expired approval, so disabling the button past
+ * expiry is a UX nicety, not the security boundary.
  */
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { z } from 'zod';
@@ -145,8 +145,8 @@ export function renderDeleteDatasourceConfirm(app: App, result: unknown): void {
     confirmBtn.disabled = true;
     void app
       .callServerTool({
-        name: 'delete-content',
-        arguments: { resourceType: 'datasource', resourceId: panel.datasourceId, confirm: true },
+        name: 'confirm-delete-content',
+        arguments: { resourceType: 'datasource', resourceId: panel.datasourceId },
       })
       .then((res) => {
         const text = callToolResultSchema.safeParse(res).success

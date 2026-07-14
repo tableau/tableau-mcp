@@ -177,6 +177,46 @@ describe('query-admin-insights tool', () => {
     }
     expect(result.content[0].text).toContain('admin');
   });
+
+  it('applies the configured cap when lower than the requested limit', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok({ data: [] }));
+
+    await getToolResult({
+      kind: 'ts-events',
+      query: validQuery,
+      limit: 50,
+      maxResultLimits: 'query-admin-insights:10',
+    });
+
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+      expect.objectContaining({ options: expect.objectContaining({ rowLimit: 10 }) }),
+    );
+  });
+
+  it('applies the requested limit when no cap is configured', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok({ data: [] }));
+
+    await getToolResult({ kind: 'site-content', query: validQuery, limit: 50 });
+
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+      expect.objectContaining({ options: expect.objectContaining({ rowLimit: 50 }) }),
+    );
+  });
+
+  it('applies the requested limit when it is lower than the configured cap', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok({ data: [] }));
+
+    await getToolResult({
+      kind: 'job-performance',
+      query: validQuery,
+      limit: 20,
+      maxResultLimits: 'query-admin-insights:100',
+    });
+
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+      expect.objectContaining({ options: expect.objectContaining({ rowLimit: 20 }) }),
+    );
+  });
 });
 
 async function getToolResult(params: {

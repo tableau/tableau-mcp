@@ -1,3 +1,4 @@
+import { getConfirmDeleteContentTool } from './_lib/confirmDeleteContent.js';
 import { getDeleteContentTool } from './_lib/deleteContent.js';
 import { getQueryAdminInsightsTool } from './adminInsights/queryAdminInsights.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
@@ -62,4 +63,5 @@ export const webToolFactories = [
   getResetConsentTool,
   getQueryAdminInsightsTool,
   getDeleteContentTool,
+  getConfirmDeleteContentTool,
 ];

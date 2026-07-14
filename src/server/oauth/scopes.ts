@@ -246,6 +246,19 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
+  // Admin-only, app-only confirm step for delete-content (MCP-Apps HITL). Invoked ONLY by a human gesture in the rendered iframe (visibility:['app']), never the model.
+  'confirm-delete-content': {
+    mcp: ['tableau:mcp:content:delete'],
+    api: new Set([
+      'tableau:workbooks:delete',
+      'tableau:workbook_tags:update',
+      'tableau:datasources:delete',
+      'tableau:datasource_tags:update',
+      'tableau:tasks:delete',
+      'tableau:users:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
+  },
 };
 
 async function getEnabledToolNames(): Promise<Set<WebToolName>> {

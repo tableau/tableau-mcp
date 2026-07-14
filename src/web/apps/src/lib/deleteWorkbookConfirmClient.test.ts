@@ -89,8 +89,8 @@ describe('renderDeleteWorkbookConfirm', () => {
     confirmBtn.click();
     await Promise.resolve();
     expect(app.callServerTool).toHaveBeenCalledWith({
-      name: 'delete-content',
-      arguments: { resourceType: 'workbook', resourceId: 'wb-1', confirm: true },
+      name: 'confirm-delete-content',
+      arguments: { resourceType: 'workbook', resourceId: 'wb-1' },
     });
   });
 
