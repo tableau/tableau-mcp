@@ -7,7 +7,14 @@ import pkg from '~/package.json';
 
 import { handleToolResult } from './lib/handleToolResult.js';
 
-const app = new App({ name: 'Tableau MCP App', version: pkg.version });
+// Declare the display modes this app supports. The host will not grant a mode we did not advertise,
+// so `fullscreen` here is what makes the preview's Expand control functional (setupExpandControl).
+// `inline` is always the initial, host-chosen mode — there is no _meta field to request a larger
+// initial surface, so any enlargement goes through the runtime requestDisplayMode path.
+const app = new App(
+  { name: 'Tableau MCP App', version: pkg.version },
+  { availableDisplayModes: ['inline', 'fullscreen'] },
+);
 
 // The host delivers a tool's complete arguments via `ui/notifications/tool-input` BEFORE the result
 // (`ui/notifications/tool-result`). We stash the built dashboard HTML from the *input* here so the

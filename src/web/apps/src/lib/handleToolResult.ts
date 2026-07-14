@@ -3,6 +3,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { embedTableauViz } from './embedTableauViz.js';
+import { setupExpandControl } from './expandControl.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
@@ -84,8 +85,11 @@ export async function handleToolResult(
     if (dashboardHtml) {
       try {
         renderDashboardPreview(dashboardHtml);
+        // Offer an Expand -> fullscreen control on the preview. Best-effort and self-gating: it
+        // no-ops unless the host advertises `fullscreen`. Must never take down the working card.
+        setupExpandControl(app);
       } catch (e) {
-        // A failed preview must never take down the (working) card.
+        // A failed preview/control must never take down the (working) card.
         console.error('[mcp-app] Failed to render dashboard preview', e);
       }
     }

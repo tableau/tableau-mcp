@@ -235,6 +235,7 @@ tableau-viz {
    frame is a sandboxed (opaque-origin) srcdoc iframe rendering untrusted HTML — see
    renderDashboardPreview.ts. */
 .dashboard-preview {
+  position: relative; /* anchors the floating Expand button (top-right) */
   margin: 12px;
   border: 1px solid #e3e6ea;
   border-radius: 12px;
@@ -251,4 +252,63 @@ tableau-viz {
   height: 480px;
   border: 0;
   background: #ffffff;
+}
+
+/* "Expand"/"Collapse" control that toggles the app's display mode (inline <-> fullscreen). Floats
+   over the top-right of the preview. Only rendered when the host advertises `fullscreen`. */
+.expand-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid #e3e6ea;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(4px);
+  color: #1f6feb;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.12);
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.expand-toggle:hover {
+  background: #ffffff;
+  border-color: #c9d3dd;
+}
+
+.expand-toggle:focus-visible {
+  outline: 2px solid #0066cc;
+  outline-offset: 2px;
+}
+
+.expand-toggle:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.expand-toggle svg {
+  display: block;
+}
+
+/* Fullscreen: the host has handed us the large surface (in Claude, the right-hand canvas). Let the
+   preview fill it edge-to-edge and grow the frame to the viewport; the card stays below. */
+.main.is-fullscreen .dashboard-preview {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.main.is-fullscreen .dashboard-preview-frame {
+  height: 100vh;
 }
