@@ -110,3 +110,36 @@ describe('ask-router — CHART_NOUN_KEYWORDS lockstep parity with classify.ts', 
     expect(src).not.toMatch(/import\(\s*['"][^'"]*\/classify[^'"]*['"]\s*\)/);
   });
 });
+
+describe('ask-router — spatial-intent family guard (W-23447710)', () => {
+  it('selectEligible refuses a non-spatial winner when the ask carries map intent', () => {
+    const ms = [
+      mkManifest({ template: 'rank-map-trap', family: 'ranking', intent_keywords: ['top', 'highest'] }),
+      mkManifest({ template: 'spatial-carrier', family: 'spatial', intent_keywords: ['map'] }),
+    ];
+    const ask = 'map of top sales by region, highest first';
+    expect(selectEligible(ask, ms, ask)).toBeNull();
+  });
+
+  it('selectEligible still binds non-map asks decisively', () => {
+    const ms = [
+      mkManifest({ template: 'rank-bar', family: 'ranking', intent_keywords: ['bar'] }),
+      mkManifest({ template: 'spatial-carrier', family: 'spatial', intent_keywords: ['map'] }),
+    ];
+    const ask = 'bar chart of sales by region';
+    expect(selectEligible(ask, ms, ask)?.template).toBe('rank-bar');
+  });
+
+  it('SPATIAL_INTENT_ALIASES stays lockstep with classify.ts (set equality)', () => {
+    function extractAliases(file: string): Set<string> {
+      const src = fs.readFileSync(file, 'utf8');
+      const m = src.match(/const\s+SPATIAL_INTENT_ALIASES[^=]*=\s*new Set\(\[([\s\S]*?)\]\)/);
+      expect(m, `SPATIAL_INTENT_ALIASES Set literal not found in ${file}`).not.toBeNull();
+      const body = m![1].replace(/\/\/[^\n]*/g, '');
+      return new Set([...body.matchAll(/['"]([^'"]+)['"]/g)].map((x) => x[1].toLowerCase()));
+    }
+    const askRouterAliases = extractAliases(path.join(repoRoot, 'src', 'desktop', 'binder', 'ask-router.ts'));
+    const classifyAliases = extractAliases(path.join(repoRoot, 'src', 'desktop', 'binder', 'classify.ts'));
+    expect([...askRouterAliases].sort()).toEqual([...classifyAliases].sort());
+  });
+});

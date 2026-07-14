@@ -131,6 +131,56 @@ function wonChartNoun(maskedAsk: string, keywords: string[]): boolean {
 }
 
 /**
+ * FAMILY-LEVEL spatial intent guard vocabulary — hand-mirrored from classify.ts
+ * (this file must not import the classifier); a parity test enforces set equality.
+ * See classify.ts for the full rationale (W-23447710, Cluster A selection half).
+ */
+const SPATIAL_INTENT_ALIASES: ReadonlySet<string> = new Set([
+  'geo',
+  'geographic',
+  'geographical',
+  'geographically',
+  'coordinate',
+  'coordinates',
+  'gps',
+  'lat/long',
+  'lat/lon',
+  'lat-long',
+  'lat-lon',
+]);
+
+function spatialIntentPhrases(manifests: TemplateManifest[]): Set<string> {
+  const phrases = new Set<string>(SPATIAL_INTENT_ALIASES);
+  for (const m of manifests) {
+    if (m.family !== 'spatial') continue;
+    for (const kw of m.intent_keywords) phrases.add(kw.toLowerCase());
+  }
+  return phrases;
+}
+
+/** Lat+lon named together is coordinate intent even without a map noun. */
+function hasCoordinatePairIntent(rawAsk: string): boolean {
+  const hasLat = phraseIndexInAsk(rawAsk, 'latitude') >= 0 || phraseIndexInAsk(rawAsk, 'lat') >= 0;
+  const hasLon =
+    phraseIndexInAsk(rawAsk, 'longitude') >= 0 ||
+    phraseIndexInAsk(rawAsk, 'lon') >= 0 ||
+    phraseIndexInAsk(rawAsk, 'lng') >= 0 ||
+    phraseIndexInAsk(rawAsk, 'long') >= 0;
+  return hasLat && hasLon;
+}
+
+function askCarriesSpatialIntent(
+  rawAsk: string,
+  maskedAsk: string,
+  manifests: TemplateManifest[],
+): boolean {
+  for (const phrase of spatialIntentPhrases(manifests)) {
+    if (phraseIndexInAsk(maskedAsk, phrase) >= 0) return true;
+  }
+  return hasCoordinatePairIntent(rawAsk);
+}
+
+/**
  * BIND-path template selection over the ELIGIBLE pool. Fail-closed: bind only on a UNIQUE
  * keyword-argmax winner that is DECISIVE (won a family-native keyword OR a distinctive chart
  * noun). Any keyword-score tie ⇒ null. `selectEligible` enforces the `fast_path_eligible`
@@ -142,6 +192,7 @@ function wonChartNoun(maskedAsk: string, keywords: string[]): boolean {
 export function selectEligible(
   maskedAsk: string,
   manifests: TemplateManifest[],
+  rawAsk = maskedAsk,
 ): TemplateManifest | null {
   const scored = manifests
     .filter((m) => m.fast_path_eligible)
@@ -152,6 +203,8 @@ export function selectEligible(
   const top = scored.filter((s) => s.score === maxScore);
   if (top.length !== 1) return null; // fail-closed on any tie
   const m = top[0].m;
+  // Family guard (W-23447710): a spatial-intent ask never binds a non-spatial winner.
+  if (m.family !== 'spatial' && askCarriesSpatialIntent(rawAsk, maskedAsk, manifests)) return null;
   const native = familyNativeKeywords(m.family, manifests);
   const won = matchedKeywords(maskedAsk, m.intent_keywords);
   const decisive =

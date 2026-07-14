@@ -225,7 +225,7 @@ export function classifyAskRoute(
 
   // Wrap (never fork) selectEligible's input with a light normalization pass so a reworded,
   // keyword-bearing near-paraphrase classifies the same as the canonical ask.
-  const eligible = selectEligible(normalizeAskForMatch(text), manifests);
+  const eligible = selectEligible(normalizeAskForMatch(text), manifests, text);
   if (eligible) {
     return decide(
       'bind-first-template',
