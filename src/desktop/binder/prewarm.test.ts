@@ -53,13 +53,15 @@ describe('prewarm/prewarmForDatasource', () => {
     expect(fams).toEqual([...fams].sort());
     expect(fams).toContain('ranking');
     expect(fams).toContain('kpi');
-    // A render-unverified template must not appear anywhere. (W60: the negative example
-    // moved from correlation-scatter-plot-chart — whose factory stamp crossed, now
-    // eligible — to its still-unverified sibling connected-scatterplot.)
+    // A render-unverified template must not appear anywhere. (W60 used connected-scatterplot
+    // as the negative; W63's live-2026-07-13 stamp made it eligible, so the negative example
+    // moved to its still-unverified sibling pareto-chart. connected-scatterplot is now
+    // asserted PRESENT below.)
     const allTemplates = r.families.flatMap((f) => f.templates.map((t) => t.template));
     expect(allTemplates).toContain('ranking-ordered-bar');
     expect(allTemplates).toContain('correlation-scatter-plot-chart');
-    expect(allTemplates).not.toContain('connected-scatterplot');
+    expect(allTemplates).toContain('connected-scatterplot');
+    expect(allTemplates).not.toContain('pareto-chart');
   });
 
   it('precomputes per-slot candidate field shortlists by kind', () => {

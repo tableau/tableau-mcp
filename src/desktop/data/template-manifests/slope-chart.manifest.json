@@ -2,11 +2,31 @@
   "template": "slope-chart",
   "family": "time-series",
   "readiness": "YELLOW",
-  "fast_path_eligible": false,
+  "fast_path_eligible": true,
   "fast_path_blockers": [],
   "portability_evidence": {
     "fixture_bind": true,
-    "render_verified": "none"
+    "render_verified": "live-2026-07-13",
+    "xml_sha256": "01819256a825acdd3ad9b9478d2af036141d6f687831776fbed4b24e8b5b3a7e",
+    "render_evidence": {
+      "method": "gate-composite",
+      "date": "2026-07-13",
+      "structural": 0.89189,
+      "critical_pass": "5/5",
+      "high_pass": "2/3",
+      "pixel": 1,
+      "pixel_regions": 6,
+      "sanity": "sane",
+      "sanity_signals": [
+        "mark-count=pass reconciled=true (8=8 == EXPECTED_COUNT, Worksheet>Copy>Data on source and applied sheets — 2 endpoint years × COUNTD([Region])=4 on the bundled Sample - Superstore, offline-pinnable absolute)",
+        "caption-leak=pass"
+      ],
+      "run": "oracle-leg replay (W63 stamp batch): independent authored oracle on bundled Sample - Superstore; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity fill with the date-grain rewrite; all 12 config facets green on the applied readback (mark=Line, year-trunc endpoints, Slope Filter calc, endpoint slice, line-end labels, no lod).",
+      "basis": "golden-parity gate run 2026-07-13 (oracle-leg): structural 0.89189 (5/5 critical; 2/3 high — the sole s3 miss is label-column-instances on the DISTINCT Slope Filter calc id, the ORACLE-CONTRACT independence divergence; s1 resolved-title cosmetic), pixel 1.0 (6 counted ROIs, same-geometry back-to-back captures), composite 94, binding-sanity sane via reconciled Copy>Data 8=8 == EXPECTED_COUNT (2 endpoints × 4 Superstore regions).",
+      "lane": "fable-direct stamp batch 2026-07-13 (W63; orchestrator live gate run, oracle-stamp.mjs re-drive on the session's live instances) PID=34497",
+      "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
+      "gate_composite": 94
+    }
   },
   "datasource_placeholder": true,
   "placeholders": [

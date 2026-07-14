@@ -6,6 +6,7 @@
   "count": 44,
   "fast_path_templates": [
     "box-plot-chart",
+    "connected-scatterplot",
     "control-chart-xmr",
     "correlation-bubble-chart",
     "correlation-scatter-plot-chart",
@@ -19,8 +20,10 @@
     "part-to-whole-treemap-chart",
     "part-to-whole-waterfall",
     "quota-attainment-bullet",
+    "ranking-dot-strip-plot",
     "ranking-ordered-bar",
     "ranking-ordered-column",
+    "slope-chart",
     "spatial-choropleth-map",
     "spatial-symbol-map",
     "trend-line-chart",
@@ -469,11 +472,31 @@
       "template": "connected-scatterplot",
       "family": "correlation",
       "readiness": "YELLOW",
-      "fast_path_eligible": false,
+      "fast_path_eligible": true,
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "none"
+        "render_verified": "live-2026-07-13",
+        "xml_sha256": "a1af2dbcb0101f71e0837623d04ab346f5ef121fd2ba3d740fed209329fc72be",
+        "render_evidence": {
+          "method": "gate-composite",
+          "date": "2026-07-13",
+          "structural": 0.89189,
+          "critical_pass": "5/5",
+          "high_pass": "2/3",
+          "pixel": 1,
+          "pixel_regions": 6,
+          "sanity": "sane",
+          "sanity_signals": [
+            "mark-count=pass reconciled=true (2508=2508, Worksheet>Copy>Data on source and applied sheets — COUNTD([Region],[Customer Name]) on the bundled Sample - Superstore, measured live)",
+            "caption-leak=pass"
+          ],
+          "run": "oracle-leg replay (W63 stamp batch): independent authored oracle on bundled Sample - Superstore; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity fill (native Superstore names + the template's own Profit Ratio calc, no rewrites); all 10 config facets green on the applied readback (mark=Line, cols=Sales, rows=Profit Ratio calc, color=Region, lod=Customer Name).",
+          "basis": "golden-parity gate run 2026-07-13 (oracle-leg): structural 0.89189 (5/5 critical; 2/3 high — the sole s3 miss is label-column-instances on the DISTINCT oracle calc id vs the template's 1368249927221915648, the ORACLE-CONTRACT independence divergence, same honest-miss class as ww-ou-arrow's; s1 resolved-title cosmetic), pixel 1.0 (6 counted ROIs, same-geometry back-to-back captures), composite 94, binding-sanity sane via reconciled Copy>Data 2508=2508 (grain = [Region] x [Customer Name]; data-dependent, measured live).",
+          "lane": "fable-direct stamp batch 2026-07-13 (W63; orchestrator live gate run, oracle-stamp.mjs re-drive on the session's live instances) PID=32915",
+          "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
+          "gate_composite": 94
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [
@@ -483,7 +506,6 @@
       "intent_keywords": [
         "connected-scatterplot",
         "connected-scatter",
-        "scatter",
         "trajectory",
         "path",
         "relationship"
@@ -3598,11 +3620,31 @@
       "template": "ranking-dot-strip-plot",
       "family": "ranking",
       "readiness": "YELLOW",
-      "fast_path_eligible": false,
+      "fast_path_eligible": true,
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "none"
+        "render_verified": "live-2026-07-13",
+        "xml_sha256": "36aa23b7779995125c486c84ac2fe73d0515adab106d97747e76c6c7d3f2c2b6",
+        "render_evidence": {
+          "method": "gate-composite",
+          "date": "2026-07-13",
+          "structural": 0.97297,
+          "critical_pass": "5/5",
+          "high_pass": "3/3",
+          "pixel": 1,
+          "pixel_regions": 6,
+          "sanity": "sane",
+          "sanity_signals": [
+            "mark-count=pass reconciled=true (203=203, Worksheet>Copy>Data on source and applied sheets — COUNTD(Month(Order Date),[Sub-Category]) <= 12×17=204 on the bundled Sample - Superstore, measured live)",
+            "caption-leak=pass"
+          ],
+          "run": "oracle-leg replay (W63 stamp batch): independent authored oracle on bundled Sample - Superstore; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity fill (native names + neutral level-members month filter, no rewrites); all 15 config facets green on the applied readback (mark=Circle sizing-off, rows=Month, cols=Sales, lod=Sub-Category, per-cell average refline, level-members month slice, no color/size).",
+          "basis": "golden-parity gate run 2026-07-13 (oracle-leg): structural 0.97297 (5/5 critical; 3/3 high — no s3 miss: native names, no divergent calc id; s1 resolved-title cosmetic only), pixel 1.0 (6 counted ROIs, same-geometry back-to-back captures), composite 98, binding-sanity sane via reconciled Copy>Data 203=203 (<= 12 month-members × 17 sub-categories = 204; data-dependent, measured live).",
+          "lane": "fable-direct stamp batch 2026-07-13 (W63; orchestrator live gate run, oracle-stamp.mjs re-drive on the session's live instances) PID=34499",
+          "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
+          "gate_composite": 98
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [
@@ -3612,7 +3654,6 @@
       "intent_keywords": [
         "dot-strip-plot",
         "dot-plot",
-        "strip-plot",
         "ranking"
       ],
       "description": "A dot strip plot: one Circle mark per detail-grain member placed along an aggregated-measure axis, grouped by a category on rows, with a per-cell average reference line — a space-efficient way to rank/compare members within each row. Lane W11-F2: the source month filter was PARAMETERIZED (collapsed to level-members) so the date stays a data-driven Filters pill with no source literals.",
@@ -3823,11 +3864,31 @@
       "template": "slope-chart",
       "family": "time-series",
       "readiness": "YELLOW",
-      "fast_path_eligible": false,
+      "fast_path_eligible": true,
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "none"
+        "render_verified": "live-2026-07-13",
+        "xml_sha256": "01819256a825acdd3ad9b9478d2af036141d6f687831776fbed4b24e8b5b3a7e",
+        "render_evidence": {
+          "method": "gate-composite",
+          "date": "2026-07-13",
+          "structural": 0.89189,
+          "critical_pass": "5/5",
+          "high_pass": "2/3",
+          "pixel": 1,
+          "pixel_regions": 6,
+          "sanity": "sane",
+          "sanity_signals": [
+            "mark-count=pass reconciled=true (8=8 == EXPECTED_COUNT, Worksheet>Copy>Data on source and applied sheets — 2 endpoint years × COUNTD([Region])=4 on the bundled Sample - Superstore, offline-pinnable absolute)",
+            "caption-leak=pass"
+          ],
+          "run": "oracle-leg replay (W63 stamp batch): independent authored oracle on bundled Sample - Superstore; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity fill with the date-grain rewrite; all 12 config facets green on the applied readback (mark=Line, year-trunc endpoints, Slope Filter calc, endpoint slice, line-end labels, no lod).",
+          "basis": "golden-parity gate run 2026-07-13 (oracle-leg): structural 0.89189 (5/5 critical; 2/3 high — the sole s3 miss is label-column-instances on the DISTINCT Slope Filter calc id, the ORACLE-CONTRACT independence divergence; s1 resolved-title cosmetic), pixel 1.0 (6 counted ROIs, same-geometry back-to-back captures), composite 94, binding-sanity sane via reconciled Copy>Data 8=8 == EXPECTED_COUNT (2 endpoints × 4 Superstore regions).",
+          "lane": "fable-direct stamp batch 2026-07-13 (W63; orchestrator live gate run, oracle-stamp.mjs re-drive on the session's live instances) PID=34497",
+          "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
+          "gate_composite": 94
+        }
       },
       "datasource_placeholder": true,
       "placeholders": [
