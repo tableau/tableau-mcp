@@ -1,4 +1,6 @@
-import { PulseBundleRequest } from '../../../../sdks/tableau/apis/pulseApi.js';
+import { z } from 'zod';
+
+import { pulseBundleRequestSchema } from '../../../../sdks/tableau/types/pulse.js';
 
 type ChironFilter = { field: string; value: string };
 
@@ -18,7 +20,7 @@ export function buildChironBundleRequest({
   timeField,
   allowedDimensions = [],
   filters = [],
-}: BuildChironBundleRequestArgs): PulseBundleRequest {
+}: BuildChironBundleRequestArgs): z.infer<typeof pulseBundleRequestSchema> {
   // Categorical equality filters scope the metric to specific dimension members
   // (drill-down). Shape matches pulseFilterSchema.
   // Categorical equality filter scoping the metric to a dimension member.
@@ -88,7 +90,6 @@ export function buildChironBundleRequest({
             },
             row_level_id_field: {
               identifier_col: '',
-              identifier_label: '',
             },
             row_level_entity_names: {
               entity_name_singular: '',

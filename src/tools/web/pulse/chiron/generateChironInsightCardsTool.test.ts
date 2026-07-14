@@ -151,9 +151,30 @@ describe('getGenerateChironInsightCardsTool', () => {
                       viz: {
                         data: {
                           values: [
-                            { truncDate: '2026-06-01T00:00:00Z', formattedTruncDate: 'Jun 1', rawValue: 100, ci0: 90, ci1: 110, dashed: false },
-                            { truncDate: '2026-06-02T00:00:00Z', formattedTruncDate: 'Jun 2', rawValue: 120, ci0: 95, ci1: 130, dashed: false },
-                            { truncDate: '2026-07-01T00:00:00Z', formattedTruncDate: 'Jul 1', rawValue: 'null', ci0: 'null', ci1: 'null', dashed: true },
+                            {
+                              truncDate: '2026-06-01T00:00:00Z',
+                              formattedTruncDate: 'Jun 1',
+                              rawValue: 100,
+                              ci0: 90,
+                              ci1: 110,
+                              dashed: false,
+                            },
+                            {
+                              truncDate: '2026-06-02T00:00:00Z',
+                              formattedTruncDate: 'Jun 2',
+                              rawValue: 120,
+                              ci0: 95,
+                              ci1: 130,
+                              dashed: false,
+                            },
+                            {
+                              truncDate: '2026-07-01T00:00:00Z',
+                              formattedTruncDate: 'Jul 1',
+                              rawValue: 'null',
+                              ci0: 'null',
+                              ci1: 'null',
+                              dashed: true,
+                            },
                           ],
                         },
                       },

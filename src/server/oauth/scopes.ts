@@ -265,7 +265,7 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:insight:create'],
     api: new Set(['tableau:insight_brief:create', 'tableau:mcp_site_settings:read']),
   },
-  'generate-chiron-insight-cards': {
+  'generate-insight-cards': {
     mcp: ['tableau:mcp:insight:create', 'tableau:mcp:datasource:read'],
     api: new Set([
       'tableau:insights:read',

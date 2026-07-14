@@ -134,9 +134,7 @@ const paramsSchema = {
   // Drill-down controls. `breakdownDimension` scopes the breakdown group to a
   // single dimension; `filters` restrict the metric to specific members.
   breakdownDimension: z.string().nonempty().optional(),
-  filters: z
-    .array(z.object({ field: z.string().nonempty(), value: z.string() }))
-    .optional(),
+  filters: z.array(z.object({ field: z.string().nonempty(), value: z.string() })).optional(),
 };
 
 export const getGenerateChironInsightCardsTool = (
@@ -144,12 +142,11 @@ export const getGenerateChironInsightCardsTool = (
 ): WebTool<typeof paramsSchema> => {
   const tool = new WebTool({
     server,
-    name: 'generate-chiron-insight-cards',
-    description:
-      'Generate deterministic period-over-period insight cards for a datasource using Pulse bundle insights.',
+    name: 'generate-insight-cards',
+    description: 'Generate deterministic insights for a published datasource.',
     paramsSchema,
     annotations: {
-      title: 'Generate Chiron Insight Cards',
+      title: 'Generate Insight Cards',
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -403,10 +400,7 @@ type VizCarrier = { result?: { viz?: unknown } };
 function collectVizValues(bundleResponse: PulseBundleResponse): unknown[][] {
   const arrays: unknown[][] = [];
   for (const group of bundleResponse.bundle_response.result.insight_groups) {
-    const carriers: VizCarrier[] = [
-      ...(group.insights ?? []),
-      ...(group.summaries ?? []),
-    ];
+    const carriers: VizCarrier[] = [...(group.insights ?? []), ...(group.summaries ?? [])];
     for (const carrier of carriers) {
       const values = readVizValues(carrier.result?.viz);
       if (values) {
@@ -487,9 +481,7 @@ function extractContributors(bundleResponse: PulseBundleResponse): Contributor[]
           typeof sample[k] === 'string' &&
           /name|label|dim|category|member|caption|contributor/i.test(k),
       ) ?? keys.find((k) => typeof sample[k] === 'string');
-    const formattedKey = keys.find(
-      (k) => typeof sample[k] === 'string' && /formatted/i.test(k),
-    );
+    const formattedKey = keys.find((k) => typeof sample[k] === 'string' && /formatted/i.test(k));
     if (!valueKey || !labelKey) {
       continue;
     }
@@ -502,8 +494,9 @@ function extractContributors(bundleResponse: PulseBundleResponse): Contributor[]
             ? (row[formattedKey] as string)
             : null,
       }))
-      .filter((item): item is { label: string; value: number; formatted: string | null } =>
-        item.label !== '' && item.value !== null,
+      .filter(
+        (item): item is { label: string; value: number; formatted: string | null } =>
+          item.label !== '' && item.value !== null,
       )
       .slice(0, 6);
     if (items.length === 0) {
@@ -532,15 +525,12 @@ function extractPronounced(bundleResponse: PulseBundleResponse): Pronounced | nu
     );
     const labelKey =
       keys.find(
-        (k) =>
-          typeof sample[k] === 'string' && /name|label|dim|category|member|caption/i.test(k),
+        (k) => typeof sample[k] === 'string' && /name|label|dim|category|member|caption/i.test(k),
       ) ?? keys.find((k) => typeof sample[k] === 'string');
     if (!pctKey || !labelKey) {
       continue;
     }
-    const formattedKey = keys.find(
-      (k) => typeof sample[k] === 'string' && /formatted/i.test(k),
-    );
+    const formattedKey = keys.find((k) => typeof sample[k] === 'string' && /formatted/i.test(k));
     const members = rows
       .map((row) => ({
         label: typeof row[labelKey] === 'string' ? (row[labelKey] as string) : '',
@@ -550,8 +540,9 @@ function extractPronounced(bundleResponse: PulseBundleResponse): Pronounced | nu
             ? (row[formattedKey] as string)
             : null,
       }))
-      .filter((m): m is { label: string; value: number; formatted: string | null } =>
-        m.label !== '' && m.value !== null,
+      .filter(
+        (m): m is { label: string; value: number; formatted: string | null } =>
+          m.label !== '' && m.value !== null,
       );
     if (members.length === 0) {
       continue;

@@ -19,7 +19,7 @@ export async function runChironBundle({
   extra: TableauWebRequestHandlerExtra;
   request: z.infer<typeof pulseBundleRequestSchema>;
   bundleType?: PulseInsightBundleType;
-  jwtScopes: ReadonlyArray<string>;
+  jwtScopes: Parameters<typeof useRestApi>[0]['jwtScopes'];
 }): Promise<Result<PulseBundleResponse, McpToolError>> {
   return await useRestApi({
     ...extra,
