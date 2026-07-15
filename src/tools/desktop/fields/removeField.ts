@@ -45,14 +45,14 @@ const paramsSchema = {
     .describe("Encoding channel ('text'=labels); required when target=encoding, else ignored."),
 };
 
-const title = 'Remove Field from a Shelf or Encoding';
+const title = 'Remove Field';
 export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const removeFieldTool = new DesktopTool({
     server,
     name: 'remove-field',
     title,
     description:
-      'Remove a field from the Rows shelf, Columns shelf, or an encoding on a worksheet locally. Reads from and writes to cache file. Use apply-worksheet to apply changes.',
+      'Remove a field from Rows, Columns, or an encoding on a worksheet locally. Reads from and writes to cache file. Use apply-worksheet to apply changes.',
     paramsSchema,
     annotations: {
       title,

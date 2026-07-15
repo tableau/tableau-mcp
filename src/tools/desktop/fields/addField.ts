@@ -45,7 +45,7 @@ const paramsSchema = {
   workbookFile: z.string().optional().describe('Optional workbook cache file for caption.'),
 };
 
-const title = 'Add Field to a Shelf or Encoding';
+const title = 'Add Field';
 export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const addFieldTool = new DesktopTool({
     server,
