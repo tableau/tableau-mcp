@@ -113,17 +113,21 @@ describe('combined-lean TOOL_PROFILE (lazy web tools)', () => {
       ([name]) => name === LOAD_WEB_TOOLS_TOOL_NAME,
     );
     expect(loaderCall).toBeDefined();
-    const loaderBytes = serializeRegisterToolCall(loaderCall!).length;
+    const loaderEntry = serializeRegisterToolCall(loaderCall!);
     // The loader is the ONLY eager web cost of combined-lean; keep it a stub. Most of its
     // bytes are the group enum itself — do not add prose to its description.
-    expect(loaderBytes).toBeLessThanOrEqual(650);
+    expect(loaderEntry.length).toBeLessThanOrEqual(650);
 
-    // Desktop half registers its full surface — same accounting as the desktop budget test.
+    // Desktop half registers its full surface. Unlike the desktop budget test's per-entry
+    // sum, count the ACTUAL tools/list payload shape — {"tools":[...]} with comma
+    // separators — so the assert can't pass while real clients see more bytes.
     const desktopServer = new DesktopMcpServer();
-    let total = DESKTOP_INSTRUCTIONS.length + loaderBytes;
+    const entries: string[] = [loaderEntry];
     for (const toolFactory of desktopToolFactories) {
-      total += (await serializeDesktopToolSurface(toolFactory(desktopServer))).length;
+      entries.push(await serializeDesktopToolSurface(toolFactory(desktopServer)));
     }
+    const payloadBytes = `{"tools":[${entries.join(',')}]}`.length;
+    const total = payloadBytes + DESKTOP_INSTRUCTIONS.length;
 
     // Same cliff as server.desktop.test.ts: past 46_000 serialized bytes, hosts defer the
     // whole surface behind ToolSearch. combined-lean exists precisely to keep the combined
@@ -162,6 +166,41 @@ describe('combined-lean TOOL_PROFILE (lazy web tools)', () => {
       toolNames: [...webToolGroups.pulse],
     });
     expect(registerToolCalls(server).length).toBe(beforeSecond);
+  });
+
+  it('concurrent loader calls for the same group do not double-register (serialized)', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+    const server = getWebServer();
+    await server.registerTools();
+
+    const loaderCallback = registerToolCalls(server).find(
+      ([name]) => name === LOAD_WEB_TOOLS_TOOL_NAME,
+    )![2];
+
+    const before = registerToolCalls(server).length;
+    const [first, second] = await Promise.all([
+      loaderCallback({ group: 'pulse' }, getMockRequestHandlerExtra()),
+      loaderCallback({ group: 'pulse' }, getMockRequestHandlerExtra()),
+    ]);
+
+    const statuses = [parseLoaderResult(first), parseLoaderResult(second)].map(
+      (r) => (r as { status: string }).status,
+    );
+    expect(statuses.sort()).toEqual(['already-loaded', 'loaded']);
+    expect(registerToolCalls(server).length).toBe(before + webToolGroups.pulse.length);
+  });
+
+  it('falls back to eager registration on stateless HTTP (lazy tools would die with the request)', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'combined-lean');
+    vi.stubEnv('TRANSPORT', 'http');
+    vi.stubEnv('DISABLE_SESSION_MANAGEMENT', 'true');
+    vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
+    const server = getWebServer();
+    await server.registerTools();
+
+    const names = registeredNames(server);
+    expect(names).not.toContain(LOAD_WEB_TOOLS_TOOL_NAME);
+    expect(names).toContain('list-datasources');
   });
 
   it('load-web-tools respects EXCLUDE_TOOLS scoping when hydrating a group', async () => {

@@ -77,7 +77,11 @@ export class WebMcpServer extends Server {
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
     const config = getConfig();
 
-    if (config.toolProfile === 'combined-lean') {
+    // Lazy loading is meaningless on stateless HTTP: the per-request server is
+    // discarded as the response closes, so tools hydrated by the loader would
+    // register on a corpse. Fall back to the eager surface there.
+    const statelessHttp = config.transport === 'http' && config.disableSessionManagement;
+    if (config.toolProfile === 'combined-lean' && !statelessHttp) {
       this._registerLoadWebToolsTool();
     } else {
       for (const tool of await this._getToolsToRegister(tableauAuthInfo)) {
@@ -94,7 +98,25 @@ export class WebMcpServer extends Server {
    * Registration goes through the same filtered pipeline as eager startup, so disabled
    * tools and INCLUDE_TOOLS/EXCLUDE_TOOLS scoping still apply.
    */
-  loadWebTools = async (
+  loadWebTools = (
+    group: LoadableWebToolGroupName,
+    tableauAuthInfo?: TableauAuthInfo,
+  ): Promise<LoadWebToolsResult> => {
+    // Serialize loads: two overlapping calls for the same group would both pass
+    // the loaded-set check and the second registerTool would throw on the
+    // duplicate name. The chain never rejects (failures are surfaced on the
+    // caller's promise, swallowed on the chain) so one bad load can't wedge it.
+    const run = this._loadWebToolsChain.then(() => this._loadWebToolsInner(group, tableauAuthInfo));
+    this._loadWebToolsChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  };
+
+  private _loadWebToolsChain: Promise<void> = Promise.resolve();
+
+  private _loadWebToolsInner = async (
     group: LoadableWebToolGroupName,
     tableauAuthInfo?: TableauAuthInfo,
   ): Promise<LoadWebToolsResult> => {
@@ -134,7 +156,7 @@ export class WebMcpServer extends Server {
       LOAD_WEB_TOOLS_TOOL_NAME,
       {
         title: 'Load Web Tools',
-        description: 'Load a Tableau web tool group (e.g. pulse) into this session.',
+        description: 'Load a Tableau web tool group.',
         inputSchema: loadWebToolsParamsSchema,
         annotations: {
           title: 'Load Web Tools',
