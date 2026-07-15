@@ -61,6 +61,7 @@ Slack channel in the Tableau #DataDev workspace.
 | [list-extract-refresh-tasks](tools/tasks/list-extract-refresh-tasks.md)                                               | Admin-only. Retrieves a list of extract refresh tasks for the site ([REST API][list-extract-refresh-tasks])         | All SKUs     |
 | [update-cloud-extract-refresh-task](tools/tasks/update-cloud-extract-refresh-task.md)                                 | Admin-only. Confirm-gated update of an extract refresh task schedule on Tableau Cloud ([REST API][update-cloud-extract-refresh-task]) | All SKUs     |
 | [list-users](tools/users/list-users.md)                                                                               | Admin-only. Retrieves a list of users on the site ([REST API][list-users-api])                                      | All SKUs     |
+| [update-user](tools/users/update-user.md)                                                                             | Admin-only. Confirm-gated update of a user's site role ([REST API][update-user-api])                               | All SKUs     |
 | [query-admin-insights](tools/admin-insights/query-admin-insights.md)                                                 | Admin-only. Dispatches on `kind` to TS Events, Site Content, Job Performance, or stale-content report ([VDS API][vds]) | All SKUs     |
 | [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
 
@@ -107,6 +108,8 @@ Slack channel in the Tableau #DataDev workspace.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#update_cloud_extract_refresh_task
 [list-users-api]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#get_users_on_site
+[update-user-api]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#update_user
 
 ## Prompt List
 

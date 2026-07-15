@@ -28,7 +28,8 @@ export type McpScope =
   | 'tableau:mcp:tasks:write'
   | 'tableau:mcp:jobs:read'
   | 'tableau:mcp:content:delete'
-  | 'tableau:mcp:users:read';
+  | 'tableau:mcp:users:read'
+  | 'tableau:mcp:users:write';
 
 export type TableauApiScope =
   | 'tableau:content:read'
@@ -52,7 +53,8 @@ export type TableauApiScope =
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
-  | 'tableau:users:read';
+  | 'tableau:users:read'
+  | 'tableau:users:update';
 
 /**
  * Default scopes supported by the MCP server
@@ -68,6 +70,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:workbook:read',
   'tableau:mcp:content:read',
   'tableau:mcp:content:delete',
+  'tableau:mcp:users:write',
   'tableau:mcp:view:read',
   'tableau:mcp:view:download',
   'tableau:mcp:flow:read',
@@ -155,6 +158,10 @@ const toolScopeMap: Record<
   'list-users': {
     mcp: ['tableau:mcp:users:read'],
     api: new Set(['tableau:users:read']),
+  },
+  'update-user': {
+    mcp: ['tableau:mcp:users:write'],
+    api: new Set(['tableau:users:update', 'tableau:users:read']),
   },
   'list-workbooks': {
     mcp: ['tableau:mcp:workbook:read'],
@@ -346,6 +353,7 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
     enabledTools.delete('confirm-delete-content');
     enabledTools.delete('list-jobs');
     enabledTools.delete('list-users');
+    enabledTools.delete('update-user');
     enabledTools.delete('query-admin-insights');
     enabledTools.delete('delete-content');
   }

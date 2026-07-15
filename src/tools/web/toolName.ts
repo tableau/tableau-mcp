@@ -33,6 +33,7 @@ export const webToolNames = [
   'revoke-access-token',
   'reset-consent',
   'query-admin-insights',
+  'update-user',
   'delete-content',
   'confirm-delete-content',
 ] as const;
@@ -92,7 +93,7 @@ export const webToolGroups = {
     'confirm-update-cloud-extract-refresh-task',
   ],
   jobs: ['list-jobs'],
-  users: ['list-users'],
+  users: ['list-users', 'update-user'],
   'token-management': ['get-embed-token', 'revoke-access-token', 'reset-consent'],
   'admin-insights': ['query-admin-insights'],
   content: ['delete-content', 'confirm-delete-content'],

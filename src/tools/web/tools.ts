@@ -25,6 +25,7 @@ import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
 import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
 import { getListUsersTool } from './users/listUsers.js';
+import { getUpdateUserTool } from './users/updateUser.js';
 import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
 import { getGetCustomViewImageTool } from './views/getCustomViewImage.js';
 import { getGetViewTool } from './views/getView.js';
@@ -45,6 +46,7 @@ export const webToolFactories = [
   getConfirmUpdateCloudExtractRefreshTaskTool,
   getListJobsTool,
   getListUsersTool,
+  getUpdateUserTool,
   getQueryDatasourceTool,
   getListFlowsTool,
   getGetFlowTool,
