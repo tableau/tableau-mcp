@@ -6,12 +6,11 @@ on:
       - main
     types: [opened, edited, synchronize, reopened, labeled, unlabeled]
 
-permissions:
-  issues: write
-
 jobs:
   check-title:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
     steps:
       - name: Ensure skip-title-check label exists
         if: github.event.pull_request.head.repo.full_name == github.repository
