@@ -1131,7 +1131,35 @@ function roleGreedyBind(
   const temporalSlots = m.slots.filter((s) => isActive(s) && s.kind === 'temporal');
   const temporalAutoCompleted = new Map<string, SchemaField>();
 
-  for (const slot of m.slots) {
+  // CLS-003 GUARD: unique-date completion must not paper over an ask-NAMED
+  // non-temporal dimension no remaining slot can consume ("trend of Actual Amount
+  // by Fiscal Period" on a temporal+measure template must escalate, never silently
+  // drop Fiscal Period and chart a date axis the user did not ask for). Capacity =
+  // remaining ACTIVE categorical/geo slots, plus ONE armed optional facet slot —
+  // facetBinding appends at most one spare NAMED categorical after the required
+  // slots bind, so an explicit facet ask ("trend of Sales per Region") still
+  // completes. Runs only in the final bind pass (temporalCompletion present).
+  const hasUnslottedNonTemporalDimension = (
+    remainingSlots: TemplateManifest['slots'],
+  ): boolean => {
+    const unconsumedNonTemporalDims = matched.filter(
+      (f) => !used.has(f) && f.role === 'dimension' && !isTemporal(f),
+    );
+    if (unconsumedNonTemporalDims.length === 0) return false;
+    let capacity = remainingSlots.filter(
+      (s) => isActive(s) && (s.kind === 'categorical' || s.kind === 'geo'),
+    ).length;
+    if (
+      temporalCompletion &&
+      askImpliesFacet(temporalCompletion.maskedAsk) &&
+      m.slots.some((s) => isFacetSlot(s) && !isActive(s))
+    ) {
+      capacity += 1;
+    }
+    return unconsumedNonTemporalDims.length > capacity;
+  };
+
+  for (const [i, slot] of m.slots.entries()) {
     if (!isActive(slot)) continue;
     let chosen: SchemaField | null = null;
     switch (slot.kind) {
@@ -1149,7 +1177,12 @@ function roleGreedyBind(
         // completeTemporalSlot. `temporalCompletion` is passed ONLY by classifyNoLlm's
         // final bind — selectWithinFamily's slot-fit probes omit it, so completion can
         // never make an extra candidate look bindable during tie-breaking.
-        if (!chosen && temporalCompletion && temporalSlots.length === 1) {
+        if (
+          !chosen &&
+          temporalCompletion &&
+          temporalSlots.length === 1 &&
+          !hasUnslottedNonTemporalDimension(m.slots.slice(i + 1))
+        ) {
           const completed = completeTemporalSlot(
             temporalCompletion.maskedAsk,
             matched,
