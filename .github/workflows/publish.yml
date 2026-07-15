@@ -9,8 +9,8 @@ jobs:
       contents: read
       id-token: write # Needed for OIDC authentication
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '>=22.7.5'
           registry-url: https://registry.npmjs.org/
@@ -63,8 +63,8 @@ jobs:
     permissions:
       contents: write # Needed to upload release assets
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '>=22.7.5'
           cache: 'npm'
