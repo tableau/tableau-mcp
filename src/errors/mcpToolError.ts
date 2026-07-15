@@ -76,6 +76,12 @@ export class FeatureDisabledError extends McpToolError {
   }
 }
 
+export class FlowNotAllowedError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'flow-not-allowed', message, statusCode: 403 });
+  }
+}
+
 export class PulseDisabledError extends McpToolError {
   constructor() {
     super({ type: 'pulse-disabled', message: 'Pulse is disabled', statusCode: 400 });

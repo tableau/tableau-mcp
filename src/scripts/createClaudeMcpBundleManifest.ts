@@ -639,6 +639,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  FLOW_TOOLS_ENABLED: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable Tableau Prep flow MCP tools',
+    description:
+      'Registers the Tableau Prep flow tools (list-flows, get-flow). Disabled by default; set to "true" to enable them.',
+    required: false,
+    sensitive: false,
+  },
   ADMIN_GATE_CACHE_TTL_MINUTES: {
     includeInUserConfig: false,
     type: 'string',

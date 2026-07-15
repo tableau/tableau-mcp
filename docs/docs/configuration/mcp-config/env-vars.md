@@ -455,6 +455,21 @@ Enables product telemetry for tool usage tracking.
 
 <hr />
 
+## `FLOW_TOOLS_ENABLED`
+
+Controls whether the Tableau Prep flow tools are registered.
+
+- Default: `false`
+- Set to `true` to enable the Tableau Prep flow tools:
+  - [`list-flows`](../../tools/flows/list-flows.md)
+  - [`get-flow`](../../tools/flows/get-flow.md)
+- Only the exact value `true` enables them; any other value (or leaving it unset) keeps them
+  disabled.
+- When enabled, individual flow tools can still be excluded via
+  [`EXCLUDE_TOOLS`](#exclude_tools) (e.g. `EXCLUDE_TOOLS=flow`).
+
+<hr />
+
 ## `ADMIN_TOOLS_ENABLED`
 
 Enables admin-only tools that require site administrator permissions.

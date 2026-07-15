@@ -49,6 +49,8 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
+      // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
+      const flowTools: ReadonlyArray<WebToolName> = ['list-flows', 'get-flow'];
 
       let expectedToolNames = [...webToolNames];
 
@@ -60,6 +62,11 @@ describe('server', () => {
       // Filter out admin-only tools if admin tools are not enabled
       if (process.env.ADMIN_TOOLS_ENABLED !== 'true') {
         expectedToolNames = expectedToolNames.filter((name) => !adminOnlyTools.includes(name));
+      }
+
+      // Filter out flow tools if they are not enabled
+      if (process.env.FLOW_TOOLS_ENABLED !== 'true') {
+        expectedToolNames = expectedToolNames.filter((name) => !flowTools.includes(name));
       }
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
@@ -136,6 +143,8 @@ describe('server', () => {
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
+      // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
+      const flowTools: ReadonlyArray<WebToolName> = ['list-flows', 'get-flow'];
 
       let expectedWebToolNames = [...webToolNames];
 
@@ -151,6 +160,11 @@ describe('server', () => {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !adminOnlyTools.includes(name),
         );
+      }
+
+      // Filter out flow tools if they are not enabled
+      if (process.env.FLOW_TOOLS_ENABLED !== 'true') {
+        expectedWebToolNames = expectedWebToolNames.filter((name) => !flowTools.includes(name));
       }
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
