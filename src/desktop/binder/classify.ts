@@ -37,6 +37,7 @@ interface SchemaField {
   role: 'dimension' | 'measure';
   type: string; // "quantitative" | "nominal" | "ordinal" | ...
   datatype: string; // "string" | "real" | "integer" | "date" | "datetime" | ...
+  semanticRole?: string; // Tableau geo semantic role, e.g. "[State].[Name]"
   datasource: string;
   isAggregated: boolean;
   column_ref: string; // straight from listAvailableFields, e.g. "[Superstore].[sum:Sales:qk]"
@@ -663,7 +664,13 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
       // keyword-match. Suppressed when the plural is another field's exact name (that
       // field masks the token itself), preserving exact-first tie-breaking.
       const pluralSuffix = !lower.endsWith('s') && !exactNames.has(`${lower}s`) ? 's?' : '';
-      const re = new RegExp(`(^|[^a-z0-9])(${escapeRegex(lower)}${pluralSuffix})([^a-z0-9]|$)`, 'gi');
+      // HYPHEN↔SPACE LOCKSTEP WITH MATCHING (RT finding CLS-002): phraseIndexInAsk
+      // matches a hyphenated field name against its spaced form ("Waterfall-Chart"
+      // matches "waterfall chart"), so masking must blank that same span — a literal
+      // regex would leave "waterfall" alive in the masked ask and let the FIELD NAME
+      // select the waterfall family.
+      const body = escapeRegex(lower).replace(/-/g, '[\\s-]+');
+      const re = new RegExp(`(^|[^a-z0-9])(${body}${pluralSuffix})([^a-z0-9]|$)`, 'gi');
       masked = masked.replace(
         re,
         (_whole, pre: string, mid: string, post: string) => pre + ' '.repeat(mid.length) + post,
@@ -800,27 +807,65 @@ function isCategorical(f: SchemaField): boolean {
 }
 
 /**
- * GEO SLOT ↔ FIELD NAME AFFINITY (fail-closed geo binding). A geo slot must not
- * take "the first unused dimension" (that silently SWAPS country↔state — worse than
- * proposing); it binds only a field whose name carries the slot's geographic concept.
+ * GEO SLOT ↔ FIELD SEMANTIC ROLE / NAME AFFINITY (fail-closed geo binding). A geo
+ * slot must not take "the first unused dimension" (that silently SWAPS country↔state
+ * — worse than proposing); it binds a field whose Tableau semantic role carries the
+ * slot's geographic concept when one is declared, else a field whose NAME carries it.
+ * Semantic role is authoritative: "Territory" tagged [State].[Name] is a state field
+ * no name token could reveal, and a field whose semantic role names a DIFFERENT geo
+ * concept never wins the slot via name fallback.
  *
  * Each geo concept has a synonym set; a compound slot_id ("country_region",
  * "state_province") resolves to the concept of its FIRST recognized token (so
  * "country_region" → country, NOT the union country∪state which would over-match).
  */
-const GEO_CONCEPT_SYNONYMS: Readonly<Record<string, readonly string[]>> = {
+type GeoConcept = 'country' | 'state' | 'city' | 'zip';
+
+const GEO_CONCEPT_SYNONYMS: Readonly<Record<GeoConcept, readonly string[]>> = {
   country: ['country', 'nation'],
   state: ['state', 'province', 'region', 'admin'],
+  city: ['city'],
+  zip: ['zip', 'zipcode', 'postal'],
 };
 /** Reverse index: a token → its geographic concept (drives slot_id → affinity). */
-const GEO_TOKEN_CONCEPT: Readonly<Record<string, string>> = {
+const GEO_TOKEN_CONCEPT: Readonly<Record<string, GeoConcept>> = {
   country: 'country',
   nation: 'country',
   state: 'state',
   province: 'state',
   region: 'state',
   admin: 'state',
+  city: 'city',
+  zip: 'zip',
+  zipcode: 'zip',
+  postal: 'zip',
 };
+
+/**
+ * Tableau semantic-role → geo concept. Keys are the verbatim `semantic-role` column
+ * attribute values Tableau writes (see tests/fixtures workbook XML). Unknown roles
+ * map to null and behave exactly like an untagged field (name fallback still applies).
+ */
+const GEO_SEMANTIC_ROLE_CONCEPT: Readonly<Record<string, GeoConcept>> = {
+  '[Country].[ISO3166_2]': 'country',
+  '[Country].[Name]': 'country',
+  '[State].[Name]': 'state',
+  '[City].[Name]': 'city',
+  '[ZipCode].[Name]': 'zip',
+};
+
+function geoConceptFromSemanticRole(semanticRole?: string): GeoConcept | null {
+  if (!semanticRole) return null;
+  return GEO_SEMANTIC_ROLE_CONCEPT[semanticRole] ?? null;
+}
+
+function geoConceptFromSlotId(slotId: string): GeoConcept | null {
+  for (const t of nameTokens(slotId)) {
+    const concept = GEO_TOKEN_CONCEPT[t];
+    if (concept) return concept;
+  }
+  return null;
+}
 
 /** Split a name/slot_id into lowercased whole tokens (non-alphanumeric boundaries). */
 function nameTokens(s: string): string[] {
@@ -837,10 +882,8 @@ function nameTokens(s: string): string[] {
  * country synonyms {country,nation}; "state_province" → {state,province,region,admin}.
  */
 function geoAffinityTokens(slotId: string): Set<string> {
-  for (const t of nameTokens(slotId)) {
-    const concept = GEO_TOKEN_CONCEPT[t];
-    if (concept) return new Set(GEO_CONCEPT_SYNONYMS[concept]);
-  }
+  const concept = geoConceptFromSlotId(slotId);
+  if (concept) return new Set(GEO_CONCEPT_SYNONYMS[concept]);
   return new Set(nameTokens(slotId));
 }
 
@@ -883,7 +926,34 @@ function pickUniqueMaxAffinity(pool: SchemaField[], aff: Set<string>): GeoPick {
 }
 
 /**
- * Resolve every required geo slot to a distinct field by NAME AFFINITY. Fail-closed
+ * Geo pick for one slot: SEMANTIC ROLE first, name affinity as fallback. A unique
+ * semantic-role concept match wins outright (the tag is authoritative); 2+ matches
+ * tie (fail closed). With no semantic match, name affinity runs over the pool MINUS
+ * any field whose semantic role names a DIFFERENT geo concept — a "Region" tagged
+ * [City].[Name] must not win the state slot on its name.
+ */
+function pickGeoField(pool: SchemaField[], slotId: string): GeoPick {
+  const concept = geoConceptFromSlotId(slotId);
+  if (concept) {
+    const semanticMatches = pool.filter(
+      (f) => geoConceptFromSemanticRole(f.semanticRole) === concept,
+    );
+    if (semanticMatches.length === 1) return { kind: 'ok', field: semanticMatches[0] };
+    if (semanticMatches.length > 1) return { kind: 'tie' };
+  }
+
+  const fallbackPool = concept
+    ? pool.filter((f) => {
+        const fieldConcept = geoConceptFromSemanticRole(f.semanticRole);
+        return fieldConcept === null || fieldConcept === concept;
+      })
+    : pool;
+  return pickUniqueMaxAffinity(fallbackPool, geoAffinityTokens(slotId));
+}
+
+/**
+ * Resolve every required geo slot to a distinct field by SEMANTIC ROLE, then NAME
+ * AFFINITY. Fail-closed
  * (returns null → the caller proposes) when a geo slot is not UNAMBIGUOUS: each binds
  * the field with the strictly-greatest, unique, > 0 affinity overlap. A final
  * distinctness check rejects two geo slots resolving to the SAME field. Computing every
@@ -913,7 +983,7 @@ function resolveGeoSlots(
 
   // Phase 1 — resolve from the ASK-NAMED pool. A tie fails closed immediately.
   for (const slot of geoSlots) {
-    const pick = pickUniqueMaxAffinity(pool, geoAffinityTokens(slot.slot_id));
+    const pick = pickGeoField(pool, slot.slot_id);
     if (pick.kind === 'tie') return null; // ask named 2+ tied candidates → fail closed
     if (pick.kind === 'ok') {
       picks.set(slot.slot_id, pick.field);
@@ -929,7 +999,7 @@ function resolveGeoSlots(
   if (zeroSlots.length > 0) {
     if (!anyAskNamed) return null;
     for (const slot of zeroSlots) {
-      const widened = pickUniqueMaxAffinity(schemaDims, geoAffinityTokens(slot.slot_id));
+      const widened = pickGeoField(schemaDims, slot.slot_id);
       if (widened.kind !== 'ok') return null; // still zero, or now ambiguous → fail closed
       picks.set(slot.slot_id, widened.field);
       autoCompleted.set(slot.slot_id, widened.field);
@@ -1401,8 +1471,13 @@ export function buildLlmInput(
     (m) => m.fast_path_eligible || m.source === 'local',
   );
 
+  // Mask field names before scoring, in lockstep with classifyNoLlm (RT finding
+  // CLS-001): the propose shortlist must not let a field literally named "Pie"
+  // surface the pie family — the same leak masking exists to stop on the fast path.
+  const maskedAsk = maskFieldNames(ask, summary);
+
   let candidates = routable
-    .map((m) => ({ m, score: keywordScore(ask, m.intent_keywords) }))
+    .map((m) => ({ m, score: keywordScore(maskedAsk, m.intent_keywords) }))
     .filter((x) => x.score > 0);
 
   if (candidates.length === 0) {
@@ -1412,7 +1487,7 @@ export function buildLlmInput(
       keys: ['intent_keywords', 'description'],
       threshold: 0.5,
     });
-    const hits = fuse.search(ask).map((r) => r.item);
+    const hits = fuse.search(maskedAsk).map((r) => r.item);
     const chosen = hits.length > 0 ? hits : routable;
     candidates = chosen.map((m) => ({ m, score: 0 }));
   }
