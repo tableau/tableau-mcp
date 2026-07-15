@@ -19,9 +19,9 @@
 // without the two-call round trip. The MCP tool never passes `llmPropose`.
 
 import {
-  buildLlmInput,
+  buildLlmInput as buildCoreLlmInput,
   classifyNoLlm,
-  type LlmProposeInput,
+  type LlmProposeInput as CoreLlmProposeInput,
   MAX_CLASSIFIABLE_FIELDS,
 } from './classify.js';
 import { escapeXml } from './escape.js';
@@ -37,15 +37,59 @@ import {
 // Re-exported as the binder's public surface. Bare (source-less) re-exports of the
 // locally-imported bindings — a single `export ... from './x.js'` alongside the
 // import above would trip the target's `no-duplicate-imports` (includeExports).
-export { buildLlmInput, classifyNoLlm, MAX_CLASSIFIABLE_FIELDS, summarizeSchema, validateBinding };
-export type {
-  BindingProposal,
-  Blocker,
-  EscalateReason,
-  LlmProposeInput,
-  SchemaField,
-  SchemaSummary,
+export { classifyNoLlm, MAX_CLASSIFIABLE_FIELDS, summarizeSchema, validateBinding };
+export type { BindingProposal, Blocker, EscalateReason, SchemaField, SchemaSummary };
+
+type ProposeField = CoreLlmProposeInput['fields'][number] & { semanticRole?: string };
+type FieldIdentity = Pick<ProposeField, 'name' | 'role' | 'type' | 'datatype'>;
+
+export type LlmProposeInput = Omit<CoreLlmProposeInput, 'fields'> & {
+  fields: ProposeField[];
 };
+
+function fieldIdentityKey(f: FieldIdentity): string {
+  return `${f.name}\0${f.role}\0${f.type}\0${f.datatype}`;
+}
+
+/**
+ * Re-attach each summary field's semanticRole to the core payload by identity
+ * (name/role/type/datatype — the exact tuple the core emits). Two summary
+ * fields colliding on the tuple with DIFFERENT semantic roles are ambiguous:
+ * tag neither rather than guess.
+ *
+ * This wrapper intentionally lives outside hash-gated classify.ts.
+ */
+function enrichSemanticRoles(input: CoreLlmProposeInput, summary: SchemaSummary): LlmProposeInput {
+  const semanticRoleByField = new Map<string, string | undefined>();
+  const ambiguous = new Set<string>();
+
+  for (const f of summary.fields) {
+    const key = fieldIdentityKey(f);
+    if (semanticRoleByField.has(key) && semanticRoleByField.get(key) !== f.semanticRole) {
+      ambiguous.add(key);
+      continue;
+    }
+    semanticRoleByField.set(key, f.semanticRole);
+  }
+
+  return {
+    ...input,
+    fields: input.fields.map((f) => {
+      const key = fieldIdentityKey(f);
+      const semanticRole = ambiguous.has(key) ? undefined : semanticRoleByField.get(key);
+      return semanticRole ? { ...f, semanticRole } : f;
+    }),
+  };
+}
+
+export function buildLlmInput(
+  ask: string,
+  manifests: Map<string, TemplateManifest>,
+  summary: SchemaSummary,
+  opts?: { maxFields?: number },
+): LlmProposeInput {
+  return enrichSemanticRoles(buildCoreLlmInput(ask, manifests, summary, opts), summary);
+}
 
 /** The validated, injector-ready args for `tableau-inject-template`. */
 export interface InjectTemplateArgs {
