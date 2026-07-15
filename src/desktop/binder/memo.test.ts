@@ -529,32 +529,40 @@ describe('memo/createMemoizedBinder — measured speedup on a repeated bind', ()
     return `<?xml version='1.0' encoding='utf-8'?><workbook><datasources><datasource name='Wide'>${cols.join('')}</datasource></datasources></workbook>`;
   }
 
-  it('warm (cache hit) is faster than cold (fresh compute) over N repeats', async () => {
-    const N = 300;
-    const ask = 'bar chart of Sales by Region';
-    const xml = wideWorkbook(150, 150);
+  // 30s timeout: this is a timing benchmark (300 cold binds over a 302-field workbook) —
+  // on a loaded shared CI runner the cold loop alone can blow the 5s default (seen on the
+  // combined feature/desktop suite, 2026-07-15) while the assertion itself is load-immune
+  // (warm < cold ratio, not an absolute time).
+  it(
+    'warm (cache hit) is faster than cold (fresh compute) over N repeats',
+    { timeout: 30_000 },
+    async () => {
+      const N = 300;
+      const ask = 'bar chart of Sales by Region';
+      const xml = wideWorkbook(150, 150);
 
-    // COLD: a fresh binder per iteration ⇒ every call re-parses XML + classifies.
-    const t0 = performance.now();
-    for (let i = 0; i < N; i++) {
-      const b = createMemoizedBinder();
-      await b.bind({ ask, workbookXml: xml, manifests: real });
-    }
-    const coldMs = performance.now() - t0;
+      // COLD: a fresh binder per iteration ⇒ every call re-parses XML + classifies.
+      const t0 = performance.now();
+      for (let i = 0; i < N; i++) {
+        const b = createMemoizedBinder();
+        await b.bind({ ask, workbookXml: xml, manifests: real });
+      }
+      const coldMs = performance.now() - t0;
 
-    // WARM: one binder, primed once ⇒ every subsequent call is a cache hit.
-    const warmBinder = createMemoizedBinder();
-    await warmBinder.bind({ ask, workbookXml: xml, manifests: real });
-    const t1 = performance.now();
-    for (let i = 0; i < N; i++) {
+      // WARM: one binder, primed once ⇒ every subsequent call is a cache hit.
+      const warmBinder = createMemoizedBinder();
       await warmBinder.bind({ ask, workbookXml: xml, manifests: real });
-    }
-    const warmMs = performance.now() - t1;
+      const t1 = performance.now();
+      for (let i = 0; i < N; i++) {
+        await warmBinder.bind({ ask, workbookXml: xml, manifests: real });
+      }
+      const warmMs = performance.now() - t1;
 
-    // PORT ADAPTATION: source used console.log; the repo's no-console rule allows warn/error.
-    console.warn(
-      `[binder-memo] wide-schema(302 fields)  cold ${(coldMs / N).toFixed(4)} ms/bind  warm ${(warmMs / N).toFixed(4)} ms/bind  speedup ${(coldMs / warmMs).toFixed(1)}x`,
-    );
-    expect(warmMs).toBeLessThan(coldMs);
-  });
+      // PORT ADAPTATION: source used console.log; the repo's no-console rule allows warn/error.
+      console.warn(
+        `[binder-memo] wide-schema(302 fields)  cold ${(coldMs / N).toFixed(4)} ms/bind  warm ${(warmMs / N).toFixed(4)} ms/bind  speedup ${(coldMs / warmMs).toFixed(1)}x`,
+      );
+      expect(warmMs).toBeLessThan(coldMs);
+    },
+  );
 });
