@@ -9,8 +9,8 @@ import {
   isOverInlineXmlCap,
   xmlByteLength,
 } from '../../../desktop/inlineXmlCap.js';
-import { formatReadbackVerificationWarnings } from '../../../desktop/validation/readback-verify.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
+import { formatReadbackVerificationWarnings } from '../../../desktop/validation/readback-verify.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,

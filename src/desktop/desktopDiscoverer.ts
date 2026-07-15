@@ -20,8 +20,8 @@ export type DesktopInstanceManifest = z.infer<typeof manifestSchema>;
 export function staleSessionRecoveryMessage(sessionId: string | number): string {
   return (
     `Session ${sessionId} is stale: that Tableau Desktop process is no longer reachable or was restarted. ` +
-    `Call list-instances and retry with the current session id. ` +
-    `Cached XML files from the old session may not match the current workbook — re-read before applying.`
+    'Call list-instances and retry with the current session id. ' +
+    'Cached XML files from the old session may not match the current workbook — re-read before applying.'
   );
 }
 

@@ -93,9 +93,9 @@ describe('cache fingerprint sidecars', () => {
     writeFileSync(file, '<worksheet/>', 'utf-8');
     const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
 
-    expect(checkSidecar(file, '1', 'worksheet', resolver({ pid: 1, port: 8765, start_time: 's' }))).toEqual(
-      { ok: true },
-    );
+    expect(
+      checkSidecar(file, '1', 'worksheet', resolver({ pid: 1, port: 8765, start_time: 's' })),
+    ).toEqual({ ok: true });
     expect(logSpy).toHaveBeenCalledWith(
       expect.objectContaining({ message: expect.stringContaining('cache sidecar missing') }),
     );
@@ -106,9 +106,9 @@ describe('cache fingerprint sidecars', () => {
     writeFileSync(file, '<worksheet/>', 'utf-8');
     writeFileSync(sidecarPath(file), 'not json', 'utf-8');
     vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
-    expect(checkSidecar(file, '1', 'worksheet', resolver({ pid: 1, port: 8765, start_time: 's' }))).toEqual(
-      { ok: true },
-    );
+    expect(
+      checkSidecar(file, '1', 'worksheet', resolver({ pid: 1, port: 8765, start_time: 's' })),
+    ).toEqual({ ok: true });
   });
 
   it('proceeds when no current fingerprint can be resolved (never blocks blind)', () => {

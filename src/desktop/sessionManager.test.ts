@@ -169,7 +169,9 @@ describe('SessionManager', () => {
 
     it('throws SessionStaleError when the cached port shifts (Desktop restarted)', async () => {
       const before = new Map([[12345, instance({ port: 8765 })]]);
-      const after = new Map([[12345, instance({ port: 9999, start_time: '2024-06-01T00:00:00Z' })]]);
+      const after = new Map([
+        [12345, instance({ port: 9999, start_time: '2024-06-01T00:00:00Z' })],
+      ]);
       const sm = new SessionManager({ discoverer: mkDiscoverer([before, after]) });
 
       await sm.getExecutor('12345');

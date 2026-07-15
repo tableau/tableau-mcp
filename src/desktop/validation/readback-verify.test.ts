@@ -90,7 +90,7 @@ describe('verifyWorksheetReadback', () => {
   it('flags changed shelf expressions and mark classes as errors', () => {
     const readback = encodedWorksheet()
       .replace(`<rows>${GEO_FIELD}</rows>`, `<rows>${SALES_FIELD}</rows>`)
-      .replace(`<mark class="Shape"/>`, `<mark class="Bar"/>`);
+      .replace('<mark class="Shape"/>', '<mark class="Bar"/>');
 
     const findings = verifyWorksheetReadback(encodedWorksheet(), readback);
 
@@ -107,7 +107,7 @@ describe('verifyWorksheetReadback', () => {
         {
           kind: 'mark',
           node: 'mark',
-          intended: `<mark class="Shape">`,
+          intended: '<mark class="Shape">',
           readback: 'changed',
           severity: 'error',
         },
@@ -132,7 +132,8 @@ describe('verifyWorksheetReadback — column-instance co-dependency (RT finding 
       <panes><pane><mark class="Shape"/><encodings><lod column="[DS].[none:Location:nk]"/></encodings></pane></panes>
       <rows>[DS].[avg:Latitude:qk]</rows>
     </table></worksheet>`;
-  const CI = `<column-instance column="[Location]" derivation="None" name="[none:Location:nk]" pivot="key" type="nominal"/>`;
+  const CI =
+    '<column-instance column="[Location]" derivation="None" name="[none:Location:nk]" pivot="key" type="nominal"/>';
 
   it('flags a surviving <lod> tag whose column-instance declaration was dropped', () => {
     const findings = verifyWorksheetReadback(withDeps(CI), withDeps(''));

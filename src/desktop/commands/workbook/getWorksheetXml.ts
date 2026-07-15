@@ -35,7 +35,7 @@ async function worksheetNameSuggestions(
     const heading = close.length > 0 ? 'Did you mean' : 'Available worksheets';
     return (
       ` ${heading}: ${candidates.map((n) => `"${n}"`).join(', ')}.` +
-      ` If it is not obvious which sheet the user meant, ask the user instead of guessing.`
+      ' If it is not obvious which sheet the user meant, ask the user instead of guessing.'
     );
   } catch {
     return '';
