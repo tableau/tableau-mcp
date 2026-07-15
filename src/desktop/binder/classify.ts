@@ -664,10 +664,13 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
       // keyword-match. Suppressed when the plural is another field's exact name (that
       // field masks the token itself), preserving exact-first tie-breaking.
       const pluralSuffix = !lower.endsWith('s') && !exactNames.has(`${lower}s`) ? 's?' : '';
-      const re = new RegExp(
-        `(^|[^a-z0-9])(${escapeRegex(lower)}${pluralSuffix})([^a-z0-9]|$)`,
-        'gi',
-      );
+      // HYPHEN↔SPACE LOCKSTEP WITH MATCHING (RT finding CLS-002): phraseIndexInAsk
+      // matches a hyphenated field name against its spaced form ("Waterfall-Chart"
+      // matches "waterfall chart"), so masking must blank that same span — a literal
+      // regex would leave "waterfall" alive in the masked ask and let the FIELD NAME
+      // select the waterfall family.
+      const body = escapeRegex(lower).replace(/-/g, '[\\s-]+');
+      const re = new RegExp(`(^|[^a-z0-9])(${body}${pluralSuffix})([^a-z0-9]|$)`, 'gi');
       masked = masked.replace(
         re,
         (_whole, pre: string, mid: string, post: string) => pre + ' '.repeat(mid.length) + post,
@@ -1468,8 +1471,13 @@ export function buildLlmInput(
     (m) => m.fast_path_eligible || m.source === 'local',
   );
 
+  // Mask field names before scoring, in lockstep with classifyNoLlm (RT finding
+  // CLS-001): the propose shortlist must not let a field literally named "Pie"
+  // surface the pie family — the same leak masking exists to stop on the fast path.
+  const maskedAsk = maskFieldNames(ask, summary);
+
   let candidates = routable
-    .map((m) => ({ m, score: keywordScore(ask, m.intent_keywords) }))
+    .map((m) => ({ m, score: keywordScore(maskedAsk, m.intent_keywords) }))
     .filter((x) => x.score > 0);
 
   if (candidates.length === 0) {
@@ -1479,7 +1487,7 @@ export function buildLlmInput(
       keys: ['intent_keywords', 'description'],
       threshold: 0.5,
     });
-    const hits = fuse.search(ask).map((r) => r.item);
+    const hits = fuse.search(maskedAsk).map((r) => r.item);
     const chosen = hits.length > 0 ? hits : routable;
     candidates = chosen.map((m) => ({ m, score: 0 }));
   }
