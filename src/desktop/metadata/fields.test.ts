@@ -204,6 +204,40 @@ describe('addFieldToEncoding / removeFieldFromEncoding', () => {
   });
 });
 
+describe('detail encoding normalizes to <lod> (regression: coordinate map single-centroid blank)', () => {
+  // W-23447710 follow-up: an agent placed a dimension on the level-of-detail
+  // shelf via encoding_type="detail" → the tool wrote <detail>, which Tableau
+  // silently strips on apply (canonical LOD tag is <lod>). The pill vanished,
+  // the map collapsed to one AVG(lat)/AVG(lon) centroid, and rendered blank.
+  // Normalizing detail→lod at the metadata layer keeps the pill on the round-trip.
+  it('writes <lod> (not <detail>) when adding a field with encoding_type="detail"', () => {
+    const out = addFieldToEncoding(WORKSHEET_XML, 'detail', '[Sample].[none:Category:nk]');
+    expect(out).toMatch(/<lod\b[^>]*column=["']\[Sample\]\.\[none:Category:nk\]["']/);
+    expect(out).not.toMatch(/<detail\b/);
+  });
+
+  it('adding "detail" then "lod" for the same field is a duplicate (they are one shelf)', () => {
+    const withDetail = addFieldToEncoding(WORKSHEET_XML, 'detail', '[Sample].[none:Category:nk]');
+    // Because detail is normalized to lod, re-adding the same field as lod collides.
+    expect(() => addFieldToEncoding(withDetail, 'lod', '[Sample].[none:Category:nk]')).toThrow(
+      /already exists/,
+    );
+  });
+
+  it('removes a lod-shelf field addressed as encoding_type="detail" (add/remove symmetric)', () => {
+    const withLod = addFieldToEncoding(WORKSHEET_XML, 'lod', '[Sample].[none:Category:nk]');
+    expect(withLod).toMatch(/<lod\b[^>]*column=["']\[Sample\]\.\[none:Category:nk\]["']/);
+    // Address the same shelf with the "detail" alias — normalization means it hits <lod>.
+    const removed = removeFieldFromEncoding(withLod, 'detail', '[Sample].[none:Category:nk]');
+    expect(removed).not.toMatch(/<lod\b/);
+  });
+
+  it('leaves other encoding types (color/size) unchanged', () => {
+    const out = addFieldToEncoding(WORKSHEET_XML, 'size', '[Sample].[sum:Profit:qk]');
+    expect(out).toMatch(/<size\b[^>]*column=["']\[Sample\]\.\[sum:Profit:qk\]["']/);
+  });
+});
+
 describe('moveFieldInRows', () => {
   it('should move a field to a new position', () => {
     const twoRowsXml = addFieldToRows(WORKSHEET_XML, '[Sample].[sum:Profit:qk]');
