@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { formatArtifactSummary } from '../../../desktop/artifactSummary.js';
 import { DesktopCache } from '../../../desktop/cache.js';
+import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import {
   buildInlineCapFileMessage,
@@ -91,6 +92,9 @@ export const getGetWorkbookXmlTool = (
           // Save to cache file (requested file mode, or forced by the cap).
           const cacheFile = new DesktopCache().getCacheFilePath({ prefix: 'workbook' });
           writeFileSync(cacheFile, workbookXml, 'utf-8');
+          // Stamp the producing session so apply-workbook can refuse a cache from a
+          // different (or restarted) Desktop instance — cross-instance bleed guard (W9).
+          writeSidecar(cacheFile, resolvedSession);
 
           if (capFired) {
             logInlineXmlCapHit({ tool: 'get-workbook-xml', bytes, capBytes, file: cacheFile });

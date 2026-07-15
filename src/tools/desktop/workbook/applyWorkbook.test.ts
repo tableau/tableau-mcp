@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import * as loadWorkbookXmlModule from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import {
   ArgsValidationError,
@@ -91,6 +92,35 @@ describe('applyWorkbookTool', () => {
 
     expect(existsSync).toHaveBeenCalledWith(mockFilePath);
     expect(readFileSync).toHaveBeenCalledWith(mockFilePath, 'utf-8');
+  });
+
+  it('refuses a file-mode apply when the cache sidecar fingerprint mismatches the session (W9)', async () => {
+    const mockFilePath = '/path/to/workbook.twb';
+
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<?xml version="1.0"?><workbook></workbook>');
+    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecar').mockReturnValue({
+      ok: false,
+      message: 'Cache produced by a different Desktop session — re-read in the current session.',
+    });
+    const loadSpy = vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Ok.EMPTY);
+
+    const result = await getToolResult({
+      session: '12345',
+      mode: 'file',
+      workbookFile: mockFilePath,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('different Desktop session');
+    // The guard must short-circuit BEFORE the workbook is applied.
+    expect(loadSpy).not.toHaveBeenCalled();
+
+    // vi.clearAllMocks() resets call history but not this spy's implementation, so
+    // restore it explicitly to keep the fail-open default for the other file-mode tests.
+    sidecarSpy.mockRestore();
   });
 
   it('should default to file mode when mode is not specified', async () => {
