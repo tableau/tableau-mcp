@@ -306,6 +306,8 @@ describe('resolveProjectScopeIds', () => {
 
 describe('get-stale-content-report tool', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-05-20T00:00:00Z'));
     vi.clearAllMocks();
     adminInsightsResolver.clearCache();
     clearStaleContentReportCache();
@@ -324,6 +326,10 @@ describe('get-stale-content-report tool', () => {
         { id: 'p-2', name: 'Sales' },
       ],
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('exposes the documented tool name', () => {
