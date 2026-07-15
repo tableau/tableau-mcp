@@ -2,7 +2,7 @@ name: PR Feature Label
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, edited, synchronize, reopened]
 
 jobs:
   label:
