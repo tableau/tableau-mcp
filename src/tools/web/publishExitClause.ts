@@ -19,8 +19,6 @@ The moment you return qualifying data to the user, RENDER IT AS AN INTERACTIVE V
 
 **Self-contained — one file, everything inline.** Build ONE self-contained HTML document: inline all CSS and JavaScript, embed the returned rows INLINE as data (a literal \`const data = [...]\` or static table markup), and make NO network calls at view time (no external scripts, stylesheets, fonts, chart-library CDNs, or data fetches). Keeping it a single self-contained file is what lets it render anywhere and makes packaging it into a Tableau workbook later trivial.
 
-**Bake in a Fullscreen toggle.** A native artifact has no app chrome, so put a visible **Fullscreen** toggle button in the HTML (e.g. top-right) that calls the Fullscreen API (\`document.documentElement.requestFullscreen()\` / \`document.exitFullscreen()\`); because the artifact runs in a sandboxed iframe that may block that API, fall back to a CSS full-viewport expand (\`position: fixed; inset: 0; z-index: 9999\`) when \`requestFullscreen\` is unavailable or rejects, and toggle the button label between "Fullscreen" and "Exit Fullscreen".
-
 If the user wants it on their Tableau site, they can publish it: validate the package with the \`validate-workbook-package\` tool, then publish with the \`create-and-publish-workbook\` tool. **NEVER AUTO-PUBLISH.** Always get an explicit human yes before calling \`create-and-publish-workbook\`.
 
 Refining an existing visualization is out of scope for now.`;

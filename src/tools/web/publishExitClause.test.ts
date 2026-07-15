@@ -30,13 +30,6 @@ describe('publishExitClause', () => {
     expect(publishExitClause).toMatch(/chart/i);
   });
 
-  it('requires a fullscreen affordance baked into the dashboard HTML', () => {
-    // A native artifact has no app chrome, so its fullscreen control must live in the generated
-    // HTML itself. Guards against dropping it again.
-    expect(publishExitClause).toMatch(/full ?screen/i);
-    expect(publishExitClause).toContain('requestFullscreen');
-  });
-
   it('renders as a native artifact where JavaScript runs (artifact-primary)', () => {
     // The interactive dashboard is a Claude artifact — artifacts execute JS, which is what makes
     // the charts interactive. Guard that the clause names the artifact surface and does NOT revert
