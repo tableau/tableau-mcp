@@ -156,7 +156,7 @@ describe('confirmDeleteContentTool', () => {
     delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
     mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
     mocks.mockQueryUserOnSite.mockResolvedValue({ siteRole: 'SiteAdministratorCreator' });
-    mocks.mockIsFeatureEnabled.mockReturnValue(true);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
 
     mocks.mockGetWorkbook.mockResolvedValue({
       id: validWorkbookId,
@@ -198,7 +198,7 @@ describe('confirmDeleteContentTool', () => {
   });
 
   it('is disabled when the mcp-apps flag is OFF', async () => {
-    mocks.mockIsFeatureEnabled.mockReturnValue(false);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
     const tool = getConfirmDeleteContentTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
