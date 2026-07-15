@@ -4,19 +4,21 @@ import { z } from 'zod';
 
 import {
   ArgsValidationError,
-  DatasourceNotAllowedError,
   FeatureDisabledError,
   McpToolError,
 } from '../../../../errors/mcpToolError.js';
+import { getOverridableConfig } from '../../../../overridableConfig.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import {
   pulseBundleRequestSchema,
   PulseBundleResponse,
 } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
+import { Provider } from '../../../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../../resourceAccessChecker.js';
 import { WebTool } from '../../tool.js';
+import { TableauWebRequestHandlerExtra } from '../../toolContext.js';
 import { buildInsightBundleRequest } from './requestBuilder.js';
 import { runInsightBundle } from './runInsightBundle.js';
 
@@ -150,6 +152,11 @@ export const getGenerateInsightCardsTool = (server: WebMcpServer): WebTool<typeo
     server,
     name: 'generate-insight-cards',
     description: 'Generate deterministic insights for a published datasource.',
+    // Opt-in only: disabled unless explicitly listed in INCLUDE_TOOLS, so this
+    // tool is never frontloaded onto the default surface (tool-surface budget).
+    disabled: new Provider(
+      async () => !getOverridableConfig().includeTools.includes('generate-insight-cards'),
+    ),
     paramsSchema,
     annotations: {
       title: 'Generate Insight Cards',
@@ -171,26 +178,20 @@ export const getGenerateInsightCardsTool = (server: WebMcpServer): WebTool<typeo
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
+              // resolveDatasource enforces the bounded-context allow-list BEFORE
+              // any identity lookup, and returns null for both "not found" and
+              // "exists but outside the allowed set" — so a denial is
+              // indistinguishable from a missing datasource (no existence oracle),
+              // and no metadata / Insight Service call runs for a disallowed one.
               const resolved = await resolveDatasource({
                 restApi,
                 datasource,
+                extra,
               });
               if (!resolved) {
                 return new ArgsValidationError(
                   'Could not resolve datasource from provided input',
                 ).toErr();
-              }
-
-              // Enforce the same bounded-context allow-list every sibling
-              // data-access tool applies before reading metadata or generating
-              // insights, so a caller cannot pull governed data for a datasource
-              // outside the server's configured set.
-              const datasourceAllowed = await resourceAccessChecker.isDatasourceAllowed({
-                datasourceLuid: resolved.luid,
-                extra,
-              });
-              if (!datasourceAllowed.allowed) {
-                return new DatasourceNotAllowedError(datasourceAllowed.message).toErr();
               }
 
               const metadataResult = await restApi.vizqlDataServiceMethods.readMetadata({
@@ -200,7 +201,46 @@ export const getGenerateInsightCardsTool = (server: WebMcpServer): WebTool<typeo
                 return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
               }
 
-              const selectedTimeField = pickTimeField(metadataResult.value.data ?? [], timeField);
+              const metadataFields = metadataResult.value.data ?? [];
+
+              // Validate explicit `timeField` / `measures` overrides against
+              // metadata (the same fail-fast the drill inputs get below), so a
+              // typo/stale name returns a clear error instead of an opaque Pulse
+              // 400 that gets swallowed into an empty "successful" result.
+              if (timeField || measures?.length) {
+                const dateFields = new Set(
+                  metadataFields
+                    .filter(
+                      (item) =>
+                        typeof item.fieldCaption === 'string' &&
+                        (item.dataType === 'DATE' || item.dataType === 'DATETIME'),
+                    )
+                    .map((item) => item.fieldCaption as string),
+                );
+                const numericFields = new Set(
+                  metadataFields
+                    .filter(
+                      (item) =>
+                        typeof item.fieldCaption === 'string' &&
+                        (item.dataType === 'INTEGER' || item.dataType === 'REAL'),
+                    )
+                    .map((item) => item.fieldCaption as string),
+                );
+                if (timeField && !dateFields.has(timeField)) {
+                  return new ArgsValidationError(
+                    `timeField "${timeField}" is not a DATE/DATETIME field in this datasource`,
+                  ).toErr();
+                }
+                for (const measure of measures ?? []) {
+                  if (!numericFields.has(measure)) {
+                    return new ArgsValidationError(
+                      `measure "${measure}" is not a numeric field in this datasource`,
+                    ).toErr();
+                  }
+                }
+              }
+
+              const selectedTimeField = pickTimeField(metadataFields, timeField);
               if (!selectedTimeField) {
                 return new ArgsValidationError(
                   'Could not determine a DATE/DATETIME time field for this datasource',
@@ -363,7 +403,9 @@ function pickDimensions(fields: Array<Record<string, unknown>>, max = 5): string
 async function resolveDatasource({
   restApi,
   datasource,
+  extra,
 }: {
+  extra: TableauWebRequestHandlerExtra;
   restApi: {
     datasourcesMethods: {
       listDatasources: (args: {
@@ -382,8 +424,17 @@ async function resolveDatasource({
   datasource: string | { luid: string };
 }): Promise<{ luid: string; name: string; contentUrl: string } | null> {
   if (typeof datasource !== 'string') {
+    // Gate on the LUID BEFORE any identity lookup, so a disallowed datasource
+    // never triggers queryDatasource / readMetadata / the Insight Service.
+    const allowed = await resourceAccessChecker.isDatasourceAllowed({
+      datasourceLuid: datasource.luid,
+      extra,
+    });
+    if (!allowed.allowed) {
+      return null;
+    }
     // Look up the real identity so card headers show the datasource name, not
-    // the raw LUID. The bounded-context guard in the caller still applies.
+    // the raw LUID.
     try {
       const ds = await restApi.datasourcesMethods.queryDatasource({
         siteId: restApi.siteId,
@@ -403,6 +454,16 @@ async function resolveDatasource({
   });
   const exactMatch = response.datasources.find((d) => d.contentUrl === datasource);
   if (!exactMatch) {
+    return null;
+  }
+  // Withhold identity for a datasource outside the bounded context. Returning
+  // null (same as "not found") keeps absent vs not-allowed indistinguishable
+  // upstream, so this can't be used to enumerate non-allowed datasources.
+  const allowed = await resourceAccessChecker.isDatasourceAllowed({
+    datasourceLuid: exactMatch.id,
+    extra,
+  });
+  if (!allowed.allowed) {
     return null;
   }
 
@@ -518,8 +579,15 @@ function extractSeries(bundleResponse: PulseBundleResponse): SeriesPoint[] {
         dashed: Boolean(row.dashed),
       }))
       .filter((point) => point.date !== '')
-      // Pulse returns points newest-first; sort ascending so charts read left→right.
-      .sort((a, b) => a.date.localeCompare(b.date));
+      // Insight Service returns points newest-first; sort ascending so charts
+      // read left→right. Tiebreak by value then label so the ordering is fully
+      // deterministic (independent of VDS row order) when dates collide.
+      .sort(
+        (a, b) =>
+          a.date.localeCompare(b.date) ||
+          (a.value ?? Number.POSITIVE_INFINITY) - (b.value ?? Number.POSITIVE_INFINITY) ||
+          a.label.localeCompare(b.label),
+      );
     if (points.length > 0) {
       return points;
     }

@@ -60,20 +60,24 @@ describe('resolveDatasourceLuid', () => {
     expect(result.content[0].text).toContain('No datasource matched contentUrl');
   });
 
-  it('denies a datasource outside the bounded context', async () => {
+  it('returns an indistinguishable "no match" error for an out-of-context datasource (no existence oracle)', async () => {
     mocks.mockListDatasources.mockResolvedValue({
       datasources: [{ id: '2', name: 'correct', contentUrl: 'GUS-Work' }],
     });
-    mocks.mockIsDatasourceAllowed.mockResolvedValue({
-      allowed: false,
-      message:
-        'The set of allowed data sources that can be queried is limited by the server configuration.',
-    });
+    mocks.mockIsDatasourceAllowed.mockResolvedValue({ allowed: false, message: 'nope' });
+    const denied = await getToolResult('GUS-Work');
 
-    const result = await getToolResult('GUS-Work');
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('allowed data sources');
+    // Absent contentUrl (no rows) — must look identical to the denied case.
+    mocks.mockListDatasources.mockResolvedValue({ datasources: [] });
+    mocks.mockIsDatasourceAllowed.mockResolvedValue({ allowed: true });
+    const absent = await getToolResult('GUS-Work');
+
+    expect(denied.isError).toBe(true);
+    expect(absent.isError).toBe(true);
+    invariant(denied.content[0].type === 'text');
+    invariant(absent.content[0].type === 'text');
+    expect(denied.content[0].text).toContain('No datasource matched contentUrl');
+    expect(denied.content[0].text).toBe(absent.content[0].text);
     expect(mocks.mockIsDatasourceAllowed).toHaveBeenCalledWith(
       expect.objectContaining({ datasourceLuid: '2' }),
     );

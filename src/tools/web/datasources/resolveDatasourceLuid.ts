@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ArgsValidationError, DatasourceNotAllowedError } from '../../../errors/mcpToolError.js';
+import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
@@ -45,21 +45,23 @@ export const getResolveDatasourceLuidTool = (
               });
 
               const exact = response.datasources.find((d) => d.contentUrl === contentUrl);
-              if (!exact) {
+              // Return an IDENTICAL error for "absent" and "exists but outside the
+              // bounded context" so a caller cannot enumerate which non-allowed
+              // datasources exist (404-style, not 403 — the distinction itself is
+              // an existence oracle). Only run the allow-list check when a match
+              // exists (we need its LUID), and collapse both denials to one error.
+              const allowed =
+                !!exact &&
+                (
+                  await resourceAccessChecker.isDatasourceAllowed({
+                    datasourceLuid: exact.id,
+                    extra,
+                  })
+                ).allowed;
+              if (!exact || !allowed) {
                 return new ArgsValidationError(
                   `No datasource matched contentUrl "${contentUrl}"`,
                 ).toErr();
-              }
-
-              // Do not return identity (LUID/name) for a datasource outside the
-              // server's bounded context — otherwise this is an existence/LUID
-              // oracle and feeds unguarded LUIDs into generate-insight-cards.
-              const datasourceAllowed = await resourceAccessChecker.isDatasourceAllowed({
-                datasourceLuid: exact.id,
-                extra,
-              });
-              if (!datasourceAllowed.allowed) {
-                return new DatasourceNotAllowedError(datasourceAllowed.message).toErr();
               }
 
               return Ok({

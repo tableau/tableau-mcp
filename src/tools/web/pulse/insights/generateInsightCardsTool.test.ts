@@ -9,6 +9,7 @@ import { getGenerateInsightCardsTool } from './generateInsightCardsTool.js';
 
 const mocks = vi.hoisted(() => ({
   mockListDatasources: vi.fn(),
+  mockQueryDatasource: vi.fn(),
   mockReadMetadata: vi.fn(),
   mockGenerateBundle: vi.fn(),
   mockIsDatasourceAllowed: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('../../../../restApiInstance.js', () => ({
       siteId: 'test-site-id',
       datasourcesMethods: {
         listDatasources: mocks.mockListDatasources,
+        queryDatasource: mocks.mockQueryDatasource,
       },
       vizqlDataServiceMethods: {
         readMetadata: mocks.mockReadMetadata,
@@ -493,23 +495,59 @@ describe('getGenerateInsightCardsTool', () => {
     expect(parsed.cards[0].deltaPct).toBeNull();
   });
 
-  it('denies a datasource outside the bounded context before reading metadata or generating insights', async () => {
+  it('denies an out-of-context datasource before any metadata / Insight Service call, with no existence oracle', async () => {
     mocks.mockListDatasources.mockResolvedValue({
       datasources: [{ id: 'ds-luid', name: 'GUS Work', contentUrl: 'GUS-Work' }],
     });
-    mocks.mockIsDatasourceAllowed.mockResolvedValue({
-      allowed: false,
-      message:
-        'The set of allowed data sources that can be queried is limited by the server configuration.',
-    });
+    mocks.mockIsDatasourceAllowed.mockResolvedValue({ allowed: false, message: 'nope' });
+    const denied = await getToolResult({ datasource: 'GUS-Work' });
 
-    const result = await getToolResult({ datasource: 'GUS-Work' });
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('allowed data sources');
-    // The guard must run before any governed read.
+    // Absent contentUrl (no rows) — must be indistinguishable from the denial.
+    mocks.mockListDatasources.mockResolvedValue({ datasources: [] });
+    mocks.mockIsDatasourceAllowed.mockResolvedValue({ allowed: true });
+    const absent = await getToolResult({ datasource: 'GUS-Work' });
+
+    expect(denied.isError).toBe(true);
+    expect(absent.isError).toBe(true);
+    invariant(denied.content[0].type === 'text');
+    invariant(absent.content[0].type === 'text');
+    expect(denied.content[0].text).toContain('Could not resolve datasource');
+    expect(denied.content[0].text).toBe(absent.content[0].text);
+    // The guard runs before any governed read.
     expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
     expect(mocks.mockGenerateBundle).not.toHaveBeenCalled();
+  });
+
+  it('gates a denied { luid } input before any identity lookup (no queryDatasource / readMetadata / bundle)', async () => {
+    mocks.mockIsDatasourceAllowed.mockResolvedValue({ allowed: false, message: 'nope' });
+
+    const result = await getToolResult({ datasource: { luid: 'ds-luid' } });
+    expect(result.isError).toBe(true);
+    expect(mocks.mockIsDatasourceAllowed).toHaveBeenCalledWith(
+      expect.objectContaining({ datasourceLuid: 'ds-luid' }),
+    );
+    expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
+    expect(mocks.mockGenerateBundle).not.toHaveBeenCalled();
+  });
+
+  it('is disabled by default and enabled only when listed in INCLUDE_TOOLS', async () => {
+    const prev = process.env.INCLUDE_TOOLS;
+    try {
+      delete process.env.INCLUDE_TOOLS;
+      const disabledTool = getGenerateInsightCardsTool(new WebMcpServer());
+      expect(await Provider.from(disabledTool.disabled)).toBe(true);
+
+      process.env.INCLUDE_TOOLS = 'generate-insight-cards';
+      const enabledTool = getGenerateInsightCardsTool(new WebMcpServer());
+      expect(await Provider.from(enabledTool.disabled)).toBe(false);
+    } finally {
+      if (prev === undefined) {
+        delete process.env.INCLUDE_TOOLS;
+      } else {
+        process.env.INCLUDE_TOOLS = prev;
+      }
+    }
   });
 
   it('surfaces the bundle error when every measure fails (no silent empty result)', async () => {
