@@ -51,6 +51,53 @@ const DEFAULT_INACTIVE_DAYS = 90;
 
 const LICENSED_ROLES = ['Creator', 'Explorer', 'ExplorerCanPublish', 'Viewer'] as const;
 
+const TS_EVENTS_FIELDS = ['Actor User ID', 'Actor User Name', 'Event Type', 'Event Created At'];
+
+const SITE_CONTENT_FIELDS = [
+  'Item Type',
+  'Item Name',
+  'Owner Email',
+  'Owner LUID',
+  'Item Parent Project Name',
+];
+
+const buildActivityQuery = (inactiveDays: number): Record<string, unknown> => ({
+  kind: 'ts-events',
+  query: {
+    fields: TS_EVENTS_FIELDS.map((fieldCaption) => ({ fieldCaption })),
+    filters: [
+      {
+        field: { fieldCaption: 'Event Type' },
+        filterType: 'SET',
+        values: ['Login', 'Login (Embedded)'],
+        exclude: false,
+      },
+      {
+        field: { fieldCaption: 'Event Created At' },
+        filterType: 'DATE',
+        periodType: 'DAYS',
+        dateRangeType: 'LASTN',
+        rangeN: inactiveDays,
+      },
+    ],
+  },
+});
+
+const buildOwnershipQuery = (): Record<string, unknown> => ({
+  kind: 'site-content',
+  query: {
+    fields: SITE_CONTENT_FIELDS.map((fieldCaption) => ({ fieldCaption })),
+    filters: [
+      {
+        field: { fieldCaption: 'Item Type' },
+        filterType: 'SET',
+        values: ['Workbook', 'Datasource'],
+        exclude: false,
+      },
+    ],
+  },
+});
+
 export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
   name: 'user-license-reclamation-apply',
   title: 'User license reclamation — downgrade inactive users to Unlicensed',
@@ -143,14 +190,28 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
           ]
         : []),
       '',
-      `**Step 2 — Activity signals (read-only).** Call \`${ADMIN_INSIGHTS_TOOL}\` with \`kind: "ts-events"\` ` +
-        "to retrieve login activity. Use this to determine each user's last login date. " +
-        `A user is considered inactive if their last login was more than ${inactiveDays} days ago, ` +
-        'or if they have never logged in.',
+      `**Step 2 — Activity signals (read-only).** Call \`${ADMIN_INSIGHTS_TOOL}\` exactly once with the arguments below ` +
+        "to retrieve login events. Use these to determine each user's most recent login date.",
       '',
-      '**Step 3 — Ownership inventory (read-only).** For each inactive user identified in Step 2, ' +
-        `call \`${ADMIN_INSIGHTS_TOOL}\` with \`kind: "site-content"\` to count how many workbooks ` +
-        'and data sources they own. This is informational — ownership is NOT affected by downgrade. ' +
+      '```json',
+      JSON.stringify(buildActivityQuery(inactiveDays), null, 2),
+      '```',
+      '',
+      'The query returns rows of login events within the lookback window. For each user from Step 1, ' +
+        'find their most recent `Event Created At` among the returned rows (matching on `Actor User ID`). ' +
+        `A user is considered inactive if they have NO login row in the result (meaning no login within ${inactiveDays} days), ` +
+        'or if they were absent from Step 1 results entirely (never logged in).',
+      '',
+      `**Step 3 — Ownership inventory (read-only).** Call \`${ADMIN_INSIGHTS_TOOL}\` exactly once with the arguments below ` +
+        'to retrieve content ownership data.',
+      '',
+      '```json',
+      JSON.stringify(buildOwnershipQuery(), null, 2),
+      '```',
+      '',
+      'For each inactive user identified in Step 2, count how many workbooks and data sources they own ' +
+        '(matching on `Owner LUID` from the Site Content rows against the user LUID from Step 1). ' +
+        'This is informational — ownership is NOT affected by downgrade. ' +
         'Present the owned-content count per user so the admin can decide whether to reassign ownership ' +
         'separately before or after reclamation.',
       '',

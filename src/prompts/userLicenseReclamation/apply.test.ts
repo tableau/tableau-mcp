@@ -124,12 +124,32 @@ describe('user-license-reclamation-apply prompt', () => {
   it('defaults inactive threshold to 90 days', async () => {
     const text = await textOf();
     expect(text).toContain('90 days');
+    expect(text).toContain('"rangeN": 90');
   });
 
   it('uses custom inactiveDays when provided', async () => {
     const text = await textOf({ inactiveDays: '60' });
     expect(text).toContain('60 days');
-    expect(text).not.toContain('90 days');
+    expect(text).toContain('"rangeN": 60');
+    expect(text).not.toContain('"rangeN": 90');
+  });
+
+  it('provides a deterministic VDS query for ts-events (Step 2)', async () => {
+    const text = await textOf();
+    expect(text).toContain('"kind": "ts-events"');
+    expect(text).toContain('"fieldCaption": "Actor User ID"');
+    expect(text).toContain('"fieldCaption": "Event Type"');
+    expect(text).toContain('"fieldCaption": "Event Created At"');
+    expect(text).toContain('"Login"');
+    expect(text).toContain('"Login (Embedded)"');
+  });
+
+  it('provides a deterministic VDS query for site-content (Step 3)', async () => {
+    const text = await textOf();
+    expect(text).toContain('"kind": "site-content"');
+    expect(text).toContain('"fieldCaption": "Item Type"');
+    expect(text).toContain('"fieldCaption": "Owner LUID"');
+    expect(text).toContain('"fieldCaption": "Item Name"');
   });
 
   it('defaults site roles to all licensed roles', async () => {
