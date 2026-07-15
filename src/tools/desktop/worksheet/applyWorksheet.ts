@@ -9,6 +9,7 @@ import {
   isOverInlineXmlCap,
   xmlByteLength,
 } from '../../../desktop/inlineXmlCap.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -20,15 +21,15 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
-  worksheetName: z.string().describe('Worksheet (must already exist).'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+  worksheetName: z.string().describe('Name of the worksheet to update (must already exist).'),
   mode: z
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe('file=worksheetFile; inline=worksheetXml.'),
-  worksheetFile: z.string().optional().describe('Worksheet file for mode=file.'),
-  worksheetXml: z.string().optional().describe('Worksheet XML for mode=inline.'),
+    .describe('file reads worksheetFile; inline uses worksheetXml.'),
+  worksheetFile: z.string().optional().describe('Modified worksheet cache file for mode=file.'),
+  worksheetXml: z.string().optional().describe('Worksheet content for mode=inline.'),
 };
 
 const title = 'Apply Worksheet';
@@ -40,7 +41,7 @@ export const getApplyWorksheetTool = (
     name: 'apply-worksheet',
     title,
     description: [
-      'Apply modified worksheet XML to Tableau (mutating). mode=file is default; mode=inline is for small XML.',
+      'Apply modified worksheet content to Tableau (mutating). mode=file is default; mode=inline is for small worksheets.',
       'IMPORTANT: can only UPDATE an existing worksheet, not create one — use apply-workbook to create.',
     ].join(' '),
     paramsSchema,
@@ -63,7 +64,7 @@ export const getApplyWorksheetTool = (
             case 'inline': {
               if (!worksheetXml?.trim()) {
                 return new ArgsValidationError(
-                  'When mode=inline, a non-empty worksheet XML string is required.',
+                  'When mode=inline, non-empty worksheet content is required.',
                 ).toErr();
               }
               break;
@@ -73,7 +74,7 @@ export const getApplyWorksheetTool = (
                 return new ArgsValidationError(
                   [
                     'When mode=file, a non-empty worksheet file path is required.',
-                    'The path can be determined using get-worksheet-xml.',
+                    'The path can be determined using the worksheet structure retrieval tool.',
                   ].join(' '),
                 ).toErr();
               }
@@ -82,7 +83,7 @@ export const getApplyWorksheetTool = (
                 return new WorksheetNotFoundError(
                   [
                     `Cached worksheet file not found: ${worksheetFile}`,
-                    'Provide a path determined by get-worksheet-xml.',
+                    'Provide a path determined by the worksheet structure retrieval tool.',
                   ].join(' '),
                 ).toErr();
               }
@@ -96,7 +97,12 @@ export const getApplyWorksheetTool = (
             }
           }
 
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const result = await loadWorksheetXml({
             worksheetName,
             xml: worksheetXml,
@@ -125,7 +131,7 @@ export const getApplyWorksheetTool = (
               : '';
 
           return new Ok({
-            message: `Successfully applied worksheet XML for "${worksheetName}". The worksheet has been updated.${note}`,
+            message: `Successfully applied worksheet update for "${worksheetName}". The worksheet has been updated.${note}`,
           });
         },
       });

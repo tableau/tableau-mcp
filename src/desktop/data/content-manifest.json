@@ -2,9 +2,9 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.11.0+content.2026-07-08",
+  "content_version": "2.11.0+content.2026-07-13",
   "schema_version": "1",
-  "generated": "2026-07-08",
+  "generated": "2026-07-13",
   "engine_compat": {
     "server_min": "2.11.0",
     "node": ">=22.7.5"
@@ -57,8 +57,8 @@
     },
     {
       "path": "data-visualization-templates-xml/correlation-highlight-table.xml",
-      "sha256": "688cbb4986529a36956dec2dddab714f18734e146a6231acaadee191d9988eaf",
-      "bytes": 5896
+      "sha256": "81c30f84e8583610b4e6b153edfaa79b32a3370a2bdfdcbc0181d29480e4a325",
+      "bytes": 5949
     },
     {
       "path": "data-visualization-templates-xml/correlation-scatter-plot-chart.xml",
@@ -66,9 +66,14 @@
       "bytes": 3250
     },
     {
+      "path": "data-visualization-templates-xml/deviation-arrow.xml",
+      "sha256": "338b99d6780fe108781e51a202fb1dc2cb0562106a8300b9c92e72bf5ccc8cfa",
+      "bytes": 4318
+    },
+    {
       "path": "data-visualization-templates-xml/deviation-diverging-bar.xml",
-      "sha256": "a94fd1809cfd21594b250feb07cc6a1fe3c8bfa0de958430917ac832869334d5",
-      "bytes": 3675
+      "sha256": "dfd31d10c3c1cd0de8dd039334a33fcb536962d46afc58ab74db24e86fe6b356",
+      "bytes": 3728
     },
     {
       "path": "data-visualization-templates-xml/deviation-gain-loss-chart.xml",
@@ -77,8 +82,8 @@
     },
     {
       "path": "data-visualization-templates-xml/deviation-spine-chart.xml",
-      "sha256": "3994a391f450cbf250214e3ed46d0c7ff294b67353689170d20aca3f40f9390d",
-      "bytes": 5901
+      "sha256": "5a8c6598d05ca81a6b6ed5de9d22440bf24f4f9e68590c6117010523e39491bf",
+      "bytes": 5954
     },
     {
       "path": "data-visualization-templates-xml/distribution-bar-code-chart.xml",
@@ -87,8 +92,8 @@
     },
     {
       "path": "data-visualization-templates-xml/distribution-histogram.xml",
-      "sha256": "bc70eb365ebe8647a5118d31389fc25205a4ca2807cc2286b348b39e503ab8fc",
-      "bytes": 1822
+      "sha256": "e684e749d53be92701585affb2338d2e1ec788960ffaa8904db3a79b02482df1",
+      "bytes": 1836
     },
     {
       "path": "data-visualization-templates-xml/funnel-chart.xml",
@@ -117,13 +122,18 @@
     },
     {
       "path": "data-visualization-templates-xml/magnitude-paired-bar.xml",
-      "sha256": "7cfd1c10ecb46e630432afc9c91564bda16c50f1317ac8cc19217912dce08fb6",
-      "bytes": 2406
+      "sha256": "8dfd3a5f4cd2664a774c2a982427c3d148c6dfcf9f3de0ad68bc71b360d6aa5f",
+      "bytes": 2459
     },
     {
       "path": "data-visualization-templates-xml/magnitude-paired-column-chart.xml",
-      "sha256": "c481d9c89a318ca5eada06e0394599f252ee6479030b0340e83f61d4729c7b2c",
-      "bytes": 2406
+      "sha256": "54e13afb3c004b2b511fd25d84bfce712cc28e5f289f12e03e8cbedbedb569fa",
+      "bytes": 2459
+    },
+    {
+      "path": "data-visualization-templates-xml/magnitude-simple-bar.xml",
+      "sha256": "86822337c84088ead4638cbdcb7259a90225acfd9ff8ee6578ee3f4209a773c9",
+      "bytes": 2474
     },
     {
       "path": "data-visualization-templates-xml/pareto-chart.xml",
@@ -151,6 +161,11 @@
       "bytes": 2087
     },
     {
+      "path": "data-visualization-templates-xml/part-to-whole-waterfall-chart.xml",
+      "sha256": "390e07f8e4d223dd5c4f2966e1e23b0f3bbf7838b7058bca348e5514f4957952",
+      "bytes": 4827
+    },
+    {
       "path": "data-visualization-templates-xml/part-to-whole-waterfall.xml",
       "sha256": "215d8fbe9970b79ecd46242799d600fd4775056d887571b5242b7b2726d00681",
       "bytes": 5083
@@ -159,6 +174,11 @@
       "path": "data-visualization-templates-xml/quota-attainment-bullet.xml",
       "sha256": "6a0dfe73ca8d106a296fff0d22a06870c893124adf2a7079f33663e2ac92a614",
       "bytes": 2032
+    },
+    {
+      "path": "data-visualization-templates-xml/ranking-bullet-chart.xml",
+      "sha256": "b92617e293bd67cb084f1706d3ca9f9fc1796b8f7228696e3a99dc48dac57de2",
+      "bytes": 4480
     },
     {
       "path": "data-visualization-templates-xml/ranking-bump-chart.xml",
@@ -182,13 +202,23 @@
     },
     {
       "path": "data-visualization-templates-xml/slope-chart.xml",
-      "sha256": "170c6c14aabba89a37209664ca3e15da163c4d83c0ff6e25a7efc976ee4e3b7b",
-      "bytes": 3076
+      "sha256": "01819256a825acdd3ad9b9478d2af036141d6f687831776fbed4b24e8b5b3a7e",
+      "bytes": 3124
     },
     {
       "path": "data-visualization-templates-xml/spatial-choropleth-map.xml",
       "sha256": "b75f203fdb787be456d1d37e74d3d292de8850ab3f304016e3ff5401dfc175ea",
       "bytes": 6220
+    },
+    {
+      "path": "data-visualization-templates-xml/spatial-filled-map.xml",
+      "sha256": "1cd0e7b46a9b93c3f253e7dac3bfc021cf8b8663d47e04b8119e3f0bb441bc9f",
+      "bytes": 3355
+    },
+    {
+      "path": "data-visualization-templates-xml/spatial-symbol-map-latlon.xml",
+      "sha256": "954fdf3343d0231c1dd8837a938b2193e123627c01aacbac01b7f26c7427db52",
+      "bytes": 2828
     },
     {
       "path": "data-visualization-templates-xml/spatial-symbol-map.xml",
@@ -207,8 +237,13 @@
     },
     {
       "path": "data-visualization-templates-xml/ww-ou-arrow.xml",
-      "sha256": "f822c0902be27773e93ab0a5f4e6b52063013a7347da7faf64ee23a73806b132",
-      "bytes": 19986
+      "sha256": "5db1a3b2cfec461045137ab393da8ae58fc972eddb54f4d1722d8082e260ec8f",
+      "bytes": 20039
+    },
+    {
+      "path": "data-visualization-templates-xml/ww-ou-diff.xml",
+      "sha256": "d8dd72a26c34d34117afcd9c8eb2a1a389d22f3904cce1906f077c246d6c7e8e",
+      "bytes": 16674
     },
     {
       "path": "template-manifests.fixture.json",
@@ -217,23 +252,23 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "88d48e47f756af9f15906c4cffddaab18febe97fe6836defe75e86822c403593",
-      "bytes": 230883
+      "sha256": "1f38d342199e480d74fe72b822fb3851c6595aac1e33d0ac00d16c8a330140e1",
+      "bytes": 274432
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
-      "sha256": "e3cb287a383b13b2e413c4a2dd61dcde703a7abbf6d86627a772f17e6b3a4928",
-      "bytes": 7523
+      "sha256": "a1c5f0a48aaf7f30963e20b569b7179167bf0e3fafcb11dc99acbc3aad050fde",
+      "bytes": 7623
     },
     {
       "path": "template-manifests/bullet-variance-chart.manifest.json",
-      "sha256": "64098d8739656b5751cbc63591967ec19a07f16ad2272f8a818502e14038ae53",
-      "bytes": 5412
+      "sha256": "d2b14571e8948be28a75dd71bbd05fe58be39b283da0f8c55a3a2a9fd728314d",
+      "bytes": 6064
     },
     {
       "path": "template-manifests/change-over-time-area-chart.manifest.json",
-      "sha256": "c9556b196500c5e0fecbffffdca5a152034682398bd7a790e10fa6655c4431f2",
-      "bytes": 1856
+      "sha256": "a755116c3b56367f97f976591c987230799408ead7bf5458f59e99eb8201fae5",
+      "bytes": 2576
     },
     {
       "path": "template-manifests/change-over-time-calendar-heatmap.manifest.json",
@@ -242,23 +277,23 @@
     },
     {
       "path": "template-manifests/change-over-time-stacked-area-chart.manifest.json",
-      "sha256": "4edcd16aac3ab8c3fe39284c7456a188e74d90506e29e4148f1312a24d19d3ce",
-      "bytes": 1775
+      "sha256": "b9cb54ca189b63993cfeeec311a40321728877d7539c81d54b04e158084af11d",
+      "bytes": 2516
     },
     {
       "path": "template-manifests/connected-scatterplot.manifest.json",
-      "sha256": "6569269ee10409cd4ce2173cf41ed49050a50f89486ad97e8bb34d59462c8b54",
-      "bytes": 3468
+      "sha256": "a9f5bdfdad0d1358a05a3e47ffbc6590c99350c9b1a083ab3047f00e1c18ae7c",
+      "bytes": 5372
     },
     {
       "path": "template-manifests/control-chart-xmr.manifest.json",
-      "sha256": "21ae86a46d3d627c08eae93d6b7989cbecf06c32a7d52f9670b0f1002589ff8e",
-      "bytes": 4727
+      "sha256": "3a7ea0153afd3919e012d91bbdcf54fbe37d32ba74d1edc6eb57934c1c772d1c",
+      "bytes": 7222
     },
     {
       "path": "template-manifests/correlation-bubble-chart.manifest.json",
-      "sha256": "203c00c85d5bd840b7ed41e01f8ca030ed05e794815615b96817eda0e8e469d1",
-      "bytes": 1305
+      "sha256": "35131c04e8e37130345d533a6eabd2cbd70cbf68c79646982be8107585351953",
+      "bytes": 3283
     },
     {
       "path": "template-manifests/correlation-dual-axis-chart.manifest.json",
@@ -267,18 +302,23 @@
     },
     {
       "path": "template-manifests/correlation-highlight-table.manifest.json",
-      "sha256": "fb0afcc6fecb727f92044e7a1ed4f3afac9d7e34a50c7bb4792ee30ed464f996",
-      "bytes": 5811
+      "sha256": "a02b8a92f328569ac59102d06d004f6bf9072fd27ad3a617a22fc0e81a966510",
+      "bytes": 6669
     },
     {
       "path": "template-manifests/correlation-scatter-plot-chart.manifest.json",
-      "sha256": "5d679334b17903a5a1099cfcd0f31de232dff5ef72fe754bdedab532bb07a533",
-      "bytes": 4687
+      "sha256": "516262563717665ed80cb52d3f87331cbb78a18561c7acfa17c8c46a3a767fb9",
+      "bytes": 4773
+    },
+    {
+      "path": "template-manifests/deviation-arrow.manifest.json",
+      "sha256": "0cc9fea66b80778aa4e1d6df0900b5d7e00f0c8bde0f22f4f8e95bcd287d1c47",
+      "bytes": 8164
     },
     {
       "path": "template-manifests/deviation-diverging-bar.manifest.json",
-      "sha256": "2e369ac51bcca9d1a96d6efd014578f561f77edaa47e5198b050ba075434cac8",
-      "bytes": 4749
+      "sha256": "66116aa3eb4bcb096fd93215bcd092d065ea2dd2bba9d0d88189b7e61169654f",
+      "bytes": 5490
     },
     {
       "path": "template-manifests/deviation-gain-loss-chart.manifest.json",
@@ -292,18 +332,18 @@
     },
     {
       "path": "template-manifests/distribution-bar-code-chart.manifest.json",
-      "sha256": "74b8123718ed76649f6991363eb96a9358b11591d046fe33ba76a0f518df8df3",
-      "bytes": 2948
+      "sha256": "d561f42bee77294615a1611edebff6890a9729b62135545f597c576b6f4001b0",
+      "bytes": 3034
     },
     {
       "path": "template-manifests/distribution-histogram.manifest.json",
-      "sha256": "c5e177d839219b67d03f013352fb18b765301b29553079398bf33bb2d24be4d6",
-      "bytes": 5445
+      "sha256": "04992d8f0fe60659fef4e5a3a8e6238c327394d28945f24eaf6a1370c99b2b97",
+      "bytes": 8457
     },
     {
       "path": "template-manifests/funnel-chart.manifest.json",
-      "sha256": "91b1bdfd520bab734cee8bb2892eda2002a9fd0028cf7f478e3580e83179723d",
-      "bytes": 7168
+      "sha256": "faaf1caf7205609768c04706f80ffecbbd623608e41a8a96f0585f479b5cb75e",
+      "bytes": 7252
     },
     {
       "path": "template-manifests/gantt-chart.manifest.json",
@@ -312,8 +352,8 @@
     },
     {
       "path": "template-manifests/gantt-task-rollup-chart.manifest.json",
-      "sha256": "b61291596e313728c0862b681505c9fba5ea6d5bb9736643bccd53ae050aea9f",
-      "bytes": 9109
+      "sha256": "83bb5437f0a7e0e5439b43ee73b7468dad8a1ce096b0f70e9af3157b6081811e",
+      "bytes": 9193
     },
     {
       "path": "template-manifests/gantt-timeline-chart.manifest.json",
@@ -322,18 +362,23 @@
     },
     {
       "path": "template-manifests/kpi-text.manifest.json",
-      "sha256": "977064a88359563476fe43afcaa15466687b89daa280cfc20587636f985a053c",
-      "bytes": 1980
+      "sha256": "f2ffe3f48162928c8070fd730d30aacedda002942a6d5503b8cb751af845d1a7",
+      "bytes": 2066
     },
     {
       "path": "template-manifests/magnitude-paired-bar.manifest.json",
-      "sha256": "922ca8545ceacbaf28f1fd0efc22bece3f5e52401bdf903d85471ac2fa0c23e3",
-      "bytes": 3424
+      "sha256": "01e2a407c64a3dabc74aea591de9d7237f8f87de3d7449b18d1e2219e5a5af1b",
+      "bytes": 4329
     },
     {
       "path": "template-manifests/magnitude-paired-column-chart.manifest.json",
-      "sha256": "5d40aff2e959c014e71f303c2f4d09d1a71eea19b7b85b8bc7f7eca66de45c4e",
-      "bytes": 3206
+      "sha256": "d9c21398452b228bc31f7aa75c5dc0a18bac0366756be71c0eb12f554b9999b0",
+      "bytes": 4120
+    },
+    {
+      "path": "template-manifests/magnitude-simple-bar.manifest.json",
+      "sha256": "54f256f818906d9b866f0e17c3f81cc077af7de9032868492e704a6a8ec42109",
+      "bytes": 4841
     },
     {
       "path": "template-manifests/pareto-chart.manifest.json",
@@ -342,8 +387,8 @@
     },
     {
       "path": "template-manifests/part-to-whole-pie-chart.manifest.json",
-      "sha256": "e611193d1eec140c576879eab88ac9529c52a866f9fda394ec46d7f113ecdb6e",
-      "bytes": 1950
+      "sha256": "d7717218e1b0e809a0d5f2d5f283c9a1d27bbbf37a1e517af72adc0f14752aff",
+      "bytes": 4076
     },
     {
       "path": "template-manifests/part-to-whole-proportional-stacked-bar.manifest.json",
@@ -352,13 +397,13 @@
     },
     {
       "path": "template-manifests/part-to-whole-stacked-bar-chart.manifest.json",
-      "sha256": "c36cf53dc9f8f1cdbb2bf56565c9abce9cfa1dac154942e5a187771409b96b47",
-      "bytes": 2838
+      "sha256": "2e1468976ce56baf6c77417ca3c54a2d725847004e5dfda7fe6e6b4328732227",
+      "bytes": 2924
     },
     {
       "path": "template-manifests/part-to-whole-treemap-chart.manifest.json",
-      "sha256": "c954e6c491fc64cf3fb081db700a12df037ed80bc45c0a39ebcbafad252d0987",
-      "bytes": 2273
+      "sha256": "7a34cfc40ff51d5f16d5b784bb004fb3084934605fd37f0c989a42eac08041a0",
+      "bytes": 2359
     },
     {
       "path": "template-manifests/part-to-whole-waterfall.manifest.json",
@@ -367,8 +412,8 @@
     },
     {
       "path": "template-manifests/quota-attainment-bullet.manifest.json",
-      "sha256": "d440645c62d86ab3f990923f28228d13ebee73d65a78dd4a0ea00d6f105f299c",
-      "bytes": 7700
+      "sha256": "fd790c8d6fdf2b3747e3da9d07be119f60369ce33d4e813204e72c6f258be18b",
+      "bytes": 7784
     },
     {
       "path": "template-manifests/ranking-bump-chart.manifest.json",
@@ -377,23 +422,23 @@
     },
     {
       "path": "template-manifests/ranking-dot-strip-plot.manifest.json",
-      "sha256": "df44680d837235cd32bf25b4e949b2115d23307cec73ae3f820f13e53c6bee06",
-      "bytes": 2661
+      "sha256": "69f658dab12b0f343e720df1cedee7e2db1c6d7753073fe49b53d85e86e5650e",
+      "bytes": 4487
     },
     {
       "path": "template-manifests/ranking-ordered-bar.manifest.json",
-      "sha256": "ba1931651c6fa8f9871eba46af855d14a656e40671266c2f499aef05b2be7bb8",
-      "bytes": 3214
+      "sha256": "1ef1517c621eacd37c289328a95852d41afa5ccad41ec2b8d5b3bd65780b648e",
+      "bytes": 3308
     },
     {
       "path": "template-manifests/ranking-ordered-column.manifest.json",
-      "sha256": "fd2ba0fa6ccf940b2e9878280c251723a8ae0c879889b355bed1b9d915b195ba",
-      "bytes": 1828
+      "sha256": "90e4e6d009fe9cf7ca006241bf610db69348b8e133d13da67380ea156adabd7a",
+      "bytes": 1926
     },
     {
       "path": "template-manifests/slope-chart.manifest.json",
-      "sha256": "d810b3d3a77af18685d03410faad8b6a51c0186bb109734a5be2aeef7625626b",
-      "bytes": 2689
+      "sha256": "14fb83590611238b4b189135961c3916014551b9af3beb660591e47ad1689df9",
+      "bytes": 4510
     },
     {
       "path": "template-manifests/spatial-choropleth-map.manifest.json",
@@ -401,14 +446,19 @@
       "bytes": 5913
     },
     {
+      "path": "template-manifests/spatial-symbol-map-latlon.manifest.json",
+      "sha256": "8bc4cb6b55dccc4176489fdc14feb11c3bd0e679684c00f4eb1b0e506b8b2850",
+      "bytes": 3567
+    },
+    {
       "path": "template-manifests/spatial-symbol-map.manifest.json",
-      "sha256": "21276c67b45d5a515a91ea061fe3654b6153e3f10f5bae809c7274e6fd3e0ee9",
-      "bytes": 2763
+      "sha256": "678e0d7d6337ad005ef3cb3361a673bbf45dd1976400983533ee683fba4c0de3",
+      "bytes": 4657
     },
     {
       "path": "template-manifests/trend-line-chart.manifest.json",
-      "sha256": "a3f76e50ba83cc1a85656149de632bf29ec17b14b0eed601f70effabf050f6eb",
-      "bytes": 3908
+      "sha256": "cd915dd51cc7dea5e2e1fea757522019f0c147f1d0d3399d0cd771f7fdd51e4f",
+      "bytes": 5222
     },
     {
       "path": "template-manifests/ww-floating-bars.manifest.json",
@@ -417,8 +467,8 @@
     },
     {
       "path": "template-manifests/ww-ou-arrow.manifest.json",
-      "sha256": "4f391a1799e81713daf8d3e9c3c7ce28ef775ffaf33c0e8120ce3c171c29457a",
-      "bytes": 16614
+      "sha256": "4e5aac6aec5595b8aa85dfe84f820c26a0b308fd9a27339fb99a780b5e5ffff4",
+      "bytes": 16700
     },
     {
       "path": "template-manifests/ww-ou-diff.manifest.json",

@@ -125,4 +125,25 @@ describe('DesktopConfig', () => {
       expect(new Config().externalApiDiscoveryDir).toBeUndefined();
     });
   });
+
+  describe('pinned Desktop session id', () => {
+    it('should be undefined by default', () => {
+      expect(new Config().desktopSessionId).toBeUndefined();
+    });
+
+    it('should read a numeric pid from TABLEAU_DESKTOP_SESSION_ID', () => {
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '4242');
+      expect(new Config().desktopSessionId).toBe('4242');
+    });
+
+    it('should ignore a blank value', () => {
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '');
+      expect(new Config().desktopSessionId).toBeUndefined();
+    });
+
+    it('should ignore a non-numeric value', () => {
+      vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', 'not-a-pid');
+      expect(new Config().desktopSessionId).toBeUndefined();
+    });
+  });
 });

@@ -22,7 +22,7 @@ import type { TemplateManifest } from './manifest-types.js';
 // Discount and (dims) Sub-Category/Category/Segment/Region/State-Province/Country-Region/
 // Order Date(temporal)/... .
 //
-// bindTemplate is called with loadManifests() (NATIVE eligibility — the 14 render-verified
+// bindTemplate is called with loadManifests() (NATIVE eligibility — the 20 render-verified
 // templates, no forced-eligible cloning) and NO proposal / NO llmPropose, so every result
 // is the pure Call-1 no-LLM decision: 'bound' (used_llm=false) or 'propose'.
 
@@ -38,18 +38,26 @@ const EXPECTED_DATASOURCE = 'Sample - Superstore';
 // extended (per the discover-and-pin contract) rather than silently under-covering.
 const EXPECTED_ELIGIBLE = [
   'box-plot-chart',
+  'connected-scatterplot', // W63 render-stamp port: live-2026-07-13
+  'control-chart-xmr',
+  'correlation-bubble-chart',
   'correlation-scatter-plot-chart', // W60 parity port: factory stamp crossed
   'distribution-bar-code-chart',
   'funnel-chart',
   'gantt-task-rollup-chart',
   'kpi-text',
+  'magnitude-simple-bar',
+  'part-to-whole-pie-chart',
   'part-to-whole-stacked-bar-chart',
   'part-to-whole-treemap-chart',
   'part-to-whole-waterfall',
   'quota-attainment-bullet',
+  'ranking-dot-strip-plot', // W63 render-stamp port: live-2026-07-13
   'ranking-ordered-bar',
   'ranking-ordered-column',
+  'slope-chart', // W63 render-stamp port: live-2026-07-13
   'spatial-choropleth-map',
+  'spatial-symbol-map',
   'trend-line-chart',
   'ww-ou-arrow',
 ].sort();
@@ -83,6 +91,16 @@ const ONE_SHOTS: ReadonlyArray<readonly [ask: string, template: string]> = [
   // [Country/Region]; the ask-named [State/Province] fills the state slot. MOVED here
   // from PINNED_PROPOSE (was fail-closed pre-W60) — see resolveGeoSlots widening.
   ['filled map of Profit by State/Province', 'spatial-choropleth-map'],
+  ['pie chart of Sales by Segment', 'part-to-whole-pie-chart'],
+  ['symbol map of Sales by Country/Region, State/Province, and City', 'spatial-symbol-map'],
+  // W63 render-stamp port: connected-scatterplot one-shots on the 'connected' qualifier +
+  // two measures + a detail dim + a color dim (the 'vs ... by ... and ...' phrasing fills
+  // X/Profit-Ratio/detail/color). The bare 'scatter' noun stays with
+  // correlation-scatter-plot-chart (W63 dropped connected-scatterplot's 'scatter' alias).
+  ['connected scatterplot of Profit vs Sales by Customer Name and Region', 'connected-scatterplot'],
+  // W63 render-stamp port: slope-chart one-shots on the 'slope' chart noun + measure + dim
+  // + temporal [Order Date] filling the endpoint-period slots.
+  ['slope chart of Sales by Region over Order Date', 'slope-chart'],
 ];
 
 // ── KNOWN SAFE-PROPOSES (NOT bound — fail-closed by design; WHY each) ──────────
@@ -106,12 +124,6 @@ const SAFE_PROPOSES: ReadonlyArray<readonly [ask: string, why: string]> = [
     // quota-attainment-bullet requires TWO quantitative slots: actual + quota. Only Sales is
     // named (role-greedy binds only ask-NAMED fields), so the quota slot is unfilled → propose.
     'no second (quota) measure named → quota slot unfilled (quota-attainment-bullet)',
-  ],
-  [
-    'pie chart of Sales by Segment',
-    // part-to-whole-pie-chart is unstamped (fast_path_eligible=false) so it is never a no-LLM
-    // candidate; nothing else matches 'pie' → propose. (It also carries avoid_when guidance.)
-    'pie template unstamped (not fast_path_eligible)',
   ],
   [
     'sankey of customer order flows between regions',
@@ -151,6 +163,11 @@ const PINNED_BOUND: ReadonlyArray<readonly [ask: string, template: string, note:
     'spatial-choropleth-map',
     'pinned-current-behavior: two geo dims (state/country name affinity) + Profit fill all three slots',
   ],
+  [
+    'magnitude chart of Sales by Category',
+    'magnitude-simple-bar',
+    'pinned-current-behavior: magnitude intent + Sales + Category fill the simple magnitude bar slots',
+  ],
 ];
 
 // Pinned NOT-BOUND (propose → assert not-bound):
@@ -161,6 +178,18 @@ const PINNED_PROPOSE: ReadonlyArray<readonly [ask: string, note: string]> = [
     // (both geo); a Sales-by-Sub-Category ask names no geo field → geo slots unfilled → propose.
     'pinned-current-behavior: distribution-bar-code-chart requires two geo slots — none named → fail closed',
   ],
+  [
+    'control chart of Profit by Order Date',
+    'pinned-current-behavior: W62 stamp made control-chart-xmr eligible, but no-LLM classifier still proposes on this phrasing',
+  ],
+  [
+    'bubble chart of Profit, Discount, and Sales by Order ID',
+    'pinned-current-behavior: W62 stamp made correlation-bubble-chart eligible, but no-LLM classifier still proposes on this phrasing',
+  ],
+  [
+    'dot strip plot of Sales by Sub-Category over Order Date',
+    'pinned-current-behavior: W63 stamp made ranking-dot-strip-plot eligible, but its rows slot needs a MONTH-derivation temporal (deriv=mn) that this phrasing does not fill deterministically → propose (fail-open to the LLM path)',
+  ],
   // NB (W60): 'filled map of Profit by State/Province' MOVED to the ONE_SHOTS table — the
   // required country geo slot now auto-completes from the schema (Country/Region) when the
   // state slot is ask-named. The distribution-bar-code strip-plot case above stays here:
@@ -168,7 +197,7 @@ const PINNED_PROPOSE: ReadonlyArray<readonly [ask: string, note: string]> = [
 ];
 
 describe('binder/bind-behavior-matrix — eligibility tripwire', () => {
-  it('the eligible set is exactly the 14 render-verified templates this matrix covers', () => {
+  it('the eligible set is exactly the 20 render-verified templates this matrix covers', () => {
     // If a NEW template is stamped fast_path_eligible, this fails — extend the matrix
     // (add its one-shot / discover-and-pin entry) deliberately rather than under-cover it.
     expect(eligibleNames).toEqual(EXPECTED_ELIGIBLE);

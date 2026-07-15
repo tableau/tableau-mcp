@@ -8,6 +8,10 @@ import type {
 
 const allRules: ValidationRule[] = validationRules;
 
+type ContextAwareValidationRule = ValidationRule & {
+  validate(xml: string, context?: ValidationContext): ValidationIssue[];
+};
+
 export function runValidation(
   xml: string,
   context: ValidationContext,
@@ -17,7 +21,7 @@ export function runValidation(
   for (const rule of rules) {
     if (rule.contexts.includes(context)) {
       try {
-        issues.push(...rule.validate(xml));
+        issues.push(...(rule as ContextAwareValidationRule).validate(xml, context));
       } catch (err) {
         // A broken rule must not crash the apply path.
         issues.push({

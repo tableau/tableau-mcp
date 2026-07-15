@@ -98,6 +98,8 @@ describe('listAvailableFieldsTool', () => {
     expect(body.message).toContain('Found 2 fields in "Sample - Superstore"');
     expect(body.message).toContain('DIMENSIONS');
     expect(body.message).toContain('MEASURES');
+    expect(body.message).toContain('Text');
+    expect(body.message).toContain('Number (decimal)');
     expect(body.fields).toHaveLength(2);
   });
 

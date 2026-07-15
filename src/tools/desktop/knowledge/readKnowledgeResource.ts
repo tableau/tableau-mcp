@@ -11,7 +11,7 @@ const paramsSchema = {
   uri: z
     .string()
     .describe(
-      "Resource URI, e.g. 'expertise://tableau/viz-design/chart-selection'; list-knowledge-resources shows URIs.",
+      "Resource URI, e.g. 'expertise://tableau/strategy/viz-design/chart-selection'. Use list-knowledge-resources to see available URIs.",
     ),
 };
 
@@ -24,7 +24,7 @@ export const getReadKnowledgeResourceTool = (
     name: 'read-knowledge-resource',
     title: toolTitle,
     description:
-      'Read an expertise module by URI (e.g., expertise://tableau/tableau-tactics/viz/filters). Use list-knowledge-resources to enumerate available URIs.',
+      'Read an expertise module by URI (e.g., expertise://tableau/tactics/viz/filters). Use list-knowledge-resources to enumerate available URIs.',
     paramsSchema,
     annotations: {
       title: toolTitle,

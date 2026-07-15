@@ -5,6 +5,11 @@ import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import {
+  bindExplicitTemplate,
+  formatExplicitBindErrors,
+} from '../../../desktop/binder/explicit-bind.js';
+import { summarizeSchema } from '../../../desktop/binder/schema-summary.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import {
@@ -17,17 +22,20 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  workbookFile: z.string().describe('Workbook cache file.'),
-  templateName: z.string().describe('Template name; no .xml.'),
-  title: z.string().describe('Sheet name; replaces {{TITLE}}.'),
-  sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe('Injected sheet type.'),
-  templateParameters: z.record(z.string()).optional().describe('Placeholder substitutions.'),
-  fieldMapping: z.record(z.string()).optional().describe('Template field -> column-ref.'),
+  workbookFile: z.string().describe('Workbook cache file path.'),
+  templateName: z.string().describe('Template name.'),
+  title: z.string().describe('New sheet name; replaces {{TITLE}}.'),
+  sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe('Type of sheet being injected.'),
+  templateParameters: z
+    .record(z.string())
+    .optional()
+    .describe('Additional placeholder substitutions.'),
+  fieldMapping: z.record(z.string()).optional().describe('Template field to column-ref map.'),
   insertPosition: z
     .enum(['end', 'before_sheet', 'after_sheet'])
     .optional()
-    .describe('Tab position.'),
-  relativeSheetName: z.string().optional().describe('Anchor sheet for before/after.'),
+    .describe('Tab insertion position.'),
+  relativeSheetName: z.string().optional().describe('Anchor sheet for before/after insertion.'),
 };
 
 const toolTitle = 'Inject Template';
@@ -39,9 +47,8 @@ export const getInjectTemplateTool = (
     name: 'inject-template',
     title: toolTitle,
     description: [
-      'Inject a worksheet/dashboard/story template into cached workbook XML (mutates the file).',
-      'Use list-xml-templates for names; supports placeholders including {{TITLE}}.',
-      'Workflow: get-workbook-xml (mode=file) → inject-template → apply-workbook.',
+      'Inject a worksheet/dashboard/story template into a cached workbook (mutates).',
+      'Names from template list; supports {{TITLE}}. Then apply-workbook.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -86,7 +93,7 @@ export const getInjectTemplateTool = (
             const files = listTemplateNames();
             const available = files.length > 0 ? files.join(', ') : 'none';
             return new ArgsValidationError(
-              `Template "${templateName}" not found.\n\nAvailable templates: ${available}\n\nUse list-xml-templates to see all options.`,
+              `Template "${templateName}" not found.\n\nAvailable templates: ${available}\n\nUse the template list tool to see all options.`,
             ).toErr();
           }
 
@@ -99,6 +106,33 @@ export const getInjectTemplateTool = (
             // one. inject-template has no session, so the per-apply identity is the
             // target workbook file + apply timestamp; a randomUUID guards against
             // same-millisecond collisions.
+            // Manifest enforcement (P0 W-23447710): a caller-supplied mapping for a
+            // manifest-backed template is validated/corrected through the binder
+            // contract — slot derivations come from the manifest, not the caller.
+            let appliedFieldMapping = fieldMapping;
+            const explicitTemplateWarnings: string[] = [];
+            if (
+              templateParameters?.DATASOURCE &&
+              fieldMapping &&
+              Object.keys(fieldMapping).length > 0
+            ) {
+              const explicitBind = bindExplicitTemplate(
+                templateName,
+                fieldMapping,
+                summarizeSchema(workbookXml),
+                { title, datasource: templateParameters.DATASOURCE },
+              );
+
+              if (!explicitBind.ok) {
+                return new ArgsValidationError(
+                  formatExplicitBindErrors(templateName, explicitBind.errors),
+                ).toErr();
+              }
+
+              if (!explicitBind.passthrough) appliedFieldMapping = explicitBind.fieldMapping;
+              explicitTemplateWarnings.push(...explicitBind.warnings);
+            }
+
             const applyNonce = `${workbookFile}:${Date.now()}:${randomUUID()}`;
             const result = buildInjectedWorkbookXml({
               workbookXml,
@@ -106,7 +140,7 @@ export const getInjectTemplateTool = (
               title,
               sheetType,
               templateParameters,
-              fieldMapping,
+              fieldMapping: appliedFieldMapping,
               insertPosition,
               relativeSheetName,
               applyNonce,
@@ -118,16 +152,27 @@ export const getInjectTemplateTool = (
 
             writeFileSync(resolve(workbookFile), result.xml, 'utf-8');
 
-            return new Ok({ workbookFile, templateName, title, sheetType });
+            return new Ok({
+              workbookFile,
+              templateName,
+              title,
+              sheetType,
+              warnings: explicitTemplateWarnings,
+            });
           } catch (err) {
             return new FileReadError(err).toErr();
           }
         },
-        getSuccessResult: ({ workbookFile, templateName, title, sheetType }) => ({
+        getSuccessResult: ({ workbookFile, templateName, title, sheetType, warnings }) => ({
           content: [
             {
               type: 'text',
-              text: `Injected template "${templateName}" as "${title}" (${sheetType}).\n\nUpdated file: ${workbookFile}\n\nUse apply-workbook to apply changes to Tableau.`,
+              text:
+                `Injected template "${templateName}" as "${title}" (${sheetType}).` +
+                (warnings.length > 0
+                  ? `\n\nTemplate advisory warnings:\n${warnings.map((w) => `  - ${w}`).join('\n')}`
+                  : '') +
+                `\n\nUpdated file: ${workbookFile}\n\nUse apply-workbook to apply changes to Tableau.`,
             },
           ],
         }),

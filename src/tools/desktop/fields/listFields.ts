@@ -23,7 +23,7 @@ export const getListFieldsTool = (server: DesktopMcpServer): DesktopTool<typeof 
     name: 'list-fields',
     title,
     description: [
-      'List fields already placed on a worksheet: encodings, rows, cols, positions, column refs.',
+      'List fields already placed on a worksheet: encodings, Rows, Columns, positions, column refs.',
       'For available fields use list-available-fields with the workbook file. Use exact column_ref for removals.',
     ].join(' '),
     paramsSchema,
@@ -75,7 +75,9 @@ export const getListFieldsTool = (server: DesktopMcpServer): DesktopTool<typeof 
 
           const lines: string[] = [`Found ${fields.length} field(s):\n`];
           for (const [location, locationFields] of Object.entries(byLocation)) {
-            lines.push(`\n${location}:`);
+            const displayLocation =
+              location === 'rows' ? 'Rows' : location === 'cols' ? 'Columns' : location;
+            lines.push(`\n${displayLocation}:`);
             for (const field of locationFields) {
               lines.push(`  [${field.index}] ${field.column}`);
             }

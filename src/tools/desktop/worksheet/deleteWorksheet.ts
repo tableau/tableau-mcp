@@ -23,6 +23,7 @@ import type {
   ParsedWorkbook,
   ParsedWorksheet,
 } from '../../../desktop/metadata/types.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   DesktopCommandExecutionError,
   WorkbookXmlLoadFailedError,
@@ -155,8 +156,8 @@ function refusal(
 }
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
-  worksheetName: z.string().min(1).describe('Worksheet name to delete.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+  worksheetName: z.string().min(1).describe('Existing worksheet name to delete.'),
 };
 
 const title = 'Delete Worksheet';
@@ -185,7 +186,12 @@ export const getDeleteWorksheetTool = (
         extra,
         args: { session, worksheetName },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
 
           // ── Events anchor (pre-read) — the standard gate (bindTemplate.ts /
           // dashboardAutoApply.ts): capture BEFORE the read so the (read, apply]
@@ -205,7 +211,7 @@ export const getDeleteWorksheetTool = (
           const removal = removeWorksheetFromWorkbook(xmlResult.value, worksheetName);
           if (removal.status === 'parse-failed') {
             return new XmlModificationError(
-              `Could not parse the live workbook XML: ${removal.message}`,
+              `Could not parse the live workbook structure: ${removal.message}`,
             ).toErr();
           }
           if (removal.status === 'not-found') {

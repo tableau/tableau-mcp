@@ -9,6 +9,7 @@ import {
   isOverInlineXmlCap,
   xmlByteLength,
 } from '../../../desktop/inlineXmlCap.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   ArgsValidationError,
   DashboardXmlLoadFailedError,
@@ -20,15 +21,15 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
-  dashboardName: z.string().describe('Dashboard (must already exist).'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+  dashboardName: z.string().describe('Name of the dashboard to update (must already exist).'),
   mode: z
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe('file=dashboardFile; inline=dashboardXml.'),
-  dashboardFile: z.string().optional().describe('Dashboard file for mode=file.'),
-  dashboardXml: z.string().optional().describe('Dashboard XML for mode=inline.'),
+    .describe('file reads dashboardFile; inline uses dashboardXml.'),
+  dashboardFile: z.string().optional().describe('Modified dashboard cache file for mode=file.'),
+  dashboardXml: z.string().optional().describe('Dashboard layout content for mode=inline.'),
 };
 
 const title = 'Apply Dashboard';
@@ -40,9 +41,9 @@ export const getApplyDashboardTool = (
     name: 'apply-dashboard',
     title,
     description: [
-      'Apply modified dashboard XML to Tableau (mutating). mode=file is default; mode=inline is for small XML.',
+      'Apply modified dashboard layout to Tableau (mutating). mode=file is default; mode=inline is for small dashboards.',
       'IMPORTANT: can only UPDATE an existing dashboard, not create one — use apply-workbook to create.',
-      'See expertise://tableau/tableau-tactics/dashboard/zones for zone structure.',
+      'See expertise://tableau/tactics/dashboard/zones for zone structure.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -64,7 +65,7 @@ export const getApplyDashboardTool = (
             case 'inline': {
               if (!dashboardXml?.trim()) {
                 return new ArgsValidationError(
-                  'When mode=inline, a non-empty dashboard XML string is required.',
+                  'When mode=inline, non-empty dashboard layout content is required.',
                 ).toErr();
               }
               break;
@@ -74,7 +75,7 @@ export const getApplyDashboardTool = (
                 return new ArgsValidationError(
                   [
                     'When mode=file, a non-empty dashboard file path is required.',
-                    'The path can be determined using get-dashboard-xml.',
+                    'The path can be determined using the dashboard layout retrieval tool.',
                   ].join(' '),
                 ).toErr();
               }
@@ -83,7 +84,7 @@ export const getApplyDashboardTool = (
                 return new WorkbookNotFoundError(
                   [
                     `Cached dashboard file not found: ${dashboardFile}`,
-                    'Provide a path determined by get-dashboard-xml.',
+                    'Provide a path determined by the dashboard layout retrieval tool.',
                   ].join(' '),
                 ).toErr();
               }
@@ -97,7 +98,12 @@ export const getApplyDashboardTool = (
             }
           }
 
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const result = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,
@@ -126,7 +132,7 @@ export const getApplyDashboardTool = (
               : '';
 
           return new Ok({
-            message: `Successfully applied dashboard XML for "${dashboardName}". The dashboard has been updated.${note}`,
+            message: `Successfully applied dashboard update for "${dashboardName}". The dashboard has been updated.${note}`,
           });
         },
       });

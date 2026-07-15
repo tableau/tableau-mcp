@@ -53,6 +53,37 @@ describe('ExternalApiToolExecutor', () => {
       await executor.start();
       expect(executor.isAvailable()).toBe(false);
     });
+
+    it('fails closed with a pid-named error when a pinned pid is not among the discovered instances', async () => {
+      const executor = new ExternalApiToolExecutor({
+        pid: 12345,
+        discover: () => [instanceFor(server)], // pid 999 — not the pinned 12345
+      });
+      await executor.start();
+      expect(executor.isAvailable()).toBe(false);
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'undo',
+        signal,
+      });
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('unknown');
+      if (error.type === 'unknown') {
+        expect(String(error.error)).toContain('pid 12345');
+      }
+    });
+
+    it('connects to the pinned instance when its pid is present', async () => {
+      const executor = new ExternalApiToolExecutor({
+        pid: 999,
+        discover: () => [instanceFor(server)],
+      });
+      await executor.start();
+      expect(executor.isAvailable()).toBe(true);
+    });
   });
 
   describe('executeCommand routing', () => {
@@ -190,6 +221,39 @@ describe('ExternalApiToolExecutor', () => {
       expect(result.isOk()).toBe(true);
       expect(result.unwrap().parsedResult.text).toBe('<workbook><from-desktop /></workbook>');
       expect(discover).toHaveBeenCalledTimes(2);
+    });
+
+    it('fails closed when the pinned pid disappears on the 401 rescan instead of retargeting', async () => {
+      const other = await startMockExternalApiServer({
+        workbookXml: '<workbook><other /></workbook>',
+      });
+      try {
+        const discover = vi
+          .fn()
+          .mockReturnValueOnce([{ ...instanceFor(server, 'stale-token'), pid: 999 }])
+          .mockReturnValue([{ ...instanceFor(other, 'valid-token'), pid: 111 }]); // pinned pid 999 gone
+
+        const executor = new ExternalApiToolExecutor({ pid: 999, discover });
+        await executor.start();
+
+        const result = await executor.executeCommand({
+          namespace: 'tabui',
+          command: 'save-underlying-metadata',
+          args: { 'is-json': false },
+          schema: z.object({ text: z.string() }),
+          signal,
+        });
+
+        expect(result.isErr()).toBe(true);
+        const error = result.unwrapErr();
+        expect(error.type).toBe('unknown');
+        if (error.type === 'unknown') {
+          expect(String(error.error)).toContain('pid 999');
+        }
+        expect(other.requests).toHaveLength(0);
+      } finally {
+        await other.close();
+      }
     });
 
     it('gives up after a single rescan when the 401 persists', async () => {

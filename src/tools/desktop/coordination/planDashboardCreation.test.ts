@@ -112,9 +112,21 @@ describe('planDashboardCreationTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('BLOCKED');
-    expect(result.content[0].text).toContain('ambiguous');
-    expect(result.content[0].text).toContain('"Sales"');
+    expect(result.content[0].text).toBe(
+      [
+        'BLOCKED: 1 ambiguous field reference — cannot plan dashboard',
+        '',
+        'Ambiguous (matches multiple columns — pick one):',
+        '  • "Sales" → candidates: "[DS1].[sum:Sales:qk]", "[DS2].[sum:Sales:qk]"',
+        '',
+        'Next step: disambiguate each field, then re-call plan-dashboard-creation.',
+        '  • Use resolve-field with an explicit datasource.',
+        '  • For not_found fields, call list-available-fields to see valid names.',
+      ].join('\n'),
+    );
+    expect(result.structuredContent).toEqual({
+      nextAction: { label: 'Disambiguate each field before re-planning', kind: 'prefill' },
+    });
   });
 
   it('should include not_found fields in the blocked response alongside ambiguous', async () => {

@@ -2,23 +2,92 @@
   "template": "correlation-bubble-chart",
   "family": "correlation",
   "readiness": "GREEN",
-  "fast_path_eligible": false,
+  "fast_path_eligible": true,
   "fast_path_blockers": [],
-  "portability_evidence": { "fixture_bind": true, "render_verified": "none" },
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "live-2026-07-11",
+    "xml_sha256": "b246e150b97c2a897bb5434abf7c1957e7f0f92b1ac5ce8e26d8b6c219ca061c",
+    "render_evidence": {
+      "method": "gate-composite",
+      "date": "2026-07-11",
+      "structural": 0.97297,
+      "critical_pass": "5/5",
+      "high_pass": "3/3",
+      "pixel": 0.95833,
+      "pixel_regions": 6,
+      "sanity": "sane",
+      "sanity_signals": [
+        "mark-count=pass reconciled=true (5111=5111, Worksheet>Copy>Data on source and applied sheets -- COUNTD([Order ID]) on the bundled xls, measured live)",
+        "caption-leak=pass"
+      ],
+      "run": "oracle-leg replay (W62 stamp batch): independent authored oracle on bundled Sample - Superstore; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity placeholder fill (no rewrites -- native Superstore names); all 12 config facets green on the applied readback incl. the non-Sum AVG(Discount) derivation on rows",
+      "basis": "golden-parity gate run 2026-07-11 (oracle-leg): structural 0.97297 (5/5 critical, 3/3 high; sole miss = salience-1 resolved-title cosmetic -- applied sheet name differs from oracle sheet name by design), pixel 0.95833 (6 counted ROIs, same-geometry back-to-back captures), composite 97, binding-sanity sane via reconciled Copy>Data mark counts 5111=5111 (grain [Order ID]; data-dependent so measured live, no absolute pin).",
+      "lane": "fable-direct stamp batch 2026-07-11 (orchestrator live gate run; oracle-stamp.mjs CONFIG=bubble PID=90826)",
+      "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
+      "gate_composite": 97
+    }
+  },
   "datasource_placeholder": true,
-  "placeholders": ["TITLE", "DATASOURCE"],
-  "intent_keywords": ["bubble", "correlation", "scatter", "relationship", "three-measures", "sized-scatter"],
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "bubble",
+    "correlation",
+    "scatter",
+    "relationship",
+    "three-measures",
+    "sized-scatter"
+  ],
   "description": "One bubble per detail-grain member; X and Y are two measures, bubble size is a third measure.",
   "slots": [
-    { "slot_id": "discount", "template_field": "Discount", "derivation": "avg",
-      "role": ["rows"], "kind": "quantitative", "bindable": true, "required": true },
-    { "slot_id": "profit", "template_field": "Profit", "derivation": "sum",
-      "role": ["cols"], "kind": "quantitative", "bindable": true, "required": true },
-    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
-      "role": ["size"], "kind": "quantitative", "bindable": true, "required": true },
-    { "slot_id": "order_id", "template_field": "Order ID", "derivation": "none",
-      "role": ["detail"], "kind": "categorical", "bindable": true, "required": true,
-      "notes": "detail/grain dimension: one bubble per member." }
+    {
+      "slot_id": "discount",
+      "template_field": "Discount",
+      "derivation": "avg",
+      "role": [
+        "rows"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true
+    },
+    {
+      "slot_id": "profit",
+      "template_field": "Profit",
+      "derivation": "sum",
+      "role": [
+        "cols"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true
+    },
+    {
+      "slot_id": "sales",
+      "template_field": "Sales",
+      "derivation": "sum",
+      "role": [
+        "size"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true
+    },
+    {
+      "slot_id": "order_id",
+      "template_field": "Order ID",
+      "derivation": "none",
+      "role": [
+        "detail"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "detail/grain dimension: one bubble per member."
+    }
   ],
   "calcs": [],
   "hazards": []

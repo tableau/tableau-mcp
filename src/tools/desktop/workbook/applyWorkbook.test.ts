@@ -32,7 +32,7 @@ describe('applyWorkbookTool', () => {
   it('should create a tool instance with correct properties', () => {
     const applyWorkbookTool = getApplyWorkbookTool(new DesktopMcpServer());
     expect(applyWorkbookTool.name).toBe('apply-workbook');
-    expect(applyWorkbookTool.description).toContain('Apply modified workbook XML to Tableau');
+    expect(applyWorkbookTool.description).toContain('Apply modified workbook content to Tableau');
     expect(applyWorkbookTool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       mode: expect.any(Object),
@@ -63,7 +63,7 @@ describe('applyWorkbookTool', () => {
     invariant(result.content[0].type === 'text');
 
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
-    expect(resultObj.message).toContain('Successfully applied workbook XML');
+    expect(resultObj.message).toContain('Successfully applied workbook update');
   });
 
   it('should successfully apply workbook XML in file mode', async () => {
@@ -87,7 +87,7 @@ describe('applyWorkbookTool', () => {
     invariant(result.content[0].type === 'text');
 
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
-    expect(resultObj.message).toContain('Successfully applied workbook XML');
+    expect(resultObj.message).toContain('Successfully applied workbook update');
 
     expect(existsSync).toHaveBeenCalledWith(mockFilePath);
     expect(readFileSync).toHaveBeenCalledWith(mockFilePath, 'utf-8');
@@ -126,8 +126,7 @@ describe('applyWorkbookTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
-      new ArgsValidationError('When mode=inline, a non-empty workbook TWB XML string is required.')
-        .message,
+      new ArgsValidationError('When mode=inline, non-empty workbook content is required.').message,
     );
   });
 
@@ -280,7 +279,7 @@ describe('applyWorkbookTool', () => {
     invariant(result.content[0].type === 'text');
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
     // Still applied (not rejected on size) ...
-    expect(resultObj.message).toContain('Successfully applied workbook XML');
+    expect(resultObj.message).toContain('Successfully applied workbook update');
     // ... but nudged toward file mode for next time.
     expect(resultObj.message).toContain('inline cap');
     expect(resultObj.message).toContain('mode=file');

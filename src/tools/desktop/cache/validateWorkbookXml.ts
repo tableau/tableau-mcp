@@ -7,10 +7,10 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  xml: z.string().describe('Workbook XML to validate.'),
+  xml: z.string().describe('The workbook content to validate.'),
 };
 
-const toolTitle = 'Validate Workbook XML';
+const toolTitle = 'Check Workbook Structure';
 export const getValidateWorkbookXmlTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
@@ -19,7 +19,7 @@ export const getValidateWorkbookXmlTool = (
     name: 'validate-workbook-xml',
     title: toolTitle,
     description:
-      'Check that workbook XML is well-formed (parseable). Does not validate against XSD schema — Tableau validates that when you apply the XML. Use this before apply-workbook to catch basic XML syntax errors early.',
+      'Check that workbook content is well-formed (parseable). Tableau runs deeper validation when you apply the update. Use this before apply-workbook to catch basic structure errors early.',
     paramsSchema,
     annotations: {
       title: toolTitle,
@@ -35,7 +35,7 @@ export const getValidateWorkbookXmlTool = (
         callback: async () => new Ok(wellFormedXmlRule.validate(xml)),
         getSuccessResult: (issues) => {
           if (issues.length === 0) {
-            return { content: [{ type: 'text', text: 'Workbook XML is well-formed.' }] };
+            return { content: [{ type: 'text', text: 'Workbook structure is well-formed.' }] };
           }
           const errorList = issues.map((issue, i) => `${i + 1}. ${issue.message}`).join('\n');
           return {
@@ -43,7 +43,7 @@ export const getValidateWorkbookXmlTool = (
             content: [
               {
                 type: 'text',
-                text: `Workbook XML is malformed with ${issues.length} error(s):\n\n${errorList}\n\nFix these errors before calling apply-workbook.`,
+                text: `Workbook structure has ${issues.length} error(s):\n\n${errorList}\n\nFix these errors before calling apply-workbook.`,
               },
             ],
           };

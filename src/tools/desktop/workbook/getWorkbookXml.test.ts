@@ -34,13 +34,13 @@ describe('getWorkbookXmlTool', () => {
   it('should create a tool instance with correct properties', () => {
     const getWorkbookXmlTool = getGetWorkbookXmlTool(new DesktopMcpServer());
     expect(getWorkbookXmlTool.name).toBe('get-workbook-xml');
-    expect(getWorkbookXmlTool.description).toContain('Get current workbook XML');
+    expect(getWorkbookXmlTool.description).toContain('Get current workbook structure');
     expect(getWorkbookXmlTool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       mode: expect.any(Object),
     });
     expect(getWorkbookXmlTool.annotations).toMatchObject({
-      title: 'Get Workbook XML',
+      title: 'Get Workbook Structure',
       readOnlyHint: false,
       openWorldHint: false,
     });
@@ -171,7 +171,7 @@ describe('getWorkbookXmlTool', () => {
     expect(resultObj.message).toContain('inline cap');
     expect(resultObj.message).toContain('Sales');
     expect(resultObj.message).toContain('Superstore');
-    expect(resultObj.instructions).toContain('read-cached-xml');
+    expect(resultObj.instructions).toContain('cache read tool');
   });
 
   it('logs a cap-hit receipt when the cap fires', async () => {

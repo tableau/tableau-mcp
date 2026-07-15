@@ -9,6 +9,7 @@ import {
   isOverInlineXmlCap,
   xmlByteLength,
 } from '../../../desktop/inlineXmlCap.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -20,14 +21,14 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   mode: z
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe('file=workbookFile; inline=workbookXml.'),
-  workbookFile: z.string().optional().describe('Workbook file for mode=file.'),
-  workbookXml: z.string().optional().describe('Workbook XML for mode=inline.'),
+    .describe('file reads workbookFile; inline uses workbookXml.'),
+  workbookFile: z.string().optional().describe('Modified workbook cache file for mode=file.'),
+  workbookXml: z.string().optional().describe('Full workbook content for mode=inline.'),
 };
 
 const title = 'Apply Workbook';
@@ -39,8 +40,8 @@ export const getApplyWorkbookTool = (
     name: 'apply-workbook',
     title,
     description: [
-      'Apply modified workbook XML to Tableau (mutating). mode=file is default; mode=inline is for small XML.',
-      'See expertise://tableau/tableau-tactics/data/datasources before editing datasource XML.',
+      'Apply modified workbook content to Tableau (mutating). mode=file is default; mode=inline is for small workbooks.',
+      'See expertise://tableau/tactics/data/datasources before editing datasource structure.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -62,7 +63,7 @@ export const getApplyWorkbookTool = (
             case 'inline': {
               if (!workbookXml?.trim()) {
                 return new ArgsValidationError(
-                  'When mode=inline, a non-empty workbook TWB XML string is required.',
+                  'When mode=inline, non-empty workbook content is required.',
                 ).toErr();
               }
               break;
@@ -72,7 +73,7 @@ export const getApplyWorkbookTool = (
                 return new ArgsValidationError(
                   [
                     'When mode=file, a non-empty workbook file path is required.',
-                    'The path can be determined using any of the tools that get or modify workbook XML.',
+                    'The path can be determined using any of the tools that get or modify workbook content.',
                   ].join(' '),
                 ).toErr();
               }
@@ -81,7 +82,7 @@ export const getApplyWorkbookTool = (
                 return new WorkbookNotFoundError(
                   [
                     `Cached workbook file not found: ${workbookFile}`,
-                    'Provide a path determined by any of the tools that get or modify workbook XML.',
+                    'Provide a path determined by any of the tools that get or modify workbook content.',
                   ].join(' '),
                 ).toErr();
               }
@@ -95,7 +96,12 @@ export const getApplyWorkbookTool = (
             }
           }
 
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const result = await loadWorkbookXml({
             xml: workbookXml,
             executor,
@@ -125,7 +131,7 @@ export const getApplyWorkbookTool = (
               : '';
 
           return new Ok({
-            message: `Successfully applied workbook XML. The workbook has been updated.${note}`,
+            message: `Successfully applied workbook update. The workbook has been updated.${note}`,
           });
         },
       });

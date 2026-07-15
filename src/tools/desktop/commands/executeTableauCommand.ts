@@ -2,12 +2,13 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   command: z
     .string()
     .describe(
@@ -39,6 +40,12 @@ export const getExecuteTableauCommandTool = (
         extra,
         args: { session, command, args },
         callback: async () => {
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+
           const parts = command.split(':');
           if (parts.length !== 2) {
             return new ArgsValidationError(
@@ -53,7 +60,7 @@ export const getExecuteTableauCommandTool = (
             ).toErr();
           }
 
-          const executor = await extra.getExecutor(session);
+          const executor = await extra.getExecutor(resolvedSession);
           const result = await executor.executeCommand({
             namespace,
             command: cmd,

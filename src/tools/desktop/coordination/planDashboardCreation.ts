@@ -5,20 +5,22 @@ import { z } from 'zod';
 import { DesktopCache } from '../../../desktop/cache.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { resolveField } from '../../../desktop/metadata/index.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { listTemplateNames } from '../../../desktop/templates/templatePath.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { attachNextAction, prefillNextAction } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
-  dashboardName: z.string().describe('Dashboard name to create.'),
-  title: z.string().optional().describe('Title.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+  dashboardName: z.string().describe('Name of the dashboard to create.'),
+  title: z.string().optional().describe('Optional dashboard title.'),
   layout: z
     .object({
       type: z.enum(['auto-grid', 'rows', 'columns', 'custom']).describe('Layout type.'),
       gridColumns: z.number().optional().describe('Auto-grid columns.'),
-      kpiStripHeight: z.number().optional().describe('KPI strip height %.'),
+      kpiStripHeight: z.number().optional().describe('KPI strip height percent.'),
       zones: z
         .array(
           z.object({
@@ -30,20 +32,22 @@ const paramsSchema = {
           }),
         )
         .optional()
-        .describe('Custom zones.'),
+        .describe('Custom zone positions.'),
     })
     .optional()
-    .describe('Layout.'),
+    .describe('Dashboard layout.'),
   worksheets: z
     .array(
       z.object({
-        name: z.string().describe('Worksheet.'),
-        type: z.enum(['kpi', 'chart']).describe('Worksheet kind.'),
-        template: z.string().optional().describe('Template name.'),
-        fields: z.array(z.string()).describe('Viz fields.'),
+        name: z.string().describe('Worksheet name.'),
+        type: z
+          .enum(['kpi', 'chart'])
+          .describe("Worksheet type: 'kpi' or 'chart' for viz worksheets."),
+        template: z.string().optional().describe('Optional template name.'),
+        fields: z.array(z.string()).describe('Viz field names.'),
       }),
     )
-    .describe('Worksheets to create.'),
+    .describe('List of worksheets to create.'),
 };
 
 function selectTemplate(ws: { type: string; template?: string }): string {
@@ -60,8 +64,8 @@ export const getPlanDashboardCreationTool = (
     name: 'plan-dashboard-creation',
     title: toolTitle,
     description: [
-      'Plan a dashboard build: Phase 1 caches sheets; Phase 2 builds/applies worksheets and dashboard in parallel.',
-      'Blocks planning if any field is ambiguous across datasources — caller must resolve ambiguity first. Details: expertise://tableau/dashboard-design/layout-patterns.',
+      'Plan a dashboard: Phase 1 caches sheets; Phase 2 builds/applies in parallel.',
+      'Resolve ambiguous fields first. expertise://tableau/strategy/dashboard-design/layout-patterns.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -79,7 +83,12 @@ export const getPlanDashboardCreationTool = (
         extra,
         args: { session, dashboardName, title, layout, worksheets },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const signal = extra.signal;
           const workbookResult = await getWorkbookXml({ executor, signal });
 
@@ -91,7 +100,7 @@ export const getPlanDashboardCreationTool = (
           const templateFiles = listTemplateNames();
 
           // Resolve all requested fields
-          const cache = new DesktopCache(session);
+          const cache = new DesktopCache(resolvedSession);
           const fieldMap: Record<string, string | null> = {};
           const aggregationWarnings: string[] = [];
           const ambiguousFields: Array<{ field: string; candidates: string[] }> = [];
@@ -154,7 +163,10 @@ export const getPlanDashboardCreationTool = (
               '  • Use resolve-field with an explicit datasource.',
               '  • For not_found fields, call list-available-fields to see valid names.',
             );
-            return new ArgsValidationError(lines.join('\n')).toErr();
+            return attachNextAction(
+              new ArgsValidationError(lines.join('\n')),
+              prefillNextAction('Disambiguate each field before re-planning'),
+            ).toErr();
           }
 
           // Cache workbook for subagents
@@ -224,7 +236,7 @@ export const getPlanDashboardCreationTool = (
             },
             phase1Prework: {
               description:
-                'Batch create all sheets + dashboard and cache empty XMLs (single tool call)',
+                'Batch create all sheets + dashboard and cache empty working copies (single tool call)',
               tool: 'batch-create-and-cache-sheets',
               params: {
                 worksheetNames: worksheets.map((ws) => ws.name),
@@ -264,7 +276,7 @@ export const getPlanDashboardCreationTool = (
           if (canParallelize) {
             lines.push(
               `Spawn ${allTasks.length} subagents in parallel (${worksheetTasks.length} worksheets + 1 dashboard).`,
-              'Each subagent: reads cached file, builds XML, applies immediately.',
+              'Each subagent: reads cached file, builds the worksheet or dashboard, applies immediately.',
               'Tool: build-and-apply-worksheet (worksheets), build-and-apply-dashboard (dashboard)',
             );
           } else {

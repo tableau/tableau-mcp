@@ -15,6 +15,7 @@ import {
   bundledIntelligenceProvider,
   type ProviderStatus,
 } from '../../../desktop/intelligence/provider.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
@@ -32,7 +33,7 @@ import { DesktopTool } from '../tool.js';
 // exactly [...loadManifests().values()], so re-keying by m.template reproduces it.
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   ask: z.string().describe('Natural-language chart request.'),
 };
 
@@ -87,7 +88,7 @@ export const getProposeTemplateTool = (
     description: [
       'Classify an ask against bundled fast-path templates and return candidates plus output_schema. Model-free.',
       "status 'deterministic' can go to validate-proposal/bind-template; status 'propose' means choose a candidate and fill output_schema.",
-      'Discovery only: never returns apply-ready args and never changes the workbook. Details: expertise://tableau/tableau-tactics/workflow/templates.',
+      'Discovery only: never returns apply-ready args and never changes the workbook. Details: expertise://tableau/tactics/workflow/templates.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -102,7 +103,12 @@ export const getProposeTemplateTool = (
         extra,
         args: { session, ask },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });
           if (xmlResult.isErr()) {
             return new DesktopCommandExecutionError(xmlResult.error).toErr();

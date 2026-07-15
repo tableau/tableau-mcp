@@ -16,7 +16,12 @@ async function startServer(): Promise<void> {
     ? config.defaultNotificationLevel
     : 'debug';
   if (config.loggers.has('fileLogger')) {
-    setFileLogger(new FileLogger({ logDirectory: config.fileLoggerDirectory }));
+    setFileLogger(
+      new FileLogger({
+        logDirectory: config.fileLoggerDirectory,
+        fileNamePrefix: 'desktop-mcp-',
+      }),
+    );
   }
 
   if (config.transport !== 'stdio') {

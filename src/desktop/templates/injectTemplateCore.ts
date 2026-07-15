@@ -20,6 +20,21 @@ import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
 import { injectTemplate, InsertPosition, SheetType } from './injectTemplate.js';
 
 /** Escape the five XML metacharacters (identical to the inject-template tool). */
+/**
+ * xmldom >=0.9 (this repo ships 0.9.10) throws NamespaceError serializing user:*
+ * attributes with no xmlns:user in scope; templates are workbook fragments that
+ * historically omitted the declaration. No-op when declared or unused.
+ * Ported from a2td 3ee7bb6.
+ */
+export function ensureUserNamespace(xml: string): string {
+  if (!/\buser:[A-Za-z0-9_-]+/.test(xml)) return xml;
+  if (/\sxmlns:user=/.test(xml)) return xml;
+  return xml.replace(
+    /<([A-Za-z0-9:_-]+)(\s|>)/,
+    "<$1 xmlns:user='http://www.tableausoftware.com/xml/user'$2",
+  );
+}
+
 export function escapeXml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
@@ -159,6 +174,7 @@ export function buildInjectedWorkbookXml({
     // W28-C: splice a BOUND facet pill onto the trellis shelf BEFORE the frozen
     // core rewrite (identity no-op when no facet is bound). The core then maps
     // [Facet] → the bound field.
+    processed = ensureUserNamespace(processed);
     processed = spliceBoundFacet(processed, fieldMapping ?? {});
     processed = rewriteFieldReferences(
       processed,

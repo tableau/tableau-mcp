@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'crypto';
-import { Err, Ok, Result } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
@@ -13,24 +13,28 @@ import {
   type EscalateReason,
 } from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
+import { classifyAskRoute, normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import {
   loadWorkbookXml,
   type LoadWorkbookXmlError,
 } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
-import { DesktopDiscoverer } from '../../../desktop/desktopDiscoverer.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
+import { sessionRouteState } from '../../../desktop/route/route-state.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { ExecuteCommandError, ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  type McpToolError,
-  NoDesktopInstancesFoundError,
-} from '../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import {
+  jsonToolResult,
+  type NextAction,
+  prefillNextAction,
+  type StructuredResult,
+  withNextAction,
+} from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 // The nested `proposal` mirrors the binder library's public data contract
 // (`BindingProposal` / `PROPOSAL_OUTPUT_SCHEMA`) verbatim so a Call-1 `propose` payload
@@ -40,15 +44,25 @@ import { DesktopTool } from '../tool.js';
 import { proposalSchema } from './proposalSchema.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional with one running Desktop.'),
-  ask: z.string().describe('Chart ask.'),
-  proposal: proposalSchema.optional().describe("Call 2 only: filled Call-1 'propose' payload."),
-  minConfidence: z.number().min(0).max(1).optional().describe('Confidence floor; default 0.6.'),
+  session: z
+    .string()
+    .optional()
+    .describe('Session ID. Optional only when exactly one Desktop instance is running.'),
+  ask: z.string().describe('Natural-language viz request.'),
+  proposal: proposalSchema
+    .optional()
+    .describe("Call 2 only: filled proposal from a Call-1 'propose' payload."),
+  minConfidence: z
+    .number()
+    .min(0)
+    .max(1)
+    .optional()
+    .describe('Proposal confidence floor; default 0.6.'),
   auto_apply: z
     .boolean()
     .optional()
     .describe(
-      'True: apply deterministic Call-1 binds server-side. Never auto-applies Call-2 proposals. Default false/read-only.',
+      'When true, deterministic Call-1 binds apply server-side. Never auto-applies Call-2 proposals. Default false/read-only.',
     ),
 };
 
@@ -83,6 +97,7 @@ type AppliedFastPathResult = {
 };
 
 type BindTemplateToolResult = BindTemplateToolResultBase | AppliedFastPathResult;
+type StructuredBindTemplateToolResult = StructuredResult<BindTemplateToolResult>;
 
 /** Escalation reasons that route back to the general (non-fast-path) authoring flow. */
 const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
@@ -98,6 +113,19 @@ const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
   // route to the general authoring flow.
   'schema-too-large',
 ]);
+
+function nextActionForEscalation(reason: EscalateReason): NextAction {
+  if (reason === 'ambiguous-field' || reason === 'field-not-found') {
+    return prefillNextAction('Resolve the fields first');
+  }
+  if (reason === 'low-confidence') {
+    return prefillNextAction('Pick a higher-confidence proposal');
+  }
+  if (TIER2_REASONS.has(reason)) {
+    return prefillNextAction('Use the general worksheet build tools');
+  }
+  return prefillNextAction('Build the worksheet manually');
+}
 
 function renderBlockers(blockers: Blocker[]): string {
   if (blockers.length === 0) {
@@ -125,7 +153,7 @@ function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): 
     next =
       'This ask is not a fast-path template bind. Author the worksheet with the general field/worksheet build tools instead. ' +
       'If a blocker names a real but not-fast-path-eligible template, that template can still be applied via the manual chain: ' +
-      'get-workbook-xml -> inject-template (that template_name + an explicit field_mapping) -> apply-workbook.';
+      'get workbook structure in file mode -> inject-template (that template_name + an explicit field_mapping) -> apply-workbook.';
   } else {
     next = 'Author the worksheet with the general build tools instead.';
   }
@@ -145,10 +173,10 @@ function buildGuidance(res: BinderResult): string {
         'then call bind-template again with { session, ask, proposal } matching output_schema. ' +
         // W60 pie-anyway gap: candidates carry ONLY fast-path-eligible templates, so an ask naming an
         // unstamped shape (canonically pie) dead-ended here with no honest route — name both exits.
-        'If the asked chart shape is not among the candidates (e.g. pie/donut — no pie template is ' +
+        'If the asked viz shape is not among the candidates (e.g. pie/donut — no pie template is ' +
         'fast-path eligible), do not force a mismatched proposal: bind the nearest candidate and tell the ' +
         'user in one sentence why (for a pie ask, a sorted bar or treemap compares shares more precisely); ' +
-        'if they explicitly want the exact shape anyway, use the manual chain — get-workbook-xml -> ' +
+        'if they explicitly want the exact shape anyway, use the manual chain — get workbook structure in file mode -> ' +
         "inject-template with template_name 'part-to-whole-pie-chart' (field_mapping: Region -> the " +
         'category dimension, Sales -> the measure) -> apply-workbook. ' +
         `${DERIVATION_OVERRIDE_INSTRUCTION}.`
@@ -156,40 +184,6 @@ function buildGuidance(res: BinderResult): string {
     case 'escalate':
       return renderEscalationGuidance(res.reason, res.blockers);
   }
-}
-
-/**
- * Session-default-when-unique (bind-template only): with an explicit `session` the
- * caller always wins; with none, resolve automatically ONLY when exactly one Desktop
- * instance is running. 0 or 2+ instances fail closed with an instance-listing error
- * so the caller must pick one — this deletes the list-instances turn from the common
- * single-Desktop case without ever guessing between multiple instances.
- *
- * Exported for reuse by dashboard-auto-apply (W60), which needs the identical
- * fail-closed session resolution — no reason for a second implementation.
- */
-export function resolveSession(session: string | undefined): Result<string, McpToolError> {
-  if (session !== undefined) {
-    return Ok(session);
-  }
-
-  const instances = new DesktopDiscoverer().getInstances();
-  if (instances.size === 0) {
-    return Err(new NoDesktopInstancesFoundError());
-  }
-  if (instances.size > 1) {
-    const ids = Array.from(instances.values())
-      .map((i) => i.pid)
-      .join(', ');
-    return Err(
-      new ArgsValidationError(
-        `Multiple Tableau Desktop instances are running (session IDs: ${ids}). Specify which one to use via the 'session' parameter (see list-instances for details).`,
-      ),
-    );
-  }
-
-  const [only] = Array.from(instances.values());
-  return Ok(String(only.pid));
 }
 
 /** Human-readable detail for a loadWorkbookXml failure, used in the apply-error text. */
@@ -206,7 +200,7 @@ function describeApplyError(
     if (inner.type === 'load-rejected') {
       return `Tableau rejected the load: ${inner.message}`;
     }
-    return 'invalid workbook XML';
+    return 'invalid workbook content';
   }
   return `workbook load command failed: ${JSON.stringify(error.error)}`;
 }
@@ -230,7 +224,7 @@ function applyFallback(
     ...base,
     guidance:
       guidance ??
-      `Server-side auto-apply did not complete (${apply_error}). The bound args are intact — fall back to the manual chain: get-workbook-xml → inject-template → apply-workbook using the returned args.`,
+      `Server-side auto-apply did not complete (${apply_error}). The bound args are intact — fall back to the manual chain: get workbook structure in file mode → inject-template → apply-workbook using the returned args.`,
     applied: false,
     apply_error,
   };
@@ -338,7 +332,7 @@ async function performAutoApply({
   };
 }
 
-const title = 'Bind a Chart Template to an Ask (Fast Path)';
+const title = 'Bind a Viz Template to an Ask (Fast Path)';
 
 export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const bindTemplateTool = new DesktopTool({
@@ -346,9 +340,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     name: 'bind-template',
     title,
     description: [
-      'Bind a checked-in chart template to an ask and return validated inject args. Model-free.',
+      'Bind a checked-in viz template to an ask and return validated inject args. Model-free.',
       "Call 1 returns 'bound' or 'propose'; Call 2 returns 'bound' or 'escalate'.",
-      'auto_apply:true renders deterministic Call-1 binds in one call. Details: expertise://tableau/tableau-tactics/workflow/templates.',
+      'auto_apply:true renders deterministic Call-1 binds in one call. Details: expertise://tableau/tactics/workflow/templates.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -418,16 +412,62 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               .listTemplateManifests()
               .map((m): [string, TemplateManifest] => [m.template, m]),
           );
-          const res = await bindTemplate({
-            ask,
-            workbookXml: xmlResult.value,
-            manifests,
-            ...(proposal ? { proposal: proposal as BindingProposal } : {}),
-            ...(minConfidence !== undefined ? { minConfidence } : {}),
-          });
+          // Route-state recording is OBSERVATIONAL — a route-layer fault must never break a
+          // bind (fail-open, the gate's own discipline): a swallowed classification simply
+          // leaves the ask unrecorded and the gate later fail-opens on absent state.
+          const askKey = normalizeAskForMatch(ask);
+          try {
+            const routeDecision = classifyAskRoute(ask, [...manifests.values()]);
+            sessionRouteState.recordAskClassification(resolvedSession, {
+              ask: askKey,
+              route: routeDecision.route,
+              shape: routeDecision.shape,
+              template: routeDecision.template,
+            });
+          } catch {
+            // A classification fault on a NEW ask also invalidates whatever ask was
+            // pending — leaving it would hand the gate a stale "no bind attempt yet"
+            // record for a different ask (cross-ask leak).
+            try {
+              sessionRouteState.clearCurrentAsk(resolvedSession);
+            } catch {
+              /* fail-open */
+            }
+          }
+          let res;
+          try {
+            res = await bindTemplate({
+              ask,
+              workbookXml: xmlResult.value,
+              manifests,
+              ...(proposal ? { proposal: proposal as BindingProposal } : {}),
+              ...(minConfidence !== undefined ? { minConfidence } : {}),
+            });
+          } catch (e) {
+            // A THROWN bind has no recordable outcome; clear the pending record (only if
+            // it is still this ask's) so the gate can never read "no bind attempt yet"
+            // for an ask whose bind WAS attempted. The error path itself is unchanged.
+            try {
+              sessionRouteState.clearCurrentAsk(resolvedSession, askKey);
+            } catch {
+              /* fail-open */
+            }
+            throw e;
+          }
+          try {
+            sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
+          } catch {
+            /* fail-open */
+          }
           const bindMs = Date.now() - bindStart;
 
-          const base: BindTemplateToolResultBase = { ...res, guidance: buildGuidance(res) };
+          const base: StructuredBindTemplateToolResult =
+            res.status === 'escalate'
+              ? withNextAction(
+                  { ...res, guidance: buildGuidance(res) },
+                  nextActionForEscalation(res.reason),
+                )
+              : { ...res, guidance: buildGuidance(res) };
 
           // ── Auto-apply gate (defense in depth) ───────────────────────────
           // Only a deterministic Call-1 bind (used_llm === false) of a fast-path-
@@ -459,6 +499,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             }),
           );
         },
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });
     },
   });

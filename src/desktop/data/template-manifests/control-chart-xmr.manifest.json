@@ -2,45 +2,122 @@
   "template": "control-chart-xmr",
   "family": "deviation",
   "readiness": "GREEN",
-  "fast_path_eligible": false,
+  "fast_path_eligible": true,
   "fast_path_blockers": [],
-  "portability_evidence": { "fixture_bind": true, "render_verified": "none" },
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "live-2026-07-11",
+    "xml_sha256": "130bce6e869a4f662fbeb061487cfb8a5296c51254fa9767cd47600fcf671510",
+    "render_evidence": {
+      "method": "gate-composite",
+      "date": "2026-07-11",
+      "structural": 0.89189,
+      "critical_pass": "5/5",
+      "high_pass": "2/3",
+      "pixel": 1.0,
+      "pixel_regions": 6,
+      "sanity": "sane",
+      "sanity_signals": [
+        "mark-count=pass reconciled=true (1242=1242, Worksheet>Copy>Data on source and applied sheets -- distinct MDY order days on the bundled xls, measured live)",
+        "caption-leak=pass"
+      ],
+      "run": "oracle-leg replay (W62 stamp batch): independent authored oracle on bundled Sample - Superstore; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity fill (native names + the template's own out-of-control calc, no rewrites); all 15 config facets green on the applied readback -- BOTH reference lines (per-pane average refline0 + stdev +/-3 band refline1) and the User-derivation table-calc color instance SURVIVED tableau-apply-worksheet mode=inline (the quota-refline/slope-table-calc survival class this leg existed to prove)",
+      "basis": "golden-parity gate run 2026-07-11 (oracle-leg): structural 0.89189 (5/5 critical; 2/3 high -- the sole s3 miss is label-column-instances on the calc ID, the oracle's DISTINCT authored calc id ...034 vs the template's 20260705120000, i.e. the ORACLE-CONTRACT independence divergence itself, same honest-miss class as ww-ou-arrow's; s1 resolved-title cosmetic), pixel 1.0 (6 counted ROIs, same-geometry back-to-back captures), composite 94, binding-sanity sane via reconciled Copy>Data 1242=1242 (grain = distinct MDY days; data-dependent, measured live; reflines added no rows).",
+      "lane": "fable-direct stamp batch 2026-07-11 (orchestrator live gate run; oracle-stamp.mjs CONFIG=xmr PID=96600)",
+      "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
+      "gate_composite": 94
+    }
+  },
   "datasource_placeholder": true,
-  "placeholders": ["TITLE", "DATASOURCE"],
-  "intent_keywords": ["control-chart", "xmr", "process-control", "reference-line", "spc"],
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "control-chart",
+    "xmr",
+    "process-control",
+    "reference-line",
+    "spc"
+  ],
   "description": "An aggregated measure over an exact date with template-owned average and +/-3-sigma reference lines/bands; marks colored by an out-of-control (beyond +/-3-sigma) violation calc, not the raw measure.",
   "slots": [
-    { "slot_id": "order_date", "template_field": "Order Date", "derivation": "tdy",
-      "role": ["cols"], "kind": "temporal", "bindable": true, "required": true,
-      "notes": "XML instance is [md:Order Date:ok] derivation='MDY' (exact date, discrete/ordinal). 'md'/'MDY' is NOT a derivationMap key nor a §2.2 Derivation member. Normalized to the closest canonical token 'tdy' (TruncDay = day-level date). See non-canonical-template-derivation hazard for the fidelity caveat." },
-    { "slot_id": "profit", "template_field": "Profit", "derivation": "sum",
-      "role": ["rows"], "kind": "quantitative", "bindable": true, "required": true,
-      "notes": "[sum:Profit:qk] drives rows (the individuals series) and the template-owned average / +/-3-sigma sample-stdev reference lines/bands. It NO LONGER drives color: color is the template violation calc (control_status_calc), so the same field is not on both a shelf and color and the redundant-color-encoding design gate is not tripped." }
+    {
+      "slot_id": "order_date",
+      "template_field": "Order Date",
+      "derivation": "tdy",
+      "role": [
+        "cols"
+      ],
+      "kind": "temporal",
+      "bindable": true,
+      "required": true,
+      "notes": "XML instance is [md:Order Date:ok] derivation='MDY' (exact date, discrete/ordinal). 'md'/'MDY' is NOT a derivationMap key nor a \u00a72.2 Derivation member. Normalized to the closest canonical token 'tdy' (TruncDay = day-level date). See non-canonical-template-derivation hazard for the fidelity caveat."
+    },
+    {
+      "slot_id": "profit",
+      "template_field": "Profit",
+      "derivation": "sum",
+      "role": [
+        "rows"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "notes": "[sum:Profit:qk] drives rows (the individuals series) and the template-owned average / +/-3-sigma sample-stdev reference lines/bands. It NO LONGER drives color: color is the template violation calc (control_status_calc), so the same field is not on both a shelf and color and the redundant-color-encoding design gate is not tripped."
+    }
   ],
   "calcs": [
-    { "slot_id": "control_status_calc", "template_field": "Calculation_20260705120000", "derivation": "usr",
-      "role": ["color"], "kind": "calc", "bindable": false, "required": true,
+    {
+      "slot_id": "control_status_calc",
+      "template_field": "Calculation_20260705120000",
+      "derivation": "usr",
+      "role": [
+        "color"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
       "formula": "IF ABS(SUM([Profit]) - WINDOW_AVG(SUM([Profit]))) > 3 * WINDOW_STDEV(SUM([Profit])) THEN 1 ELSE 0 END",
-      "formula_refs": ["Profit"],
-      "depends_on_slots": ["profit"],
+      "formula_refs": [
+        "Profit"
+      ],
+      "depends_on_slots": [
+        "profit"
+      ],
       "result_role": "measure",
       "inputs": [
-        { "ref": "Profit", "slot_id": "profit", "slot_kind": "quantitative", "required": true, "template_internal": false }
+        {
+          "ref": "Profit",
+          "slot_id": "profit",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        }
       ],
-      "notes": "XmR out-of-control flag: 1 when the point is beyond the +/-3-sigma control limits, else 0. WINDOW_AVG(SUM([Profit])) is the center line and 3*WINDOW_STDEV(SUM([Profit])) the band — the SAME limits the template's 'average' and sample-'stdev' (factor +/-3) reference lines draw, so color and bands agree. Referenced by [usr:Calculation_20260705120000:ok] (derivation='User' — an aggregate/table-calc field MUST use usr:, never none:, or the viz renders blank). Drives the color encoding (discrete: 1=red out-of-control, 0=blue in-control), replacing the former redundant [sum:Profit:qk] gradient." }
+      "notes": "XmR out-of-control flag: 1 when the point is beyond the +/-3-sigma control limits, else 0. WINDOW_AVG(SUM([Profit])) is the center line and 3*WINDOW_STDEV(SUM([Profit])) the band \u2014 the SAME limits the template's 'average' and sample-'stdev' (factor +/-3) reference lines draw, so color and bands agree. Referenced by [usr:Calculation_20260705120000:ok] (derivation='User' \u2014 an aggregate/table-calc field MUST use usr:, never none:, or the viz renders blank). Drives the color encoding (discrete: 1=red out-of-control, 0=blue in-control), replacing the former redundant [sum:Profit:qk] gradient."
+    }
   ],
   "hazards": [
-    { "code": "non-canonical-template-derivation",
-      "detail": "Template date instance uses derivation short-form 'md' (long 'MDY', an exact discrete date), absent from templates.ts derivationMap and the §2.2 Derivation union. Manifest records the closest canonical 'tdy' (TruncDay). RESIDUAL RISK: TruncDay (continuous day) differs from MDY (discrete exact date) at runtime; the fast-path date binding may render continuous rather than discrete. XML trusted for slot/field structure; derivation token normalized.",
-      "xml": "control-chart-xmr.xml:16" },
-    { "code": "template-owned-reference-lines",
+    {
+      "code": "non-canonical-template-derivation",
+      "detail": "Template date instance uses derivation short-form 'md' (long 'MDY', an exact discrete date), absent from templates.ts derivationMap and the \u00a72.2 Derivation union. Manifest records the closest canonical 'tdy' (TruncDay). RESIDUAL RISK: TruncDay (continuous day) differs from MDY (discrete exact date) at runtime; the fast-path date binding may render continuous rather than discrete. XML trusted for slot/field structure; derivation token normalized.",
+      "xml": "control-chart-xmr.xml:16"
+    },
+    {
+      "code": "template-owned-reference-lines",
       "detail": "average and sample-stdev (+/-3 factor) reference lines/bands are bound to [sum:Profit:qk] and repaired only because Profit is a bound slot; no dataset-specific calc IDs are referenced, so this is not a DATASET_SPECIFIC_FORMULA blocker.",
-      "xml": "control-chart-xmr.xml:58-62" },
-    { "code": "color-violation-calc-window-addressing",
-      "detail": "Color is driven by control_status_calc, a WINDOW_AVG/WINDOW_STDEV table calc (the ±3-sigma beyond-limits flag). The column-instance carries no explicit <table-calc> Compute Using, so on live apply the window addressing defaults to the natural table partition (the Order Date series on cols). RESIDUAL RISK: the exact Compute Using must be confirmed on a live render — render_verified stays 'none' until then. This lane is a code-only structural fix (unblock the redundant-color-encoding gate); no live apply/parity has run.",
-      "xml": "control-chart-xmr.xml:14" },
-    { "code": "raw-formula-refs",
+      "xml": "control-chart-xmr.xml:58-62"
+    },
+    {
+      "code": "color-violation-calc-window-addressing",
+      "detail": "Color is driven by control_status_calc, a WINDOW_AVG/WINDOW_STDEV table calc (the +/-3-sigma beyond-limits flag). The column-instance carries no explicit <table-calc> Compute Using, so on live apply the window addressing defaults to the natural table partition (the Order Date series on cols). RESOLVED LIVE 2026-07-11 (oracle-leg composite 94): the default natural-table addressing computed on the applied render -- the User-derivation color instance and BOTH reference lines survived tableau-apply-worksheet mode=inline and reconciled 1242=1242 (see portability_evidence.render_evidence).",
+      "xml": "control-chart-xmr.xml:14"
+    },
+    {
+      "code": "raw-formula-refs",
       "detail": "control_status_calc references the bare bindable [Profit]; templates.ts rewriteFormulaFieldRefs repairs it on bind because Profit is a bindable bare-key slot (same pattern as ww-ou-arrow). No template-internal calc-to-calc refs.",
-      "xml": "control-chart-xmr.xml:14" }
+      "xml": "control-chart-xmr.xml:14"
+    }
   ]
 }
