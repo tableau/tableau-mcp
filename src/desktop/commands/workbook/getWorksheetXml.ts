@@ -8,6 +8,39 @@ import {
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
+import { listWorksheets } from './listWorksheets.js';
+
+/**
+ * Best-effort "did you mean" suffix for a worksheet-name miss (W6, cluster H). Lists the
+ * live sheet names, surfaces close matches (case-insensitive substring either direction)
+ * first, and tells the agent to ask the user rather than guess when nothing clearly
+ * matches. Never throws; returns '' when the list is unavailable — zero cost on success.
+ */
+async function worksheetNameSuggestions(
+  missName: string,
+  { executor, signal }: WithExecutorAndAbortSignal,
+): Promise<string> {
+  try {
+    const listed = await listWorksheets({ executor, signal });
+    if (listed.isErr()) return '';
+    const names = listed.value.worksheets.filter((n) => !!n);
+    if (names.length === 0) return '';
+
+    const needle = missName.toLowerCase();
+    const close = names.filter((n) => {
+      const hay = n.toLowerCase();
+      return hay.includes(needle) || needle.includes(hay);
+    });
+    const candidates = (close.length > 0 ? close : names).slice(0, 12);
+    const heading = close.length > 0 ? 'Did you mean' : 'Available worksheets';
+    return (
+      ` ${heading}: ${candidates.map((n) => `"${n}"`).join(', ')}.` +
+      ` If it is not obvious which sheet the user meant, ask the user instead of guessing.`
+    );
+  } catch {
+    return '';
+  }
+}
 
 export type GetWorksheetXmlError = (
   | { type: 'no-worksheet-found' }
@@ -55,9 +88,13 @@ async function getWorksheetXmlViaAgentApi({
   const worksheetCount = (worksheetXml.match(/<worksheet/g) || []).length;
 
   if (worksheetCount === 0) {
+    const didYouMean = await worksheetNameSuggestions(worksheetName, { executor, signal });
     return Err({
       type: 'get-worksheet-xml-error',
-      error: { type: 'no-worksheet-found', message: `No worksheet found for ${worksheetName}.` },
+      error: {
+        type: 'no-worksheet-found',
+        message: `No worksheet found for ${worksheetName}.${didYouMean}`,
+      },
     });
   }
 
@@ -92,9 +129,13 @@ async function getWorksheetXmlViaExternalApi({
   }
 
   if (worksheetXml === null) {
+    const didYouMean = await worksheetNameSuggestions(worksheetName, { executor, signal });
     return Err({
       type: 'get-worksheet-xml-error',
-      error: { type: 'no-worksheet-found', message: `No worksheet found for ${worksheetName}.` },
+      error: {
+        type: 'no-worksheet-found',
+        message: `No worksheet found for ${worksheetName}.${didYouMean}`,
+      },
     });
   }
 
