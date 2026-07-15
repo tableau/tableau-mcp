@@ -42,8 +42,7 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          shopt -s nocasematch
-          if [[ "$PR_TITLE" =~ ^docs: ]]; then
+          if [[ "${PR_TITLE,,}" =~ ^docs: ]]; then
             echo "✅ Docs PR - skipping work item number check"
             exit 0
           fi
