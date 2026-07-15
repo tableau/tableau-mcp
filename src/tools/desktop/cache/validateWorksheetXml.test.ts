@@ -14,7 +14,7 @@ describe('validateWorksheetXmlTool', () => {
     expect(tool.paramsSchema).toMatchObject({ xml: expect.any(Object) });
   });
 
-  it('should return success for well-formed XML', async () => {
+  it('should return success for well-formed worksheet content', async () => {
     const result = await getResult('<worksheet name="Sheet1"><table/></worksheet>');
 
     expect(result.isError).toBeFalsy();
@@ -22,12 +22,12 @@ describe('validateWorksheetXmlTool', () => {
     expect(result.content[0].text).toContain('well-formed');
   });
 
-  it('should return error for malformed XML', async () => {
+  it('should return error for malformed worksheet content', async () => {
     const result = await getResult('<worksheet name="Sheet1"><table></worksheet>');
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('malformed');
+    expect(result.content[0].text).toContain('Worksheet structure has');
     expect(result.content[0].text).toContain('error');
   });
 

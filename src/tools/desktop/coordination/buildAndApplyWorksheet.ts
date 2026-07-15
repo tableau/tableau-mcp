@@ -4,10 +4,21 @@ import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import {
+  bindExplicitTemplate,
+  formatExplicitBindErrors,
+  schemaSummaryFromAvailableFields,
+} from '../../../desktop/binder/explicit-bind.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
+import {
+  checkRouteGateForScratchEntry,
+  type RouteGateResult,
+} from '../../../desktop/route/route-gate.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { spliceBoundFacet } from '../../../desktop/templates/facetSplice.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
+import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import {
@@ -19,6 +30,23 @@ import {
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
+function isRouteGateResult(result: unknown): result is RouteGateResult {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    Array.isArray((result as { content?: unknown }).content) &&
+    typeof (result as { isError?: unknown }).isError === 'boolean'
+  );
+}
+
+function getSuccessResult(result: unknown): CallToolResult {
+  if (isRouteGateResult(result)) return result;
+  return {
+    isError: false,
+    content: [{ type: 'text', text: JSON.stringify(result) }],
+  };
+}
+
 function escapeXml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -29,15 +57,15 @@ function escapeXml(text: string): string {
 }
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   taskSpec: z
     .object({
       worksheetName: z.string(),
-      worksheetFile: z.string().describe('Cached worksheet XML file.'),
+      worksheetFile: z.string().describe('Cached worksheet file.'),
       type: z.enum(['kpi', 'chart']),
       template: z.string().optional().describe('Template name.'),
       fields: z.array(z.string()).describe('Column refs to use.'),
-      workbookFile: z.string().describe('Cached workbook XML file.'),
+      workbookFile: z.string().describe('Cached workbook file.'),
     })
     .describe('Task spec from plan-dashboard-creation.'),
 };
@@ -51,8 +79,8 @@ export const getBuildAndApplyWorksheetTool = (
     name: 'build-and-apply-worksheet',
     title: toolTitle,
     description: [
-      'Build worksheet XML from a template and immediately APPLY it to the live workbook.',
-      'Designed for parallel Phase-2 execution by subagents. Details: expertise://tableau/tableau-tactics/viz/worksheets.',
+      'Build a worksheet from a template and immediately APPLY it to the live workbook.',
+      'Designed for parallel Phase-2 execution by subagents. Details: expertise://tableau/tactics/viz/worksheets.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -66,6 +94,7 @@ export const getBuildAndApplyWorksheetTool = (
       return await tool.logAndExecute({
         extra,
         args: { session, taskSpec },
+        getSuccessResult,
         callback: async () => {
           const { worksheetName, workbookFile, template, fields } = taskSpec;
 
@@ -75,7 +104,7 @@ export const getBuildAndApplyWorksheetTool = (
 
           if (!template) {
             return new ArgsValidationError(
-              'taskSpec.template is required. KPIs default to "kpi-text"; charts should use a chart-specific template (e.g., "ranking-ordered-bar"). Re-run plan-dashboard-creation to get a plan with templates populated.',
+              'taskSpec.template is required. KPIs default to "kpi-text"; viz worksheets should use a viz-specific template (e.g., "ranking-ordered-bar"). Re-run plan-dashboard-creation to get a plan with templates populated.',
             ).toErr();
           }
 
@@ -83,8 +112,22 @@ export const getBuildAndApplyWorksheetTool = (
           let templateXml = readTemplate(template);
           if (!templateXml) {
             return new ArgsValidationError(
-              `Template not found: "${template}". Check available templates with list-xml-templates.`,
+              `Template not found: "${template}". Check available templates with the template list tool.`,
             ).toErr();
+          }
+
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+
+          const gateResult = checkRouteGateForScratchEntry(
+            'build-and-apply-worksheet',
+            resolvedSession,
+          );
+          if (gateResult) {
+            return new Ok(gateResult);
           }
 
           const workbookXml = readFileSync(workbookFile, 'utf-8');
@@ -131,15 +174,17 @@ export const getBuildAndApplyWorksheetTool = (
           const templateDimensions = templateRequirements.filter((c) => c.role === 'dimension');
           const templateMeasures = templateRequirements.filter((c) => c.role === 'measure');
 
-          const fieldMapping: Record<string, string> = {};
-          const fieldMetadata: Record<string, { datatype: string; type: string }> = {};
+          // Legacy positional mapping — kept ONLY as the no-manifest passthrough.
+          // Manifest-backed templates get their mapping from bindExplicitTemplate below.
+          const passthroughFieldMapping: Record<string, string> = {};
+          const passthroughFieldMetadata: Record<string, { datatype: string; type: string }> = {};
 
           for (let i = 0; i < templateDimensions.length && i < dimensionFields.length; i++) {
             const columnRef = dimensionFields[i];
             const field = availableFields.find((f) => f.column_ref === columnRef);
-            fieldMapping[templateDimensions[i].name] = columnRef;
+            passthroughFieldMapping[templateDimensions[i].name] = columnRef;
             if (field?.datatype && field.type) {
-              fieldMetadata[templateDimensions[i].name] = {
+              passthroughFieldMetadata[templateDimensions[i].name] = {
                 datatype: field.datatype,
                 type: field.type,
               };
@@ -149,9 +194,9 @@ export const getBuildAndApplyWorksheetTool = (
           for (let i = 0; i < templateMeasures.length && i < measureFields.length; i++) {
             const columnRef = measureFields[i];
             const field = availableFields.find((f) => f.column_ref === columnRef);
-            fieldMapping[templateMeasures[i].name] = columnRef;
+            passthroughFieldMapping[templateMeasures[i].name] = columnRef;
             if (field?.datatype && field.type) {
-              fieldMetadata[templateMeasures[i].name] = {
+              passthroughFieldMetadata[templateMeasures[i].name] = {
                 datatype: field.datatype,
                 type: field.type,
               };
@@ -171,16 +216,44 @@ export const getBuildAndApplyWorksheetTool = (
             );
           }
 
+          // Manifest enforcement (P0 W-23447710): slot derivations/keys come from the
+          // manifest, never the caller's positional refs. Blockers stop the apply —
+          // stricter than the old behavior, which left sample fields in unmapped slots.
+          const explicitBind = bindExplicitTemplate(
+            template,
+            fields,
+            schemaSummaryFromAvailableFields(availableFields),
+            {
+              title: worksheetName,
+              datasource: datasourceName,
+              passthroughFieldMapping,
+            },
+          );
+
+          if (!explicitBind.ok) {
+            return new ArgsValidationError(
+              formatExplicitBindErrors(template, explicitBind.errors),
+            ).toErr();
+          }
+
+          warnings.push(...explicitBind.warnings);
+          const fieldMapping = explicitBind.fieldMapping;
+          const fieldMetadata =
+            Object.keys(explicitBind.fieldMetadata).length > 0
+              ? explicitBind.fieldMetadata
+              : passthroughFieldMetadata;
+
           // Inject title and replace field references. Per-apply calc namespacing is
           // wired at this tool boundary: the shared core defaults namespacing OFF and
           // never mints its own nonce, so derive one from session + apply timestamp
           // (randomUUID guards same-millisecond applies). Distinct nonces => distinct
           // calc-name suffixes => repeated applies into one workbook don't collide.
           templateXml = templateXml.replace(/\{\{TITLE\}\}/g, escapeXml(worksheetName));
-          const applyNonce = `${session}:${Date.now()}:${randomUUID()}`;
+          const applyNonce = `${resolvedSession}:${Date.now()}:${randomUUID()}`;
           // W28-C: splice a BOUND facet pill onto the trellis shelf BEFORE the frozen
           // core rewrite (identity no-op when no facet is bound). The core then maps
           // [Facet] → the bound field so the facet actually renders.
+          templateXml = ensureUserNamespace(templateXml);
           templateXml = spliceBoundFacet(templateXml, fieldMapping);
           templateXml = rewriteFieldReferences(
             templateXml,
@@ -200,7 +273,7 @@ export const getBuildAndApplyWorksheetTool = (
           const worksheetXml = worksheetMatch[0];
 
           // Apply to Tableau
-          const executor = await extra.getExecutor(session);
+          const executor = await extra.getExecutor(resolvedSession);
           const signal = extra.signal;
           const applyResult = await loadWorksheetXml({
             worksheetName,

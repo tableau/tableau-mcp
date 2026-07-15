@@ -111,6 +111,11 @@ describe('binder/carrier-uniqueness — CHART_NOUN_KEYWORDS ↔ eligible manifes
     expect(carriersOf('dot-strip')).toEqual(['distribution-bar-code-chart']);
   });
 
+  it('the newly stamped pie nouns (pie/donut) are each single-carrier', () => {
+    expect(carriersOf('pie')).toEqual(['part-to-whole-pie-chart']);
+    expect(carriersOf('donut')).toEqual(['part-to-whole-pie-chart']);
+  });
+
   it("the generic 'map' is DELIBERATELY absent from CHART_NOUN_KEYWORDS (dual-carrier hazard)", () => {
     // 'map' is an intent_keyword of BOTH spatial-choropleth-map and spatial-symbol-map,
     // so admitting it would make the lone-winner exemption ambiguous the moment
@@ -127,14 +132,17 @@ describe('binder/carrier-uniqueness — CHART_NOUN_KEYWORDS ↔ eligible manifes
   // ── Pinned-current-behavior: the exact single-carrier / zero-carrier split ───
   // Documents (and locks) the reality that "exactly one carrier" is NOT universal:
   // nouns whose template is not yet fast_path_eligible carry ZERO eligible carriers.
-  // If a future stamp (e.g. distribution-histogram, slope-chart, part-to-whole-pie)
-  // moves a noun from zero → one carrier, this pin fails and forces a deliberate
-  // re-review — which is the intended tripwire, not a false alarm.
+  // If a future stamp (e.g. distribution-histogram) moves a noun from zero → one
+  // carrier, this pin fails and forces a deliberate re-review — which is the intended
+  // tripwire, not a false alarm.
+  // W63: slope/slope-chart/slope-graph moved zero → one carrier (slope-chart stamped
+  // live-2026-07-13, fast-path eligible). connected-scatterplot dropped its bare 'scatter'
+  // alias on the same stamp (canonical scatter = correlation-scatter-plot-chart), so
+  // 'scatter' stays single-carrier; ranking-dot-strip-plot dropped bare 'strip-plot'
+  // (canonical = distribution-bar-code-chart). Only 'histogram' remains zero-carrier.
   it('pins the zero-carrier nouns (templates present but not yet stamped eligible)', () => {
     const zeroCarrier = [...new Set(nouns)].filter((n) => carriersOf(n).length === 0).sort();
-    expect(zeroCarrier).toEqual(
-      ['donut', 'histogram', 'pie', 'slope', 'slope-chart', 'slope-graph'].sort(),
-    );
+    expect(zeroCarrier).toEqual(['histogram'].sort());
   });
 
   it('every non-zero-carrier noun has exactly one carrier (no >1 slips past the split)', () => {

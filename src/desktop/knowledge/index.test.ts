@@ -68,18 +68,17 @@ describe('knowledge/index', () => {
   describe('listKnowledgeResources', () => {
     it('returns resources with correct URIs', () => {
       setupFsMock({
-        [join(KNOWLEDGE_DIR, 'viz-design', 'chart-selection.md')]:
+        [join(KNOWLEDGE_DIR, 'strategy', 'viz-design', 'chart-selection.md')]:
           '# Chart Selection\nPick the right chart.',
-        [join(KNOWLEDGE_DIR, 'tableau-tactics', 'viz', 'filters.md')]:
-          '# Filters\nHow to use filters.',
+        [join(KNOWLEDGE_DIR, 'tactics', 'viz', 'filters.md')]: '# Filters\nHow to use filters.',
       });
 
       const resources = listKnowledgeResources();
 
       expect(resources).toHaveLength(2);
       expect(resources.map((r) => r.uri)).toEqual([
-        'expertise://tableau/tableau-tactics/viz/filters',
-        'expertise://tableau/viz-design/chart-selection',
+        'expertise://tableau/strategy/viz-design/chart-selection',
+        'expertise://tableau/tactics/viz/filters',
       ]);
     });
 
@@ -114,10 +113,13 @@ describe('knowledge/index', () => {
   describe('readKnowledgeResource', () => {
     it('returns content for a valid URI', () => {
       setupFsMock({
-        [join(KNOWLEDGE_DIR, 'viz-design', 'chart-selection.md')]: '# Chart Selection\nContent.',
+        [join(KNOWLEDGE_DIR, 'strategy', 'viz-design', 'chart-selection.md')]:
+          '# Chart Selection\nContent.',
       });
 
-      const result = readKnowledgeResource('expertise://tableau/viz-design/chart-selection');
+      const result = readKnowledgeResource(
+        'expertise://tableau/strategy/viz-design/chart-selection',
+      );
       expect(result).toBe('# Chart Selection\nContent.');
     });
 
@@ -128,7 +130,9 @@ describe('knowledge/index', () => {
 
     it('returns null for wrong URI scheme', () => {
       setupFsMock({});
-      expect(readKnowledgeResource('http://tableau/viz-design/chart-selection')).toBeNull();
+      expect(
+        readKnowledgeResource('http://tableau/strategy/viz-design/chart-selection'),
+      ).toBeNull();
     });
 
     it('returns null for path traversal attempt', () => {

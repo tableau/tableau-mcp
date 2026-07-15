@@ -7,6 +7,7 @@
  "portability_evidence": {
   "fixture_bind": true,
   "render_verified": "live-2026-07-06",
+  "xml_sha256": "88884a946deae4555f31ab65c4063f1105e2a100a534cf494b3f55f10b1ad797",
   "render_evidence": {
    "method": "gate-composite",
    "date": "2026-07-06",
@@ -39,7 +40,8 @@
   "box-and-whisker",
   "whisker",
   "quartile",
-  "distribution"
+  "distribution",
+  "spread-out"
  ],
  "description": "A box-and-whisker plot showing the DISTRIBUTION of a measure: Circle marks at one point per grain member (the level dimension on the level-of-detail shelf), a continuous measure axis on rows ([sum:Measure:qk]), and a per-cell box-plot reference line (boxplot-whisker-type='standard') that draws the median / IQR box + whiskers over those points; an OPTIONAL facet dimension on cols splits the distribution into side-by-side boxes. Serves UC7 (distribution analysis) and the UC4 ranged/uncertainty view. Generalized from the repo distribution-bar-code-chart (a live-stamped strip plot: detail-grain dim on lod + aggregated measure axis) plus the distribution-box-whisker catalog exemplar's box-plot reference-line + Circle marks. Live render-verified 2026-07-06 by the golden-parity gate (composite 98; see portability_evidence.render_evidence): structural 0.97297 (5/5 critical), pixel 1.0, binding-sanity sane via reconciled 800=800=EXPECTED_COUNT Copy>Data mark counts (grain live-corrected from the disproven Segment-FD assumption) and caption-leak pass.",
  "avoid_when": [

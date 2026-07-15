@@ -12,18 +12,19 @@ import {
   logInlineXmlCapHit,
   xmlByteLength,
 } from '../../../desktop/inlineXmlCap.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   mode: z
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe('file=cache path; inline=XML.'),
+    .describe('file writes cache path; inline returns workbook content.'),
 };
 
 type InlineResult = {
@@ -36,7 +37,7 @@ type FileResult = {
 };
 type GetWorkbookXmlToolResult = { message: string } & (InlineResult | FileResult);
 
-const title = 'Get Workbook XML';
+const title = 'Get Workbook Structure';
 export const getGetWorkbookXmlTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
@@ -45,8 +46,8 @@ export const getGetWorkbookXmlTool = (
     name: 'get-workbook-xml',
     title,
     description: [
-      'Get current workbook XML. mode=file is default; mode=inline returns XML.',
-      'PREFERRED: use the field tools (add-field-to-*) or batch-create-and-cache-sheets instead of editing XML directly; edit XML only as a last resort. Use apply-workbook to apply changes.',
+      'Get current workbook structure. mode=file is default; mode=inline returns workbook content.',
+      'PREFERRED: use the field tools (add-field/remove-field) or batch-create-and-cache-sheets instead of editing workbook content directly; use apply-workbook to apply changes.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -61,7 +62,12 @@ export const getGetWorkbookXmlTool = (
         extra,
         args: { session, mode },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const result = await getWorkbookXml({ executor, signal: extra.signal });
 
           if (result.isErr()) {
@@ -77,7 +83,7 @@ export const getGetWorkbookXmlTool = (
 
           if (mode === 'inline' && !capFired) {
             return new Ok({
-              message: `Workbook XML returned inline (${bytes} bytes)`,
+              message: `Workbook content returned inline (${bytes} bytes)`,
               workbookXml,
             });
           }
@@ -98,14 +104,14 @@ export const getGetWorkbookXmlTool = (
               }),
               file: cacheFile,
               instructions:
-                'This workbook exceeds the inline cap. Use read-cached-xml (with a worksheet/dashboard ' +
-                'selector or startByte/endByte to read a slice), write-cached-xml (same selector to ' +
+                'This workbook exceeds the inline cap. Use the cache read tool (with a worksheet/dashboard ' +
+                'selector or startByte/endByte to read a slice), the cache write tool (same selector to ' +
                 'splice edits back), then apply-workbook with mode=file. Do not request mode=inline.',
             });
           }
 
           log({
-            message: `Saved workbook XML to cache file: ${cacheFile}`,
+            message: `Saved workbook content to cache file: ${cacheFile}`,
             level: 'info',
             logger: 'tool',
             data: {
@@ -118,7 +124,7 @@ export const getGetWorkbookXmlTool = (
             message: `Workbook saved to cache file (${bytes} bytes)\n\nArtifact summary:\n${formatArtifactSummary('workbook', workbookXml)}`,
             file: cacheFile,
             instructions:
-              'Use this file path with modification tools instead of passing XML directly.',
+              'Use this file path with modification tools instead of passing content directly.',
           });
         },
       });

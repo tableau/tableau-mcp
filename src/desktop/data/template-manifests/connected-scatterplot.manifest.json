@@ -2,11 +2,31 @@
   "template": "connected-scatterplot",
   "family": "correlation",
   "readiness": "YELLOW",
-  "fast_path_eligible": false,
+  "fast_path_eligible": true,
   "fast_path_blockers": [],
   "portability_evidence": {
     "fixture_bind": true,
-    "render_verified": "none"
+    "render_verified": "live-2026-07-13",
+    "xml_sha256": "a1af2dbcb0101f71e0837623d04ab346f5ef121fd2ba3d740fed209329fc72be",
+    "render_evidence": {
+      "method": "gate-composite",
+      "date": "2026-07-13",
+      "structural": 0.89189,
+      "critical_pass": "5/5",
+      "high_pass": "2/3",
+      "pixel": 1,
+      "pixel_regions": 6,
+      "sanity": "sane",
+      "sanity_signals": [
+        "mark-count=pass reconciled=true (2508=2508, Worksheet>Copy>Data on source and applied sheets — COUNTD([Region],[Customer Name]) on the bundled Sample - Superstore, measured live)",
+        "caption-leak=pass"
+      ],
+      "run": "oracle-leg replay (W63 stamp batch): independent authored oracle on bundled Sample - Superstore; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity fill (native Superstore names + the template's own Profit Ratio calc, no rewrites); all 10 config facets green on the applied readback (mark=Line, cols=Sales, rows=Profit Ratio calc, color=Region, lod=Customer Name).",
+      "basis": "golden-parity gate run 2026-07-13 (oracle-leg): structural 0.89189 (5/5 critical; 2/3 high — the sole s3 miss is label-column-instances on the DISTINCT oracle calc id vs the template's 1368249927221915648, the ORACLE-CONTRACT independence divergence, same honest-miss class as ww-ou-arrow's; s1 resolved-title cosmetic), pixel 1.0 (6 counted ROIs, same-geometry back-to-back captures), composite 94, binding-sanity sane via reconciled Copy>Data 2508=2508 (grain = [Region] x [Customer Name]; data-dependent, measured live).",
+      "lane": "fable-direct stamp batch 2026-07-13 (W63; orchestrator live gate run, oracle-stamp.mjs re-drive on the session's live instances) PID=32915",
+      "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
+      "gate_composite": 94
+    }
   },
   "datasource_placeholder": true,
   "placeholders": [
@@ -16,7 +36,6 @@
   "intent_keywords": [
     "connected-scatterplot",
     "connected-scatter",
-    "scatter",
     "trajectory",
     "path",
     "relationship"

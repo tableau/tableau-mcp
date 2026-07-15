@@ -10,19 +10,41 @@ import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheet
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { addDashboard, addSheet } from '../../../desktop/metadata/index.js';
 import {
+  checkRouteGateForScratchEntry,
+  type RouteGateResult,
+} from '../../../desktop/route/route-gate.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
+import {
   DesktopCommandExecutionError,
   WorkbookXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
+function isRouteGateResult(result: unknown): result is RouteGateResult {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    Array.isArray((result as { content?: unknown }).content) &&
+    typeof (result as { isError?: unknown }).isError === 'boolean'
+  );
+}
+
+function getSuccessResult(result: unknown): CallToolResult {
+  if (isRouteGateResult(result)) return result;
+  return {
+    isError: false,
+    content: [{ type: 'text', text: JSON.stringify(result) }],
+  };
+}
+
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   worksheetNames: z.array(z.string()).describe('Names of worksheets to create.'),
   dashboardName: z.string().describe('Name of dashboard to create.'),
 };
 
-const toolTitle = 'Batch Create Sheets and Cache XMLs';
+const toolTitle = 'Batch Create Sheets and Cache Working Copies';
 export const getBatchCreateAndCacheSheetsTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
@@ -31,7 +53,7 @@ export const getBatchCreateAndCacheSheetsTool = (
     name: 'batch-create-and-cache-sheets',
     title: toolTitle,
     description: [
-      'Create multiple worksheet sheets and one dashboard in one operation, then cache all empty XMLs.',
+      'Create multiple worksheet sheets and one dashboard in one operation, then cache all empty working copies.',
       'Phase 1 of the parallel dashboard creation workflow.',
       'Returns file paths for use in build-and-apply-worksheet and build-and-apply-dashboard.',
     ].join(' '),
@@ -50,10 +72,25 @@ export const getBatchCreateAndCacheSheetsTool = (
       return await tool.logAndExecute({
         extra,
         args: { session, worksheetNames, dashboardName },
+        getSuccessResult,
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+
+          const gateResult = checkRouteGateForScratchEntry(
+            'batch-create-and-cache-sheets',
+            resolvedSession,
+          );
+          if (gateResult) {
+            return new Ok(gateResult);
+          }
+
+          const executor = await extra.getExecutor(resolvedSession);
           const signal = extra.signal;
-          const cache = new DesktopCache(session);
+          const cache = new DesktopCache(resolvedSession);
 
           // Fetch current workbook
           const workbookResult = await getWorkbookXml({ executor, signal });
@@ -90,7 +127,7 @@ export const getBatchCreateAndCacheSheetsTool = (
           });
           writeFileSync(workbookFile, workbookXml, 'utf-8');
 
-          // Fetch and cache all worksheet XMLs
+          // Fetch and cache all worksheet working copies.
           const worksheetFiles: Record<string, string> = {};
           const worksheetWarnings: string[] = [];
           for (const name of worksheetNames) {
@@ -110,7 +147,7 @@ export const getBatchCreateAndCacheSheetsTool = (
             worksheetFiles[name] = file;
           }
 
-          // Fetch and cache dashboard XML
+          // Fetch and cache the dashboard working copy.
           let dashboardFile: string | null = null;
           const dashResult = await getDashboardXml({ dashboardName, executor, signal });
           if (dashResult.isErr()) {

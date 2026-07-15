@@ -7,7 +7,7 @@ import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {};
 
-const toolTitle = 'List Available XML Templates';
+const toolTitle = 'List Available Viz Templates';
 export const getListXmlTemplatesTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
@@ -16,7 +16,7 @@ export const getListXmlTemplatesTool = (
     name: 'list-xml-templates',
     title: toolTitle,
     description:
-      'List all available XML visualization templates. Use template names with build-and-apply-worksheet.',
+      'List all available visualization templates. Use template names with build-and-apply-worksheet.',
     paramsSchema,
     annotations: {
       title: toolTitle,

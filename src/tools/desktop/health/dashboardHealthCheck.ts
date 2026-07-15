@@ -35,6 +35,7 @@ import {
   summarizeSchema,
 } from '../../../desktop/binder/schema-summary.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
@@ -42,18 +43,18 @@ import { DesktopTool } from '../tool.js';
 // ── Binding manifest (input) ─────────────────────────────────────────────────
 
 const boundSheetSchema = z.object({
-  title: z.string().describe('Sheet title.'),
-  templateName: z.string().describe('Template name.'),
-  fieldMapping: z.record(z.string()).describe('slot->column_ref.'),
-  schemaHash: z.string().describe('Schema hash at bind.'),
-  primaryDatasource: z.string().describe('Datasource at bind.'),
+  title: z.string().describe('Worksheet title.'),
+  templateName: z.string().describe('Bound template name.'),
+  fieldMapping: z.record(z.string()).describe('slot -> column_ref.'),
+  schemaHash: z.string().describe('Bind-time schema hash.'),
+  primaryDatasource: z.string().describe('Bind-time datasource.'),
 });
 
 const bindingRecordSchema = z.object({
-  dashboardName: z.string().describe('Dashboard.'),
-  sheets: z.array(boundSheetSchema).describe('Sheets.'),
-  workbookHashAtBind: z.string().describe('Workbook hash at bind.'),
-  recordedAt: z.string().describe('Bind time.'),
+  dashboardName: z.string().describe('Dashboard name.'),
+  sheets: z.array(boundSheetSchema).describe('Bound worksheets.'),
+  workbookHashAtBind: z.string().describe('Bind-time workbook hash.'),
+  recordedAt: z.string().describe('Bind timestamp.'),
 });
 
 export type DashboardBoundSheet = z.infer<typeof boundSheetSchema>;
@@ -105,7 +106,7 @@ export interface DashboardHealthReport {
 }
 
 const D9_REASON =
-  'Live render/visual breakage is not detectable from workbook XML alone; the Desktop Agent ' +
+  'Live render/visual breakage is not detectable from workbook structure alone; the Desktop Agent ' +
   'API exposes no render-diagnostics or screenshot-diff surface today.';
 
 function makeUndetectable(): DashboardHealthReport['undetectable'] {
@@ -380,8 +381,8 @@ export function runDashboardHealthCheck({
 // ── Tool registration ────────────────────────────────────────────────────────
 
 const paramsSchema = {
-  session: z.string().describe('Session ID from list-instances.'),
-  manifest: bindingRecordSchema.describe('Prior binding manifest.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+  manifest: bindingRecordSchema.describe('Binding manifest from a prior bind.'),
 };
 
 const title = 'Dashboard Health Check (Flag-Only)';
@@ -395,7 +396,7 @@ export const getDashboardHealthCheckTool = (
     description: [
       'READ-ONLY drift detector for a previously-bound dashboard.',
       'Flags renamed/deleted sheets, changed fields, orphan zones, and datasource changes.',
-      'Flag-only: never repairs. D9 live render breakage is undetectable from XML and disclosed in reports. Details: expertise://tableau/tableau-tactics/workflow/recovery.',
+      'Flag-only: never repairs. D9 live render breakage is not structure-detectable and is disclosed. Details: expertise://tableau/tactics/workflow/recovery.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -410,7 +411,12 @@ export const getDashboardHealthCheckTool = (
         extra,
         args: { session, manifest },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+          const executor = await extra.getExecutor(resolvedSession);
           const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });
           if (xmlResult.isErr()) {
             return new DesktopCommandExecutionError(xmlResult.error).toErr();

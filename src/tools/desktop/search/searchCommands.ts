@@ -7,7 +7,12 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  keywords: z.array(z.string()).describe("Keywords to search (e.g., ['goto', 'sheet'])"),
+  keywords: z
+    .union([z.array(z.string()), z.string()])
+    .transform((v) => (typeof v === 'string' ? v.split(/[,\s]+/).filter(Boolean) : v))
+    .describe(
+      "Array of keywords to search for (e.g., ['goto', 'sheet']). A single string is accepted and split on whitespace/commas.",
+    ),
 };
 
 const title = 'Search Tableau Commands Reference';

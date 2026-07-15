@@ -431,3 +431,58 @@ describe('classifyNoLlm — determinism', () => {
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 });
+
+describe('classifyNoLlm — spatial-intent family guard (W-23447710)', () => {
+  it('demotes a non-spatial keyword-count winner when the ask carries bare map intent', () => {
+    const m = mapOf(
+      synth('rank-map-trap', 'ranking', ['top', 'highest'], catVal()),
+      synth('spatial-map-carrier', 'spatial', ['map'], catVal()),
+    );
+    expect(classifyNoLlm('Map of top Sales by Region, highest first.', m, SUMMARY)).toBeNull();
+  });
+
+  it('does not demote a spatial winner — choropleth binds as before', () => {
+    const m = mapOf(
+      synth('choropleth', 'spatial', ['choropleth', 'filled-map', 'map'], geoTriple()),
+    );
+    const res = classifyNoLlm(
+      'Build a choropleth filled map of Profit by State/Province within Country/Region.',
+      m,
+      SUMMARY,
+    );
+    expect(res).not.toBeNull();
+    expect(res!.template).toBe('choropleth');
+  });
+
+  it('leaves non-map asks unaffected', () => {
+    const m = mapOf(
+      synth('rank', 'ranking', ['bar'], catVal()),
+      synth('spatial-map-carrier', 'spatial', ['map'], catVal()),
+    );
+    const res = classifyNoLlm('bar chart of Sales by Region', m, SUMMARY);
+    expect(res).not.toBeNull();
+    expect(res!.template).toBe('rank');
+  });
+
+  it('demotes on a lat+lon coordinate-pair ask even without a map noun', () => {
+    const coordSummary: SchemaSummary = {
+      datasource: 'DS',
+      fields: [
+        field('Location', 'dimension', 'nominal', 'string'),
+        field('Latitude', 'measure', 'quantitative', 'real'),
+        field('Longitude', 'measure', 'quantitative', 'real'),
+      ],
+    };
+    const m = mapOf(
+      synth(
+        'scatter-latlon-trap',
+        'correlation',
+        ['scatter', 'plot'],
+        [slot('x', 'quantitative'), slot('y', 'quantitative')],
+      ),
+    );
+    expect(
+      classifyNoLlm('scatter plot of Latitude and Longitude by Location', m, coordSummary),
+    ).toBeNull();
+  });
+});

@@ -15,14 +15,17 @@ import { DesktopTool } from '../tool.js';
 import { getCacheDir, isWithinCacheDir } from './cachePath.js';
 
 const paramsSchema = {
-  filePath: z.string().describe('XML cache path.'),
-  worksheet: z.string().optional().describe('Worksheet slice selector. One selector at a time.'),
-  dashboard: z.string().optional().describe('Dashboard slice selector.'),
-  startByte: z.number().int().min(0).optional().describe('Byte-slice start.'),
-  endByte: z.number().int().min(0).optional().describe('Byte-slice end.'),
+  filePath: z.string().describe('Cached working-copy file path.'),
+  worksheet: z
+    .string()
+    .optional()
+    .describe('Optional worksheet slice selector. One selector at a time.'),
+  dashboard: z.string().optional().describe('Optional dashboard slice selector.'),
+  startByte: z.number().int().min(0).optional().describe('Optional raw byte-slice start.'),
+  endByte: z.number().int().min(0).optional().describe('Optional raw byte-slice end.'),
 };
 
-const toolTitle = 'Read Cached XML';
+const toolTitle = 'Read Cached Working Copy';
 export const getReadCachedXmlTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
@@ -31,7 +34,7 @@ export const getReadCachedXmlTool = (
     name: 'read-cached-xml',
     title: toolTitle,
     description:
-      'Read cached worksheet/dashboard/workbook XML. For large files, pass exactly ONE selector: ' +
+      'Read cached worksheet, dashboard, or workbook content. For large files, pass exactly ONE selector: ' +
       'worksheet, dashboard, or startByte/endByte range.',
     paramsSchema,
     annotations: {

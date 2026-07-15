@@ -27,7 +27,10 @@ export const bindingSchema = z
   .object({
     slot_id: z.string().describe('Slot id.'),
     field: z.string().describe('Exact field name.'),
-    derivation: z.enum(DERIVATION_SHORT_FORMS).optional().describe('Aggregation/date-grain (derivation) override.'),
+    derivation: z
+      .enum(DERIVATION_SHORT_FORMS)
+      .optional()
+      .describe('Aggregation/date-grain (derivation) override.'),
   })
   .strict();
 

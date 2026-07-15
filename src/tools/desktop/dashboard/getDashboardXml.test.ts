@@ -37,14 +37,14 @@ describe('getDashboardXmlTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getGetDashboardXmlTool(new DesktopMcpServer());
     expect(tool.name).toBe('get-dashboard-xml');
-    expect(tool.description).toContain('Get XML for an existing dashboard');
+    expect(tool.description).toContain('Get layout for an existing dashboard');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       dashboardName: expect.any(Object),
       mode: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Get Dashboard XML',
+      title: 'Get Dashboard Layout',
       readOnlyHint: false,
       openWorldHint: false,
     });
@@ -159,7 +159,7 @@ describe('getDashboardXmlTool', () => {
     const resultObj = fileResultSchema.parse(parsed);
     expect(resultObj.message).toContain('inline cap');
     expect(resultObj.message).toContain('Sales Dashboard');
-    expect(resultObj.instructions).toContain('read-cached-xml');
+    expect(resultObj.instructions).toContain('cache read tool');
   });
 
   it('logs a cap-hit receipt when the cap fires', async () => {

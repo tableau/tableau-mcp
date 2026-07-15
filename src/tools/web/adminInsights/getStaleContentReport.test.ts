@@ -369,6 +369,11 @@ describe('get-stale-content-report tool', () => {
   });
 
   it('runs a single Site Content VDS query and returns filtered rows', async () => {
+    // Pin "now" (Date only, so awaited promises still run): wb-recent's fixture date is
+    // only non-stale relative to a fixed clock — on the real clock this test starts
+    // failing the day the fixture ages past 90 days.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-05-20T00:00:00Z'));
     const { Ok } = await import('ts-results-es');
     mocks.mockQueryDatasource.mockResolvedValueOnce(
       Ok({
@@ -429,6 +434,7 @@ describe('get-stale-content-report tool', () => {
     expect(payload.rows.every((r) => r.daysSinceLastUse > 90)).toBe(true);
     const neverFlagged = payload.rows.find((r) => r.itemId === 'wb-never');
     expect(neverFlagged?.neverAccessed).toBe(true);
+    vi.useRealTimers();
   });
 
   it('accepts rows where Item Parent Project Name is null (top-level content)', async () => {

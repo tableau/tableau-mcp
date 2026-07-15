@@ -21,6 +21,25 @@ const typeAbbrev = (type: string): string => {
   return type;
 };
 
+const tableauDatatypeLabel = (datatype?: string): string => {
+  switch (datatype) {
+    case 'integer':
+      return 'Number (whole)';
+    case 'real':
+      return 'Number (decimal)';
+    case 'date':
+      return 'Date';
+    case 'datetime':
+      return 'Date & Time';
+    case 'string':
+      return 'Text';
+    case 'boolean':
+      return 'True/False';
+    default:
+      return datatype || 'unknown';
+  }
+};
+
 const title = 'List All Available Fields in Workbook Datasources';
 export const getListAvailableFieldsTool = (
   server: DesktopMcpServer,
@@ -31,7 +50,7 @@ export const getListAvailableFieldsTool = (
     title,
     description: [
       'List ALL fields available in workbook datasources.',
-      'Returns exact column_ref inputs for field tools. Call before adding rows/cols/encodings.',
+      'Returns exact column_ref inputs for field tools. Call before adding fields to Rows, Columns, or encodings.',
       'Reads the workbook cache file, NOT a worksheet file.',
     ].join(' '),
     paramsSchema,
@@ -81,7 +100,7 @@ export const getListAvailableFieldsTool = (
               const displayName = field.caption || field.columnName.replace(/^\[|\]$/g, '');
               const cleanName = field.columnName.replace(/^\[|\]$/g, '');
               const localNameDisplay = displayName === cleanName ? '(same)' : cleanName;
-              const typeInfo = `${typeAbbrev(field.type)} (${field.datatype || 'unknown'})`;
+              const typeInfo = `${typeAbbrev(field.type)} (${tableauDatatypeLabel(field.datatype)})`;
               const aggregated = field.isAggregated ? ' [AGG]' : '';
               output +=
                 pad(displayName, 30) +
@@ -103,7 +122,7 @@ export const getListAvailableFieldsTool = (
               const displayName = field.caption || field.columnName.replace(/^\[|\]$/g, '');
               const cleanName = field.columnName.replace(/^\[|\]$/g, '');
               const localNameDisplay = displayName === cleanName ? '(same)' : cleanName;
-              const typeInfo = `${typeAbbrev(field.type)} (${field.datatype || 'unknown'})`;
+              const typeInfo = `${typeAbbrev(field.type)} (${tableauDatatypeLabel(field.datatype)})`;
               const aggregated = field.isAggregated ? ' [AGG]' : '';
               output +=
                 pad(displayName, 30) +

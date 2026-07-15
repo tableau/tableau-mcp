@@ -2,15 +2,14 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { GetEventsFailedError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z
-    .string()
-    .describe('Session ID from tool that lists running Tableau Desktop instances.'),
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   sinceSequence: z
     .number()
     .optional()
@@ -52,7 +51,11 @@ export const getCheckForUserChangesTool = (
         extra,
         args: { session, sinceSequence },
         callback: async () => {
-          const executor = await extra.getExecutor(session);
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const executor = await extra.getExecutor(sessionResult.value);
           const result = await executor.getEvents({
             signal: extra.signal,
             sinceSequence,

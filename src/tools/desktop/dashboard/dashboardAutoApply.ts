@@ -25,6 +25,7 @@ import {
 } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import { deleteDashboard, listWorkbookDashboards } from '../../../desktop/metadata/dashboards.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
 import {
   buildInjectedWorkbookXml,
@@ -35,7 +36,13 @@ import { ExecuteCommandError } from '../../../desktop/toolExecutor/toolExecutor.
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { resolveSession } from '../binder/bindTemplate.js';
+import {
+  jsonToolResult,
+  type NextAction,
+  prefillNextAction,
+  type StructuredResult,
+  withNextAction,
+} from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import { buildDashboardXml, computeZones } from './dashboardZones.js';
 
@@ -56,8 +63,8 @@ const MIN_ASKS = 2;
 const MAX_ASKS = 6;
 
 const askSchema = z.object({
-  ask: z.string().min(1).describe('Chart ask.'),
-  title: z.string().min(1).max(80).optional().describe('Sheet title override.'),
+  ask: z.string().min(1).describe('Natural-language viz request.'),
+  title: z.string().min(1).max(80).optional().describe('Optional sheet title override.'),
 });
 
 const layoutSchema = z.object({
@@ -65,20 +72,25 @@ const layoutSchema = z.object({
     .enum(['auto-grid', 'rows', 'columns'])
     .optional()
     .default('auto-grid')
-    .describe('Dashboard layout.'),
-  gridColumns: z.number().optional().describe('Auto-grid columns.'),
+    .describe('Dashboard grid layout.'),
+  gridColumns: z.number().optional().describe('Auto-grid column count.'),
 });
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional with one running Desktop.'),
+  session: z
+    .string()
+    .optional()
+    .describe('Session ID. Optional only when exactly one Desktop instance is running.'),
   asks: z
     .array(askSchema)
     .min(MIN_ASKS)
     .max(MAX_ASKS)
-    .describe(`2-${MAX_ASKS} asks; each must bind deterministically or batch is refused.`),
-  dashboardName: z.string().min(1).describe('Dashboard to build/apply.'),
-  title: z.string().optional().describe('Title.'),
-  layout: layoutSchema.optional().describe('Layout.'),
+    .describe(
+      `2-${MAX_ASKS} viz asks; every ask must bind deterministically or the whole batch is refused.`,
+    ),
+  dashboardName: z.string().min(1).describe('Name of the dashboard to build and apply.'),
+  title: z.string().optional().describe('Optional dashboard title text.'),
+  layout: layoutSchema.optional().describe('Dashboard layout options.'),
 };
 
 /** One ask's outcome, tagged with its position and original ask text for diagnostics. */
@@ -115,6 +127,7 @@ type DashboardAutoApplyToolResult =
   | DashboardAutoApplyRefusalResult
   | DashboardAutoApplySuccessResult
   | DashboardAutoApplyPartialResult;
+type StructuredDashboardAutoApplyToolResult = StructuredResult<DashboardAutoApplyToolResult>;
 
 /** Human-readable detail for a loadWorkbookXml failure (mirrors bindTemplate.ts). */
 function describeApplyError(
@@ -130,7 +143,7 @@ function describeApplyError(
     if (inner.type === 'load-rejected') {
       return `Tableau rejected the load: ${inner.message}`;
     }
-    return 'invalid workbook XML';
+    return 'invalid workbook content';
   }
   return `workbook load command failed: ${JSON.stringify(error.error)}`;
 }
@@ -139,8 +152,15 @@ function refusal(
   results: AskOutcome[],
   guidance: string,
   apply_error?: string,
-): Ok<DashboardAutoApplyToolResult> {
-  return new Ok({ applied: false, results, guidance, ...(apply_error ? { apply_error } : {}) });
+  nextAction?: NextAction,
+): Ok<StructuredDashboardAutoApplyToolResult> {
+  const result: DashboardAutoApplyRefusalResult = {
+    applied: false,
+    results,
+    guidance,
+    ...(apply_error ? { apply_error } : {}),
+  };
+  return new Ok(nextAction ? withNextAction(result, nextAction) : result);
 }
 
 /** Quote-agnostic (matches injectTemplateCore.ts's own conventions): true when `title`
@@ -158,7 +178,7 @@ function isReferencedByDashboardZone(workbookXml: string, title: string): boolea
   return new RegExp(`<zone [^>]*name=['"]${nameAttr}['"]`).test(workbookXml);
 }
 
-const title = 'Build a Dashboard From N Asks in One Call (Fast Path)';
+const title = 'Build Dashboard From Viz Asks (Fast Path)';
 
 export const getDashboardAutoApplyTool = (
   server: DesktopMcpServer,
@@ -168,9 +188,9 @@ export const getDashboardAutoApplyTool = (
     name: 'dashboard-auto-apply',
     title,
     description: [
-      'Bind 2-6 chart asks to checked-in templates and APPLY one new/replaced dashboard in one call.',
+      'Bind 2-6 viz asks to templates and APPLY one new/replaced dashboard in one call.',
       'Every ask must bind deterministically; otherwise NOTHING is applied and each outcome is returned.',
-      'All-or-nothing: duplicate/zone-used titles, user edits, or preflight failures refuse the WHOLE batch. Details: expertise://tableau/tableau-tactics/dashboard/zones.',
+      'All-or-nothing: duplicate/zone-used titles, user edits, or preflight failures refuse the WHOLE batch. Details: expertise://tableau/tactics/dashboard/zones.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -184,7 +204,7 @@ export const getDashboardAutoApplyTool = (
       { session, asks, dashboardName, title: titleText, layout },
       extra,
     ): Promise<CallToolResult> => {
-      return await dashboardAutoApplyTool.logAndExecute<DashboardAutoApplyToolResult>({
+      return await dashboardAutoApplyTool.logAndExecute<StructuredDashboardAutoApplyToolResult>({
         extra,
         args: { session, asks, dashboardName, title: titleText, layout },
         callback: async () => {
@@ -244,8 +264,10 @@ export const getDashboardAutoApplyTool = (
               'One or more asks did not deterministically bind (Call-1, no-LLM). Nothing was applied to ' +
                 'the live workbook. Each ask carries its own bind-template-shaped outcome below: for ' +
                 '"propose", fill its output_schema and call bind-template again; for "escalate", follow its ' +
-                'guidance. Once every ask binds, retry dashboard-auto-apply, or fall back to the per-chart ' +
+                'guidance. Once every ask binds, retry dashboard-auto-apply, or fall back to the per-viz ' +
                 'bind-template(auto_apply:true) flow using each already-bound ask.',
+              undefined,
+              prefillNextAction('Resolve each ask before retrying'),
             );
           }
 
@@ -263,7 +285,9 @@ export const getDashboardAutoApplyTool = (
             return refusal(
               outcomes,
               'One or more bound asks are not eligible for server-side auto-apply (used_llm or ' +
-                'fast_path_eligible gate failed). Nothing was applied. Fall back to the per-chart flow.',
+                'fast_path_eligible gate failed). Nothing was applied. Fall back to the per-viz flow.',
+              undefined,
+              prefillNextAction('Use the per-viz flow'),
             );
           }
 
@@ -286,6 +310,7 @@ export const getDashboardAutoApplyTool = (
               `Duplicate resolved title(s) within the batch: ${detail}. Give each ask a distinct 'title' ` +
                 'and retry — nothing was applied.',
               `duplicate title(s): ${detail}`,
+              prefillNextAction('Give each ask a distinct title'),
             );
           }
 
@@ -314,6 +339,7 @@ export const getDashboardAutoApplyTool = (
                 'Applying this batch would silently rewire that dashboard to a replaced sheet. Rename the ' +
                 "ask's title and retry — nothing was applied.",
               `title referenced by existing dashboard zone: ${detail}`,
+              prefillNextAction('Rename the colliding worksheet titles'),
             );
           }
 
@@ -417,6 +443,7 @@ export const getDashboardAutoApplyTool = (
                   'current workbook — do NOT re-apply, the binds were computed against the pre-edit workbook ' +
                   'and re-applying could revert their changes.',
                 `user changed the workbook during the batch (${events.value.count} event(s) since read)`,
+                prefillNextAction('Re-run dashboard-auto-apply'),
               );
             }
           }
@@ -433,9 +460,10 @@ export const getDashboardAutoApplyTool = (
             return refusal(
               outcomes,
               `Server-side auto-apply did not complete (${describeApplyError(applyResult.error)}). Nothing ` +
-                'was applied — fall back to the per-chart bind-template(auto_apply:true) flow using each ' +
+                'was applied — fall back to the per-viz bind-template(auto_apply:true) flow using each ' +
                 "ask's bound args.",
               describeApplyError(applyResult.error),
+              prefillNextAction('Fall back to per-viz auto-apply'),
             );
           }
           const applyMs = Date.now() - applyStart;
@@ -464,17 +492,22 @@ export const getDashboardAutoApplyTool = (
                 err.type === 'load-dashboard-xml-error'
                   ? JSON.stringify(err.error)
                   : `workbook load command failed: ${JSON.stringify(err.error)}`;
-              return new Ok({
-                applied: 'partial',
-                dashboard: dashboardName,
-                sheets,
-                apply_error: message,
-                guidance:
-                  `The workbook (sheets + an empty "${dashboardName}" dashboard) was applied, but laying ` +
-                  `in the zones failed (${message}). Re-issue the zones via build-and-apply-dashboard — the ` +
-                  'dashboard exists with a valid empty layout, nothing is corrupted.',
-                ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
-              });
+              return new Ok(
+                withNextAction(
+                  {
+                    applied: 'partial',
+                    dashboard: dashboardName,
+                    sheets,
+                    apply_error: message,
+                    guidance:
+                      `The workbook (sheets + an empty "${dashboardName}" dashboard) was applied, but laying ` +
+                      `in the zones failed (${message}). Re-issue the zones via build-and-apply-dashboard — the ` +
+                      'dashboard exists with a valid empty layout, nothing is corrupted.',
+                    ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
+                  },
+                  prefillNextAction('Re-issue the zones'),
+                ),
+              );
             }
           }
 
@@ -487,6 +520,7 @@ export const getDashboardAutoApplyTool = (
             ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
           });
         },
+        getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });
     },
   });

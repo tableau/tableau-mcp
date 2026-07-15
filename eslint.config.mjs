@@ -63,6 +63,11 @@ export default [
       // Migration snapshot workspace (local-only, git-excluded) — reference material
       // only, never built or shipped.
       '.a2td-snapshot/**',
+      // Lockstep byte-identity files (lockstep.hashes.json): kept byte-identical
+      // with a2td's lockstep-core, so local prettier drift must not be "fixed"
+      // here — scripts/check-lockstep.mjs is the gate that matters for these.
+      'src/desktop/binder/classify.ts',
+      'src/desktop/templates/fieldReferenceRewriter.ts',
     ],
   },
   {

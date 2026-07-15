@@ -2,11 +2,31 @@
   "template": "spatial-symbol-map",
   "family": "spatial",
   "readiness": "YELLOW",
-  "fast_path_eligible": false,
+  "fast_path_eligible": true,
   "fast_path_blockers": [],
   "portability_evidence": {
     "fixture_bind": true,
-    "render_verified": "none"
+    "render_verified": "live-2026-07-11",
+    "xml_sha256": "0e10814f07d32b7c4c1a9113f0b6d2db9e62119316d39630db43a3415fd424d0",
+    "render_evidence": {
+      "method": "gate-composite",
+      "date": "2026-07-11",
+      "structural": 0.97297,
+      "critical_pass": "5/5",
+      "high_pass": "3/3",
+      "pixel": 1.0,
+      "pixel_regions": 6,
+      "sanity": "sane",
+      "sanity_signals": [
+        "mark-count=pass reconciled=true (616=616, Worksheet>Copy>Data on source and applied sheets)",
+        "caption-leak=pass"
+      ],
+      "run": "oracle-leg replay (W44-STAMP-PORT config): independent authored oracle on bundled Sample - Superstore; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity placeholder fill (no rewrites -- native Superstore geo names); all 12 config facets green on the applied readback",
+      "basis": "golden-parity gate run 2026-07-11 (oracle-leg): structural 0.97297 (5/5 critical, 3/3 high; sole miss = salience-1 resolved-title cosmetic -- applied sheet name differs from oracle sheet name by design), pixel 1.0 (6 counted ROIs, same-geometry back-to-back captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 616=616. Geocoding proven live: generated Lat/Long materialized on the bundled xls (manifest hazards generated-geo-required + geo-bind-not-geocodable closed for this datasource); bundled-xls geo grain measured 616 (CookBook Superstore's was 605 -- different data vintage, both internally reconciled).",
+      "lane": "fable-direct stamp batch 2026-07-11 (orchestrator live gate run; oracle-stamp.mjs CONFIG=spatial-symbol-map PID=65652)",
+      "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
+      "gate_composite": 98
+    }
   },
   "datasource_placeholder": true,
   "placeholders": [
@@ -16,8 +36,11 @@
   "intent_keywords": [
     "symbol-map",
     "proportional-symbol-map",
+    "graduated-symbol-map",
     "bubble-map",
     "point-map",
+    "dot-map",
+    "pin-map",
     "spatial",
     "map"
   ],
@@ -57,7 +80,7 @@
       "kind": "geo",
       "bindable": true,
       "required": true,
-      "notes": "template column carries semantic-role='[City].[Name]'; finest geographic grain — one symbol per city."
+      "notes": "template column carries semantic-role='[City].[Name]'; finest geographic grain \u2014 one symbol per city."
     },
     {
       "slot_id": "sales",
@@ -76,7 +99,7 @@
   "hazards": [
     {
       "code": "generated-geo-required",
-      "detail": "Rows/Cols are [Latitude (generated)]/[Longitude (generated)] — Tableau auto-generates these ONLY when the bound LOD fields carry a recognized geographic semantic-role. Binding non-geo dimensions produces no map (empty generated coordinates).",
+      "detail": "Rows/Cols are [Latitude (generated)]/[Longitude (generated)] \u2014 Tableau auto-generates these ONLY when the bound LOD fields carry a recognized geographic semantic-role. Binding non-geo dimensions produces no map (empty generated coordinates).",
       "xml": "spatial-symbol-map.xml:53-54"
     },
     {

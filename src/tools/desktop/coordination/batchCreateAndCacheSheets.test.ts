@@ -21,9 +21,13 @@ import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXm
 import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { addDashboard, addSheet } from '../../../desktop/metadata/index.js';
+import { deflectionText } from '../../../desktop/route/route-gate.js';
+import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 
 const SESSION = 'session-1';
+const FLAG = 'ROUTE_ENFORCEMENT';
+const ORIGINAL_ROUTE_ENFORCEMENT = process.env[FLAG];
 
 const WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets/></workbook>';
 const WORKSHEET_XML = '<worksheet name="Sheet1"><table/></worksheet>';
@@ -151,6 +155,107 @@ describe('batchCreateAndCacheSheetsTool', () => {
     });
 
     expect(writeFileSync).toHaveBeenCalled();
+  });
+});
+
+describe('batchCreateAndCacheSheetsTool — route gate (ROUTE_ENFORCEMENT)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionRouteState.clear();
+    delete process.env[FLAG];
+  });
+
+  afterEach(() => {
+    sessionRouteState.clear();
+    if (ORIGINAL_ROUTE_ENFORCEMENT === undefined) delete process.env[FLAG];
+    else process.env[FLAG] = ORIGINAL_ROUTE_ENFORCEMENT;
+  });
+
+  function seedPendingBindFirst(): void {
+    sessionRouteState.recordAskClassification(SESSION, {
+      ask: 'bar chart of sales by region',
+      route: 'bind-first',
+      shape: 'bind-first-template',
+      template: 'ranking-ordered-bar',
+    });
+  }
+
+  const params = {
+    session: SESSION,
+    worksheetNames: ['Sheet1', 'Sheet2'],
+    dashboardName: 'My Dashboard',
+  };
+
+  it('flag off executes normally even with a pending current_ask', async () => {
+    seedPendingBindFirst();
+
+    const result = await getResult(params);
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Ready for Phase 2');
+    expect(getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(writeFileSync).toHaveBeenCalled();
+  });
+
+  it('flag on returns the deflection before fetching or writing workbook XML', async () => {
+    process.env[FLAG] = 'on';
+    seedPendingBindFirst();
+
+    const result = await getResult(params);
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(deflectionText('ranking-ordered-bar'));
+    invariant(result.content[1].type === 'text');
+    expect(JSON.parse(result.content[1].text)).toEqual({
+      next_route: 'bind-first',
+      template: 'ranking-ordered-bar',
+    });
+    expect(getWorkbookXml).not.toHaveBeenCalled();
+    expect(loadWorkbookXml).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it('flag on deflects once, then an identical second call executes normally', async () => {
+    process.env[FLAG] = 'on';
+    seedPendingBindFirst();
+
+    const first = await getResult(params);
+    const second = await getResult(params);
+
+    expect(first.isError).toBe(false);
+    invariant(first.content[0].type === 'text');
+    expect(first.content[0].text).toBe(deflectionText('ranking-ordered-bar'));
+    expect(second.isError).toBeFalsy();
+    invariant(second.content[0].type === 'text');
+    expect(second.content[0].text).toContain('Ready for Phase 2');
+    expect(getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(writeFileSync).toHaveBeenCalled();
+  });
+
+  it('flag on with no current_ask executes normally', async () => {
+    process.env[FLAG] = 'on';
+
+    const result = await getResult(params);
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Ready for Phase 2');
+    expect(getWorkbookXml).toHaveBeenCalledTimes(1);
+  });
+
+  it('flag on with an already-concluded current_ask executes normally', async () => {
+    process.env[FLAG] = 'on';
+    seedPendingBindFirst();
+    sessionRouteState.recordAskOutcome(SESSION, 'bar chart of sales by region', 'bound');
+
+    const result = await getResult(params);
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Ready for Phase 2');
+    expect(getWorkbookXml).toHaveBeenCalledTimes(1);
   });
 });
 

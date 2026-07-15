@@ -16,13 +16,18 @@ import { DesktopTool } from '../tool.js';
 import { getCacheDir, isWithinCacheDir } from './cachePath.js';
 
 const paramsSchema = {
-  filePath: z.string().describe('XML cache path to write.'),
-  xmlContent: z.string().describe('XML: whole file or selector replacement.'),
-  worksheet: z.string().optional().describe('Worksheet splice selector. One selector at a time.'),
-  dashboard: z.string().optional().describe('Dashboard splice selector.'),
+  filePath: z.string().describe('Cached working-copy file path to write.'),
+  xmlContent: z
+    .string()
+    .describe('Content to write: whole file, or replacement element when a selector is provided.'),
+  worksheet: z
+    .string()
+    .optional()
+    .describe('Optional worksheet splice selector. One selector at a time.'),
+  dashboard: z.string().optional().describe('Optional dashboard splice selector.'),
 };
 
-const toolTitle = 'Write Cached XML';
+const toolTitle = 'Save Cached Working Copy';
 export const getWriteCachedXmlTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
@@ -31,7 +36,7 @@ export const getWriteCachedXmlTool = (
     name: 'write-cached-xml',
     title: toolTitle,
     description:
-      'Write cached XML before apply-* tools (mutates cache file). For large files, pass exactly ' +
+      'Save cached workbook, worksheet, or dashboard content before apply-* tools (mutates cache file). For large files, pass exactly ' +
       'ONE worksheet or dashboard selector to splice one replacement element.',
     paramsSchema,
     annotations: {
@@ -74,7 +79,7 @@ export const getWriteCachedXmlTool = (
           if (issues.length > 0) {
             const errorList = issues.map((issue, i) => `${i + 1}. ${issue.message}`).join('\n');
             return new ArgsValidationError(
-              `XML validation failed with ${issues.length} error(s):\n\n${errorList}\n\nFix these errors before writing.`,
+              `Content validation failed with ${issues.length} error(s):\n\n${errorList}\n\nFix these errors before writing.`,
             ).toErr();
           }
 
@@ -104,7 +109,7 @@ export const getWriteCachedXmlTool = (
               return new ArgsValidationError(
                 `Splice target mismatch: the ${selectorTag} selector is "${selectorName}", so ` +
                   `xmlContent must be a <${selectorTag} name="${selectorName}"> element, but its ` +
-                  `outer element is ${found}. Fix the selector or the xmlContent so both name the ` +
+                  `outer element is ${found}. Fix the selector or content so both name the ` +
                   `same ${selectorTag}; nothing was written.`,
               ).toErr();
             }

@@ -23,8 +23,8 @@ import type { TemplateManifest } from './manifest-types.js';
 // 'propose'/'escalate' (not bound). Pinned outcomes were DISCOVERED on the first run
 // against the committed fixtures (see pinned-current-behavior notes on each row); two
 // diverged from the spike's original /tmp run and are called out where they occur:
-//   • the eligible set is now 15 (adds correlation-scatter-plot-chart, stamped after
-//     the spike), and
+//   • the eligible set is now 20 (adds the W62 render-stamp evidence wave after the
+//     spike), and
 //   • gantt-task-rollup-chart now ONE-SHOTS (the spike's gate-4 MIN-over-date demotion
 //     was fixed in validate.ts after the spike captured its snapshot).
 
@@ -43,18 +43,26 @@ const ADVERSARIAL = loadFixture('adversarial.xml');
 // (a natural ask targeting the new template) rather than silently under-covering.
 const EXPECTED_ELIGIBLE = [
   'box-plot-chart',
+  'connected-scatterplot',
+  'control-chart-xmr',
+  'correlation-bubble-chart',
   'correlation-scatter-plot-chart',
   'distribution-bar-code-chart',
   'funnel-chart',
   'gantt-task-rollup-chart',
   'kpi-text',
+  'magnitude-simple-bar',
+  'part-to-whole-pie-chart',
   'part-to-whole-stacked-bar-chart',
   'part-to-whole-treemap-chart',
   'part-to-whole-waterfall',
   'quota-attainment-bullet',
+  'ranking-dot-strip-plot',
   'ranking-ordered-bar',
   'ranking-ordered-column',
+  'slope-chart',
   'spatial-choropleth-map',
+  'spatial-symbol-map',
   'trend-line-chart',
   'ww-ou-arrow',
 ].sort();
@@ -123,6 +131,13 @@ const SAAS_ASKS: Ask[] = [
     note: 'measure ARR + dim Industry fill the ordered-bar slots',
   },
   {
+    ask: 'magnitude chart of ARR by Industry',
+    targets: 'magnitude-simple-bar',
+    mayBind: 'magnitude-simple-bar',
+    pinned: 'bound',
+    note: 'magnitude intent + ARR + Industry fill the generic magnitude bar slots',
+  },
+  {
     ask: 'column chart of ARR by Industry',
     targets: 'ranking-ordered-column',
     mayBind: 'ranking-ordered-column',
@@ -149,6 +164,13 @@ const SAAS_ASKS: Ask[] = [
     mayBind: 'part-to-whole-waterfall',
     pinned: 'bound',
     note: 'waterfall intent word + ARR + Industry',
+  },
+  {
+    ask: 'pie chart of ARR by Industry',
+    targets: 'part-to-whole-pie-chart',
+    mayBind: 'part-to-whole-pie-chart',
+    pinned: 'bound',
+    note: 'pie chart noun + ARR + Industry fill wedge-size and color',
   },
   {
     ask: 'line chart of ARR by Renewal Date',
@@ -227,6 +249,34 @@ const SAAS_ASKS: Ask[] = [
     pinned: 'not-bound',
     note: 'GEO REFUSAL #2: same, phrased as filled map',
   },
+  {
+    ask: 'symbol map of ARR by Region Name',
+    targets: 'spatial-symbol-map',
+    mayBind: null,
+    pinned: 'not-bound',
+    note: 'GEO REFUSAL #3: symbol map is stamped but SaaS Region Name is not geocodable',
+  },
+  {
+    ask: 'connected scatterplot of ARR vs Seats by Account Name colored by Industry',
+    targets: 'connected-scatterplot',
+    mayBind: 'connected-scatterplot',
+    pinned: 'bound',
+    note: "W63 coverage: two measures (X/Profit-Ratio) + a color dim + a detail dim one-shot the connected-scatterplot; the 'connected' qualifier disambiguates it from the plain correlation-scatter-plot-chart (which owns the bare 'scatter' noun after W63 dropped connected-scatterplot's 'scatter' alias)",
+  },
+  {
+    ask: 'slope chart of ARR by Industry over Renewal Date',
+    targets: 'slope-chart',
+    mayBind: 'slope-chart',
+    pinned: 'bound',
+    note: "W63 coverage: 'slope' chart noun + measure + dim + temporal [Renewal Date] fills the endpoint-period slope slots",
+  },
+  {
+    ask: 'dot strip plot of ARR by Industry over Renewal Date',
+    targets: 'ranking-dot-strip-plot',
+    mayBind: null,
+    pinned: 'not-bound',
+    note: 'W63 coverage: ranking-dot-strip-plot requires a MONTH-derivation temporal on rows (deriv=mn) + measure on cols + a detail dim; the SaaS phrasing does not fill the month-grain rows slot deterministically -> honest propose (fail-open to the LLM path), not a wrong one-shot',
+  },
 ];
 
 // ── Fixture B: Hospital ops ───────────────────────────────────────────────────
@@ -272,6 +322,13 @@ const HOSPITAL_ASKS: Ask[] = [
     mayBind: 'trend-line-chart',
     pinned: 'bound',
     note: 'temporal [Admission Date] fills time slot',
+  },
+  {
+    ask: 'control chart of Cost by Admission Date',
+    targets: 'control-chart-xmr',
+    mayBind: null,
+    pinned: 'not-bound',
+    note: 'pinned-current-behavior: W62 stamp made it eligible, but no-LLM classifier still proposes on this phrasing',
   },
   {
     ask: 'total Cost as a KPI',
@@ -414,6 +471,13 @@ const ADVERSARIAL_ASKS: Ask[] = [
     note: 'two measures + two dims fill all four scatter slots',
   },
   {
+    ask: 'bubble chart of Max Temp, Line Items, and Average Score by Trend',
+    targets: 'correlation-bubble-chart',
+    mayBind: null,
+    pinned: 'not-bound',
+    note: 'pinned-current-behavior: W62 stamp made it eligible, but no-LLM classifier still proposes on this phrasing',
+  },
+  {
     ask: 'line chart of Max Temp by Trend',
     targets: 'trend-line-chart',
     mayBind: null,
@@ -461,7 +525,7 @@ function isWrongBind(row: Ask, r: BinderResult): boolean {
 }
 
 describe('portability/invariant — fixture & eligibility tripwires', () => {
-  it('the eligible set is exactly the 15 render-verified templates this suite covers', () => {
+  it('the eligible set is exactly the 20 render-verified templates this suite covers', () => {
     // If a NEW template is stamped fast_path_eligible, this fails — extend the fixtures
     // with a natural ask targeting it (discover-and-pin) rather than under-covering.
     expect(eligibleNames).toEqual(EXPECTED_ELIGIBLE);

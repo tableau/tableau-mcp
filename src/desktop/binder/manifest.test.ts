@@ -384,7 +384,7 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
     }
   });
 
-  it('the render-verified set is exactly the fifteen live-proven factory templates', () => {
+  it('the fast-path eligible set is exactly the twenty-three live-proven templates', () => {
     // W59 template-sync: the seven missing fast-path XMLs were ported from the factory
     // (a2td) with their manifests. fast_path_eligible / render_verified TRAVEL UNCHANGED
     // from the factory (no stamps minted in transit): the factory's 2026-07-06 stamp wave
@@ -394,8 +394,16 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
     // quota-attainment-bullet.
     // W60 parity port: correlation-scatter-plot-chart's factory stamp crossed (it was
     // stamped in a2td all along and dark here) — 14 → 15.
-    // Everything else ships propose-only (render_verified none) and honestly surfaces
-    // the not-live-render-verified blocker via deriveFastPathBlockers.
+    // W62 render-stamp evidence port: spatial-symbol-map, part-to-whole-pie-chart,
+    // correlation-bubble-chart, control-chart-xmr, and magnitude-simple-bar crossed with
+    // live 2026-07-11 evidence and XML hashes — 15 → 20.
+    // W63 render-stamp evidence port: connected-scatterplot + slope-chart (composite 94)
+    // and ranking-dot-strip-plot (composite 98) crossed with live 2026-07-13 evidence and
+    // XML hashes — 20 → 23. connected-scatterplot dropped its bare 'scatter' keyword and
+    // ranking-dot-strip-plot dropped bare 'strip-plot' on becoming eligible, so the
+    // canonical scatter/strip-plot nouns keep a single carrier (see carrier-uniqueness).
+    // Other templates either ship propose-only (render_verified none) or retain a
+    // separate blocker despite render evidence (for example histogram bin-width tuning).
     const eligible = [...manifests.values()]
       .filter((m) => m.fast_path_eligible)
       .map((m) => m.template)
@@ -403,18 +411,26 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
     expect(eligible).toEqual(
       [
         'box-plot-chart',
+        'connected-scatterplot',
+        'control-chart-xmr',
+        'correlation-bubble-chart',
         'correlation-scatter-plot-chart',
         'distribution-bar-code-chart',
         'funnel-chart',
         'gantt-task-rollup-chart',
         'kpi-text',
+        'magnitude-simple-bar',
+        'part-to-whole-pie-chart',
         'part-to-whole-stacked-bar-chart',
         'part-to-whole-treemap-chart',
         'part-to-whole-waterfall',
         'quota-attainment-bullet',
+        'ranking-dot-strip-plot',
         'ranking-ordered-bar',
         'ranking-ordered-column',
+        'slope-chart',
         'spatial-choropleth-map',
+        'spatial-symbol-map',
         'trend-line-chart',
         'ww-ou-arrow',
       ].sort(),
