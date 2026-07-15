@@ -2,19 +2,18 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { getConfig } from '../../../../config.js';
 import {
   ArgsValidationError,
   FeatureDisabledError,
   McpToolError,
 } from '../../../../errors/mcpToolError.js';
-import { getOverridableConfig } from '../../../../overridableConfig.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import {
   pulseBundleRequestSchema,
   PulseBundleResponse,
 } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
-import { Provider } from '../../../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../../resourceAccessChecker.js';
 import { WebTool } from '../../tool.js';
@@ -148,15 +147,15 @@ const paramsSchema = {
 };
 
 export const getGenerateInsightCardsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+  const config = getConfig();
   const tool = new WebTool({
     server,
     name: 'generate-insight-cards',
     description: 'Generate deterministic insights for a published datasource.',
-    // Opt-in only: disabled unless explicitly listed in INCLUDE_TOOLS, so this
-    // tool is never frontloaded onto the default surface (tool-surface budget).
-    disabled: new Provider(
-      async () => !getOverridableConfig().includeTools.includes('generate-insight-cards'),
-    ),
+    // Gated off by default (INSIGHTS_TOOLS_ENABLED) so it's never frontloaded
+    // onto the default surface / into hosts like Slackbot; set the env var to
+    // register it. `INCLUDE_TOOLS=insights` still scopes it as an extra opt-in.
+    disabled: !config.insightsToolsEnabled,
     paramsSchema,
     annotations: {
       title: 'Generate Insight Cards',
@@ -361,16 +360,27 @@ export const getGenerateInsightCardsTool = (server: WebMcpServer): WebTool<typeo
   return tool;
 };
 
+// Candidate field captions of the given data types, deduped and sorted by
+// caption so selection is deterministic regardless of VDS metadata order.
+function sortedCaptionsByType(
+  fields: Array<Record<string, unknown>>,
+  dataTypes: ReadonlyArray<string>,
+): string[] {
+  const captions = fields
+    .filter(
+      (item) =>
+        typeof item.fieldCaption === 'string' && dataTypes.includes(item.dataType as string),
+    )
+    .map((item) => item.fieldCaption as string);
+  return Array.from(new Set(captions)).sort((a, b) => a.localeCompare(b));
+}
+
 function pickTimeField(fields: Array<Record<string, unknown>>, override?: string): string | null {
   if (override) {
     return override;
   }
-  const field = fields.find(
-    (item) =>
-      typeof item.fieldCaption === 'string' &&
-      (item.dataType === 'DATE' || item.dataType === 'DATETIME'),
-  );
-  return typeof field?.fieldCaption === 'string' ? field.fieldCaption : null;
+  // Deterministic: alphabetically-first DATE/DATETIME field (not response order).
+  return sortedCaptionsByType(fields, ['DATE', 'DATETIME'])[0] ?? null;
 }
 
 function pickMeasures(
@@ -381,23 +391,14 @@ function pickMeasures(
   if (overrides?.length) {
     return overrides.slice(0, maxCards);
   }
-  const measures = fields
-    .filter(
-      (item) =>
-        typeof item.fieldCaption === 'string' &&
-        (item.dataType === 'INTEGER' || item.dataType === 'REAL'),
-    )
-    .map((item) => item.fieldCaption as string);
-  return Array.from(new Set(measures)).slice(0, maxCards);
+  return sortedCaptionsByType(fields, ['INTEGER', 'REAL']).slice(0, maxCards);
 }
 
 // Categorical (STRING) fields are candidates for Pulse dimension breakdowns.
 // Without allowed_dimensions the detail bundle's breakdown group is empty.
 function pickDimensions(fields: Array<Record<string, unknown>>, max = 5): string[] {
-  const dimensions = fields
-    .filter((item) => typeof item.fieldCaption === 'string' && item.dataType === 'STRING')
-    .map((item) => item.fieldCaption as string);
-  return Array.from(new Set(dimensions)).slice(0, max);
+  // Deterministic: dedupe + sort by caption before truncating (not VDS order).
+  return sortedCaptionsByType(fields, ['STRING']).slice(0, max);
 }
 
 async function resolveDatasource({

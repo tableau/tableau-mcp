@@ -76,6 +76,7 @@ export class Config extends BaseConfig {
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
   flowToolsEnabled: boolean;
+  insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
 
   constructor() {
@@ -142,6 +143,7 @@ export class Config extends BaseConfig {
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
       FLOW_TOOLS_ENABLED: flowToolsEnabled,
+      INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
     } = cleansedVars;
 
@@ -304,6 +306,10 @@ export class Config extends BaseConfig {
     // Flow tools are gated off by default while flow rollouts are staged into
     // production; set FLOW_TOOLS_ENABLED=true to register them.
     this.flowToolsEnabled = flowToolsEnabled === 'true';
+    // Insight-cards tools (generate-insight-cards, resolve-datasource-luid) are
+    // gated off by default while the insights rollout is staged (keeps hosts
+    // like Slackbot stable); set INSIGHTS_TOOLS_ENABLED=true to register them.
+    this.insightsToolsEnabled = insightsToolsEnabled === 'true';
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';

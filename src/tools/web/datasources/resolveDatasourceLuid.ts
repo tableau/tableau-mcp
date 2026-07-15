@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { getConfig } from '../../../config.js';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -15,11 +16,14 @@ const paramsSchema = {
 export const getResolveDatasourceLuidTool = (
   server: WebMcpServer,
 ): WebTool<typeof paramsSchema> => {
+  const config = getConfig();
   const tool = new WebTool({
     server,
     name: 'resolve-datasource-luid',
     description:
       'Resolve a published datasource LUID by exact, case-sensitive datasource contentUrl match.',
+    // Gated off by default (INSIGHTS_TOOLS_ENABLED) alongside generate-insight-cards.
+    disabled: !config.insightsToolsEnabled,
     paramsSchema,
     annotations: {
       title: 'Resolve Datasource LUID',

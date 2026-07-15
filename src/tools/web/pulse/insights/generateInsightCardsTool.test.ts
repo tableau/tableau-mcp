@@ -531,25 +531,6 @@ describe('getGenerateInsightCardsTool', () => {
     expect(mocks.mockGenerateBundle).not.toHaveBeenCalled();
   });
 
-  it('is disabled by default and enabled only when listed in INCLUDE_TOOLS', async () => {
-    const prev = process.env.INCLUDE_TOOLS;
-    try {
-      delete process.env.INCLUDE_TOOLS;
-      const disabledTool = getGenerateInsightCardsTool(new WebMcpServer());
-      expect(await Provider.from(disabledTool.disabled)).toBe(true);
-
-      process.env.INCLUDE_TOOLS = 'generate-insight-cards';
-      const enabledTool = getGenerateInsightCardsTool(new WebMcpServer());
-      expect(await Provider.from(enabledTool.disabled)).toBe(false);
-    } finally {
-      if (prev === undefined) {
-        delete process.env.INCLUDE_TOOLS;
-      } else {
-        process.env.INCLUDE_TOOLS = prev;
-      }
-    }
-  });
-
   it('surfaces the bundle error when every measure fails (no silent empty result)', async () => {
     mocks.mockListDatasources.mockResolvedValue({
       datasources: [{ id: 'ds-luid', name: 'GUS Work', contentUrl: 'GUS-Work' }],
@@ -595,6 +576,71 @@ describe('getGenerateInsightCardsTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('is not a categorical field');
     expect(mocks.mockGenerateBundle).not.toHaveBeenCalled();
+  });
+
+  it('selects the same fields regardless of VDS metadata order (deterministic)', async () => {
+    const metadata = [
+      { fieldCaption: 'Order Date', dataType: 'DATE' },
+      { fieldCaption: 'Ship Date', dataType: 'DATETIME' },
+      { fieldCaption: 'Sales', dataType: 'REAL' },
+      { fieldCaption: 'Quantity', dataType: 'INTEGER' },
+      { fieldCaption: 'Profit', dataType: 'REAL' },
+      { fieldCaption: 'Region', dataType: 'STRING' },
+    ];
+    const genericBundle = Ok({
+      bundle_response: {
+        result: {
+          insight_groups: [
+            {
+              type: 'ban',
+              summaries: [],
+              insights: [
+                {
+                  insight_type: 'popc',
+                  result: {
+                    type: 'popc',
+                    version: 1,
+                    question: '',
+                    score: 1,
+                    markup: 'up 5%',
+                    facts: { delta_percent: 5 },
+                  },
+                },
+              ],
+            },
+          ],
+          has_errors: false,
+          characterization: 'CHARACTERIZATION_UNSPECIFIED',
+        },
+      },
+    });
+
+    const run = async (
+      md: Array<{ fieldCaption: string; dataType: string }>,
+    ): Promise<{ measures: string[]; timeField: string | undefined; dimensions: string[] }> => {
+      mocks.mockListDatasources.mockResolvedValue({
+        datasources: [{ id: 'ds', name: 'DS', contentUrl: 'DS' }],
+      });
+      mocks.mockReadMetadata.mockResolvedValue(Ok({ data: md }));
+      mocks.mockGenerateBundle.mockResolvedValue(genericBundle);
+      const result = await getToolResult({ datasource: 'DS', maxCards: 2 });
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(result.content[0].text);
+      return {
+        measures: parsed.cards.map((card: { measure: string }) => card.measure),
+        timeField: parsed.cards[0]?.timeField,
+        dimensions: parsed.dimensions,
+      };
+    };
+
+    const inOrder = await run(metadata);
+    const shuffled = await run([...metadata].reverse());
+
+    expect(inOrder).toEqual(shuffled);
+    // Deterministic alphabetical selection (independent of response order).
+    expect(inOrder.measures).toEqual(['Profit', 'Quantity']);
+    expect(inOrder.timeField).toBe('Order Date');
+    expect(inOrder.dimensions).toEqual(['Region']);
   });
 });
 
