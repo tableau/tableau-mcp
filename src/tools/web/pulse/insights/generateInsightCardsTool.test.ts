@@ -5,7 +5,7 @@ import { WebMcpServer } from '../../../../server.web.js';
 import invariant from '../../../../utils/invariant.js';
 import { Provider } from '../../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
-import { getGenerateChironInsightCardsTool } from './generateChironInsightCardsTool.js';
+import { getGenerateInsightCardsTool } from './generateInsightCardsTool.js';
 
 const mocks = vi.hoisted(() => ({
   mockListDatasources: vi.fn(),
@@ -37,7 +37,7 @@ vi.mock('../../resourceAccessChecker.js', () => ({
   },
 }));
 
-describe('getGenerateChironInsightCardsTool', () => {
+describe('getGenerateInsightCardsTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.mockIsDatasourceAllowed.mockResolvedValue({ allowed: true });
@@ -571,7 +571,7 @@ async function getToolResult(
     datasource: 'GUS-Work',
   },
 ): Promise<CallToolResult> {
-  const tool = getGenerateChironInsightCardsTool(new WebMcpServer());
+  const tool = getGenerateInsightCardsTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
     {

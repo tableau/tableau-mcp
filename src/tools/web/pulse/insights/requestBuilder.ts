@@ -2,25 +2,25 @@ import { z } from 'zod';
 
 import { pulseBundleRequestSchema } from '../../../../sdks/tableau/types/pulse.js';
 
-type ChironFilter = { field: string; value: string };
+type InsightFilter = { field: string; value: string };
 
-type BuildChironBundleRequestArgs = {
+type BuildInsightBundleRequestArgs = {
   datasourceLuid: string;
   datasourceName: string;
   measure: string;
   timeField: string;
   allowedDimensions?: string[];
-  filters?: ChironFilter[];
+  filters?: InsightFilter[];
 };
 
-export function buildChironBundleRequest({
+export function buildInsightBundleRequest({
   datasourceLuid,
   datasourceName,
   measure,
   timeField,
   allowedDimensions = [],
   filters = [],
-}: BuildChironBundleRequestArgs): z.infer<typeof pulseBundleRequestSchema> {
+}: BuildInsightBundleRequestArgs): z.infer<typeof pulseBundleRequestSchema> {
   // Categorical equality filters scope the metric instance to specific dimension
   // members (drill-down); shape matches pulseFilterSchema. Confirmed against the
   // live Pulse API: the operator must be the enum 'OPERATOR_EQUAL' (not '='), and

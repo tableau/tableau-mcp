@@ -17,12 +17,12 @@ import { WebMcpServer } from '../../../../server.web.js';
 import { getVizqlDataServiceDisabledError } from '../../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../../resourceAccessChecker.js';
 import { WebTool } from '../../tool.js';
-import { buildChironBundleRequest } from './requestBuilder.js';
-import { runChironBundle } from './runChironBundle.js';
+import { buildInsightBundleRequest } from './requestBuilder.js';
+import { runInsightBundle } from './runInsightBundle.js';
 
 type InsightDirection = 'up' | 'down' | 'flat' | 'no_data';
 
-const CHIRON_BUNDLE_TYPE = 'detail' as const;
+const INSIGHT_BUNDLE_TYPE = 'detail' as const;
 
 type SeriesPoint = {
   date: string;
@@ -127,7 +127,7 @@ type InsightCard = {
     tool: 'generate-pulse-metric-value-insight-bundle';
     args: {
       bundleRequest: z.infer<typeof pulseBundleRequestSchema>;
-      bundleType: typeof CHIRON_BUNDLE_TYPE;
+      bundleType: typeof INSIGHT_BUNDLE_TYPE;
     };
   };
 };
@@ -145,9 +145,7 @@ const paramsSchema = {
     .optional(),
 };
 
-export const getGenerateChironInsightCardsTool = (
-  server: WebMcpServer,
-): WebTool<typeof paramsSchema> => {
+export const getGenerateInsightCardsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const tool = new WebTool({
     server,
     name: 'generate-insight-cards',
@@ -257,7 +255,7 @@ export const getGenerateChironInsightCardsTool = (
               const bundleErrors: Array<{ measure: string; error: string }> = [];
               let firstBundleError: McpToolError | null = null;
               for (const measure of selectedMeasures) {
-                const request = buildChironBundleRequest({
+                const request = buildInsightBundleRequest({
                   datasourceLuid: resolved.luid,
                   datasourceName: resolved.name,
                   measure,
@@ -265,10 +263,10 @@ export const getGenerateChironInsightCardsTool = (
                   allowedDimensions: activeDimensions,
                   filters,
                 });
-                const bundle = await runChironBundle({
+                const bundle = await runInsightBundle({
                   extra,
                   request,
-                  bundleType: CHIRON_BUNDLE_TYPE,
+                  bundleType: INSIGHT_BUNDLE_TYPE,
                   jwtScopes: tool.requiredApiScopes,
                 });
                 if (bundle.isErr()) {
@@ -464,7 +462,7 @@ function mapBundleToCard({
       tool: 'generate-pulse-metric-value-insight-bundle',
       args: {
         bundleRequest,
-        bundleType: CHIRON_BUNDLE_TYPE,
+        bundleType: INSIGHT_BUNDLE_TYPE,
       },
     },
   };

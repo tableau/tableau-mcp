@@ -13,9 +13,9 @@ import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasou
 import { getEmbedTokenTool } from './getEmbedToken/getEmbedToken.js';
 import { getListJobsTool } from './jobs/listJobs.js';
 import { getListProjectsTool } from './projects/listProjects.js';
-import { getGenerateChironInsightCardsTool } from './pulse/chiron/generateChironInsightCardsTool.js';
 import { getGeneratePulseInsightBriefTool } from './pulse/generateInsightBrief/generatePulseInsightBriefTool.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './pulse/generateMetricValueInsightBundle/generatePulseMetricValueInsightBundleTool.js';
+import { getGenerateInsightCardsTool } from './pulse/insights/generateInsightCardsTool.js';
 import { getListAllPulseMetricDefinitionsTool } from './pulse/listAllMetricDefinitions/listAllPulseMetricDefinitions.js';
 import { getListPulseMetricDefinitionsFromDefinitionIdsTool } from './pulse/listMetricDefinitionsFromDefinitionIds/listPulseMetricDefinitionsFromDefinitionIds.js';
 import { getListPulseMetricsFromMetricDefinitionIdTool } from './pulse/listMetricsFromMetricDefinitionId/listPulseMetricsFromMetricDefinitionId.js';
@@ -55,7 +55,7 @@ export const webToolFactories = [
   getListPulseMetricSubscriptionsTool,
   getGeneratePulseMetricValueInsightBundleTool,
   getGeneratePulseInsightBriefTool,
-  getGenerateChironInsightCardsTool,
+  getGenerateInsightCardsTool,
   getGetWorkbookTool,
   getGetViewTool,
   getGetViewDataTool,

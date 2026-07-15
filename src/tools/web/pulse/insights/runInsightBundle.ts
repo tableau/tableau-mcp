@@ -10,7 +10,7 @@ import {
 } from '../../../../sdks/tableau/types/pulse.js';
 import { TableauWebRequestHandlerExtra } from '../../toolContext.js';
 
-export async function runChironBundle({
+export async function runInsightBundle({
   extra,
   request,
   bundleType = 'detail',
