@@ -315,6 +315,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  TOOL_PROFILE: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Tool Profile',
+    description:
+      "Tool registration profile: unset/'full' registers everything, 'demo' the slim desktop set, 'combined-lean' the full desktop set plus a lazy web-tool loader.",
+    required: false,
+    sensitive: false,
+  },
   MAX_RESULT_LIMIT: {
     includeInUserConfig: false,
     type: 'number',

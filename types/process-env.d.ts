@@ -5,6 +5,7 @@ interface ProcessEnvBase {
   ENABLED_LOGGERS: string | undefined;
   FILE_LOGGER_DIRECTORY: string | undefined;
   MAX_REQUEST_TIMEOUT_MS: string | undefined;
+  TOOL_PROFILE: string | undefined;
 }
 
 export interface ProcessEnvWeb extends ProcessEnvBase {

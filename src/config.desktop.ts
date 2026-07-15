@@ -6,13 +6,8 @@ import { parseNumber } from './utils/parseNumber.js';
 
 export class Config extends BaseConfig {
   agentApiClientConfig: AgentApiClientConfig;
-  /**
-   * Which set of desktop tools to register (W60 spike lever 1 / preamble P1). Normalized
-   * (trim + lowercase). '' (unset) or 'full' registers the full set; 'demo' registers the
-   * slim fast-path + escalation-fallback set; any other value falls back to full with a
-   * logged warning. Slimming the registered surface cuts per-turn schema tokens/latency.
-   */
-  toolProfile: string;
+  // toolProfile lives on BaseConfig (shared with web/combined); desktop consumes it via
+  // selectToolsForProfile — '' / 'full' / 'combined-lean' → full set, 'demo' → slim set.
   /**
    * Server-enforced ceiling (bytes) on inline workbook/worksheet/dashboard XML in a tool
    * result. Over this, the get-*-xml tools respond in file mode regardless of the requested
@@ -46,7 +41,6 @@ export class Config extends BaseConfig {
       AGENT_API_BASE: agentApiBase,
       AGENT_API_AUTH_TOKEN: agentApiAuthToken,
       AGENT_API_POLL_INTERVAL_MS: agentApiPollIntervalMs,
-      TOOL_PROFILE: toolProfile,
       INLINE_XML_MAX_BYTES: inlineXmlMaxBytes,
       TABLEAU_EXTERNAL_API: externalApi,
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
@@ -61,7 +55,6 @@ export class Config extends BaseConfig {
     this.externalApiDiscoveryDir = externalApiDiscoveryDir || undefined;
     this.desktopSessionId =
       desktopSessionId && /^\d+$/.test(desktopSessionId) ? desktopSessionId : undefined;
-    this.toolProfile = (toolProfile ?? '').trim().toLowerCase();
 
     this.inlineXmlMaxBytes = parseNumber(inlineXmlMaxBytes, {
       defaultValue: DEFAULT_INLINE_XML_MAX_BYTES,
