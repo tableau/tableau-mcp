@@ -28,6 +28,7 @@ export interface SchemaField {
   role: 'dimension' | 'measure';
   type: string; // "quantitative" | "nominal" | "ordinal" | ...
   datatype: string; // "string" | "real" | "integer" | "date" | "datetime" | ...
+  semanticRole?: string; // Tableau geo semantic role, e.g. "[State].[Name]"
   datasource: string;
   isAggregated: boolean;
   column_ref: string; // straight from listAvailableFields, e.g. "[Superstore].[sum:Sales:qk]"
@@ -63,6 +64,7 @@ export function summarizeSchema(workbookXml: string): SchemaSummary {
       role,
       type: f.type,
       datatype: f.datatype ?? '',
+      semanticRole: f.semanticRole,
       datasource: f.datasource,
       isAggregated: !!f.isAggregated,
       column_ref: f.column_ref,

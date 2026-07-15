@@ -82,7 +82,7 @@ function makeExtra(workbookXml = WORKBOOK_WITH_CAPTION): TableauDesktopRequestHa
     { name: 'M2', role: 'measure', datatype: 'real', type: 'quantitative' },
   ]);
   vi.mocked(rewriteFieldReferences).mockReturnValue(WORKSHEET_OUTPUT);
-  vi.mocked(loadWorksheetXml).mockResolvedValue(new Ok(undefined));
+  vi.mocked(loadWorksheetXml).mockResolvedValue(new Ok({ readbackWarnings: [] }));
   return extra;
 }
 
@@ -314,7 +314,7 @@ describe('buildAndApplyWorksheetTool — mapping construction characterization',
     const capturedXml: string[] = [];
     vi.mocked(loadWorksheetXml).mockImplementation(async ({ xml }) => {
       capturedXml.push(xml);
-      return new Ok(undefined);
+      return new Ok({ readbackWarnings: [] });
     });
 
     // Two applies into the same workbook; no fields needed — we only exercise the calc.

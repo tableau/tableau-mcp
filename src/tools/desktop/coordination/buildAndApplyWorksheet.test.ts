@@ -61,7 +61,7 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
     { name: 'Sales', role: 'measure', datatype: 'integer', type: 'quantitative' },
   ]);
   vi.mocked(rewriteFieldReferences).mockReturnValue(TEMPLATE_XML);
-  vi.mocked(loadWorksheetXml).mockResolvedValue(new Ok(undefined));
+  vi.mocked(loadWorksheetXml).mockResolvedValue(new Ok({ readbackWarnings: [] }));
   return extra;
 }
 

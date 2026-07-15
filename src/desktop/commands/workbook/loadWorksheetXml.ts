@@ -8,11 +8,17 @@ import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
+import {
+  formatReadbackVerificationError,
+  type ReadbackFinding,
+  verifyWorksheetReadback,
+} from '../../validation/readback-verify.js';
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { withApplyLock } from './applyMutex.js';
 import { focusAppliedSheetBestEffort } from './focusAppliedSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
+import { getWorksheetXml } from './getWorksheetXml.js';
 import { applyWorkbookText, interpretLoadOutcome } from './loadWorkbookXml.js';
 
 export type LoadWorksheetXmlError =
@@ -21,13 +27,77 @@ export type LoadWorksheetXmlError =
   // The load-worksheet command reported command-level completion, but Tableau
   // rejected the actual document load (surfaced in the response payload, not in
   // `status`). `message` carries Desktop's own error text.
-  | { type: 'load-rejected'; message: string };
+  | { type: 'load-rejected'; message: string }
+  // Apply succeeded but the post-apply readback proved Tableau silently dropped or
+  // changed an intent-bearing node (the silently-dropped-pill killer, W4). `message`
+  // carries the agent-facing fix recipe; `findings` the structured evidence.
+  | { type: 'readback-failed'; findings: ReadbackFinding[]; message: string };
+
+/** Non-fatal readback warnings surfaced on a successful apply (sort drops/changes). */
+export interface LoadWorksheetXmlOk {
+  readbackWarnings: ReadbackFinding[];
+}
 
 type LoadWorksheetXmlResult = Result<
-  void,
+  LoadWorksheetXmlOk,
   | { type: 'execute-command-error'; error: ExecuteCommandError }
   | { type: 'load-worksheet-xml-error'; error: LoadWorksheetXmlError }
 >;
+
+/**
+ * Post-apply readback verification. Re-reads the just-applied worksheet and compares
+ * intent-bearing structures against the authored XML. Never throws and never fails the
+ * apply on a re-read miss: if the worksheet cannot be re-read, verification is skipped
+ * (returns no findings) so telemetry can never mask a real apply.
+ */
+async function verifyReadbackAfterApply(
+  worksheetName: string,
+  intendedXml: string,
+  executor: WithExecutorAndAbortSignal['executor'],
+  signal: WithExecutorAndAbortSignal['signal'],
+): Promise<ReadbackFinding[]> {
+  try {
+    const reread = await getWorksheetXml({ worksheetName, executor, signal });
+    if (reread.isErr()) {
+      log({
+        level: 'warning',
+        message: 'Post-apply worksheet readback verification skipped — could not re-read worksheet',
+        logger: 'worksheetCommands',
+        data: { worksheetName, error: reread.error },
+      });
+      return [];
+    }
+    return verifyWorksheetReadback(intendedXml, reread.value);
+  } catch (error) {
+    log({
+      level: 'warning',
+      message: 'Post-apply worksheet readback verification skipped — re-read threw',
+      logger: 'worksheetCommands',
+      data: { worksheetName, error: error instanceof Error ? error.message : String(error) },
+    });
+    return [];
+  }
+}
+
+/**
+ * Turn readback findings into a load outcome: ERROR-severity findings fail the apply
+ * (the rendered chart does not match intent), WARNING-severity findings ride along on a
+ * successful Ok so the tool can surface them without blocking.
+ */
+function readbackOutcome(findings: ReadbackFinding[]): LoadWorksheetXmlResult {
+  const errors = findings.filter((f) => f.severity === 'error');
+  if (errors.length > 0) {
+    return Err({
+      type: 'load-worksheet-xml-error',
+      error: {
+        type: 'readback-failed',
+        findings,
+        message: formatReadbackVerificationError(findings),
+      },
+    });
+  }
+  return Ok({ readbackWarnings: findings });
+}
 
 export async function loadWorksheetXml({
   worksheetName,
@@ -135,6 +205,13 @@ async function loadWorksheetXmlViaAgentApi({
     },
   });
 
+  // Verify the apply landed durably BEFORE focusing — an ERROR-severity readback means
+  // Tableau silently dropped intent-bearing nodes, so we reject and never navigate to the
+  // broken sheet (W4). WARNING-severity findings ride along on the successful Ok.
+  const findings = await verifyReadbackAfterApply(worksheetName, xml, executor, signal);
+  const outcomeResult = readbackOutcome(findings);
+  if (outcomeResult.isErr()) return outcomeResult;
+
   await focusAppliedSheetBestEffort({
     sheetName: worksheetName,
     appliedVia: 'load-worksheet',
@@ -142,7 +219,7 @@ async function loadWorksheetXmlViaAgentApi({
     signal,
   });
 
-  return Ok.EMPTY;
+  return outcomeResult;
 }
 
 async function loadWorksheetXmlViaExternalApi({
@@ -179,6 +256,10 @@ async function loadWorksheetXmlViaExternalApi({
       data: { worksheetName },
     });
 
+    const findings = await verifyReadbackAfterApply(worksheetName, xml, executor, signal);
+    const outcomeResult = readbackOutcome(findings);
+    if (outcomeResult.isErr()) return outcomeResult;
+
     await focusAppliedSheetBestEffort({
       sheetName: worksheetName,
       appliedVia: 'load-worksheet',
@@ -186,7 +267,7 @@ async function loadWorksheetXmlViaExternalApi({
       signal,
     });
 
-    return Ok.EMPTY;
+    return outcomeResult;
   });
 }
 

@@ -49,7 +49,7 @@ describe('applyWorksheetTool', () => {
 
   it('should successfully apply worksheet XML in inline mode', async () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
-    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(Ok.EMPTY);
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(Ok({ readbackWarnings: [] }));
 
     const mockExecutor = vi.fn().mockResolvedValue({});
 
@@ -74,7 +74,7 @@ describe('applyWorksheetTool', () => {
 
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockXml);
-    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(Ok.EMPTY);
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(Ok({ readbackWarnings: [] }));
 
     const mockExecutor = vi.fn().mockResolvedValue({});
 
@@ -226,7 +226,7 @@ describe('applyWorksheetTool', () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
     const mockLoadWorksheetXml = vi
       .spyOn(loadWorksheetXmlModule, 'loadWorksheetXml')
-      .mockResolvedValue(Ok.EMPTY);
+      .mockResolvedValue(Ok({ readbackWarnings: [] }));
 
     const mockExecutor = vi.fn().mockResolvedValue({});
     const customSignal = new AbortController().signal;
@@ -257,7 +257,7 @@ describe('applyWorksheetTool over-cap note', () => {
 
   it('accepts an over-cap inline apply but appends the file-mode note', async () => {
     const overCapXml = '<worksheet name="Sales">' + 'x'.repeat(20000) + '</worksheet>';
-    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(Ok.EMPTY);
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(Ok({ readbackWarnings: [] }));
 
     const result = await getToolResult({
       session: '12345',

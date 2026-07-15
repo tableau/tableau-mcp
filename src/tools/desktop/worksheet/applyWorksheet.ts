@@ -9,6 +9,7 @@ import {
   isOverInlineXmlCap,
   xmlByteLength,
 } from '../../../desktop/inlineXmlCap.js';
+import { formatReadbackVerificationWarnings } from '../../../desktop/validation/readback-verify.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   ArgsValidationError,
@@ -130,8 +131,14 @@ export const getApplyWorksheetTool = (
               ? `\n\n${buildApplyOverCapNote(inlineBytes, capBytes)}`
               : '';
 
+          // Non-fatal post-apply readback warnings (e.g. a sort Tableau reshaped) ride
+          // along so the agent can re-check the rendered chart before moving on (W4).
+          const readbackWarning = result.isOk()
+            ? formatReadbackVerificationWarnings(result.value.readbackWarnings)
+            : '';
+
           return new Ok({
-            message: `Successfully applied worksheet update for "${worksheetName}". The worksheet has been updated.${note}`,
+            message: `Successfully applied worksheet update for "${worksheetName}". The worksheet has been updated.${note}${readbackWarning}`,
           });
         },
       });

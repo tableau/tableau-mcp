@@ -372,6 +372,7 @@ export function listAvailableFields(
       let type: string;
       let datatype: string;
       let caption: string | undefined;
+      let semanticRole: string | undefined;
 
       let isAggregated = false;
       let formula: string | undefined;
@@ -381,6 +382,7 @@ export function listAvailableFields(
         type = column['@_type'];
         datatype = column['@_datatype'];
         caption = column['@_caption'];
+        semanticRole = column['@_semantic-role'];
 
         if (column.calculation && column.calculation['@_formula']) {
           formula = column.calculation['@_formula'];
@@ -407,6 +409,7 @@ export function listAvailableFields(
         type = column['@_type'];
         datatype = column['@_datatype'];
         caption = column['@_caption'];
+        semanticRole = column['@_semantic-role'];
       } else {
         datatype = column['@_datatype'];
         caption = undefined;
@@ -448,6 +451,7 @@ export function listAvailableFields(
         role: role,
         datatype: datatype,
         caption: caption,
+        semanticRole: semanticRole,
         isAggregated: isAggregated,
         formula: formula,
         folder: folder,
