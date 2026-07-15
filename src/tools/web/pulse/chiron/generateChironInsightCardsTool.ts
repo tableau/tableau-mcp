@@ -2,7 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ArgsValidationError, FeatureDisabledError } from '../../../../errors/mcpToolError.js';
+import {
+  ArgsValidationError,
+  DatasourceNotAllowedError,
+  FeatureDisabledError,
+  McpToolError,
+} from '../../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import {
   pulseBundleRequestSchema,
@@ -10,6 +15,7 @@ import {
 } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { getVizqlDataServiceDisabledError } from '../../getVizqlDataServiceDisabledError.js';
+import { resourceAccessChecker } from '../../resourceAccessChecker.js';
 import { WebTool } from '../../tool.js';
 import { buildChironBundleRequest } from './requestBuilder.js';
 import { runChironBundle } from './runChironBundle.js';
@@ -134,7 +140,9 @@ const paramsSchema = {
   // Drill-down controls. `breakdownDimension` scopes the breakdown group to a
   // single dimension; `filters` restrict the metric to specific members.
   breakdownDimension: z.string().nonempty().optional(),
-  filters: z.array(z.object({ field: z.string().nonempty(), value: z.string() })).optional(),
+  filters: z
+    .array(z.object({ field: z.string().nonempty(), value: z.string().nonempty() }))
+    .optional(),
 };
 
 export const getGenerateChironInsightCardsTool = (
@@ -175,6 +183,18 @@ export const getGenerateChironInsightCardsTool = (
                 ).toErr();
               }
 
+              // Enforce the same bounded-context allow-list every sibling
+              // data-access tool applies before reading metadata or generating
+              // insights, so a caller cannot pull governed data for a datasource
+              // outside the server's configured set.
+              const datasourceAllowed = await resourceAccessChecker.isDatasourceAllowed({
+                datasourceLuid: resolved.luid,
+                extra,
+              });
+              if (!datasourceAllowed.allowed) {
+                return new DatasourceNotAllowedError(datasourceAllowed.message).toErr();
+              }
+
               const metadataResult = await restApi.vizqlDataServiceMethods.readMetadata({
                 datasource: { datasourceLuid: resolved.luid },
               });
@@ -205,10 +225,37 @@ export const getGenerateChironInsightCardsTool = (
               // "break down by <other dimension>" follow-ups. A drill request
               // only narrows the *active* set used for this bundle's breakdown.
               const allDimensions = pickDimensions(metadataResult.value.data ?? []);
+
+              // Validate caller-supplied drill inputs against the datasource's
+              // categorical fields up front. Otherwise a typo/stale field name
+              // produces an opaque Pulse 400 that gets swallowed below and
+              // surfaces as an empty (but "successful") card list.
+              const categoricalFields = new Set(
+                (metadataResult.value.data ?? [])
+                  .filter(
+                    (item) => typeof item.fieldCaption === 'string' && item.dataType === 'STRING',
+                  )
+                  .map((item) => item.fieldCaption as string),
+              );
+              if (breakdownDimension && !categoricalFields.has(breakdownDimension)) {
+                return new ArgsValidationError(
+                  `breakdownDimension "${breakdownDimension}" is not a categorical field in this datasource`,
+                ).toErr();
+              }
+              for (const filter of filters ?? []) {
+                if (!categoricalFields.has(filter.field)) {
+                  return new ArgsValidationError(
+                    `filter field "${filter.field}" is not a categorical field in this datasource`,
+                  ).toErr();
+                }
+              }
+
               const activeDimensions = breakdownDimension ? [breakdownDimension] : allDimensions;
               const primaryDimension = activeDimensions[0] ?? null;
 
               const cards: InsightCard[] = [];
+              const bundleErrors: Array<{ measure: string; error: string }> = [];
+              let firstBundleError: McpToolError | null = null;
               for (const measure of selectedMeasures) {
                 const request = buildChironBundleRequest({
                   datasourceLuid: resolved.luid,
@@ -225,6 +272,10 @@ export const getGenerateChironInsightCardsTool = (
                   jwtScopes: tool.requiredApiScopes,
                 });
                 if (bundle.isErr()) {
+                  if (!firstBundleError) {
+                    firstBundleError = bundle.error;
+                  }
+                  bundleErrors.push({ measure, error: bundle.error.message });
                   continue;
                 }
 
@@ -241,6 +292,14 @@ export const getGenerateChironInsightCardsTool = (
                 );
               }
 
+              // If every measure's bundle failed, surface the real error rather
+              // than an empty-but-successful result (indistinguishable from a
+              // legitimate no-data datasource, and it hides the exact Pulse
+              // API-contract failures that are hardest to debug).
+              if (cards.length === 0 && firstBundleError) {
+                return firstBundleError.toErr();
+              }
+
               return Ok({
                 datasource: {
                   luid: resolved.luid,
@@ -249,7 +308,9 @@ export const getGenerateChironInsightCardsTool = (
                 },
                 dimensions: allDimensions,
                 cards,
-                generatedAt: new Date().toISOString(),
+                // Partial-failure detail: measures whose bundle failed while
+                // others succeeded (empty when all measures produced a card).
+                warnings: bundleErrors,
               });
             },
           });
@@ -313,13 +374,27 @@ async function resolveDatasource({
         pageSize: number;
         pageNumber: number;
       }) => Promise<{ datasources: Array<{ id: string; name: string; contentUrl?: string }> }>;
+      queryDatasource: (args: {
+        siteId: string;
+        datasourceId: string;
+      }) => Promise<{ name: string; contentUrl?: string }>;
     };
     siteId: string;
   };
   datasource: string | { luid: string };
 }): Promise<{ luid: string; name: string; contentUrl: string } | null> {
   if (typeof datasource !== 'string') {
-    return { luid: datasource.luid, name: datasource.luid, contentUrl: datasource.luid };
+    // Look up the real identity so card headers show the datasource name, not
+    // the raw LUID. The bounded-context guard in the caller still applies.
+    try {
+      const ds = await restApi.datasourcesMethods.queryDatasource({
+        siteId: restApi.siteId,
+        datasourceId: datasource.luid,
+      });
+      return { luid: datasource.luid, name: ds.name, contentUrl: ds.contentUrl ?? '' };
+    } catch {
+      return { luid: datasource.luid, name: datasource.luid, contentUrl: '' };
+    }
   }
 
   const response = await restApi.datasourcesMethods.listDatasources({
@@ -502,6 +577,10 @@ function extractContributors(bundleResponse: PulseBundleResponse): Contributor[]
     if (items.length === 0) {
       continue;
     }
+    // sharePct is share of *gross* movement: each member's absolute contribution
+    // over the sum of absolute contributions. This is a labeled display heuristic
+    // (not a downstream computation); for mixed-sign contributor sets it reflects
+    // magnitude of movement, not net contribution.
     const total = items.reduce((sum, item) => sum + Math.abs(item.value), 0);
     return items.map((item) => ({
       label: item.label,

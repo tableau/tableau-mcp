@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   mockListDatasources: vi.fn(),
   mockReadMetadata: vi.fn(),
   mockGenerateBundle: vi.fn(),
+  mockIsDatasourceAllowed: vi.fn(),
 }));
 
 vi.mock('../../../../restApiInstance.js', () => ({
@@ -30,9 +31,16 @@ vi.mock('../../../../restApiInstance.js', () => ({
   ),
 }));
 
+vi.mock('../../resourceAccessChecker.js', () => ({
+  resourceAccessChecker: {
+    isDatasourceAllowed: mocks.mockIsDatasourceAllowed,
+  },
+}));
+
 describe('getGenerateChironInsightCardsTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockIsDatasourceAllowed.mockResolvedValue({ allowed: true });
   });
 
   it('parses headline and delta from bundle facts', async () => {
@@ -483,6 +491,72 @@ describe('getGenerateChironInsightCardsTool', () => {
     expect(parsed.cards).toHaveLength(1);
     expect(parsed.cards[0].direction).toBe('no_data');
     expect(parsed.cards[0].deltaPct).toBeNull();
+  });
+
+  it('denies a datasource outside the bounded context before reading metadata or generating insights', async () => {
+    mocks.mockListDatasources.mockResolvedValue({
+      datasources: [{ id: 'ds-luid', name: 'GUS Work', contentUrl: 'GUS-Work' }],
+    });
+    mocks.mockIsDatasourceAllowed.mockResolvedValue({
+      allowed: false,
+      message:
+        'The set of allowed data sources that can be queried is limited by the server configuration.',
+    });
+
+    const result = await getToolResult({ datasource: 'GUS-Work' });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('allowed data sources');
+    // The guard must run before any governed read.
+    expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
+    expect(mocks.mockGenerateBundle).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the bundle error when every measure fails (no silent empty result)', async () => {
+    mocks.mockListDatasources.mockResolvedValue({
+      datasources: [{ id: 'ds-luid', name: 'GUS Work', contentUrl: 'GUS-Work' }],
+    });
+    mocks.mockReadMetadata.mockResolvedValue(
+      Ok({
+        data: [
+          { fieldCaption: 'Created Date', dataType: 'DATE' },
+          { fieldCaption: 'Cases', dataType: 'INTEGER' },
+        ],
+      }),
+    );
+    const { PulseInsightsApiError } = await import('../../../../errors/mcpToolError.js');
+    mocks.mockGenerateBundle.mockResolvedValue(
+      new PulseInsightsApiError('Invalid request', 400).toErr(),
+    );
+
+    const result = await getToolResult({ datasource: 'GUS-Work' });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Invalid request');
+  });
+
+  it('rejects a breakdownDimension that is not a categorical field', async () => {
+    mocks.mockListDatasources.mockResolvedValue({
+      datasources: [{ id: 'ds-luid', name: 'GUS Work', contentUrl: 'GUS-Work' }],
+    });
+    mocks.mockReadMetadata.mockResolvedValue(
+      Ok({
+        data: [
+          { fieldCaption: 'Created Date', dataType: 'DATE' },
+          { fieldCaption: 'Cases', dataType: 'INTEGER' },
+          { fieldCaption: 'Status', dataType: 'STRING' },
+        ],
+      }),
+    );
+
+    const result = await getToolResult({
+      datasource: 'GUS-Work',
+      breakdownDimension: 'Nonexistent Field',
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('is not a categorical field');
+    expect(mocks.mockGenerateBundle).not.toHaveBeenCalled();
   });
 });
 

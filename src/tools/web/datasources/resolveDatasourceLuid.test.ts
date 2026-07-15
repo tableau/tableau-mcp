@@ -8,6 +8,7 @@ import { getResolveDatasourceLuidTool } from './resolveDatasourceLuid.js';
 
 const mocks = vi.hoisted(() => ({
   mockListDatasources: vi.fn(),
+  mockIsDatasourceAllowed: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -21,9 +22,16 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
+vi.mock('../resourceAccessChecker.js', () => ({
+  resourceAccessChecker: {
+    isDatasourceAllowed: mocks.mockIsDatasourceAllowed,
+  },
+}));
+
 describe('resolveDatasourceLuid', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockIsDatasourceAllowed.mockResolvedValue({ allowed: true });
   });
 
   it('returns exact case-sensitive contentUrl match', async () => {
@@ -50,6 +58,25 @@ describe('resolveDatasourceLuid', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('No datasource matched contentUrl');
+  });
+
+  it('denies a datasource outside the bounded context', async () => {
+    mocks.mockListDatasources.mockResolvedValue({
+      datasources: [{ id: '2', name: 'correct', contentUrl: 'GUS-Work' }],
+    });
+    mocks.mockIsDatasourceAllowed.mockResolvedValue({
+      allowed: false,
+      message:
+        'The set of allowed data sources that can be queried is limited by the server configuration.',
+    });
+
+    const result = await getToolResult('GUS-Work');
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('allowed data sources');
+    expect(mocks.mockIsDatasourceAllowed).toHaveBeenCalledWith(
+      expect.objectContaining({ datasourceLuid: '2' }),
+    );
   });
 });
 

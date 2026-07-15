@@ -13,7 +13,7 @@ import { TableauWebRequestHandlerExtra } from '../../toolContext.js';
 export async function runChironBundle({
   extra,
   request,
-  bundleType = 'ban',
+  bundleType = 'detail',
   jwtScopes,
 }: {
   extra: TableauWebRequestHandlerExtra;

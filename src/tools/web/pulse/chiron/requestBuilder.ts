@@ -21,12 +21,11 @@ export function buildChironBundleRequest({
   allowedDimensions = [],
   filters = [],
 }: BuildChironBundleRequestArgs): z.infer<typeof pulseBundleRequestSchema> {
-  // Categorical equality filters scope the metric to specific dimension members
-  // (drill-down). Shape matches pulseFilterSchema.
-  // Categorical equality filter scoping the metric to a dimension member.
-  // Confirmed against the live Pulse API: the operator must be the enum
-  // 'OPERATOR_EQUAL' (not '='), and each categorical value must carry ONLY
-  // string_value — sending bool_value/null_value alongside triggers HTTP 400.
+  // Categorical equality filters scope the metric instance to specific dimension
+  // members (drill-down); shape matches pulseFilterSchema. Confirmed against the
+  // live Pulse API: the operator must be the enum 'OPERATOR_EQUAL' (not '='), and
+  // each categorical value must carry ONLY string_value — sending
+  // bool_value/null_value alongside triggers HTTP 400.
   const pulseFilters = filters.map((f) => ({
     field: f.field,
     operator: 'OPERATOR_EQUAL',
@@ -52,6 +51,9 @@ export function buildChironBundleRequest({
             basic_specification: {
               measure: {
                 field: measure,
+                // Known limitation (draft): aggregation is hardcoded to SUM.
+                // Average/count-style measures will produce misleading cards
+                // until the aggregation is derived from metadata.
                 aggregation: 'AGGREGATION_SUM',
               },
               time_dimension: {

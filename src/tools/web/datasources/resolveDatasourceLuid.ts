@@ -2,9 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ArgsValidationError } from '../../../errors/mcpToolError.js';
+import { ArgsValidationError, DatasourceNotAllowedError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 
 const paramsSchema = {
@@ -48,6 +49,17 @@ export const getResolveDatasourceLuidTool = (
                 return new ArgsValidationError(
                   `No datasource matched contentUrl "${contentUrl}"`,
                 ).toErr();
+              }
+
+              // Do not return identity (LUID/name) for a datasource outside the
+              // server's bounded context — otherwise this is an existence/LUID
+              // oracle and feeds unguarded LUIDs into generate-insight-cards.
+              const datasourceAllowed = await resourceAccessChecker.isDatasourceAllowed({
+                datasourceLuid: exact.id,
+                extra,
+              });
+              if (!datasourceAllowed.allowed) {
+                return new DatasourceNotAllowedError(datasourceAllowed.message).toErr();
               }
 
               return Ok({
