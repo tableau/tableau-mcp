@@ -70,6 +70,24 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:jobs:read');
     });
 
+    it('should exclude tableau:mcp:content:delete when adminToolsEnabled is false', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes();
+      expect(scopes).not.toContain('tableau:mcp:content:delete');
+    });
+
+    it('should include tableau:mcp:content:delete when adminToolsEnabled is true', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: true,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes();
+      expect(scopes).toContain('tableau:mcp:content:delete');
+    });
+
     it('should always include other MCP scopes regardless of adminToolsEnabled', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,

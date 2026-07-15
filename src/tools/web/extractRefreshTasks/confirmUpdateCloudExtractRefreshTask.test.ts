@@ -183,12 +183,12 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
 
   // --- Cross-namespace isolation: a delete approval must not unlock an update ---
 
-  it('rejects an approval established under the delete-extract-refresh-task namespace', async () => {
-    await new AppApprovalEvidence('delete-extract-refresh-task').establish({
+  it('rejects an approval established under the delete-content namespace', async () => {
+    await new AppApprovalEvidence('delete-content').establish({
       restApi: { siteId: 'test-site-id' } as never,
       siteId: 'test-site-id',
       target: { id: validTaskId, kind: 'extract-refresh-task' },
-      tool: 'confirm-delete-extract-refresh-task',
+      tool: 'delete-content',
       userLuid: getMockRequestHandlerExtra().getUserLuid(),
     });
     const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });

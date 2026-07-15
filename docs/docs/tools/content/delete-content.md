@@ -4,8 +4,8 @@ sidebar_position: 1
 
 # Delete Content
 
-Consolidated destructive-delete tool that permanently deletes a workbook, published data source,
-or extract refresh task. Dispatches on `resourceType`:
+Permanently deletes a workbook, published data source, or extract refresh task. Dispatches on
+`resourceType`:
 
 - `workbook` — deletes a workbook (recoverable via recycle bin on Tableau Cloud)
 - `datasource` — deletes a published data source (recoverable via recycle bin; warns on downstream dependents)
@@ -15,11 +15,6 @@ The tool is **admin-only** — it is registered only when `ADMIN_TOOLS_ENABLED=t
 request time it verifies the caller's site role and rejects anything below
 `SiteAdministratorCreator` / `SiteAdministratorExplorer` / `ServerAdministrator`.
 
-:::note[Replaces legacy tools]
-This tool is a superset of the three legacy delete tools (`delete-workbook`,
-`delete-datasource`, `delete-extract-refresh-task`), which remain registered as back-compat
-shims for one release cycle and share the underlying implementation.
-:::
 
 ## Two-phase safety
 
@@ -149,6 +144,4 @@ preview call. Required when `confirm` is `true`; ignored otherwise.
 
 ## Related
 
-- [`delete-workbook`](../workbooks/delete-workbook.md) — legacy workbook-only delete (shim)
-- [`delete-datasource`](../data-qna/delete-datasource.md) — legacy datasource-only delete (shim)
-- [`delete-extract-refresh-task`](../tasks/delete-extract-refresh-task.md) — legacy task-only delete (shim)
+- [`query-admin-insights`](../admin-insights/query-admin-insights.md) — admin-insights query tool

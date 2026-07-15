@@ -24,11 +24,8 @@ export type McpScope =
   | 'tableau:mcp:pulse:read'
   | 'tableau:mcp:insight:create'
   | 'tableau:mcp:tasks:read'
-  | 'tableau:mcp:tasks:delete'
   | 'tableau:mcp:tasks:write'
-  | 'tableau:mcp:workbook:delete'
   | 'tableau:mcp:jobs:read'
-  | 'tableau:mcp:datasource:delete'
   | 'tableau:mcp:content:delete'
   | 'tableau:mcp:users:read';
 
@@ -60,14 +57,11 @@ export type TableauApiScope =
  */
 export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:datasource:read',
-  'tableau:mcp:datasource:delete',
   'tableau:mcp:tasks:read',
-  'tableau:mcp:tasks:delete',
   'tableau:mcp:tasks:write',
   'tableau:mcp:jobs:read',
   'tableau:mcp:users:read',
   'tableau:mcp:workbook:read',
-  'tableau:mcp:workbook:delete',
   'tableau:mcp:content:read',
   'tableau:mcp:content:delete',
   'tableau:mcp:view:read',
@@ -100,17 +94,6 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:tasks:read'],
     api: new Set(['tableau:tasks:read', 'tableau:users:read']),
   },
-  'delete-extract-refresh-task': {
-    mcp: ['tableau:mcp:tasks:delete'],
-    api: new Set(['tableau:tasks:delete', 'tableau:users:read']),
-  },
-  // Admin-only, app-only confirm step for delete-extract-refresh-task (MCP-Apps HITL). Invoked ONLY
-  // by a human gesture in the rendered iframe (visibility:['app']), never the model. Deletes the task
-  // (tasks:delete); adminGate.assertAdmin → GET /sites/{siteId}/users/{userId} → users:read.
-  'confirm-delete-extract-refresh-task': {
-    mcp: ['tableau:mcp:tasks:delete'],
-    api: new Set(['tableau:tasks:delete', 'tableau:users:read']),
-  },
   'update-cloud-extract-refresh-task': {
     mcp: ['tableau:mcp:tasks:write'],
     api: new Set(['tableau:tasks:write', 'tableau:users:read']),
@@ -134,60 +117,6 @@ const toolScopeMap: Record<
   'list-workbooks': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
-  },
-  // Admin-only destructive tool. Two-phase: preview tags the workbook (workbook_tags:update) and
-  // resolves the owner (users:read); confirm deletes it (workbooks:delete). getWorkbook → content:read.
-  // adminGate.assertAdmin → GET /sites/{siteId}/users/{userId} → users:read. Goes through the
-  // resourceAccessChecker (tool scoping), so it also needs RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES
-  // (content:read + mcp_site_settings:read).
-  'delete-workbook': {
-    mcp: ['tableau:mcp:workbook:delete'],
-    api: new Set([
-      'tableau:workbooks:delete',
-      'tableau:workbook_tags:update',
-      'tableau:users:read',
-      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
-    ]),
-  },
-  // Admin-only, app-only confirm step for delete-workbook (MCP-Apps HITL). Invoked ONLY by a human
-  // gesture in the rendered iframe (visibility:['app']), never the model. Re-fetches + re-checks the
-  // pending-deletion tag and deletes (workbooks:delete + content:read), resolves the owner for the
-  // audit (users:read), and goes through the resourceAccessChecker — same API scopes as delete-workbook
-  // minus the tag write (the tag was applied in the preview phase).
-  'confirm-delete-workbook': {
-    mcp: ['tableau:mcp:workbook:delete'],
-    api: new Set([
-      'tableau:workbooks:delete',
-      'tableau:users:read',
-      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
-    ]),
-  },
-  // Admin-only destructive tool. Preview tags the datasource (datasource_tags:update), resolves the
-  // owner (users:read), and warns about dependent workbooks/flows via the Metadata API (content:read);
-  // confirm deletes it (datasources:delete). adminGate.assertAdmin → GET /users/{id} → users:read.
-  // Goes through the resourceAccessChecker (tool scoping), so it also needs
-  // RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES (content:read + mcp_site_settings:read).
-  'delete-datasource': {
-    mcp: ['tableau:mcp:datasource:delete'],
-    api: new Set([
-      'tableau:datasources:delete',
-      'tableau:datasource_tags:update',
-      'tableau:users:read',
-      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
-    ]),
-  },
-  // Admin-only, app-only confirm step for delete-datasource (MCP-Apps HITL). Invoked ONLY by a human
-  // gesture in the rendered iframe (visibility:['app']), never the model. Re-fetches + re-checks the
-  // pending-deletion tag and deletes (datasources:delete + content:read), resolves the owner for the
-  // audit (users:read), and goes through the resourceAccessChecker — same API scopes as
-  // delete-datasource minus the tag write (the tag was applied in the preview phase).
-  'confirm-delete-datasource': {
-    mcp: ['tableau:mcp:datasource:delete'],
-    api: new Set([
-      'tableau:datasources:delete',
-      'tableau:users:read',
-      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
-    ]),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
@@ -291,50 +220,8 @@ const toolScopeMap: Record<
     mcp: [],
     api: new Set<TableauApiScope>(),
   },
-  // Admin Insights (admin-only). Resolves dataset LUID via list-datasources, then VDS query.
-  // Bypasses resourceAccessChecker — datasources are internal/known and admin-gated.
-  'query-admin-insights-ts-events': {
-    mcp: ['tableau:mcp:datasource:read'],
-    api: new Set([
-      'tableau:viz_data_service:read',
-      'tableau:content:read',
-      'tableau:mcp_site_settings:read',
-      // adminGate.assertAdmin → GET /sites/{siteId}/users/{userId}
-      'tableau:users:read',
-    ]),
-  },
-  'query-admin-insights-site-content': {
-    mcp: ['tableau:mcp:datasource:read'],
-    api: new Set([
-      'tableau:viz_data_service:read',
-      'tableau:content:read',
-      'tableau:mcp_site_settings:read',
-      'tableau:users:read',
-    ]),
-  },
-  'query-admin-insights-job-performance': {
-    mcp: ['tableau:mcp:datasource:read'],
-    api: new Set([
-      'tableau:viz_data_service:read',
-      'tableau:content:read',
-      'tableau:mcp_site_settings:read',
-      'tableau:users:read',
-    ]),
-  },
-  // Server-side anti-join: runs TS Events + Site Content VDS queries internally,
-  // applies threshold, returns final filtered rows. Deterministic — no LLM math.
-  'get-stale-content-report': {
-    mcp: ['tableau:mcp:datasource:read'],
-    api: new Set([
-      'tableau:viz_data_service:read',
-      'tableau:content:read',
-      'tableau:mcp_site_settings:read',
-      'tableau:users:read',
-    ]),
-  },
-  // Consolidated admin-insights tool (W-23375797). Dispatches on `kind` to ts-events, site-content,
-  // job-performance (raw VDS) or stale-content (server-side anti-join). Union of the scopes required
-  // by the four legacy tools it replaces — any kind may need any of these.
+  // Dispatches on `kind` to ts-events, site-content, job-performance (raw VDS) or stale-content
+  // (server-side anti-join). Union of the scopes required by all four kinds.
   'query-admin-insights': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set([
@@ -344,14 +231,23 @@ const toolScopeMap: Record<
       'tableau:users:read',
     ]),
   },
-  // Consolidated destructive-delete tool (W-23375797). Dispatches on `resourceType` to workbook,
-  // datasource, or extract-refresh-task. Gated on a single umbrella MCP scope
-  // (`tableau:mcp:content:delete`) that covers all three dispatch paths — declaring the three
-  // per-resource legacy scopes here would be AND-enforced by authMiddleware and lock out callers
-  // who only granted one of them. Callers who need per-resource granularity keep using the legacy
-  // `delete-{workbook,datasource,extract-refresh-task}` tools during the shim window. Workbook and
-  // datasource paths still route through resourceAccessChecker (union of API scopes preserved).
+  // Dispatches on `resourceType` to workbook, datasource, or extract-refresh-task. Gated on a
+  // single umbrella MCP scope (`tableau:mcp:content:delete`). Workbook and datasource paths still
+  // route through resourceAccessChecker.
   'delete-content': {
+    mcp: ['tableau:mcp:content:delete'],
+    api: new Set([
+      'tableau:workbooks:delete',
+      'tableau:workbook_tags:update',
+      'tableau:datasources:delete',
+      'tableau:datasource_tags:update',
+      'tableau:tasks:delete',
+      'tableau:users:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
+  },
+  // Admin-only, app-only confirm step for delete-content (MCP-Apps HITL). Invoked ONLY by a human gesture in the rendered iframe (visibility:['app']), never the model.
+  'confirm-delete-content': {
     mcp: ['tableau:mcp:content:delete'],
     api: new Set([
       'tableau:workbooks:delete',
@@ -374,20 +270,11 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
     enabledTools.delete('list-extract-refresh-tasks');
-    enabledTools.delete('delete-extract-refresh-task');
-    enabledTools.delete('confirm-delete-extract-refresh-task');
     enabledTools.delete('update-cloud-extract-refresh-task');
     enabledTools.delete('confirm-update-cloud-extract-refresh-task');
-    enabledTools.delete('delete-workbook');
-    enabledTools.delete('confirm-delete-workbook');
+    enabledTools.delete('confirm-delete-content');
     enabledTools.delete('list-jobs');
-    enabledTools.delete('delete-datasource');
-    enabledTools.delete('confirm-delete-datasource');
     enabledTools.delete('list-users');
-    enabledTools.delete('query-admin-insights-ts-events');
-    enabledTools.delete('query-admin-insights-site-content');
-    enabledTools.delete('query-admin-insights-job-performance');
-    enabledTools.delete('get-stale-content-report');
     enabledTools.delete('query-admin-insights');
     enabledTools.delete('delete-content');
   }
@@ -396,10 +283,8 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   // human-gesture confirm steps for their preview tools and only exist when the iframe can render.
   if (!mcpAppsEnabled) {
     enabledTools.delete('get-embed-token');
-    enabledTools.delete('confirm-delete-workbook');
-    enabledTools.delete('confirm-delete-datasource');
-    enabledTools.delete('confirm-delete-extract-refresh-task');
     enabledTools.delete('confirm-update-cloud-extract-refresh-task');
+    enabledTools.delete('confirm-delete-content');
   }
 
   return enabledTools;

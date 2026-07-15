@@ -1,47 +1,14 @@
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getConfig } from '../../../config.js';
-import { AdminOnlyError, McpToolError } from '../../../errors/mcpToolError.js';
-import { useRestApi } from '../../../restApiInstance.js';
+import { McpToolError } from '../../../errors/mcpToolError.js';
 import { Query } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
-import { WebMcpServer } from '../../../server.web.js';
 import { ExpiringMap } from '../../../utils/expiringMap.js';
 import { milliseconds } from '../../../utils/milliseconds.js';
 import { paginate } from '../../../utils/paginate.js';
 import { parseNumber } from '../../../utils/parseNumber.js';
-import { assertAdmin } from '../adminGate.js';
-import { WebTool } from '../tool.js';
-import { executeAdminInsightsQuery } from './adminInsightsToolBase.js';
-import { ADMIN_INSIGHTS_DATASETS, ADMIN_INSIGHTS_PROJECT_NAME } from './resolver.js';
-
-const paramsSchema = {
-  minAgeDays: z
-    .number()
-    .int()
-    .min(1)
-    .max(3650)
-    .optional()
-    .describe(
-      'Minimum days since last access for content to be considered stale. Defaults to 90 days.',
-    ),
-  projectIds: z
-    .array(z.string())
-    .optional()
-    .describe(
-      'Optional list of project LUIDs to scope the report to. ' +
-        'If omitted, returns all projects the caller can access. ' +
-        'Any requested LUID that is unknown on the site or outside the server-configured ' +
-        'scope is reported in `mcp.warnings` and ignored; if none of the requested LUIDs ' +
-        'resolve, an empty report (0 rows) is returned — never the full site.',
-    ),
-  itemTypes: z
-    .array(z.enum(['Workbook', 'Datasource']))
-    .optional()
-    .describe('Optional filter for item types. Defaults to ["Workbook", "Datasource"].'),
-};
+import { ADMIN_INSIGHTS_PROJECT_NAME } from './resolver.js';
 
 export type StaleContentRow = {
   itemId: string;
@@ -95,168 +62,6 @@ type StaleReportWarning = {
 };
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
-
-export const getGetStaleContentReportTool = (
-  server: WebMcpServer,
-): WebTool<typeof paramsSchema> => {
-  const config = getConfig();
-  const tool = new WebTool({
-    server,
-    name: 'get-stale-content-report',
-    disabled: !config.adminToolsEnabled,
-    description: `
-Builds a deterministic report of stale Tableau Cloud content (workbooks and published
-datasources) by querying the Admin Insights "Site Content" datasource — which exposes a
-\`Last Accessed At\` field per item — applying the staleness threshold server-side, and
-returning already-filtered rows. Restricted to Tableau site administrators on Tableau Cloud
-sites with Admin Insights enabled.
-
-The server applies the threshold comparison, optional project filter, and sort. Clients
-receive only items where days since last use exceed the threshold. No client-side math.
-
-**Output schema (JSON):**
-\`\`\`json
-{
-  "thresholdDays": 90,
-  "totalStaleItems": <number>,
-  "totalStaleSizeBytes": <number>,
-  "rows": [
-    {
-      "itemId": "...",
-      "itemLuid": "..." | null,
-      "itemType": "Workbook" | "Datasource",
-      "itemName": "...",
-      "project": "..." | null,
-      "ownerEmail": "..." | null,
-      "createdAt": "ISO date" | null,
-      "updatedAt": "ISO date" | null,
-      "lastUsedDate": "ISO date",
-      "daysSinceLastUse": <number>,
-      "size": <number> | null,
-      "neverAccessed": <boolean>
-    }
-  ]
-}
-\`\`\`
-
-Rows are sorted descending by \`daysSinceLastUse\`, then by \`size\`. Items with no recorded
-access have \`lastUsedDate = createdAt\` and \`neverAccessed = true\`.
-
-To act on a stale item (e.g. \`delete-workbook\`, \`get-workbook\`, \`delete-datasource\`), pass
-\`itemLuid\` — the content LUID. Do NOT pass \`itemId\`: it is Site Content's integer repository ID
-and the REST API rejects it (404). \`itemLuid\` is \`null\` only on older sites that omit the column.
-
-**Caveats**
-- The Tableau-managed \`Admin Insights\` project is excluded by design — its datasources
-  are admin-owned and not user content.
-- \`Last Accessed At\` is \`null\` for items that have never been accessed; the report
-  ages those items from \`Created At\` instead.
-`.trim(),
-    paramsSchema,
-    annotations: {
-      title: 'Stale content report',
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: false,
-    },
-    callback: async ({ minAgeDays, projectIds, itemTypes }, extra): Promise<CallToolResult> => {
-      const configWithOverrides = await extra.getConfigWithOverrides();
-      const thresholdDays = minAgeDays ?? configWithOverrides.staleContentMinAgeDays;
-      const types = itemTypes ?? ['Workbook', 'Datasource'];
-      const { scopeIds: requestedProjectIds, boundedOutOfScopeIds } = resolveProjectScopeIds({
-        argProjectIds: projectIds,
-        boundedProjectIds: configWithOverrides.boundedContext.projectIds,
-      });
-
-      return await tool.logAndExecute({
-        extra,
-        args: { minAgeDays: thresholdDays, projectIds, itemTypes: types },
-        callback: async () => {
-          return await useRestApi({
-            ...extra,
-            jwtScopes: tool.requiredApiScopes,
-            callback: async (restApi) => {
-              const adminResult = await assertAdmin(restApi, extra);
-              if (adminResult.isErr()) {
-                return new AdminOnlyError(adminResult.error).toErr();
-              }
-
-              let projectNameScope: ReadonlyArray<string> | null = null;
-              let unknownProjectIds: ReadonlyArray<string> = [];
-              if (requestedProjectIds) {
-                const namesResult = await resolveProjectIdsToNames({
-                  restApi,
-                  projectIds: requestedProjectIds,
-                });
-                if (namesResult.isErr()) {
-                  return namesResult;
-                }
-                projectNameScope = namesResult.value.names;
-                unknownProjectIds = namesResult.value.unknownIds;
-              }
-
-              // Did any requested project survive both drop paths? Drives the warning wording:
-              // if nothing remains, the report is empty and the message must say so rather than
-              // implying a valid subset was scoped to.
-              const hasRemainingScope = !!(projectNameScope && projectNameScope.length > 0);
-              const warnings = buildProjectIdWarnings({
-                boundedOutOfScopeIds,
-                unknownProjectIds,
-                hasRemainingScope,
-              });
-
-              // Widening guard (core fix for W-23202054): a scope WAS requested but nothing
-              // resolved to a real project name. Do NOT fall through to buildSiteContentQuery,
-              // which would emit the unscoped full-site query. Return an empty report + the
-              // warnings so a fully-invalid scope can never silently widen to the whole site.
-              if (requestedProjectIds && projectNameScope && projectNameScope.length === 0) {
-                return new Ok({
-                  thresholdDays,
-                  totalStaleItems: 0,
-                  totalStaleSizeBytes: 0,
-                  rows: [] as StaleContentRow[],
-                  ...(warnings.length > 0 ? { mcp: { warnings } } : {}),
-                });
-              }
-
-              const siteContentResult = await executeAdminInsightsQuery({
-                restApi,
-                datasetName: ADMIN_INSIGHTS_DATASETS.SITE_CONTENT,
-                query: buildSiteContentQuery(types, projectNameScope),
-              });
-              if (siteContentResult.isErr()) {
-                return siteContentResult;
-              }
-
-              const universe = z
-                .array(siteContentRowSchema)
-                .parse(siteContentResult.value.data ?? []);
-
-              const today = new Date();
-              const rows = computeStaleRows({
-                universe,
-                thresholdDays,
-                today,
-              });
-
-              return new Ok({
-                thresholdDays,
-                totalStaleItems: rows.length,
-                totalStaleSizeBytes: rows.reduce((sum, r) => sum + (r.size ?? 0), 0),
-                rows,
-                ...(warnings.length > 0 ? { mcp: { warnings } } : {}),
-              });
-            },
-          });
-        },
-        constrainSuccessResult: (result) => ({ type: 'success', result }),
-      });
-    },
-  });
-
-  return tool;
-};
 
 function buildSiteContentQuery(
   types: ReadonlyArray<'Workbook' | 'Datasource'>,
@@ -573,9 +378,7 @@ export const exportedForTesting = {
   parseSize,
 };
 
-// Exported for reuse by query-admin-insights (kind=stale-content). These are the same helpers the
-// stale-content report uses; sharing them avoids a second implementation drifting out of sync while
-// the legacy get-stale-content-report shim remains registered.
+// Exported for reuse by query-admin-insights (kind=stale-content).
 export {
   buildProjectIdWarnings as _buildProjectIdWarnings,
   buildSiteContentQuery as _buildSiteContentQuery,

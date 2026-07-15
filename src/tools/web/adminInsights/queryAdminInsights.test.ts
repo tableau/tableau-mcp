@@ -178,26 +178,43 @@ describe('query-admin-insights tool', () => {
     expect(result.content[0].text).toContain('admin');
   });
 
-  // Locks in the tightest-cap fix: a per-tool cap keyed on the LEGACY tool name in
-  // MAX_RESULT_LIMITS must still bound raw-VDS queries issued through the consolidated
-  // tool, even when the caller supplies a larger `limit`. Regressing this would silently
-  // widen the ceiling for operators who migrate callers to `query-admin-insights` while
-  // keeping their existing MAX_RESULT_LIMITS config.
-  it('honors a legacy per-kind cap in MAX_RESULT_LIMITS over a larger caller limit', async () => {
+  it('applies the configured cap when lower than the requested limit', async () => {
     mocks.mockQueryDatasource.mockResolvedValue(new Ok({ data: [] }));
 
-    const result = await getToolResult({
+    await getToolResult({
       kind: 'ts-events',
       query: validQuery,
-      limit: 100,
-      maxResultLimits: 'query-admin-insights-ts-events:5',
+      limit: 50,
+      maxResultLimits: 'query-admin-insights:10',
     });
 
-    expect(result.isError).toBeFalsy();
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
-      expect.objectContaining({
-        options: expect.objectContaining({ rowLimit: 5 }),
-      }),
+      expect.objectContaining({ options: expect.objectContaining({ rowLimit: 10 }) }),
+    );
+  });
+
+  it('applies the requested limit when no cap is configured', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok({ data: [] }));
+
+    await getToolResult({ kind: 'site-content', query: validQuery, limit: 50 });
+
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+      expect.objectContaining({ options: expect.objectContaining({ rowLimit: 50 }) }),
+    );
+  });
+
+  it('applies the requested limit when it is lower than the configured cap', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok({ data: [] }));
+
+    await getToolResult({
+      kind: 'job-performance',
+      query: validQuery,
+      limit: 20,
+      maxResultLimits: 'query-admin-insights:100',
+    });
+
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+      expect.objectContaining({ options: expect.objectContaining({ rowLimit: 20 }) }),
     );
   });
 });

@@ -15,7 +15,7 @@ describe('stale-content-cleanup-inform prompt', () => {
     expect(prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
   });
 
-  it('instructs the model to call get-stale-content-report once and forbid recomputation', async () => {
+  it('instructs the model to call query-admin-insights once and forbid recomputation', async () => {
     const prompt = getStaleContentCleanupInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});
     expect(result.messages).toHaveLength(1);
@@ -25,7 +25,7 @@ describe('stale-content-cleanup-inform prompt', () => {
       throw new Error('expected text content');
     }
     const { text } = message.content;
-    expect(text).toContain('`get-stale-content-report`');
+    expect(text).toContain('`query-admin-insights`');
     expect(text).toContain('exactly once');
     expect(text).toContain('Do **not** recompute');
     expect(text).toContain('"minAgeDays": 90');

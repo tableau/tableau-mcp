@@ -66,7 +66,7 @@ describe('guardMutation', () => {
     return guardMutation({
       restApi: makeRestApi(),
       extra: getMockRequestHandlerExtra(),
-      tool: 'delete-datasource',
+      tool: 'delete-content',
       action: 'delete',
       mode: 'preview-confirm',
       phase: 'preview',
@@ -90,7 +90,7 @@ describe('guardMutation', () => {
     expect(record.denyReason).toBe('not-admin');
     // Even a rejected privilege escalation names the target it tried to act on.
     expect(record.target.id).toBe('target-1');
-    expect(record.tool).toBe('delete-datasource');
+    expect(record.tool).toBe('delete-content');
   });
 
   it('resolves the target before emitting the not-admin denial so the record names it', async () => {
@@ -144,7 +144,7 @@ describe('guardMutation', () => {
     const result = await run({ phase: 'confirm', evidence });
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
-      expect(result.error.message).toContain('Run delete-datasource with confirm omitted');
+      expect(result.error.message).toContain('Run delete-content with confirm omitted');
       // The app-only recovery (re-preview + approve in panel) must NOT appear for in-place tools.
       expect(result.error.message).not.toContain('confirmation panel');
     }
@@ -153,14 +153,14 @@ describe('guardMutation', () => {
   it('on an app-only confirm tool (previewTool set), the denial points at the preview tool + panel, not a confirm arg', async () => {
     const evidence = makeEvidence({ verify: vi.fn().mockResolvedValue(false) });
     const result = await run({
-      tool: 'confirm-delete-datasource',
-      previewTool: 'delete-datasource',
+      tool: 'delete-content',
+      previewTool: 'delete-content',
       phase: 'confirm',
       evidence,
     });
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
-      expect(result.error.message).toContain('Re-run delete-datasource to preview again');
+      expect(result.error.message).toContain('Re-run delete-content to preview again');
       expect(result.error.message).toContain('approve in the confirmation panel');
       // The model-invisible confirm tool takes no `confirm` arg, so never tell the user to pass one.
       expect(result.error.message).not.toContain('with confirm omitted');
@@ -242,7 +242,7 @@ describe('guardMutation', () => {
     await guardMutation({
       restApi: makeRestApi(),
       extra: getMockRequestHandlerExtra(),
-      tool: 'delete-extract-refresh-task',
+      tool: 'delete-content',
       action: 'delete',
       mode: 'preview-confirm',
       phase: 'preview',

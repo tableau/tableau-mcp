@@ -271,6 +271,7 @@ This means that:
   [`MAX_RESULT_LIMIT`](#max_result_limit) variable will be used instead.
 - Each limit must be a positive number, or `*` to indicate unbounded results.
 
+
 <hr />
 
 ## `DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`
@@ -461,16 +462,11 @@ Enables admin-only tools that require site administrator permissions.
 - Default: `false`
 - When `true`, enables tools that are restricted to Tableau site administrators:
   - [`list-extract-refresh-tasks`](../../tools/tasks/list-extract-refresh-tasks.md)
-  - [`delete-extract-refresh-task`](../../tools/tasks/delete-extract-refresh-task.md)
   - [`update-cloud-extract-refresh-task`](../../tools/tasks/update-cloud-extract-refresh-task.md)
   - [`list-jobs`](../../tools/jobs/list-jobs.md)
   - [`list-users`](../../tools/users/list-users.md)
-  - [`delete-workbook`](../../tools/workbooks/delete-workbook.md)
-  - [`delete-datasource`](../../tools/data-qna/delete-datasource.md)
-  - [`query-admin-insights-ts-events`](../../tools/admin-insights/query-admin-insights-ts-events.md)
-  - [`query-admin-insights-site-content`](../../tools/admin-insights/query-admin-insights-site-content.md)
-  - [`query-admin-insights-job-performance`](../../tools/admin-insights/query-admin-insights-job-performance.md)
-  - [`get-stale-content-report`](../../tools/admin-insights/get-stale-content-report.md)
+  - [`delete-content`](../../tools/content/delete-content.md)
+  - [`query-admin-insights`](../../tools/admin-insights/query-admin-insights.md)
 - These tools require the user to have one of the following site roles:
   - SiteAdministratorCreator
   - SiteAdministratorExplorer
@@ -500,7 +496,7 @@ memory pressure to reduce REST traffic.
 ## `MUTATION_PREVIEW_TTL_MINUTES`
 
 TTL (in minutes) for the single-use confirmation tokens minted by the preview phase of two-phase
-mutation tools (e.g. [`delete-extract-refresh-task`](../../tools/tasks/delete-extract-refresh-task.md)).
+mutation tools (e.g. [`delete-content`](../../tools/content/delete-content.md)).
 A token must be supplied on the confirmed call before it expires, otherwise the caller must re-run
 the preview.
 
@@ -516,7 +512,7 @@ time between preview and confirmation.
 ## `STALE_CONTENT_MIN_AGE_DAYS`
 
 Default minimum days since last access for content to be considered stale by the
-[`get-stale-content-report`](../../tools/admin-insights/get-stale-content-report.md) tool. Callers
+[`query-admin-insights`](../../tools/admin-insights/query-admin-insights.md) tool's `kind: "stale-content"` backend. Callers
 can pass an explicit `minAgeDays` argument to override per-call.
 
 - Default: `90`

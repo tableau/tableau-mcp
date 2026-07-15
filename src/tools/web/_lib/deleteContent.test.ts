@@ -135,7 +135,7 @@ describe('deleteContentTool', () => {
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
   });
 
-  it('exposes the consolidated tool name and paramsSchema', async () => {
+  it('exposes the tool name and paramsSchema', async () => {
     const tool = await getDeleteContentTool(new WebMcpServer());
     expect(tool.name).toBe('delete-content');
     expect(tool.paramsSchema).toHaveProperty('resourceType');
@@ -368,7 +368,7 @@ describe('deleteContentTool', () => {
       expect(tool.app?.resourceUri).toContain('delete-content');
     });
 
-    it('workbook preview returns the LEGACY delete-workbook-confirm panel and records approval under delete-workbook', async () => {
+    it('workbook preview returns the LEGACY delete-workbook-confirm panel and records approval under delete-content', async () => {
       const result = await getToolResult({ resourceType: 'workbook', resourceId: 'wb-app' });
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
@@ -376,14 +376,14 @@ describe('deleteContentTool', () => {
       // LEGACY panel kind so the existing iframe machinery keeps working end-to-end.
       expect(payload.data.kind).toBe('delete-workbook-confirm');
       expect(payload.data.workbookId).toBe('wb-app');
-      // Approval established under the LEGACY namespace so confirm-delete-workbook verifies OK.
+      // Approval established under the delete-content namespace.
       const extra = getMockRequestHandlerExtra();
       await expect(
-        new AppApprovalEvidence().verify({
+        new AppApprovalEvidence('delete-content').verify({
           restApi: { siteId: 'test-site-id' } as never,
           siteId: 'test-site-id',
           target: { id: 'wb-app', kind: 'workbook' },
-          tool: 'confirm-delete-workbook',
+          tool: 'delete-content',
           userLuid: extra.getUserLuid(),
         }),
       ).resolves.toBe(true);
