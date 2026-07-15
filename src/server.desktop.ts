@@ -66,7 +66,9 @@ export function selectToolsForProfile<T extends { name: DesktopToolName }>(
   if (profile === 'demo') {
     return tools.filter((tool) => DEMO_TOOL_PROFILE.has(tool.name));
   }
-  if (profile !== '' && profile !== 'full') {
+  // 'combined-lean' means "full desktop surface, lazy web surface" — the web half is
+  // handled by WebMcpServer; the desktop half registers everything, same as 'full'.
+  if (profile !== '' && profile !== 'full' && profile !== 'combined-lean') {
     log({
       message: `Unknown TOOL_PROFILE "${profile}" — registering the full tool set.`,
       level: 'warning',

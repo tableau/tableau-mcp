@@ -322,6 +322,11 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selectToolsForProfile(tools, 'full')).toBe(tools);
   });
 
+  it('"combined-lean" registers the full desktop set (the lean half is the web side)', () => {
+    const tools = allTools();
+    expect(selectToolsForProfile(tools, 'combined-lean')).toBe(tools);
+  });
+
   it('an unknown profile value falls back to the full set and logs a warning', () => {
     const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
     const tools = allTools();

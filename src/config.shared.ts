@@ -19,6 +19,12 @@ export class BaseConfig {
   disableLogMasking: boolean;
   maxRequestTimeoutMs: number;
   notificationPayloadMaxBytes: number;
+  /**
+   * Which tool registration profile to use. Normalized (trim + lowercase). '' (unset) and
+   * 'full' keep the eager/default tool surface; variant-specific profiles ('demo' on
+   * desktop, 'combined-lean' on the combined build) narrow or lazy-load parts of it.
+   */
+  toolProfile: string;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -31,6 +37,7 @@ export class BaseConfig {
       DISABLE_LOG_MASKING: disableLogMasking,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       NOTIFICATION_PAYLOAD_MAX_BYTES: notificationPayloadMaxBytes,
+      TOOL_PROFILE: toolProfile,
     } = cleansedVars;
 
     this.transport = isTransport(transport) ? transport : 'stdio';
@@ -48,6 +55,7 @@ export class BaseConfig {
       defaultValue: 8192,
       minValue: 1,
     });
+    this.toolProfile = (toolProfile ?? '').trim().toLowerCase();
   }
 }
 
