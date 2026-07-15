@@ -23,12 +23,19 @@ jobs:
               await github.rest.issues.getLabel({ ...context.repo, name });
             } catch (error) {
               if (error.status === 404) {
-                await github.rest.issues.createLabel({
-                  ...context.repo,
-                  name,
-                  color: 'ededed',
-                  description: 'Bypass the PR title @W- work item check',
-                });
+                try {
+                  await github.rest.issues.createLabel({
+                    ...context.repo,
+                    name,
+                    color: 'ededed',
+                    description: 'Bypass the PR title @W- work item check',
+                  });
+                } catch (createError) {
+                  // 422 = already exists (e.g., concurrent workflow run)
+                  if (createError.status !== 422) {
+                    throw createError;
+                  }
+                }
               } else {
                 throw error;
               }
