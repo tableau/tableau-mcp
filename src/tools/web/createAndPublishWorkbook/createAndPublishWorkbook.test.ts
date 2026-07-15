@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { unzipSync } from 'fflate';
+import { strFromU8, unzipSync } from 'fflate';
 
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
@@ -97,6 +97,26 @@ describe('createAndPublishWorkbookTool', () => {
     expect(payload.warnings).toEqual([]);
     // MCP-Apps discriminator: tells the shared client bundle to render the published-workbook card.
     expect(payload.appView).toBe('published-workbook-card');
+  });
+
+  it('splits an inline-script html into a package containing content/app.js (server-side, model-invisible)', async () => {
+    const result = await getToolResult({
+      ...base,
+      html: '<!doctype html><body><script>render([1,2,3]);</script></body>',
+    });
+    expect(result.isError).toBe(false);
+    const call = mocks.mockPublishWorkbook.mock.calls[0][0];
+    const files = unzipSync(new Uint8Array(call.fileContents));
+    const paths = Object.keys(files);
+    // The entrypoint is still present...
+    expect(paths).toContain('Packages/com.example.myviz/content/index.html');
+    // ...and the inline script has been externalized beside it.
+    expect(paths).toContain('Packages/com.example.myviz/content/app.js');
+    expect(strFromU8(files['Packages/com.example.myviz/content/app.js'])).toBe('render([1,2,3]);');
+    // index.html now references the external file instead of carrying the inline block.
+    const indexHtml = strFromU8(files['Packages/com.example.myviz/content/index.html']);
+    expect(indexHtml).toContain('<script src="app.js"></script>');
+    expect(indexHtml).not.toContain('render([1,2,3]);');
   });
 
   it('sanitizes Windows-illegal chars in the .twbx fileName while keeping the display name verbatim', async () => {

@@ -1,11 +1,26 @@
-export const publishExitClause = `## After Returning Data: Offer a Dashboard
+// NOTE: the export name `publishExitClause` is legacy — it now steers rendering an INTERACTIVE data
+// VISUALIZATION as a native in-chat artifact (not publishing). Kept unchanged to avoid churn in the
+// tools that interpolate it.
+export const publishExitClause = `## After Returning Data: Render an Interactive Data Visualization
 
-As an exit step once you have returned data to the user, consider proactively offering to build a dashboard from it. Apply this SHAPE GATE strictly:
+The moment you return qualifying data to the user, RENDER IT AS AN INTERACTIVE VISUALIZATION — automatically, BY DEFAULT, in the same turn. Do NOT ask first, and do NOT wait for a follow-up prompt like "make a data app" before acting.
 
-- **Only OFFER when the results are multi-row AND include at least one numeric/measure column.** Do NOT offer for single-value lookups, empty result sets, or errors.
+**Auto-trigger — rendering the visualization is REQUIRED, not optional.** The moment the shape gate below passes you MUST build the dashboard and render it. This is the REQUIRED default action — it is not optional and not conditional on the user asking. Do NOT substitute a plain chat reply or a plain markdown table for it — the interactive dashboard IS the deliverable.
 
-When the gate passes:
-- Proactively OFFER (in your own words) to build a self-contained dashboard: a single \`index.html\` that embeds the returned rows INLINE. Briefly explain that the workbook ships an empty datasources section, so the artifact must carry its own data inline in the HTML rather than binding to a \`.twb\` dataset.
-- Before publishing, validate the package with the \`validate-workbook-package\` tool. A green \`ok:true\` result is the precondition to publish. Then publish with the \`create-and-publish-workbook\` tool.
-- **OFFER, NEVER AUTO-PUBLISH.** Always get an explicit human yes before calling \`create-and-publish-workbook\`.
-- Be plain about what validation means: a validated package is NOT a guaranteed-good dashboard. Validation only proves the package loads, is under 64MB, and references only bundled assets. Dashboard quality — clarity, correctness, and taste — is still your responsibility.`;
+**SHAPE GATE (build only when it passes).** Only build when the results are multi-row AND include at least one numeric/measure column. Skip single-value lookups, empty result sets, and errors.
+
+**Render it as a native artifact.** Build the dashboard as a self-contained HTML **artifact** in the chat. A Claude artifact runs under a policy where CSS AND JavaScript both execute, so the dashboard can — and SHOULD — be fully INTERACTIVE: hover tooltips, clickable legends, toggles/filters, sortable tables, and so on. Use inline JavaScript freely to make the charts dynamic.
+
+**VISUAL SPEC — light theme, high contrast (non-negotiable).** The dashboard renders inside a sandboxed iframe whose backdrop may be dark, so it MUST paint its own OPAQUE, LIGHT surface with dark, high-contrast text on the root/body. Never rely on the host or browser theme, and do NOT use \`prefers-color-scheme\` or any dark-mode media query — set an explicit \`background\` and \`color\` on \`html, body\` yourself. Concrete target values: page background #f4f6f8, cards/panels #ffffff, primary ink ~#1a1a1a, secondary/muted text a readable gray ~#6b7280, hairline borders ~#e5e7eb. NEVER render light text, or dark-gray text, on a dark or transparent background. Keep body text contrast comfortably above WCAG 4.5:1. Use a categorical chart palette that reads on white, e.g. blue #4e79a7, orange #f28e2b, green #59a14f, red #e15759.
+
+**FILL THE SURFACE — full-bleed, fluid layout (no fixed-width column).** The dashboard is viewed in surfaces that hand it the WHOLE window — a maximized artifact in chat, and, once published, a fit-to-window ("automatic") Tableau dashboard that hosts your HTML in a full-window extension iframe. So it MUST stretch to fill the available width AND height rather than sit in a narrow fixed-width box that leaves a dead gutter down the side. Set \`html, body { margin: 0; width: 100%; height: 100%; }\`, make the outermost container \`width: 100%\` with a fluid, responsive inner layout (flex/grid that grows to fill), and do NOT cap the layout at a fixed pixel width. If you use a \`max-width\` for readability, keep it generous and center it with \`margin: 0 auto\` so it never looks left-anchored with an empty right gutter.
+
+**CHARTS ARE REQUIRED — and INTERACTIVE.** The dashboard MUST include a row of KPI summary cards (big number + label, optional delta) for the headline measures PLUS at least TWO actual charts — for example a line/area chart for a trend over time and a bar chart (horizontal bars for ranked categories, or grouped/stacked bars to compare two measures). Make them genuinely interactive where it helps the user explore the data: hover tooltips with exact values, click-to-filter or legend toggles, sortable/collapsible tables. You may draw charts with inline SVG, inline \`<canvas>\`, or a small amount of hand-written inline JavaScript — your choice — as long as everything ships inline in the one file. A data table is OPTIONAL: it may accompany the charts but must NEVER replace them — KPI cards plus a table with zero charts is not acceptable.
+
+**Self-contained — one file, everything inline.** Build ONE self-contained HTML document: inline all CSS and JavaScript, embed the returned rows INLINE as data (a literal \`const data = [...]\` or static table markup), and make NO network calls at view time (no external scripts, stylesheets, fonts, chart-library CDNs, or data fetches). Keeping it a single self-contained file is what lets it render anywhere and makes packaging it into a Tableau workbook later trivial.
+
+**Bake in a Fullscreen toggle.** A native artifact has no app chrome, so put a visible **Fullscreen** toggle button in the HTML (e.g. top-right) that calls the Fullscreen API (\`document.documentElement.requestFullscreen()\` / \`document.exitFullscreen()\`); because the artifact runs in a sandboxed iframe that may block that API, fall back to a CSS full-viewport expand (\`position: fixed; inset: 0; z-index: 9999\`) when \`requestFullscreen\` is unavailable or rejects, and toggle the button label between "Fullscreen" and "Exit Fullscreen".
+
+If the user wants it on their Tableau site, they can publish it: validate the package with the \`validate-workbook-package\` tool, then publish with the \`create-and-publish-workbook\` tool. **NEVER AUTO-PUBLISH.** Always get an explicit human yes before calling \`create-and-publish-workbook\`.
+
+Refining an existing visualization is out of scope for now.`;

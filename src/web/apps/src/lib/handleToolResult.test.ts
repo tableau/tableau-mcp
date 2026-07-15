@@ -17,14 +17,12 @@ vi.mock('./publishedWorkbookCard.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./publishedWorkbookCard.js')>();
   return { ...actual, renderPublishedWorkbookCard: vi.fn() };
 });
-vi.mock('./renderDashboardPreview.js');
 
 import { embedTableauViz } from './embedTableauViz.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
 import { renderPublishedWorkbookCard } from './publishedWorkbookCard.js';
-import { renderDashboardPreview } from './renderDashboardPreview.js';
 
 describe('handleToolResult', () => {
   let mockApp: App;
@@ -380,52 +378,5 @@ describe('handleToolResult', () => {
     expect(vi.mocked(callGetEmbedTokenTool)).not.toHaveBeenCalled();
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
     expect(vi.mocked(setupOpenInTableauLink)).not.toHaveBeenCalled();
-  });
-
-  const publishResult: CallToolResult = {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify({
-          appView: 'published-workbook-card',
-          name: 'My Viz',
-          url: 'https://main-windows/#/site/AdminProfiles/workbooks/4122',
-          projectId: 'proj-abc',
-        }),
-      },
-    ],
-  };
-
-  it('published-workbook card: renders a dashboard preview above the card when html is captured', async () => {
-    const html = '<h1>Built dashboard</h1>';
-
-    await handleToolResult(mockApp, publishResult, html);
-    await new Promise((r) => setTimeout(r, 0));
-
-    // Card AND preview both render; card runs first (replaceChildren), preview prepends above it.
-    expect(vi.mocked(renderPublishedWorkbookCard)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(renderDashboardPreview)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(renderDashboardPreview)).toHaveBeenCalledWith(html);
-  });
-
-  it('published-workbook card: renders card only (no preview) when no html was captured', async () => {
-    await handleToolResult(mockApp, publishResult);
-    await new Promise((r) => setTimeout(r, 0));
-
-    expect(vi.mocked(renderPublishedWorkbookCard)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(renderDashboardPreview)).not.toHaveBeenCalled();
-  });
-
-  it('published-workbook card: a preview render failure never takes down the card', async () => {
-    vi.mocked(renderDashboardPreview).mockImplementation(() => {
-      throw new Error('boom');
-    });
-
-    // Must not reject.
-    await expect(handleToolResult(mockApp, publishResult, '<h1>x</h1>')).resolves.toBeUndefined();
-    await new Promise((r) => setTimeout(r, 0));
-
-    // Card still rendered despite the preview throwing.
-    expect(vi.mocked(renderPublishedWorkbookCard)).toHaveBeenCalledTimes(1);
   });
 });

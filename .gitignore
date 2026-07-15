@@ -32,12 +32,21 @@ src/web/apps/dist/
 /playwright/.cache/
 /playwright/.auth/
 
-.work/tickets/*.md
-.work/specs/GUS-*.md
-.work/specs/gus-*.md
-.work/reports/*.md
+# Local agent scratch under .work/ — ignore everything except the committed
+# scaffold (specs/TEMPLATE.md + the .gitkeep placeholders). See the agent-os
+# repo contract (#410).
+.work/*
+!.work/specs/
+!.work/reports/
+!.work/tickets/
+.work/specs/*
+.work/reports/*
+.work/tickets/*
 !.work/specs/TEMPLATE.md
 !.work/**/.gitkeep
 
 # Stashed tools kept for later (not part of the build)
 .stash/
+
+# Local handoff/scratch notes and POCs — kept on disk, never committed.
+handoff/
