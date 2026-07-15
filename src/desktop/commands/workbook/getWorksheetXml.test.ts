@@ -98,6 +98,50 @@ describe('getWorksheetXml (Agent API transport, default)', () => {
     }
   });
 
+  it('appends a "did you mean" suggestion listing close sheet names on a miss (W6)', async () => {
+    // save-worksheet finds nothing; list-worksheets returns the real names so the
+    // miss message can surface close matches for self-correction.
+    const mockExecutor = {
+      executeCommand: vi.fn(async (params: any) => {
+        if (params.command === 'list-worksheets') {
+          return Ok({
+            command_id: 'cmd-list',
+            status: 'completed',
+            parsedResult: {
+              worksheets: JSON.stringify({
+                count: 3,
+                worksheets: [{ name: 'Sales by Region' }, { name: 'Profit Map' }, { name: 'KPIs' }],
+              }),
+            },
+          });
+        }
+        return Ok({
+          command_id: 'cmd-123',
+          status: 'completed',
+          parsedResult: { worksheetXml: '<empty></empty>' },
+        });
+      }),
+    } as unknown as LocalExecutor;
+
+    const result = await getWorksheetXml({
+      worksheetName: 'Sales',
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'get-worksheet-xml-error');
+      expect(result.error.error.type).toBe('no-worksheet-found');
+      // "Sales" is a substring of "Sales by Region" → surfaced as a close match.
+      expect(result.error.error.message).toContain('Did you mean');
+      expect(result.error.error.message).toContain('"Sales by Region"');
+      expect(result.error.error.message).toContain('ask the user instead of guessing');
+      // A non-matching sheet is not listed among the close matches.
+      expect(result.error.error.message).not.toContain('"KPIs"');
+    }
+  });
+
   it('should return multiple-worksheets-found error when response contains more than one worksheet', async () => {
     const mockXml = '<workbook><worksheet name="Sheet 1"/><worksheet name="Sheet 2"/></workbook>';
     const mockExecutor = {

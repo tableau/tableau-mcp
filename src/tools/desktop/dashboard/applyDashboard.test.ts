@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import * as loadDashboardXmlModule from '../../../desktop/commands/workbook/loadDashboardXml.js';
 import {
   ArgsValidationError,
@@ -71,6 +72,29 @@ describe('applyDashboardTool', () => {
     expect(resultObj.message).toContain('Successfully applied dashboard update');
     expect(existsSync).toHaveBeenCalledWith(mockFilePath);
     expect(readFileSync).toHaveBeenCalledWith(mockFilePath, 'utf-8');
+  });
+
+  it('refuses a file-mode apply when the cache sidecar fingerprint mismatches the session (W9)', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<dashboard name="Sales Dashboard"></dashboard>');
+    const sidecarSpy = vi.spyOn(cacheFingerprintModule, 'checkSidecar').mockReturnValue({
+      ok: false,
+      message: 'Cache produced by a different Desktop session — re-read in the current session.',
+    });
+    const loadSpy = vi
+      .spyOn(loadDashboardXmlModule, 'loadDashboardXml')
+      .mockResolvedValue(Ok.EMPTY);
+
+    const result = await getToolResult({ mode: 'file', dashboardFile: '/path/to/dashboard.xml' });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('different Desktop session');
+    expect(loadSpy).not.toHaveBeenCalled();
+
+    // vi.clearAllMocks() resets call history but not this spy's implementation, so
+    // restore it explicitly to keep the fail-open default for the other file-mode tests.
+    sidecarSpy.mockRestore();
   });
 
   it('should return error when inline mode is used without dashboardXml', async () => {

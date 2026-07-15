@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import {
   buildApplyOverCapNote,
@@ -12,6 +13,7 @@ import {
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   ArgsValidationError,
+  CacheSessionMismatchError,
   DesktopCommandExecutionError,
   FileReadError,
   WorkbookNotFoundError,
@@ -101,6 +103,17 @@ export const getApplyWorkbookTool = (
             return sessionResult.error.toErr();
           }
           const resolvedSession = sessionResult.value;
+
+          // Cross-instance cache-bleed guard (W9): refuse a cache file produced by a
+          // different (or restarted) Desktop session before applying it — file mode only,
+          // since inline content carries no cache fingerprint.
+          if (mode === 'file' && workbookFile) {
+            const sidecar = checkSidecar(workbookFile, resolvedSession, 'workbook');
+            if (!sidecar.ok) {
+              return new CacheSessionMismatchError(sidecar.message!).toErr();
+            }
+          }
+
           const executor = await extra.getExecutor(resolvedSession);
           const result = await loadWorkbookXml({
             xml: workbookXml,

@@ -177,4 +177,21 @@ describe('listAvailableFields', () => {
     const fields = listAvailableFields(withParams);
     expect(fields.find((f) => f.datasource === 'Parameters')).toBeUndefined();
   });
+
+  it('should preserve Tableau semantic-role attributes on available fields', () => {
+    const xml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='GeoDS'>
+      <column name='[Territory]' role='dimension' type='nominal' datatype='string' semantic-role='[State].[Name]' />
+      <column name='[MRR]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const availableFields = listAvailableFields(xml);
+    const territory = availableFields.find((f) => f.columnName === '[Territory]');
+    expect(territory?.semanticRole).toBe('[State].[Name]');
+    const mrr = availableFields.find((f) => f.columnName === '[MRR]');
+    expect(mrr?.semanticRole).toBeUndefined();
+  });
 });

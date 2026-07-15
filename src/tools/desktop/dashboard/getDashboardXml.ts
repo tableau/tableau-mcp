@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { formatArtifactSummary } from '../../../desktop/artifactSummary.js';
 import { DesktopCache } from '../../../desktop/cache.js';
+import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { getDashboardXml } from '../../../desktop/commands/workbook/getDashboardXml.js';
 import {
   buildInlineCapFileMessage,
@@ -100,6 +101,9 @@ export const getGetDashboardXmlTool = (
             prefix: `dashboard-${safeName}`,
           });
           writeFileSync(cacheFile, dashboardXml, 'utf-8');
+          // Stamp the producing session so apply-dashboard can refuse a cache from a
+          // different (or restarted) Desktop instance — cross-instance bleed guard (W9).
+          writeSidecar(cacheFile, resolvedSession);
 
           if (capFired) {
             logInlineXmlCapHit({ tool: 'get-dashboard-xml', bytes, capBytes, file: cacheFile });

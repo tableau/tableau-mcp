@@ -56,33 +56,51 @@ describe('loadWorksheetXml (Agent API transport, default)', () => {
     );
   });
 
+  // A command-dispatching executor: the post-apply readback (W4) re-reads the sheet via
+  // `save-worksheet`, so tests that assert focus/apply choreography must serve that call.
+  function dispatchingAgentExecutor(
+    readbackXml: string,
+    overrides: Partial<Record<string, unknown>> = {},
+  ): {
+    executor: LocalExecutor;
+    calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }>;
+    executeCommand: ReturnType<typeof vi.fn>;
+  } {
+    const calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }> = [];
+    const executeCommand = vi.fn(async (params: any) => {
+      calls.push({ namespace: params.namespace, command: params.command, args: params.args });
+      if (params.command in overrides) return overrides[params.command];
+      if (params.command === 'save-worksheet') {
+        return Ok({
+          command_id: 'cmd-readback',
+          status: 'completed',
+          submitted_at: '',
+          parsedResult: { worksheetXml: readbackXml },
+        });
+      }
+      return Ok({ command_id: 'cmd-ok', status: 'completed', submitted_at: '' });
+    });
+    return { executor: { executeCommand } as unknown as LocalExecutor, calls, executeCommand };
+  }
+
   it('focuses the worksheet after a successful apply', async () => {
-    const mockExecutor = {
-      executeCommand: vi
-        .fn()
-        .mockResolvedValueOnce(Ok({ command_id: 'cmd-123', status: 'completed', submitted_at: '' }))
-        .mockResolvedValueOnce(
-          Ok({ command_id: 'cmd-goto', status: 'completed', submitted_at: '' }),
-        ),
-    } as unknown as LocalExecutor;
+    const { executor, calls } = dispatchingAgentExecutor(validXml);
 
     const result = await loadWorksheetXml({
       worksheetName,
       xml: validXml,
-      executor: mockExecutor,
+      executor,
       signal: mockSignal,
     });
 
     expect(result.isOk()).toBe(true);
-    expect(mockExecutor.executeCommand).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        namespace: 'tabdoc',
-        command: 'goto-sheet',
-        args: { sheet: worksheetName },
-        signal: mockSignal,
-      }),
-    );
+    // Post-apply readback (W4) runs before focus; focus is the final call.
+    expect(calls.some((c) => c.namespace === 'tabui' && c.command === 'save-worksheet')).toBe(true);
+    expect(calls.at(-1)).toMatchObject({
+      namespace: 'tabdoc',
+      command: 'goto-sheet',
+      args: { sheet: worksheetName },
+    });
   });
 
   it('keeps worksheet apply successful when focusing the worksheet fails', async () => {
@@ -90,17 +108,12 @@ describe('loadWorksheetXml (Agent API transport, default)', () => {
       type: 'command-failed' as const,
       error: { code: 'GOTO_FAILED', message: 'could not navigate', recoverable: true },
     };
-    const mockExecutor = {
-      executeCommand: vi
-        .fn()
-        .mockResolvedValueOnce(Ok({ command_id: 'cmd-123', status: 'completed', submitted_at: '' }))
-        .mockResolvedValueOnce(Err(error)),
-    } as unknown as LocalExecutor;
+    const { executor } = dispatchingAgentExecutor(validXml, { 'goto-sheet': Err(error) });
 
     const result = await loadWorksheetXml({
       worksheetName,
       xml: validXml,
-      executor: mockExecutor,
+      executor,
       signal: mockSignal,
     });
 
@@ -116,6 +129,56 @@ describe('loadWorksheetXml (Agent API transport, default)', () => {
         }),
       }),
     );
+  });
+
+  it('fails the apply (readback-failed) when Tableau silently drops an intent-bearing node', async () => {
+    const intended =
+      '<worksheet name="Sheet 1"><table>' +
+      '<panes><pane><mark class="Shape"/>' +
+      '<encodings><lod column="[DS].[none:State:nk]"/></encodings></pane></panes>' +
+      '<rows>[DS].[none:State:nk]</rows></table></worksheet>';
+    // Readback comes back with the <lod> encoding and the rows shelf stripped.
+    const stripped =
+      '<worksheet name="Sheet 1"><table>' +
+      '<panes><pane><mark class="Shape"/><encodings/></pane></panes></table></worksheet>';
+    const { executor } = dispatchingAgentExecutor(stripped);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: intended,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      invariant(result.error.error.type === 'readback-failed');
+      expect(result.error.error.message).toContain('silently dropped');
+      expect(result.error.error.findings.some((f) => f.node === 'lod')).toBe(true);
+    }
+  });
+
+  it('surfaces readback WARNINGS on a successful apply without failing it', async () => {
+    const intended =
+      '<worksheet name="Sheet 1"><table>' +
+      '<view><computed-sort column="[DS].[none:State:nk]" direction="DESC" using="[DS].[sum:Profit:qk]"/></view>' +
+      '<panes><pane><mark class="Bar"/></pane></panes></table></worksheet>';
+    // Sort direction changed on readback → warning-severity, non-fatal.
+    const changed = intended.replace('direction="DESC"', 'direction="ASC"');
+    const { executor } = dispatchingAgentExecutor(changed);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: intended,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.readbackWarnings.some((f) => f.kind === 'sort')).toBe(true);
+    }
   });
 
   it('should return error when XML is invalid', async () => {

@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { loadDashboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
 import {
   buildApplyOverCapNote,
@@ -12,6 +13,7 @@ import {
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   ArgsValidationError,
+  CacheSessionMismatchError,
   DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
   FileReadError,
@@ -103,6 +105,17 @@ export const getApplyDashboardTool = (
             return sessionResult.error.toErr();
           }
           const resolvedSession = sessionResult.value;
+
+          // Cross-instance cache-bleed guard (W9): refuse a cache file produced by a
+          // different (or restarted) Desktop session before applying it — file mode only,
+          // since inline content carries no cache fingerprint.
+          if (mode === 'file' && dashboardFile) {
+            const sidecar = checkSidecar(dashboardFile, resolvedSession, 'dashboard');
+            if (!sidecar.ok) {
+              return new CacheSessionMismatchError(sidecar.message!).toErr();
+            }
+          }
+
           const executor = await extra.getExecutor(resolvedSession);
           const result = await loadDashboardXml({
             dashboardName,

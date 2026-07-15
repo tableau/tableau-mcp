@@ -36,6 +36,7 @@ export interface FieldReference {
   type: string;
   role: string;
   datatype?: string;
+  semanticRole?: string; // Tableau geo semantic role, e.g. "[State].[Name]"
   caption?: string;
   isAggregated?: boolean;
   formula?: string;

@@ -3,12 +3,14 @@ import { existsSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { injectViewpoints } from '../../../desktop/commands/workbook/injectViewpoints.js';
 import { loadDashboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
+  CacheSessionMismatchError,
   DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
   WorkbookNotFoundError,
@@ -85,6 +87,18 @@ export const getBuildAndApplyDashboardTool = (
             return sessionResult.error.toErr();
           }
           const resolvedSession = sessionResult.value;
+
+          // Cross-instance cache-bleed guard (W9): refuse caches produced by a different
+          // (or restarted) Desktop session before applying either one.
+          const wbSidecar = checkSidecar(workbookFile, resolvedSession, 'workbook');
+          if (!wbSidecar.ok) {
+            return new CacheSessionMismatchError(wbSidecar.message!).toErr();
+          }
+          const dashSidecar = checkSidecar(dashboardFile, resolvedSession, 'dashboard');
+          if (!dashSidecar.ok) {
+            return new CacheSessionMismatchError(dashSidecar.message!).toErr();
+          }
+
           const executor = await extra.getExecutor(resolvedSession);
 
           // Fetch workbook, inject viewpoints, apply workbook
