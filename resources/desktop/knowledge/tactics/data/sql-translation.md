@@ -42,6 +42,37 @@ SQL aggregations with `GROUP BY` translate to Tableau FIXED LODs. The `GROUP BY`
 
 ---
 
+## String functions
+
+SQL string functions map to Tableau scalar string functions. Two differences bite most often: **Tableau has no `CONCAT` — use `+`** (and every non-string operand must be wrapped in `STR()`), and **all position/length arguments are 1-based** (`MID`, `FIND`, `LEFT` count from 1, not 0).
+
+| SQL | Tableau | Notes |
+|---|---|---|
+| `col1 \|\| col2` / `CONCAT(a, b)` | `[A] + [B]` | No `CONCAT` function; `+` only. Wrap non-strings: `[Name] + " (" + STR([Id]) + ")"` |
+| `SUBSTRING(str, start, len)` | `MID([Str], start, len)` | 1-based `start`; `len` optional (`MID([Str], 5)` → to end) |
+| `LEFT(str, n)` / `RIGHT(str, n)` | `LEFT([Str], n)` / `RIGHT([Str], n)` | identical |
+| `CHARINDEX(sub, str)` / `POSITION(sub IN str)` | `FIND([Str], sub)` | **arg order flips** (string first); returns `0` when not found |
+| `LEN(str)` / `LENGTH(str)` | `LEN([Str])` | character count |
+| `UPPER` / `LOWER` | `UPPER([Str])` / `LOWER([Str])` | identical |
+| `TRIM` / `LTRIM` / `RTRIM` | `TRIM([Str])` / `LTRIM([Str])` / `RTRIM([Str])` | trims spaces only |
+| `REPLACE(str, from, to)` | `REPLACE([Str], from, to)` | identical |
+| `CONTAINS` / `LIKE '%x%'` | `CONTAINS([Str], "x")` | returns boolean |
+| `str LIKE 'x%'` / `LIKE '%x'` | `STARTSWITH([Str], "x")` / `ENDSWITH([Str], "x")` | anchored match |
+| `REGEXP_SUBSTR` / `REGEXP_EXTRACT` | `REGEXP_EXTRACT([Str], pattern)` | first capture group |
+| `REGEXP_REPLACE(str, pat, rep)` | `REGEXP_REPLACE([Str], pat, rep)` | identical |
+| `str REGEXP pat` / `RLIKE` | `REGEXP_MATCH([Str], pat)` | returns boolean |
+| `SPLIT_PART(str, delim, n)` | `SPLIT([Str], delim, n)` | 1-based token index |
+| `CAST(x AS VARCHAR)` | `STR([X])` | any type → string |
+| `ISNULL(x, y)` (SQL Server 2-arg) | `IFNULL([X], [Y])` | 2-arg fallback; **not** `ISNULL` (Tableau `ISNULL` is 1-arg boolean) |
+
+**What does NOT work:**
+- `CONCAT([A], [B])` — there is no `CONCAT` function in Tableau; it errors. Use `[A] + [B]`.
+- `"Order " + [Order Id]` where `[Order Id]` is numeric — `+` on mixed types errors. Wrap: `"Order " + STR([Order Id])`.
+- Assuming `FIND` is 0-based or takes `(substring, string)` order — it is 1-based and takes `([Str], substring)`, the reverse of `CHARINDEX`.
+- Treating Tableau `ISNULL([X])` as the SQL Server 2-arg `ISNULL(x, y)` — Tableau's is a 1-arg boolean test; use `IFNULL`/`ZN` for a fallback value.
+
+---
+
 ## Window functions
 
 SQL window functions have limited direct equivalents in Tableau. Key translations:
