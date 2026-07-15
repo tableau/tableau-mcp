@@ -33,6 +33,7 @@
   "scripts": {
     "build": "tsx src/scripts/build.ts && tsc --project tsconfig.providers.json",
     "build:desktop": "tsx src/scripts/build.ts --variant desktop && tsc --project tsconfig.providers.json",
+    "build:desktop:dirty": "tsx src/scripts/build.ts --variant desktop --dirty && tsc --project tsconfig.providers.json",
     "build:combined": "tsx src/scripts/build.ts --variant combined && tsc --project tsconfig.providers.json",
     "build:dev": "tsx src/scripts/build.ts --dev && tsc --project tsconfig.providers.json",
     "build:docker": "docker build -t tableau-mcp .",
