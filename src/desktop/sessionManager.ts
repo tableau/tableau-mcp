@@ -31,10 +31,20 @@ export class SessionStaleError extends Error {
 
 export class SessionManager {
   private readonly sessions: Map<string, DesktopConnection> = new Map();
-  private readonly discoverer: DesktopDiscoverer;
+  private injectedDiscoverer?: DesktopDiscoverer;
+  private lazyDiscoverer?: DesktopDiscoverer;
 
   constructor({ discoverer }: { discoverer?: DesktopDiscoverer } = {}) {
-    this.discoverer = discoverer ?? new DesktopDiscoverer();
+    this.injectedDiscoverer = discoverer;
+  }
+
+  /**
+   * The manifest reader, constructed lazily. Constructing it eagerly would consult
+   * discovery machinery even for an explicit-session tool call that never needs it, so
+   * it is built only on first real use (session create or the freshness gate).
+   */
+  private get discoverer(): DesktopDiscoverer {
+    return (this.injectedDiscoverer ??= this.lazyDiscoverer ??= new DesktopDiscoverer());
   }
 
   /** The Desktop instance a cached local session is pinned to (for cache fingerprinting). */
