@@ -486,3 +486,74 @@ describe('classifyNoLlm — spatial-intent family guard (W-23447710)', () => {
     ).toBeNull();
   });
 });
+
+// ── CLS-003: TEMPORAL-COMPLETION NAMED-DIMENSION GUARD ────────────────────────
+// Unique-date completion must not paper over an ask-NAMED non-temporal dimension
+// that no remaining slot can consume: "trend of Actual Amount by Fiscal Period"
+// on a temporal+measure template must escalate (null), never silently drop
+// Fiscal Period and chart a date axis the user did not ask for. Capacity counts
+// the remaining ACTIVE categorical/geo slots plus ONE armed optional facet slot
+// (facetBinding appends at most one spare named categorical post-bind).
+describe('classifyNoLlm — temporal completion named-dimension guard (CLS-003)', () => {
+  const tempVal = (): SlotSpec[] => [slot('t', 'temporal'), slot('v', 'quantitative')];
+  const financeSummary: SchemaSummary = {
+    datasource: 'DS',
+    fields: [
+      field('Posting Date', 'dimension', 'ordinal', 'date'),
+      field('Fiscal Period', 'dimension', 'nominal', 'string'),
+      field('Actual Amount', 'measure', 'quantitative', 'real'),
+    ],
+  };
+  const superstoreLoneDate: SchemaSummary = {
+    datasource: 'DS',
+    fields: [
+      field('Order Date', 'dimension', 'ordinal', 'date'),
+      field('Region', 'dimension', 'nominal', 'string'),
+      field('Sales', 'measure', 'quantitative', 'real'),
+    ],
+  };
+  const facetCol = (): SlotSpec => ({
+    ...slot('facet_col', 'categorical'),
+    required: false,
+    role: ['cols'],
+  });
+
+  it('does not complete over an ask-named non-temporal dimension no slot can consume', () => {
+    const m = mapOf(synth('ts', 'time-series', ['trend'], tempVal()));
+    expect(classifyNoLlm('trend of Actual Amount by Fiscal Period', m, financeSummary)).toBeNull();
+  });
+
+  it('still completes when the named dimension has its own remaining categorical slot', () => {
+    const m = mapOf(
+      synth(
+        'ts',
+        'time-series',
+        ['trend'],
+        [slot('t', 'temporal'), slot('cat', 'categorical'), slot('v', 'quantitative')],
+      ),
+    );
+    const res = classifyNoLlm('trend of Sales by Region', m, superstoreLoneDate);
+    expect(res).not.toBeNull();
+    expect(res!.bindings).toEqual([
+      { slot_id: 't', field: 'Order Date' },
+      { slot_id: 'cat', field: 'Region' },
+      { slot_id: 'v', field: 'Sales' },
+    ]);
+  });
+
+  it('still completes on an explicit facet ask — the armed optional facet slot is capacity', () => {
+    const m = mapOf(synth('ts', 'time-series', ['trend'], [...tempVal(), facetCol()]));
+    const res = classifyNoLlm('trend of Sales per Region', m, superstoreLoneDate);
+    expect(res).not.toBeNull();
+    expect(res!.bindings).toEqual([
+      { slot_id: 't', field: 'Order Date' },
+      { slot_id: 'v', field: 'Sales' },
+      { slot_id: 'facet_col', field: 'Region' },
+    ]);
+  });
+
+  it('bare "by <dim>" stays blocked even when a facet slot exists (by is not a facet cue)', () => {
+    const m = mapOf(synth('ts', 'time-series', ['trend'], [...tempVal(), facetCol()]));
+    expect(classifyNoLlm('trend of Sales by Region', m, superstoreLoneDate)).toBeNull();
+  });
+});
