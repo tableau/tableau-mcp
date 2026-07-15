@@ -56,6 +56,7 @@
     "build:inspect:docker:http": "run-s build:docker inspect:docker:http",
     "test": "vitest --config ./vitest.config.ts",
     "test:e2e": "vitest --config ./vitest.config.e2e.ts",
+    "test:e2e:sea": "vitest --config ./vitest.config.e2e.sea.ts",
     "test:eval": "vitest --config ./vitest.config.eval.ts",
     "test:oauth:embedded": "vitest --config ./vitest.config.oauth.embedded.ts",
     "test:oauth:tableau": "npx playwright test",

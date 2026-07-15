@@ -6,3 +6,9 @@ runs:
     - name: E2E Tests
       shell: bash
       run: npm run test:e2e
+
+    # Runs AFTER the parallel pool: seaAssets rebuilds ./build in-place, which
+    # must never overlap with suites spawning `node build/index.js` children.
+    - name: SEA Asset E2E Tests
+      shell: bash
+      run: npm run test:e2e:sea
