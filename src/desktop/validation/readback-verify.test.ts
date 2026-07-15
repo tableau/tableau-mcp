@@ -115,6 +115,38 @@ describe('verifyWorksheetReadback', () => {
     );
   });
 
+  it('does not flag an authored Automatic mark that Tableau resolved to a concrete class', () => {
+    const intended = encodedWorksheet().replace(
+      '<mark class="Shape"/>',
+      '<mark class="Automatic"/>',
+    );
+    const readback = encodedWorksheet().replace('<mark class="Shape"/>', '<mark class="Bar"/>');
+
+    const findings = verifyWorksheetReadback(intended, readback);
+
+    expect(findings.some((f) => f.kind === 'mark')).toBe(false);
+  });
+
+  it('still flags an Automatic mark that is entirely absent from the readback (real drop)', () => {
+    const intended = encodedWorksheet().replace(
+      '<mark class="Shape"/>',
+      '<mark class="Automatic"/>',
+    );
+    const readback = encodedWorksheet()
+      .replace('<panes><pane>', '<panes><pane2>')
+      .replace('</pane></panes>', '</pane2></panes>');
+
+    const findings = verifyWorksheetReadback(intended, readback);
+
+    expect(findings).toContainEqual({
+      kind: 'mark',
+      node: 'mark',
+      intended: '<mark class="Automatic">',
+      readback: 'missing',
+      severity: 'error',
+    });
+  });
+
   it('tolerates Tableau-added readback noise such as style and formatting nodes', () => {
     const readback = encodedWorksheet(`
       <style><style-rule element="worksheet"><format attr="font-size" value="10"/></style-rule></style>

@@ -303,6 +303,11 @@ export function verifyWorksheetReadback(
   for (const mark of intended.marks) {
     const candidate = readback.marks.find((item) => item.paneIndex === mark.paneIndex);
     if (candidate?.klass === mark.klass) continue;
+    // An authored `Automatic` mark is resolved by Tableau to a concrete class (Bar,
+    // Circle, …) on readback — that is expected resolution, not a dropped mark. Any
+    // concrete class in the same pane satisfies an intended `Automatic`; only a truly
+    // absent mark (no candidate) is a real drop. (False-positive guard, RB readback.)
+    if (mark.klass.toLowerCase() === 'automatic' && candidate) continue;
     findings.push({
       kind: 'mark',
       node: 'mark',
