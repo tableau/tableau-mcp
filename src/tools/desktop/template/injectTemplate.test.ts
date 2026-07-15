@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { resolve } from 'path';
 
+import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { removeSameNamedWorksheet } from '../../../desktop/templates/injectTemplateCore.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -11,6 +12,7 @@ import { getInjectTemplateTool } from './injectTemplate.js';
 vi.mock('../../../desktop/templates/injectTemplate.js');
 vi.mock('../../../desktop/templates/fieldReferenceRewriter.js');
 vi.mock('../../../desktop/templates/templatePath.js');
+vi.mock('../../../desktop/commands/workbook/cacheFingerprint.js');
 vi.mock('fs');
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
@@ -21,6 +23,7 @@ import { listTemplateNames, readTemplate } from '../../../desktop/templates/temp
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 
 const WORKBOOK_FILE = resolve('/cache/workbook.xml');
+const SESSION = '12345';
 const WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets/></workbook>';
 const TEMPLATE_XML =
   '<workbook><worksheets><worksheet name="{{TITLE}}"/></worksheets>' +
@@ -29,6 +32,7 @@ const INJECTED_XML =
   '<?xml version="1.0"?><workbook><worksheets><worksheet name="Sheet1"/></worksheets></workbook>';
 
 const BASE_PARAMS = {
+  session: SESSION,
   workbookFile: WORKBOOK_FILE,
   templateName: 'ranking-ordered-bar',
   title: 'Sheet1',
@@ -58,6 +62,7 @@ describe('injectTemplateTool', () => {
     expect(tool.name).toBe('inject-template');
     expect(tool.annotations).toMatchObject({ readOnlyHint: false });
     expect(tool.paramsSchema).toMatchObject({
+      session: expect.any(Object),
       workbookFile: expect.any(Object),
       templateName: expect.any(Object),
       title: expect.any(Object),
@@ -79,6 +84,15 @@ describe('injectTemplateTool', () => {
     await getResult(BASE_PARAMS);
 
     expect(writeFileSync).toHaveBeenCalledWith(resolve(WORKBOOK_FILE), INJECTED_XML, 'utf-8');
+  });
+
+  it('writes a fingerprint sidecar after updating the workbook cache file', async () => {
+    await getResult(BASE_PARAMS);
+
+    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(
+      resolve(WORKBOOK_FILE),
+      SESSION,
+    );
   });
 
   it('should return error when workbook file does not exist', async () => {

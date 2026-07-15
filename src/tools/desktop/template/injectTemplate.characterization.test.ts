@@ -18,6 +18,7 @@ import { getInjectTemplateTool } from './injectTemplate.js';
 vi.mock('../../../desktop/templates/injectTemplate.js');
 vi.mock('../../../desktop/templates/fieldReferenceRewriter.js');
 vi.mock('../../../desktop/templates/templatePath.js');
+vi.mock('../../../desktop/commands/workbook/cacheFingerprint.js');
 vi.mock('fs');
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
@@ -28,6 +29,7 @@ import { listTemplateNames, readTemplate } from '../../../desktop/templates/temp
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 
 const WORKBOOK_FILE = resolve('/cache/workbook.xml');
+const SESSION = '12345';
 const WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets/></workbook>';
 // Template carries {{TITLE}}, a non-DATASOURCE placeholder ({{SUBTITLE}}), a bare
 // {{DATASOURCE}} placeholder, and a field ref — exercising every substitution path.
@@ -42,6 +44,7 @@ const INJECTED_XML =
   '<?xml version="1.0"?><workbook><worksheets><worksheet name="Sheet1"/></worksheets></workbook>';
 
 const BASE_PARAMS = {
+  session: SESSION,
   workbookFile: WORKBOOK_FILE,
   templateName: 'ranking-ordered-bar',
   title: 'Sheet1',

@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import {
   removeFieldFromCols,
   removeFieldFromEncoding,
@@ -34,15 +35,14 @@ const ENCODING_TYPES = [
 const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
 const paramsSchema = {
+  session: z.string().describe('Session ID.'),
   worksheetFile: z.string().describe('Worksheet cache file.'),
-  target: z
-    .enum(FIELD_TARGETS)
-    .describe("Source: 'rows' for Rows, 'cols' for Columns, or 'encoding'."),
+  target: z.enum(FIELD_TARGETS).describe('Source: rows, cols, or encoding.'),
   columnRef: z.string().describe('Column reference to remove.'),
   encodingType: z
     .enum(ENCODING_TYPES)
     .optional()
-    .describe("Encoding channel ('text'=labels); required when target=encoding, else ignored."),
+    .describe("Encoding channel ('text'=labels); required iff target=encoding."),
 };
 
 const title = 'Remove Field';
@@ -52,7 +52,7 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
     name: 'remove-field',
     title,
     description:
-      'Remove a field from Rows, Columns, or an encoding on a worksheet locally. Reads from and writes to cache file. Use apply-worksheet to apply changes.',
+      'Remove a field from Rows, Columns, or an encoding; mutates cache. Apply with apply-worksheet.',
     paramsSchema,
     annotations: {
       title,
@@ -62,12 +62,12 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
       idempotentHint: false,
     },
     callback: async (
-      { worksheetFile, target, columnRef, encodingType },
+      { session, worksheetFile, target, columnRef, encodingType },
       extra,
     ): Promise<CallToolResult> => {
       return await removeFieldTool.logAndExecute({
         extra,
-        args: { worksheetFile, target, columnRef, encodingType },
+        args: { session, worksheetFile, target, columnRef, encodingType },
         callback: async () => {
           if (!existsSync(worksheetFile)) {
             return new FileNotFoundError(worksheetFile).toErr();
@@ -123,6 +123,7 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
 
           try {
             writeFileSync(worksheetFile, modifiedXml, 'utf-8');
+            writeSidecar(worksheetFile, session);
           } catch (error) {
             return new FileReadError(error).toErr();
           }

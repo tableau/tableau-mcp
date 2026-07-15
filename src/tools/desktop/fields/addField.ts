@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import {
   addFieldToCols,
   addFieldToEncoding,
@@ -34,6 +35,7 @@ const ENCODING_TYPES = [
 const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
 const paramsSchema = {
+  session: z.string().describe('Session ID.'),
   worksheetFile: z.string().describe('Worksheet cache file.'),
   target: z.enum(FIELD_TARGETS).describe('Destination: rows=Rows, cols=Columns, or encoding.'),
   columnRef: z.string().describe('Column reference.'),
@@ -41,8 +43,8 @@ const paramsSchema = {
     .enum(ENCODING_TYPES)
     .optional()
     .describe("Encoding channel ('text'=labels); required iff target=encoding."),
-  index: z.number().optional().describe('Optional 0-based insert position.'),
-  workbookFile: z.string().optional().describe('Optional workbook cache file for caption.'),
+  index: z.number().optional().describe('0-based insert position.'),
+  workbookFile: z.string().optional().describe('Workbook cache file for caption.'),
 };
 
 const title = 'Add Field';
@@ -52,7 +54,7 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
     name: 'add-field',
     title,
     description:
-      'Add a field to Rows, Columns, or an encoding (mutates cache; adds missing datasource dependency). Apply with apply-worksheet.',
+      'Add a field to Rows, Columns, or an encoding; mutates cache. Apply with apply-worksheet.',
     paramsSchema,
     annotations: {
       title,
@@ -62,12 +64,12 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
       idempotentHint: false,
     },
     callback: async (
-      { worksheetFile, target, columnRef, encodingType, index, workbookFile },
+      { session, worksheetFile, target, columnRef, encodingType, index, workbookFile },
       extra,
     ): Promise<CallToolResult> => {
       return await addFieldTool.logAndExecute({
         extra,
-        args: { worksheetFile, target, columnRef, encodingType, index, workbookFile },
+        args: { session, worksheetFile, target, columnRef, encodingType, index, workbookFile },
         callback: async () => {
           if (!existsSync(worksheetFile)) {
             return new FileNotFoundError(worksheetFile).toErr();
@@ -138,6 +140,7 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
 
           try {
             writeFileSync(worksheetFile, modifiedXml, 'utf-8');
+            writeSidecar(worksheetFile, session);
           } catch (error) {
             return new FileReadError(error).toErr();
           }

@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { z } from 'zod';
 
+import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import * as metadataModule from '../../../desktop/metadata/index.js';
 import {
   ArgsValidationError,
@@ -16,6 +17,7 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getAddFieldTool } from './addField.js';
 
 vi.mock('../../../desktop/metadata/index.js');
+vi.mock('../../../desktop/commands/workbook/cacheFingerprint.js');
 vi.mock('fs');
 
 type EncodingType = 'color' | 'size' | 'lod' | 'detail' | 'text' | 'tooltip' | 'path' | 'angle';
@@ -27,6 +29,7 @@ const resultSchema = z.object({
 });
 
 const WORKSHEET_FILE = '/cache/worksheet.xml';
+const SESSION = '12345';
 const WORKBOOK_FILE = '/cache/workbook.xml';
 const COLUMN_REF = '[Sample - Superstore].[sum:Profit:qk]';
 const MODIFIED_XML = '<worksheet name="Sheet 1"><table></table></worksheet>';
@@ -41,6 +44,7 @@ describe('addFieldTool', () => {
     expect(tool.name).toBe('add-field');
     expect(tool.description).toContain('Rows, Columns, or an encoding');
     expect(tool.paramsSchema).toMatchObject({
+      session: expect.any(Object),
       worksheetFile: expect.any(Object),
       target: expect.any(Object),
       columnRef: expect.any(Object),
@@ -122,6 +126,17 @@ describe('addFieldTool', () => {
     expect(writeFileSync).toHaveBeenCalledWith(WORKSHEET_FILE, MODIFIED_XML, 'utf-8');
   });
 
+  it('writes a fingerprint sidecar after updating the worksheet cache file', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    await getResult({ worksheetFile: WORKSHEET_FILE, target: 'rows', columnRef: COLUMN_REF });
+
+    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKSHEET_FILE, SESSION);
+  });
+
   it('does not use the Tableau command channel after a successful field edit', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
@@ -133,6 +148,7 @@ describe('addFieldTool', () => {
 
     const result = await callback(
       {
+        session: SESSION,
         worksheetFile: WORKSHEET_FILE,
         target: 'rows',
         columnRef: COLUMN_REF,
@@ -428,7 +444,7 @@ async function getResult({
   const tool = getAddFieldTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
-    { worksheetFile, target, columnRef, encodingType, index, workbookFile },
+    { session: SESSION, worksheetFile, target, columnRef, encodingType, index, workbookFile },
     getMockRequestHandlerExtra(),
   );
 }

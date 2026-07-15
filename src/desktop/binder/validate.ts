@@ -134,6 +134,71 @@ const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);
 // only; MIN/MAX on a plain string dimension remains illegal (unchanged).
 const TEMPORAL_MINMAX_DERIVATIONS: ReadonlySet<string> = new Set(['min', 'max']);
 
+// Geo semantic-role concept check (red-team GEO-02). MIRRORS the private
+// tables in hash-gated src/desktop/binder/classify.ts (geoConceptFromSlotId /
+// GEO_SEMANTIC_ROLE_CONCEPT) — they are intentionally not exported because this
+// port must keep lockstep-core bytes unchanged.
+type GeoConcept = 'country' | 'state' | 'city' | 'zip';
+
+const GEO_TOKEN_CONCEPT: Readonly<Record<string, GeoConcept>> = {
+  country: 'country',
+  nation: 'country',
+  state: 'state',
+  province: 'state',
+  region: 'state',
+  admin: 'state',
+  city: 'city',
+  zip: 'zip',
+  zipcode: 'zip',
+  postal: 'zip',
+};
+
+const GEO_SEMANTIC_ROLE_CONCEPT: Readonly<Record<string, GeoConcept>> = {
+  '[Country].[ISO3166_2]': 'country',
+  '[Country].[Name]': 'country',
+  '[State].[Name]': 'state',
+  '[City].[Name]': 'city',
+  '[ZipCode].[Name]': 'zip',
+};
+
+function geoNameTokens(s: string): string[] {
+  return s
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+function geoConceptFromSlotId(slotId: string): GeoConcept | null {
+  for (const t of geoNameTokens(slotId)) {
+    const concept = GEO_TOKEN_CONCEPT[t];
+    if (concept) return concept;
+  }
+  return null;
+}
+
+function geoConceptFromSemanticRole(semanticRole?: string): GeoConcept | null {
+  if (!semanticRole) return null;
+  return GEO_SEMANTIC_ROLE_CONCEPT[semanticRole] ?? null;
+}
+
+/**
+ * A geo slot must not bind a field whose Tableau semantic role names a
+ * DIFFERENT geo concept — a [City].[Name]-tagged field can't fill a
+ * state/province slot no matter what its name suggests. Fires only when BOTH
+ * concepts are known; an untagged field or exotic slot keeps today's
+ * dimension-only acceptance.
+ */
+function geoConceptMismatch(
+  slot: SlotSpec,
+  f: SchemaField,
+): { slotConcept: GeoConcept; fieldConcept: GeoConcept } | null {
+  if (slot.kind !== 'geo') return null;
+  const slotConcept = geoConceptFromSlotId(slot.slot_id);
+  const fieldConcept = geoConceptFromSemanticRole(f.semanticRole);
+  if (!slotConcept || !fieldConcept || slotConcept === fieldConcept) return null;
+  return { slotConcept, fieldConcept };
+}
+
 /** Column-instance type suffix (field-resolver.ts:107-112 / field-builder.ts:408-410). */
 function typeSuffixFor(type: string): string {
   if (type === 'quantitative') return 'qk';
@@ -311,6 +376,21 @@ export function validateBinding(
         detail:
           `slot '${slotId}' expects ${slot.kind} but "${fieldQuery}" is ` +
           `role=${f.role}, type=${f.type}, datatype=${f.datatype}`,
+      });
+      continue;
+    }
+
+    // Gate 3b: geo semantic-role concept (red-team GEO-02) — the deterministic
+    // path already enforces this in pickGeoField; the validate leg must too or
+    // a City-tagged field can bind a state slot via Call-2.
+    const geoMismatch = geoConceptMismatch(slot, f);
+    if (geoMismatch) {
+      blockers.push({
+        code: 'kind-mismatch',
+        slot_id: slotId,
+        detail:
+          `slot '${slotId}' expects geo concept ${geoMismatch.slotConcept} but "${fieldQuery}" is tagged ` +
+          `semanticRole=${f.semanticRole} (${geoMismatch.fieldConcept})`,
       });
       continue;
     }

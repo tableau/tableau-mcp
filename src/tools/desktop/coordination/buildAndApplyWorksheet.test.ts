@@ -98,6 +98,23 @@ describe('buildAndApplyWorksheetTool', () => {
     expect(result.content[0].text).toContain('ranking-ordered-bar');
   });
 
+  it('reports skipped readback caveat when apply succeeds without verification', async () => {
+    const extra = makeExtra();
+    vi.mocked(loadWorksheetXml).mockResolvedValue(
+      new Ok({
+        readbackWarnings: [],
+        readbackVerification: { ok: true, status: 'skipped', message: 'worksheet busy' },
+      }),
+    );
+
+    const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('could not verify (readback unavailable)');
+    expect(result.content[0].text).not.toMatch(/\bverified\b/i);
+  });
+
   it('should return error when workbook file does not exist', async () => {
     const extra = makeExtra();
     vi.mocked(existsSync).mockReturnValue(false);

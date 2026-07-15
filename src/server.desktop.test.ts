@@ -213,7 +213,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['validate-proposal', 2014], // do not grow
     ['dashboard-auto-apply', 1829], // do not grow
     ['dashboard-health-check', 1821], // do not grow
-    ['inject-template', 1382], // do not grow
+    ['inject-template', 1356], // do not grow
     ['build-and-apply-worksheet', 1274], // do not grow
   ]);
 

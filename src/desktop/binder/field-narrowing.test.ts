@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { buildLlmInput } from './classify.js';
+import { buildLlmInput } from './binder.js';
 import type { Family, SlotKind, TemplateManifest } from './manifest-types.js';
 import type { SchemaField, SchemaSummary } from './schema-summary.js';
 
@@ -29,6 +29,7 @@ function field(
   role: 'dimension' | 'measure',
   type: string,
   datatype: string,
+  semanticRole?: string,
 ): SchemaField {
   return {
     name,
@@ -36,6 +37,7 @@ function field(
     role,
     type,
     datatype,
+    ...(semanticRole ? { semanticRole } : {}),
     datasource: 'DS',
     isAggregated: false,
     column_ref: `[DS].[${name}]`,
@@ -189,6 +191,31 @@ describe('binder/buildLlmInput — field narrowing (stage 2B)', () => {
       fields.map((f) => ({ name: f.name, role: f.role, type: f.type, datatype: f.datatype })),
     );
     expect(input.more_available).toBeUndefined();
+  });
+
+  // Red-team GEO-03: the propose model can't respect geo tags it never sees.
+  it('includes semanticRole for geo-tagged fields in the propose payload', () => {
+    const fields = [
+      field('Sales', 'measure', 'quantitative', 'real'),
+      field('Territory', 'dimension', 'nominal', 'string', '[State].[Name]'),
+    ];
+    const summary: SchemaSummary = { datasource: 'DS', fields };
+
+    const input = buildLlmInput('bar of Sales by Territory', barTemplate(), summary);
+
+    expect(input.fields.find((f) => f.name === 'Territory')).toEqual({
+      name: 'Territory',
+      role: 'dimension',
+      type: 'nominal',
+      datatype: 'string',
+      semanticRole: '[State].[Name]',
+    });
+    expect(input.fields.find((f) => f.name === 'Sales')).toEqual({
+      name: 'Sales',
+      role: 'measure',
+      type: 'quantitative',
+      datatype: 'real',
+    });
   });
 
   it('more_available reports the exact withheld count', () => {

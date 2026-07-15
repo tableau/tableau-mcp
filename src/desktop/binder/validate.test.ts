@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { loadManifests } from './manifest.js';
@@ -13,6 +15,7 @@ function field(p: {
   datatype: string;
   caption?: string;
   isAggregated?: boolean;
+  semanticRole?: string;
   datasource?: string;
 }): SchemaField {
   const bare = p.columnName.replace(/^\[|\]$/g, '');
@@ -24,6 +27,7 @@ function field(p: {
     role: p.role,
     type: p.type,
     datatype: p.datatype,
+    ...(p.semanticRole ? { semanticRole: p.semanticRole } : {}),
     datasource: ds,
     isAggregated: p.isAggregated ?? false,
     column_ref: `[${ds}].[none:${bare}:nk]`,
@@ -202,6 +206,60 @@ describe('binder/validate — gate 3: kind/role compatibility', () => {
       ],
     };
     expect(validateBinding(m, p, SUMMARY).ok).toBe(true);
+  });
+
+  // Gate 3b (red-team GEO-02): geo slots must respect the field's Tableau
+  // semantic-role concept, mirroring pickGeoField on the deterministic path.
+  const geoSummary = (regionSemanticRole?: string): SchemaSummary => ({
+    datasource: 'Superstore',
+    fields: [
+      field({
+        columnName: '[Country]',
+        role: 'dimension',
+        type: 'nominal',
+        datatype: 'string',
+        semanticRole: '[Country].[Name]',
+      }),
+      field({
+        columnName: '[Region]',
+        role: 'dimension',
+        type: 'nominal',
+        datatype: 'string',
+        semanticRole: regionSemanticRole,
+      }),
+      field({ columnName: '[Profit]', role: 'measure', type: 'quantitative', datatype: 'real' }),
+    ],
+  });
+  const geoProposal = (m: TemplateManifest): BindingProposal => ({
+    template: m.template,
+    title: 't',
+    bindings: [
+      { slot_id: 'country', field: 'Country' },
+      { slot_id: 'state', field: 'Region' },
+      { slot_id: 'profit', field: 'Profit' },
+    ],
+  });
+
+  it('fire: a City-tagged dimension cannot bind a state geo slot', () => {
+    const m = manifests.get('spatial-choropleth-map')!;
+    const r = validateBinding(m, geoProposal(m), geoSummary('[City].[Name]'));
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const blocker = r.blockers.find((b) => b.code === 'kind-mismatch' && b.slot_id === 'state');
+      expect(blocker).toBeDefined();
+      expect(blocker!.detail).toContain('geo concept state');
+      expect(blocker!.detail).toContain('[City].[Name]');
+    }
+  });
+
+  it("no-fire: an untagged dimension keeps today's geo-slot acceptance", () => {
+    const m = manifests.get('spatial-choropleth-map')!;
+    expect(validateBinding(m, geoProposal(m), geoSummary(undefined)).ok).toBe(true);
+  });
+
+  it('no-fire: a matching State-tagged dimension binds the state geo slot', () => {
+    const m = manifests.get('spatial-choropleth-map')!;
+    expect(validateBinding(m, geoProposal(m), geoSummary('[State].[Name]')).ok).toBe(true);
   });
 });
 
@@ -1179,4 +1237,24 @@ describe('binder/validate — XML escaping in the emitted payload (M10 Finding 1
       expect(values).toContain('[Superstore].[none:Region:nk]');
     }
   });
+});
+
+describe('binder/validate — geo mirror parity with lockstep classify.ts (GEO-02 port)', () => {
+  // The geo tables here MIRROR private tables in hash-gated classify.ts (not
+  // exported so lockstep-core bytes stay unchanged) — pin them token-identical
+  // at the source level so classifier table edits can't silently drift the gate.
+  const extractTable = (source: string, constName: string): string => {
+    const match = source.match(new RegExp(`const ${constName}[^=]*= \\{[^}]*\\};`));
+    if (!match) throw new Error(`${constName} not found`);
+    return match[0].replace(new RegExp(`const ${constName}[^=]*=`), '');
+  };
+
+  it.each(['GEO_TOKEN_CONCEPT', 'GEO_SEMANTIC_ROLE_CONCEPT'])(
+    '%s literal matches classify.ts byte-for-byte',
+    (constName) => {
+      const validateSrc = fs.readFileSync(path.join(__dirname, 'validate.ts'), 'utf-8');
+      const classifySrc = fs.readFileSync(path.join(__dirname, 'classify.ts'), 'utf-8');
+      expect(extractTable(validateSrc, constName)).toBe(extractTable(classifySrc, constName));
+    },
+  );
 });

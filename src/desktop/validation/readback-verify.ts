@@ -20,6 +20,14 @@ export interface ReadbackFinding {
   severity: ReadbackFindingSeverity;
 }
 
+export type ReadbackVerificationStatus = 'passed' | 'warning' | 'failed' | 'skipped';
+
+export interface ReadbackVerificationResult {
+  ok: boolean;
+  status: ReadbackVerificationStatus;
+  message?: string;
+}
+
 type XmlRecord = Record<string, any>;
 
 interface EncodingSignature {
@@ -360,6 +368,13 @@ export function formatReadbackVerificationError(findings: ReadbackFinding[]): st
     'The rendered chart does NOT match the intent — likely an invalid/unsupported node. ' +
     'Fix the worksheet XML to use Tableau-supported shelf, mark, filter, and encoding nodes, then re-apply.'
   );
+}
+
+export function formatReadbackVerificationStatus(
+  result: ReadbackVerificationResult | undefined,
+): string {
+  if (result?.status !== 'skipped') return '';
+  return 'Apply succeeded, but could not verify (readback unavailable). Re-read the worksheet before relying on the result.';
 }
 
 export function formatReadbackVerificationWarnings(findings: ReadbackFinding[]): string {
