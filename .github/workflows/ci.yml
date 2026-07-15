@@ -37,8 +37,13 @@ jobs:
       - name: Build
         run: npm run build
 
+      # --dirty: the plain build:desktop CLEANS ./build first, deleting the
+      # build/index.js the default build just produced — the e2e suites spawn
+      # `node build/index.js` children, which then die pre-handshake
+      # ("Connection closed") until server.test.ts happens to rebuild it
+      # mid-pool. Root-caused 2026-07-15 on the resync PR (#504).
       - name: Build desktop variant
-        run: npm run build:desktop
+        run: npm run build:desktop:dirty
 
       - name: Build Docker image
         run: npm run build:docker
