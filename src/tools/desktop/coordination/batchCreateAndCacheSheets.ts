@@ -4,6 +4,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { DesktopCache } from '../../../desktop/cache.js';
+import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { getDashboardXml } from '../../../desktop/commands/workbook/getDashboardXml.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheetXml.js';
@@ -126,6 +127,9 @@ export const getBatchCreateAndCacheSheetsTool = (
             id: 'for-parallel-build',
           });
           writeFileSync(workbookFile, workbookXml, 'utf-8');
+          // Fingerprint the cache with the producing Desktop instance so a Phase-2 apply
+          // can refuse a cache from a different (or restarted) Desktop session (W9).
+          writeSidecar(workbookFile, resolvedSession);
 
           // Fetch and cache all worksheet working copies.
           const worksheetFiles: Record<string, string> = {};
@@ -144,6 +148,7 @@ export const getBatchCreateAndCacheSheetsTool = (
             const safeWsName = name.replace(/[^a-zA-Z0-9]/g, '_');
             const file = cache.getCacheFilePath({ prefix: 'worksheet', id: safeWsName });
             writeFileSync(file, wsResult.value, 'utf-8');
+            writeSidecar(file, resolvedSession);
             worksheetFiles[name] = file;
           }
 
@@ -159,6 +164,7 @@ export const getBatchCreateAndCacheSheetsTool = (
             const safeDashName = dashboardName.replace(/[^a-zA-Z0-9]/g, '_');
             dashboardFile = cache.getCacheFilePath({ prefix: 'dashboard', id: safeDashName });
             writeFileSync(dashboardFile, dashResult.value, 'utf-8');
+            writeSidecar(dashboardFile, resolvedSession);
           }
 
           const worksheetFileLines = Object.entries(worksheetFiles)

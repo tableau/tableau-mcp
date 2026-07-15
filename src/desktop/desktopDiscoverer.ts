@@ -12,6 +12,19 @@ const manifestSchema = z.object({
 
 export type DesktopInstanceManifest = z.infer<typeof manifestSchema>;
 
+/**
+ * Agent-actionable recovery text for a stale session (Desktop quit/restarted, or a
+ * cache file produced by a different Desktop instance). Shared by SessionManager's
+ * freshness gate and the cache-fingerprint bleed guard so both speak the same recovery.
+ */
+export function staleSessionRecoveryMessage(sessionId: string | number): string {
+  return (
+    `Session ${sessionId} is stale: that Tableau Desktop process is no longer reachable or was restarted. ` +
+    `Call list-instances and retry with the current session id. ` +
+    `Cached XML files from the old session may not match the current workbook — re-read before applying.`
+  );
+}
+
 export class DesktopDiscoverer {
   private readonly isPidAlive: (pid: number) => boolean;
 

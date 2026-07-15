@@ -9,6 +9,7 @@ import {
   formatExplicitBindErrors,
   schemaSummaryFromAvailableFields,
 } from '../../../desktop/binder/explicit-bind.js';
+import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import {
@@ -23,6 +24,7 @@ import { getTemplateColumnRequirements } from '../../../desktop/templates/templa
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import {
   ArgsValidationError,
+  CacheSessionMismatchError,
   DesktopCommandExecutionError,
   FileNotFoundError,
   WorksheetXmlLoadFailedError,
@@ -128,6 +130,13 @@ export const getBuildAndApplyWorksheetTool = (
           );
           if (gateResult) {
             return new Ok(gateResult);
+          }
+
+          // Cross-instance cache-bleed guard (W9): refuse a cache produced by a different
+          // (or restarted) Desktop session — its XML may not match the current workbook.
+          const workbookSidecar = checkSidecar(workbookFile, resolvedSession, 'workbook');
+          if (!workbookSidecar.ok) {
+            return new CacheSessionMismatchError(workbookSidecar.message!).toErr();
           }
 
           const workbookXml = readFileSync(workbookFile, 'utf-8');
