@@ -11,7 +11,10 @@ import {
   xmlByteLength,
 } from '../../../desktop/inlineXmlCap.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
-import { formatReadbackVerificationWarnings } from '../../../desktop/validation/readback-verify.js';
+import {
+  formatReadbackVerificationStatus,
+  formatReadbackVerificationWarnings,
+} from '../../../desktop/validation/readback-verify.js';
 import {
   ArgsValidationError,
   CacheSessionMismatchError,
@@ -149,9 +152,13 @@ export const getApplyWorksheetTool = (
           const readbackWarning = result.isOk()
             ? formatReadbackVerificationWarnings(result.value.readbackWarnings)
             : '';
+          const readbackStatus = result.isOk()
+            ? formatReadbackVerificationStatus(result.value.readbackVerification)
+            : '';
+          const updateStatus = readbackStatus || 'The worksheet has been updated.';
 
           return new Ok({
-            message: `Successfully applied worksheet update for "${worksheetName}". The worksheet has been updated.${note}${readbackWarning}`,
+            message: `Successfully applied worksheet update for "${worksheetName}". ${updateStatus}${note}${readbackWarning}`,
           });
         },
       });

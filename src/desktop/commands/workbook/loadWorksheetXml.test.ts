@@ -181,6 +181,40 @@ describe('loadWorksheetXml (Agent API transport, default)', () => {
     }
   });
 
+  it('reports skipped readback status and logger when post-apply readback is unavailable', async () => {
+    const error = {
+      type: 'command-failed' as const,
+      error: { code: 'BUSY', message: 'worksheet busy', recoverable: true },
+    };
+    const { executor } = dispatchingAgentExecutor(validXml, { 'save-worksheet': Err(error) });
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.readbackWarnings).toEqual([]);
+      expect(result.value.readbackVerification).toMatchObject({
+        ok: true,
+        status: 'skipped',
+      });
+    }
+    expect(loggerModule.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warning',
+        message: expect.stringContaining('readback verification skipped'),
+        data: expect.objectContaining({
+          worksheetName,
+          status: 'skipped',
+        }),
+      }),
+    );
+  });
+
   it('should return error when XML is invalid', async () => {
     const mockExecutor = {} as unknown as LocalExecutor;
 

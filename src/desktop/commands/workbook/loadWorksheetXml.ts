@@ -11,6 +11,7 @@ import {
 import {
   formatReadbackVerificationError,
   type ReadbackFinding,
+  type ReadbackVerificationResult,
   verifyWorksheetReadback,
 } from '../../validation/readback-verify.js';
 import { runValidation } from '../../validation/registry.js';
@@ -36,6 +37,11 @@ export type LoadWorksheetXmlError =
 /** Non-fatal readback warnings surfaced on a successful apply (sort drops/changes). */
 export interface LoadWorksheetXmlOk {
   readbackWarnings: ReadbackFinding[];
+  readbackVerification?: ReadbackVerificationResult;
+}
+
+interface PostApplyWorksheetReadbackVerification extends ReadbackVerificationResult {
+  findings: ReadbackFinding[];
 }
 
 type LoadWorksheetXmlResult = Result<
@@ -50,32 +56,52 @@ type LoadWorksheetXmlResult = Result<
  * apply on a re-read miss: if the worksheet cannot be re-read, verification is skipped
  * (returns no findings) so telemetry can never mask a real apply.
  */
-async function verifyReadbackAfterApply(
+function publicReadbackVerificationResult(
+  result: PostApplyWorksheetReadbackVerification,
+): ReadbackVerificationResult {
+  return result.message
+    ? { ok: result.ok, status: result.status, message: result.message }
+    : { ok: result.ok, status: result.status };
+}
+
+async function verifyPostApplyWorksheetReadback(
   worksheetName: string,
   intendedXml: string,
   executor: WithExecutorAndAbortSignal['executor'],
   signal: WithExecutorAndAbortSignal['signal'],
-): Promise<ReadbackFinding[]> {
+): Promise<PostApplyWorksheetReadbackVerification> {
   try {
     const reread = await getWorksheetXml({ worksheetName, executor, signal });
     if (reread.isErr()) {
+      const message =
+        reread.error.type === 'get-worksheet-xml-error'
+          ? reread.error.error.message
+          : 'could not re-read worksheet after apply';
       log({
         level: 'warning',
         message: 'Post-apply worksheet readback verification skipped — could not re-read worksheet',
         logger: 'worksheetCommands',
-        data: { worksheetName, error: reread.error },
+        data: { worksheetName, status: 'skipped', error: reread.error },
       });
-      return [];
+      return { ok: true, status: 'skipped', findings: [], message };
     }
-    return verifyWorksheetReadback(intendedXml, reread.value);
+    const findings = verifyWorksheetReadback(intendedXml, reread.value);
+    if (findings.some((f) => f.severity === 'error')) {
+      return { ok: false, status: 'failed', findings };
+    }
+    if (findings.some((f) => f.severity === 'warning')) {
+      return { ok: true, status: 'warning', findings };
+    }
+    return { ok: true, status: 'passed', findings: [] };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     log({
       level: 'warning',
       message: 'Post-apply worksheet readback verification skipped — re-read threw',
       logger: 'worksheetCommands',
-      data: { worksheetName, error: error instanceof Error ? error.message : String(error) },
+      data: { worksheetName, status: 'skipped', error: message },
     });
-    return [];
+    return { ok: true, status: 'skipped', findings: [], message };
   }
 }
 
@@ -84,7 +110,10 @@ async function verifyReadbackAfterApply(
  * (the rendered chart does not match intent), WARNING-severity findings ride along on a
  * successful Ok so the tool can surface them without blocking.
  */
-function readbackOutcome(findings: ReadbackFinding[]): LoadWorksheetXmlResult {
+function readbackOutcome(
+  verification: PostApplyWorksheetReadbackVerification,
+): LoadWorksheetXmlResult {
+  const { findings } = verification;
   const errors = findings.filter((f) => f.severity === 'error');
   if (errors.length > 0) {
     return Err({
@@ -96,7 +125,10 @@ function readbackOutcome(findings: ReadbackFinding[]): LoadWorksheetXmlResult {
       },
     });
   }
-  return Ok({ readbackWarnings: findings });
+  return Ok({
+    readbackWarnings: findings,
+    readbackVerification: publicReadbackVerificationResult(verification),
+  });
 }
 
 export async function loadWorksheetXml({
@@ -104,9 +136,11 @@ export async function loadWorksheetXml({
   xml,
   executor,
   signal,
+  readbackVerificationOut,
 }: {
   worksheetName: string;
   xml: string;
+  readbackVerificationOut?: ReadbackVerificationResult[];
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
@@ -149,8 +183,20 @@ export async function loadWorksheetXml({
   // its command registry, so applying a single sheet re-posts a minimal whole-workbook document.
   // The POST upserts by name: it overwrites the colliding sheet in place and leaves the rest live.
   return getDesktopConfig().externalApiEnabled
-    ? loadWorksheetXmlViaExternalApi({ worksheetName, xml, executor, signal })
-    : loadWorksheetXmlViaAgentApi({ worksheetName, xml, executor, signal });
+    ? loadWorksheetXmlViaExternalApi({
+        worksheetName,
+        xml,
+        executor,
+        signal,
+        readbackVerificationOut,
+      })
+    : loadWorksheetXmlViaAgentApi({
+        worksheetName,
+        xml,
+        executor,
+        signal,
+        readbackVerificationOut,
+      });
 }
 
 async function loadWorksheetXmlViaAgentApi({
@@ -158,9 +204,11 @@ async function loadWorksheetXmlViaAgentApi({
   xml,
   executor,
   signal,
+  readbackVerificationOut,
 }: {
   worksheetName: string;
   xml: string;
+  readbackVerificationOut?: ReadbackVerificationResult[];
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   const result = await executor.executeCommand({
     namespace: 'tabui',
@@ -208,8 +256,9 @@ async function loadWorksheetXmlViaAgentApi({
   // Verify the apply landed durably BEFORE focusing — an ERROR-severity readback means
   // Tableau silently dropped intent-bearing nodes, so we reject and never navigate to the
   // broken sheet (W4). WARNING-severity findings ride along on the successful Ok.
-  const findings = await verifyReadbackAfterApply(worksheetName, xml, executor, signal);
-  const outcomeResult = readbackOutcome(findings);
+  const verification = await verifyPostApplyWorksheetReadback(worksheetName, xml, executor, signal);
+  readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
+  const outcomeResult = readbackOutcome(verification);
   if (outcomeResult.isErr()) return outcomeResult;
 
   await focusAppliedSheetBestEffort({
@@ -227,9 +276,11 @@ async function loadWorksheetXmlViaExternalApi({
   xml,
   executor,
   signal,
+  readbackVerificationOut,
 }: {
   worksheetName: string;
   xml: string;
+  readbackVerificationOut?: ReadbackVerificationResult[];
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   return withApplyLock(async () => {
     const workbookResult = await getWorkbookXml({ executor, signal });
@@ -256,8 +307,14 @@ async function loadWorksheetXmlViaExternalApi({
       data: { worksheetName },
     });
 
-    const findings = await verifyReadbackAfterApply(worksheetName, xml, executor, signal);
-    const outcomeResult = readbackOutcome(findings);
+    const verification = await verifyPostApplyWorksheetReadback(
+      worksheetName,
+      xml,
+      executor,
+      signal,
+    );
+    readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
+    const outcomeResult = readbackOutcome(verification);
     if (outcomeResult.isErr()) return outcomeResult;
 
     await focusAppliedSheetBestEffort({

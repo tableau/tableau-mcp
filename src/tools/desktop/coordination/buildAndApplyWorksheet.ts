@@ -22,6 +22,7 @@ import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenc
 import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
+import { formatReadbackVerificationStatus } from '../../../desktop/validation/readback-verify.js';
 import {
   ArgsValidationError,
   CacheSessionMismatchError,
@@ -304,8 +305,12 @@ export const getBuildAndApplyWorksheetTool = (
             }
           }
 
+          const readbackStatusWarning = applyResult.isOk()
+            ? formatReadbackVerificationStatus(applyResult.value.readbackVerification)
+            : '';
+
           return new Ok({
-            message: `Built and applied worksheet "${worksheetName}" using template "${template}" with ${fields.length} fields.`,
+            message: `Built and applied worksheet "${worksheetName}" using template "${template}" with ${fields.length} fields.${readbackStatusWarning ? ` ${readbackStatusWarning}` : ''}`,
             worksheetName,
             template,
             fieldCount: fields.length,

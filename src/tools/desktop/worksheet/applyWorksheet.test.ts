@@ -24,6 +24,11 @@ describe('applyWorksheetTool', () => {
   const resultSchema = z.object({
     message: z.string(),
   });
+  const skippedReadbackVerification = {
+    ok: true,
+    status: 'skipped' as const,
+    message: 'worksheet busy',
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -98,6 +103,51 @@ describe('applyWorksheetTool', () => {
 
     expect(existsSync).toHaveBeenCalledWith(mockFilePath);
     expect(readFileSync).toHaveBeenCalledWith(mockFilePath, 'utf-8');
+  });
+
+  it('reports skipped readback honestly for inline worksheet XML apply', async () => {
+    const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Ok({ readbackWarnings: [], readbackVerification: skippedReadbackVerification }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: 'Sheet 1',
+      mode: 'inline',
+      worksheetXml: mockXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const message = resultSchema.parse(JSON.parse(result.content[0].text)).message;
+    expect(message).toContain('could not verify (readback unavailable)');
+    expect(message).not.toMatch(/\bverified\b/i);
+  });
+
+  it('reports skipped readback honestly for file-based worksheet apply', async () => {
+    const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
+    const mockFilePath = '/path/to/worksheet.xml';
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(mockXml);
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Ok({ readbackWarnings: [], readbackVerification: skippedReadbackVerification }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: 'Sheet 1',
+      mode: 'file',
+      worksheetFile: mockFilePath,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const message = resultSchema.parse(JSON.parse(result.content[0].text)).message;
+    expect(message).toContain('could not verify (readback unavailable)');
+    expect(message).not.toMatch(/\bverified\b/i);
   });
 
   it('should return error when inline mode is used without worksheetXml', async () => {
