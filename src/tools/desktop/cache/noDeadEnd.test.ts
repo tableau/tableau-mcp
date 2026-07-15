@@ -87,7 +87,13 @@ describe('no-dead-end file workflow for a filesystem-less client', () => {
       "<worksheet name='Sales'><table><rows>[Sales Modified]</rows></table></worksheet>";
     const writeCb = await Provider.from(getWriteCachedXmlTool(new DesktopMcpServer()).callback);
     const writeResult = await writeCb(
-      { filePath: file, xmlContent: modifiedSales, worksheet: 'Sales', dashboard: undefined },
+      {
+        session: 's1',
+        filePath: file,
+        xmlContent: modifiedSales,
+        worksheet: 'Sales',
+        dashboard: undefined,
+      },
       extra(),
     );
     expect(writeResult.isError).toBeFalsy();

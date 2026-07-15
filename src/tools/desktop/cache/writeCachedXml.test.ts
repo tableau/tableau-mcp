@@ -8,14 +8,17 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getWriteCachedXmlTool } from './writeCachedXml.js';
 
 vi.mock('../../../desktop/cache.js');
+vi.mock('../../../desktop/commands/workbook/cacheFingerprint.js');
 vi.mock('fs');
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 
 import { DesktopCache } from '../../../desktop/cache.js';
+import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
 
 const CACHE_DIR = resolve('/tmp/test-cache');
 const CACHED_FILE = `${CACHE_DIR}/worksheet-session-1.xml`;
+const SESSION = '12345';
 const VALID_XML = '<worksheet name="Sheet1"><table/></worksheet>';
 const MALFORMED_XML = '<worksheet name="Sheet1"><table></worksheet>';
 
@@ -41,6 +44,7 @@ describe('writeCachedXmlTool', () => {
     expect(tool.name).toBe('write-cached-xml');
     expect(tool.annotations).toMatchObject({ readOnlyHint: false });
     expect(tool.paramsSchema).toMatchObject({
+      session: expect.any(Object),
       filePath: expect.any(Object),
       xmlContent: expect.any(Object),
     });
@@ -59,6 +63,12 @@ describe('writeCachedXmlTool', () => {
     await getResult(CACHED_FILE, VALID_XML);
 
     expect(writeFileSync).toHaveBeenCalledWith(resolve(CACHED_FILE), VALID_XML, 'utf-8');
+  });
+
+  it('writes a fingerprint sidecar after writing the cache file', async () => {
+    await getResult(CACHED_FILE, VALID_XML);
+
+    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(resolve(CACHED_FILE), SESSION);
   });
 
   it('should return error for malformed XML without writing', async () => {
@@ -245,7 +255,13 @@ async function getResult(
   const tool = getWriteCachedXmlTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
-    { filePath, xmlContent, worksheet: selectors.worksheet, dashboard: selectors.dashboard },
+    {
+      session: SESSION,
+      filePath,
+      xmlContent,
+      worksheet: selectors.worksheet,
+      dashboard: selectors.dashboard,
+    },
     getMockRequestHandlerExtra(),
   );
 }

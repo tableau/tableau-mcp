@@ -10,6 +10,7 @@ import {
   formatExplicitBindErrors,
 } from '../../../desktop/binder/explicit-bind.js';
 import { summarizeSchema } from '../../../desktop/binder/schema-summary.js';
+import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import {
@@ -22,20 +23,18 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  workbookFile: z.string().describe('Workbook cache file path.'),
+  session: z.string().describe('Session ID.'),
+  workbookFile: z.string().describe('Workbook cache file.'),
   templateName: z.string().describe('Template name.'),
   title: z.string().describe('New sheet name; replaces {{TITLE}}.'),
-  sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe('Type of sheet being injected.'),
-  templateParameters: z
-    .record(z.string())
-    .optional()
-    .describe('Additional placeholder substitutions.'),
+  sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe('Sheet type.'),
+  templateParameters: z.record(z.string()).optional().describe('Placeholder substitutions.'),
   fieldMapping: z.record(z.string()).optional().describe('Template field to column-ref map.'),
   insertPosition: z
     .enum(['end', 'before_sheet', 'after_sheet'])
     .optional()
     .describe('Tab insertion position.'),
-  relativeSheetName: z.string().optional().describe('Anchor sheet for before/after insertion.'),
+  relativeSheetName: z.string().optional().describe('Anchor for before/after insertion.'),
 };
 
 const toolTitle = 'Inject Template';
@@ -47,8 +46,8 @@ export const getInjectTemplateTool = (
     name: 'inject-template',
     title: toolTitle,
     description: [
-      'Inject a worksheet/dashboard/story template into a cached workbook (mutates).',
-      'Names from template list; supports {{TITLE}}. Then apply-workbook.',
+      'Inject a template into a cached workbook (mutates).',
+      'Supports {{TITLE}}. Then apply-workbook.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -60,6 +59,7 @@ export const getInjectTemplateTool = (
     },
     callback: async (
       {
+        session,
         workbookFile,
         templateName,
         title,
@@ -74,6 +74,7 @@ export const getInjectTemplateTool = (
       return await tool.logAndExecute({
         extra,
         args: {
+          session,
           workbookFile,
           templateName,
           title,
@@ -103,7 +104,7 @@ export const getInjectTemplateTool = (
 
             // Per-apply calc namespacing identity: the shared core defaults
             // namespacing OFF and never mints its own nonce, so the caller supplies
-            // one. inject-template has no session, so the per-apply identity is the
+            // one. The sidecar uses session for cache fingerprinting; this nonce is
             // target workbook file + apply timestamp; a randomUUID guards against
             // same-millisecond collisions.
             // Manifest enforcement (P0 W-23447710): a caller-supplied mapping for a
@@ -151,6 +152,7 @@ export const getInjectTemplateTool = (
             }
 
             writeFileSync(resolve(workbookFile), result.xml, 'utf-8');
+            writeSidecar(resolve(workbookFile), session);
 
             return new Ok({
               workbookFile,

@@ -4,6 +4,7 @@ import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
 import { parseOuterElement, replaceElement } from '../../../desktop/xmlElement.js';
 import {
@@ -16,15 +17,13 @@ import { DesktopTool } from '../tool.js';
 import { getCacheDir, isWithinCacheDir } from './cachePath.js';
 
 const paramsSchema = {
-  filePath: z.string().describe('Cached working-copy file path to write.'),
+  session: z.string().describe('Session ID.'),
+  filePath: z.string().describe('Cache file path to write.'),
   xmlContent: z
     .string()
-    .describe('Content to write: whole file, or replacement element when a selector is provided.'),
-  worksheet: z
-    .string()
-    .optional()
-    .describe('Optional worksheet splice selector. One selector at a time.'),
-  dashboard: z.string().optional().describe('Optional dashboard splice selector.'),
+    .describe('Content to write; replacement element when a selector is provided.'),
+  worksheet: z.string().optional().describe('Worksheet splice selector. One selector at a time.'),
+  dashboard: z.string().optional().describe('Dashboard splice selector.'),
 };
 
 const toolTitle = 'Save Cached Working Copy';
@@ -36,8 +35,7 @@ export const getWriteCachedXmlTool = (
     name: 'write-cached-xml',
     title: toolTitle,
     description:
-      'Save cached workbook, worksheet, or dashboard content before apply-* tools (mutates cache file). For large files, pass exactly ' +
-      'ONE worksheet or dashboard selector to splice one replacement element.',
+      'Save cached workbook, worksheet, or dashboard content before apply-* tools. For large files, pass ONE selector to splice a replacement element.',
     paramsSchema,
     annotations: {
       title: toolTitle,
@@ -47,12 +45,12 @@ export const getWriteCachedXmlTool = (
       openWorldHint: false,
     },
     callback: async (
-      { filePath, xmlContent, worksheet, dashboard },
+      { session, filePath, xmlContent, worksheet, dashboard },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute({
         extra,
-        args: { filePath, xmlContent, worksheet, dashboard },
+        args: { session, filePath, xmlContent, worksheet, dashboard },
         callback: async () => {
           const absolutePath = resolve(filePath);
           const cacheDir = getCacheDir();
@@ -133,6 +131,7 @@ export const getWriteCachedXmlTool = (
 
           try {
             writeFileSync(absolutePath, contentToWrite, 'utf-8');
+            writeSidecar(absolutePath, session);
             return new Ok({
               filePath,
               bytes: contentToWrite.length,
