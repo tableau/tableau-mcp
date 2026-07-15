@@ -28,8 +28,8 @@ import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './se
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import {
-  webToolGroupNames,
   WebToolGroupName,
+  webToolGroupNames,
   webToolGroups,
   WebToolName,
 } from './tools/web/toolName.js';
