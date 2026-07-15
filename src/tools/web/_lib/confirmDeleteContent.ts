@@ -7,6 +7,7 @@ import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
 import { AllEvidence, AppApprovalEvidence, TagEvidence } from './evidence.js';
@@ -40,7 +41,10 @@ export const getConfirmDeleteContentTool = (server: WebMcpServer): WebTool<typeo
   const confirmDeleteContentTool = new WebTool({
     server,
     name: 'confirm-delete-content',
-    disabled: !config.adminToolsEnabled || !getFeatureGate().isFeatureEnabled('mcp-apps'),
+    disabled: new Provider(
+      async () =>
+        !config.adminToolsEnabled || !(await getFeatureGate().isFeatureEnabled('mcp-apps')),
+    ),
     description: `
 Confirms and executes a content deletion previously previewed by \`delete-content\`. This tool is
 **not visible to the model** — it is invoked only by an explicit human confirmation gesture inside
