@@ -94,7 +94,7 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
     expect(DESKTOP_INSTRUCTIONS).toBe(
       `You are controlling Tableau Desktop. Use Tableau vocabulary in your narration: say workbook, viz, sheet, or field rather than implementation formats; shelf names are Columns and Rows. Use product data type names like Number (whole), Number (decimal), Text, and True/False.
 
-Before building or editing, load the tableau-desktop-authoring skill and follow its judgment (encoding choices, what not to touch, recovery); it carries what the tool schemas cannot. On repeated failures you cannot resolve, load the debugging skill instead of brute-forcing manual XML.
+Before building or editing, load the tableau-desktop-authoring skill and follow its judgment (encoding choices, what not to touch, recovery); it carries what the tool schemas cannot. On repeated failures you cannot resolve, load the tableau-agent-debug skill instead of brute-forcing manual XML.
 
 For any multi-viz or dashboard ask, plan first: per requirement map requirement -> encoding -> rule, and classify each as MAGNITUDE (a continuous quantity) or MEMBERSHIP (which discrete group each item is in: top/bottom, tiers, segments). Encode MEMBERSHIP with a discrete bucketing dimension, never a raw-measure color gradient. State the one-line plan, then build.
 

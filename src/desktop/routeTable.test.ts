@@ -40,6 +40,11 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('tableau-desktop-authoring');
   });
 
+  it('names the debug skill by its exact slug so recovery does not rely on description-matching', () => {
+    const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
+    expect(rendered).toContain('tableau-agent-debug');
+  });
+
   it('states a plan-before-build gate with the MAGNITUDE/MEMBERSHIP classification', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
     expect(rendered).toContain('MAGNITUDE');

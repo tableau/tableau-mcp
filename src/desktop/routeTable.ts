@@ -35,7 +35,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'authoring-skill',
-    text: 'Before building or editing, load the tableau-desktop-authoring skill and follow its judgment (encoding choices, what not to touch, recovery); it carries what the tool schemas cannot. On repeated failures you cannot resolve, load the debugging skill instead of brute-forcing manual XML.',
+    text: 'Before building or editing, load the tableau-desktop-authoring skill and follow its judgment (encoding choices, what not to touch, recovery); it carries what the tool schemas cannot. On repeated failures you cannot resolve, load the tableau-agent-debug skill instead of brute-forcing manual XML.',
   },
   {
     kind: 'prose',
