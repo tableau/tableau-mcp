@@ -116,7 +116,7 @@ const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
 
 function nextActionForEscalation(reason: EscalateReason): NextAction {
   if (reason === 'ambiguous-field' || reason === 'field-not-found') {
-    return prefillNextAction('Resolve the fields first');
+    return prefillNextAction('Resolve the fields first; otherwise ask the user');
   }
   if (reason === 'low-confidence') {
     return prefillNextAction('Pick a higher-confidence proposal');
@@ -145,7 +145,7 @@ function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): 
   let next: string;
   if (reason === 'ambiguous-field' || reason === 'field-not-found') {
     next =
-      'Resolve the field(s) with the resolve-field tool, then call bind-template again with a corrected proposal.';
+      'Resolve the field(s) with the resolve-field tool, then call bind-template again with a corrected proposal; otherwise ask the user with ask-user (present the candidates).';
   } else if (reason === 'low-confidence') {
     next =
       'Confidence was below the floor. Re-examine the candidate template(s), pick the best fit, and re-propose with higher confidence.';

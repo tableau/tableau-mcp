@@ -33,21 +33,16 @@ import { proposalSchema } from './proposalSchema.js';
 // manifest.template == filename, and listTemplateManifests() is [...loadManifests().values()]).
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  ask: z.string().describe('Natural-language chart request.'),
+  session: z.string().optional().describe('Session.'),
+  ask: z.string().describe('Ask.'),
   // WATCH-CLASS (required): bind-template makes `proposal` OPTIONAL (Call-1 classify vs
   // Call-2 validate). validate-proposal has one job — validate a filled proposal — so the
   // proposal is REQUIRED. Left optional, an omitted proposal would drive bindTemplate down
   // the Call-1 classify path and silently return a propose payload instead of a validation
   // (fail-open). Requiring it at the schema fails closed. The proposal shape itself is the
   // SHARED proposalSchema (confidence required, title <= 80, derivation closed enum).
-  proposal: proposalSchema.describe('Filled binding proposal to validate.'),
-  minConfidence: z
-    .number()
-    .min(0)
-    .max(1)
-    .optional()
-    .describe('Proposal confidence floor; default 0.6.'),
+  proposal: proposalSchema.describe('Proposal.'),
+  minConfidence: z.number().min(0).max(1).optional().describe('Min confidence.'),
 };
 
 /** Result of a validate-proposal call: a dry-run verdict, never an applied change. */
@@ -85,9 +80,8 @@ export const getValidateProposalTool = (
     name: 'validate-proposal',
     title,
     description: [
-      "Dry-run a filled binding proposal through bind-template's deterministic Call-2 gate WITHOUT creating or applying a worksheet.",
-      'Returns valid:true with would-be inject args, or valid:false with reason/blockers. When valid, call bind-template with the same proposal.',
-      'content_status reports content freshness (bundled snapshot, not a live fetch). Details: expertise://tableau/tactics/workflow/templates.',
+      'Dry-run bind-template gate; no apply.',
+      'Returns inject args/blockers; if valid, call bind-template.',
     ].join(' '),
     paramsSchema,
     annotations: {

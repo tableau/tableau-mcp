@@ -74,12 +74,23 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     requiredEvidence: [],
   },
   {
+    kind: 'prose',
+    id: 'ask-user-ambiguity',
+    text: 'If ambiguity changes workbook content, call ask-user with urgency=blocking; stop for answer.',
+  },
+  {
     kind: 'route',
     id: 'edit-in-place',
     trigger: 'current/this/that/existing sheet, chart, view, or dashboard',
     action:
-      'edit in place: resolve the target (exact name, else list-worksheets; ask if ambiguous), then refine-worksheet for top-N/sort edits, else get-worksheet-xml -> edit -> apply-worksheet. Never create a new sheet unless explicitly asked.',
-    toolSequence: ['list-worksheets', 'refine-worksheet', 'get-worksheet-xml', 'apply-worksheet'],
+      'edit in place: resolve the target (exact name, else list-worksheets; ask via ask-user if ambiguous), then refine-worksheet for top-N/sort edits, else get-worksheet-xml -> edit -> apply-worksheet. Never create a new sheet unless explicitly asked.',
+    toolSequence: [
+      'list-worksheets',
+      'ask-user',
+      'refine-worksheet',
+      'get-worksheet-xml',
+      'apply-worksheet',
+    ],
     stopConditions: ['Never create a new sheet unless explicitly asked'],
     requiredEvidence: ['resolved worksheet/dashboard target before applying'],
   },

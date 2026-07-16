@@ -26,7 +26,7 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
     title,
     description: [
       'Resolve a free-form field reference to an exact column_ref.',
-      'ALWAYS reports ambiguity; DO NOT GUESS. Re-call with datasource or use list-available-fields.',
+      'ALWAYS reports ambiguity; DO NOT GUESS. Re-call with datasource or list-available-fields; if still ambiguous, ask-user with candidates.',
       'Use before add-field-* when column_ref did not come from list-available-fields.',
     ].join(' '),
     paramsSchema,

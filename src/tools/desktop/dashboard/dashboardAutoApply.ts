@@ -63,8 +63,8 @@ const MIN_ASKS = 2;
 const MAX_ASKS = 6;
 
 const askSchema = z.object({
-  ask: z.string().min(1).describe('Natural-language viz request.'),
-  title: z.string().min(1).max(80).optional().describe('Optional sheet title override.'),
+  ask: z.string().min(1).describe('Viz.'),
+  title: z.string().min(1).max(80).optional().describe('Sheet.'),
 });
 
 const layoutSchema = z.object({
@@ -72,25 +72,16 @@ const layoutSchema = z.object({
     .enum(['auto-grid', 'rows', 'columns'])
     .optional()
     .default('auto-grid')
-    .describe('Dashboard grid layout.'),
-  gridColumns: z.number().optional().describe('Auto-grid column count.'),
+    .describe('Grid.'),
+  gridColumns: z.number().optional().describe('Cols.'),
 });
 
 const paramsSchema = {
-  session: z
-    .string()
-    .optional()
-    .describe('Session ID. Optional only when exactly one Desktop instance is running.'),
-  asks: z
-    .array(askSchema)
-    .min(MIN_ASKS)
-    .max(MAX_ASKS)
-    .describe(
-      `2-${MAX_ASKS} viz asks; every ask must bind deterministically or the whole batch is refused.`,
-    ),
-  dashboardName: z.string().min(1).describe('Name of the dashboard to build and apply.'),
-  title: z.string().optional().describe('Optional dashboard title text.'),
-  layout: layoutSchema.optional().describe('Dashboard layout options.'),
+  session: z.string().optional().describe('Session.'),
+  asks: z.array(askSchema).min(MIN_ASKS).max(MAX_ASKS).describe(`2-${MAX_ASKS} asks.`),
+  dashboardName: z.string().min(1).describe('Name.'),
+  title: z.string().optional().describe('Title.'),
+  layout: layoutSchema.optional().describe('Layout.'),
 };
 
 /** One ask's outcome, tagged with its position and original ask text for diagnostics. */
@@ -188,9 +179,7 @@ export const getDashboardAutoApplyTool = (
     name: 'dashboard-auto-apply',
     title,
     description: [
-      'Bind 2-6 viz asks to templates and APPLY one new/replaced dashboard in one call.',
-      'Every ask must bind deterministically; otherwise NOTHING is applied and each outcome is returned.',
-      'All-or-nothing: duplicate/zone-used titles, user edits, or preflight failures refuse the WHOLE batch. Details: expertise://tableau/tactics/dashboard/zones.',
+      'Build dashboard from 2-6 deterministic asks; no apply on bind, duplicate, edit, or preflight fail.',
     ].join(' '),
     paramsSchema,
     annotations: {

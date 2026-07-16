@@ -180,11 +180,12 @@ describe('bindTemplateTool', () => {
       guidance:
         'Escalated (field-not-found). No worksheet was produced. Blockers: ' +
         '[field-not-found] slot \'val\' No field named "Revenue".. Next: Resolve the field(s) ' +
-        'with the resolve-field tool, then call bind-template again with a corrected proposal.',
+        'with the resolve-field tool, then call bind-template again with a corrected proposal; ' +
+        'otherwise ask the user with ask-user (present the candidates).',
     };
     expect(result.content[0].text).toBe(JSON.stringify(expectedBody));
     expect(result.structuredContent).toEqual({
-      nextAction: { label: 'Resolve the fields first', kind: 'prefill' },
+      nextAction: { label: 'Resolve the fields first; otherwise ask the user', kind: 'prefill' },
     });
     const body = JSON.parse(result.content[0].text);
     expect(body.status).toBe('escalate');

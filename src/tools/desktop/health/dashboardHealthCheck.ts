@@ -43,18 +43,18 @@ import { DesktopTool } from '../tool.js';
 // ── Binding manifest (input) ─────────────────────────────────────────────────
 
 const boundSheetSchema = z.object({
-  title: z.string().describe('Worksheet title.'),
-  templateName: z.string().describe('Bound template name.'),
-  fieldMapping: z.record(z.string()).describe('slot -> column_ref.'),
-  schemaHash: z.string().describe('Bind-time schema hash.'),
-  primaryDatasource: z.string().describe('Bind-time datasource.'),
+  title: z.string().describe('Sheet.'),
+  templateName: z.string().describe('Template.'),
+  fieldMapping: z.record(z.string()).describe('Mapping.'),
+  schemaHash: z.string().describe('Schema.'),
+  primaryDatasource: z.string().describe('Source.'),
 });
 
 const bindingRecordSchema = z.object({
-  dashboardName: z.string().describe('Dashboard name.'),
-  sheets: z.array(boundSheetSchema).describe('Bound worksheets.'),
-  workbookHashAtBind: z.string().describe('Bind-time workbook hash.'),
-  recordedAt: z.string().describe('Bind timestamp.'),
+  dashboardName: z.string().describe('Dashboard.'),
+  sheets: z.array(boundSheetSchema).describe('Sheets.'),
+  workbookHashAtBind: z.string().describe('Workbook.'),
+  recordedAt: z.string().describe('Time.'),
 });
 
 export type DashboardBoundSheet = z.infer<typeof boundSheetSchema>;
@@ -381,8 +381,8 @@ export function runDashboardHealthCheck({
 // ── Tool registration ────────────────────────────────────────────────────────
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  manifest: bindingRecordSchema.describe('Binding manifest from a prior bind.'),
+  session: z.string().optional().describe('Session.'),
+  manifest: bindingRecordSchema.describe('Bind record.'),
 };
 
 const title = 'Dashboard Health Check (Flag-Only)';
@@ -394,9 +394,8 @@ export const getDashboardHealthCheckTool = (
     name: 'dashboard-health-check',
     title,
     description: [
-      'READ-ONLY drift detector for a previously-bound dashboard.',
-      'Flags renamed/deleted sheets, changed fields, orphan zones, and datasource changes.',
-      'Flag-only: never repairs. D9 live render breakage is not structure-detectable and is disclosed. Details: expertise://tableau/tactics/workflow/recovery.',
+      'Read-only.',
+      'Flags sheet/field/zone/source drift; no repairs; D9 render undetectable.',
     ].join(' '),
     paramsSchema,
     annotations: {

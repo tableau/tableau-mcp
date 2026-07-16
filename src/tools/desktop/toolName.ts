@@ -23,6 +23,7 @@ export const desktopToolNames = [
   'lookup-workbook-schema',
   'search-workbook-examples',
   'execute-tableau-command',
+  'ask-user',
   'bind-template',
   'dashboard-auto-apply',
   'dashboard-health-check',
