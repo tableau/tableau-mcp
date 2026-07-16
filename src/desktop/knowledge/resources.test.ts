@@ -26,6 +26,29 @@ describe('desktop knowledge resources', () => {
     expect(content).toContain('apply-worksheet');
   });
 
+  it('surfaces the failure-recovery-honesty entry (stale-cache re-read + receipt honesty)', () => {
+    const resource = listKnowledgeResources().find(
+      (entry) => entry.uri === 'expertise://tableau/tactics/workflow/failure-recovery-honesty',
+    );
+
+    expect(resource?.name).toBe(
+      'Recovering From "Not Found" and Honoring the Verification Receipt',
+    );
+    expect(resource?.description).toContain('stale cache');
+
+    const content = readKnowledgeResource(resource!.uri);
+    // Rule 8 — stale-cache re-read before declaring Tableau unreachable
+    expect(content).toContain('stale cache');
+    expect(content).toContain('get-workbook-xml');
+    expect(content).toContain('list-available-fields');
+    expect(content).toContain('resolve-field');
+    expect(content).toContain('not_found');
+    // Rule 9 — honor the host verification receipt
+    expect(content).toContain('HOST VERIFICATION');
+    expect(content).toContain('verified');
+    expect(content).toContain('unverified');
+  });
+
   it('surfaces the Tableau vocabulary entry for user-facing narration prompts', () => {
     const resource = listKnowledgeResources().find(
       (entry) => entry.uri === 'expertise://tableau/tactics/workflow/tableau-vocabulary',
