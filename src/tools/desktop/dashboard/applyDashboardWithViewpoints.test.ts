@@ -33,8 +33,12 @@ describe('applyDashboardWithViewpointsTool', () => {
     vi.mocked(readFileSync).mockReturnValue(mockDashboardXml);
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(mockWorkbookXml));
     vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(mockWorkbookXml);
-    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Ok({ validationWarnings: [] }));
-    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(Ok({ validationWarnings: [] }));
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Ok({ validationWarnings: [] }),
+    );
+    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
+      Ok({ validationWarnings: [] }),
+    );
   });
 
   it('should create a tool instance with correct properties', () => {

@@ -53,7 +53,9 @@ describe('no-dead-end file workflow for a filesystem-less client', () => {
 
   it('supports get(capped) -> slice-read -> targeted write -> apply(file) with only server tools', async () => {
     vi.spyOn(getWorkbookXmlCmd, 'getWorkbookXml').mockResolvedValue(Ok(WORKBOOK));
-    const loadSpy = vi.spyOn(loadWorkbookXmlCmd, 'loadWorkbookXml').mockResolvedValue(Ok({ validationWarnings: [] }));
+    const loadSpy = vi
+      .spyOn(loadWorkbookXmlCmd, 'loadWorkbookXml')
+      .mockResolvedValue(Ok({ validationWarnings: [] }));
 
     // 1) GET: inline requested, but the cap forces file mode. Agent gets a path + summary,
     //    NOT the 20KB workbook.
