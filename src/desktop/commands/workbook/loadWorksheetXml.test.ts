@@ -131,6 +131,120 @@ describe('loadWorksheetXml (Agent API transport, default)', () => {
     );
   });
 
+  it('rejects before apply when worksheet_name does not match the XML worksheet name', async () => {
+    // Canonical-name gate: the XML root name is the identity Tableau applies. A caller name
+    // that disagrees must fail BEFORE apply so goto-sheet can never target a stale/default sheet.
+    const { executor, calls } = dispatchingAgentExecutor(validXml);
+
+    const result = await loadWorksheetXml({
+      worksheetName: 'Different Sheet',
+      xml: validXml, // name="Sheet 1"
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      invariant(result.error.error.type === 'name-mismatch');
+      // Recovery-oriented (P2a): both names verbatim + a FIX line telling the LLM exactly how to
+      // recover (align worksheet_name to the XML name, or edit the <worksheet name> attribute).
+      expect(result.error.error.message).toBe(
+        'worksheet_name "Different Sheet" does not match the <worksheet name> in the XML ("Sheet 1"). ' +
+          'FIX: Retry with worksheet_name set to the XML\'s name "Sheet 1" — or update the <worksheet name> ' +
+          'attribute in the XML to "Different Sheet" if the caller name is intended.',
+      );
+    }
+    // No apply and no navigation happened.
+    expect(calls.some((c) => c.command === 'load-worksheet')).toBe(false);
+    expect(calls.some((c) => c.command === 'goto-sheet')).toBe(false);
+  });
+
+  it('rejects a <workbook>-wrapped payload before apply with a single-fragment recovery error', async () => {
+    // P1: a whole-workbook document has no top-level <worksheet> identity to gate on. It passes
+    // upstream validation (well-formed) and reaches the resolver, so instead of the misleading
+    // `does not match XML worksheet name ""`, the gate must reject with an actionable, non-empty
+    // recovery hint. It must NOT be "selected" or applied — the fragment-only contract is enforced
+    // downstream by buildMinimalSheetDoc, so accepting a workbook here would only fail later.
+    const { executor, calls } = dispatchingAgentExecutor(validXml);
+    const workbookShaped =
+      "<?xml version='1.0'?><workbook><worksheets>" +
+      '<worksheet name="Sheet 1"><table></table></worksheet></worksheets>' +
+      '<windows><window class="worksheet" name="Sheet 1"/></windows></workbook>';
+
+    const result = await loadWorksheetXml({
+      worksheetName: 'Sheet 1',
+      xml: workbookShaped,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      invariant(result.error.error.type === 'name-mismatch');
+      expect(result.error.error.message).toContain('single <worksheet name="..."> fragment');
+      expect(result.error.error.message).toContain('whole <workbook> document');
+      expect(result.error.error.message).toContain('apply-workbook');
+      // The old, misleading empty-name mismatch must be gone.
+      expect(result.error.error.message).not.toContain('name ""');
+    }
+    // Never applied and never navigated.
+    expect(calls.some((c) => c.command === 'load-worksheet')).toBe(false);
+    expect(calls.some((c) => c.command === 'goto-sheet')).toBe(false);
+  });
+
+  it('passes the gate when the caller arg is NFD and the XML name is NFC (visually identical)', async () => {
+    // P2b: "Café" spelled with a precomposed é (NFC) in the XML vs a decomposed e + combining
+    // acute (NFD) in the caller arg are visually identical and must not false-mismatch. The
+    // canonical name threaded to load + goto-sheet is the name exactly as authored in the XML.
+    const nfcName = 'Caf\u00e9'; // é as a single precomposed code point (NFC)
+    const nfdName = 'Cafe\u0301'; // e + U+0301 combining acute accent (NFD)
+    expect(nfcName).not.toBe(nfdName); // different code points…
+    expect(nfcName.normalize('NFC')).toBe(nfdName.normalize('NFC')); // …but NFC-equal
+    const nfcXml = `<worksheet name="${nfcName}"><table></table></worksheet>`;
+    const { executor, calls } = dispatchingAgentExecutor(nfcXml);
+
+    const result = await loadWorksheetXml({
+      worksheetName: nfdName,
+      xml: nfcXml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(calls.find((c) => c.command === 'load-worksheet')?.args).toMatchObject({
+      worksheetName: nfcName,
+    });
+    expect(calls.at(-1)).toMatchObject({
+      namespace: 'tabdoc',
+      command: 'goto-sheet',
+      args: { sheet: nfcName },
+    });
+  });
+
+  it('focuses the canonical XML worksheet name (not the raw caller arg) after a matched apply', async () => {
+    const { executor, calls } = dispatchingAgentExecutor(validXml);
+
+    const result = await loadWorksheetXml({
+      worksheetName: '  Sheet 1  ', // matches "Sheet 1" after trim
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    // The load command and the final goto-sheet both use the canonical, trimmed name.
+    expect(calls.find((c) => c.command === 'load-worksheet')?.args).toMatchObject({
+      worksheetName: 'Sheet 1',
+    });
+    expect(calls.at(-1)).toMatchObject({
+      namespace: 'tabdoc',
+      command: 'goto-sheet',
+      args: { sheet: 'Sheet 1' },
+    });
+  });
+
   it('fails the apply (readback-failed) when Tableau silently drops an intent-bearing node', async () => {
     const intended =
       '<worksheet name="Sheet 1"><table>' +
