@@ -49,13 +49,10 @@ const paramsSchema = {
     .optional()
     .describe('Session; optional when one Desktop instance is running.'),
   ask: z.string().describe('Viz ask.'),
-  proposal: proposalSchema.optional().describe("Call 2 only: filled proposal from a Call-1 'propose' payload."),
-  minConfidence: z
-    .number()
-    .min(0)
-    .max(1)
+  proposal: proposalSchema
     .optional()
-    .describe('Confidence floor; default 0.6.'),
+    .describe("Call 2 only: filled proposal from a Call-1 'propose' payload."),
+  minConfidence: z.number().min(0).max(1).optional().describe('Confidence floor; default 0.6.'),
   auto_apply: z
     .boolean()
     .optional()
