@@ -44,15 +44,17 @@ export const auditRecordSchema = z.object({
     // Non-sensitive description only — NEVER the raw nonce.
     detail: z.string().optional(),
   }),
-  // Lifecycle of a mutation attempt:
-  //   - 'denied'    — authorization/evidence gate rejected the attempt; nothing mutated.
-  //   - 'allowed'   — the attempt passed the gate. For a preview this is terminal (nothing mutates);
-  //                   for a confirm it records only the AUTHORIZATION decision and is followed by a
-  //                   terminal outcome record once the destructive REST call returns.
-  //   - 'completed' — the confirmed mutation's REST call succeeded.
+  // Lifecycle of a mutation attempt — a preview emits exactly ONE record, and so does a confirm:
+  //   - 'denied'    — authorization/evidence gate rejected the attempt; nothing mutated. The SOLE
+  //                   record for a denied attempt (preview or confirm).
+  //   - 'allowed'   — a PREVIEW passed the gate; terminal for a preview (nothing mutates). A confirm
+  //                   NEVER emits 'allowed' — its authorization is folded into the terminal
+  //                   'completed'/'failed' record below so a confirm logs exactly once.
+  //   - 'completed' — the confirmed mutation's REST call succeeded. The SOLE record for a successful
+  //                   confirm.
   //   - 'failed'    — the confirmed mutation was authorized but its REST call failed; the target is
-  //                   unchanged. Distinguishing this from 'completed' is what an incident responder
-  //                   needs — an 'allowed' record alone cannot tell authorized-but-failed from done.
+  //                   unchanged. The SOLE record for a failed confirm. Distinguishing this from
+  //                   'completed' is what an incident responder needs.
   result: z.enum(['allowed', 'denied', 'completed', 'failed']),
   denyReason: z.string().optional(),
   // Non-sensitive summary of why a 'failed' outcome failed (e.g. the Tableau status/code). Never set

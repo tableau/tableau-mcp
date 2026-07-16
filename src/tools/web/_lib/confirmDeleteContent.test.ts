@@ -18,8 +18,8 @@ vi.mock('../users/resolveOwnerEmail.js', () => ({
 }));
 
 // All mutation-audit records emitted so far, each parsed through the authoritative schema so the
-// assertion fails if the guard ever drops a required field. A confirmed deletion emits two (the
-// allowed authorization decision, then the terminal completed/failed outcome); denied paths emit one.
+// assertion fails if the guard ever drops a required field. A confirmed deletion emits exactly one
+// terminal record (completed or failed); denied paths also emit exactly one.
 function getAuditRecords(): ReturnType<typeof auditRecordSchema.parse>[] {
   const log = logger.log as MockedFunction<typeof logger.log>;
   return log.mock.calls
@@ -223,10 +223,10 @@ describe('confirmDeleteContentTool', () => {
       workbookId: validWorkbookId,
       siteId: 'test-site-id',
     });
-    // A confirmed deletion emits two records: the allowed authorization decision, then the terminal
-    // 'completed' outcome once the REST delete succeeds.
+    // A confirmed deletion emits exactly one record: the terminal 'completed' outcome once the REST
+    // delete succeeds (the confirm's authorization is folded into that terminal record).
     const records = getAuditRecords();
-    expect(records.map((r) => r.result)).toEqual(['allowed', 'completed']);
+    expect(records.map((r) => r.result)).toEqual(['completed']);
     expect(records.every((r) => r.phase === 'confirm')).toBe(true);
     expect(records.every((r) => r.action === 'delete')).toBe(true);
   });
@@ -308,7 +308,7 @@ describe('confirmDeleteContentTool', () => {
       siteId: 'test-site-id',
     });
     const records = getAuditRecords();
-    expect(records.map((r) => r.result)).toEqual(['allowed', 'completed']);
+    expect(records.map((r) => r.result)).toEqual(['completed']);
     expect(records.every((r) => r.phase === 'confirm')).toBe(true);
     expect(records.every((r) => r.action === 'delete')).toBe(true);
   });
@@ -332,7 +332,7 @@ describe('confirmDeleteContentTool', () => {
       taskId: validTaskId,
     });
     const records = getAuditRecords();
-    expect(records.map((r) => r.result)).toEqual(['allowed', 'completed']);
+    expect(records.map((r) => r.result)).toEqual(['completed']);
     expect(records.every((r) => r.phase === 'confirm')).toBe(true);
     expect(records.every((r) => r.action === 'delete')).toBe(true);
   });
@@ -368,10 +368,10 @@ describe('confirmDeleteContentTool', () => {
       tag: testTag,
     });
     expect(result.isError).toBe(true);
-    // An authorized-but-failed deletion records the terminal 'failed' outcome so the audit trail
-    // never claims a deletion that did not happen.
+    // An authorized-but-failed deletion records the terminal 'failed' outcome (the sole audit record
+    // for the confirm) so the audit trail never claims a deletion that did not happen.
     const records = getAuditRecords();
-    expect(records.map((r) => r.result)).toEqual(['allowed', 'failed']);
+    expect(records.map((r) => r.result)).toEqual(['failed']);
     const failed = records.find((r) => r.result === 'failed');
     invariant(failed, 'expected a failed audit record');
     expect(failed.failureDetail).toContain('Resource not found');

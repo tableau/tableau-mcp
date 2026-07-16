@@ -23,8 +23,10 @@ The tool is **two-phase** to keep the destructive action safe:
 1. **Preview** (default — `confirm` omitted or `false`):
    - For `workbook` / `datasource`: tags the resource with `pending-deletion` (reversible,
      visible in the Tableau UI), reports identity, project, and owner.
-   - For `extract-refresh-task`: mints a single-use `confirmationToken` and reports task
-     metadata.
+   - For `extract-refresh-task`: first verifies the task exists on the site (there is no single-get
+     endpoint, so the task list is checked for a matching id) — an unknown `taskId` returns a
+     not-found error and **no** `confirmationToken` is minted. When the task exists, mints a
+     single-use `confirmationToken` and reports task metadata.
    - Does **not** delete anything.
 
 2. **Confirm** (`confirm: true`):
@@ -67,7 +69,7 @@ cannot be previewed or deleted — the request is rejected before any side effec
 
 ### Extract Refresh Task
 
-- [Get Extract Refresh Task](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#get_extract_refresh_task) (preview + confirm verification)
+- [List Extract Refresh Tasks](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_jobs_tasks_and_schedules.htm#list_extract_refresh_tasks) (preview + confirm — existence check, since there is no single-get endpoint)
 - [Delete Extract Refresh Task](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#delete_extract_refresh_task) (confirm)
 
 ### Common

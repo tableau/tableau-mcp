@@ -51,6 +51,11 @@ describe('server', () => {
       ];
       // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
       const flowTools: ReadonlyArray<WebToolName> = ['list-flows', 'get-flow'];
+      // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
+      const insightsTools: ReadonlyArray<WebToolName> = [
+        'generate-insight-cards',
+        'resolve-datasource-luid',
+      ];
 
       let expectedToolNames = [...webToolNames];
 
@@ -67,6 +72,11 @@ describe('server', () => {
       // Filter out flow tools if they are not enabled
       if (process.env.FLOW_TOOLS_ENABLED !== 'true') {
         expectedToolNames = expectedToolNames.filter((name) => !flowTools.includes(name));
+      }
+
+      // Filter out insights tools if they are not enabled
+      if (process.env.INSIGHTS_TOOLS_ENABLED !== 'true') {
+        expectedToolNames = expectedToolNames.filter((name) => !insightsTools.includes(name));
       }
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
@@ -145,6 +155,11 @@ describe('server', () => {
       ];
       // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
       const flowTools: ReadonlyArray<WebToolName> = ['list-flows', 'get-flow'];
+      // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
+      const insightsTools: ReadonlyArray<WebToolName> = [
+        'generate-insight-cards',
+        'resolve-datasource-luid',
+      ];
 
       let expectedWebToolNames = [...webToolNames];
 
@@ -165,6 +180,11 @@ describe('server', () => {
       // Filter out flow tools if they are not enabled
       if (process.env.FLOW_TOOLS_ENABLED !== 'true') {
         expectedWebToolNames = expectedWebToolNames.filter((name) => !flowTools.includes(name));
+      }
+
+      // Filter out insights tools if they are not enabled
+      if (process.env.INSIGHTS_TOOLS_ENABLED !== 'true') {
+        expectedWebToolNames = expectedWebToolNames.filter((name) => !insightsTools.includes(name));
       }
 
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)

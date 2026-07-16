@@ -62,11 +62,11 @@ export interface GuardOutcome {
   actor: MutationActor;
   target: MutationTarget;
   /**
-   * Records the TERMINAL outcome of a confirmed mutation's REST call. The guard's own `allowed`
-   * record captures only the authorization decision (it is emitted before the caller runs the
-   * destructive REST call); the caller MUST call this once the REST result is known so the audit
-   * trail reflects outcome, not just intent. No-op on the preview phase (nothing mutates), so callers
-   * can invoke it unconditionally. See finding: "Audit says 'allowed' before the mutation runs".
+   * Records the TERMINAL outcome of a confirmed mutation's REST call. On a confirm the guard emits NO
+   * 'allowed' record (that would double-log the attempt); this terminal 'completed'/'failed' record
+   * is the SOLE audit entry for the confirm, so the caller MUST invoke it once the REST result is
+   * known or the attempt goes unaudited. No-op on the preview phase (nothing mutates, and the preview
+   * already logged its single 'allowed' record), so callers can invoke it unconditionally.
    */
   recordOutcome: (outcome: { ok: true } | { ok: false; failureDetail?: string }) => void;
 }
@@ -200,21 +200,26 @@ export async function guardMutation<TTarget>({
     await evidence.establish(evidenceCtx);
   }
 
-  // (6) Allowed: record the authorization decision and let the tool perform its mutation / build its
-  // response. For a confirm this is NOT the terminal record — the caller reports the REST outcome via
-  // recordOutcome() below so the audit trail distinguishes completed from authorized-but-failed.
-  emitAuditRecord({
-    actor,
-    tool,
-    action,
-    phase,
-    target,
-    confirmationEvidence: evidenceDescriptor,
-    result: 'allowed',
-  });
+  // (6) Allowed: on a PREVIEW, emit the single terminal 'allowed' record — nothing mutates, so the
+  // authorization decision is the whole story. On a CONFIRM this record is deliberately suppressed:
+  // the caller reports the REST outcome via recordOutcome() below, and that terminal
+  // 'completed'/'failed' record is the sole audit entry for the confirm (a confirm logs EXACTLY
+  // once). Emitting 'allowed' here too would double-log every confirmed mutation.
+  if (phase !== 'confirm') {
+    emitAuditRecord({
+      actor,
+      tool,
+      action,
+      phase,
+      target,
+      confirmationEvidence: evidenceDescriptor,
+      result: 'allowed',
+    });
+  }
 
   // Terminal-outcome recorder handed to the caller. Only a confirm phase mutates, so the preview
-  // phase is a deliberate no-op — callers can invoke it unconditionally after their REST call.
+  // phase is a deliberate no-op — callers can invoke it unconditionally after their REST call. On a
+  // confirm this emits the SOLE audit record for the attempt ('completed' or 'failed').
   const recordOutcome = (outcome: { ok: true } | { ok: false; failureDetail?: string }): void => {
     if (phase !== 'confirm') {
       return;

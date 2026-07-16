@@ -495,14 +495,15 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       expect(record.confirmationEvidence.kind).toBe('registry-nonce');
     });
 
-    it('AC-6(b): confirm with a valid preview token applies the update and audits allowed→completed', async () => {
+    it('AC-6(b): confirm with a valid preview token applies the update and audits a single completed', async () => {
       const result = await previewThenConfirm({ taskId: validTaskId, schedule: validSchedule });
       expect(result.isError).toBe(false);
       expect(mocks.mockUpdateCloudExtractRefreshTask).toHaveBeenCalled();
-      // Two phases, three records: preview=allowed, confirm=allowed (intent), confirm=completed (outcome).
+      // A confirm logs exactly once: the preview emitted its own allowed record, and the confirm
+      // emits only the terminal 'completed' outcome.
       const records = getAuditRecords();
       const confirmRecords = records.filter((r) => r.phase === 'confirm');
-      expect(confirmRecords.map((r) => r.result)).toEqual(['allowed', 'completed']);
+      expect(confirmRecords.map((r) => r.result)).toEqual(['completed']);
       expect(confirmRecords.every((r) => r.action === 'update')).toBe(true);
       expect(confirmRecords.every((r) => r.target.id === validTaskId)).toBe(true);
     });
@@ -577,9 +578,9 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     });
 
     // Fix #2: the audit trail must reflect OUTCOME, not just intent. When the confirmed REST call
-    // fails, the terminal record is 'failed' (with detail) — never a bare 'allowed' that would claim
-    // a mutation which never happened.
-    it('AC-6(f): a failed confirmed update audits allowed then failed (not completed)', async () => {
+    // fails, the sole confirm record is 'failed' (with detail) — never a bare 'allowed' that would
+    // claim a mutation which never happened.
+    it('AC-6(f): a failed confirmed update audits a single failed (not completed, not allowed)', async () => {
       mocks.mockUpdateCloudExtractRefreshTask.mockResolvedValue(
         new Err({
           type: 'tableau-api',
@@ -592,7 +593,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       const result = await previewThenConfirm({ taskId: validTaskId, schedule: validSchedule });
       expect(result.isError).toBe(true);
       const confirmRecords = getAuditRecords().filter((r) => r.phase === 'confirm');
-      expect(confirmRecords.map((r) => r.result)).toEqual(['allowed', 'failed']);
+      expect(confirmRecords.map((r) => r.result)).toEqual(['failed']);
       const failed = confirmRecords.find((r) => r.result === 'failed');
       invariant(failed, 'expected a failed audit record');
       expect(failed.failureDetail).toContain('Tableau 409');

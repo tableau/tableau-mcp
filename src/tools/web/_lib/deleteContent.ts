@@ -8,6 +8,7 @@ import {
   DatasourceNotAllowedError,
   McpToolError,
   PreviewNotRunError,
+  UnknownError,
   WorkbookNotAllowedError,
 } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
@@ -480,6 +481,22 @@ async function runExtractRefreshTaskBranch({
   mcpAppsEnabled: boolean;
 }): Promise<Result<DeleteContentResult, McpToolError>> {
   const siteId = restApi.siteId;
+
+  // Confirm existence BEFORE the guard mints a nonce. Unlike the workbook/datasource branches (whose
+  // resolveTarget reads the target via getWorkbook/queryDatasource, so a missing resource 404s before
+  // any evidence is established), the task branch has no single-get endpoint — so list-and-find is the
+  // only existence check available. Run it unconditionally (preview AND confirm) to stay symmetric
+  // with the sibling branches and to keep the guard from minting a confirmationToken for a task that
+  // does not exist on this site.
+  const tasks = await restApi.tasksMethods.listExtractRefreshTasks({ siteId });
+  if (!tasks.some((task) => task.id === taskId)) {
+    return new UnknownError(
+      `Extract refresh task '${taskId}' not found. Deleting an extract refresh task is Tableau ` +
+        "Cloud only — verify you're connected to a Cloud site (not Server) and that the taskId " +
+        'came from list-extract-refresh-tasks.',
+      404,
+    ).toErr();
+  }
 
   const resolveTarget = async (): Promise<MutationTarget> => ({
     id: taskId,
