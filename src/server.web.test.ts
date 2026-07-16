@@ -160,6 +160,35 @@ describe('server', () => {
     expect(registeredToolNames).toContain('list-datasources');
   });
 
+  it('should not register insight tools by default (INSIGHTS_TOOLS_ENABLED unset)', async () => {
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    // Insight tools are gated off by default so hosts (e.g. Slackbot) stay stable...
+    expect(registeredToolNames).not.toContain('generate-insight-cards');
+    expect(registeredToolNames).not.toContain('resolve-datasource-luid');
+    // ...while unrelated tools stay registered.
+    expect(registeredToolNames).toContain('list-datasources');
+  });
+
+  it('should register insight tools when INSIGHTS_TOOLS_ENABLED is "true"', async () => {
+    vi.stubEnv('INSIGHTS_TOOLS_ENABLED', 'true');
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    expect(registeredToolNames).toContain('generate-insight-cards');
+    expect(registeredToolNames).toContain('resolve-datasource-luid');
+    expect(registeredToolNames).toContain('list-datasources');
+  });
+
   it('should register tools filtered by includeTools', async () => {
     vi.stubEnv('INCLUDE_TOOLS', 'query-datasource');
     const server = getServer();

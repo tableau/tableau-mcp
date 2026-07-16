@@ -648,6 +648,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  INSIGHTS_TOOLS_ENABLED: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable insight-cards MCP tools',
+    description:
+      'Registers the datasource-context insight tools (generate-insight-cards, resolve-datasource-luid). Disabled by default; set to "true" to enable them.',
+    required: false,
+    sensitive: false,
+  },
   ADMIN_GATE_CACHE_TTL_MINUTES: {
     includeInUserConfig: false,
     type: 'string',
