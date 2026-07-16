@@ -94,6 +94,10 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
     expect(DESKTOP_INSTRUCTIONS).toBe(
       `You are controlling Tableau Desktop. Use Tableau vocabulary in your narration: say workbook, viz, sheet, or field rather than implementation formats; shelf names are Columns and Rows. Use product data type names like Number (whole), Number (decimal), Text, and True/False.
 
+Load tableau-desktop-authoring before builds/edits; if unresolved failures repeat, switch to tableau-agent-debug, not manual XML.
+
+Before multi-viz/dashboard builds, plan: classify requirements as MAGNITUDE=continuous quantity or MEMBERSHIP=discrete group; encode MEMBERSHIP with discrete buckets, never raw-measure color gradients. State the one-line plan, then build.
+
 For a plain viz ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot), FIRST call bind-template with the user's ask and auto_apply: true — a confident bind renders the viz in ONE call (~2s server-side, no further tool calls). On propose/escalate, fall back to the general authoring tools (get-workbook-xml -> edit -> apply-workbook, or inject-template for a known template).
 
 For a dashboard ask with 2-6 vizzes (e.g. "a dashboard with sales by region and profit by category"), FIRST call dashboard-auto-apply with one { ask, title? } per viz and a dashboardName — it binds and composes every viz into one dashboard in ONE call. If any ask fails to deterministically bind, nothing is applied and each ask's outcome is returned; fall back to bind-template per viz, or build-and-apply-dashboard for KPI strips / custom zone layouts.
@@ -211,10 +215,10 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // DO NOT GROW these: trim them down and lower/remove the entry. Never raise a
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
-    ['bind-template', 2110], // do not grow
-    ['plan-dashboard-creation', 2040], // do not grow
+    ['bind-template', 1898], // ratcheted down in the 46k trim (W65/#534); do not grow
+    ['plan-dashboard-creation', 1797], // ratcheted down in the 46k trim (W65/#534); do not grow
     ['build-and-apply-dashboard', 2033], // do not grow
-    ['validate-proposal', 1601], // do not grow
+    ['validate-proposal', 1557], // ratcheted down in the 46k trim (W65/#534); do not grow
     ['dashboard-auto-apply', 1300], // +5 (Andy #521 review): restore ask/title noun-role (Viz ask/Sheet title) — funded by byte-negative all-or-nothing description reword; do not grow
     ['dashboard-health-check', 1453], // do not grow
     ['inject-template', 1356], // do not grow

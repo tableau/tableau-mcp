@@ -33,6 +33,16 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     text: 'You are controlling Tableau Desktop. Use Tableau vocabulary in your narration: say workbook, viz, sheet, or field rather than implementation formats; shelf names are Columns and Rows. Use product data type names like Number (whole), Number (decimal), Text, and True/False.',
   },
   {
+    kind: 'prose',
+    id: 'authoring-skill',
+    text: 'Load tableau-desktop-authoring before builds/edits; if unresolved failures repeat, switch to tableau-agent-debug, not manual XML.',
+  },
+  {
+    kind: 'prose',
+    id: 'plan-before-build',
+    text: 'Before multi-viz/dashboard builds, plan: classify requirements as MAGNITUDE=continuous quantity or MEMBERSHIP=discrete group; encode MEMBERSHIP with discrete buckets, never raw-measure color gradients. State the one-line plan, then build.',
+  },
+  {
     kind: 'route',
     id: 'plain-chart',
     trigger:
