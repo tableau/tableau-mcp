@@ -1,8 +1,11 @@
 /**
  * @vitest-environment jsdom
  */
+import type { App } from '@modelcontextprotocol/ext-apps';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('./recordMcpAppErrorClient.js');
+import { reportMcpAppError } from './recordMcpAppErrorClient.js';
 import { showError } from './showError.js';
 
 describe('showError', () => {
@@ -123,6 +126,31 @@ describe('showError', () => {
     // Should not throw
     showError('TOOL_ERROR');
 
+    expect(document.querySelector('.mcp-app-error')).toBeNull();
+  });
+
+  it('reports telemetry with scenario and cause when app is provided', () => {
+    const app = {} as unknown as App;
+    const cause = new Error('JSON parse failed');
+
+    showError('PARSE_ERROR', cause, app);
+
+    expect(vi.mocked(reportMcpAppError)).toHaveBeenCalledWith(app, 'PARSE_ERROR', cause);
+  });
+
+  it('does not report telemetry when app is not provided', () => {
+    showError('TOOL_ERROR');
+
+    expect(vi.mocked(reportMcpAppError)).not.toHaveBeenCalled();
+  });
+
+  it('reports telemetry even when the container is missing', () => {
+    document.body.replaceChildren();
+    const app = {} as unknown as App;
+
+    showError('EMBED_LOAD_ERROR', undefined, app);
+
+    expect(vi.mocked(reportMcpAppError)).toHaveBeenCalledWith(app, 'EMBED_LOAD_ERROR', undefined);
     expect(document.querySelector('.mcp-app-error')).toBeNull();
   });
 });

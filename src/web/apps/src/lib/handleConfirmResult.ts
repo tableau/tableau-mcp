@@ -29,7 +29,7 @@ import {
  */
 export function handleConfirmResult(app: App, result: CallToolResult): void {
   if (!result || result.isError) {
-    showError('TOOL_ERROR');
+    showError('TOOL_ERROR', undefined, app);
     return;
   }
 
@@ -51,5 +51,5 @@ export function handleConfirmResult(app: App, result: CallToolResult): void {
   }
 
   // No known confirm-panel shape matched — surface the error UI rather than silently doing nothing.
-  showError('TOOL_ERROR');
+  showError('TOOL_ERROR', undefined, app);
 }

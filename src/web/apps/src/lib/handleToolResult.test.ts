@@ -12,11 +12,13 @@ vi.mock('./getEmbedTokenToolClient.js');
 vi.mock('./embedTableauViz.js');
 vi.mock('./loadTableauEmbeddingApi.js');
 vi.mock('./openInTableauLink.js');
+vi.mock('./recordMcpAppErrorClient.js');
 
 import { embedTableauViz } from './embedTableauViz.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
+import { reportMcpAppError } from './recordMcpAppErrorClient.js';
 
 describe('handleToolResult', () => {
   let mockApp: App;
@@ -340,5 +342,17 @@ describe('handleToolResult', () => {
 
     // Assert setupOpenInTableauLink WAS called
     expect(vi.mocked(setupOpenInTableauLink)).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports telemetry via the app when a tool error occurs', async () => {
+    const errorResult: CallToolResult = {
+      isError: true,
+      content: [{ type: 'text', text: 'Tool execution failed' }],
+    };
+
+    await handleToolResult(mockApp, errorResult);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(vi.mocked(reportMcpAppError)).toHaveBeenCalledWith(mockApp, 'TOOL_ERROR', undefined);
   });
 });

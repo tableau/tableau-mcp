@@ -56,7 +56,7 @@ describe('handleConfirmResult', () => {
   it('shows error UI when tool returns error result (isError: true)', () => {
     handleConfirmResult(mockApp, { isError: true, content: [{ type: 'text', text: 'boom' }] });
 
-    expect(vi.mocked(showError)).toHaveBeenCalledWith('TOOL_ERROR');
+    expect(vi.mocked(showError)).toHaveBeenCalledWith('TOOL_ERROR', undefined, mockApp);
     expect(vi.mocked(renderDeleteWorkbookConfirm)).not.toHaveBeenCalled();
   });
 
@@ -65,7 +65,7 @@ describe('handleConfirmResult', () => {
     handleConfirmResult(mockApp, null as any);
 
     expect(vi.mocked(showError)).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(showError)).toHaveBeenCalledWith('TOOL_ERROR');
+    expect(vi.mocked(showError)).toHaveBeenCalledWith('TOOL_ERROR', undefined, mockApp);
   });
 
   it('routes a delete-workbook confirm result to renderDeleteWorkbookConfirm', () => {
@@ -113,7 +113,7 @@ describe('handleConfirmResult', () => {
   it('shows error UI when no known confirm-panel shape matches', () => {
     handleConfirmResult(mockApp, okResult);
 
-    expect(vi.mocked(showError)).toHaveBeenCalledWith('TOOL_ERROR');
+    expect(vi.mocked(showError)).toHaveBeenCalledWith('TOOL_ERROR', undefined, mockApp);
     expect(vi.mocked(renderDeleteWorkbookConfirm)).not.toHaveBeenCalled();
     expect(vi.mocked(renderDeleteDatasourceConfirm)).not.toHaveBeenCalled();
     expect(vi.mocked(renderDeleteExtractRefreshTaskConfirm)).not.toHaveBeenCalled();

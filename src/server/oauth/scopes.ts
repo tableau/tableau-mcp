@@ -291,6 +291,11 @@ const toolScopeMap: Record<
     mcp: [],
     api: new Set<TableauApiScope>(),
   },
+  // MCP-app error telemetry relay: no Tableau REST API calls, no content scope required.
+  'record-mcp-app-error': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
   // Admin Insights (admin-only). Resolves dataset LUID via list-datasources, then VDS query.
   // Bypasses resourceAccessChecker — datasources are internal/known and admin-gated.
   'query-admin-insights-ts-events': {
@@ -395,6 +400,7 @@ function getEnabledToolNames(): Set<WebToolName> {
   // human-gesture confirm steps for their preview tools and only exist when the iframe can render.
   if (!featureGate.isFeatureEnabled('mcp-apps')) {
     enabledTools.delete('get-embed-token');
+    enabledTools.delete('record-mcp-app-error');
     enabledTools.delete('confirm-delete-workbook');
     enabledTools.delete('confirm-delete-datasource');
     enabledTools.delete('confirm-delete-extract-refresh-task');

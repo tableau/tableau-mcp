@@ -43,7 +43,7 @@ export function extractUrlObjectFromResult(result: CallToolResult): string {
  */
 export async function handleToolResult(app: App, result: CallToolResult): Promise<void> {
   if (!result || result.isError) {
-    showError('TOOL_ERROR');
+    showError('TOOL_ERROR', undefined, app);
     return;
   }
 
@@ -52,7 +52,7 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
   try {
     viewUrl = extractUrlObjectFromResult(result);
   } catch (e) {
-    showError('PARSE_ERROR', e);
+    showError('PARSE_ERROR', e, app);
     return;
   }
 
@@ -60,7 +60,7 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
   try {
     await loadTableauEmbeddingApi(viewUrl);
   } catch (e) {
-    showError('EMBED_LOAD_ERROR', e);
+    showError('EMBED_LOAD_ERROR', e, app);
     return;
   }
 
@@ -69,12 +69,12 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
   try {
     token = await callGetEmbedTokenTool(app);
   } catch (e) {
-    showError('AUTH_ERROR', e);
+    showError('AUTH_ERROR', e, app);
     return;
   }
 
   // Auth failure (runtime) - handled by onError callback
-  embedTableauViz(viewUrl, token, () => showError('AUTH_ERROR'));
+  embedTableauViz(viewUrl, token, () => showError('AUTH_ERROR', undefined, app));
 
   const main = document.querySelector('.main');
   if (main) {

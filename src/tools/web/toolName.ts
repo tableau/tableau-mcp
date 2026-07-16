@@ -18,6 +18,7 @@ export const webToolNames = [
   'query-datasource',
   'get-datasource-metadata',
   'get-embed-token',
+  'record-mcp-app-error',
   'get-workbook',
   'get-view',
   'get-view-data',
@@ -97,7 +98,12 @@ export const webToolGroups = {
   ],
   jobs: ['list-jobs'],
   users: ['list-users'],
-  'token-management': ['get-embed-token', 'revoke-access-token', 'reset-consent'],
+  'token-management': [
+    'get-embed-token',
+    'record-mcp-app-error',
+    'revoke-access-token',
+    'reset-consent',
+  ],
   'admin-insights': [
     'query-admin-insights',
     'query-admin-insights-ts-events',
