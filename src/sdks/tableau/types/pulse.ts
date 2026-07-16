@@ -361,7 +361,9 @@ export const pulseBundleRequestSchema = z.object({
         definition: z.object({
           datasource: z.object({
             id: z.string(),
-            id_type: z.enum(['DATASOURCE_ID_TYPE_PUBLISHED', 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE']).optional(),
+            id_type: z
+              .enum(['DATASOURCE_ID_TYPE_PUBLISHED', 'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE'])
+              .optional(),
           }),
           basic_specification: pulseBasicSpecificationSchema,
           is_running_total: z.boolean(),
