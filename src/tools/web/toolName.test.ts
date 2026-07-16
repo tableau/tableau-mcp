@@ -10,7 +10,11 @@ import {
   webToolNames,
 } from './toolName.js';
 
-const MAX_TOOL_NAME_LENGTH = 64;
+// AWS Bedrock enforces a 64-char limit on tool names. When registered as a
+// Claude Code plugin, every tool name is prefixed with
+// mcp__plugin_<plugin>_<server_key>__ (minimum 22 chars with empty server key),
+// leaving at most 42 characters for the tool name itself.
+const MAX_TOOL_NAME_LENGTH = 42;
 
 describe('WebToolName', () => {
   it('should validate each tool belongs to a group', () => {
