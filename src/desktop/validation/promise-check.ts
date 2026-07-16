@@ -11,7 +11,7 @@
  *
  * Ported from agent-to-tableau-desktop.
  */
-import type { ReadbackVerificationResult } from './readback-verify.js';
+import type { ReadbackFinding, ReadbackVerificationResult } from './readback-verify.js';
 import type { ValidationIssue } from './types.js';
 
 export type PromiseOutcome = 'verified' | 'unverified' | 'failed';
@@ -19,6 +19,27 @@ export type PromiseOutcome = 'verified' | 'unverified' | 'failed';
 export interface WorksheetReceiptInput {
   validationWarnings: ValidationIssue[];
   readback: ReadbackVerificationResult | undefined;
+  /**
+   * Readback findings for this apply (same list the warnings above render from).
+   * Used to detect a PROMISED sort — a `<computed-sort>` present in the SUBMITTED
+   * XML — that Tableau dropped or changed on readback. That is a claim failure
+   * ("sorted descending" is exactly what was asked), NOT the incidental sort
+   * drift the readback verifier otherwise treats as a warning, so it must not
+   * ride out as "verified". (W66 item 4)
+   */
+  readbackFindings?: ReadbackFinding[];
+}
+
+/**
+ * True when a readback finding proves a submitted `<computed-sort>` did not
+ * survive intact. `verifyWorksheetReadback` only emits a sort finding for a sort
+ * that was in the SUBMITTED XML, and stamps `node` with the sort tag — so a
+ * `computed-sort` sort finding is definitionally "the promise had a computed-sort
+ * and readback lost/changed it". A `shelf-sort-v2` (incidental) finding does not
+ * qualify, and a submission with no sort produces no finding at all.
+ */
+function promisedSortNotVerified(findings: ReadbackFinding[] | undefined): boolean {
+  return (findings ?? []).some((f) => f.kind === 'sort' && f.node === 'computed-sort');
 }
 
 function formatPreflight(validationWarnings: ValidationIssue[]): string {
@@ -49,6 +70,16 @@ export function formatWorksheetPromiseCheck(input: WorksheetReceiptInput): strin
       outcome = 'unverified';
       parts.push('readback unavailable');
       break;
+  }
+  // A `<computed-sort>` in the submitted XML is an explicit sort promise ("sorted
+  // descending"). If readback shows it dropped/changed, the sort claim FAILED and
+  // must never be labeled verified on the warning-status path (readback sort
+  // discrepancies are warnings, and warnings otherwise map to verified). Incidental
+  // drift — a submission with no `<computed-sort>`, or a non-promise shelf sort —
+  // yields no qualifying finding and is left unchanged. (W66 item 4)
+  if (outcome === 'verified' && promisedSortNotVerified(input.readbackFindings)) {
+    outcome = 'failed';
+    parts.push('promised sort NOT verified (computed-sort dropped/changed on readback)');
   }
   const guard =
     outcome === 'verified'
