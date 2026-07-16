@@ -1,15 +1,14 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
-import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
-import { FileNotFoundError, FileReadError, UnknownError } from '../../../errors/mcpToolError.js';
+import { FileNotFoundError, FileReadError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
+import { refreshWorkbookCache } from './refreshWorkbookCache.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; refreshes live workbook first.'),
@@ -81,22 +80,19 @@ export const getListAvailableFieldsTool = (
               return sessionResult.error.toErr();
             }
 
-            const resolvedSession = sessionResult.value;
-            const executor = await extra.getExecutor(resolvedSession);
-            const result = await getWorkbookXml({ executor, signal: extra.signal });
-            if (result.isErr()) {
-              return new UnknownError(
-                `Failed to refresh workbook from Tableau before listing fields: ${JSON.stringify(result.error)}. Retry without session to read the cache as-is.`,
-              ).toErr();
+            // Shared refresh seam (W-23447478): resolve-field reuses the identical
+            // re-snapshot + cache/sidecar-rewrite path. list-available-fields fails
+            // hard on a refresh failure (never silently lists stale fields).
+            const refresh = await refreshWorkbookCache({
+              extra,
+              workbookFile,
+              resolvedSession: sessionResult.value,
+              action: 'listing fields',
+            });
+            if (!refresh.ok) {
+              return refresh.error.toErr();
             }
-
-            workbookXml = result.value;
-            try {
-              writeFileSync(workbookFile, workbookXml, 'utf-8');
-              writeSidecar(workbookFile, resolvedSession);
-            } catch (error) {
-              return new FileReadError(error).toErr();
-            }
+            workbookXml = refresh.xml;
           } else {
             try {
               workbookXml = readFileSync(workbookFile, 'utf-8');
