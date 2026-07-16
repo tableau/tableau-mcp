@@ -274,10 +274,14 @@ describe('applyWorkbookTool', () => {
     expect(result.content[0].text).toBe(new WorkbookXmlLoadFailedError(error.error).message);
   });
 
-  it('reports failure (not success) when Desktop rejected the load', async () => {
+  it('reports actionable failure text when Desktop rejected the load', async () => {
     // Bug 1 (P0): apply must not lie. When loadWorkbookXml surfaces Desktop's actual
     // load rejection, the tool must return isError with that error text — never the
-    // canned "Successfully applied" message.
+    // canned "Successfully applied" message. This tool-level test exercises the
+    // McpToolError message passthrough (xmlLoadErrorMessage): the command layer's
+    // load-rejected message is surfaced verbatim, no longer JSON.stringify-wrapped.
+    // (The classifier is NOT exercised here — the mock injects at the loadWorkbookXml
+    // boundary, so the message it carries is what the tool must present unwrapped.)
     const mockXml = '<?xml version="1.0"?><workbook></workbook>';
     const deskError =
       'The load was not able to complete successfully. Qualified Name Parse Error --- ' +
@@ -302,6 +306,8 @@ describe('applyWorkbookTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).not.toContain('Successfully applied');
     expect(result.content[0].text).toContain('Qualified Name Parse Error');
+    // Presentation change: the message is surfaced as-is, not JSON.stringify-wrapped.
+    expect(result.content[0].text).not.toMatch(/^\{/);
   });
 
   it('accepts an over-cap inline apply but appends the file-mode note', async () => {

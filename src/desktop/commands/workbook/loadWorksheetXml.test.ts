@@ -362,7 +362,13 @@ describe('loadWorksheetXml (Agent API transport, default)', () => {
     if (result.isErr()) {
       invariant(result.error.type === 'load-worksheet-xml-error');
       invariant(result.error.error.type === 'load-rejected');
+      // The load-rejected message is now the classifier's actionable format, not the
+      // raw Desktop error: it prefixes the classification and appends a FIX recipe while
+      // still preserving Desktop's original text as evidence.
+      expect(result.error.error.message).toContain('Apply failed:');
       expect(result.error.error.message).toContain('Qualified Name Parse Error');
+      expect(result.error.error.message).toContain('FIX:');
+      expect(result.error.error.message).not.toBe(deskError);
     }
   });
 

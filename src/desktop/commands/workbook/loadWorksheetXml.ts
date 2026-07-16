@@ -16,6 +16,7 @@ import {
 } from '../../validation/readback-verify.js';
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
+import { formatApplyFailureForAgent } from './applyFailureClassifier.js';
 import { withApplyLock } from './applyMutex.js';
 import { focusAppliedSheetBestEffort } from './focusAppliedSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
@@ -246,7 +247,14 @@ async function loadWorksheetXmlViaAgentApi({
 
     return Err({
       type: 'load-worksheet-xml-error',
-      error: { type: 'load-rejected', message: outcome.message },
+      error: {
+        type: 'load-rejected',
+        message: formatApplyFailureForAgent({
+          context: 'worksheet',
+          serverError: outcome.message,
+          xmlSnippet: xml,
+        }),
+      },
     });
   }
 

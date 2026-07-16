@@ -10,6 +10,7 @@ import {
 } from '../../toolExecutor/toolExecutor.js';
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
+import { formatApplyFailureForAgent } from './applyFailureClassifier.js';
 import { withApplyLock } from './applyMutex.js';
 import { focusAppliedSheetBestEffort } from './focusAppliedSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
@@ -137,7 +138,14 @@ async function loadDashboardXmlViaAgentApi({
 
     return Err({
       type: 'load-dashboard-xml-error',
-      error: { type: 'load-rejected', message: outcome.message },
+      error: {
+        type: 'load-rejected',
+        message: formatApplyFailureForAgent({
+          context: 'dashboard',
+          serverError: outcome.message,
+          xmlSnippet: xml,
+        }),
+      },
     });
   }
 

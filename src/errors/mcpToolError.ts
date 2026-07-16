@@ -5,10 +5,22 @@ import { fromError } from 'zod-validation-error/v3';
 import type { GetDashboardXmlError } from '../desktop/commands/workbook/getDashboardXml.js';
 import type { GetWorksheetXmlError } from '../desktop/commands/workbook/getWorksheetXml.js';
 import type { LoadDashboardXmlError } from '../desktop/commands/workbook/loadDashboardXml.js';
-import { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWorkbookXml.js';
+import type { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWorkbookXml.js';
 import type { LoadWorksheetXmlError } from '../desktop/commands/workbook/loadWorksheetXml.js';
 import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
+
+// The load-*-xml error union carries Desktop's own rejection text on its message-bearing
+// variants (load-rejected / readback-failed), already formatted for the agent by
+// applyFailureClassifier. Surface that text directly instead of JSON.stringify-wrapping it;
+// fall back to JSON only for the structural variants that carry no message string.
+function xmlLoadErrorMessage(
+  error: LoadWorkbookXmlError | LoadWorksheetXmlError | LoadDashboardXmlError,
+): string {
+  return 'message' in error && typeof error.message === 'string'
+    ? error.message
+    : JSON.stringify(error);
+}
 
 export class McpToolError extends Error {
   readonly type: string;
@@ -258,7 +270,7 @@ export class WorkbookXmlLoadFailedError extends McpToolError {
   constructor(error: LoadWorkbookXmlError) {
     super({
       type: 'load-workbook-xml-error',
-      message: JSON.stringify(error),
+      message: xmlLoadErrorMessage(error),
       statusCode: 500,
     });
   }
@@ -268,7 +280,7 @@ export class WorksheetXmlLoadFailedError extends McpToolError {
   constructor(error: LoadWorksheetXmlError) {
     super({
       type: 'load-worksheet-xml-error',
-      message: JSON.stringify(error),
+      message: xmlLoadErrorMessage(error),
       statusCode: 500,
     });
   }
@@ -298,7 +310,7 @@ export class DashboardXmlLoadFailedError extends McpToolError {
   constructor(error: LoadDashboardXmlError) {
     super({
       type: 'load-dashboard-xml-error',
-      message: JSON.stringify(error),
+      message: xmlLoadErrorMessage(error),
       statusCode: 500,
     });
   }

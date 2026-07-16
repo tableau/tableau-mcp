@@ -14,6 +14,7 @@ import {
 } from '../../toolExecutor/toolExecutor.js';
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
+import { formatApplyFailureForAgent } from './applyFailureClassifier.js';
 import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 
@@ -283,7 +284,14 @@ async function loadUnderlyingMetadataByFilepath({
 
     return Err({
       type: 'load-workbook-xml-error',
-      error: { type: 'load-rejected', message: outcome.message },
+      error: {
+        type: 'load-rejected',
+        message: formatApplyFailureForAgent({
+          context: 'workbook',
+          serverError: outcome.message,
+          xmlSnippet: xml,
+        }),
+      },
     });
   }
 
@@ -341,7 +349,14 @@ async function loadUnderlyingMetadataByText({
 
     return Err({
       type: 'load-workbook-xml-error',
-      error: { type: 'load-rejected', message: outcome.message },
+      error: {
+        type: 'load-rejected',
+        message: formatApplyFailureForAgent({
+          context: 'workbook',
+          serverError: outcome.message,
+          xmlSnippet: xml,
+        }),
+      },
     });
   }
 
