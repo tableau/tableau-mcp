@@ -247,18 +247,77 @@ describe('listAvailableFieldsTool', () => {
     expect(body.message).toContain('No fields found');
     expect(body.fields).toHaveLength(0);
   });
+
+  it('verbosity=slim returns compact fields with no ASCII table', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<workbook/>');
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue(mockFields as any);
+
+    const result = await getResult({ workbookFile: '/workbook.xml', verbosity: 'slim' });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = z
+      .object({
+        datasource: z.string().nullable(),
+        count: z.number(),
+        fields: z.array(
+          z.object({
+            caption: z.string(),
+            role: z.string(),
+            datatype: z.string().optional(),
+          }),
+        ),
+      })
+      .parse(JSON.parse(result.content[0].text));
+
+    // No human-readable table in slim mode; datasource is hoisted to the top level.
+    expect('message' in body).toBe(false);
+    expect(body.datasource).toBe('Sample - Superstore');
+    expect(body.count).toBe(2);
+    expect(body.fields).toHaveLength(2);
+    // caption falls back to the bracket-stripped columnName when caption is absent.
+    expect(body.fields[0]).toMatchObject({ caption: 'Profit', role: 'measure', datatype: 'real' });
+    expect(body.fields[1]).toMatchObject({ caption: 'Category', role: 'dimension', datatype: 'string' });
+    // Per-field metadata not needed for picking is omitted: column_ref (authoring),
+    // and the redundant/near-duplicate name, datasource, semanticRole.
+    const first = body.fields[0] as Record<string, unknown>;
+    expect(first.column_ref).toBeUndefined();
+    expect(first.name).toBeUndefined();
+    expect(first.datasource).toBeUndefined();
+    expect(first.semanticRole).toBeUndefined();
+  });
+
+  it('verbosity=slim on an empty datasource returns count 0 and no fields', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<workbook/>');
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue([]);
+
+    const result = await getResult({ workbookFile: '/workbook.xml', verbosity: 'slim' });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = z
+      .object({ datasource: z.string().nullable(), count: z.number(), fields: z.array(z.any()) })
+      .parse(JSON.parse(result.content[0].text));
+    expect(body.datasource).toBeNull();
+    expect(body.count).toBe(0);
+    expect(body.fields).toHaveLength(0);
+  });
 });
 
 async function getResult({
   workbookFile,
   session,
+  verbosity,
   extra,
 }: {
   workbookFile?: string;
   session?: string;
+  verbosity?: 'slim' | 'full';
   extra?: ReturnType<typeof getMockRequestHandlerExtra>;
 }): Promise<CallToolResult> {
   const tool = getListAvailableFieldsTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
-  return await callback({ session, workbookFile }, extra ?? getMockRequestHandlerExtra());
+  return await callback({ session, workbookFile, verbosity }, extra ?? getMockRequestHandlerExtra());
 }
