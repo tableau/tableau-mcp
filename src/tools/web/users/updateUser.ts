@@ -10,6 +10,8 @@ import { RegistryEvidence } from '../_lib/evidence.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
 import { WebTool } from '../tool.js';
 
+// ServerAdministrator is server-scoped (not assignable via PUT /sites/.../users/...).
+// SupportUser is internal/support-only and not a valid assignment target for customers.
 const VALID_SITE_ROLES = [
   'Creator',
   'Explorer',
@@ -79,14 +81,14 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
 
   **Response:** Confirmation message with the user's updated site role.
 
-  Tableau Cloud scope: \`tableau:users:update\`.
+  Tableau REST API scopes: \`tableau:users:update\`, \`tableau:users:read\`.
   `,
     paramsSchema,
     annotations: {
       title: 'Update User',
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     },
     callback: async (args, extra): Promise<CallToolResult> => {
@@ -135,6 +137,9 @@ export const getUpdateUserTool = (server: WebMcpServer): WebTool<typeof paramsSc
               const { target, recordOutcome } = guardResult.value;
 
               if (!args.confirm) {
+                // In production, guardMutation always calls resolveTarget on success, so
+                // cachedUser is guaranteed set. Fallback retained for unit tests that mock
+                // guardMutation (bypassing resolveTarget).
                 const user =
                   cachedUser ??
                   (await restApi.usersMethods.queryUserOnSite({

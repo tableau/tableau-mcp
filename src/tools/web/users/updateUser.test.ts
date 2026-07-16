@@ -116,6 +116,34 @@ describe('updateUserTool', () => {
         }),
       );
     });
+
+    it('should NOT call updateUser during preview (safety property)', async () => {
+      mocks.mockQueryUserOnSite.mockResolvedValue(mockUser);
+
+      await getToolResult({
+        userId: 'a1b2c3d4-e5f6-4890-abcd-ef1234567890',
+        siteRole: 'Unlicensed',
+      });
+
+      expect(mocks.mockUpdateUser).not.toHaveBeenCalled();
+    });
+
+    it('should handle missing siteRole/email with fallback text', async () => {
+      mocks.mockQueryUserOnSite.mockResolvedValue({
+        ...mockUser,
+        siteRole: undefined,
+        email: undefined,
+      });
+
+      const result = await getToolResult({
+        userId: 'a1b2c3d4-e5f6-4890-abcd-ef1234567890',
+        siteRole: 'Viewer',
+      });
+
+      const text = (result.content[0] as { type: string; text: string }).text;
+      expect(text).toContain('unknown');
+      expect(text).toContain('no email');
+    });
   });
 
   describe('confirm phase', () => {
@@ -206,6 +234,21 @@ describe('updateUserTool', () => {
       });
 
       expect(recordOutcome).toHaveBeenCalledWith({ ok: true });
+    });
+
+    it('should fall back to args.siteRole when API response omits siteRole', async () => {
+      mocks.mockUpdateUser.mockResolvedValue({ name: 'jsmith' });
+
+      const result = await getToolResult({
+        userId: 'a1b2c3d4-e5f6-4890-abcd-ef1234567890',
+        siteRole: 'Unlicensed',
+        confirm: true,
+        confirmationToken: 'test-token',
+      });
+
+      const text = (result.content[0] as { type: string; text: string }).text;
+      expect(text).toContain('Unlicensed');
+      expect(text).toContain('successfully updated');
     });
   });
 

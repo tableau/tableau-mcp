@@ -279,6 +279,37 @@ describe('RegistryEvidence', () => {
       ).resolves.toBe(true);
     });
   });
+
+  describe('binding (payload) isolation', () => {
+    it('a nonce minted with binding A does not verify with binding B', async () => {
+      const evidence = new RegistryEvidence();
+      const target: MutationTarget = { id: 'user-1', kind: 'user' };
+      await evidence.establish(makeCtx({ target, tool: 'update-user', binding: 'user-1:Viewer' }));
+      const nonce = evidence.getEstablishedNonce()!;
+      // Different binding (role swap) → must be rejected.
+      await expect(
+        evidence.verify(
+          makeCtx({
+            target,
+            tool: 'update-user',
+            binding: 'user-1:Unlicensed',
+            confirmationToken: nonce,
+          }),
+        ),
+      ).resolves.toBe(false);
+      // Same binding → accepted.
+      await expect(
+        evidence.verify(
+          makeCtx({
+            target,
+            tool: 'update-user',
+            binding: 'user-1:Viewer',
+            confirmationToken: nonce,
+          }),
+        ),
+      ).resolves.toBe(true);
+    });
+  });
 });
 
 describe('AppApprovalEvidence', () => {
