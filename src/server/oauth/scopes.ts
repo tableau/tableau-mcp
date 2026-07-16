@@ -243,11 +243,11 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_definitions_metrics:read', 'tableau:mcp_site_settings:read']),
   },
-  'list-pulse-metric-defs-from-def-ids': {
+  'list-pulse-metric-definitions': {
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_definitions_metrics:read', 'tableau:mcp_site_settings:read']),
   },
-  'list-pulse-metrics-from-metric-def-id': {
+  'list-pulse-metrics-from-definition-id': {
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_definitions_metrics:read', 'tableau:mcp_site_settings:read']),
   },

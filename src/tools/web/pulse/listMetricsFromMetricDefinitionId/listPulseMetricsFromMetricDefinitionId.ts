@@ -16,7 +16,7 @@ export const getListPulseMetricsFromMetricDefinitionIdTool = (
 ): WebTool<typeof paramsSchema> => {
   const listPulseMetricsFromMetricDefinitionIdTool = new WebTool({
     server,
-    name: 'list-pulse-metrics-from-metric-def-id',
+    name: 'list-pulse-metrics-from-definition-id',
     description: `
 Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metrics for a specific Pulse Metric Definition on the current site.
 

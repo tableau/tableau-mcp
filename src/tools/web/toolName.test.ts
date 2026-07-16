@@ -10,6 +10,8 @@ import {
   webToolNames,
 } from './toolName.js';
 
+const MAX_TOOL_NAME_LENGTH = 64;
+
 describe('WebToolName', () => {
   it('should validate each tool belongs to a group', () => {
     const toolNamesToGroups = Object.entries(webToolGroups).reduce(
@@ -36,6 +38,15 @@ describe('WebToolName', () => {
   it('should not allow a tool group to have the same name as a tool', () => {
     for (const group of webToolGroupNames) {
       expect(isWebToolName(group), `Group ${group} is the same as a tool name`).toBe(false);
+    }
+  });
+
+  it('all tool names are within the max length limit', () => {
+    for (const name of webToolNames) {
+      expect(
+        name.length,
+        `Tool name "${name}" exceeds ${MAX_TOOL_NAME_LENGTH}-char limit (${name.length} chars)`,
+      ).toBeLessThanOrEqual(MAX_TOOL_NAME_LENGTH);
     }
   });
 });
