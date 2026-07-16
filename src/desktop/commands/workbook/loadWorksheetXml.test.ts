@@ -103,6 +103,25 @@ describe('loadWorksheetXml (Agent API transport, default)', () => {
     });
   });
 
+  it('suppresses the post-apply goto-sheet when suppressFocus is set (compose-focus seam)', async () => {
+    // Plan-owned worksheet apply: the final dashboard apply owns focus, so a parallel worksheet
+    // apply must NOT issue its own goto-sheet. The apply + readback still run and still succeed.
+    const { executor, calls } = dispatchingAgentExecutor(validXml);
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      suppressFocus: true,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(calls.some((c) => c.command === 'load-worksheet')).toBe(true);
+    expect(calls.some((c) => c.command === 'save-worksheet')).toBe(true); // readback still runs
+    expect(calls.some((c) => c.command === 'goto-sheet')).toBe(false); // focus suppressed
+  });
+
   it('keeps worksheet apply successful when focusing the worksheet fails', async () => {
     const error = {
       type: 'command-failed' as const,

@@ -204,10 +204,15 @@ export async function loadWorksheetXml({
   executor,
   signal,
   readbackVerificationOut,
+  suppressFocus = false,
 }: {
   worksheetName: string;
   xml: string;
   readbackVerificationOut?: ReadbackVerificationResult[];
+  // When true, skip the post-apply goto-sheet. Set by build-and-apply-worksheet for
+  // worksheets that belong to a multi-task dashboard plan, so the final dashboard apply
+  // owns focus instead of the last of N parallel worksheet applies (compose-focus seam).
+  suppressFocus?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
@@ -271,6 +276,7 @@ export async function loadWorksheetXml({
         executor,
         signal,
         readbackVerificationOut,
+        suppressFocus,
       })
     : loadWorksheetXmlViaAgentApi({
         worksheetName: canonicalName,
@@ -278,6 +284,7 @@ export async function loadWorksheetXml({
         executor,
         signal,
         readbackVerificationOut,
+        suppressFocus,
       }));
   if (result.isErr()) {
     return result;
@@ -293,10 +300,12 @@ async function loadWorksheetXmlViaAgentApi({
   executor,
   signal,
   readbackVerificationOut,
+  suppressFocus = false,
 }: {
   worksheetName: string;
   xml: string;
   readbackVerificationOut?: ReadbackVerificationResult[];
+  suppressFocus?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   const result = await executor.executeCommand({
     namespace: 'tabui',
@@ -356,12 +365,17 @@ async function loadWorksheetXmlViaAgentApi({
   const outcomeResult = readbackOutcome(verification);
   if (outcomeResult.isErr()) return outcomeResult;
 
-  await focusAppliedSheetBestEffort({
-    sheetName: worksheetName,
-    appliedVia: 'load-worksheet',
-    executor,
-    signal,
-  });
+  // Focus the applied sheet UNLESS this apply belongs to a multi-task plan (compose-focus
+  // seam): there the final dashboard apply owns focus, so parallel worksheet applies must
+  // not race to steal it.
+  if (!suppressFocus) {
+    await focusAppliedSheetBestEffort({
+      sheetName: worksheetName,
+      appliedVia: 'load-worksheet',
+      executor,
+      signal,
+    });
+  }
 
   return outcomeResult;
 }
@@ -372,10 +386,12 @@ async function loadWorksheetXmlViaExternalApi({
   executor,
   signal,
   readbackVerificationOut,
+  suppressFocus = false,
 }: {
   worksheetName: string;
   xml: string;
   readbackVerificationOut?: ReadbackVerificationResult[];
+  suppressFocus?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   return withApplyLock(async () => {
     const workbookResult = await getWorkbookXml({ executor, signal });
@@ -412,12 +428,16 @@ async function loadWorksheetXmlViaExternalApi({
     const outcomeResult = readbackOutcome(verification);
     if (outcomeResult.isErr()) return outcomeResult;
 
-    await focusAppliedSheetBestEffort({
-      sheetName: worksheetName,
-      appliedVia: 'load-worksheet',
-      executor,
-      signal,
-    });
+    // Focus the applied sheet UNLESS this apply belongs to a multi-task plan (compose-focus
+    // seam) — the final dashboard apply owns focus in that case.
+    if (!suppressFocus) {
+      await focusAppliedSheetBestEffort({
+        sheetName: worksheetName,
+        appliedVia: 'load-worksheet',
+        executor,
+        signal,
+      });
+    }
 
     return outcomeResult;
   });

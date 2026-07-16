@@ -18,6 +18,7 @@ import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXm
 import { FieldResolution, resolveField } from '../../../desktop/metadata/index.js';
 import { getTemplatesDir } from '../../../desktop/templates/templatePath.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
+import { isPlanBuildWorksheet, resetPlanBuildWorksheets } from './planBuildFocus.js';
 
 const SESSION = 'session-1';
 
@@ -231,6 +232,74 @@ describe('planDashboardCreationTool', () => {
     expect(result.isError).toBeFalsy();
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).not.toContain('PARALLELIZE');
+  });
+});
+
+// Compose-focus seam (a2td #215 port): the plan tool records every planned worksheet name for
+// its session so build-and-apply-worksheet can suppress per-sheet focus (final dashboard apply
+// owns it). Names outside the plan, and other sessions, stay standalone (unrecorded).
+describe('planDashboardCreationTool — records plan worksheets for focus suppression', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetPlanBuildWorksheets();
+  });
+
+  afterEach(() => {
+    resetPlanBuildWorksheets();
+  });
+
+  it('registers every planned worksheet name (and leaves standalone names / other sessions unrecorded)', async () => {
+    vi.mocked(resolveField).mockReturnValue(makeExactResolution('Sales'));
+
+    const result = await getResult({
+      session: 'plan-session',
+      dashboardName: 'Exec Dashboard',
+      worksheets: [
+        { name: 'Sales by Region', type: 'chart', fields: ['Sales'] },
+        { name: 'Profit KPI', type: 'kpi', fields: ['Sales'] },
+      ],
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(isPlanBuildWorksheet('plan-session', 'Sales by Region')).toBe(true);
+    expect(isPlanBuildWorksheet('plan-session', 'Profit KPI')).toBe(true);
+    // A name that was not part of the plan, and a different session, stay standalone.
+    expect(isPlanBuildWorksheet('plan-session', 'Some Other Sheet')).toBe(false);
+    expect(isPlanBuildWorksheet('different-session', 'Sales by Region')).toBe(false);
+  });
+
+  it('does not record any worksheet when planning is BLOCKED on an ambiguous field', async () => {
+    vi.mocked(resolveField).mockReturnValue({
+      kind: 'ambiguous',
+      query: 'Sales',
+      candidates: [
+        {
+          column_ref: '[DS1].[sum:Sales:qk]',
+          datasource: 'DS1',
+          column_name: 'Sales',
+          role: 'measure',
+          is_aggregated: false,
+        },
+        {
+          column_ref: '[DS2].[sum:Sales:qk]',
+          datasource: 'DS2',
+          column_name: 'Sales',
+          role: 'measure',
+          is_aggregated: false,
+        },
+      ],
+    });
+
+    const result = await getResult({
+      session: 'plan-session',
+      dashboardName: 'Blocked Dashboard',
+      worksheets: [{ name: 'Sales by Region', type: 'chart', fields: ['Sales'] }],
+    });
+
+    expect(result.isError).toBe(true);
+    // Planning bailed before building tasks, so nothing is recorded — a later standalone apply
+    // of this name must still focus.
+    expect(isPlanBuildWorksheet('plan-session', 'Sales by Region')).toBe(false);
   });
 });
 

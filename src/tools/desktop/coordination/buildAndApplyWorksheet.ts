@@ -32,6 +32,7 @@ import {
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
+import { isPlanBuildWorksheet } from './planBuildFocus.js';
 
 function isRouteGateResult(result: unknown): result is RouteGateResult {
   return (
@@ -285,11 +286,18 @@ export const getBuildAndApplyWorksheetTool = (
           // Apply to Tableau
           const executor = await extra.getExecutor(resolvedSession);
           const signal = extra.signal;
+          // Suppress the per-worksheet goto-sheet ONLY when this apply belongs to a multi-task
+          // dashboard plan (recorded by plan-dashboard-creation): there the last of N parallel
+          // worksheet applies would otherwise steal focus, and only the final dashboard apply
+          // should own it. This tool is publicly reachable, so a STANDALONE hand-crafted taskSpec
+          // (no plan recorded for this session/name) still focuses its sheet as before.
+          const suppressFocus = isPlanBuildWorksheet(resolvedSession, worksheetName);
           const applyResult = await loadWorksheetXml({
             worksheetName,
             xml: worksheetXml,
             executor,
             signal,
+            suppressFocus,
           });
 
           if (applyResult.isErr()) {
