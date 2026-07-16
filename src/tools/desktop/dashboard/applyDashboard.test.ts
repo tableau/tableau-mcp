@@ -43,7 +43,9 @@ describe('applyDashboardTool', () => {
 
   it('should successfully apply dashboard XML in inline mode', async () => {
     const mockXml = '<dashboard name="Sales Dashboard"><zones></zones></dashboard>';
-    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(Ok.EMPTY);
+    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
+      Ok({ validationWarnings: [] }),
+    );
 
     const result = await getToolResult({
       mode: 'inline',
@@ -54,6 +56,8 @@ describe('applyDashboardTool', () => {
     invariant(result.content[0].type === 'text');
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(resultObj.message).toContain('Successfully applied dashboard update');
+    expect(resultObj.message).toContain('HOST VERIFICATION — unverified');
+    expect(resultObj.message).toContain('full dashboard intent NOT re-verified');
   });
 
   it('should successfully apply dashboard XML in file mode', async () => {
@@ -62,7 +66,9 @@ describe('applyDashboardTool', () => {
 
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockXml);
-    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(Ok.EMPTY);
+    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
+      Ok({ validationWarnings: [] }),
+    );
 
     const result = await getToolResult({ mode: 'file', dashboardFile: mockFilePath });
 
@@ -83,7 +89,7 @@ describe('applyDashboardTool', () => {
     });
     const loadSpy = vi
       .spyOn(loadDashboardXmlModule, 'loadDashboardXml')
-      .mockResolvedValue(Ok.EMPTY);
+      .mockResolvedValue(Ok({ validationWarnings: [] }));
 
     const result = await getToolResult({ mode: 'file', dashboardFile: '/path/to/dashboard.xml' });
 
@@ -161,7 +167,9 @@ describe('applyDashboardTool', () => {
   it('accepts an over-cap inline apply but appends the file-mode note', async () => {
     const overCapXml =
       '<dashboard name="Sales Dashboard"><zones>' + 'x'.repeat(20000) + '</zones></dashboard>';
-    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(Ok.EMPTY);
+    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
+      Ok({ validationWarnings: [] }),
+    );
 
     const result = await getToolResult({ mode: 'inline', dashboardXml: overCapXml });
 
@@ -177,7 +185,7 @@ describe('applyDashboardTool', () => {
     const mockXml = '<dashboard name="Sales Dashboard"><zones></zones></dashboard>';
     const mockLoad = vi
       .spyOn(loadDashboardXmlModule, 'loadDashboardXml')
-      .mockResolvedValue(Ok.EMPTY);
+      .mockResolvedValue(Ok({ validationWarnings: [] }));
     const customSignal = new AbortController().signal;
 
     await getToolResult({ mode: 'inline', dashboardXml: mockXml, customSignal });

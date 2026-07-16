@@ -11,10 +11,8 @@ import {
   xmlByteLength,
 } from '../../../desktop/inlineXmlCap.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
-import {
-  formatReadbackVerificationStatus,
-  formatReadbackVerificationWarnings,
-} from '../../../desktop/validation/readback-verify.js';
+import { formatWorksheetPromiseCheck } from '../../../desktop/validation/promise-check.js';
+import { formatReadbackVerificationWarnings } from '../../../desktop/validation/readback-verify.js';
 import {
   ArgsValidationError,
   CacheSessionMismatchError,
@@ -152,13 +150,18 @@ export const getApplyWorksheetTool = (
           const readbackWarning = result.isOk()
             ? formatReadbackVerificationWarnings(result.value.readbackWarnings)
             : '';
-          const readbackStatus = result.isOk()
-            ? formatReadbackVerificationStatus(result.value.readbackVerification)
+          // Host verification receipt (W-23447506) — subsumes the old readback
+          // status sentence: one host-truth line, derived from preflight +
+          // readback, never model-filled.
+          const receipt = result.isOk()
+            ? formatWorksheetPromiseCheck({
+                validationWarnings: result.value.validationWarnings ?? [],
+                readback: result.value.readbackVerification,
+              })
             : '';
-          const updateStatus = readbackStatus || 'The worksheet has been updated.';
 
           return new Ok({
-            message: `Successfully applied worksheet update for "${worksheetName}". ${updateStatus}${note}${readbackWarning}`,
+            message: `Successfully applied worksheet update for "${worksheetName}". The worksheet has been updated.${note}${readbackWarning}${receipt}`,
           });
         },
       });

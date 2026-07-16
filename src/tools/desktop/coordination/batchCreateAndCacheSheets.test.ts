@@ -39,7 +39,7 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(getWorkbookXml).mockResolvedValue(new Ok(WORKBOOK_XML));
   vi.mocked(addSheet).mockReturnValue(WORKBOOK_XML);
   vi.mocked(addDashboard).mockReturnValue(WORKBOOK_XML);
-  vi.mocked(loadWorkbookXml).mockResolvedValue(new Ok(undefined));
+  vi.mocked(loadWorkbookXml).mockResolvedValue(new Ok({ validationWarnings: [] }));
   vi.mocked(getWorksheetXml).mockResolvedValue(new Ok(WORKSHEET_XML));
   vi.mocked(getDashboardXml).mockResolvedValue(new Ok(DASHBOARD_XML));
   vi.mocked(writeFileSync).mockImplementation(() => {});
@@ -75,6 +75,8 @@ describe('batchCreateAndCacheSheetsTool', () => {
     expect(result.content[0].text).toContain('Sheet2');
     expect(result.content[0].text).toContain('My Dashboard');
     expect(result.content[0].text).toContain('Ready for Phase 2');
+    expect(result.content[0].text).toContain('HOST VERIFICATION — unverified');
+    expect(result.content[0].text).toContain('full workbook intent NOT re-verified');
   });
 
   it('should call addSheet for each worksheet name', async () => {

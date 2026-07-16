@@ -96,6 +96,7 @@ describe('buildAndApplyWorksheetTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Sheet1');
     expect(result.content[0].text).toContain('ranking-ordered-bar');
+    expect(result.content[0].text).toContain('HOST VERIFICATION');
   });
 
   it('reports skipped readback caveat when apply succeeds without verification', async () => {
@@ -111,7 +112,8 @@ describe('buildAndApplyWorksheetTool', () => {
 
     expect(result.isError).toBeFalsy();
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('could not verify (readback unavailable)');
+    expect(result.content[0].text).toContain('HOST VERIFICATION — unverified');
+    expect(result.content[0].text).toContain('readback unavailable');
     expect(result.content[0].text).not.toMatch(/\bverified\b/i);
   });
 

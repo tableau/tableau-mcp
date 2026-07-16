@@ -11,6 +11,7 @@ import {
   xmlByteLength,
 } from '../../../desktop/inlineXmlCap.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
+import { formatDashboardPromiseCheck } from '../../../desktop/validation/promise-check.js';
 import {
   ArgsValidationError,
   CacheSessionMismatchError,
@@ -144,8 +145,15 @@ export const getApplyDashboardTool = (
               ? `\n\n${buildApplyOverCapNote(inlineBytes, capBytes)}`
               : '';
 
+          // Host verification receipt (W-23447506): dashboard applies have no
+          // structural readback, so say so honestly instead of implying full
+          // re-verification happened.
+          const receipt = result.isOk()
+            ? formatDashboardPromiseCheck(result.value.validationWarnings)
+            : '';
+
           return new Ok({
-            message: `Successfully applied dashboard update for "${dashboardName}". The dashboard has been updated.${note}`,
+            message: `Successfully applied dashboard update for "${dashboardName}". The dashboard has been updated.${note}${receipt}`,
           });
         },
       });

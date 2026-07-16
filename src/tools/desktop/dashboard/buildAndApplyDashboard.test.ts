@@ -43,8 +43,8 @@ describe('buildAndApplyDashboardTool', () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(mockWorkbookXml));
     vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(mockWorkbookXml);
-    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Ok.EMPTY);
-    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(Ok.EMPTY);
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Ok({ validationWarnings: [] }));
+    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(Ok({ validationWarnings: [] }));
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -78,7 +78,7 @@ describe('buildAndApplyDashboardTool', () => {
   it('should call loadDashboardXml with built XML containing zone elements', async () => {
     const mockLoad = vi
       .spyOn(loadDashboardXmlModule, 'loadDashboardXml')
-      .mockResolvedValue(Ok.EMPTY);
+      .mockResolvedValue(Ok({ validationWarnings: [] }));
 
     await getToolResult({ layoutSpec: defaultLayoutSpec, worksheetNames: ['Chart 1'] });
 
@@ -93,7 +93,7 @@ describe('buildAndApplyDashboardTool', () => {
   it('should include a title text zone when title is provided', async () => {
     const mockLoad = vi
       .spyOn(loadDashboardXmlModule, 'loadDashboardXml')
-      .mockResolvedValue(Ok.EMPTY);
+      .mockResolvedValue(Ok({ validationWarnings: [] }));
 
     await getToolResult({
       title: 'My Dashboard',

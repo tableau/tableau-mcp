@@ -49,7 +49,9 @@ describe('applyWorkbookTool', () => {
 
   it('should successfully apply workbook XML in inline mode', async () => {
     const mockXml = '<?xml version="1.0"?><workbook></workbook>';
-    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Ok.EMPTY);
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Ok({ validationWarnings: [] }),
+    );
 
     const mockExecutor = vi.fn().mockResolvedValue({});
 
@@ -65,6 +67,8 @@ describe('applyWorkbookTool', () => {
 
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(resultObj.message).toContain('Successfully applied workbook update');
+    expect(resultObj.message).toContain('HOST VERIFICATION — unverified');
+    expect(resultObj.message).toContain('full workbook intent NOT re-verified');
   });
 
   it('should successfully apply workbook XML in file mode', async () => {
@@ -73,7 +77,9 @@ describe('applyWorkbookTool', () => {
 
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockXml);
-    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Ok.EMPTY);
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Ok({ validationWarnings: [] }),
+    );
 
     const mockExecutor = vi.fn().mockResolvedValue({});
 
@@ -103,7 +109,9 @@ describe('applyWorkbookTool', () => {
       ok: false,
       message: 'Cache produced by a different Desktop session — re-read in the current session.',
     });
-    const loadSpy = vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Ok.EMPTY);
+    const loadSpy = vi
+      .spyOn(loadWorkbookXmlModule, 'loadWorkbookXml')
+      .mockResolvedValue(Ok({ validationWarnings: [] }));
 
     const result = await getToolResult({
       session: '12345',
@@ -129,7 +137,9 @@ describe('applyWorkbookTool', () => {
 
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockXml);
-    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Ok.EMPTY);
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Ok({ validationWarnings: [] }),
+    );
 
     const mockExecutor = vi.fn().mockResolvedValue({});
 
@@ -296,7 +306,9 @@ describe('applyWorkbookTool', () => {
 
   it('accepts an over-cap inline apply but appends the file-mode note', async () => {
     const overCapXml = '<workbook>' + 'x'.repeat(20000) + '</workbook>';
-    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Ok.EMPTY);
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Ok({ validationWarnings: [] }),
+    );
 
     const result = await getToolResult({
       session: '12345',
@@ -317,7 +329,9 @@ describe('applyWorkbookTool', () => {
 
   it('does not append the note for an under-cap inline apply', async () => {
     const smallXml = '<?xml version="1.0"?><workbook></workbook>';
-    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Ok.EMPTY);
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Ok({ validationWarnings: [] }),
+    );
 
     const result = await getToolResult({
       session: '12345',
@@ -335,7 +349,7 @@ describe('applyWorkbookTool', () => {
     const mockXml = '<?xml version="1.0"?><workbook></workbook>';
     const mockLoadWorkbookXml = vi
       .spyOn(loadWorkbookXmlModule, 'loadWorkbookXml')
-      .mockResolvedValue(Ok.EMPTY);
+      .mockResolvedValue(Ok({ validationWarnings: [] }));
 
     const mockExecutor = vi.fn().mockResolvedValue({});
     const customSignal = new AbortController().signal;

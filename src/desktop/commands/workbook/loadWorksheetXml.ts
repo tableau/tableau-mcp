@@ -38,6 +38,7 @@ export type LoadWorksheetXmlError =
 export interface LoadWorksheetXmlOk {
   readbackWarnings: ReadbackFinding[];
   readbackVerification?: ReadbackVerificationResult;
+  validationWarnings?: ValidationIssue[];
 }
 
 interface PostApplyWorksheetReadbackVerification extends ReadbackVerificationResult {
@@ -182,7 +183,7 @@ export async function loadWorksheetXml({
   // External Client API ("Athena V0") exposes no per-sheet route — tabui:load-worksheet is not in
   // its command registry, so applying a single sheet re-posts a minimal whole-workbook document.
   // The POST upserts by name: it overwrites the colliding sheet in place and leaves the rest live.
-  return getDesktopConfig().externalApiEnabled
+  const result = await (getDesktopConfig().externalApiEnabled
     ? loadWorksheetXmlViaExternalApi({
         worksheetName,
         xml,
@@ -196,7 +197,13 @@ export async function loadWorksheetXml({
         executor,
         signal,
         readbackVerificationOut,
-      });
+      }));
+  if (result.isErr()) {
+    return result;
+  }
+  // Preflight warnings ride along so apply responses can compute the host
+  // verification receipt (W-23447506) without re-running validation.
+  return Ok({ ...result.value, validationWarnings: validation.issues });
 }
 
 async function loadWorksheetXmlViaAgentApi({

@@ -73,6 +73,7 @@ describe('applyWorksheetTool', () => {
 
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(resultObj.message).toContain('Successfully applied worksheet update');
+    expect(resultObj.message).toContain('HOST VERIFICATION');
   });
 
   it('should successfully apply worksheet XML in file mode', async () => {
@@ -100,6 +101,7 @@ describe('applyWorksheetTool', () => {
 
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(resultObj.message).toContain('Successfully applied worksheet update');
+    expect(resultObj.message).toContain('HOST VERIFICATION');
 
     expect(existsSync).toHaveBeenCalledWith(mockFilePath);
     expect(readFileSync).toHaveBeenCalledWith(mockFilePath, 'utf-8');
@@ -122,7 +124,8 @@ describe('applyWorksheetTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const message = resultSchema.parse(JSON.parse(result.content[0].text)).message;
-    expect(message).toContain('could not verify (readback unavailable)');
+    expect(message).toContain('HOST VERIFICATION — unverified');
+    expect(message).toContain('readback unavailable');
     expect(message).not.toMatch(/\bverified\b/i);
   });
 
@@ -146,7 +149,8 @@ describe('applyWorksheetTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const message = resultSchema.parse(JSON.parse(result.content[0].text)).message;
-    expect(message).toContain('could not verify (readback unavailable)');
+    expect(message).toContain('HOST VERIFICATION — unverified');
+    expect(message).toContain('readback unavailable');
     expect(message).not.toMatch(/\bverified\b/i);
   });
 
