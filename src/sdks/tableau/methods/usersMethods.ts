@@ -110,7 +110,7 @@ export default class UsersMethods extends AuthenticatedMethods<typeof usersApis>
     siteId: string;
     userId: string;
     siteRole: string;
-  }): Promise<User> => {
+  }): Promise<Partial<User>> => {
     const { user } = await this._apiClient.updateUser(
       { user: { siteRole } },
       {

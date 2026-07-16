@@ -106,7 +106,7 @@ const updateUserEndpoint = makeEndpoint({
     { name: 'userId', type: 'Path', schema: z.string() },
     { name: 'body', type: 'Body', schema: z.object({ user: z.object({ siteRole: z.string() }) }) },
   ],
-  response: z.object({ user: userSchema }),
+  response: z.object({ user: userSchema.partial() }),
 });
 
 const usersApi = makeApi([listUsersEndpoint, getUserOnSiteEndpoint, updateUserEndpoint]);
