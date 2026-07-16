@@ -35,6 +35,17 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     );
   });
 
+  it('directs the agent to load the authoring skill before building', () => {
+    const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
+    expect(rendered).toContain('tableau-desktop-authoring');
+  });
+
+  it('states a plan-before-build gate with the MAGNITUDE/MEMBERSHIP classification', () => {
+    const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
+    expect(rendered).toContain('MAGNITUDE');
+    expect(rendered).toContain('MEMBERSHIP');
+  });
+
   it.each(routes)('route "$id" declares a tool sequence and stop conditions', (route) => {
     expect(route.toolSequence.length).toBeGreaterThan(0);
     expect(route.stopConditions.length).toBeGreaterThan(0);
