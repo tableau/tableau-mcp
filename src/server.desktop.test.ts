@@ -94,9 +94,9 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
     expect(DESKTOP_INSTRUCTIONS).toBe(
       `You are controlling Tableau Desktop. Use Tableau vocabulary in your narration: say workbook, viz, sheet, or field rather than implementation formats; shelf names are Columns and Rows. Use product data type names like Number (whole), Number (decimal), Text, and True/False.
 
-Before building or editing, load the tableau-desktop-authoring skill and follow its judgment (encoding choices, what not to touch, recovery); it carries what the tool schemas cannot. On repeated failures you cannot resolve, load the tableau-agent-debug skill instead of brute-forcing manual XML.
+Load tableau-desktop-authoring before builds/edits; if unresolved failures repeat, switch to tableau-agent-debug, not manual XML.
 
-For any multi-viz or dashboard ask, plan first: per requirement map requirement -> encoding -> rule, and classify each as MAGNITUDE (a continuous quantity) or MEMBERSHIP (which discrete group each item is in: top/bottom, tiers, segments). Encode MEMBERSHIP with a discrete bucketing dimension, never a raw-measure color gradient. State the one-line plan, then build.
+Before multi-viz/dashboard builds, plan: classify requirements as MAGNITUDE=continuous quantity or MEMBERSHIP=discrete group; encode MEMBERSHIP with discrete buckets, never raw-measure color gradients. State the one-line plan, then build.
 
 For a plain viz ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot), FIRST call bind-template with the user's ask and auto_apply: true — a confident bind renders the viz in ONE call (~2s server-side, no further tool calls). On propose/escalate, fall back to the general authoring tools (get-workbook-xml -> edit -> apply-workbook, or inject-template for a known template).
 
@@ -215,10 +215,10 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // DO NOT GROW these: trim them down and lower/remove the entry. Never raise a
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
-    ['bind-template', 2110], // do not grow
-    ['plan-dashboard-creation', 2040], // do not grow
+    ['bind-template', 1898], // ratcheted down in the 46k trim (W65/#534); do not grow
+    ['plan-dashboard-creation', 1797], // ratcheted down in the 46k trim (W65/#534); do not grow
     ['build-and-apply-dashboard', 2033], // do not grow
-    ['validate-proposal', 1601], // do not grow
+    ['validate-proposal', 1557], // ratcheted down in the 46k trim (W65/#534); do not grow
     ['dashboard-auto-apply', 1300], // +5 (Andy #521 review): restore ask/title noun-role (Viz ask/Sheet title) — funded by byte-negative all-or-nothing description reword; do not grow
     ['dashboard-health-check', 1453], // do not grow
     ['inject-template', 1356], // do not grow

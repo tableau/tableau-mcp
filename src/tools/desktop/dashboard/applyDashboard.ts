@@ -44,9 +44,8 @@ export const getApplyDashboardTool = (
     name: 'apply-dashboard',
     title,
     description: [
-      'Apply modified dashboard layout to Tableau (mutating). mode=file is default; mode=inline is for small dashboards.',
-      'IMPORTANT: can only UPDATE an existing dashboard, not create one — use apply-workbook to create.',
-      'See expertise://tableau/tactics/dashboard/zones for zone structure.',
+      'Apply modified dashboard layout to Tableau.',
+      'Updates existing dashboards only; use apply-workbook to create.',
     ].join(' '),
     paramsSchema,
     annotations: {

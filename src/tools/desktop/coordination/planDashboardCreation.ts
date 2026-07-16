@@ -14,14 +14,14 @@ import { DesktopTool } from '../tool.js';
 import { markPlanBuildWorksheets } from './planBuildFocus.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  dashboardName: z.string().describe('Name of the dashboard to create.'),
-  title: z.string().optional().describe('Optional dashboard title.'),
+  session: z.string().optional().describe('Session; optional if pinned or unique.'),
+  dashboardName: z.string().describe('Dashboard name.'),
+  title: z.string().optional().describe('Dashboard title.'),
   layout: z
     .object({
-      type: z.enum(['auto-grid', 'rows', 'columns', 'custom']).describe('Layout type.'),
-      gridColumns: z.number().optional().describe('Auto-grid columns.'),
-      kpiStripHeight: z.number().optional().describe('KPI strip height percent.'),
+      type: z.enum(['auto-grid', 'rows', 'columns', 'custom']).describe('Layout.'),
+      gridColumns: z.number().optional().describe('Grid columns.'),
+      kpiStripHeight: z.number().optional().describe('KPI height %.'),
       zones: z
         .array(
           z.object({
@@ -33,22 +33,20 @@ const paramsSchema = {
           }),
         )
         .optional()
-        .describe('Custom zone positions.'),
+        .describe('Zones.'),
     })
     .optional()
-    .describe('Dashboard layout.'),
+    .describe('Layout.'),
   worksheets: z
     .array(
       z.object({
-        name: z.string().describe('Worksheet name.'),
-        type: z
-          .enum(['kpi', 'chart'])
-          .describe("Worksheet type: 'kpi' or 'chart' for viz worksheets."),
-        template: z.string().optional().describe('Optional template name.'),
-        fields: z.array(z.string()).describe('Viz field names.'),
+        name: z.string().describe('Name.'),
+        type: z.enum(['kpi', 'chart']).describe('kpi or chart.'),
+        template: z.string().optional().describe('Template.'),
+        fields: z.array(z.string()).describe('Fields.'),
       }),
     )
-    .describe('List of worksheets to create.'),
+    .describe('Worksheets.'),
 };
 
 function selectTemplate(ws: { type: string; template?: string }): string {
@@ -65,8 +63,8 @@ export const getPlanDashboardCreationTool = (
     name: 'plan-dashboard-creation',
     title: toolTitle,
     description: [
-      'Plan a dashboard: Phase 1 caches sheets; Phase 2 builds/applies in parallel.',
-      'Resolve ambiguous fields first. expertise://tableau/strategy/dashboard-design/layout-patterns.',
+      'Plan dashboard sheet and layout tasks for parallel build/apply.',
+      'Resolve ambiguous fields first.',
     ].join(' '),
     paramsSchema,
     annotations: {

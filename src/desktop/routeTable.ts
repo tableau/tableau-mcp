@@ -35,12 +35,12 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'authoring-skill',
-    text: 'Before building or editing, load the tableau-desktop-authoring skill and follow its judgment (encoding choices, what not to touch, recovery); it carries what the tool schemas cannot. On repeated failures you cannot resolve, load the tableau-agent-debug skill instead of brute-forcing manual XML.',
+    text: 'Load tableau-desktop-authoring before builds/edits; if unresolved failures repeat, switch to tableau-agent-debug, not manual XML.',
   },
   {
     kind: 'prose',
     id: 'plan-before-build',
-    text: 'For any multi-viz or dashboard ask, plan first: per requirement map requirement -> encoding -> rule, and classify each as MAGNITUDE (a continuous quantity) or MEMBERSHIP (which discrete group each item is in: top/bottom, tiers, segments). Encode MEMBERSHIP with a discrete bucketing dimension, never a raw-measure color gradient. State the one-line plan, then build.',
+    text: 'Before multi-viz/dashboard builds, plan: classify requirements as MAGNITUDE=continuous quantity or MEMBERSHIP=discrete group; encode MEMBERSHIP with discrete buckets, never raw-measure color gradients. State the one-line plan, then build.',
   },
   {
     kind: 'route',

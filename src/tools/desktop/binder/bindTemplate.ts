@@ -47,22 +47,20 @@ const paramsSchema = {
   session: z
     .string()
     .optional()
-    .describe('Session ID. Optional only when exactly one Desktop instance is running.'),
-  ask: z.string().describe('Natural-language viz request.'),
-  proposal: proposalSchema
-    .optional()
-    .describe("Call 2 only: filled proposal from a Call-1 'propose' payload."),
+    .describe('Session; optional when one Desktop instance is running.'),
+  ask: z.string().describe('Viz ask.'),
+  proposal: proposalSchema.optional().describe("Call 2 only: filled proposal from a Call-1 'propose' payload."),
   minConfidence: z
     .number()
     .min(0)
     .max(1)
     .optional()
-    .describe('Proposal confidence floor; default 0.6.'),
+    .describe('Confidence floor; default 0.6.'),
   auto_apply: z
     .boolean()
     .optional()
     .describe(
-      'When true, deterministic Call-1 binds apply server-side. Never auto-applies Call-2 proposals. Default false/read-only.',
+      'True applies deterministic Call-1 binds server-side; never auto-applies Call-2 proposals. Default false/read-only.',
     ),
 };
 
@@ -340,9 +338,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     name: 'bind-template',
     title,
     description: [
-      'Bind a checked-in viz template to an ask and return validated inject args. Model-free.',
+      'Bind a checked-in template to an ask.',
       "Call 1 returns 'bound' or 'propose'; Call 2 returns 'bound' or 'escalate'.",
-      'auto_apply:true renders deterministic Call-1 binds in one call. Details: expertise://tableau/tactics/workflow/templates.',
+      'auto_apply:true renders deterministic Call-1 binds.',
     ].join(' '),
     paramsSchema,
     annotations: {
