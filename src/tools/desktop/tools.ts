@@ -23,6 +23,7 @@ import { getListFieldsTool } from './fields/listFields.js';
 import { getRemoveFieldTool } from './fields/removeField.js';
 import { getResolveFieldTool } from './fields/resolveField.js';
 import { getDashboardHealthCheckTool } from './health/dashboardHealthCheck.js';
+import { getAskUserTool } from './interaction/askUser.js';
 import { getListKnowledgeResourcesTool } from './knowledge/listKnowledgeResources.js';
 import { getReadKnowledgeResourceTool } from './knowledge/readKnowledgeResource.js';
 import { getLookupWorkbookSchemaTool } from './search/lookupWorkbookSchema.js';
@@ -66,6 +67,7 @@ export const desktopToolFactories = [
   getLookupWorkbookSchemaTool,
   getSearchWorkbookExamplesTool,
   getExecuteTableauCommandTool,
+  getAskUserTool,
   getBindTemplateTool,
   getDashboardAutoApplyTool,
   getDashboardHealthCheckTool,

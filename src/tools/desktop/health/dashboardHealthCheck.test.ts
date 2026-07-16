@@ -273,7 +273,8 @@ describe('dashboardHealthCheckTool (wiring)', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getDashboardHealthCheckTool(new DesktopMcpServer());
     expect(tool.name).toBe('dashboard-health-check');
-    expect(tool.description).toContain('READ-ONLY drift detector');
+    expect(tool.description).toContain('Read-only');
+    expect(tool.description).toContain('no repairs');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       manifest: expect.any(Object),

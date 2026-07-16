@@ -100,7 +100,9 @@ For a dashboard ask with 2-6 vizzes (e.g. "a dashboard with sales by region and 
 
 For a data-value question ("what was revenue in Q3?"), do NOT answer with a number — this server cannot read data values. Say so, then offer the viz that would show it (a plain viz ask via bind-template) instead.
 
-For current/this/that/existing sheet, chart, view, or dashboard, edit in place: resolve the target (exact name, else list-worksheets; ask if ambiguous), then refine-worksheet for top-N/sort edits, else get-worksheet-xml -> edit -> apply-worksheet. Never create a new sheet unless explicitly asked.
+If ambiguity changes workbook content, call ask-user with urgency=blocking; stop for answer.
+
+For current/this/that/existing sheet, chart, view, or dashboard, edit in place: resolve the target (exact name, else list-worksheets; ask via ask-user if ambiguous), then refine-worksheet for top-N/sort edits, else get-worksheet-xml -> edit -> apply-worksheet. Never create a new sheet unless explicitly asked.
 
 Every session-scoped tool call needs the session id from list-instances — except bind-template and dashboard-auto-apply, which auto-resolve the session when exactly one Desktop instance is running.
 
@@ -148,7 +150,7 @@ describe('desktop tools/list serialized surface', () => {
 
     // 46_000 is the ToolSearch auto-deferral cliff on MCP hosts, not a tunable constant — past it
     // the whole desktop surface gets deferred behind ToolSearch. The shelf-tool consolidation has
-    // landed, so this is GREEN: the serialized surface is 45_336 bytes, ~664 under the cliff.
+    // landed, so this is GREEN: the serialized surface is 45_202 bytes, ~798 under the cliff.
     // That headroom is the ENTIRE budget for future tools — trim tools to fit it; NEVER raise the
     // cap to ship a tool (raising it just re-buries the whole surface behind ToolSearch).
     expect(total).toBeLessThanOrEqual(46_000);
@@ -212,9 +214,9 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['bind-template', 2110], // do not grow
     ['plan-dashboard-creation', 2040], // do not grow
     ['build-and-apply-dashboard', 2033], // do not grow
-    ['validate-proposal', 2014], // do not grow
-    ['dashboard-auto-apply', 1829], // do not grow
-    ['dashboard-health-check', 1821], // do not grow
+    ['validate-proposal', 1601], // do not grow
+    ['dashboard-auto-apply', 1300], // +5 (Andy #521 review): restore ask/title noun-role (Viz ask/Sheet title) — funded by byte-negative all-or-nothing description reword; do not grow
+    ['dashboard-health-check', 1453], // do not grow
     ['inject-template', 1356], // do not grow
     ['build-and-apply-worksheet', 1274], // do not grow
   ]);
