@@ -95,12 +95,17 @@ describe('update-user', () => {
     if (!toolsAvailable) {
       return;
     }
+    // resolveTarget calls queryUserOnSite — needs a real user on the site.
+    const userId = process.env.UPDATE_USER_E2E_ID;
+    if (!userId) {
+      console.warn(
+        'Skipping preview assertion — set UPDATE_USER_E2E_ID to a real user LUID on the site.',
+      );
+      return;
+    }
     const message = await client.callTool('update-user', {
       schema: z.string(),
-      toolArgs: {
-        userId: 'a1b2c3d4-e5f6-4789-9abc-ef1234567890',
-        siteRole: 'Unlicensed',
-      },
+      toolArgs: { userId, siteRole: 'Unlicensed' },
     });
     expect(message).toContain('Preview');
     expect(message).toContain('No change has been made');
@@ -111,12 +116,20 @@ describe('update-user', () => {
     if (!toolsAvailable) {
       return;
     }
+    // resolveTarget calls queryUserOnSite — needs a real user on the site.
+    const userId = process.env.UPDATE_USER_E2E_ID;
+    if (!userId) {
+      console.warn(
+        'Skipping bogus-token assertion — set UPDATE_USER_E2E_ID to a real user LUID on the site.',
+      );
+      return;
+    }
     let threw = false;
     try {
       await client.callTool('update-user', {
         schema: z.string(),
         toolArgs: {
-          userId: 'a1b2c3d4-e5f6-4789-9abc-ef1234567890',
+          userId,
           siteRole: 'Unlicensed',
           confirm: true,
           confirmationToken: '00000000-0000-4000-8000-000000000000',
