@@ -12,8 +12,9 @@ import { McpClient } from '../mcpClient.js';
  * second call passes `confirm: true` plus that token; the server verifies and consumes it before
  * applying the role change.
  *
- * The mutating leg is gated behind `UPDATE_USER_E2E_ID` — set it to a disposable user LUID once
- * the endpoint is enabled on your Cloud site.
+ * Preview and bogus-token tests are gated behind `UPDATE_USER_E2E_ID` — set it to a disposable
+ * user LUID on the site. The mutating leg is gated behind a separate `UPDATE_USER_E2E_DESTRUCTIVE_ID`
+ * — set it to a disposable user LUID that you don't mind being downgraded to Unlicensed.
  */
 describe('update-user', () => {
   let client: McpClient;
@@ -99,7 +100,7 @@ describe('update-user', () => {
     const userId = process.env.UPDATE_USER_E2E_ID;
     if (!userId) {
       console.warn(
-        'Skipping preview assertion — set UPDATE_USER_E2E_ID to a real user LUID on the site.',
+        'Skipping preview assertion — set UPDATE_USER_E2E_ID to a disposable user LUID on the site.',
       );
       return;
     }
@@ -120,7 +121,7 @@ describe('update-user', () => {
     const userId = process.env.UPDATE_USER_E2E_ID;
     if (!userId) {
       console.warn(
-        'Skipping bogus-token assertion — set UPDATE_USER_E2E_ID to a real user LUID on the site.',
+        'Skipping bogus-token assertion — set UPDATE_USER_E2E_ID to a disposable user LUID on the site.',
       );
       return;
     }
@@ -146,10 +147,10 @@ describe('update-user', () => {
     if (!toolsAvailable) {
       return;
     }
-    const disposableId = process.env.UPDATE_USER_E2E_ID;
+    const disposableId = process.env.UPDATE_USER_E2E_DESTRUCTIVE_ID;
     if (!disposableId) {
       console.warn(
-        'Skipping mutating assertion — set UPDATE_USER_E2E_ID to a disposable user LUID.',
+        'Skipping mutating assertion — set UPDATE_USER_E2E_DESTRUCTIVE_ID to a disposable user LUID.',
       );
       return;
     }
