@@ -63,8 +63,8 @@ const MIN_ASKS = 2;
 const MAX_ASKS = 6;
 
 const askSchema = z.object({
-  ask: z.string().min(1).describe('Viz.'),
-  title: z.string().min(1).max(80).optional().describe('Sheet.'),
+  ask: z.string().min(1).describe('Viz ask'),
+  title: z.string().min(1).max(80).optional().describe('Sheet title'),
 });
 
 const layoutSchema = z.object({
@@ -179,7 +179,7 @@ export const getDashboardAutoApplyTool = (
     name: 'dashboard-auto-apply',
     title,
     description: [
-      'Build dashboard from 2-6 deterministic asks; no apply on bind, duplicate, edit, or preflight fail.',
+      'Build dashboard from 2-6 asks; all-or-nothing — bind/dup/edit/preflight fail refuses the batch.',
     ].join(' '),
     paramsSchema,
     annotations: {

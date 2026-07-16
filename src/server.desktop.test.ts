@@ -215,7 +215,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['plan-dashboard-creation', 2040], // do not grow
     ['build-and-apply-dashboard', 2033], // do not grow
     ['validate-proposal', 1601], // do not grow
-    ['dashboard-auto-apply', 1295], // do not grow
+    ['dashboard-auto-apply', 1300], // +5 (Andy #521 review): restore ask/title noun-role (Viz ask/Sheet title) — funded by byte-negative all-or-nothing description reword; do not grow
     ['dashboard-health-check', 1453], // do not grow
     ['inject-template', 1356], // do not grow
     ['build-and-apply-worksheet', 1274], // do not grow
