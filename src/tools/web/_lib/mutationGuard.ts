@@ -12,6 +12,13 @@
  *      forged confirmations exactly as #414's tag gate does.
  *   4. Emits a single authoritative AuditRecord (allowed OR denied) to the durable log sink.
  *
+ * DURABILITY CONTRACT (AC-5, honest note): the authoritative audit records emitted below are
+ * structured JSON written to the dedicated `audit` logger, which bypasses the LOG_LEVEL severity
+ * filter (see AUDIT_LOGGER) so an operator cannot suppress them by raising LOG_LEVEL. DURABILITY
+ * itself is the DEPLOYMENT's responsibility: this server emits the records to its log stream
+ * (stderr/stdout/file); operators MUST ship that audit stream to their durable/immutable log store
+ * (SIEM, log archive, etc.) for retention. There is no built-in durable sink here.
+ *
  * AC-5 — RESIDUAL GAP (code-enforced human approval): the MCP SDK shipped with this server
  * (@modelcontextprotocol/sdk >=1.26, currently 1.29) DOES expose an elicitation primitive
  * (server.elicitInput(...)), but it is not wired in here and host/client support for it is uneven —
@@ -36,6 +43,7 @@ import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import { WebToolName } from '../toolName.js';
 import { AuditRecord, auditRecordSchema } from './auditRecord.js';
 import { EvidenceContext, EvidenceStrategy } from './evidence.js';
+import { renderPreviewNotRunMessage } from './hitlText.js';
 
 /** Identity of the principal attempting the mutation, captured for the audit record. */
 export interface MutationActor {
@@ -183,14 +191,14 @@ export async function guardMutation<TTarget>({
       // approving in the rendered panel — it is model-invisible and takes no `confirm` arg, so the
       // "run with confirm omitted" recovery does not apply to it. A model-visible preview-confirm
       // tool (no previewTool) previews and confirms under the SAME name, so it recovers in place.
-      const recovery = previewTool
-        ? `Re-run ${previewTool} to preview again, then approve in the confirmation panel.`
-        : `Run ${tool} with confirm omitted (or false) first to preview, then call again with ` +
-          'confirm: true.';
+      // Wording single-sourced in hitlText.ts (renderPreviewNotRunMessage).
       return new PreviewNotRunError(
-        `Mutation blocked: ${tool} could not verify that a preview ran for ${target.kind} ` +
-          `${target.id}. ${recovery} This gate verifies server-side state and cannot be bypassed by ` +
-          'computing a token.',
+        renderPreviewNotRunMessage({
+          tool,
+          previewTool,
+          targetKind: target.kind,
+          targetId: target.id,
+        }),
       ).toErr();
     }
   }

@@ -46,6 +46,7 @@ const mocks = vi.hoisted(() => ({
   mockDeleteDatasource: vi.fn(),
   mockQueryDatasource: vi.fn(),
   mockDeleteExtractRefreshTask: vi.fn(),
+  mockListExtractRefreshTasks: vi.fn(),
   mockQueryUserOnSite: vi.fn(),
   mockAssertAdmin: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
@@ -72,6 +73,7 @@ vi.mock('../../../restApiInstance.js', () => ({
       },
       tasksMethods: {
         deleteExtractRefreshTask: mocks.mockDeleteExtractRefreshTask,
+        listExtractRefreshTasks: mocks.mockListExtractRefreshTasks,
       },
       usersMethods: {
         queryUserOnSite: mocks.mockQueryUserOnSite,
@@ -177,6 +179,11 @@ describe('confirmDeleteContentTool', () => {
     mocks.mockDeleteExtractRefreshTask.mockResolvedValue(undefined);
     mocks.mockAddTagsToWorkbook.mockResolvedValue(undefined);
     mocks.mockAddTagsToDatasource.mockResolvedValue(undefined);
+    // Default: the task list resolves the task to its underlying datasource so the audit target is
+    // enriched (AC-3). Individual tests override to exercise the id-only fallback.
+    mocks.mockListExtractRefreshTasks.mockResolvedValue([
+      { id: validTaskId, datasource: { id: validDatasourceId } },
+    ]);
   });
 
   it('is a model-invisible app-only tool gated on adminToolsEnabled && mcp-apps', () => {
@@ -335,6 +342,11 @@ describe('confirmDeleteContentTool', () => {
     expect(records.map((r) => r.result)).toEqual(['completed']);
     expect(records.every((r) => r.phase === 'confirm')).toBe(true);
     expect(records.every((r) => r.action === 'delete')).toBe(true);
+    // AC-3 / Gap-B: the task audit target is enriched with the underlying datasource identity
+    // (name/project from queryDatasource, owner from resolveOwnerEmail — both mocked above).
+    expect(records[0].target.name).toBe('Test Datasource');
+    expect(records[0].target.project).toBe('Test Project');
+    expect(records[0].target.owner).toBe('owner@test.com');
   });
 
   // --- Cross-namespace isolation: an update approval must not unlock a delete ---

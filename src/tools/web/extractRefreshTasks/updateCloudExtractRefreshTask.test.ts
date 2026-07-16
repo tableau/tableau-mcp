@@ -55,6 +55,8 @@ function extractConfirmationToken(text: string): string {
 
 const mocks = vi.hoisted(() => ({
   mockUpdateCloudExtractRefreshTask: vi.fn(),
+  mockListExtractRefreshTasks: vi.fn(),
+  mockQueryDatasource: vi.fn(),
   mockQueryUserOnSite: vi.fn(),
   mockAssertAdmin: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
@@ -69,6 +71,10 @@ vi.mock('../../../restApiInstance.js', () => ({
     callback({
       tasksMethods: {
         updateCloudExtractRefreshTask: mocks.mockUpdateCloudExtractRefreshTask,
+        listExtractRefreshTasks: mocks.mockListExtractRefreshTasks,
+      },
+      datasourcesMethods: {
+        queryDatasource: mocks.mockQueryDatasource,
       },
       usersMethods: {
         queryUserOnSite: mocks.mockQueryUserOnSite,
@@ -120,8 +126,25 @@ describe('updateCloudExtractRefreshTaskTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
-    mocks.mockQueryUserOnSite.mockResolvedValue({ siteRole: 'SiteAdministratorCreator' });
+    mocks.mockQueryUserOnSite.mockResolvedValue({
+      id: 'owner-1',
+      name: 'Owner One',
+      email: 'owner@example.com',
+      siteRole: 'SiteAdministratorCreator',
+    });
     mocks.mockUpdateCloudExtractRefreshTask.mockResolvedValue(new Ok(updatedTask));
+    // Default: the task list resolves this task to its underlying datasource so the audit target is
+    // enriched (AC-3). Tests that don't care about enrichment are unaffected (best-effort, id always
+    // present).
+    mocks.mockListExtractRefreshTasks.mockResolvedValue([
+      { id: validTaskId, datasource: { id: 'ds-1' } },
+    ]);
+    mocks.mockQueryDatasource.mockResolvedValue({
+      id: 'ds-1',
+      name: 'Sales Extract',
+      project: { name: 'Finance' },
+      owner: { id: 'owner-1' },
+    });
     // Default: mcp-apps flag OFF → today's exact confirm-only behavior.
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
   });
@@ -506,6 +529,10 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       expect(confirmRecords.map((r) => r.result)).toEqual(['completed']);
       expect(confirmRecords.every((r) => r.action === 'update')).toBe(true);
       expect(confirmRecords.every((r) => r.target.id === validTaskId)).toBe(true);
+      // AC-3 / Gap-B: the audit target is enriched from the task's underlying datasource.
+      expect(confirmRecords.every((r) => r.target.name === 'Sales Extract')).toBe(true);
+      expect(confirmRecords.every((r) => r.target.project === 'Finance')).toBe(true);
+      expect(confirmRecords.every((r) => r.target.owner === 'owner@example.com')).toBe(true);
     });
 
     // Fix #1: the confirm is bound to the exact schedule that was previewed. A token minted for

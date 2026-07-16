@@ -338,6 +338,50 @@ describe('deleteContentTool', () => {
       });
     });
 
+    // AC-3 / Gap-B: the audit record's target is enriched with the underlying content's
+    // name/project/owner, derived from the task's datasource (the task list carries only the id).
+    it('enriches the preview audit target with the underlying datasource name/project/owner', async () => {
+      mocks.mockListExtractRefreshTasks.mockResolvedValue([
+        { id: validTaskId, datasource: { id: mockDatasource.id } },
+      ]);
+      const result = await getToolResult({
+        resourceType: 'extract-refresh-task',
+        resourceId: validTaskId,
+      });
+      expect(result.isError).toBe(false);
+      const record = getAuditRecords()[0];
+      expect(record.target.id).toBe(validTaskId);
+      expect(record.target.kind).toBe('extract-refresh-task');
+      expect(record.target.name).toBe(mockDatasource.name);
+      expect(record.target.project).toBe('Samples');
+      expect(record.target.owner).toBe('owner@example.com');
+    });
+
+    it('enriched confirm audit target carries the underlying content identity', async () => {
+      mocks.mockListExtractRefreshTasks.mockResolvedValue([
+        { id: validTaskId, datasource: { id: mockDatasource.id } },
+      ]);
+      const previewText = await previewAndGetText({
+        resourceType: 'extract-refresh-task',
+        resourceId: validTaskId,
+      });
+      const token = extractToken(previewText);
+      (logger.log as MockedFunction<typeof logger.log>).mockClear();
+
+      const result = await getToolResult({
+        resourceType: 'extract-refresh-task',
+        resourceId: validTaskId,
+        confirm: true,
+        confirmationToken: token,
+      });
+      expect(result.isError).toBe(false);
+      const records = getAuditRecords();
+      expect(records.map((r) => r.result)).toEqual(['completed']);
+      expect(records[0].target.name).toBe(mockDatasource.name);
+      expect(records[0].target.project).toBe('Samples');
+      expect(records[0].target.owner).toBe('owner@example.com');
+    });
+
     it('rejects a non-UUID resourceId with a clear error', async () => {
       const result = await getToolResult({
         resourceType: 'extract-refresh-task',

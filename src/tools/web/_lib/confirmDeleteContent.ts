@@ -12,6 +12,7 @@ import { WebTool } from '../tool.js';
 import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
 import { AllEvidence, AppApprovalEvidence, TagEvidence } from './evidence.js';
 import { guardMutation, MutationTarget } from './mutationGuard.js';
+import { resolveExtractRefreshTaskTarget } from './resolveExtractRefreshTaskTarget.js';
 
 const resourceTypeSchema = z.enum(['workbook', 'datasource', 'extract-refresh-task']);
 
@@ -202,10 +203,18 @@ allowed time window. If the check fails the deletion is rejected and the user mu
                 }
 
                 case 'extract-refresh-task': {
-                  const resolveTarget = async (): Promise<MutationTarget> => ({
-                    id: resourceId,
-                    kind: 'extract-refresh-task',
-                  });
+                  // Enrich the audit target with the underlying content's name/project/owner (AC-3)
+                  // via the shared best-effort helper. No task list is pre-fetched on this confirm
+                  // path, so the helper lists tasks once, finds this id, then does ONE content lookup
+                  // + ONE owner lookup. A resolve failure degrades to an id-only target and never
+                  // blocks the deletion.
+                  const resolveTarget = async (): Promise<MutationTarget> =>
+                    resolveExtractRefreshTaskTarget({
+                      restApi,
+                      siteId,
+                      taskId: resourceId,
+                      logger: 'confirm-delete-content',
+                    });
 
                   const guardResult = await guardMutation({
                     restApi,
