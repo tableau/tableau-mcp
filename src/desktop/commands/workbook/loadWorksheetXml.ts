@@ -3,7 +3,9 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { getDesktopConfig } from '../../../config.desktop.js';
 import { log } from '../../../logging/logger.js';
 import { sanitizeValue } from '../../../logging/sanitize.js';
+import { normalizeArray, parseXML } from '../../metadata/parser.js';
 import { buildMinimalSheetDoc } from '../../metadata/sheets.js';
+import type { ParsedWorksheet } from '../../metadata/types.js';
 import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
@@ -26,6 +28,11 @@ import { applyWorkbookText, interpretLoadOutcome } from './loadWorkbookXml.js';
 export type LoadWorksheetXmlError =
   | { type: 'invalid-xml' }
   | { type: 'validation-failed'; issues: Array<ValidationIssue> }
+  // The caller's worksheet_name disagrees with the `<worksheet name>` in the authored XML, or the
+  // payload carries no top-level `<worksheet>` fragment to gate on (e.g. a whole `<workbook>`
+  // document). Caught BEFORE apply so the post-apply goto-sheet can never target a stale/default
+  // sheet, and so the agent gets an actionable message instead of a misleading empty-name mismatch.
+  | { type: 'name-mismatch'; message: string }
   // The load-worksheet command reported command-level completion, but Tableau
   // rejected the actual document load (surfaced in the response payload, not in
   // `status`). `message` carries Desktop's own error text.
@@ -133,6 +140,64 @@ function readbackOutcome(
   });
 }
 
+/**
+ * Canonical-name gate. The `<worksheet name>` in the authored XML is the identity Tableau
+ * applies, so require the caller's `worksheetName` to agree with it before we touch Desktop.
+ * Names are compared after trim and Unicode NFC normalization (case-sensitive) so visually
+ * identical NFD/NFC spellings do not false-mismatch. Returns the validated canonical name — the
+ * name exactly as authored in the XML (trimmed), which is what Tableau stores when it applies the
+ * raw XML — for the load, the readback, and the post-apply goto-sheet, so focus can never target a
+ * stale/default sheet (e.g. "Sheet 1"), and so buildMinimalSheetDoc's own name check still matches.
+ *
+ * Only a single top-level `<worksheet>` fragment is a legal payload here (the same fragment
+ * get-worksheet-xml returns and buildMinimalSheetDoc requires). A `<workbook>`-wrapped document has
+ * no top-level identity to gate on, so it is rejected before apply with a recovery hint rather than
+ * failing as a misleading mismatch against an empty XML name.
+ */
+function resolveCanonicalWorksheetName(
+  worksheetName: string,
+  xml: string,
+): Result<string, Extract<LoadWorksheetXmlError, { type: 'name-mismatch' }>> {
+  const callerName = worksheetName.trim();
+  let xmlName = '';
+  let isWorkbookDocument = false;
+  try {
+    const parsed = parseXML(xml);
+    const worksheet = normalizeArray(parsed.worksheet as ParsedWorksheet | undefined)[0];
+    xmlName = worksheet?.['@_name']?.trim() ?? '';
+    isWorkbookDocument = !xmlName && Boolean(parsed.workbook);
+  } catch {
+    xmlName = '';
+  }
+
+  if (!xmlName) {
+    // No top-level <worksheet> identity to gate on — reject with an actionable recovery message
+    // instead of a misleading mismatch against an empty XML name.
+    return Err({
+      type: 'name-mismatch',
+      message: isWorkbookDocument
+        ? 'apply-worksheet expects a single <worksheet name="..."> fragment, but the XML is a whole ' +
+          `<workbook> document. FIX: Extract just the <worksheet name="${callerName}"> element and retry ` +
+          'with that fragment as worksheetXml — or apply the whole document with apply-workbook.'
+        : 'apply-worksheet could not find a top-level <worksheet name="..."> element in the XML. ' +
+          `FIX: Provide a single <worksheet name="${callerName}"> fragment (as returned by get-worksheet-xml) ` +
+          'as worksheetXml.',
+    });
+  }
+
+  if (xmlName.normalize('NFC') !== callerName.normalize('NFC')) {
+    return Err({
+      type: 'name-mismatch',
+      message:
+        `worksheet_name "${worksheetName}" does not match the <worksheet name> in the XML ("${xmlName}"). ` +
+        `FIX: Retry with worksheet_name set to the XML's name "${xmlName}" — or update the <worksheet name> ` +
+        `attribute in the XML to "${worksheetName}" if the caller name is intended.`,
+    });
+  }
+
+  return Ok(xmlName);
+}
+
 export async function loadWorksheetXml({
   worksheetName,
   xml,
@@ -181,19 +246,34 @@ export async function loadWorksheetXml({
     });
   }
 
+  // Canonical-name gate (focus hardening): require the caller's worksheet_name to agree with
+  // the XML root name before apply, then thread the validated canonical name through the load,
+  // readback, and goto-sheet so navigation can never land on a stale/default sheet.
+  const canonicalNameResult = resolveCanonicalWorksheetName(worksheetName, xml);
+  if (canonicalNameResult.isErr()) {
+    log({
+      level: 'error',
+      message: 'worksheet_name does not match the XML worksheet name — not sent to Tableau',
+      logger: 'worksheetCommands',
+      data: { worksheetName, message: canonicalNameResult.error.message },
+    });
+    return Err({ type: 'load-worksheet-xml-error', error: canonicalNameResult.error });
+  }
+  const canonicalName = canonicalNameResult.value;
+
   // External Client API ("Athena V0") exposes no per-sheet route — tabui:load-worksheet is not in
   // its command registry, so applying a single sheet re-posts a minimal whole-workbook document.
   // The POST upserts by name: it overwrites the colliding sheet in place and leaves the rest live.
   const result = await (getDesktopConfig().externalApiEnabled
     ? loadWorksheetXmlViaExternalApi({
-        worksheetName,
+        worksheetName: canonicalName,
         xml,
         executor,
         signal,
         readbackVerificationOut,
       })
     : loadWorksheetXmlViaAgentApi({
-        worksheetName,
+        worksheetName: canonicalName,
         xml,
         executor,
         signal,

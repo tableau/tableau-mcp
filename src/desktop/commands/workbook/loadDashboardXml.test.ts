@@ -104,6 +104,150 @@ describe('loadDashboardXml (Agent API transport, default)', () => {
     );
   });
 
+  it('rejects before apply when dashboard_name does not match the XML dashboard name', async () => {
+    // Canonical-name gate: the XML root name is the identity Tableau applies. A caller name
+    // that disagrees must fail BEFORE apply so goto-sheet can never target a stale/default sheet.
+    const executeCommand = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-123', status: 'completed', submitted_at: '' }));
+    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+
+    const result = await loadDashboardXml({
+      dashboardName: 'Different Dashboard',
+      xml: validXml, // name="Sales Dashboard"
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-dashboard-xml-error');
+      invariant(result.error.error.type === 'name-mismatch');
+      // Recovery-oriented (P2a): both names verbatim + a FIX line telling the LLM exactly how to
+      // recover (align dashboard_name to the XML name, or edit the <dashboard name> attribute).
+      expect(result.error.error.message).toBe(
+        'dashboard_name "Different Dashboard" does not match the <dashboard name> in the XML ' +
+          '("Sales Dashboard"). FIX: Retry with dashboard_name set to the XML\'s name "Sales Dashboard" — ' +
+          'or update the <dashboard name> attribute in the XML to "Different Dashboard" if the caller ' +
+          'name is intended.',
+      );
+    }
+    // No apply and no navigation happened.
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('rejects a <workbook>-wrapped payload before apply with a single-fragment recovery error', async () => {
+    // P1: a whole-workbook document has no top-level <dashboard> identity to gate on. It passes
+    // upstream validation (well-formed) and reaches the resolver, so instead of the misleading
+    // `does not match XML dashboard name ""`, the gate must reject with an actionable, non-empty
+    // recovery hint. It must NOT be "selected" or applied — the fragment-only contract is enforced
+    // downstream by buildMinimalDashboardDoc, so accepting a workbook here would only fail later.
+    const executeCommand = vi
+      .fn()
+      .mockResolvedValue(Ok({ command_id: 'cmd-123', status: 'completed', submitted_at: '' }));
+    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+    const workbookShaped =
+      "<?xml version='1.0'?><workbook><dashboards>" +
+      '<dashboard name="Sales Dashboard"><zones></zones></dashboard></dashboards>' +
+      '<windows><window class="dashboard" name="Sales Dashboard"/></windows></workbook>';
+
+    const result = await loadDashboardXml({
+      dashboardName: 'Sales Dashboard',
+      xml: workbookShaped,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-dashboard-xml-error');
+      invariant(result.error.error.type === 'name-mismatch');
+      expect(result.error.error.message).toContain('single <dashboard name="..."> fragment');
+      expect(result.error.error.message).toContain('whole <workbook> document');
+      expect(result.error.error.message).toContain('apply-workbook');
+      // The old, misleading empty-name mismatch must be gone.
+      expect(result.error.error.message).not.toContain('name ""');
+    }
+    // Never applied and never navigated.
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('passes the gate when the caller arg is NFD and the XML name is NFC (visually identical)', async () => {
+    // P2b: "Café" spelled with a precomposed é (NFC) in the XML vs a decomposed e + combining
+    // acute (NFD) in the caller arg are visually identical and must not false-mismatch. The
+    // canonical name threaded to load + goto-sheet is the name exactly as authored in the XML.
+    const nfcName = 'Caf\u00e9'; // é as a single precomposed code point (NFC)
+    const nfdName = 'Cafe\u0301'; // e + U+0301 combining acute accent (NFD)
+    expect(nfcName).not.toBe(nfdName); // different code points…
+    expect(nfcName.normalize('NFC')).toBe(nfdName.normalize('NFC')); // …but NFC-equal
+    const nfcXml = `<dashboard name="${nfcName}"><zones></zones></dashboard>`;
+    const executeCommand = vi
+      .fn()
+      .mockResolvedValueOnce(Ok({ command_id: 'cmd-123', status: 'completed', submitted_at: '' }))
+      .mockResolvedValueOnce(Ok({ command_id: 'cmd-goto', status: 'completed', submitted_at: '' }));
+    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+
+    const result = await loadDashboardXml({
+      dashboardName: nfdName,
+      xml: nfcXml,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(executeCommand).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        namespace: 'tabui',
+        command: 'load-dashboard',
+        args: { dashboardName: nfcName, dashboardXml: nfcXml },
+      }),
+    );
+    expect(executeCommand).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        namespace: 'tabdoc',
+        command: 'goto-sheet',
+        args: { sheet: nfcName },
+      }),
+    );
+  });
+
+  it('focuses the canonical XML dashboard name (not the raw caller arg) after a matched apply', async () => {
+    const executeCommand = vi
+      .fn()
+      .mockResolvedValueOnce(Ok({ command_id: 'cmd-123', status: 'completed', submitted_at: '' }))
+      .mockResolvedValueOnce(Ok({ command_id: 'cmd-goto', status: 'completed', submitted_at: '' }));
+    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+
+    const result = await loadDashboardXml({
+      dashboardName: '  Sales Dashboard  ', // matches "Sales Dashboard" after trim
+      xml: validXml,
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    // The load command and the final goto-sheet both use the canonical, trimmed name.
+    expect(mockExecutor.executeCommand).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        namespace: 'tabui',
+        command: 'load-dashboard',
+        args: { dashboardName: 'Sales Dashboard', dashboardXml: validXml },
+      }),
+    );
+    expect(mockExecutor.executeCommand).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        namespace: 'tabdoc',
+        command: 'goto-sheet',
+        args: { sheet: 'Sales Dashboard' },
+        signal: mockSignal,
+      }),
+    );
+  });
+
   it('should return invalid-xml error when xml is empty', async () => {
     const mockExecutor = { executeCommand: vi.fn() } as unknown as LocalExecutor;
 
