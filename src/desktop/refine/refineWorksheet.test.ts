@@ -1,3 +1,6 @@
+import { ensureUserNamespace } from '../templates/injectTemplateCore.js';
+import { runValidation } from '../validation/registry.js';
+import { parseXml } from '../validation/rules/parseXml.js';
 import {
   confirmSortDirectionApplied,
   confirmTopNApplied,
@@ -302,8 +305,20 @@ describe('planSortDirection', () => {
     expect(r.reason).toMatch(/ASC.*DESC/);
   });
 
-  it('refuses when no computed-sort is present', () => {
-    const xml = BASE.replace(/<computed-sort[^>]*\/>/, '');
+  it('refuses when no computed-sort is present on a shape richer than a simple bar', () => {
+    // This assertion previously used BASE-minus-sort (a single-dim/single-measure bar) to
+    // prove the historic "refuse when unsorted" limitation. That exact shape is now the
+    // ADD-a-sort case (covered below), so it can no longer refuse. The no-sort refusal is
+    // still correct — and still exercised here — for any shape richer than the simple bar
+    // (two categorical dimensions), where we never guess a sort.
+    const xml = withDeps(
+      REGION_COL +
+        "<column datatype='string' name='[Category]' role='dimension' type='nominal' />" +
+        SALES_COL +
+        REGION_CI +
+        "<column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />" +
+        SALES_CI,
+    ).replace(/<computed-sort[^>]*\/>/, '');
     const r = planSortDirection(xml, { direction: 'ASC' });
     expect(r.ok).toBe(false);
     if (r.ok) return;
@@ -330,6 +345,193 @@ describe('planSortDirection', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.reason).toMatch(/nested/i);
+  });
+});
+
+describe('planSortDirection — INSERT a sort on an unsorted simple bar', () => {
+  // The unsorted single-dim/single-measure bar: BASE with its <computed-sort> removed —
+  // the exact shape magnitude-simple-bar.xml ships, minus the sort node.
+  const UNSORTED = BASE.replace(/<computed-sort[^>]*\/>/, '');
+
+  it('inserts a safe self-closing computed-sort (desc) with template placement/attributes', () => {
+    const r = planSortDirection(UNSORTED, { direction: 'DESC' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.column).toBe('[Superstore].[none:Region:nk]');
+    expect(r.direction).toBe('DESC');
+
+    // Mirrors magnitude-simple-bar.xml:24 exactly (column = dim CI, using = measure CI).
+    expect(r.xml).toContain(
+      "<computed-sort column='[Superstore].[none:Region:nk]' direction='DESC' using='[Superstore].[sum:Sales:qk]' />",
+    );
+    // Exactly one sort node (no accidental duplicate) and the XML still parses.
+    expect([...r.xml.matchAll(/<computed-sort\b/g)]).toHaveLength(1);
+    expect(parseXml(r.xml)?.documentElement).toBeTruthy();
+
+    // Placed after the dependencies anchor and before <aggregation> (template ordering).
+    const sortIdx = r.xml.indexOf('<computed-sort');
+    expect(sortIdx).toBeGreaterThan(r.xml.indexOf('</datasource-dependencies>'));
+    expect(sortIdx).toBeLessThan(r.xml.indexOf('<aggregation'));
+  });
+
+  it('honors the requested direction on insert (ASC)', () => {
+    const r = planSortDirection(UNSORTED, { direction: 'ASC' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.xml).toContain(
+      "<computed-sort column='[Superstore].[none:Region:nk]' direction='ASC' using='[Superstore].[sum:Sales:qk]' />",
+    );
+  });
+
+  it('round-trip: the inserted node passes the SAME preflight validation the apply path runs', () => {
+    const r = planSortDirection(UNSORTED, { direction: 'DESC' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // Mirror refineWorksheet.ts: ensureUserNamespace(patched) → runValidation(_, 'worksheet').
+    const result = runValidation(ensureUserNamespace(r.xml), 'worksheet');
+    expect(result.valid).toBe(true);
+    expect(result.issues.filter((i) => i.severity === 'error')).toEqual([]);
+    // Specifically NOT the crashing nested form.
+    expect(result.issues.some((i) => i.ruleId === 'computed-sort-crash')).toBe(false);
+    // And the inserted sort is confirmable by the same readback check the tool uses.
+    expect(confirmSortDirectionApplied(r.xml, r.column, 'DESC')).toBe(true);
+  });
+});
+
+describe('planSortDirection — INSERT refusals (richer shapes keep the no-sort refusal)', () => {
+  const stripSort = (xml: string): string => xml.replace(/<computed-sort[^>]*\/>/, '');
+
+  it('refuses to insert when a second measure makes the ranking key ambiguous', () => {
+    const xml = stripSort(
+      withDeps(
+        REGION_COL +
+          SALES_COL +
+          "<column datatype='real' name='[Profit]' role='measure' type='quantitative' />" +
+          REGION_CI +
+          SALES_CI +
+          "<column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />",
+      ),
+    );
+    const r = planSortDirection(xml, { direction: 'DESC' });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/no <computed-sort>/i);
+  });
+
+  it('refuses to insert when the sheet uses a calculated field', () => {
+    const xml = stripSort(
+      withDeps(
+        REGION_COL +
+          SALES_COL +
+          REGION_CI +
+          "<column-instance column='[Calculation_1]' derivation='User' name='[usr:Calculation_1:qk]' pivot='key' type='quantitative' />",
+      ),
+    );
+    const r = planSortDirection(xml, { direction: 'DESC' });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/no <computed-sort>/i);
+  });
+
+  it('refuses to insert when a table calc is present', () => {
+    // Still one dim + one measure CI (derivation Sum), but the measure carries a
+    // <table-calc> child → out of the simple-bar envelope; the guard keeps the refusal.
+    const xml = stripSort(BASE).replace(
+      SALES_CI,
+      "<column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative'><table-calc ordering-type='Rows' /></column-instance>",
+    );
+    const r = planSortDirection(xml, { direction: 'DESC' });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/no <computed-sort>/i);
+  });
+
+  it('refuses to insert on a dual-axis / multi-pane sheet', () => {
+    const xml = stripSort(BASE).replace(
+      '</panes>',
+      "  <pane><view><breakdown value='auto' /></view><mark class='Line' /></pane>\n    </panes>",
+    );
+    const r = planSortDirection(xml, { direction: 'DESC' });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/no <computed-sort>/i);
+  });
+
+  it('refuses to insert when the dimension is not bound to a shelf (sort would dangle)', () => {
+    // 1 dim + 1 measure, but the dimension pill is not on rows/cols → the computed-sort
+    // would couple to a pill that isn't placed; keep the refusal rather than guess.
+    const xml = stripSort(BASE).replace('<rows>[Superstore].[none:Region:nk]</rows>', '<rows />');
+    const r = planSortDirection(xml, { direction: 'DESC' });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/no <computed-sort>/i);
+  });
+
+  it('refuses to insert when the same dimension is bound to BOTH shelves (P1c)', () => {
+    // rows AND cols both carry the dimension CI, so this is not the verified simple-bar
+    // shape (dim on exactly one shelf, measure on the other). The old `includes` check
+    // over the concatenated shelves would pass; the per-shelf binding must refuse.
+    const xml = stripSort(BASE).replace(
+      '<cols>[Superstore].[sum:Sales:qk]</cols>',
+      '<cols>[Superstore].[none:Region:nk] / [Superstore].[sum:Sales:qk]</cols>',
+    );
+    const r = planSortDirection(xml, { direction: 'DESC' });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/no <computed-sort>/i);
+  });
+
+  it('refuses to insert when more than one datasource-dependencies block is present (P1b)', () => {
+    // A second dependency block (column metadata only) leaves the primary Region/Sales
+    // CIs unambiguous, but insertion would land between the two blocks — refuse unless
+    // there is EXACTLY one dependency block.
+    const xml = stripSort(BASE).replace(
+      '</datasource-dependencies>',
+      "</datasource-dependencies>\n      <datasource-dependencies datasource='Superstore'>" +
+        "<column datatype='string' name='[Segment]' role='dimension' type='nominal' /></datasource-dependencies>",
+    );
+    const r = planSortDirection(xml, { direction: 'DESC' });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/no <computed-sort>/i);
+  });
+
+  it('refuses to insert when the datasource name carries XML-special characters (P1a)', () => {
+    // A datasource whose name contains an apostrophe/ampersand would be interpolated raw
+    // into single-quoted attributes → malformed XML. The shelves here reference the same
+    // name (double-quoted, apostrophe-safe source) so shelf-binding passes and the ONLY
+    // reason to refuse is the unescaped special char in the built column/using values.
+    const xml = stripSort(BASE)
+      .replace(
+        "<datasource-dependencies datasource='Superstore'>",
+        '<datasource-dependencies datasource="Bob\'s &amp; Sons">',
+      )
+      .replaceAll('[Superstore].', "[Bob's &amp; Sons].");
+    const r = planSortDirection(xml, { direction: 'DESC' });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/no <computed-sort>/i);
+  });
+
+  it("refuses to insert when the only 'dimension' is the Measure Names pseudo-field (P2)", () => {
+    // Measure Names ([:Measure Names], nominal/None) matches the dimension pattern but is
+    // an internal pseudo-CI, not a real categorical dimension — exclude it so the sheet
+    // has no dimension to order and the insert refuses.
+    const xml = stripSort(
+      withDeps(
+        "<column datatype='string' name='[:Measure Names]' role='dimension' type='nominal' />" +
+          SALES_COL +
+          "<column-instance column='[:Measure Names]' derivation='None' name='[none:Measure Names:nk]' pivot='key' type='nominal' />" +
+          SALES_CI,
+      ),
+    ).replace(
+      '<rows>[Superstore].[none:Region:nk]</rows>',
+      '<rows>[Superstore].[none:Measure Names:nk]</rows>',
+    );
+    const r = planSortDirection(xml, { direction: 'DESC' });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/no <computed-sort>/i);
   });
 });
 

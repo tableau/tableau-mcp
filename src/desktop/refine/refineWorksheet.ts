@@ -12,12 +12,17 @@
  *     unambiguous categorical dimension CI, keyed by its single measure CI, then
  *     create/extend <slices>.
  *   - sort_direction: flip `direction` on an existing single self-closing <computed-sort>.
- *     The nested <sort class="computed-sort"> form crashes Desktop and is refused.
+ *     The nested <sort class="computed-sort"> form crashes Desktop and is refused. When
+ *     NO sort node exists yet, INSERT a safe self-closing <computed-sort> — but only under
+ *     the confirmed simple-bar shape (exactly one categorical dimension + one measure, both
+ *     on a shelf, single pane): the exact shape magnitude-simple-bar.xml ships (its sort
+ *     node at :24). Any richer shape keeps the no-sort refusal.
  *
  * Refusal, not repair: anything outside this tiny envelope (ambiguous dims/measures, n
- * outside 1..50, sets/params/rollups/calcs, an existing Top-N, a nested/absent/multiple
- * computed-sort) returns `{ ok: false, reason }` so the caller can hand back to the
- * standard authoring path instead of entering whole-workbook XML surgery.
+ * outside 1..50, sets/params/rollups/calcs, an existing Top-N, a nested/multiple
+ * computed-sort, or an absent computed-sort on a shape richer than a simple bar) returns
+ * `{ ok: false, reason }` so the caller can hand back to the standard authoring path
+ * instead of entering whole-workbook XML surgery.
  *
  * Repo-agnostic by construction: this module imports only third-party XML libraries
  * (@xmldom/xmldom, xpath) — no tableau-mcp modules — so it is a byte-adoption candidate
@@ -138,14 +143,24 @@ function datasourceName(xml: string): string {
   return ds ? (ds[1] ?? ds[2] ?? '') : '';
 }
 
+/**
+ * Internal pseudo-fields (Measure Names / Measure Values and any `[:...]` internal
+ * column) match the nominal/quantitative derivation patterns but are NOT real dims or
+ * measures — never treat them as the sheet's single dimension/measure.
+ */
+function isPseudoFieldCi(ci: ColumnInstance): boolean {
+  return /^\[:/.test(ci.column) || ci.column === '[Multiple Values]';
+}
+
 /** A plain categorical dimension CI: nominal + None derivation (e.g. [none:Region:nk]). */
 function isDimensionCi(ci: ColumnInstance): boolean {
-  return ci.type === 'nominal' && ci.derivation === 'None';
+  return !isPseudoFieldCi(ci) && ci.type === 'nominal' && ci.derivation === 'None';
 }
 
 /** A measure CI: quantitative with a canonical aggregation derivation (e.g. [sum:Sales:qk]). */
 function isMeasureCi(ci: ColumnInstance): boolean {
   return (
+    !isPseudoFieldCi(ci) &&
     ci.type === 'quantitative' &&
     Object.prototype.hasOwnProperty.call(AGG_DERIVATIONS, ci.derivation)
   );
@@ -295,10 +310,81 @@ export function planTopN(
   return { ok: true, xml: out, filterColumn };
 }
 
+/** The text of a single shelf (`rows`/`cols`) — where placed (bound) pills appear DS-qualified. */
+function shelfText(xml: string, shelf: 'rows' | 'cols'): string {
+  return xml.match(new RegExp(`<${shelf}\\b[^>]*>([\\s\\S]*?)</${shelf}>`))?.[1] ?? '';
+}
+
+/** True if a value carries any XML-special char that would break a single-quoted attribute. */
+function hasXmlSpecialChars(value: string): boolean {
+  return /['"<>&]/.test(value);
+}
+
 /**
- * Plan a direction flip on the worksheet's single self-closing <computed-sort>. Refuses if
- * absent, if more than one is present, if the direction is invalid, or if the sort uses the
- * nested <sort class="computed-sort"> crash form. Pure.
+ * Plan the INSERTION of a safe self-closing <computed-sort> on an UNSORTED sheet, but
+ * ONLY when the sheet is the confirmed simple-bar shape magnitude-simple-bar.xml ships:
+ * exactly one categorical dimension + one measure (and no other CIs), both bound to a
+ * shelf, a single pane, and none of the out-of-envelope constructs (calc/set/param/
+ * table-calc). Attributes/placement mirror that template's sort node (:24):
+ *   <computed-sort column='[ds].[dimCI]' direction='…' using='[ds].[measureCI]' />
+ * placed right after </datasource-dependencies>. The node is the self-closing form the
+ * lossy-apply detector explicitly recommends (it round-trips as <computed-sort>, never a
+ * dropped <shelf-sort-v2>), so it cannot trip shelf-sort-v2 loss. Returns a SortPlan when
+ * the shape is safe, else null so the caller keeps the standard no-sort refusal — we never
+ * guess a sort for a richer shape.
+ */
+function planSortInsertion(xml: string, direction: SortDirection): SortPlan | null {
+  const cis = parseColumnInstances(xml);
+  // Out-of-envelope constructs (calc/set/param) or a table calc → do not guess.
+  if (unsupportedConstruct(xml, cis) !== null) return null;
+  if (/<table-calc\b/.test(xml)) return null;
+  // Dual-axis / layered marks show up as multiple panes; the simple bar has exactly one.
+  if ((xml.match(/<pane\b/g) ?? []).length !== 1) return null;
+  // Exactly ONE dependency block, or the insertion anchor (its </…>) is ambiguous and the
+  // node could land between blocks. The simple bar has a single dependency block.
+  if ((xml.match(/<datasource-dependencies\b/g) ?? []).length !== 1) return null;
+  // Exactly the template's two CIs: one categorical dimension + one measure, nothing else.
+  if (cis.length !== 2) return null;
+  const dims = cis.filter(isDimensionCi);
+  const measures = cis.filter(isMeasureCi);
+  if (dims.length !== 1 || measures.length !== 1) return null;
+
+  const ds = datasourceName(xml);
+  if (!ds) return null;
+  if (!/<\/datasource-dependencies>/.test(xml)) return null;
+
+  const column = `[${ds}].${dims[0].name}`;
+  const using = `[${ds}].${measures[0].name}`;
+  // The attribute values are string-built into single-quoted attributes; a datasource name
+  // or CI carrying a quote/angle-bracket/ampersand would emit malformed XML. Refuse rather
+  // than guess an escaping — refusal falls back to the always-safe standard path.
+  if (hasXmlSpecialChars(column) || hasXmlSpecialChars(using)) return null;
+  // The simple bar binds the dimension to exactly one shelf and the measure to the other.
+  // A dimension present on BOTH shelves (or the two sharing a shelf) is not that shape —
+  // check each shelf separately rather than the concatenation (manifest hazard
+  // "computed-sort-pill-coupling": the dimension is what we order, the measure is the key).
+  const rows = shelfText(xml, 'rows');
+  const cols = shelfText(xml, 'cols');
+  const dimOnRows = rows.includes(column);
+  const dimOnCols = cols.includes(column);
+  const measOnRows = rows.includes(using);
+  const measOnCols = cols.includes(using);
+  const boundLikeSimpleBar =
+    (dimOnRows && !dimOnCols && measOnCols && !measOnRows) ||
+    (dimOnCols && !dimOnRows && measOnRows && !measOnCols);
+  if (!boundLikeSimpleBar) return null;
+
+  const node = `<computed-sort column='${column}' direction='${direction}' using='${using}' />`;
+  const out = xml.replace(/<\/datasource-dependencies>/, (m) => `${m}\n      ${node}`);
+  return { ok: true, xml: out, column, direction };
+}
+
+/**
+ * Plan a direction change on the worksheet's single self-closing <computed-sort>: flip an
+ * existing one, or INSERT one on an unsorted simple bar (see planSortInsertion). Refuses if
+ * more than one sort is present, if the direction is invalid, if the sort uses the nested
+ * <sort class="computed-sort"> crash form, or if the sheet is unsorted AND richer than a
+ * simple bar. Pure.
  */
 export function planSortDirection(
   xml: string,
@@ -323,7 +409,13 @@ export function planSortDirection(
   }
 
   const selfClosing = [...xml.matchAll(/<computed-sort\b[^>]*\/>/g)];
-  if (selfClosing.length === 0) return refuse('no <computed-sort> present to change direction on.');
+  if (selfClosing.length === 0) {
+    // No sort yet: ADD one iff the sheet is the safe simple-bar shape; otherwise keep the
+    // historic refusal so a richer shape falls back to the standard build path.
+    const inserted = planSortInsertion(xml, direction);
+    if (inserted) return inserted;
+    return refuse('no <computed-sort> present to change direction on.');
+  }
   if (selfClosing.length > 1) {
     return refuse('more than one <computed-sort> present; the target sort is ambiguous.');
   }
