@@ -24,6 +24,7 @@ import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenc
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
+import { markPlanBuildWorksheets, resetPlanBuildWorksheets } from './planBuildFocus.js';
 
 const SESSION = 'session-1';
 const FLAG = 'ROUTE_ENFORCEMENT';
@@ -189,6 +190,51 @@ describe('buildAndApplyWorksheetTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('<worksheet>');
+  });
+});
+
+// Compose-focus seam (a2td #215 port): build-and-apply-worksheet suppresses its per-sheet
+// focus only for worksheets recorded by a multi-task plan (session+name scoped), so the final
+// dashboard apply owns focus. Standalone applies keep focusing.
+describe('buildAndApplyWorksheetTool — plan-build focus suppression', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetPlanBuildWorksheets();
+  });
+
+  afterEach(() => {
+    resetPlanBuildWorksheets();
+  });
+
+  it('does NOT suppress focus for a standalone apply (no plan recorded)', async () => {
+    const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE });
+
+    expect(result.isError).toBeFalsy();
+    expect(loadWorksheetXml).toHaveBeenCalledWith(
+      expect.objectContaining({ worksheetName: 'Sheet1', suppressFocus: false }),
+    );
+  });
+
+  it('suppresses focus when the (session, worksheet) was recorded by a plan', async () => {
+    markPlanBuildWorksheets(SESSION, ['Sheet1']);
+
+    const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE });
+
+    expect(result.isError).toBeFalsy();
+    expect(loadWorksheetXml).toHaveBeenCalledWith(
+      expect.objectContaining({ worksheetName: 'Sheet1', suppressFocus: true }),
+    );
+  });
+
+  it('does NOT suppress focus when the plan was recorded for a DIFFERENT session', async () => {
+    markPlanBuildWorksheets('other-session', ['Sheet1']);
+
+    const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE });
+
+    expect(result.isError).toBeFalsy();
+    expect(loadWorksheetXml).toHaveBeenCalledWith(
+      expect.objectContaining({ worksheetName: 'Sheet1', suppressFocus: false }),
+    );
   });
 });
 
