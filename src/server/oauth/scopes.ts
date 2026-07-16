@@ -311,6 +311,7 @@ const toolScopeMap: Record<
       'tableau:workbook_tags:update',
       'tableau:datasources:delete',
       'tableau:datasource_tags:update',
+      'tableau:tasks:read',
       'tableau:tasks:delete',
       'tableau:users:read',
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,

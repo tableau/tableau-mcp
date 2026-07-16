@@ -51,6 +51,7 @@ const mocks = vi.hoisted(() => ({
   mockQueryDatasource: vi.fn(),
   mockAddTagsToDatasource: vi.fn(),
   mockDeleteDatasource: vi.fn(),
+  mockListExtractRefreshTasks: vi.fn(),
   mockDeleteExtractRefreshTask: vi.fn(),
   mockGraphql: vi.fn(),
   mockQueryUserOnSite: vi.fn(),
@@ -78,6 +79,7 @@ vi.mock('../../../restApiInstance.js', () => ({
         deleteDatasource: mocks.mockDeleteDatasource,
       },
       tasksMethods: {
+        listExtractRefreshTasks: mocks.mockListExtractRefreshTasks,
         deleteExtractRefreshTask: mocks.mockDeleteExtractRefreshTask,
       },
       metadataMethods: {
@@ -130,6 +132,9 @@ describe('deleteContentTool', () => {
     mocks.mockAddTagsToDatasource.mockResolvedValue(undefined);
     mocks.mockDeleteWorkbook.mockResolvedValue(undefined);
     mocks.mockDeleteDatasource.mockResolvedValue(undefined);
+    // Existence check for the extract-refresh-task branch: default to a list that CONTAINS the task
+    // id the task tests exercise, so preview/confirm reach the guard as before.
+    mocks.mockListExtractRefreshTasks.mockResolvedValue([{ id: validTaskId }]);
     mocks.mockDeleteExtractRefreshTask.mockResolvedValue(undefined);
     mocks.mockGraphql.mockResolvedValue({ publishedDatasources: [] });
     mocks.mockIsFeatureEnabled.mockResolvedValue(false);
@@ -353,6 +358,135 @@ describe('deleteContentTool', () => {
       expect(result.isError).toBe(true);
       expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
     });
+
+    // --- DEFECT 1 (W-23377934): existence check BEFORE minting a nonce ---
+    // The task branch has no single-get endpoint, so it list-and-finds. A taskId absent from the
+    // list must 404 WITHOUT the guard minting a confirmationToken — symmetric with the
+    // workbook/datasource branches whose resolveTarget reads 404 before any evidence is established.
+    // Pre-fix, the branch went straight to guardMutation and returned a preview WITH a token for a
+    // nonexistent task; these tests pin the no-token behavior.
+    describe('DEFECT-1: nonexistent task', () => {
+      it('preview returns not-found and mints NO confirmation token', async () => {
+        // Task is genuinely absent from this site (list does not contain validTaskId).
+        mocks.mockListExtractRefreshTasks.mockResolvedValue([{ id: 'some-other-task-id' }]);
+        const result = await getToolResult({
+          resourceType: 'extract-refresh-task',
+          resourceId: validTaskId,
+        });
+
+        // (a) It is an ERROR result carrying the 404 not-found message.
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        const text = result.content[0].text;
+        expect(text).toContain('not found');
+        expect(text).toContain(validTaskId);
+
+        // (b) NO confirmation token / nonce is minted or returned. The preview success text
+        // ('Preview —' + confirmationToken) must NOT appear.
+        expect(text).not.toContain('Preview —');
+        expect(text).not.toMatch(/confirmationToken/i);
+
+        // (c) No delete call, and — because the branch returns before guardMutation — NO audit
+        // record at all was emitted (in particular no 'allowed' for a minted token).
+        expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
+        expect(getAuditRecords()).toHaveLength(0);
+      });
+
+      it('preview on an EMPTY task list returns not-found and no token', async () => {
+        mocks.mockListExtractRefreshTasks.mockResolvedValue([]);
+        const result = await getToolResult({
+          resourceType: 'extract-refresh-task',
+          resourceId: validTaskId,
+        });
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('not found');
+        expect(result.content[0].text).not.toMatch(/confirmationToken/i);
+        expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
+        expect(getAuditRecords()).toHaveLength(0);
+      });
+
+      it('confirm:true on a task absent from the list returns not-found and never deletes', async () => {
+        // A caller who forged/replayed a token against a task that no longer exists is 404'd before
+        // the guard runs, so nothing is deleted.
+        mocks.mockListExtractRefreshTasks.mockResolvedValue([]);
+        const result = await getToolResult({
+          resourceType: 'extract-refresh-task',
+          resourceId: validTaskId,
+          confirm: true,
+          confirmationToken: 'a1b2c3d4-e5f6-4789-9abc-ef1234567890',
+        });
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('not found');
+        expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
+        expect(getAuditRecords()).toHaveLength(0);
+      });
+    });
+
+    // --- DEFECT 2 (W-23377934): a confirm logs EXACTLY ONE audit record ---
+    // The shared guard no longer emits 'allowed' on a confirm; the terminal recordOutcome emit is the
+    // sole record. Pre-fix a successful confirm logged ['allowed','completed'].
+    describe('DEFECT-2: confirm audit fires exactly once', () => {
+      it('preview still emits a single ALLOWED audit record (no regression)', async () => {
+        const result = await getToolResult({
+          resourceType: 'extract-refresh-task',
+          resourceId: validTaskId,
+        });
+        expect(result.isError).toBe(false);
+        const records = getAuditRecords();
+        expect(records.map((r) => r.result)).toEqual(['allowed']);
+        expect(records[0].phase).toBe('preview');
+      });
+
+      it('a successful confirm delete emits exactly one COMPLETED record (not allowed+completed)', async () => {
+        const previewText = await previewAndGetText({
+          resourceType: 'extract-refresh-task',
+          resourceId: validTaskId,
+        });
+        const token = extractToken(previewText);
+        // Isolate the confirm phase's audit emissions from the preview's 'allowed' record.
+        (logger.log as MockedFunction<typeof logger.log>).mockClear();
+
+        const result = await getToolResult({
+          resourceType: 'extract-refresh-task',
+          resourceId: validTaskId,
+          confirm: true,
+          confirmationToken: token,
+        });
+        expect(result.isError).toBe(false);
+        expect(mocks.mockDeleteExtractRefreshTask).toHaveBeenCalledOnce();
+
+        const records = getAuditRecords();
+        expect(records.map((r) => r.result)).toEqual(['completed']);
+        expect(records[0].phase).toBe('confirm');
+        expect(records[0].action).toBe('delete');
+      });
+
+      it('a failed confirm delete emits exactly one FAILED record (not allowed+failed)', async () => {
+        const previewText = await previewAndGetText({
+          resourceType: 'extract-refresh-task',
+          resourceId: validTaskId,
+        });
+        const token = extractToken(previewText);
+        mocks.mockDeleteExtractRefreshTask.mockRejectedValueOnce(new Error('Resource not found'));
+        (logger.log as MockedFunction<typeof logger.log>).mockClear();
+
+        const result = await getToolResult({
+          resourceType: 'extract-refresh-task',
+          resourceId: validTaskId,
+          confirm: true,
+          confirmationToken: token,
+        });
+        expect(result.isError).toBe(true);
+
+        const records = getAuditRecords();
+        expect(records.map((r) => r.result)).toEqual(['failed']);
+        expect(records[0].phase).toBe('confirm');
+        const failed = records[0];
+        expect(failed.failureDetail).toContain('Resource not found');
+      });
+    });
   });
 
   // --- MCP-Apps flag ON: preview returns LEGACY namespace panel + records approval under legacy ---
@@ -455,5 +589,10 @@ async function previewAndGetText(args: {
   return preview.content[0].text;
 }
 
-// silence unused: getAuditRecords wired up in case future tests want to assert audit rows.
-void getAuditRecords;
+function extractToken(previewText: string): string {
+  const match = previewText.match(
+    /confirmationToken:\s*\\?"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/,
+  );
+  invariant(match, `expected confirmationToken in preview: ${previewText}`);
+  return match[1];
+}

@@ -19,8 +19,8 @@ import { scheduleBinding } from './updateCloudExtractRefreshTask.js';
 vi.mock('../../../logging/logger.js');
 
 // All mutation-audit records emitted so far, each parsed through the authoritative schema so the
-// assertion fails if the guard ever drops a required field. A confirmed update emits two (the
-// allowed authorization decision, then the terminal completed/failed outcome); denied paths emit one.
+// assertion fails if the guard ever drops a required field. A confirmed update emits exactly one
+// terminal record (completed or failed); denied paths also emit exactly one.
 function getAuditRecords(): ReturnType<typeof auditRecordSchema.parse>[] {
   const log = logger.log as MockedFunction<typeof logger.log>;
   return log.mock.calls
@@ -159,10 +159,10 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
       taskId: validTaskId,
       schedule: validSchedule,
     });
-    // A confirmed update emits two records: the allowed authorization decision, then the terminal
-    // 'completed' outcome once the REST update succeeds (audit reflects outcome, not just intent).
+    // A confirmed update emits exactly one record: the terminal 'completed' outcome once the REST
+    // update succeeds (the confirm's authorization is folded into that terminal record).
     const records = getAuditRecords();
-    expect(records.map((r) => r.result)).toEqual(['allowed', 'completed']);
+    expect(records.map((r) => r.result)).toEqual(['completed']);
     expect(records.every((r) => r.phase === 'confirm')).toBe(true);
     expect(records.every((r) => r.action === 'update')).toBe(true);
     expect(records.every((r) => r.confirmationEvidence.kind === 'registry-nonce')).toBe(true);
@@ -296,9 +296,10 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
     expect(result.content[0].text).toContain('Tableau Cloud only');
     expect(result.content[0].text).toContain('Tableau 404 [404001]');
     // An authorized-but-failed update records the terminal 'failed' outcome (with the Tableau-api
-    // detail) so the audit trail never claims an update that did not happen.
+    // detail) as the sole confirm record, so the audit trail never claims an update that did not
+    // happen.
     const records = getAuditRecords();
-    expect(records.map((r) => r.result)).toEqual(['allowed', 'failed']);
+    expect(records.map((r) => r.result)).toEqual(['failed']);
     const failed = records.find((r) => r.result === 'failed');
     invariant(failed, 'expected a failed audit record');
     expect(failed.failureDetail).toContain('Tableau 404 [404001]');
