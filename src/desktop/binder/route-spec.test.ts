@@ -177,6 +177,31 @@ describe('classifyAskRoute — refine detection is EDIT-CONTEXT gated', () => {
     ).toBe(false);
     expect(d.shape).not.toBe('refine-top-n');
   });
+
+  // fix/repair and "current/this/that (work)sheet" wording must carry sheet EDIT context so
+  // the ask is routed as an in-place refine, never as a new-viz build. These invariants pin
+  // the hasEditContext behavior (verified return: refine-encoding / free) without over-fitting.
+  it.each(['fix current sheet', 'repair that worksheet', 'show this worksheet as a line'])(
+    '"%s" carries sheet edit context without becoming a new viz',
+    (ask) => {
+      const d = classifyAskRoute(ask, manifests);
+      // It resolves to a REFINE shape (edit of an existing sheet) ...
+      expect(REFINE_SHAPES.has(d.shape), `${d.shape} should be a refine shape`).toBe(true);
+      // ... never a bind-first new-viz build.
+      expect(d.route).not.toBe('bind-first');
+      expect(d.shape).not.toBe('bind-first-template');
+    },
+  );
+
+  it('does not classify data-source repair wording as a sheet edit', () => {
+    const d = classifyAskRoute('fix the data source', manifests);
+    // The NON_SHEET_FIX_RE guard keeps "fix the data source" out of the edit-context path:
+    // it stays unmatched (NOT a refine shape), unlike the "fix current sheet" case above.
+    expect(d.shape).toBe('unmatched');
+    expect(d.route).toBe('free');
+    expect(REFINE_SHAPES.has(d.shape)).toBe(false);
+    expect(d.shape).not.toBe('refine-encoding');
+  });
 });
 
 describe('classifyAskRoute — fail-open free', () => {

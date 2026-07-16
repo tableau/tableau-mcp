@@ -29,9 +29,9 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('contains the plain-chart, dashboard, and data-value deflection routes', () => {
+  it('contains the required desktop routes', () => {
     expect(routes.map((route) => route.id)).toEqual(
-      expect.arrayContaining(['plain-chart', 'dashboard', 'data-value-question']),
+      expect.arrayContaining(['plain-chart', 'dashboard', 'data-value-question', 'edit-in-place']),
     );
   });
 

@@ -10,6 +10,7 @@ import {
 } from '../../toolExecutor/toolExecutor.js';
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
+import { formatApplyFailureForAgent } from './applyFailureClassifier.js';
 import { withApplyLock } from './applyMutex.js';
 import { focusAppliedSheetBestEffort } from './focusAppliedSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
@@ -23,7 +24,17 @@ export type LoadDashboardXmlError =
   // `status`). `message` carries Desktop's own error text.
   | { type: 'load-rejected'; message: string };
 
+export interface LoadDashboardXmlOk {
+  validationWarnings: ValidationIssue[];
+}
+
 type LoadDashboardXmlResult = Result<
+  LoadDashboardXmlOk,
+  | { type: 'execute-command-error'; error: ExecuteCommandError }
+  | { type: 'load-dashboard-xml-error'; error: LoadDashboardXmlError }
+>;
+
+type LoadDashboardHelperResult = Result<
   void,
   | { type: 'execute-command-error'; error: ExecuteCommandError }
   | { type: 'load-dashboard-xml-error'; error: LoadDashboardXmlError }
@@ -78,9 +89,15 @@ export async function loadDashboardXml({
   // External Client API ("Athena V0") exposes no per-sheet route — tabui:load-dashboard is not in
   // its command registry, so applying a single dashboard re-posts a minimal whole-workbook document.
   // The POST upserts by name: it overwrites the colliding dashboard in place and leaves the rest live.
-  return getDesktopConfig().externalApiEnabled
+  const result = await (getDesktopConfig().externalApiEnabled
     ? loadDashboardXmlViaExternalApi({ dashboardName, xml, executor, signal })
-    : loadDashboardXmlViaAgentApi({ dashboardName, xml, executor, signal });
+    : loadDashboardXmlViaAgentApi({ dashboardName, xml, executor, signal }));
+  if (result.isErr()) {
+    return result;
+  }
+  // Preflight warnings ride along so apply responses can compute the host
+  // verification receipt (W-23447506) without re-running validation.
+  return Ok({ validationWarnings: validation.issues });
 }
 
 async function loadDashboardXmlViaAgentApi({
@@ -91,7 +108,7 @@ async function loadDashboardXmlViaAgentApi({
 }: {
   dashboardName: string;
   xml: string;
-} & WithExecutorAndAbortSignal): Promise<LoadDashboardXmlResult> {
+} & WithExecutorAndAbortSignal): Promise<LoadDashboardHelperResult> {
   const result = await executor.executeCommand({
     namespace: 'tabui',
     command: 'load-dashboard',
@@ -121,7 +138,14 @@ async function loadDashboardXmlViaAgentApi({
 
     return Err({
       type: 'load-dashboard-xml-error',
-      error: { type: 'load-rejected', message: outcome.message },
+      error: {
+        type: 'load-rejected',
+        message: formatApplyFailureForAgent({
+          context: 'dashboard',
+          serverError: outcome.message,
+          xmlSnippet: xml,
+        }),
+      },
     });
   }
 
@@ -153,7 +177,7 @@ async function loadDashboardXmlViaExternalApi({
 }: {
   dashboardName: string;
   xml: string;
-} & WithExecutorAndAbortSignal): Promise<LoadDashboardXmlResult> {
+} & WithExecutorAndAbortSignal): Promise<LoadDashboardHelperResult> {
   return withApplyLock(async () => {
     const workbookResult = await getWorkbookXml({ executor, signal });
     if (workbookResult.isErr()) {

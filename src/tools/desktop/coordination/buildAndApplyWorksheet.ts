@@ -22,7 +22,7 @@ import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenc
 import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
-import { formatReadbackVerificationStatus } from '../../../desktop/validation/readback-verify.js';
+import { formatWorksheetPromiseCheck } from '../../../desktop/validation/promise-check.js';
 import {
   ArgsValidationError,
   CacheSessionMismatchError,
@@ -305,12 +305,17 @@ export const getBuildAndApplyWorksheetTool = (
             }
           }
 
-          const readbackStatusWarning = applyResult.isOk()
-            ? formatReadbackVerificationStatus(applyResult.value.readbackVerification)
+          // Host verification receipt (W-23447506) — subsumes the old readback
+          // status sentence: one host-truth line derived from preflight + readback.
+          const receipt = applyResult.isOk()
+            ? formatWorksheetPromiseCheck({
+                validationWarnings: applyResult.value.validationWarnings ?? [],
+                readback: applyResult.value.readbackVerification,
+              })
             : '';
 
           return new Ok({
-            message: `Built and applied worksheet "${worksheetName}" using template "${template}" with ${fields.length} fields.${readbackStatusWarning ? ` ${readbackStatusWarning}` : ''}`,
+            message: `Built and applied worksheet "${worksheetName}" using template "${template}" with ${fields.length} fields.${receipt}`,
             worksheetName,
             template,
             fieldCount: fields.length,

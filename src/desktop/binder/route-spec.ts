@@ -128,12 +128,21 @@ const NEW_VIZ_RE =
  */
 const EDIT_ANAPHORA_RE =
   /\b(?:this|that|the|current|existing)\s+(?:(?:bar|line|column|pie|scatter|area|stacked)\s+)?(?:chart|graph|plot|viz|visuali[sz]ation|view|dashboard)\b/i;
+// "current/this/that sheet" is an edit signal too. Deliberately not bare
+// "existing worksheets", which appears in do-not-replace-new-viz wording.
+const CURRENT_SHEET_RE = /\b(?:current|this|that)\s+(?:work)?sheet\b/i;
 const EDIT_INSTRUCTION_RE =
-  /\b(?:change|modify|update|convert|swap|re-?colou?r|re-?sort|adjust|tweak|instead)\b|\b(?:make|show|render|turn|set)\s+(?:it|that|this|them|these|those)\b/i;
+  /\b(?:fix|repair|change|modify|update|convert|swap|re-?colou?r|re-?sort|adjust|tweak|instead)\b|\b(?:make|show|render|turn|set)\s+(?:it|that|this|them|these|those)\b/i;
+const NON_SHEET_FIX_RE = /\b(?:fix|repair)\s+(?:the\s+)?(?:data\s+source|datasource|connection)\b/i;
 
 /** True when the ask carries an EDIT signal (anaphora to an existing viz OR a modify instruction). */
 function hasEditContext(text: string): boolean {
-  return EDIT_ANAPHORA_RE.test(text) || EDIT_INSTRUCTION_RE.test(text);
+  if (NON_SHEET_FIX_RE.test(text) && !EDIT_ANAPHORA_RE.test(text) && !CURRENT_SHEET_RE.test(text)) {
+    return false;
+  }
+  return (
+    EDIT_ANAPHORA_RE.test(text) || CURRENT_SHEET_RE.test(text) || EDIT_INSTRUCTION_RE.test(text)
+  );
 }
 
 /**

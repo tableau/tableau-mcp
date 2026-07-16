@@ -1,14 +1,18 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
+import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
-import { FileNotFoundError, FileReadError } from '../../../errors/mcpToolError.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
+import { FileNotFoundError, FileReadError, UnknownError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
+  session: z.string().optional().describe('Session ID; refreshes live workbook first.'),
   workbookFile: z.string().describe('Workbook cache file, not worksheet.'),
 };
 
@@ -51,30 +55,54 @@ export const getListAvailableFieldsTool = (
     description: [
       'List ALL fields available in workbook datasources.',
       'Returns exact column_ref inputs for field tools. Call before adding fields to Rows, Columns, or encodings.',
-      'Reads the workbook cache file, NOT a worksheet file.',
+      'Reads cache; session refreshes live workbook first. NOT a worksheet file.',
     ].join(' '),
     paramsSchema,
     annotations: {
       title,
-      readOnlyHint: true,
+      readOnlyHint: false, // With session, rewrites the workbook cache file + sidecar
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ workbookFile }, extra): Promise<CallToolResult> => {
+    callback: async ({ session, workbookFile }, extra): Promise<CallToolResult> => {
       return await listAvailableFieldsTool.logAndExecute({
         extra,
-        args: { workbookFile },
+        args: { session, workbookFile },
         callback: async () => {
           if (!existsSync(workbookFile)) {
             return new FileNotFoundError(workbookFile).toErr();
           }
 
           let workbookXml: string;
-          try {
-            workbookXml = readFileSync(workbookFile, 'utf-8');
-          } catch (error) {
-            return new FileReadError(error).toErr();
+          if (session) {
+            const sessionResult = resolveSession(session);
+            if (sessionResult.isErr()) {
+              return sessionResult.error.toErr();
+            }
+
+            const resolvedSession = sessionResult.value;
+            const executor = await extra.getExecutor(resolvedSession);
+            const result = await getWorkbookXml({ executor, signal: extra.signal });
+            if (result.isErr()) {
+              return new UnknownError(
+                `Failed to refresh workbook from Tableau before listing fields: ${JSON.stringify(result.error)}. Retry without session to read the cache as-is.`,
+              ).toErr();
+            }
+
+            workbookXml = result.value;
+            try {
+              writeFileSync(workbookFile, workbookXml, 'utf-8');
+              writeSidecar(workbookFile, resolvedSession);
+            } catch (error) {
+              return new FileReadError(error).toErr();
+            }
+          } else {
+            try {
+              workbookXml = readFileSync(workbookFile, 'utf-8');
+            } catch (error) {
+              return new FileReadError(error).toErr();
+            }
           }
 
           const fields = listAvailableFields(workbookXml);

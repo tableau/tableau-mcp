@@ -100,6 +100,8 @@ For a dashboard ask with 2-6 vizzes (e.g. "a dashboard with sales by region and 
 
 For a data-value question ("what was revenue in Q3?"), do NOT answer with a number — this server cannot read data values. Say so, then offer the viz that would show it (a plain viz ask via bind-template) instead.
 
+For current/this/that/existing sheet, chart, view, or dashboard, edit in place: resolve the target (exact name, else list-worksheets; ask if ambiguous), then refine-worksheet for top-N/sort edits, else get-worksheet-xml -> edit -> apply-worksheet. Never create a new sheet unless explicitly asked.
+
 Every session-scoped tool call needs the session id from list-instances — except bind-template and dashboard-auto-apply, which auto-resolve the session when exactly one Desktop instance is running.
 
 If an apply is rejected by preflight validation, fix the workbook content per the FIX lines in the error and re-apply. Prefer file mode for large workbooks.`,
@@ -146,7 +148,7 @@ describe('desktop tools/list serialized surface', () => {
 
     // 46_000 is the ToolSearch auto-deferral cliff on MCP hosts, not a tunable constant — past it
     // the whole desktop surface gets deferred behind ToolSearch. The shelf-tool consolidation has
-    // landed, so this is GREEN: the serialized surface is 44_015 bytes, ~1_985 under the cliff.
+    // landed, so this is GREEN: the serialized surface is 45_336 bytes, ~664 under the cliff.
     // That headroom is the ENTIRE budget for future tools — trim tools to fit it; NEVER raise the
     // cap to ship a tool (raising it just re-buries the whole surface behind ToolSearch).
     expect(total).toBeLessThanOrEqual(46_000);

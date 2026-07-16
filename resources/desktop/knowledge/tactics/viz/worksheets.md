@@ -321,7 +321,7 @@ The old `get_connected_datasources` had a known limitation — it only exposed d
 - **Worksheet-level `table-calculations` section** — put table-calc config in column-instance children
 - **Sort nodes inside column definitions** in datasource-dependencies — use view-level sort
 - **`shelf-sort-deltas`** at the table level
-- **Top N filters** (`function="filter"` groupfilter) — use table calc filter instead (INDEX() on Rows + quantitative range filter). See `workbook-calcs` module for the full per-partition Top N pattern.
+- **Top N filters authored as a FLAT `function="filter"` groupfilter** — stripped. Two working forms exist: the confirmed NESTED recipe (`function="end"` → `order` → `level-members` + matching `<slices>` entry — see `tactics/viz/filters.md`, Top N section), or a table calc filter (INDEX() on Rows + quantitative range filter; see `workbook-calcs` for the per-partition pattern). Preflight rule `malformed-top-n-filter` blocks the flat shape.
 
 ### Table calculation config (Compute Using)
 

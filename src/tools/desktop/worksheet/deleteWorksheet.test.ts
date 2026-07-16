@@ -232,7 +232,9 @@ describe('deleteWorksheetTool', () => {
       extraWindows: ["<window class='dashboard' name='Dash One'><viewpoints/></window>"],
     });
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(fixture));
-    const loadSpy = vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Ok.EMPTY);
+    const loadSpy = vi
+      .spyOn(loadWorkbookXmlModule, 'loadWorkbookXml')
+      .mockResolvedValue(Ok({ validationWarnings: [] }));
 
     const result = await getToolResult({ worksheetName: 'Beta' });
 
@@ -286,7 +288,9 @@ describe('deleteWorksheetTool', () => {
 
   it('proceeds without the events gate on transports without event support', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(buildWorkbook()));
-    const loadSpy = vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Ok.EMPTY);
+    const loadSpy = vi
+      .spyOn(loadWorkbookXmlModule, 'loadWorkbookXml')
+      .mockResolvedValue(Ok({ validationWarnings: [] }));
     const getEvents = vi.fn().mockResolvedValue(Err('events unsupported on this transport'));
 
     const result = await getToolResult({ worksheetName: 'Beta', getEvents });

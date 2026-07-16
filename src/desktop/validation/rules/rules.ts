@@ -16,6 +16,7 @@ import { hardcodedDateFilterRule } from './hardcodedDateFilter.js';
 import { invalidColumnInstancePivotRule } from './invalidColumnInstancePivot.js';
 import { invalidDerivationStringRule } from './invalidDerivationString.js';
 import { malformedSetGroupfilterRule } from './malformedSetGroupfilter.js';
+import { malformedTopNFilterRule } from './malformedTopNFilter.js';
 import { mixedAggregationCalcRule } from './mixedAggregationCalc.js';
 import { parameterFieldOnShelfRule } from './parameterFieldOnShelf.js';
 import { placeholderDatasourceRefRule } from './placeholderDatasourceRef.js';
@@ -50,6 +51,7 @@ export const validationRules = [
   duplicateEmptyParameterRule,
   setCountMalformedParameterRule,
   malformedSetGroupfilterRule,
+  malformedTopNFilterRule,
   calcNameFieldCollisionRule,
   mixedAggregationCalcRule,
   aggregateCalcDerivationRule,

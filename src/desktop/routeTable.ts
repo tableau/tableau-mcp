@@ -74,6 +74,16 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     requiredEvidence: [],
   },
   {
+    kind: 'route',
+    id: 'edit-in-place',
+    trigger: 'current/this/that/existing sheet, chart, view, or dashboard',
+    action:
+      'edit in place: resolve the target (exact name, else list-worksheets; ask if ambiguous), then refine-worksheet for top-N/sort edits, else get-worksheet-xml -> edit -> apply-worksheet. Never create a new sheet unless explicitly asked.',
+    toolSequence: ['list-worksheets', 'refine-worksheet', 'get-worksheet-xml', 'apply-worksheet'],
+    stopConditions: ['Never create a new sheet unless explicitly asked'],
+    requiredEvidence: ['resolved worksheet/dashboard target before applying'],
+  },
+  {
     kind: 'prose',
     id: SESSION_RESOLUTION_ID,
     text: 'Every session-scoped tool call needs the session id from list-instances — except bind-template and dashboard-auto-apply, which auto-resolve the session when exactly one Desktop instance is running.',

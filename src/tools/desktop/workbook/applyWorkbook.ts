@@ -11,6 +11,7 @@ import {
   xmlByteLength,
 } from '../../../desktop/inlineXmlCap.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
+import { formatWorkbookPromiseCheck } from '../../../desktop/validation/promise-check.js';
 import {
   ArgsValidationError,
   CacheSessionMismatchError,
@@ -143,8 +144,15 @@ export const getApplyWorkbookTool = (
               ? `\n\n${buildApplyOverCapNote(inlineBytes, capBytes)}`
               : '';
 
+          // Host verification receipt (W-23447506): whole-workbook applies have
+          // no structural readback, so say so honestly instead of implying
+          // full re-verification happened.
+          const receipt = result.isOk()
+            ? formatWorkbookPromiseCheck(result.value.validationWarnings)
+            : '';
+
           return new Ok({
-            message: `Successfully applied workbook update. The workbook has been updated.${note}`,
+            message: `Successfully applied workbook update. The workbook has been updated.${note}${receipt}`,
           });
         },
       });

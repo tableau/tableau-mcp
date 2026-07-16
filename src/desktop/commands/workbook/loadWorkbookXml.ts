@@ -14,6 +14,7 @@ import {
 } from '../../toolExecutor/toolExecutor.js';
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
+import { formatApplyFailureForAgent } from './applyFailureClassifier.js';
 import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 
@@ -128,8 +129,12 @@ function firstString(...values: unknown[]): string | undefined {
   return undefined;
 }
 
+export interface LoadWorkbookXmlOk {
+  validationWarnings: ValidationIssue[];
+}
+
 type LoadWorkbookXmlResult = Result<
-  void,
+  LoadWorkbookXmlOk,
   | { type: 'execute-command-error'; error: ExecuteCommandError }
   | { type: 'load-workbook-xml-error'; error: LoadWorkbookXmlError }
 >;
@@ -183,10 +188,16 @@ export async function loadWorkbookXml({
     if (result.isErr()) {
       return Err({ type: 'execute-command-error', error: result.error });
     }
-    return Ok.EMPTY;
+    return Ok({ validationWarnings: validation.issues });
   }
 
-  return loadUnderlyingMetadataByFilepath({ xml, executor, signal, filePath });
+  const result = await loadUnderlyingMetadataByFilepath({ xml, executor, signal, filePath });
+  if (result.isErr()) {
+    return result;
+  }
+  // Preflight warnings ride along so apply responses can compute the host
+  // verification receipt (W-23447506) without re-running validation.
+  return Ok({ validationWarnings: validation.issues });
 }
 
 async function loadUnderlyingMetadataByFilepath({
@@ -273,7 +284,14 @@ async function loadUnderlyingMetadataByFilepath({
 
     return Err({
       type: 'load-workbook-xml-error',
-      error: { type: 'load-rejected', message: outcome.message },
+      error: {
+        type: 'load-rejected',
+        message: formatApplyFailureForAgent({
+          context: 'workbook',
+          serverError: outcome.message,
+          xmlSnippet: xml,
+        }),
+      },
     });
   }
 
@@ -331,7 +349,14 @@ async function loadUnderlyingMetadataByText({
 
     return Err({
       type: 'load-workbook-xml-error',
-      error: { type: 'load-rejected', message: outcome.message },
+      error: {
+        type: 'load-rejected',
+        message: formatApplyFailureForAgent({
+          context: 'workbook',
+          serverError: outcome.message,
+          xmlSnippet: xml,
+        }),
+      },
     });
   }
 

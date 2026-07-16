@@ -15,6 +15,7 @@ import {
   type RouteGateResult,
 } from '../../../desktop/route/route-gate.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
+import { formatWorkbookPromiseCheck } from '../../../desktop/validation/promise-check.js';
 import {
   DesktopCommandExecutionError,
   WorkbookXmlLoadFailedError,
@@ -179,6 +180,12 @@ export const getBatchCreateAndCacheSheetsTool = (
             msg += `\n\nWarnings:\n${worksheetWarnings.map((w) => `  • ${w}`).join('\n')}`;
           }
           msg += '\n\nReady for Phase 2 parallel execution.';
+          // Host verification receipt (W-23447506): this whole-workbook apply has
+          // no structural readback, so say so honestly instead of implying full
+          // re-verification happened.
+          msg += applyResult.isOk()
+            ? formatWorkbookPromiseCheck(applyResult.value.validationWarnings)
+            : '';
 
           return new Ok({
             message: msg,
