@@ -157,6 +157,7 @@ export const getApplyWorksheetTool = (
             ? formatWorksheetPromiseCheck({
                 validationWarnings: result.value.validationWarnings ?? [],
                 readback: result.value.readbackVerification,
+                readbackFindings: result.value.readbackWarnings,
               })
             : '';
 
