@@ -49,6 +49,6 @@ This prompt uses existing scopes — no new scope registration is needed:
 
 - TS Events caps at 90 days lookback on Tableau Cloud (365 days with Advanced Management).
 - `lastLogin` reflects Tableau UI sign-in only — API-only or embedded users may show as inactive.
-- Pair with [user-license-reclamation-apply](user-license-reclamation-apply.md) to act on the results.
+- Pair with `user-license-reclamation-apply` (coming soon) to act on the results.
 
 See also: [Environment Variables](../configuration/mcp-config/env-vars.md)
