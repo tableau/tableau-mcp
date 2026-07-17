@@ -75,7 +75,14 @@ export interface LlmProposeInput {
       derivation?: Derivation;
     }>;
   }>;
-  fields: Array<{ name: string; role: 'dimension' | 'measure'; type: string; datatype: string }>;
+  fields: Array<{
+    name: string;
+    role: 'dimension' | 'measure';
+    type: string;
+    datatype: string;
+    datasource?: string;
+    column_ref?: string;
+  }>;
   /**
    * FIELD-NARROWING signal (stage 2B, adjudicated attack 1): present ONLY when
    * `fields` was capped — `count` is how many relevant-but-lower-ranked fields
@@ -804,6 +811,30 @@ function isMeasure(f: SchemaField): boolean {
 }
 function isCategorical(f: SchemaField): boolean {
   return f.role === 'dimension' && !isTemporal(f) && (f.type === 'nominal' || f.type === 'ordinal');
+}
+
+function shouldExposeFieldIdentity(fields: SchemaField[]): boolean {
+  const datasources = new Set<string>();
+  const names = new Set<string>();
+  for (const f of fields) {
+    datasources.add(f.datasource);
+    if (names.has(f.name)) return true;
+    names.add(f.name);
+  }
+  return datasources.size > 1;
+}
+
+function proposeField(
+  f: SchemaField,
+  exposeIdentity: boolean,
+): LlmProposeInput['fields'][number] {
+  return {
+    name: f.name,
+    role: f.role,
+    type: f.type,
+    datatype: f.datatype,
+    ...(exposeIdentity ? { datasource: f.datasource, column_ref: f.column_ref } : {}),
+  };
 }
 
 /**
@@ -1567,6 +1598,7 @@ export function buildLlmInput(
   const { fields: narrowed } = narrowFields(ask, rankPool, kinds, maxFields);
   const withheld = summary.fields.length - narrowed.length;
 
+  const exposeFieldIdentity = shouldExposeFieldIdentity(summary.fields);
   const result: LlmProposeInput = {
     ask,
     candidate_templates: top.map(({ m }) => ({
@@ -1585,12 +1617,7 @@ export function buildLlmInput(
           derivation: slot.derivation, // template default; override only if the ask differs
         })),
     })),
-    fields: narrowed.map((f) => ({
-      name: f.name,
-      role: f.role,
-      type: f.type,
-      datatype: f.datatype,
-    })),
+    fields: narrowed.map((f) => proposeField(f, exposeFieldIdentity)),
   };
 
   if (withheld > 0) {
