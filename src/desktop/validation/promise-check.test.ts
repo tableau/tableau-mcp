@@ -5,9 +5,21 @@ import {
   formatWorkbookPromiseCheck,
   formatWorksheetPromiseCheck,
 } from './promise-check.js';
+import type { ReadbackFinding } from './readback-verify.js';
 import type { ValidationIssue } from './types.js';
 
 const warning = (): ValidationIssue => ({ ruleId: 'x', severity: 'warning', message: 'w' });
+const sortWarning = (
+  node: 'computed-sort' | 'shelf-sort-v2',
+  readback: 'missing' | 'changed' = 'missing',
+): ReadbackFinding => ({
+  kind: 'sort',
+  node,
+  column: '[DS].[none:State:nk]',
+  intended: `<${node} column="[DS].[none:State:nk]">`,
+  readback,
+  severity: 'warning',
+});
 
 describe('promise check receipt (W-23447506)', () => {
   it('formats clean readback as verified', () => {
@@ -46,6 +58,49 @@ describe('promise check receipt (W-23447506)', () => {
     });
     expect(text).toContain('HOST VERIFICATION — failed');
     expect(text).toContain('readback FAILED');
+  });
+
+  it('escalates promised computed-sort loss from warning to failed', () => {
+    const text = formatWorksheetPromiseCheck({
+      validationWarnings: [],
+      readback: { ok: true, status: 'warning' },
+      readbackFindings: [sortWarning('computed-sort')],
+    });
+
+    expect(text).toContain('HOST VERIFICATION — failed');
+    expect(text).toContain('promised sort NOT verified');
+    expect(text).not.toContain('HOST VERIFICATION — verified');
+  });
+
+  it('escalates promised shelf-sort-v2 loss from warning to failed', () => {
+    const text = formatWorksheetPromiseCheck({
+      validationWarnings: [],
+      readback: { ok: true, status: 'warning' },
+      readbackFindings: [sortWarning('shelf-sort-v2', 'changed')],
+    });
+
+    expect(text).toContain('HOST VERIFICATION — failed');
+    expect(text).toContain('promised sort NOT verified');
+    expect(text).not.toContain('HOST VERIFICATION — verified');
+  });
+
+  it('keeps non-sort readback warnings verified', () => {
+    const text = formatWorksheetPromiseCheck({
+      validationWarnings: [],
+      readback: { ok: true, status: 'warning' },
+      readbackFindings: [
+        {
+          kind: 'mark',
+          node: 'mark',
+          intended: '<mark class="Bar">',
+          readback: 'changed',
+          severity: 'warning',
+        },
+      ],
+    });
+
+    expect(text).toContain('HOST VERIFICATION — verified');
+    expect(text).not.toContain('promised sort NOT verified');
   });
 
   it('formats workbook applies as honestly unverified', () => {

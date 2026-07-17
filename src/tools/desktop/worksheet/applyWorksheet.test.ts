@@ -4,6 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import * as loadWorksheetXmlModule from '../../../desktop/commands/workbook/loadWorksheetXml.js';
+import type { ReadbackFinding } from '../../../desktop/validation/readback-verify.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -28,6 +29,14 @@ describe('applyWorksheetTool', () => {
     ok: true,
     status: 'skipped' as const,
     message: 'worksheet busy',
+  };
+  const promisedSortLossWarning: ReadbackFinding = {
+    kind: 'sort',
+    node: 'computed-sort',
+    column: '[DS].[none:State:nk]',
+    intended: '<computed-sort column="[DS].[none:State:nk]">',
+    readback: 'missing',
+    severity: 'warning',
   };
 
   beforeEach(() => {
@@ -152,6 +161,31 @@ describe('applyWorksheetTool', () => {
     expect(message).toContain('HOST VERIFICATION — unverified');
     expect(message).toContain('readback unavailable');
     expect(message).not.toMatch(/\bverified\b/i);
+  });
+
+  it('fails the receipt when readback warnings show promised sort loss', async () => {
+    const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Ok({
+        readbackWarnings: [promisedSortLossWarning],
+        readbackVerification: { ok: true, status: 'warning' },
+      }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: 'Sheet 1',
+      mode: 'inline',
+      worksheetXml: mockXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const message = resultSchema.parse(JSON.parse(result.content[0].text)).message;
+    expect(message).toContain('HOST VERIFICATION — failed');
+    expect(message).toContain('promised sort NOT verified');
+    expect(message).not.toContain('HOST VERIFICATION — verified');
   });
 
   it('should return error when inline mode is used without worksheetXml', async () => {
