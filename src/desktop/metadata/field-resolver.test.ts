@@ -1,4 +1,8 @@
-import { resolveField } from './field-resolver.js';
+import {
+  formatCanonicalColumnRef,
+  parseCanonicalColumnRef,
+  resolveField,
+} from './field-resolver.js';
 
 const WB_TWO_DATASOURCES = `<?xml version="1.0" encoding="UTF-8"?>
 <workbook>
@@ -8,6 +12,18 @@ const WB_TWO_DATASOURCES = `<?xml version="1.0" encoding="UTF-8"?>
       <column name="[Region]" datatype="string" role="dimension" type="nominal"/>
     </datasource>
     <datasource name="ds2" caption="Sample - Coffee Chain">
+      <column name="[Profit]" datatype="real" role="measure" type="quantitative"/>
+    </datasource>
+  </datasources>
+</workbook>`;
+
+const WB_DUPLICATE_DATASOURCE_CAPTIONS = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook>
+  <datasources>
+    <datasource name="ds1" caption="Shared Caption">
+      <column name="[Profit]" datatype="real" role="measure" type="quantitative"/>
+    </datasource>
+    <datasource name="ds2" caption="Shared Caption">
       <column name="[Profit]" datatype="real" role="measure" type="quantitative"/>
     </datasource>
   </datasources>
@@ -42,6 +58,36 @@ describe('resolveField', () => {
     expect(r.datasource).toBe('ds1');
   });
 
+  it('resolves an exact column_ref as already disambiguated', () => {
+    const r = resolveField(WB_TWO_DATASOURCES, '[ds2].[sum:Profit:qk]');
+    expect(r.kind).toBe('exact');
+    expect(r.column_ref).toBe('[ds2].[sum:Profit:qk]');
+    expect(r.datasource).toBe('ds2');
+  });
+
+  it('returns not_found for a column_ref-shaped miss without fuzzy fallback', () => {
+    const r = resolveField(WB_TWO_DATASOURCES, '[missing_ds].[sum:Profit:qk]');
+    expect(r.kind).toBe('not_found');
+    expect(r.candidates).toEqual([]);
+  });
+
+  it('collapses ambiguity when a unique datasource caption is supplied', () => {
+    const r = resolveField(WB_TWO_DATASOURCES, 'Profit', {
+      datasource: 'Sample - Coffee Chain',
+    });
+    expect(r.kind).toBe('exact');
+    expect(r.column_ref).toBe('[ds2].[sum:Profit:qk]');
+    expect(r.datasource).toBe('ds2');
+  });
+
+  it('returns ambiguous when the datasource caption selector is not unique', () => {
+    const r = resolveField(WB_DUPLICATE_DATASOURCE_CAPTIONS, 'Profit', {
+      datasource: 'Shared Caption',
+    });
+    expect(r.kind).toBe('ambiguous');
+    expect(r.candidates?.map((c) => c.datasource).sort()).toEqual(['ds1', 'ds2']);
+  });
+
   it('should return not_found for an empty query', () => {
     const r = resolveField(WB_TWO_DATASOURCES, '');
     expect(r.kind).toBe('not_found');
@@ -73,5 +119,43 @@ describe('resolveField', () => {
     expect(r.kind).toBe('rewritten');
     expect(r.rewrites).toContain('ignored-redundant-aggregation');
     expect(r.reason).toMatch(/already aggregated/);
+  });
+});
+
+describe('canonical column_ref helpers', () => {
+  it.each([
+    {
+      datasource: 'federated.ds2',
+      derivation: 'sum',
+      localFieldName: 'Profit',
+      pivot: 'qk',
+    },
+    {
+      datasource: 'Orders.Primary',
+      derivation: 'none',
+      localFieldName: 'Customer.Segment',
+      pivot: 'nk',
+    },
+    {
+      datasource: 'Calculations',
+      derivation: 'usr',
+      localFieldName: 'Profit:Ratio',
+      pivot: 'qk',
+    },
+    {
+      datasource: 'Dates',
+      derivation: 'yr',
+      localFieldName: 'Order.Date:Fiscal',
+      pivot: 'ok',
+    },
+  ])('round-trips canonical refs for $datasource / $localFieldName', (parts) => {
+    expect(parseCanonicalColumnRef(formatCanonicalColumnRef(parts))).toEqual({
+      ...parts,
+      columnInstanceName: `[${parts.derivation}:${parts.localFieldName}:${parts.pivot}]`,
+    });
+  });
+
+  it('returns null for datasource-qualified refs that are not canonical instances', () => {
+    expect(parseCanonicalColumnRef('[Sample].[Profit]')).toBeNull();
   });
 });

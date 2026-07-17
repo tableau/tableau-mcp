@@ -108,6 +108,46 @@ describe('addFieldToRows / removeFieldFromRows', () => {
     expect(rowFields).toHaveLength(1);
     expect(rowFields[0]?.column).toBe('[Sample].[sum:Sales:qk]');
   });
+
+  it('requires datasource-qualified refs when adding to rows', () => {
+    expect(() => addFieldToRows(WORKSHEET_XML, '[sum:Profit:qk]')).toThrow(
+      /Invalid column reference format/,
+    );
+  });
+
+  it('keeps the legacy column-instance validation error for datasource-qualified non-instance refs', () => {
+    expect(() => addFieldToRows(WORKSHEET_XML, '[Sample].[Profit]')).toThrow(
+      /Invalid column-instance name format: \[Profit\]/,
+    );
+  });
+});
+
+describe('addFieldToRows dotted and colon refs', () => {
+  const DOTTED_COLON_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<worksheet name="Sheet 1">
+  <table>
+    <view>
+      <datasources>
+        <datasource name="Orders.Primary" caption="Orders"/>
+      </datasources>
+      <datasource-dependencies datasource="Orders.Primary">
+        <column name="[City.Region]" datatype="string" role="dimension" type="nominal"/>
+        <column name="[Profit:Ratio]" datatype="real" role="measure" type="quantitative"/>
+        <column-instance name="[none:City.Region:nk]" column="[City.Region]" derivation="None" pivot="key" type="nominal"/>
+      </datasource-dependencies>
+    </view>
+    <rows>[Orders.Primary].[none:City.Region:nk]</rows>
+  </table>
+</worksheet>`;
+
+  it('adds a datasource-qualified ref when datasource and field names contain dots or colons', () => {
+    const modified = addFieldToRows(DOTTED_COLON_XML, '[Orders.Primary].[sum:Profit:Ratio:qk]');
+    const rowFields = listFields(modified).filter((f) => f.location === 'rows');
+    expect(rowFields.map((f) => f.column)).toContain('[Orders.Primary].[sum:Profit:Ratio:qk]');
+    expect(modified).toContain(
+      '<column-instance name="[sum:Profit:Ratio:qk]" column="[Profit:Ratio]"',
+    );
+  });
 });
 
 describe('addFieldToRows date-part derivations', () => {
