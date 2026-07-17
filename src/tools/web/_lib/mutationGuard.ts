@@ -59,9 +59,6 @@ export interface MutationTarget {
   name?: string;
   project?: string;
   owner?: string;
-  // 'user' is reserved/forward-looking: no user-mutation tool is wired yet. Kept in the union so the
-  // audit schema (auditRecord.ts) stays stable when one is added; removing it now would be a
-  // breaking schema change for downstream audit-log consumers.
   kind: 'datasource' | 'workbook' | 'extract-refresh-task' | 'user';
 }
 
@@ -259,6 +256,8 @@ function targetKindHint(tool: WebToolName): MutationTarget['kind'] {
       return 'datasource';
     case 'update-cloud-extract-refresh-task':
       return 'extract-refresh-task';
+    case 'update-user':
+      return 'user';
     default:
       return 'datasource';
   }

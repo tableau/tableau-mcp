@@ -164,4 +164,32 @@ describe('UsersMethods', () => {
       expect(result.pagination?.totalAvailable).toBe(5);
     });
   });
+
+  describe('updateUser', () => {
+    it('should update user site role and return updated user', async () => {
+      const mockApiClient = {
+        updateUser: vi.fn().mockResolvedValue({
+          user: { id: 'u1', name: 'jsmith', siteRole: 'Unlicensed' },
+        }),
+      };
+
+      const usersMethods = new UsersMethods('http://test', { type: 'Bearer', token: 'test' }, {});
+      // @ts-expect-error - Mocking private property
+      usersMethods._apiClient = mockApiClient;
+
+      const result = await usersMethods.updateUser({
+        siteId: 'site-1',
+        userId: 'u1',
+        siteRole: 'Unlicensed',
+      });
+
+      expect(result).toEqual({ id: 'u1', name: 'jsmith', siteRole: 'Unlicensed' });
+      expect(mockApiClient.updateUser).toHaveBeenCalledWith(
+        { user: { siteRole: 'Unlicensed' } },
+        expect.objectContaining({
+          params: { siteId: 'site-1', userId: 'u1' },
+        }),
+      );
+    });
+  });
 });

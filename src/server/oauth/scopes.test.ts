@@ -70,6 +70,24 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:jobs:read');
     });
 
+    it('should include tableau:mcp:users:write when adminToolsEnabled is true', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: true,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes();
+      expect(scopes).toContain('tableau:mcp:users:write');
+    });
+
+    it('should exclude tableau:mcp:users:write when adminToolsEnabled is false', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedMcpScopes();
+      expect(scopes).not.toContain('tableau:mcp:users:write');
+    });
+
     it('should exclude tableau:mcp:content:delete when adminToolsEnabled is false', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
@@ -213,6 +231,24 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:flows:read');
     });
 
+    it('should include tableau:users:update when adminToolsEnabled is true', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: true,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).toContain('tableau:users:update');
+    });
+
+    it('should exclude tableau:users:update when adminToolsEnabled is false', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).not.toContain('tableau:users:update');
+    });
+
     it('should always include other API scopes regardless of adminToolsEnabled', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: false,
@@ -258,6 +294,8 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:tasks:write');
       expect(scopes).not.toContain('tableau:jobs:read');
       expect(scopes).not.toContain('tableau:users:read');
+      expect(scopes).not.toContain('tableau:mcp:users:write');
+      expect(scopes).not.toContain('tableau:users:update');
     });
   });
 
