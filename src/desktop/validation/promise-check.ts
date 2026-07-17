@@ -11,7 +11,7 @@
  *
  * Ported from agent-to-tableau-desktop.
  */
-import type { ReadbackVerificationResult } from './readback-verify.js';
+import type { ReadbackFinding, ReadbackVerificationResult } from './readback-verify.js';
 import type { ValidationIssue } from './types.js';
 
 export type PromiseOutcome = 'verified' | 'unverified' | 'failed';
@@ -19,6 +19,15 @@ export type PromiseOutcome = 'verified' | 'unverified' | 'failed';
 export interface WorksheetReceiptInput {
   validationWarnings: ValidationIssue[];
   readback: ReadbackVerificationResult | undefined;
+  readbackFindings?: ReadbackFinding[];
+}
+
+function isPromisedSortLossWarning(finding: ReadbackFinding): boolean {
+  return (
+    finding.kind === 'sort' &&
+    finding.severity === 'warning' &&
+    (finding.node === 'computed-sort' || finding.node === 'shelf-sort-v2')
+  );
 }
 
 function formatPreflight(validationWarnings: ValidationIssue[]): string {
@@ -49,6 +58,10 @@ export function formatWorksheetPromiseCheck(input: WorksheetReceiptInput): strin
       outcome = 'unverified';
       parts.push('readback unavailable');
       break;
+  }
+  if (outcome === 'verified' && input.readbackFindings?.some(isPromisedSortLossWarning)) {
+    outcome = 'failed';
+    parts.push('promised sort NOT verified (sort node dropped/changed on readback)');
   }
   const guard =
     outcome === 'verified'
