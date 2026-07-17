@@ -11,6 +11,7 @@ import {
 } from '../../../desktop/binder/explicit-bind.js';
 import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
+import { parseDatasourceQualifiedColumnRef } from '../../../desktop/metadata/field-resolver.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import {
   checkRouteGateForScratchEntry,
@@ -58,6 +59,31 @@ function escapeXml(text: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+function inferSingleDatasourceFromColumnRefs(
+  refs: string[],
+): { ok: true; datasource: string | null } | { ok: false; message: string } {
+  const refsByDatasource = new Map<string, string[]>();
+  for (const ref of refs) {
+    const datasource = parseDatasourceQualifiedColumnRef(ref.trim())?.datasource;
+    if (!datasource) continue;
+    refsByDatasource.set(datasource, [...(refsByDatasource.get(datasource) ?? []), ref]);
+  }
+  if (refsByDatasource.size <= 1) {
+    return { ok: true, datasource: [...refsByDatasource.keys()][0] ?? null };
+  }
+  const breakdown = [...refsByDatasource.entries()]
+    .map(([datasource, dsRefs]) => `${datasource} (${dsRefs.join(', ')})`)
+    .join('; ');
+  return {
+    ok: false,
+    message:
+      'BLOCKED: mixed-datasource field references — cannot build worksheet\n\n' +
+      `taskSpec.fields resolve to multiple datasources — ${breakdown}. The no-manifest passthrough ` +
+      'path substitutes a single {{DATASOURCE}} and would silently repoint fields to the wrong datasource.\n\n' +
+      'FIX: Provide refs from one datasource, or use a manifest-backed template/data-model relationship that binds within one datasource.',
+  };
 }
 
 const paramsSchema = {
@@ -143,23 +169,9 @@ export const getBuildAndApplyWorksheetTool = (
 
           const workbookXml = readFileSync(workbookFile, 'utf-8');
 
-          // Determine datasource name from workbook
-          let datasourceName = 'Unknown';
-          const captionMatch = workbookXml.match(/<datasource[^>]+caption=["']([^"']+)["']/);
-          if (captionMatch) {
-            datasourceName = captionMatch[1];
-          } else {
-            const allMatches = workbookXml.matchAll(/<datasource[^>]+name=["']([^"']+)["']/g);
-            for (const match of allMatches) {
-              if (match[1] !== 'Parameters') {
-                datasourceName = match[1];
-                break;
-              }
-            }
-          }
-
           // Get available fields for role detection
           const availableFields = listAvailableFields(workbookXml);
+          const schemaSummary = schemaSummaryFromAvailableFields(availableFields);
 
           // Fields dropped here (no role match, or beyond the template's slot count)
           // used to vanish silently (pinned by X1). Collect a non-breaking warning
@@ -230,16 +242,11 @@ export const getBuildAndApplyWorksheetTool = (
           // Manifest enforcement (P0 W-23447710): slot derivations/keys come from the
           // manifest, never the caller's positional refs. Blockers stop the apply —
           // stricter than the old behavior, which left sample fields in unmapped slots.
-          const explicitBind = bindExplicitTemplate(
-            template,
-            fields,
-            schemaSummaryFromAvailableFields(availableFields),
-            {
-              title: worksheetName,
-              datasource: datasourceName,
-              passthroughFieldMapping,
-            },
-          );
+          const explicitBind = bindExplicitTemplate(template, fields, schemaSummary, {
+            title: worksheetName,
+            datasource: schemaSummary.datasource,
+            passthroughFieldMapping,
+          });
 
           if (!explicitBind.ok) {
             return new ArgsValidationError(
@@ -249,6 +256,14 @@ export const getBuildAndApplyWorksheetTool = (
 
           warnings.push(...explicitBind.warnings);
           const fieldMapping = explicitBind.fieldMapping;
+          let rewriteDatasource = explicitBind.datasource;
+          if (explicitBind.passthrough) {
+            const inferred = inferSingleDatasourceFromColumnRefs(fields);
+            if (!inferred.ok) {
+              return new ArgsValidationError(inferred.message).toErr();
+            }
+            rewriteDatasource = inferred.datasource ?? explicitBind.datasource;
+          }
           const fieldMetadata =
             Object.keys(explicitBind.fieldMetadata).length > 0
               ? explicitBind.fieldMetadata
@@ -269,7 +284,7 @@ export const getBuildAndApplyWorksheetTool = (
           templateXml = rewriteFieldReferences(
             templateXml,
             fieldMapping,
-            datasourceName,
+            rewriteDatasource,
             fieldMetadata,
             { namespaceCalcs: true, applyNonce },
           );

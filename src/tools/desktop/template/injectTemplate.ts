@@ -11,6 +11,7 @@ import {
 } from '../../../desktop/binder/explicit-bind.js';
 import { summarizeSchema } from '../../../desktop/binder/schema-summary.js';
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
+import { parseDatasourceQualifiedColumnRef } from '../../../desktop/metadata/field-resolver.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import {
@@ -36,6 +37,17 @@ const paramsSchema = {
     .describe('Tab insertion position.'),
   relativeSheetName: z.string().optional().describe('Anchor for before/after insertion.'),
 };
+
+function inferSingleDatasourceFromFieldMapping(
+  fieldMapping?: Record<string, string>,
+): string | null {
+  const datasources = new Set<string>();
+  for (const ref of Object.values(fieldMapping ?? {})) {
+    const datasource = parseDatasourceQualifiedColumnRef(ref.trim())?.datasource;
+    if (datasource) datasources.add(datasource);
+  }
+  return datasources.size === 1 ? [...datasources][0] : null;
+}
 
 const toolTitle = 'Inject Template';
 export const getInjectTemplateTool = (
@@ -111,6 +123,7 @@ export const getInjectTemplateTool = (
             // manifest-backed template is validated/corrected through the binder
             // contract — slot derivations come from the manifest, not the caller.
             let appliedFieldMapping = fieldMapping;
+            let appliedTemplateParameters = templateParameters;
             const explicitTemplateWarnings: string[] = [];
             if (
               templateParameters?.DATASOURCE &&
@@ -130,7 +143,24 @@ export const getInjectTemplateTool = (
                 ).toErr();
               }
 
+              const resolvedDatasource =
+                explicitBind.passthrough && fieldMapping
+                  ? (inferSingleDatasourceFromFieldMapping(fieldMapping) ?? explicitBind.datasource)
+                  : explicitBind.datasource;
+
+              if (resolvedDatasource !== templateParameters.DATASOURCE) {
+                return new ArgsValidationError(
+                  `Explicit template binding BLOCKED for "${templateName}". No worksheet was produced.\n\n` +
+                    `  • [datasource-mismatch] caller DATASOURCE "${templateParameters.DATASOURCE}" does not match resolved mapping datasource "${resolvedDatasource}".\n` +
+                    `    FIX: Set templateParameters.DATASOURCE to "${resolvedDatasource}" and retry with the same fieldMapping.`,
+                ).toErr();
+              }
+
               if (!explicitBind.passthrough) appliedFieldMapping = explicitBind.fieldMapping;
+              appliedTemplateParameters = {
+                ...templateParameters,
+                DATASOURCE: resolvedDatasource,
+              };
               explicitTemplateWarnings.push(...explicitBind.warnings);
             }
 
@@ -140,7 +170,7 @@ export const getInjectTemplateTool = (
               templateXml,
               title,
               sheetType,
-              templateParameters,
+              templateParameters: appliedTemplateParameters,
               fieldMapping: appliedFieldMapping,
               insertPosition,
               relativeSheetName,

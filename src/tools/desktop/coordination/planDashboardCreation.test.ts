@@ -49,6 +49,13 @@ function makeExactResolution(fieldName: string): FieldResolution {
   };
 }
 
+function extractPlan(result: CallToolResult): any {
+  invariant(result.content[0].type === 'text');
+  const marker = 'FULL PLAN (JSON):';
+  const payload = JSON.parse(result.content[0].text) as { message: string };
+  return JSON.parse(payload.message.slice(payload.message.indexOf(marker) + marker.length).trim());
+}
+
 describe('planDashboardCreationTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -161,6 +168,84 @@ describe('planDashboardCreationTool', () => {
     expect(result.content[0].text).toContain('ambiguous');
     expect(result.content[0].text).toContain('not_found');
     expect(result.content[0].text).toContain('"Unknown"');
+  });
+
+  it('should block planning when only not_found fields are present', async () => {
+    vi.mocked(resolveField).mockReturnValue({ kind: 'not_found', query: 'Unknown' });
+
+    const result = await getResult({
+      session: SESSION,
+      dashboardName: 'My Dashboard',
+      worksheets: [{ name: 'Sheet1', type: 'chart', fields: ['Unknown'] }],
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('BLOCKED: 1 not_found field reference');
+    expect(result.content[0].text).toContain('"Unknown"');
+    expect(result.content[0].text).not.toContain('FULL PLAN (JSON):');
+  });
+
+  it('resolves object-shaped fields with datasource selectors and carries task datasource', async () => {
+    vi.mocked(resolveField).mockImplementation((_, query, options) => ({
+      kind: 'exact',
+      query,
+      column_ref: `[${options?.datasource}].[sum:${query}:qk]`,
+      datasource: options?.datasource,
+    }));
+
+    const result = await getResult({
+      session: SESSION,
+      dashboardName: 'My Dashboard',
+      worksheets: [
+        { name: 'Sheet1', type: 'chart', fields: [{ query: 'Profit', datasource: 'ds2' }] },
+      ],
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(resolveField).toHaveBeenCalledWith(SAMPLE_WORKBOOK_XML, 'Profit', {
+      datasource: 'ds2',
+    });
+    const plan = extractPlan(result);
+    const worksheetTask = plan.phase2Parallel.tasks.find((t: any) => t.task_type === 'worksheet');
+    expect(worksheetTask.fields).toEqual(['[ds2].[sum:Profit:qk]']);
+    expect(worksheetTask.datasource).toBe('ds2');
+  });
+
+  it('caches field resolution by query and datasource selector', async () => {
+    vi.mocked(resolveField).mockImplementation((_, query, options) => ({
+      kind: 'exact',
+      query,
+      column_ref: `[${options?.datasource}].[sum:${query}:qk]`,
+      datasource: options?.datasource,
+    }));
+
+    const result = await getResult({
+      session: SESSION,
+      dashboardName: 'My Dashboard',
+      worksheets: [
+        { name: 'Sheet1', type: 'chart', fields: [{ query: 'Profit', datasource: 'ds1' }] },
+        { name: 'Sheet2', type: 'chart', fields: [{ query: 'Profit', datasource: 'ds2' }] },
+      ],
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(resolveField).toHaveBeenCalledTimes(2);
+    expect(resolveField).toHaveBeenNthCalledWith(1, SAMPLE_WORKBOOK_XML, 'Profit', {
+      datasource: 'ds1',
+    });
+    expect(resolveField).toHaveBeenNthCalledWith(2, SAMPLE_WORKBOOK_XML, 'Profit', {
+      datasource: 'ds2',
+    });
+    const plan = extractPlan(result);
+    const worksheetTasks = plan.phase2Parallel.tasks.filter(
+      (t: any) => t.task_type === 'worksheet',
+    );
+    expect(worksheetTasks.map((t: any) => t.fields)).toEqual([
+      ['[ds1].[sum:Profit:qk]'],
+      ['[ds2].[sum:Profit:qk]'],
+    ]);
+    expect(worksheetTasks.map((t: any) => t.datasource)).toEqual(['ds1', 'ds2']);
   });
 
   it('should handle getWorkbookXml failure', async () => {
@@ -307,7 +392,12 @@ async function getResult(
   params: {
     session: string;
     dashboardName: string;
-    worksheets: { name: string; type: 'kpi' | 'chart'; fields: string[]; template?: string }[];
+    worksheets: {
+      name: string;
+      type: 'kpi' | 'chart';
+      fields: Array<string | { query: string; datasource?: string }>;
+      template?: string;
+    }[];
     title?: string;
     layout?: any;
   },
