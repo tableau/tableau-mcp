@@ -1,3 +1,7 @@
+import {
+  parseColumnInstanceRef,
+  parseDatasourceQualifiedColumnRef,
+} from '../metadata/field-resolver.js';
 import { loadManifests } from './manifest.js';
 import type { Derivation, SlotSpec, TemplateManifest } from './manifest-types.js';
 import { bareName, type SchemaField, type SchemaSummary } from './schema-summary.js';
@@ -337,13 +341,16 @@ function resolveSource(raw: string, schema: SchemaSummary): ResolvedSource | Exp
 }
 
 function parseColumnRef(raw: string): { datasource?: string; base: string } | null {
-  const match = /^(?:\[([^\]]+)\]\.)?\[(.+)\]$/.exec(raw.trim());
-  if (!match) return null;
-  const first = match[2].indexOf(':');
-  const last = match[2].lastIndexOf(':');
-  if (first <= 0 || last <= first) return null;
-  const base = match[2].slice(first + 1, last);
-  return base ? { datasource: match[1], base } : null;
+  const trimmed = raw.trim();
+  const qualified = parseDatasourceQualifiedColumnRef(trimmed);
+  if (qualified) {
+    const instance = parseColumnInstanceRef(qualified.columnInstanceName);
+    return instance ? { datasource: qualified.datasource, base: instance.localFieldName } : null;
+  }
+
+  // Keep bare instances for legacy explicit mappings; fields.ts only accepts full refs.
+  const instance = parseColumnInstanceRef(trimmed);
+  return instance ? { base: instance.localFieldName } : null;
 }
 
 const TEMPORAL_DATATYPES: ReadonlySet<string> = new Set(['date', 'datetime']);

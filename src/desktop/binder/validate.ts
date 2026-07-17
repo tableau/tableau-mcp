@@ -31,6 +31,7 @@
 
 import Fuse from 'fuse.js';
 
+import { COLUMN_REF_REGEX } from '../metadata/field-resolver.js';
 import { matchAvoidWhen } from './classify.js';
 import { escapeXml } from './escape.js';
 import type {
@@ -235,6 +236,12 @@ function resolveInSummary(s: SchemaSummary, query: string): Resolution {
   const q = query.trim();
   if (!q) return { kind: 'not_found', candidates: [] };
   const qBare = bareName(q);
+
+  // Exact column_ref is already datasource-qualified, so resolve it before names/captions.
+  const refMatches = s.fields.filter((f) => f.column_ref === q);
+  if (refMatches.length === 1) return { kind: 'exact', field: refMatches[0] };
+  if (refMatches.length > 1) return { kind: 'ambiguous', candidates: refMatches };
+  if (COLUMN_REF_REGEX.test(q)) return { kind: 'not_found', candidates: [] };
 
   // Phase 1: exact (case-sensitive) on friendly name, caption, or bare column name.
   const exact = s.fields.filter(

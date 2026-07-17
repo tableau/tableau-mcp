@@ -9,19 +9,21 @@ function field(p: {
   role: 'dimension' | 'measure';
   type: string;
   datatype: string;
+  datasource?: string;
   refDerivation?: string;
 }): SchemaField {
   const suffix = p.type === 'quantitative' ? 'qk' : p.type === 'ordinal' ? 'ok' : 'nk';
   const deriv = p.refDerivation ?? (p.role === 'measure' ? 'sum' : 'none');
+  const datasource = p.datasource ?? 'Superstore';
   return {
     name: p.name,
     columnName: `[${p.name}]`,
     role: p.role,
     type: p.type,
     datatype: p.datatype,
-    datasource: 'Superstore',
+    datasource,
     isAggregated: false,
-    column_ref: `[Superstore].[${deriv}:${p.name}:${suffix}]`,
+    column_ref: `[${datasource}].[${deriv}:${p.name}:${suffix}]`,
   };
 }
 
@@ -229,6 +231,82 @@ describe('bindExplicitTemplate', () => {
     if (result.ok) {
       expect(result.fieldMapping['Order Date@mn']).toBe('[Superstore].[mn:Order Date:ok]');
       expect(result.fieldMapping['Order Date@yr']).toBe('[Superstore].[yr:Order Date:ok]');
+    }
+  });
+
+  it('still resolves bare column-instance refs by discarding caller derivation', () => {
+    const result = bindExplicitTemplate(
+      'x-latlon',
+      {
+        Longitude: '[avg:Longitude:qk]',
+        Latitude: '[sum:Latitude:qk]',
+        Detail: '[none:City:nk]',
+        Measure: '[avg:Sales:qk]',
+      },
+      SUMMARY,
+      { manifests: manifests(LATLON) },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.fieldMapping.Longitude).toBe('[Superstore].[avg:Longitude:qk]');
+      expect(result.fieldMapping.Latitude).toBe('[Superstore].[avg:Latitude:qk]');
+      expect(result.fieldMapping.Measure).toBe('[Superstore].[sum:Sales:qk]');
+    }
+  });
+
+  it('resolves datasource-qualified refs when datasource and field names contain dots or colons', () => {
+    const dottedSummary: SchemaSummary = {
+      datasource: 'Orders.Primary',
+      fields: [
+        field({
+          name: 'Longitude',
+          role: 'measure',
+          type: 'quantitative',
+          datatype: 'real',
+          datasource: 'Orders.Primary',
+        }),
+        field({
+          name: 'Latitude',
+          role: 'measure',
+          type: 'quantitative',
+          datatype: 'real',
+          datasource: 'Orders.Primary',
+        }),
+        field({
+          name: 'City.Region',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+          datasource: 'Orders.Primary',
+        }),
+        field({
+          name: 'Profit:Ratio',
+          role: 'measure',
+          type: 'quantitative',
+          datatype: 'real',
+          datasource: 'Orders.Primary',
+        }),
+      ],
+    };
+
+    const result = bindExplicitTemplate(
+      'x-latlon',
+      {
+        Longitude: '[Orders.Primary].[sum:Longitude:qk]',
+        Latitude: '[Orders.Primary].[sum:Latitude:qk]',
+        Detail: '[Orders.Primary].[none:City.Region:nk]',
+        Measure: '[Orders.Primary].[sum:Profit:Ratio:qk]',
+      },
+      dottedSummary,
+      { manifests: manifests(LATLON) },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.datasource).toBe('Orders.Primary');
+      expect(result.fieldMapping.Detail).toBe('[Orders.Primary].[none:City.Region:nk]');
+      expect(result.fieldMapping.Measure).toBe('[Orders.Primary].[sum:Profit:Ratio:qk]');
     }
   });
 });

@@ -174,6 +174,107 @@ describe('binder/validate — gate 2: field resolution', () => {
         r.blockers.some((b) => b.code === 'ambiguous-field' && (b.candidates?.length ?? 0) >= 2),
       ).toBe(true);
   });
+
+  it('no-fire: exact column_ref binds duplicate names from the intended datasource', () => {
+    const twoDs: SchemaSummary = {
+      datasource: 'DS_A',
+      fields: [
+        field({
+          columnName: '[Region]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+          datasource: 'DS_A',
+        }),
+        {
+          ...field({
+            columnName: '[Sales]',
+            role: 'measure',
+            type: 'quantitative',
+            datatype: 'real',
+            datasource: 'DS_A',
+          }),
+          column_ref: '[DS_A].[sum:Sales:qk]',
+        },
+        field({
+          columnName: '[Region]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+          datasource: 'DS_B',
+        }),
+        {
+          ...field({
+            columnName: '[Sales]',
+            role: 'measure',
+            type: 'quantitative',
+            datatype: 'real',
+            datasource: 'DS_B',
+          }),
+          column_ref: '[DS_B].[sum:Sales:qk]',
+        },
+      ],
+    };
+    const m = manifests.get('ranking-ordered-bar')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'region', field: '[DS_B].[none:Region:nk]' },
+        { slot_id: 'sales', field: '[DS_B].[sum:Sales:qk]' },
+      ],
+    };
+    const r = validateBinding(m, p, twoDs);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.datasource).toBe('DS_B');
+      expect(r.field_mapping).toEqual({
+        Region: '[DS_B].[none:Region:nk]',
+        Sales: '[DS_B].[sum:Sales:qk]',
+      });
+    }
+  });
+
+  it('fire: column_ref-shaped miss fails closed without fuzzy candidates', () => {
+    const s: SchemaSummary = {
+      datasource: 'DS_A',
+      fields: [
+        field({
+          columnName: '[Region]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+          datasource: 'DS_A',
+        }),
+        {
+          ...field({
+            columnName: '[Sales]',
+            role: 'measure',
+            type: 'quantitative',
+            datatype: 'real',
+            datasource: 'DS_A',
+          }),
+          column_ref: '[DS_A].[sum:Sales:qk]',
+        },
+      ],
+    };
+    const m = manifests.get('ranking-ordered-bar')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'region', field: '[DS_A].[none:Region:nk]' },
+        { slot_id: 'sales', field: '[DS_A].[sum:Sale:qk]' },
+      ],
+    };
+    const r = validateBinding(m, p, s);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const blocker = r.blockers.find((b) => b.slot_id === 'sales');
+      expect(blocker?.code).toBe('field-not-found');
+      expect(blocker?.candidates).toEqual([]);
+    }
+  });
 });
 
 describe('binder/validate — gate 3: kind/role compatibility', () => {

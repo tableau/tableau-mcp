@@ -25,6 +25,7 @@
 import Fuse from 'fuse.js';
 
 import { listAvailableFields } from './field-builder.js';
+import { normalizeArray, parseXML } from './parser.js';
 import { AggregationType, type FieldReference } from './types.js';
 
 export type FieldResolutionKind = 'exact' | 'rewritten' | 'ambiguous' | 'not_found';
@@ -75,6 +76,77 @@ export interface FieldResolveOptions {
 
 const AGG_PREFIX_REGEX =
   /^(sum|avg|average|mean|min|minimum|max|maximum|count|countd|count\s*distinct|countdistinct|median|stdev|stdevp|var|varp)\s+of\s+(.+)$/i;
+
+export const COLUMN_REF_REGEX = /^\[([^\]]+)\]\.\[([^\]]+)\]$/;
+
+export interface DatasourceQualifiedColumnRef {
+  datasource: string;
+  columnInstanceName: string;
+}
+
+export interface ColumnInstanceRefParts {
+  derivation: string;
+  localFieldName: string;
+  pivot: string;
+  columnInstanceName: string;
+}
+
+export type CanonicalColumnRefParts = Omit<ColumnInstanceRefParts, 'columnInstanceName'> & {
+  datasource: string;
+};
+
+export type ParsedCanonicalColumnRef = CanonicalColumnRefParts & {
+  columnInstanceName: string;
+};
+
+export function parseDatasourceQualifiedColumnRef(
+  columnRef: string,
+): DatasourceQualifiedColumnRef | null {
+  const match = COLUMN_REF_REGEX.exec(columnRef);
+  if (!match) return null;
+  return {
+    datasource: match[1],
+    columnInstanceName: `[${match[2]}]`,
+  };
+}
+
+export function parseColumnInstanceRef(columnInstanceRef: string): ColumnInstanceRefParts | null {
+  if (!columnInstanceRef.startsWith('[') || !columnInstanceRef.endsWith(']')) {
+    return null;
+  }
+
+  const instance = columnInstanceRef.slice(1, -1);
+  const first = instance.indexOf(':');
+  const last = instance.lastIndexOf(':');
+  if (first <= 0 || last <= first) return null;
+
+  const localFieldName = instance.slice(first + 1, last);
+  if (!localFieldName) return null;
+
+  return {
+    derivation: instance.slice(0, first),
+    localFieldName,
+    pivot: instance.slice(last + 1),
+    columnInstanceName: `[${instance}]`,
+  };
+}
+
+export function parseCanonicalColumnRef(columnRef: string): ParsedCanonicalColumnRef | null {
+  const qualified = parseDatasourceQualifiedColumnRef(columnRef);
+  if (!qualified) return null;
+
+  const instance = parseColumnInstanceRef(qualified.columnInstanceName);
+  if (!instance || !instance.pivot) return null;
+
+  return {
+    datasource: qualified.datasource,
+    ...instance,
+  };
+}
+
+export function formatCanonicalColumnRef(parts: CanonicalColumnRefParts): string {
+  return `[${parts.datasource}].[${parts.derivation}:${parts.localFieldName}:${parts.pivot}]`;
+}
 
 function normalizeName(s: string): string {
   return s.replace(/^\[|\]$/g, '').trim();
@@ -134,7 +206,12 @@ function buildAggregatedRef(
   const bareName = normalizeName(base.columnName);
   const suffix = typeSuffixFor(base.type);
   const prefix = aggregationPrefix(agg);
-  return `[${base.datasource}].[${prefix}:${bareName}:${suffix}]`;
+  return formatCanonicalColumnRef({
+    datasource: base.datasource,
+    derivation: prefix,
+    localFieldName: bareName,
+    pivot: suffix,
+  });
 }
 
 function toCandidate(field: FieldReference & { column_ref: string }): FieldCandidate {
@@ -146,6 +223,56 @@ function toCandidate(field: FieldReference & { column_ref: string }): FieldCandi
     role: field.role,
     is_aggregated: !!field.isAggregated,
   };
+}
+
+function datasourceCaptionMap(workbookXml: string): Map<string, Set<string>> {
+  const workbook = parseXML(workbookXml);
+  const datasources = normalizeArray<any>(workbook.workbook?.datasources?.datasource);
+  const captions = new Map<string, Set<string>>();
+
+  for (const datasource of datasources) {
+    const name = datasource?.['@_name'];
+    const caption = datasource?.['@_caption'];
+    if (!name || !caption || name === 'Parameters') continue;
+
+    const names = captions.get(caption) ?? new Set<string>();
+    names.add(name);
+    captions.set(caption, names);
+  }
+
+  return captions;
+}
+
+function matchingFieldsForDatasource(
+  workbookXml: string,
+  fields: Array<FieldReference & { column_ref: string }>,
+  datasource: string,
+):
+  | { kind: 'exact'; fields: Array<FieldReference & { column_ref: string }> }
+  | { kind: 'ambiguous'; fields: Array<FieldReference & { column_ref: string }> }
+  | { kind: 'not_found'; fields: [] } {
+  const internalMatches = fields.filter((f) => f.datasource === datasource);
+  if (internalMatches.length > 0) {
+    return { kind: 'exact', fields: internalMatches };
+  }
+
+  const captionNames = datasourceCaptionMap(workbookXml).get(datasource);
+  if (!captionNames || captionNames.size === 0) {
+    return { kind: 'not_found', fields: [] };
+  }
+
+  const captionFields = fields.filter((f) => captionNames.has(f.datasource));
+  if (captionNames.size === 1) {
+    return { kind: 'exact', fields: captionFields };
+  }
+  return { kind: 'ambiguous', fields: captionFields };
+}
+
+function matchingCandidates(
+  fields: Array<FieldReference & { column_ref: string }>,
+  query: string,
+): Array<FieldReference & { column_ref: string }> {
+  return fields.filter((f) => fieldMatchesExact(f, query) || fieldMatchesByBareName(f, query));
 }
 
 /**
@@ -168,8 +295,37 @@ export function resolveField(
   }
 
   let allFields = listAvailableFields(workbookXml);
+  const exactRefMatch = allFields.find((f) => f.column_ref === trimmed);
+  if (exactRefMatch) {
+    return {
+      kind: 'exact',
+      query,
+      column_ref: exactRefMatch.column_ref,
+      datasource: exactRefMatch.datasource,
+    };
+  }
+  // A datasource-qualified ref is already disambiguated; a miss must not fuzzy-match.
+  if (COLUMN_REF_REGEX.test(trimmed)) {
+    return {
+      kind: 'not_found',
+      query,
+      reason: `no field matches exact column_ref "${trimmed}"`,
+      candidates: [],
+    };
+  }
+
   if (options.datasource) {
-    allFields = allFields.filter((f) => f.datasource === options.datasource);
+    const scoped = matchingFieldsForDatasource(workbookXml, allFields, options.datasource);
+    if (scoped.kind === 'ambiguous') {
+      const matches = matchingCandidates(scoped.fields, trimmed);
+      return {
+        kind: 'ambiguous',
+        query,
+        candidates: (matches.length > 0 ? matches : scoped.fields).map(toCandidate),
+        reason: `datasource selector "${options.datasource}" matches multiple datasources; use an internal datasource name or exact column_ref.`,
+      };
+    }
+    allFields = scoped.fields;
   }
 
   if (allFields.length === 0) {

@@ -3,6 +3,7 @@
  * Note: Ordering matters for all field operations
  */
 
+import { parseColumnInstanceRef, parseDatasourceQualifiedColumnRef } from './field-resolver.js';
 import { emitFieldRewrite } from './field-rewrite-listener.js';
 import { normalizeArray, parseXML, serializeXML } from './parser.js';
 import type { EncodingType, FieldInfo, ParsedEncoding, ParsedWorksheet } from './types.js';
@@ -67,7 +68,7 @@ export function addFieldToEncoding(
   }
 
   // Parse column reference to get datasource and column-instance
-  const parsedRef = parseColumnRef(columnRef);
+  const parsedRef = parseDatasourceQualifiedColumnRef(columnRef);
   if (!parsedRef) {
     throw new Error(
       `Invalid column reference format: ${columnRef}. Expected format: [Datasource Name].[column-instance-name]`,
@@ -415,23 +416,6 @@ function serializeShelfValue(fields: string[]): string {
 }
 
 /**
- * Parse column reference to extract datasource and column-instance name
- * Format: [Datasource Name].[column-instance-name]
- */
-function parseColumnRef(
-  columnRef: string,
-): { datasource: string; columnInstanceName: string } | null {
-  const match = columnRef.match(/^\[([^\]]+)\]\.\[([^\]]+)\]$/);
-  if (!match) {
-    return null;
-  }
-  return {
-    datasource: match[1],
-    columnInstanceName: `[${match[2]}]`,
-  };
-}
-
-/**
  * Map lowercase derivation abbreviations to proper-case derivation names
  * Column-instance names use lowercase (e.g., [ctd:Field:qk]) but derivation attributes use proper case (CountD)
  */
@@ -508,14 +492,15 @@ function typeFromPivotSuffix(columnInstanceName: string): string | null {
  */
 function parseColumnInstanceName(
   columnInstanceName: string,
-): { column: string; derivation: string } | null {
-  const match = columnInstanceName.match(/^\[([^:]+):([^:]+):[^\]]+\]$/);
-  if (!match) {
-    return null;
-  }
+): { column: string; derivation: string; localFieldName: string; pivot: string } | null {
+  const parsed = parseColumnInstanceRef(columnInstanceName);
+  if (!parsed || !parsed.pivot) return null;
+
   return {
-    column: `[${match[2]}]`,
-    derivation: mapDerivationToProperCase(match[1]),
+    column: `[${parsed.localFieldName}]`,
+    derivation: mapDerivationToProperCase(parsed.derivation),
+    localFieldName: parsed.localFieldName,
+    pivot: parsed.pivot,
   };
 }
 
@@ -683,21 +668,18 @@ function ensureColumnInstanceInDependencies(
     const hasAggregation = aggFunctions.some((fn) => formula.toUpperCase().includes(fn));
 
     if (hasAggregation && parsed.derivation !== 'User') {
-      const nameMatch = columnInstanceName.match(/^\[([^:]+):([^:]+):([^\]]+)\]$/);
-      if (nameMatch) {
-        correctedInstanceName = `[usr:${nameMatch[2]}:${nameMatch[3]}]`;
-        console.error(
-          `[DEBUG] Correcting column reference for calculated field with aggregation: ${columnInstanceName} -> ${correctedInstanceName}`,
-        );
-        emitFieldRewrite({
-          requested: columnInstanceName,
-          applied: correctedInstanceName,
-          reason: `calculated field "${parsed.column}" already aggregates in its formula; switching ${parsed.derivation} → User to avoid double aggregation`,
-          datasource,
-        });
-        // Check if the corrected instance already exists
-        exists = columnInstances.some((ci: any) => ci['@_name'] === correctedInstanceName);
-      }
+      correctedInstanceName = `[usr:${parsed.localFieldName}:${parsed.pivot}]`;
+      console.error(
+        `[DEBUG] Correcting column reference for calculated field with aggregation: ${columnInstanceName} -> ${correctedInstanceName}`,
+      );
+      emitFieldRewrite({
+        requested: columnInstanceName,
+        applied: correctedInstanceName,
+        reason: `calculated field "${parsed.column}" already aggregates in its formula; switching ${parsed.derivation} → User to avoid double aggregation`,
+        datasource,
+      });
+      // Check if the corrected instance already exists
+      exists = columnInstances.some((ci: any) => ci['@_name'] === correctedInstanceName);
     }
   }
 
@@ -851,20 +833,16 @@ function ensureColumnInstanceInDependencies(
           `[DEBUG] Calculated field "${parsedCorrected.column}" has aggregation in formula, correcting from "${parsedCorrected.derivation}" to "User"`,
         );
         actualDerivation = 'User';
-        // Also fix the column-instance name to use 'usr' prefix instead of aggregation prefix
-        // Parse format: [prefix:ColumnName:type] -> [usr:ColumnName:type]
-        const nameMatch = correctedInstanceName.match(/^\[([^:]+):([^:]+):([^\]]+)\]$/);
-        if (nameMatch) {
-          actualColumnInstanceName = `[usr:${nameMatch[2]}:${nameMatch[3]}]`;
-          console.error(`[DEBUG] Corrected column-instance name: ${actualColumnInstanceName}`);
-          if (actualColumnInstanceName !== correctedInstanceName) {
-            emitFieldRewrite({
-              requested: correctedInstanceName,
-              applied: actualColumnInstanceName,
-              reason: `calculated field "${parsedCorrected.column}" already aggregates; final derivation forced to User`,
-              datasource,
-            });
-          }
+        // Also fix the column-instance name to use 'usr' prefix instead of aggregation prefix.
+        actualColumnInstanceName = `[usr:${parsedCorrected.localFieldName}:${parsedCorrected.pivot}]`;
+        console.error(`[DEBUG] Corrected column-instance name: ${actualColumnInstanceName}`);
+        if (actualColumnInstanceName !== correctedInstanceName) {
+          emitFieldRewrite({
+            requested: correctedInstanceName,
+            applied: actualColumnInstanceName,
+            reason: `calculated field "${parsedCorrected.column}" already aggregates; final derivation forced to User`,
+            datasource,
+          });
         }
       }
     }
@@ -920,7 +898,7 @@ function addFieldToShelf(
   }
 
   // Parse column reference to get datasource and column-instance
-  const parsedRef = parseColumnRef(columnRef);
+  const parsedRef = parseDatasourceQualifiedColumnRef(columnRef);
   if (!parsedRef) {
     throw new Error(
       `Invalid column reference format: ${columnRef}. Expected format: [Datasource Name].[column-instance-name]`,
