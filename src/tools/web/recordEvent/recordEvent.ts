@@ -9,29 +9,29 @@ import { WebTool } from '../tool.js';
 
 // Starting field set — the final app-supplied schema is expected to grow later.
 const paramsSchema = {
-  scenario: z
+  event_type: z
     .string()
     .describe(
-      'The MCP app error category, e.g. TOOL_ERROR, PARSE_ERROR, AUTH_ERROR, EMBED_LOAD_ERROR.',
+      'The event type for product telemetry, e.g. TOOL_ERROR, PARSE_ERROR, AUTH_ERROR, EMBED_LOAD_ERROR, MCP_APP_CLICKED.',
     ),
-  message: z.string().optional().describe('Optional detail describing the error cause.'),
+  message: z.string().optional().describe('Optional detail or context for the event.'),
 };
 
 /**
- * Records a product-telemetry event when an error occurs in the MCP app UI.
+ * Records a product-telemetry event from the MCP app UI (errors, user actions, etc.).
  * Called by the app (never the model) via app.callServerTool. Mirrors the
  * server-side 'tool_call' telemetry pattern, enriching the event with request
  * context the browser bundle does not have.
  */
-export const getRecordMcpAppErrorTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
-  const recordMcpAppErrorTool = new WebTool({
+export const getRecordEventTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+  const recordEventTool = new WebTool({
     server,
-    name: 'record-mcp-app-error',
+    name: 'record-event',
     description:
-      'Records a product-telemetry event when an error occurs in the MCP app UI. This tool is only visible to the app, never the model. It takes an error scenario and optional detail, forwards a telemetry event, and returns immediately.',
+      'Records a product-telemetry event from the MCP app UI (errors, user actions, etc.). This tool is only visible to the app, never the model. It takes an event type and optional detail, forwards a telemetry event, and returns immediately.',
     paramsSchema,
     annotations: {
-      title: 'Record MCP App Error',
+      title: 'Record Event',
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -44,11 +44,11 @@ export const getRecordMcpAppErrorTool = (server: WebMcpServer): WebTool<typeof p
     },
     disabled: !getFeatureGate().isFeatureEnabled('mcp-apps'),
     callback: async (args, extra): Promise<CallToolResult> => {
-      return recordMcpAppErrorTool.logAndExecute<{ recorded: true }>({
+      return recordEventTool.logAndExecute<{ recorded: true }>({
         extra,
         args,
         callback: async () => {
-          const { config, requestId, sessionId } = extra;
+          const { config } = extra;
 
           const productTelemetryForwarder = getProductTelemetry(
             config.productTelemetryEndpoint,
@@ -56,11 +56,9 @@ export const getRecordMcpAppErrorTool = (server: WebMcpServer): WebTool<typeof p
             config.server,
           );
 
-          productTelemetryForwarder.send('tableau_mcp_event.completed', {
-            scenario: args.scenario,
+          productTelemetryForwarder.send('tableau_mcp_event', {
+            event_type: args.event_type,
             message: args.message ?? '',
-            request_id: requestId.toString(),
-            session_id: sessionId ?? '',
             site_luid: extra.getSiteLuid(),
             user_luid: extra.getUserLuid(),
             podname: config.server,
@@ -74,5 +72,5 @@ export const getRecordMcpAppErrorTool = (server: WebMcpServer): WebTool<typeof p
     },
   });
 
-  return recordMcpAppErrorTool;
+  return recordEventTool;
 };

@@ -1,9 +1,9 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { reportMcpAppError } from './recordMcpAppErrorClient.js';
+import { recordEvent } from './recordEventClient.js';
 
-describe('reportMcpAppError', () => {
+describe('recordEvent', () => {
   let mockApp: App;
   let callServerTool: ReturnType<typeof vi.fn>;
 
@@ -19,28 +19,28 @@ describe('reportMcpAppError', () => {
     vi.restoreAllMocks();
   });
 
-  it('calls the record-mcp-app-error tool with scenario and Error message', () => {
-    reportMcpAppError(mockApp, 'PARSE_ERROR', new Error('bad json'));
+  it('calls the record-event tool with event_type and Error message', () => {
+    recordEvent(mockApp, 'PARSE_ERROR', new Error('bad json'));
 
     expect(callServerTool).toHaveBeenCalledWith({
-      name: 'record-mcp-app-error',
-      arguments: { scenario: 'PARSE_ERROR', message: 'bad json' },
+      name: 'record-event',
+      arguments: { event_type: 'PARSE_ERROR', message: 'bad json' },
     });
   });
 
-  it('omits message when there is no cause', () => {
-    reportMcpAppError(mockApp, 'TOOL_ERROR');
+  it('omits message when there is no detail', () => {
+    recordEvent(mockApp, 'TOOL_ERROR');
 
     expect(callServerTool).toHaveBeenCalledWith({
-      name: 'record-mcp-app-error',
-      arguments: { scenario: 'TOOL_ERROR' },
+      name: 'record-event',
+      arguments: { event_type: 'TOOL_ERROR' },
     });
   });
 
   it('does not call the tool when the host lacks serverTools capability', () => {
     (mockApp.getHostCapabilities as ReturnType<typeof vi.fn>).mockReturnValue({});
 
-    reportMcpAppError(mockApp, 'AUTH_ERROR');
+    recordEvent(mockApp, 'AUTH_ERROR');
 
     expect(callServerTool).not.toHaveBeenCalled();
   });
@@ -48,7 +48,7 @@ describe('reportMcpAppError', () => {
   it('does not throw when callServerTool rejects (fire-and-forget)', async () => {
     callServerTool.mockRejectedValue(new Error('transport failed'));
 
-    expect(() => reportMcpAppError(mockApp, 'EMBED_LOAD_ERROR')).not.toThrow();
+    expect(() => recordEvent(mockApp, 'EMBED_LOAD_ERROR')).not.toThrow();
     // Let the rejected promise settle so the internal .catch runs.
     await new Promise((r) => setTimeout(r, 0));
   });
@@ -58,7 +58,7 @@ describe('reportMcpAppError', () => {
       throw new Error('not connected');
     });
 
-    expect(() => reportMcpAppError(mockApp, 'TOOL_ERROR')).not.toThrow();
+    expect(() => recordEvent(mockApp, 'TOOL_ERROR')).not.toThrow();
     expect(callServerTool).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,7 @@ import type { App } from '@modelcontextprotocol/ext-apps';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
+import { extractToolErrorMessage } from '../../../../utils/extractToolErrorMessage.js';
 import { embedTableauViz } from './embedTableauViz.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
@@ -43,7 +44,8 @@ export function extractUrlObjectFromResult(result: CallToolResult): string {
  */
 export async function handleToolResult(app: App, result: CallToolResult): Promise<void> {
   if (!result || result.isError) {
-    showError('TOOL_ERROR', undefined, app);
+    const cause = result ? extractToolErrorMessage(result) : undefined;
+    showError('TOOL_ERROR', cause, app);
     return;
   }
 

@@ -1,5 +1,7 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 
+import { recordEvent } from './recordEventClient.js';
+
 /**
  * Shows an inline error message when the link fails to open.
  *
@@ -60,6 +62,7 @@ export function setupOpenInTableauLink(app: App, url: string, container: HTMLEle
   // Set onclick handler to use host-mediated link opening
   link.onclick = async (e) => {
     e.preventDefault();
+    recordEvent(app, 'MCP_APP_CLICKED', url);
 
     try {
       const result = await app.openLink({ url });

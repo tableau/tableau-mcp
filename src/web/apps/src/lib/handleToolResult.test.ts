@@ -12,13 +12,13 @@ vi.mock('./getEmbedTokenToolClient.js');
 vi.mock('./embedTableauViz.js');
 vi.mock('./loadTableauEmbeddingApi.js');
 vi.mock('./openInTableauLink.js');
-vi.mock('./recordMcpAppErrorClient.js');
+vi.mock('./recordEventClient.js');
 
 import { embedTableauViz } from './embedTableauViz.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
-import { reportMcpAppError } from './recordMcpAppErrorClient.js';
+import { recordEvent } from './recordEventClient.js';
 
 describe('handleToolResult', () => {
   let mockApp: App;
@@ -344,7 +344,7 @@ describe('handleToolResult', () => {
     expect(vi.mocked(setupOpenInTableauLink)).toHaveBeenCalledTimes(1);
   });
 
-  it('reports telemetry via the app when a tool error occurs', async () => {
+  it('reports telemetry with the tool error message when a tool error occurs', async () => {
     const errorResult: CallToolResult = {
       isError: true,
       content: [{ type: 'text', text: 'Tool execution failed' }],
@@ -353,6 +353,17 @@ describe('handleToolResult', () => {
     await handleToolResult(mockApp, errorResult);
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(vi.mocked(reportMcpAppError)).toHaveBeenCalledWith(mockApp, 'TOOL_ERROR', undefined);
+    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(
+      mockApp,
+      'TOOL_ERROR',
+      'Tool execution failed',
+    );
+  });
+
+  it('reports telemetry with undefined cause when the tool result is null', async () => {
+    await handleToolResult(mockApp, null as any);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(mockApp, 'TOOL_ERROR', undefined);
   });
 });

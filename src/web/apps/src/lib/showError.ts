@@ -2,7 +2,7 @@ import type { App } from '@modelcontextprotocol/ext-apps';
 
 import DISCONNECTED_SVG from '../assets/disconnected.svg?raw';
 import { TABLEAU_VIZ_CONTAINER_ID } from './embedTableauViz.js';
-import { reportMcpAppError } from './recordMcpAppErrorClient.js';
+import { recordEvent } from './recordEventClient.js';
 
 export type Scenario = 'TOOL_ERROR' | 'PARSE_ERROR' | 'AUTH_ERROR' | 'EMBED_LOAD_ERROR';
 
@@ -37,15 +37,13 @@ export function showError(scenario: Scenario, cause?: unknown, app?: App): void 
   // Report telemetry first (best-effort), so errors are recorded even when the
   // container is missing and the error UI cannot be rendered.
   if (app) {
-    reportMcpAppError(app, scenario, cause);
+    recordEvent(app, scenario, cause);
   }
 
   const container = document.getElementById(TABLEAU_VIZ_CONTAINER_ID);
   if (!container) {
     return;
   }
-
-  console.error(ERROR_UI[scenario].logCode, cause);
 
   const errorElement = document.createElement('div');
   errorElement.className = 'mcp-app-error';
