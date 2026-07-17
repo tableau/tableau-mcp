@@ -38,6 +38,14 @@ const WORKBOOK_XML = `<?xml version="1.0"?>
   </datasources>
 </workbook>`;
 
+const TWO_DATASOURCE_WORKBOOK_XML = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource name="DS_A" caption="First Caption"/>
+    <datasource name="DS_B"/>
+  </datasources>
+</workbook>`;
+
 const TEMPLATE_XML =
   '<workbook><worksheets><worksheet name="TEMPLATE"><table/></worksheet></worksheets></workbook>';
 
@@ -65,6 +73,41 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(rewriteFieldReferences).mockReturnValue(TEMPLATE_XML);
   vi.mocked(loadWorksheetXml).mockResolvedValue(new Ok({ readbackWarnings: [] }));
   return extra;
+}
+
+function twoDatasourceFields(): any[] {
+  return [
+    {
+      column_ref: '[DS_A].[none:Region:nk]',
+      role: 'dimension',
+      datasource: 'DS_A',
+      columnName: '[Region]',
+      columnInstanceName: '[none:Region:nk]',
+      derivation: 'None' as any,
+      type: 'nominal',
+      datatype: 'string',
+    },
+    {
+      column_ref: '[DS_B].[none:Region:nk]',
+      role: 'dimension',
+      datasource: 'DS_B',
+      columnName: '[Region]',
+      columnInstanceName: '[none:Region:nk]',
+      derivation: 'None' as any,
+      type: 'nominal',
+      datatype: 'string',
+    },
+    {
+      column_ref: '[DS_B].[sum:Sales:qk]',
+      role: 'measure',
+      datasource: 'DS_B',
+      columnName: '[Sales]',
+      columnInstanceName: '[sum:Sales:qk]',
+      derivation: 'Sum' as any,
+      type: 'quantitative',
+      datatype: 'integer',
+    },
+  ];
 }
 
 const TASK_SPEC_BASE = {
@@ -193,21 +236,82 @@ describe('buildAndApplyWorksheetTool', () => {
     expect(result.isError).toBe(true);
   });
 
-  it('should call rewriteFieldReferences with template, fieldMapping, datasource name, and namespacing options', async () => {
+  it('should call rewriteFieldReferences with template, fieldMapping, resolved datasource, and namespacing options', async () => {
     await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE });
 
     // CONVERGENCE: build-and-apply now calls the shared core (rewriteFieldReferences)
     // directly instead of the deleted replaceFieldReferences wrapper, so the call
     // gains a 5th arg: the per-apply options object wiring calc namespacing ON with a
-    // caller-minted nonce. The first four args (template, mapping, datasource,
-    // metadata) are unchanged.
+    // caller-minted nonce. Seam-1 packet B changes the datasource arg to the resolved
+    // bind datasource instead of the workbook caption.
     expect(rewriteFieldReferences).toHaveBeenCalledWith(
       TEMPLATE_XML,
       expect.any(Object),
-      expect.stringMatching(/Sample/),
+      'DS',
       expect.any(Object),
       { namespaceCalcs: true, applyNonce: expect.any(String) },
     );
+  });
+
+  it('uses the explicit bind datasource for manifest-backed rewrites', async () => {
+    const extra = makeExtra();
+    vi.mocked(readFileSync).mockReturnValue(TWO_DATASOURCE_WORKBOOK_XML as any);
+    vi.mocked(listAvailableFields).mockReturnValue(twoDatasourceFields() as any);
+    vi.mocked(getTemplateColumnRequirements).mockReturnValue([
+      { name: 'Region', role: 'dimension', datatype: 'string', type: 'nominal' },
+      { name: 'Sales', role: 'measure', datatype: 'integer', type: 'quantitative' },
+    ]);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        taskSpec: {
+          ...TASK_SPEC_BASE,
+          fields: ['[DS_B].[none:Region:nk]', '[DS_B].[sum:Sales:qk]'],
+        },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(rewriteFieldReferences).toHaveBeenCalledWith(
+      TEMPLATE_XML,
+      expect.any(Object),
+      'DS_B',
+      expect.any(Object),
+      { namespaceCalcs: true, applyNonce: expect.any(String) },
+    );
+  });
+
+  it('blocks no-manifest passthrough when provided refs span datasources', async () => {
+    const extra = makeExtra();
+    vi.mocked(readFileSync).mockReturnValue(TWO_DATASOURCE_WORKBOOK_XML as any);
+    vi.mocked(readTemplate).mockReturnValue(TEMPLATE_XML);
+    vi.mocked(listAvailableFields).mockReturnValue(twoDatasourceFields() as any);
+    vi.mocked(getTemplateColumnRequirements).mockReturnValue([
+      { name: 'Region', role: 'dimension', datatype: 'string', type: 'nominal' },
+      { name: 'Sales', role: 'measure', datatype: 'integer', type: 'quantitative' },
+    ]);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        taskSpec: {
+          ...TASK_SPEC_BASE,
+          template: 'loose-template-without-manifest',
+          fields: ['[DS_A].[none:Region:nk]', '[DS_B].[sum:Sales:qk]'],
+        },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('BLOCKED: mixed-datasource field references');
+    expect(result.content[0].text).toContain('DS_A');
+    expect(result.content[0].text).toContain('DS_B');
+    expect(rewriteFieldReferences).not.toHaveBeenCalled();
+    expect(loadWorksheetXml).not.toHaveBeenCalled();
   });
 
   it('should return error when extracted worksheet element is missing from template', async () => {

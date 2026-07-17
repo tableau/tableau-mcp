@@ -59,7 +59,7 @@ function field(columnRef: string, role: string, datatype: string, type: string):
   return {
     column_ref: columnRef,
     role,
-    datasource: 'Sample Superstore',
+    datasource: columnRef.match(/^\[([^\]]+)\]\./)?.[1] ?? 'Sample Superstore',
     columnName: columnRef,
     columnInstanceName: columnRef,
     derivation: 'None',
@@ -250,19 +250,22 @@ describe('buildAndApplyWorksheetTool — mapping construction characterization',
     expect(captured.metadata).toHaveProperty('Dim1');
   });
 
-  it('derives the datasource name from the <datasource caption=...> when present', async () => {
+  it('CHARACTERIZATION REBASELINE: rewrites with the refs common datasource, not workbook caption', async () => {
+    // NEW INVARIANT (seam-1 packet B / #219): the rewrite datasource comes from the
+    // explicit bind or, for no-manifest passthrough, the single common datasource in
+    // taskSpec.fields. Workbook caption is no longer allowed to repoint the refs.
     const extra = makeExtra();
     const captured = captureCall();
 
     await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
 
-    expect(captured.datasource).toBe('Sample - Superstore');
+    expect(captured.datasource).toBe('DS');
   });
 
-  it('CHARACTERIZATION: without a caption, uses the first datasource name that is not "Parameters"', async () => {
-    // CHARACTERIZATION: current behavior — caption wins; otherwise the first
-    // non-"Parameters" datasource name is used (the literal "Parameters" datasource
-    // is always skipped).
+  it('CHARACTERIZATION REBASELINE: without a caption, still rewrites with the refs common datasource', async () => {
+    // NEW INVARIANT (seam-1 packet B / #219): fallback to the workbook's first
+    // non-Parameters datasource is gone; no-manifest passthrough must infer exactly
+    // one datasource from taskSpec.fields and fail closed if refs are mixed.
     const workbook =
       '<workbook><datasources>' +
       '<datasource name="Parameters"/>' +
@@ -273,7 +276,7 @@ describe('buildAndApplyWorksheetTool — mapping construction characterization',
 
     await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
 
-    expect(captured.datasource).toBe('Real DS');
+    expect(captured.datasource).toBe('DS');
   });
 
   it('applies the extracted worksheet through the mocked session boundary on success', async () => {

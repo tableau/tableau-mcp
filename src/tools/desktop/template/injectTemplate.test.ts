@@ -25,6 +25,11 @@ import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 const WORKBOOK_FILE = resolve('/cache/workbook.xml');
 const SESSION = '12345';
 const WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets/></workbook>';
+const TWO_DATASOURCE_WORKBOOK_XML =
+  '<?xml version="1.0"?><workbook><datasources>' +
+  '<datasource name="DS_A"><column name="[Region]" role="dimension" type="nominal" datatype="string"/></datasource>' +
+  '<datasource name="DS_B"><column name="[Region]" role="dimension" type="nominal" datatype="string"/><column name="[Sales]" role="measure" type="quantitative" datatype="integer"/></datasource>' +
+  '</datasources><worksheets/></workbook>';
 const TEMPLATE_XML =
   '<workbook><worksheets><worksheet name="{{TITLE}}"/></worksheets>' +
   '<windows><window class="worksheet" name="{{TITLE}}"/></windows></workbook>';
@@ -151,6 +156,30 @@ describe('injectTemplateTool', () => {
       undefined,
       { namespaceCalcs: true, applyNonce: expect.any(String) },
     );
+  });
+
+  it('blocks caller DATASOURCE when explicit mapping resolves to a different datasource', async () => {
+    const extra = makeExtra();
+    vi.mocked(readFileSync).mockReturnValue(TWO_DATASOURCE_WORKBOOK_XML);
+
+    const result = await getResult(
+      {
+        ...BASE_PARAMS,
+        templateParameters: { DATASOURCE: 'DS_A' },
+        fieldMapping: {
+          Region: '[DS_B].[none:Region:nk]',
+          Sales: '[DS_B].[sum:Sales:qk]',
+        },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('[datasource-mismatch]');
+    expect(result.content[0].text).toContain('DS_A');
+    expect(result.content[0].text).toContain('DS_B');
+    expect(writeFileSync).not.toHaveBeenCalled();
   });
 
   it('should not call rewriteFieldReferences when no DATASOURCE is given', async () => {

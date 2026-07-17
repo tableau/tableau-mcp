@@ -13,15 +13,35 @@ import { attachNextAction, prefillNextAction } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import { markPlanBuildWorksheets } from './planBuildFocus.js';
 
+type PlannerField = string | { query: string; datasource?: string };
+type PlannerFieldRequest = { query: string; datasource?: string };
+type PlannerFieldResolution = {
+  query: string;
+  datasourceSelector?: string;
+  kind: ReturnType<typeof resolveField>['kind'];
+  columnRef: string | null;
+  datasource: string | null;
+  reason?: string;
+  candidates: string[];
+};
+
+const plannerFieldSchema = z.union([
+  z.string(),
+  z.object({
+    query: z.string().describe('Q.'),
+    datasource: z.string().optional().describe('DS.'),
+  }),
+]);
+
 const paramsSchema = {
-  session: z.string().optional().describe('Session; optional if pinned or unique.'),
-  dashboardName: z.string().describe('Dashboard name.'),
-  title: z.string().optional().describe('Dashboard title.'),
+  session: z.string().optional().describe('S.'),
+  dashboardName: z.string().describe('N.'),
+  title: z.string().optional().describe('T.'),
   layout: z
     .object({
-      type: z.enum(['auto-grid', 'rows', 'columns', 'custom']).describe('Layout.'),
-      gridColumns: z.number().optional().describe('Grid columns.'),
-      kpiStripHeight: z.number().optional().describe('KPI height %.'),
+      type: z.enum(['auto-grid', 'rows', 'columns', 'custom']).describe('L.'),
+      gridColumns: z.number().optional().describe('C.'),
+      kpiStripHeight: z.number().optional().describe('K.'),
       zones: z
         .array(
           z.object({
@@ -33,25 +53,33 @@ const paramsSchema = {
           }),
         )
         .optional()
-        .describe('Zones.'),
+        .describe('Z.'),
     })
     .optional()
-    .describe('Layout.'),
+    .describe('L.'),
   worksheets: z
     .array(
       z.object({
-        name: z.string().describe('Name.'),
-        type: z.enum(['kpi', 'chart']).describe('kpi or chart.'),
-        template: z.string().optional().describe('Template.'),
-        fields: z.array(z.string()).describe('Fields.'),
+        name: z.string().describe('N.'),
+        type: z.enum(['kpi', 'chart']).describe('T.'),
+        template: z.string().optional().describe('Tpl.'),
+        fields: z.array(plannerFieldSchema).describe('F.'),
       }),
     )
-    .describe('Worksheets.'),
+    .describe('W.'),
 };
 
 function selectTemplate(ws: { type: string; template?: string }): string {
   if (ws.template) return ws.template;
   return ws.type === 'kpi' ? 'kpi-text' : 'ranking-ordered-bar';
+}
+
+function normalizePlannerField(field: PlannerField): PlannerFieldRequest {
+  return typeof field === 'string' ? { query: field } : field;
+}
+
+function fieldCacheKey(field: PlannerFieldRequest): string {
+  return JSON.stringify([field.query, field.datasource ?? null]);
 }
 
 const toolTitle = 'Plan Dashboard Creation';
@@ -62,10 +90,7 @@ export const getPlanDashboardCreationTool = (
     server,
     name: 'plan-dashboard-creation',
     title: toolTitle,
-    description: [
-      'Plan dashboard sheet and layout tasks for parallel build/apply.',
-      'Resolve ambiguous fields first.',
-    ].join(' '),
+    description: 'Plan dashboard tasks. parallel plan.',
     paramsSchema,
     annotations: {
       title: toolTitle,
@@ -100,60 +125,89 @@ export const getPlanDashboardCreationTool = (
 
           // Resolve all requested fields
           const cache = new DesktopCache(resolvedSession);
-          const fieldMap: Record<string, string | null> = {};
+          const fieldMap = new Map<string, PlannerFieldResolution>();
           const aggregationWarnings: string[] = [];
-          const ambiguousFields: Array<{ field: string; candidates: string[] }> = [];
-          const notFoundFields: string[] = [];
+          const ambiguousFields: Array<{
+            field: string;
+            datasource?: string;
+            candidates: string[];
+          }> = [];
+          const notFoundFields: Array<{ field: string; datasource?: string }> = [];
 
           for (const ws of worksheets) {
-            for (const fieldName of ws.fields) {
-              if (fieldName in fieldMap) continue;
-              const resolution = resolveField(workbookXml, fieldName);
+            for (const requestedField of ws.fields.map(normalizePlannerField)) {
+              const cacheKey = fieldCacheKey(requestedField);
+              if (fieldMap.has(cacheKey)) continue;
+              const resolution = resolveField(
+                workbookXml,
+                requestedField.query,
+                requestedField.datasource ? { datasource: requestedField.datasource } : undefined,
+              );
+              const resolved: PlannerFieldResolution = {
+                query: requestedField.query,
+                datasourceSelector: requestedField.datasource,
+                kind: resolution.kind,
+                columnRef: resolution.column_ref ?? null,
+                datasource: resolution.datasource ?? null,
+                reason: resolution.reason,
+                candidates: (resolution.candidates ?? []).map((c) => c.column_ref),
+              };
               switch (resolution.kind) {
                 case 'exact':
-                  fieldMap[fieldName] = resolution.column_ref ?? null;
+                  fieldMap.set(cacheKey, resolved);
                   break;
                 case 'rewritten':
-                  fieldMap[fieldName] = resolution.column_ref ?? null;
+                  fieldMap.set(cacheKey, resolved);
                   if (resolution.rewrites?.includes('ignored-redundant-aggregation')) {
-                    aggregationWarnings.push(`"${fieldName}": ${resolution.reason}`);
+                    aggregationWarnings.push(`"${requestedField.query}": ${resolution.reason}`);
                   }
                   break;
                 case 'ambiguous':
-                  fieldMap[fieldName] = null;
+                  fieldMap.set(cacheKey, resolved);
                   ambiguousFields.push({
-                    field: fieldName,
-                    candidates: (resolution.candidates ?? []).map((c) => c.column_ref),
+                    field: requestedField.query,
+                    datasource: requestedField.datasource,
+                    candidates: resolved.candidates,
                   });
                   break;
                 case 'not_found':
-                  fieldMap[fieldName] = null;
-                  notFoundFields.push(fieldName);
+                  fieldMap.set(cacheKey, resolved);
+                  notFoundFields.push({
+                    field: requestedField.query,
+                    datasource: requestedField.datasource,
+                  });
                   break;
               }
             }
           }
 
-          // Block planning if any field is ambiguous
-          if (ambiguousFields.length > 0) {
+          // Block planning if any field cannot be resolved.
+          if (ambiguousFields.length > 0 || notFoundFields.length > 0) {
             const summaryParts = [
-              `${ambiguousFields.length} ambiguous`,
+              ...(ambiguousFields.length > 0 ? [`${ambiguousFields.length} ambiguous`] : []),
               ...(notFoundFields.length > 0 ? [`${notFoundFields.length} not_found`] : []),
             ];
             const lines: string[] = [
               `BLOCKED: ${summaryParts.join(' + ')} field reference${ambiguousFields.length + notFoundFields.length === 1 ? '' : 's'} — cannot plan dashboard`,
               '',
-              'Ambiguous (matches multiple columns — pick one):',
-              ...ambiguousFields.map(
-                (a) =>
-                  `  • "${a.field}" → candidates: ${a.candidates.map((c) => `"${c}"`).join(', ')}`,
-              ),
             ];
+            if (ambiguousFields.length > 0) {
+              lines.push(
+                'Ambiguous (matches multiple columns — pick one):',
+                ...ambiguousFields.map((a) => {
+                  const selector = a.datasource ? ` (datasource "${a.datasource}")` : '';
+                  return `  • "${a.field}"${selector} → candidates: ${a.candidates.map((c) => `"${c}"`).join(', ')}`;
+                }),
+              );
+            }
             if (notFoundFields.length > 0) {
               lines.push(
                 '',
                 'Not found (no column with this name in any datasource):',
-                ...notFoundFields.map((f) => `  • "${f}"`),
+                ...notFoundFields.map((f) => {
+                  const selector = f.datasource ? ` (datasource "${f.datasource}")` : '';
+                  return `  • "${f.field}"${selector}`;
+                }),
               );
             }
             lines.push(
@@ -180,9 +234,14 @@ export const getPlanDashboardCreationTool = (
             const safeWsName = ws.name.replace(/[^a-zA-Z0-9]/g, '_');
             const worksheetFile = cache.getCacheFilePath({ prefix: 'worksheet', id: safeWsName });
             const templateName = selectTemplate(ws);
-            const resolvedFields = ws.fields
-              .map((f) => fieldMap[f])
-              .filter((r): r is string => r !== null);
+            const resolvedEntries = ws.fields
+              .map(normalizePlannerField)
+              .map((f) => fieldMap.get(fieldCacheKey(f)))
+              .filter((r): r is PlannerFieldResolution => !!r && r.columnRef !== null);
+            const resolvedFields = resolvedEntries.map((r) => r.columnRef!);
+            const resolvedDatasources = [
+              ...new Set(resolvedEntries.map((r) => r.datasource).filter((d): d is string => !!d)),
+            ];
             return {
               task_type: 'worksheet' as const,
               worksheetName: ws.name,
@@ -190,6 +249,7 @@ export const getPlanDashboardCreationTool = (
               type: ws.type,
               template: templateName,
               fields: resolvedFields,
+              datasource: resolvedDatasources.length === 1 ? resolvedDatasources[0] : null,
               workbookFile,
             };
           });
@@ -239,8 +299,8 @@ export const getPlanDashboardCreationTool = (
               totalWorksheets: worksheets.length,
               canParallelize,
               recommendedParallelism,
-              resolvedFields: Object.keys(fieldMap).length - notFoundFields.length,
-              unresolvedFields: notFoundFields,
+              resolvedFields: [...fieldMap.values()].filter((f) => f.columnRef !== null).length,
+              unresolvedFields: notFoundFields.map((f) => f.field),
               aggregationWarnings,
               availableTemplates: templateFiles,
             },
@@ -293,9 +353,6 @@ export const getPlanDashboardCreationTool = (
             lines.push('Build and apply tasks sequentially.');
           }
 
-          if (notFoundFields.length > 0) {
-            lines.push('', `WARNING: Unresolved fields: ${notFoundFields.join(', ')}`);
-          }
           if (aggregationWarnings.length > 0) {
             lines.push('', `WARNING: Redundant aggregation: ${aggregationWarnings.join('; ')}`);
           }
