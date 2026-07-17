@@ -25,10 +25,9 @@ const paramsSchema = {
     .enum(['slim', 'full'])
     .optional()
     .describe(
-      "Response detail. 'full' (default): human-readable table + full per-field metadata incl. exact column_ref. " +
-        "'slim': a compact JSON array of { name, caption, role, datatype, semanticRole, datasource } and no table — " +
-        'much smaller (~13-18KB vs ~68KB for a wide datasource), for reasoning over fields to pick measures/dimensions. ' +
-        'Slim omits column_ref; use resolve-field to get the exact column_ref for the field you commit to.',
+      "'full' (default): table + full metadata incl. column_ref. " +
+        "'slim': compact { caption, role, datatype } array, no table — much smaller for a wide datasource. " +
+        'slim omits column_ref; use resolve-field for it.',
     ),
 };
 
