@@ -114,6 +114,21 @@ Example: `"stale-pending-deletion"`
 **For `resourceType="extract-refresh-task"` only.** The single-use token returned by a prior
 preview call. Required when `confirm` is `true`; ignored otherwise.
 
+## Audit records and durability
+
+Every mutation attempt — allowed, denied, completed, or failed — emits a single authoritative,
+structured-JSON audit record (actor, tool, action, phase, target identity, evidence kind, result) on
+a dedicated `audit` logger. That logger bypasses the `LOG_LEVEL` severity filter, so an operator
+cannot suppress security-audit records by raising `LOG_LEVEL`. For an extract-refresh-task target,
+the record's `name`/`project`/`owner` derive best-effort from the task's underlying data source or
+workbook (the task itself has no such fields); if that lookup fails the record still carries the task
+id.
+
+**Durability is the deployment's responsibility.** The server only emits these records to its log
+stream (stderr/stdout/file). To retain them, operators must ship that audit-logger stream to a
+durable, ideally immutable, log store (SIEM, log archive, etc.). There is no built-in durable audit
+sink in this server.
+
 ## Side effects
 
 - **Preview (workbook/datasource)** adds the pending-deletion tag. Reversible.

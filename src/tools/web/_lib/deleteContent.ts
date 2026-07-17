@@ -34,7 +34,13 @@ import {
   RegistryEvidence,
   TagEvidence,
 } from './evidence.js';
+import {
+  renderConfirmClosedMessage,
+  renderTagDeleteNextStep,
+  renderTokenConfirmNextStep,
+} from './hitlText.js';
 import { guardMutation, MutationTarget } from './mutationGuard.js';
+import { resolveExtractRefreshTaskTarget } from './resolveExtractRefreshTaskTarget.js';
 
 export type DeleteWorkbookConfirmPanel = {
   kind: 'delete-workbook-confirm';
@@ -183,10 +189,12 @@ permanent.
             callback: async (restApi) => {
               if (confirm && mcpAppsEnabled) {
                 return new PreviewNotRunError(
-                  `Mutation blocked: deleting a ${resourceType} requires a human ` +
-                    'confirmation in the approval panel. Run delete-content in preview (omit ' +
-                    'confirm) to open the panel; the deletion is performed only when a person ' +
-                    "clicks Delete. The assistant cannot confirm on the user's behalf.",
+                  renderConfirmClosedMessage({
+                    actionPhrase: `deleting a ${resourceType}`,
+                    panelName: 'the approval panel',
+                    previewTool: 'delete-content',
+                    appliedClause: 'the deletion is performed only when a person clicks Delete',
+                  }),
                 ).toErr();
               }
               switch (resourceType) {
@@ -333,10 +341,10 @@ async function runWorkbookBranch({
   return new Ok<DeleteContentResult>(
     `Preview — workbook '${target.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
       `It has been tagged '${pendingTag}' (reversible). ` +
-      'NEXT STEP — REQUIRED: show this workbook (name, project, owner) to the user and ask them ' +
-      'to explicitly confirm deleting it. Do NOT delete without the user’s approval. ' +
-      'Once approved, call again with confirm: true (the server will verify this ' +
-      `'${pendingTag}' tag before deleting). ` +
+      renderTagDeleteNextStep({
+        subject: 'show this workbook (name, project, owner)',
+        pendingTag,
+      }) +
       `Deleted workbooks are recoverable from the Tableau recycle bin (${RECYCLE_BIN_DOC_URL}) ` +
       'for a limited time.',
   );
@@ -455,11 +463,10 @@ async function runDatasourceBranch({
     `Preview — data source '${target.name}' (id ${datasourceId}) in '${projectName}', ${ownerText}. ` +
       `${dependencyWarning} ` +
       `It has been tagged '${pendingTag}' (reversible). ` +
-      'NEXT STEP — REQUIRED: show this data source (name, project, owner) and its dependent ' +
-      'content to the user and ask them to explicitly confirm deleting it. Do NOT delete ' +
-      'without the user’s approval. ' +
-      'Once approved, call again with confirm: true (the server will verify this ' +
-      `'${pendingTag}' tag before deleting). ` +
+      renderTagDeleteNextStep({
+        subject: 'show this data source (name, project, owner) and its dependent content',
+        pendingTag,
+      }) +
       'On Tableau Cloud deleted data sources are recoverable from the recycle bin ' +
       `(${RECYCLE_BIN_DOC_URL}) for a limited time; on Tableau Server deletion is permanent.`,
   );
@@ -498,10 +505,19 @@ async function runExtractRefreshTaskBranch({
     ).toErr();
   }
 
-  const resolveTarget = async (): Promise<MutationTarget> => ({
-    id: taskId,
-    kind: 'extract-refresh-task',
-  });
+  // Enrich the audit target with the underlying content's name/project/owner (AC-3). The already-
+  // fetched `tasks` list carries only the underlying content id, so this pays ONE content lookup +
+  // ONE owner lookup on the preview/confirm path — the same cost the workbook/datasource branches
+  // already pay. The shared helper is best-effort: a lookup failure degrades to an id-only target and
+  // never fails the mutation. Feed it the already-fetched `tasks` to avoid re-listing.
+  const resolveTarget = async (): Promise<MutationTarget> =>
+    resolveExtractRefreshTaskTarget({
+      restApi,
+      siteId,
+      taskId,
+      logger: 'delete-content',
+      tasks,
+    });
 
   const registryEvidence = new RegistryEvidence();
 
@@ -559,10 +575,12 @@ async function runExtractRefreshTaskBranch({
   return new Ok<DeleteContentResult>(
     `Preview — extract refresh task '${taskId}' would be permanently deleted (the underlying data ` +
       'source or workbook is unaffected, but it will no longer be refreshed on this schedule). ' +
-      'NEXT STEP — REQUIRED: present this task to the user and ask them to explicitly confirm ' +
-      'deleting it. Do NOT delete without the user’s approval. ' +
-      `Once approved, call again with confirm: true and confirmationToken: "${nonce}" ` +
-      '(the server will verify and consume this single-use token before deleting).',
+      renderTokenConfirmNextStep({
+        subject: 'present this task',
+        approvalClause: 'confirm deleting it. Do NOT delete',
+        nonce,
+        tail: ' before deleting).',
+      }),
   );
 }
 

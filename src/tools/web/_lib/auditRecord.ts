@@ -15,6 +15,12 @@ import { z } from 'zod';
  * SECURITY: `confirmationEvidence.detail` is a non-sensitive description of the evidence (e.g. the
  * tag label, or that a registry nonce matched) — it MUST NEVER carry the raw single-use nonce, which
  * would let a reader of the audit log forge a confirmation.
+ *
+ * DURABILITY CONTRACT (AC-5): these records are emitted as structured JSON on the dedicated `audit`
+ * logger (see AUDIT_LOGGER), which bypasses the LOG_LEVEL severity filter so they can't be suppressed
+ * by raising LOG_LEVEL. DURABILITY is the DEPLOYMENT's responsibility: the server writes the records
+ * to its log stream (stderr/stdout/file); operators MUST ship that audit stream to their
+ * durable/immutable log store for retention. There is no built-in durable sink in this server.
  */
 export const auditRecordSchema = z.object({
   schemaVersion: z.literal(2),

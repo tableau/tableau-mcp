@@ -57,6 +57,8 @@ const updatedTask: ExtractRefreshTask = {
 
 const mocks = vi.hoisted(() => ({
   mockUpdateCloudExtractRefreshTask: vi.fn(),
+  mockListExtractRefreshTasks: vi.fn(),
+  mockQueryDatasource: vi.fn(),
   mockQueryUserOnSite: vi.fn(),
   mockAssertAdmin: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
@@ -71,6 +73,10 @@ vi.mock('../../../restApiInstance.js', () => ({
     callback({
       tasksMethods: {
         updateCloudExtractRefreshTask: mocks.mockUpdateCloudExtractRefreshTask,
+        listExtractRefreshTasks: mocks.mockListExtractRefreshTasks,
+      },
+      datasourcesMethods: {
+        queryDatasource: mocks.mockQueryDatasource,
       },
       usersMethods: {
         queryUserOnSite: mocks.mockQueryUserOnSite,
@@ -116,8 +122,24 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
     vi.clearAllMocks();
     delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
     mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
-    mocks.mockQueryUserOnSite.mockResolvedValue({ siteRole: 'SiteAdministratorCreator' });
+    mocks.mockQueryUserOnSite.mockResolvedValue({
+      id: 'owner-1',
+      name: 'Owner One',
+      email: 'owner@example.com',
+      siteRole: 'SiteAdministratorCreator',
+    });
     mocks.mockUpdateCloudExtractRefreshTask.mockResolvedValue(new Ok(updatedTask));
+    // Default: the task list resolves this task to its underlying datasource so the audit target is
+    // enriched (AC-3).
+    mocks.mockListExtractRefreshTasks.mockResolvedValue([
+      { id: validTaskId, datasource: { id: 'ds-1' } },
+    ]);
+    mocks.mockQueryDatasource.mockResolvedValue({
+      id: 'ds-1',
+      name: 'Sales Extract',
+      project: { name: 'Finance' },
+      owner: { id: 'owner-1' },
+    });
     mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
@@ -166,6 +188,10 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
     expect(records.every((r) => r.phase === 'confirm')).toBe(true);
     expect(records.every((r) => r.action === 'update')).toBe(true);
     expect(records.every((r) => r.confirmationEvidence.kind === 'registry-nonce')).toBe(true);
+    // AC-3 / Gap-B: the audit target is enriched from the task's underlying datasource.
+    expect(records[0].target.name).toBe('Sales Extract');
+    expect(records[0].target.project).toBe('Finance');
+    expect(records[0].target.owner).toBe('owner@example.com');
   });
 
   // --- Missing approval → PreviewNotRunError, no update ---
