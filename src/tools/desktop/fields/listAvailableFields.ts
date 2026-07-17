@@ -155,18 +155,9 @@ export const getListAvailableFieldsTool = (
 
           const fields = listAvailableFields(workbookXml);
 
-          // Slim mode: a compact JSON array for reasoning over fields (pick
-          // measures/dimensions), with no ASCII table and no authoring metadata
-          // (column_ref, columnInstanceName, formula, …). Each field carries only
-          // what a picker needs: caption (the human name, also what
-          // generate-insight-cards takes as measures/breakdownDimension), role,
-          // and datatype. Per-field `datasource` is intentionally omitted — it's
-          // identical for every field and hoisted to the top level once — as are
-          // `name` (equals caption for all but calc-copy fields, and unused by
-          // the picker) and `semanticRole` (undefined off geo datasources). Cuts
-          // a wide-datasource payload from ~68KB to well under the host's
-          // inline-output cap so it isn't truncated. Callers that need the exact
-          // column_ref resolve it via resolve-field.
+          // Slim: caption/role/datatype only, datasource hoisted to the top
+          // level, no table — small enough to avoid the inline-output cap. Get
+          // column_ref via resolve-field.
           if (verbosity === 'slim') {
             return new Ok({
               datasource: fields.length > 0 ? fields[0].datasource : null,
