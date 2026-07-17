@@ -143,9 +143,7 @@ describe('addFieldToRows dotted and colon refs', () => {
   it('adds a datasource-qualified ref when datasource and field names contain dots or colons', () => {
     const modified = addFieldToRows(DOTTED_COLON_XML, '[Orders.Primary].[sum:Profit:Ratio:qk]');
     const rowFields = listFields(modified).filter((f) => f.location === 'rows');
-    expect(rowFields.map((f) => f.column)).toContain(
-      '[Orders.Primary].[sum:Profit:Ratio:qk]',
-    );
+    expect(rowFields.map((f) => f.column)).toContain('[Orders.Primary].[sum:Profit:Ratio:qk]');
     expect(modified).toContain(
       '<column-instance name="[sum:Profit:Ratio:qk]" column="[Profit:Ratio]"',
     );
