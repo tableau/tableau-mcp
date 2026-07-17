@@ -134,7 +134,20 @@ describe('user-license-reclamation-inform prompt', () => {
     }
     const { text } = result.messages[0].content;
     expect(text).toContain('inactive ≥ 120 days');
-    expect(text).toContain('"rangeN": 120');
+    // rangeN is capped at TS Events lookback max (90), not the full inactiveDays
+    expect(text).toContain('"rangeN": 90');
+  });
+
+  it('caps rangeN at 90 when inactiveDays exceeds TS Events lookback', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({ inactiveDays: '180' });
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('inactive ≥ 180 days');
+    expect(text).toContain('"rangeN": 90');
+    expect(text).toContain('90-day lookback window');
   });
 
   it('falls back to default when env var is invalid', async () => {

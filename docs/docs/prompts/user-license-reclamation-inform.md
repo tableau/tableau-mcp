@@ -16,8 +16,8 @@ This prompt is restricted to Tableau site administrators and requires the `ADMIN
 
 The prompt orchestrates two tool calls:
 
-1. **`list-users`** — fetches all users matching the target site roles whose `lastLogin` is older than the inactivity threshold. The tool auto-paginates the full result set.
-2. **`query-admin-insights`** with `kind: "ts-events"` — cross-references Access events within the lookback window to exclude users who are active despite a stale `lastLogin` timestamp (e.g., API-only users).
+1. **`list-users`** — fetches all users matching the target site roles whose `lastLogin` is older than the inactivity threshold. The tool paginates the result set; note that if `MAX_RESULT_LIMIT` is configured, the fetch is capped and the role/lastLogin filter is applied client-side after fetch — some candidates beyond the cap may not appear.
+2. **`query-admin-insights`** with `kind: "ts-events"` — cross-references Access events within the lookback window (capped at 90 days on standard Tableau Cloud) to exclude users who are active despite a stale `lastLogin` timestamp (e.g., API-only users).
 
 The final output is a Markdown table of reclamation candidates with their site role, last login, days inactive, and auth setting. No user modifications are performed.
 

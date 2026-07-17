@@ -5,6 +5,9 @@ import { WebPromptFactory } from '../registry.js';
 export const LICENSE_RECLAIM_INACTIVE_DAYS_DEFAULT = 90;
 export const LICENSE_RECLAIM_ROLES_DEFAULT = ['Creator', 'Explorer'];
 
+// TS Events lookback cap on Tableau Cloud (365 with Advanced Management).
+const TS_EVENTS_LOOKBACK_MAX_DAYS = 90;
+
 function getConfiguredInactiveDays(): number {
   const raw = process.env.LICENSE_RECLAIM_INACTIVE_DAYS;
   if (!raw) return LICENSE_RECLAIM_INACTIVE_DAYS_DEFAULT;
@@ -26,15 +29,16 @@ function getConfiguredRoles(): string[] {
 const argsSchema = {
   inactiveDays: z
     .string()
-    .regex(/^[1-9]\d*$/, 'inactiveDays must be a positive integer')
+    .regex(/^[1-9]\d{0,3}$/, 'inactiveDays must be a positive integer (1–3650)')
     .optional()
     .describe(
       'Minimum days of inactivity before a user is considered a reclamation candidate. ' +
-        `Defaults to ${LICENSE_RECLAIM_INACTIVE_DAYS_DEFAULT}. ` +
+        `Defaults to ${LICENSE_RECLAIM_INACTIVE_DAYS_DEFAULT}. Clamped to 1–3650. ` +
         'Bounded by Admin Insights TS Events 90-day lookback window unless Advanced Management is enabled.',
     ),
   roles: z
     .string()
+    .regex(/^[A-Za-z, ]+$/, 'roles must contain only letters, commas, and spaces')
     .optional()
     .describe(
       'Comma-separated list of site roles to target for reclamation ' +
@@ -68,8 +72,14 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
     cutoffDate.setDate(cutoffDate.getDate() - inactiveDays);
     const cutoffIso = cutoffDate.toISOString();
 
+    // Cap the TS Events lookback to the platform maximum — querying beyond
+    // it returns no additional data and would cause false positives.
+    const activityLookbackDays = Math.min(inactiveDays, TS_EVENTS_LOOKBACK_MAX_DAYS);
+
     const listUsersFilter = `siteRole:in:${roles.join('|')},lastLogin:lt:${cutoffIso}`;
 
+    // Field captions per Tableau Admin Insights TS Events datasource schema:
+    // https://help.tableau.com/current/online/en-us/adminview_ts_events.htm
     const tsEventsQuery = {
       fields: [
         { fieldCaption: 'Actor User Id' },
@@ -88,7 +98,7 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
           filterType: 'DATE',
           periodType: 'DAYS',
           dateRangeType: 'LASTN',
-          rangeN: inactiveDays,
+          rangeN: activityLookbackDays,
         },
       ],
     };
@@ -98,7 +108,7 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
       '',
       '## Step 1 — Fetch candidate users',
       '',
-      'Call `list-users` to retrieve all users matching the reclamation criteria. The tool auto-paginates. Use the following filter:',
+      'Call `list-users` to retrieve users matching the reclamation criteria. The tool paginates automatically (subject to any configured `MAX_RESULT_LIMIT`). Use the following filter:',
       '',
       '```json',
       JSON.stringify({ filter: listUsersFilter }, null, 2),
@@ -111,10 +121,10 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
       'Call `query-admin-insights` with `kind: "ts-events"` to look for recent Access events by these users:',
       '',
       '```json',
-      JSON.stringify({ kind: 'ts-events', query: tsEventsQuery }, null, 2),
+      JSON.stringify({ kind: 'ts-events', query: tsEventsQuery, limit: 10000 }, null, 2),
       '```',
       '',
-      'Group the TS Events results by `Actor User Id` to determine if any candidate user has accessed content within the lookback window. Users with recent Access events should be excluded from the final candidate list — they are active despite a stale `lastLogin` timestamp.',
+      `Group the TS Events results by \`Actor User Id\` to determine if any candidate user has accessed content within the ${activityLookbackDays}-day lookback window. Users with recent Access events should be excluded from the final candidate list — they are active despite a stale \`lastLogin\` timestamp.`,
       '',
       '## Step 3 — Render the report',
       '',
