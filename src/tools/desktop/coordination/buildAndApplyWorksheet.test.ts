@@ -23,6 +23,7 @@ import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
+import type { ReadbackFinding } from '../../../desktop/validation/readback-verify.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 import { markPlanBuildWorksheets, resetPlanBuildWorksheets } from './planBuildFocus.js';
 
@@ -118,6 +119,15 @@ const TASK_SPEC_BASE = {
   workbookFile: '/cache/workbook.xml',
 };
 
+const promisedSortLossWarning: ReadbackFinding = {
+  kind: 'sort',
+  node: 'shelf-sort-v2',
+  column: '[DS].[none:Region:nk]',
+  intended: '<shelf-sort-v2 column="[DS].[none:Region:nk]">',
+  readback: 'changed',
+  severity: 'warning',
+};
+
 describe('buildAndApplyWorksheetTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -159,6 +169,24 @@ describe('buildAndApplyWorksheetTool', () => {
     expect(result.content[0].text).toContain('HOST VERIFICATION — unverified');
     expect(result.content[0].text).toContain('readback unavailable');
     expect(result.content[0].text).not.toMatch(/\bverified\b/i);
+  });
+
+  it('fails the receipt when readback warnings show promised sort loss', async () => {
+    const extra = makeExtra();
+    vi.mocked(loadWorksheetXml).mockResolvedValue(
+      new Ok({
+        readbackWarnings: [promisedSortLossWarning],
+        readbackVerification: { ok: true, status: 'warning' },
+      }),
+    );
+
+    const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('HOST VERIFICATION — failed');
+    expect(result.content[0].text).toContain('promised sort NOT verified');
+    expect(result.content[0].text).not.toContain('HOST VERIFICATION — verified');
   });
 
   it('should return error when workbook file does not exist', async () => {

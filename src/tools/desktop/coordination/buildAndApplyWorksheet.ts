@@ -334,6 +334,7 @@ export const getBuildAndApplyWorksheetTool = (
             ? formatWorksheetPromiseCheck({
                 validationWarnings: applyResult.value.validationWarnings ?? [],
                 readback: applyResult.value.readbackVerification,
+                readbackFindings: applyResult.value.readbackWarnings,
               })
             : '';
 
