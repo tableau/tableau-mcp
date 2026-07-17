@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 
-import { build, BuildOptions } from 'esbuild';
+import { build, BuildOptions, context } from 'esbuild';
 import { cpSync } from 'fs';
 import { chmod, copyFile, cp, mkdir, rm } from 'fs/promises';
 import { resolve } from 'path';
@@ -12,6 +12,7 @@ import { isVariant, variants } from './variants.js';
 
 const dev = process.argv.includes('--dev');
 const dirty = process.argv.includes('--dirty');
+const watch = process.argv.includes('--watch');
 const variant = process.argv.includes('--variant')
   ? process.argv[process.argv.indexOf('--variant') + 1]
   : 'default';
@@ -205,6 +206,42 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   } catch (error) {
     console.error('❌ Failed to build MCP Apps:', error);
     process.exit(1);
+  }
+
+  if (watch) {
+    // Watch re-bundles ONLY the main entry — the fast TS edit loop. Telemetry, features.json,
+    // desktop data, and the MCP Apps are built once above; editing those needs a full rebuild.
+    // esbuild cannot push new code into the already-running MCP process, so each rebuild still
+    // requires reconnecting the stdio server (/mcp) to take effect.
+    const ctx = await context({
+      ...buildOptions,
+      plugins: [
+        ...(buildOptions.plugins ?? []),
+        {
+          name: 'watch-reporter',
+          setup(build) {
+            build.onEnd(async (result) => {
+              for (const error of result.errors) {
+                console.log(`❌ ${error.text}`);
+              }
+              for (const warning of result.warnings) {
+                console.log(`⚠️ ${warning.text}`);
+              }
+              if (result.errors.length === 0 && buildOptions.outfile) {
+                await chmod(buildOptions.outfile, '755');
+                console.log(
+                  `✅ Rebuilt ${buildOptions.outfile} — reconnect the MCP (/mcp) to load it.`,
+                );
+              }
+            });
+          },
+        },
+      ],
+    });
+    await ctx.watch();
+    console.log(
+      `\n👀 Watching src for changes (re-bundling ${buildOptions.outfile} only). Ctrl-C to stop.`,
+    );
   }
 })();
 
