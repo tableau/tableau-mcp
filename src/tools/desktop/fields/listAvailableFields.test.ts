@@ -26,6 +26,7 @@ const resultSchema = z.object({
 const mockFields = [
   {
     datasource: 'Sample - Superstore',
+    contentUrl: 'SuperstoreDS',
     columnName: '[Profit]',
     columnInstanceName: '[sum:Profit:qk]',
     derivation: 'Sum',
@@ -38,6 +39,7 @@ const mockFields = [
   },
   {
     datasource: 'Sample - Superstore',
+    contentUrl: 'SuperstoreDS',
     columnName: '[Category]',
     columnInstanceName: '[none:Category:nk]',
     derivation: 'None',
@@ -248,7 +250,24 @@ describe('listAvailableFieldsTool', () => {
     expect(body.fields).toHaveLength(0);
   });
 
-  it('verbosity=slim returns compact fields with no ASCII table', async () => {
+  const slimBodySchema = z.object({
+    count: z.number(),
+    datasources: z.array(
+      z.object({
+        datasource: z.string().nullable(),
+        contentUrl: z.string().optional(),
+        fields: z.array(
+          z.object({
+            caption: z.string(),
+            role: z.string(),
+            datatype: z.string().optional(),
+          }),
+        ),
+      }),
+    ),
+  });
+
+  it('verbosity=slim returns compact grouped fields with no ASCII table', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<workbook/>');
     vi.mocked(metadataModule.listAvailableFields).mockReturnValue(mockFields as any);
@@ -257,38 +276,33 @@ describe('listAvailableFieldsTool', () => {
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    const body = z
-      .object({
-        datasource: z.string().nullable(),
-        count: z.number(),
-        fields: z.array(
-          z.object({
-            caption: z.string(),
-            role: z.string(),
-            datatype: z.string().optional(),
-          }),
-        ),
-      })
-      .parse(JSON.parse(result.content[0].text));
+    const body = slimBodySchema.parse(JSON.parse(result.content[0].text));
 
-    // No human-readable table in slim mode; datasource is hoisted to the top level.
+    // No human-readable table; a single datasource is still the grouped shape
+    // (one group) so callers always parse the same structure.
     expect('message' in body).toBe(false);
-    expect(body.datasource).toBe('Sample - Superstore');
+    expect('fields' in body).toBe(false);
     expect(body.count).toBe(2);
-    expect(body.fields).toHaveLength(2);
+    expect(body.datasources).toHaveLength(1);
+    expect(body.datasources[0].datasource).toBe('Sample - Superstore');
+    // Published datasource → contentUrl surfaced once on the group (the input
+    // resolve-datasource-luid needs), not repeated per field.
+    expect(body.datasources[0].contentUrl).toBe('SuperstoreDS');
+    const groupFields = body.datasources[0].fields;
+    expect(groupFields).toHaveLength(2);
     // caption falls back to the bracket-stripped columnName when caption is absent.
-    expect(body.fields[0]).toMatchObject({ caption: 'Profit', role: 'measure', datatype: 'real' });
-    expect(body.fields[1]).toMatchObject({ caption: 'Category', role: 'dimension', datatype: 'string' });
+    expect(groupFields[0]).toMatchObject({ caption: 'Profit', role: 'measure', datatype: 'real' });
+    expect(groupFields[1]).toMatchObject({ caption: 'Category', role: 'dimension', datatype: 'string' });
     // Per-field metadata not needed for picking is omitted: column_ref (authoring),
-    // and the redundant/near-duplicate name, datasource, semanticRole.
-    const first = body.fields[0] as Record<string, unknown>;
+    // and the redundant/near-duplicate name, datasource (it's on the group), semanticRole.
+    const first = groupFields[0] as Record<string, unknown>;
     expect(first.column_ref).toBeUndefined();
     expect(first.name).toBeUndefined();
     expect(first.datasource).toBeUndefined();
     expect(first.semanticRole).toBeUndefined();
   });
 
-  it('verbosity=slim on an empty datasource returns count 0 and no fields', async () => {
+  it('verbosity=slim on an empty workbook returns count 0 and no datasource groups', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<workbook/>');
     vi.mocked(metadataModule.listAvailableFields).mockReturnValue([]);
@@ -297,12 +311,47 @@ describe('listAvailableFieldsTool', () => {
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    const body = z
-      .object({ datasource: z.string().nullable(), count: z.number(), fields: z.array(z.any()) })
-      .parse(JSON.parse(result.content[0].text));
-    expect(body.datasource).toBeNull();
+    const body = slimBodySchema.parse(JSON.parse(result.content[0].text));
     expect(body.count).toBe(0);
-    expect(body.fields).toHaveLength(0);
+    expect(body.datasources).toHaveLength(0);
+  });
+
+  it('verbosity=slim groups fields by datasource across multiple datasources', async () => {
+    // Two datasources, including a SAME caption ('Profit') in each — the case
+    // where hoisting fields[0].datasource would misattribute the second and
+    // erase the only disambiguator. Grouping carries the datasource once per
+    // group rather than repeating it on every field.
+    // Two datasources: 'Sample - Superstore' is PUBLISHED (has a contentUrl),
+    // 'Finance Extract' is EMBEDDED (contentUrl undefined). Both have a 'Profit'.
+    const multiDatasourceFields = [
+      { ...mockFields[0], datasource: 'Sample - Superstore', contentUrl: 'SuperstoreDS', caption: 'Profit' },
+      { ...mockFields[1], datasource: 'Sample - Superstore', contentUrl: 'SuperstoreDS', caption: 'Category' },
+      { ...mockFields[0], datasource: 'Finance Extract', contentUrl: undefined, caption: 'Profit' },
+      { ...mockFields[1], datasource: 'Finance Extract', contentUrl: undefined, caption: 'Region' },
+    ];
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<workbook/>');
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue(multiDatasourceFields as any);
+
+    const result = await getResult({ workbookFile: '/workbook.xml', verbosity: 'slim' });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = slimBodySchema.parse(JSON.parse(result.content[0].text));
+
+    // Grouped shape (no top-level `datasource`, no flat `fields`) when >1 datasource.
+    expect('datasource' in body).toBe(false);
+    expect('fields' in body).toBe(false);
+    expect(body.count).toBe(4);
+    expect(body.datasources.map((g) => g.datasource)).toEqual(['Sample - Superstore', 'Finance Extract']);
+    // contentUrl per group: present for the published one, omitted for the embedded one.
+    expect(body.datasources[0].contentUrl).toBe('SuperstoreDS');
+    expect(body.datasources[1].contentUrl).toBeUndefined();
+    // The two same-caption 'Profit' fields stay distinct — one per group.
+    expect(body.datasources[0].fields.map((f) => f.caption)).toEqual(['Profit', 'Category']);
+    expect(body.datasources[1].fields.map((f) => f.caption)).toEqual(['Profit', 'Region']);
+    // The datasource string is NOT repeated on individual fields.
+    expect((body.datasources[0].fields[0] as Record<string, unknown>).datasource).toBeUndefined();
   });
 });
 

@@ -26,7 +26,7 @@ const paramsSchema = {
     .optional()
     .describe(
       "'full' (default): table + full metadata incl. column_ref. " +
-        "'slim': compact { caption, role, datatype } array, no table — much smaller for a wide datasource. " +
+        "'slim': fields grouped by datasource — { count, datasources: [{ datasource, contentUrl?, fields: [{ caption, role, datatype }] }] }, no table — much smaller for a wide datasource. " +
         'slim omits column_ref; use resolve-field for it.',
     ),
 };
@@ -79,9 +79,23 @@ interface SlimField {
   datatype: string | undefined;
 }
 
+/** One datasource's slim fields. Slim always groups by datasource. */
+interface SlimDatasourceGroup {
+  datasource: string | null;
+  // The datasource's contentUrl when it's a published datasource — the input
+  // resolve-datasource-luid needs to get the server LUID. Omitted for
+  // embedded/local datasources (no server copy, so no contentUrl).
+  contentUrl?: string;
+  fields: SlimField[];
+}
+
 type ListAvailableFieldsResult =
   | { message: string; fields: ReturnType<typeof listAvailableFields> }
-  | { datasource: string | null; count: number; fields: SlimField[] };
+  // Slim: fields grouped by datasource so the datasource name is carried once
+  // per group, never repeated on every field (keeps slim small). Always this
+  // shape — even for a single datasource (one group) — so callers parse one
+  // consistent structure.
+  | { count: number; datasources: SlimDatasourceGroup[] };
 
 const title = 'List All Available Fields in Workbook Datasources';
 export const getListAvailableFieldsTool = (
@@ -155,18 +169,39 @@ export const getListAvailableFieldsTool = (
 
           const fields = listAvailableFields(workbookXml);
 
-          // Slim: caption/role/datatype only, datasource hoisted to the top
-          // level, no table — small enough to avoid the inline-output cap. Get
-          // column_ref via resolve-field.
+          // Slim: caption/role/datatype only, no table — small enough to avoid
+          // the inline-output cap. Get column_ref via resolve-field.
+          //
+          // `listAvailableFields` spans ALL datasources (one flat array, each
+          // field carrying its own datasource). Slim always GROUPS by
+          // datasource — one group per datasource, in first-seen order — so the
+          // datasource name is carried once per group rather than hoisted (which
+          // would misattribute every field past the first in a multi-datasource
+          // workbook and erase the only disambiguator for same-caption fields)
+          // or repeated per field (which would bloat slim). A single-datasource
+          // workbook is just one group, so callers always parse one shape.
           if (verbosity === 'slim') {
+            const toSlimField = (f: (typeof fields)[number]): SlimField => ({
+              caption: f.caption || f.columnName.replace(/^\[|\]$/g, ''),
+              role: f.role,
+              datatype: f.datatype,
+            });
+
+            // Group by datasource name (first-seen order). Each group also
+            // carries the datasource's contentUrl (same for all its fields) —
+            // present only for published datasources.
+            const groups = new Map<string | null, SlimDatasourceGroup>();
+            for (const f of fields) {
+              let group = groups.get(f.datasource);
+              if (!group) {
+                group = { datasource: f.datasource, contentUrl: f.contentUrl, fields: [] };
+                groups.set(f.datasource, group);
+              }
+              group.fields.push(toSlimField(f));
+            }
             return new Ok({
-              datasource: fields.length > 0 ? fields[0].datasource : null,
               count: fields.length,
-              fields: fields.map((f) => ({
-                caption: f.caption || f.columnName.replace(/^\[|\]$/g, ''),
-                role: f.role,
-                datatype: f.datatype,
-              })),
+              datasources: Array.from(groups.values()),
             });
           }
 
