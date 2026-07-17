@@ -89,5 +89,25 @@ const getUserOnSiteEndpoint = makeEndpoint({
   response: z.object({ user: userSchema }),
 });
 
-const usersApi = makeApi([listUsersEndpoint, getUserOnSiteEndpoint]);
+/**
+ * Update User
+ * PUT /api/api-version/sites/site-id/users/user-id
+ * Modifies information about the specified user (site role, auth setting, etc.).
+ * Tableau Cloud scope: tableau:users:update
+ * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#update_user
+ */
+const updateUserEndpoint = makeEndpoint({
+  method: 'put',
+  path: '/sites/:siteId/users/:userId',
+  alias: 'updateUser',
+  description: 'Modifies information about the specified user',
+  parameters: [
+    { name: 'siteId', type: 'Path', schema: z.string() },
+    { name: 'userId', type: 'Path', schema: z.string() },
+    { name: 'body', type: 'Body', schema: z.object({ user: z.object({ siteRole: z.string() }) }) },
+  ],
+  response: z.object({ user: userSchema.partial() }),
+});
+
+const usersApi = makeApi([listUsersEndpoint, getUserOnSiteEndpoint, updateUserEndpoint]);
 export const usersApis = [...usersApi] as const satisfies ZodiosEndpointDefinitions;

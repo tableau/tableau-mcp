@@ -1,24 +1,21 @@
+import { getConfirmDeleteContentTool } from './_lib/confirmDeleteContent.js';
 import { getDeleteContentTool } from './_lib/deleteContent.js';
-import { getGetStaleContentReportTool } from './adminInsights/getStaleContentReport.js';
 import { getQueryAdminInsightsTool } from './adminInsights/queryAdminInsights.js';
-import { getQueryAdminInsightsJobPerformanceTool } from './adminInsights/queryJobPerformance.js';
-import { getQueryAdminInsightsSiteContentTool } from './adminInsights/querySiteContent.js';
-import { getQueryAdminInsightsTsEventsTool } from './adminInsights/queryTsEvents.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
-import { getConfirmDeleteDatasourceTool } from './datasources/confirmDeleteDatasource.js';
-import { getDeleteDatasourceTool } from './datasources/deleteDatasource.js';
 import { getListDatasourcesTool } from './datasources/listDatasources.js';
-import { getConfirmDeleteExtractRefreshTaskTool } from './extractRefreshTasks/confirmDeleteExtractRefreshTask.js';
+import { getResolveDatasourceLuidTool } from './datasources/resolveDatasourceLuid.js';
 import { getConfirmUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/confirmUpdateCloudExtractRefreshTask.js';
-import { getDeleteExtractRefreshTaskTool } from './extractRefreshTasks/deleteExtractRefreshTask.js';
 import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/updateCloudExtractRefreshTask.js';
+import { getGetFlowTool } from './flows/getFlow/getFlow.js';
+import { getListFlowsTool } from './flows/listFlows/listFlows.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getEmbedTokenTool } from './getEmbedToken/getEmbedToken.js';
 import { getListJobsTool } from './jobs/listJobs.js';
 import { getListProjectsTool } from './projects/listProjects.js';
 import { getGeneratePulseInsightBriefTool } from './pulse/generateInsightBrief/generatePulseInsightBriefTool.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './pulse/generateMetricValueInsightBundle/generatePulseMetricValueInsightBundleTool.js';
+import { getGenerateInsightCardsTool } from './pulse/insights/generateInsightCardsTool.js';
 import { getListAllPulseMetricDefinitionsTool } from './pulse/listAllMetricDefinitions/listAllPulseMetricDefinitions.js';
 import { getListPulseMetricDefinitionsFromDefinitionIdsTool } from './pulse/listMetricDefinitionsFromDefinitionIds/listPulseMetricDefinitionsFromDefinitionIds.js';
 import { getListPulseMetricsFromMetricDefinitionIdTool } from './pulse/listMetricsFromMetricDefinitionId/listPulseMetricsFromMetricDefinitionId.js';
@@ -29,6 +26,7 @@ import { getRecordEventTool } from './recordEvent/recordEvent.js';
 import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
 import { getListUsersTool } from './users/listUsers.js';
+import { getUpdateUserTool } from './users/updateUser.js';
 import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
 import { getGetCustomViewImageTool } from './views/getCustomViewImage.js';
 import { getGetViewTool } from './views/getView.js';
@@ -36,8 +34,6 @@ import { getGetViewDataTool } from './views/getViewData.js';
 import { getGetViewImageTool } from './views/getViewImage.js';
 import { getListCustomViewsTool } from './views/listCustomViews.js';
 import { getListViewsTool } from './views/listViews.js';
-import { getConfirmDeleteWorkbookTool } from './workbooks/confirmDeleteWorkbook.js';
-import { getDeleteWorkbookTool } from './workbooks/deleteWorkbook.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 
@@ -46,16 +42,16 @@ export const webToolFactories = [
   getEmbedTokenTool,
   getRecordEventTool,
   getListDatasourcesTool,
-  getDeleteDatasourceTool,
-  getConfirmDeleteDatasourceTool,
+  getResolveDatasourceLuidTool,
   getListExtractRefreshTasksTool,
-  getDeleteExtractRefreshTaskTool,
-  getConfirmDeleteExtractRefreshTaskTool,
   getUpdateCloudExtractRefreshTaskTool,
   getConfirmUpdateCloudExtractRefreshTaskTool,
   getListJobsTool,
   getListUsersTool,
+  getUpdateUserTool,
   getQueryDatasourceTool,
+  getListFlowsTool,
+  getGetFlowTool,
   getListAllPulseMetricDefinitionsTool,
   getListPulseMetricDefinitionsFromDefinitionIdsTool,
   getListPulseMetricsFromMetricDefinitionIdTool,
@@ -63,13 +59,12 @@ export const webToolFactories = [
   getListPulseMetricSubscriptionsTool,
   getGeneratePulseMetricValueInsightBundleTool,
   getGeneratePulseInsightBriefTool,
+  getGenerateInsightCardsTool,
   getGetWorkbookTool,
   getGetViewTool,
   getGetViewDataTool,
   getGetViewImageTool,
   getListWorkbooksTool,
-  getDeleteWorkbookTool,
-  getConfirmDeleteWorkbookTool,
   getListProjectsTool,
   getListViewsTool,
   getListCustomViewsTool,
@@ -78,10 +73,7 @@ export const webToolFactories = [
   getSearchContentTool,
   getRevokeAccessTokenTool,
   getResetConsentTool,
-  getQueryAdminInsightsTsEventsTool,
-  getQueryAdminInsightsSiteContentTool,
-  getQueryAdminInsightsJobPerformanceTool,
-  getGetStaleContentReportTool,
   getQueryAdminInsightsTool,
   getDeleteContentTool,
+  getConfirmDeleteContentTool,
 ];

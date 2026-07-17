@@ -107,8 +107,8 @@ describe('renderDeleteExtractRefreshTaskConfirm', () => {
     confirmBtn.click();
     await Promise.resolve();
     expect(app.callServerTool).toHaveBeenCalledWith({
-      name: 'confirm-delete-extract-refresh-task',
-      arguments: { taskId },
+      name: 'confirm-delete-content',
+      arguments: { resourceType: 'extract-refresh-task', resourceId: taskId },
     });
   });
 

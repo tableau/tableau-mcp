@@ -37,7 +37,7 @@ jobs:
           # Fail CLOSED: if the version can't be read, abort before publishing —
           # a bare publish on an empty version would wrongly move `latest`.
           # VERSION comes from package.json (the repo's own committed value, not
-          # external input) into a shell var — no ${{ }} interpolation here.
+          # external input) into a shell var — no GitHub expression interpolation here.
           VERSION="$(node -p "require('./package.json').version")"
           if [[ -z "$VERSION" || "$VERSION" == "undefined" ]]; then
             echo "::error::Could not read version from package.json — aborting publish (refusing to risk moving 'latest')"

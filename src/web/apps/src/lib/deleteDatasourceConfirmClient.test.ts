@@ -111,8 +111,8 @@ describe('renderDeleteDatasourceConfirm', () => {
     (document.getElementById('confirmDeleteBtn') as HTMLButtonElement).click();
     await Promise.resolve();
     expect(app.callServerTool).toHaveBeenCalledWith({
-      name: 'confirm-delete-datasource',
-      arguments: { datasourceId: 'ds-1' },
+      name: 'confirm-delete-content',
+      arguments: { resourceType: 'datasource', resourceId: 'ds-1' },
     });
   });
 

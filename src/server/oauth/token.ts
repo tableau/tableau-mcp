@@ -145,7 +145,7 @@ export function token(
           const requestedScopes = parseScopes(result.data.scope);
           const { valid: validScopes, invalid: invalidScopes } = validateScopes(
             requestedScopes,
-            getSupportedScopes({ includeApiScopes: advertiseApiScopes }),
+            await getSupportedScopes({ includeApiScopes: advertiseApiScopes }),
           );
 
           if (invalidScopes.length > 0) {
@@ -160,7 +160,7 @@ export function token(
             validScopes.length > 0
               ? validScopes
               : enforceScopes
-                ? getSupportedScopes({ includeApiScopes: advertiseApiScopes })
+                ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes })
                 : [];
 
           // Generate access token for client credentials grant type.

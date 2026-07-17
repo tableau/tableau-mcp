@@ -26,7 +26,7 @@ export const getStaleContentCleanupInformPrompt: WebPromptFactory = () => ({
   title: 'Stale content cleanup — generate inform report',
   description:
     'Tableau Cloud admin workflow: identify stale workbooks and published datasources by ' +
-    'invoking the deterministic `get-stale-content-report` tool, which performs the ' +
+    'invoking the deterministic `query-admin-insights` tool (kind: "stale-content"), which performs the ' +
     'TS Events / Site Content anti-join and threshold filter server-side. Read-only.',
   argsSchema,
   disabled: (config) => !config.adminToolsEnabled,
@@ -41,7 +41,7 @@ export const getStaleContentCleanupInformPrompt: WebPromptFactory = () => ({
           .filter(Boolean)
       : [];
 
-    const toolArgs: Record<string, unknown> = { minAgeDays };
+    const toolArgs: Record<string, unknown> = { kind: 'stale-content', minAgeDays };
     if (projectIds.length > 0) {
       toolArgs.projectIds = projectIds;
     }
@@ -49,7 +49,7 @@ export const getStaleContentCleanupInformPrompt: WebPromptFactory = () => ({
     const text = [
       'You are running the Tableau MCP **stale-content-cleanup-inform** workflow against the connected Tableau Cloud site.',
       '',
-      'Call the `get-stale-content-report` tool exactly once with the arguments below. The tool runs the TS Events / Site Content anti-join, applies the staleness threshold, and returns the already-filtered rows. Do **not** add or remove rows. Do **not** recompute `daysSinceLastUse`. Render the response as documented.',
+      'Call `query-admin-insights` with `kind: "stale-content"` exactly once, passing the arguments below. The tool runs the TS Events / Site Content anti-join, applies the staleness threshold, and returns the already-filtered rows. Do **not** add or remove rows. Do **not** recompute `daysSinceLastUse`. Render the response as documented.',
       '',
       '**Tool arguments**',
       '',

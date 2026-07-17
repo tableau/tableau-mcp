@@ -2,7 +2,7 @@ import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
 import { McpClient } from '../mcpClient.js';
 
 const PROMPT_NAME = 'stale-content-cleanup-apply';
-const REPORT_TOOL = 'get-stale-content-report';
+const REPORT_TOOL = 'query-admin-insights';
 
 describe('stale-content-cleanup-apply prompt', () => {
   beforeAll(setEnv);
@@ -44,9 +44,9 @@ describe('stale-content-cleanup-apply prompt', () => {
         return;
       }
       const text = await client.getPromptText(PROMPT_NAME);
-      // Reads from the deterministic report tool exactly once.
+      // Reads from the deterministic report tool.
       expect(text).toContain(`\`${REPORT_TOOL}\``);
-      expect(text).toContain('exactly once');
+      expect(text).toContain('kind: "stale-content"');
       // Required human-in-the-loop break is present.
       expect(text).toContain('🛑 STOP');
       // Dry run is the default: report only, never tag and never confirm-delete.
@@ -86,9 +86,10 @@ describe('stale-content-cleanup-apply prompt', () => {
       }
       const text = await client.getPromptText(PROMPT_NAME);
       expect(text).toContain('list-workbooks');
-      expect(text).toContain('delete-workbook');
+      expect(text).toContain('delete-content');
       expect(text).toContain('list-datasources');
-      expect(text).toContain('delete-datasource');
+      expect(text).toContain('"resourceType": "workbook"');
+      expect(text).toContain('"resourceType": "datasource"');
       expect(text).toContain('"Workbook"');
       expect(text).toContain('"Datasource"');
     });
@@ -98,8 +99,8 @@ describe('stale-content-cleanup-apply prompt', () => {
         return;
       }
       const text = await client.getPromptText(PROMPT_NAME, { itemTypes: 'Workbook' });
-      expect(text).toContain('delete-workbook');
-      expect(text).not.toContain('delete-datasource');
+      expect(text).toContain('"resourceType": "workbook"');
+      expect(text).not.toContain('"resourceType": "datasource"');
     });
 
     it('passes minAgeDays and projectIds through to the report tool args', async () => {

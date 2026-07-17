@@ -27,19 +27,18 @@ describe('stale-content-cleanup-apply prompt', () => {
     expect(prompt.disabled({ adminToolsEnabled: false } as any)).toBe(true);
   });
 
-  it('drives the report tool once and forbids recomputation', () => {
+  it('drives the report tool and forbids recomputation', () => {
     const text = getText();
-    expect(text).toContain('`get-stale-content-report`');
-    expect(text).toContain('exactly once');
+    expect(text).toContain('`query-admin-insights`');
+    expect(text).toContain('kind: "stale-content"');
     expect(text).toContain('do **not** recompute `daysSinceLastUse`');
   });
 
   it('routes both supported content types to their list and delete tools', () => {
     const text = getText();
     expect(text).toContain('list-workbooks');
-    expect(text).toContain('delete-workbook');
+    expect(text).toContain('delete-content');
     expect(text).toContain('list-datasources');
-    expect(text).toContain('delete-datasource');
   });
 
   it('explains the itemId→LUID bridge via list-* name/project filter', () => {
@@ -90,8 +89,9 @@ describe('stale-content-cleanup-apply prompt', () => {
 
   it('scopes routing to the requested itemTypes only', () => {
     const text = getText({ itemTypes: 'Workbook' });
-    expect(text).toContain('delete-workbook');
-    expect(text).not.toContain('delete-datasource');
+    expect(text).toContain('delete-content');
+    expect(text).toContain('"resourceType": "workbook"');
+    expect(text).not.toContain('"resourceType": "datasource"');
   });
 
   it('applies a custom pending-deletion tag', () => {
@@ -130,17 +130,18 @@ describe('stale-content-cleanup-apply prompt', () => {
     expect(text).toContain('No supported content types in itemTypes: Flow');
     expect(text).toContain('Workbook, Datasource');
     // Must NOT fall through to running the full workflow on all types.
-    expect(text).not.toContain('get-stale-content-report');
+    expect(text).not.toContain('query-admin-insights');
   });
 
   it('surfaces dropped unsupported itemTypes alongside supported ones', () => {
     const text = getText({ itemTypes: 'Workbook, Flow' });
     expect(text).toContain('ignoring unsupported itemTypes');
     expect(text).toContain('Flow');
-    expect(text).toContain('delete-workbook');
+    expect(text).toContain('delete-content');
+    expect(text).toContain('"resourceType": "workbook"');
     // Still runs the workflow for the supported subset.
-    expect(text).toContain('get-stale-content-report');
-    expect(text).not.toContain('delete-datasource');
+    expect(text).toContain('query-admin-insights');
+    expect(text).not.toContain('"resourceType": "datasource"');
   });
 
   it('de-duplicates repeated itemTypes (single routing/confirm block)', () => {

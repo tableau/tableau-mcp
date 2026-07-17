@@ -19,7 +19,9 @@ import {
   getMutationPreviewTtlMs,
   RegistryEvidence,
 } from '../_lib/evidence.js';
+import { renderConfirmClosedMessage, renderTokenConfirmNextStep } from '../_lib/hitlText.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
+import { resolveExtractRefreshTaskTarget } from '../_lib/resolveExtractRefreshTaskTarget.js';
 import { AppToolResult, WebTool } from '../tool.js';
 
 /**
@@ -102,15 +104,15 @@ export function scheduleBinding(schedule: UpdateCloudExtractRefreshSchedule): st
     .digest('hex');
 }
 
-export const getUpdateCloudExtractRefreshTaskTool = (
+export const getUpdateCloudExtractRefreshTaskTool = async (
   server: WebMcpServer,
-): WebTool<typeof paramsSchema> => {
+): Promise<WebTool<typeof paramsSchema>> => {
   const config = getConfig();
   // MCP-Apps HITL: when the flag is ON, the preview carries an app so the host renders an iframe
   // confirm panel and the schedule change is applied as a human gesture
   // (confirm-update-cloud-extract-refresh-task). Flag OFF → no `app`, byte-identical to today's
   // confirm-only behavior.
-  const mcpAppsEnabled = getFeatureGate().isFeatureEnabled('mcp-apps');
+  const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
 
   const updateCloudExtractRefreshTaskTool = new WebTool({
     server,
@@ -188,11 +190,14 @@ export const getUpdateCloudExtractRefreshTaskTool = (
               // keeps the original nonce-gated confirm:true path intact.
               if (args.confirm && mcpAppsEnabled) {
                 return new PreviewNotRunError(
-                  'Mutation blocked: changing an extract refresh schedule requires a human ' +
-                    'confirmation in the update-cloud-extract-refresh-task approval panel. Run ' +
-                    'update-cloud-extract-refresh-task in preview (omit confirm) to open the panel; the ' +
-                    'change is applied by confirm-update-cloud-extract-refresh-task only when a person ' +
-                    "clicks Apply. The assistant cannot confirm on the user's behalf.",
+                  renderConfirmClosedMessage({
+                    actionPhrase: 'changing an extract refresh schedule',
+                    panelName: 'the update-cloud-extract-refresh-task approval panel',
+                    previewTool: 'update-cloud-extract-refresh-task',
+                    appliedClause:
+                      'the change is applied by confirm-update-cloud-extract-refresh-task only when ' +
+                      'a person clicks Apply',
+                  }),
                 ).toErr();
               }
 
@@ -202,10 +207,17 @@ export const getUpdateCloudExtractRefreshTaskTool = (
               // schedule (see scheduleBinding), so a token minted while previewing schedule A cannot
               // confirm an update to schedule B, and a confirm with no prior preview is rejected
               // server-side. The guard audits both the preview and the confirmed update.
-              const resolveTarget = async (): Promise<MutationTarget> => ({
-                id: args.taskId,
-                kind: 'extract-refresh-task',
-              });
+              // Enrich the audit target with the underlying content's name/project/owner (AC-3) via
+              // the shared best-effort helper. No task list is pre-fetched here, so the helper lists
+              // tasks once, finds this id, then does ONE content lookup + ONE owner lookup. A resolve
+              // failure degrades to an id-only target and never blocks the update.
+              const resolveTarget = async (): Promise<MutationTarget> =>
+                resolveExtractRefreshTaskTarget({
+                  restApi,
+                  siteId: restApi.siteId,
+                  taskId: args.taskId,
+                  logger: 'update-cloud-extract-refresh-task',
+                });
               const evidence = new RegistryEvidence();
               const binding = scheduleBinding(args.schedule);
               const guardResult = await guardMutation({
@@ -274,11 +286,12 @@ export const getUpdateCloudExtractRefreshTaskTool = (
                 return new Ok(
                   `Preview — extract refresh task '${args.taskId}' would be updated to: ${frequency}${window}. ` +
                     'No change has been made. ' +
-                    'NEXT STEP — REQUIRED: present this change to the user and ask them to explicitly ' +
-                    'confirm it. Do NOT apply without the user’s approval. ' +
-                    `Once approved, call again with confirm: true and confirmationToken: "${nonce}" ` +
-                    '(the server will verify and consume this single-use token, which is bound to this ' +
-                    'exact schedule, before applying the update).',
+                    renderTokenConfirmNextStep({
+                      subject: 'present this change',
+                      approvalClause: 'confirm it. Do NOT apply',
+                      nonce,
+                      tail: ', which is bound to this exact schedule, before applying the update).',
+                    }),
                 );
               }
 

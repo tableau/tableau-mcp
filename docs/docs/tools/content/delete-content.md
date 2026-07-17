@@ -4,8 +4,8 @@ sidebar_position: 1
 
 # Delete Content
 
-Consolidated destructive-delete tool that permanently deletes a workbook, published data source,
-or extract refresh task. Dispatches on `resourceType`:
+Permanently deletes a workbook, published data source, or extract refresh task. Dispatches on
+`resourceType`:
 
 - `workbook` — deletes a workbook (recoverable via recycle bin on Tableau Cloud)
 - `datasource` — deletes a published data source (recoverable via recycle bin; warns on downstream dependents)
@@ -15,11 +15,6 @@ The tool is **admin-only** — it is registered only when `ADMIN_TOOLS_ENABLED=t
 request time it verifies the caller's site role and rejects anything below
 `SiteAdministratorCreator` / `SiteAdministratorExplorer` / `ServerAdministrator`.
 
-:::note[Replaces legacy tools]
-This tool is a superset of the three legacy delete tools (`delete-workbook`,
-`delete-datasource`, `delete-extract-refresh-task`), which remain registered as back-compat
-shims for one release cycle and share the underlying implementation.
-:::
 
 ## Two-phase safety
 
@@ -28,8 +23,10 @@ The tool is **two-phase** to keep the destructive action safe:
 1. **Preview** (default — `confirm` omitted or `false`):
    - For `workbook` / `datasource`: tags the resource with `pending-deletion` (reversible,
      visible in the Tableau UI), reports identity, project, and owner.
-   - For `extract-refresh-task`: mints a single-use `confirmationToken` and reports task
-     metadata.
+   - For `extract-refresh-task`: first verifies the task exists on the site (there is no single-get
+     endpoint, so the task list is checked for a matching id) — an unknown `taskId` returns a
+     not-found error and **no** `confirmationToken` is minted. When the task exists, mints a
+     single-use `confirmationToken` and reports task metadata.
    - Does **not** delete anything.
 
 2. **Confirm** (`confirm: true`):
@@ -72,7 +69,7 @@ cannot be previewed or deleted — the request is rejected before any side effec
 
 ### Extract Refresh Task
 
-- [Get Extract Refresh Task](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#get_extract_refresh_task) (preview + confirm verification)
+- [List Extract Refresh Tasks](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_jobs_tasks_and_schedules.htm#list_extract_refresh_tasks) (preview + confirm — existence check, since there is no single-get endpoint)
 - [Delete Extract Refresh Task](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#delete_extract_refresh_task) (confirm)
 
 ### Common
@@ -117,6 +114,21 @@ Example: `"stale-pending-deletion"`
 **For `resourceType="extract-refresh-task"` only.** The single-use token returned by a prior
 preview call. Required when `confirm` is `true`; ignored otherwise.
 
+## Audit records and durability
+
+Every mutation attempt — allowed, denied, completed, or failed — emits a single authoritative,
+structured-JSON audit record (actor, tool, action, phase, target identity, evidence kind, result) on
+a dedicated `audit` logger. That logger bypasses the `LOG_LEVEL` severity filter, so an operator
+cannot suppress security-audit records by raising `LOG_LEVEL`. For an extract-refresh-task target,
+the record's `name`/`project`/`owner` derive best-effort from the task's underlying data source or
+workbook (the task itself has no such fields); if that lookup fails the record still carries the task
+id.
+
+**Durability is the deployment's responsibility.** The server only emits these records to its log
+stream (stderr/stdout/file). To retain them, operators must ship that audit-logger stream to a
+durable, ideally immutable, log store (SIEM, log archive, etc.). There is no built-in durable audit
+sink in this server.
+
 ## Side effects
 
 - **Preview (workbook/datasource)** adds the pending-deletion tag. Reversible.
@@ -149,6 +161,4 @@ preview call. Required when `confirm` is `true`; ignored otherwise.
 
 ## Related
 
-- [`delete-workbook`](../workbooks/delete-workbook.md) — legacy workbook-only delete (shim)
-- [`delete-datasource`](../data-qna/delete-datasource.md) — legacy datasource-only delete (shim)
-- [`delete-extract-refresh-task`](../tasks/delete-extract-refresh-task.md) — legacy task-only delete (shim)
+- [`query-admin-insights`](../admin-insights/query-admin-insights.md) — admin-insights query tool

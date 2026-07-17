@@ -8,6 +8,7 @@ import {
   DatasourceNotAllowedError,
   McpToolError,
   PreviewNotRunError,
+  UnknownError,
   WorkbookNotAllowedError,
 } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/init.js';
@@ -22,13 +23,10 @@ import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
-import { DeleteDatasourceConfirmPanel } from '../datasources/deleteDatasource.js';
-import { DeleteExtractRefreshTaskConfirmPanel } from '../extractRefreshTasks/deleteExtractRefreshTask.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { AppToolResult, WebTool } from '../tool.js';
 import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
-import { DeleteWorkbookConfirmPanel } from '../workbooks/deleteWorkbook.js';
 import {
   AppApprovalEvidence,
   DEFAULT_PENDING_DELETION_TAG,
@@ -36,32 +34,55 @@ import {
   RegistryEvidence,
   TagEvidence,
 } from './evidence.js';
+import {
+  renderConfirmClosedMessage,
+  renderTagDeleteNextStep,
+  renderTokenConfirmNextStep,
+} from './hitlText.js';
 import { guardMutation, MutationTarget } from './mutationGuard.js';
+import { resolveExtractRefreshTaskTarget } from './resolveExtractRefreshTaskTarget.js';
+
+export type DeleteWorkbookConfirmPanel = {
+  kind: 'delete-workbook-confirm';
+  workbookId: string;
+  name?: string;
+  project?: string;
+  owner?: string;
+  expiresAtMs: number;
+};
+
+export type DeleteDatasourceConfirmPanel = {
+  kind: 'delete-datasource-confirm';
+  datasourceId: string;
+  name?: string;
+  project?: string;
+  owner?: string;
+  expiresAtMs: number;
+};
+
+export type DeleteExtractRefreshTaskConfirmPanel = {
+  kind: 'delete-extract-refresh-task-confirm';
+  taskId: string;
+  expiresAtMs: number;
+};
 
 /**
- * Consolidated destructive-delete tool (W-23375797). Dispatches on `resourceType`:
+ * Dispatches on `resourceType`:
+ * - `workbook` — TagEvidence + resourceAccessChecker.isWorkbookAllowed.
+ * - `datasource` — TagEvidence + isDatasourceAllowed + downstream warning.
+ * - `extract-refresh-task` — RegistryEvidence nonce.
  *
- * - `workbook` — mirrors delete-workbook (TagEvidence, resourceAccessChecker.isWorkbookAllowed).
- * - `datasource` — mirrors delete-datasource (TagEvidence, isDatasourceAllowed, downstream warning).
- * - `extract-refresh-task` — mirrors delete-extract-refresh-task (RegistryEvidence nonce).
- *
- * Two-phase (preview → confirm), same guarantees as the underlying tools:
+ * Two-phase (preview → confirm):
  * - Flag OFF (`mcp-apps`): preview tags/mints-nonce; confirm re-verifies evidence and deletes.
- * - Flag ON: model-driven `confirm:true` is CLOSED; preview also records `AppApprovalEvidence`
- *   under the LEGACY per-resource namespace and returns the LEGACY confirm-panel `data.kind`
- *   (`delete-workbook-confirm` / `delete-datasource-confirm` / `delete-extract-refresh-task-confirm`).
- *   That keeps the existing iframe machinery working end-to-end — the panel's Confirm button
- *   invokes the legacy `confirm-delete-{resource}` tool, whose AppApprovalEvidence check under
- *   the same legacy namespace passes.
- *
- * This tool is registered alongside the legacy `delete-{workbook,datasource,extract-refresh-task}`
- * tools for one release cycle; a follow-up PR drops the shims once callers have migrated.
+ * - Flag ON: preview records `AppApprovalEvidence` and returns a confirm-panel payload for the
+ *   MCP-Apps iframe. The iframe's Confirm button calls the separate app-only
+ *   `confirm-delete-content` tool (visibility:['app'], model-invisible). Model-driven `confirm:true`
+ *   on THIS tool is unconditionally rejected with PreviewNotRunError when mcp-apps is enabled.
  */
 
 const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm';
 
 const resourceTypeSchema = z.enum(['workbook', 'datasource', 'extract-refresh-task']);
-type ResourceType = z.infer<typeof resourceTypeSchema>;
 
 const paramsSchema = {
   resourceType: resourceTypeSchema.describe(
@@ -110,9 +131,11 @@ type DeleteContentResult =
   | AppToolResult<DeleteDatasourceConfirmPanel>
   | AppToolResult<DeleteExtractRefreshTaskConfirmPanel>;
 
-export const getDeleteContentTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+export const getDeleteContentTool = async (
+  server: WebMcpServer,
+): Promise<WebTool<typeof paramsSchema>> => {
   const config = getConfig();
-  const mcpAppsEnabled = getFeatureGate().isFeatureEnabled('mcp-apps');
+  const mcpAppsEnabled = await getFeatureGate().isFeatureEnabled('mcp-apps');
 
   const tool = new WebTool({
     server,
@@ -164,19 +187,16 @@ permanent.
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
-              // Flag ON (MCP-Apps HITL): the model-driven confirm:true path is CLOSED so an agent
-              // cannot self-confirm a deletion by re-calling this tool — the only route to deletion
-              // is a human gesture in the confirm panel (which fires the LEGACY confirm-delete-*).
-              // Flag OFF keeps the original evidence-gated confirm:true path intact.
               if (confirm && mcpAppsEnabled) {
                 return new PreviewNotRunError(
-                  `Mutation blocked: deleting a ${humanResource(resourceType)} requires a human ` +
-                    'confirmation in the approval panel. Run delete-content in preview (omit ' +
-                    'confirm) to open the panel; the deletion is performed only when a person ' +
-                    "clicks Delete. The assistant cannot confirm on the user's behalf.",
+                  renderConfirmClosedMessage({
+                    actionPhrase: `deleting a ${resourceType}`,
+                    panelName: 'the approval panel',
+                    previewTool: 'delete-content',
+                    appliedClause: 'the deletion is performed only when a person clicks Delete',
+                  }),
                 ).toErr();
               }
-
               switch (resourceType) {
                 case 'workbook':
                   return await runWorkbookBranch({
@@ -217,14 +237,6 @@ permanent.
 
   return tool;
 };
-
-function humanResource(kind: ResourceType): string {
-  return kind === 'extract-refresh-task'
-    ? 'extract refresh task'
-    : kind === 'datasource'
-      ? 'data source'
-      : 'workbook';
-}
 
 async function runWorkbookBranch({
   restApi,
@@ -305,15 +317,11 @@ async function runWorkbookBranch({
   }
 
   if (mcpAppsEnabled) {
-    // Flag-ON preview: the pending-deletion tag was already written by guardMutation above
-    // (TagEvidence). Here we additionally establish AppApprovalEvidence under the LEGACY
-    // 'delete-workbook' namespace so the iframe's Confirm click (which fires the legacy
-    // confirm-delete-workbook tool) sees this approval as valid.
-    await new AppApprovalEvidence('delete-workbook').establish({
+    await new AppApprovalEvidence('delete-content').establish({
       restApi,
       siteId,
       target,
-      tool: 'confirm-delete-workbook',
+      tool: 'delete-content',
       userLuid: extra.getUserLuid(),
     });
     const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
@@ -333,10 +341,10 @@ async function runWorkbookBranch({
   return new Ok<DeleteContentResult>(
     `Preview — workbook '${target.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
       `It has been tagged '${pendingTag}' (reversible). ` +
-      'NEXT STEP — REQUIRED: show this workbook (name, project, owner) to the user and ask them ' +
-      'to explicitly confirm deleting it. Do NOT delete without the user’s approval. ' +
-      'Once approved, call again with confirm: true (the server will verify this ' +
-      `'${pendingTag}' tag before deleting). ` +
+      renderTagDeleteNextStep({
+        subject: 'show this workbook (name, project, owner)',
+        pendingTag,
+      }) +
       `Deleted workbooks are recoverable from the Tableau recycle bin (${RECYCLE_BIN_DOC_URL}) ` +
       'for a limited time.',
   );
@@ -424,13 +432,11 @@ async function runDatasourceBranch({
   }
 
   if (mcpAppsEnabled) {
-    // Flag-ON preview: pending-deletion tag already written by guardMutation; additionally
-    // establish AppApprovalEvidence under legacy 'delete-datasource' namespace (see workbook branch).
-    await new AppApprovalEvidence('delete-datasource').establish({
+    await new AppApprovalEvidence('delete-content').establish({
       restApi,
       siteId,
       target,
-      tool: 'confirm-delete-datasource',
+      tool: 'delete-content',
       userLuid: extra.getUserLuid(),
     });
     const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
@@ -457,11 +463,10 @@ async function runDatasourceBranch({
     `Preview — data source '${target.name}' (id ${datasourceId}) in '${projectName}', ${ownerText}. ` +
       `${dependencyWarning} ` +
       `It has been tagged '${pendingTag}' (reversible). ` +
-      'NEXT STEP — REQUIRED: show this data source (name, project, owner) and its dependent ' +
-      'content to the user and ask them to explicitly confirm deleting it. Do NOT delete ' +
-      'without the user’s approval. ' +
-      'Once approved, call again with confirm: true (the server will verify this ' +
-      `'${pendingTag}' tag before deleting). ` +
+      renderTagDeleteNextStep({
+        subject: 'show this data source (name, project, owner) and its dependent content',
+        pendingTag,
+      }) +
       'On Tableau Cloud deleted data sources are recoverable from the recycle bin ' +
       `(${RECYCLE_BIN_DOC_URL}) for a limited time; on Tableau Server deletion is permanent.`,
   );
@@ -484,12 +489,37 @@ async function runExtractRefreshTaskBranch({
 }): Promise<Result<DeleteContentResult, McpToolError>> {
   const siteId = restApi.siteId;
 
-  const resolveTarget = async (): Promise<MutationTarget> => ({
-    id: taskId,
-    kind: 'extract-refresh-task',
-  });
+  // Confirm existence BEFORE the guard mints a nonce. Unlike the workbook/datasource branches (whose
+  // resolveTarget reads the target via getWorkbook/queryDatasource, so a missing resource 404s before
+  // any evidence is established), the task branch has no single-get endpoint — so list-and-find is the
+  // only existence check available. Run it unconditionally (preview AND confirm) to stay symmetric
+  // with the sibling branches and to keep the guard from minting a confirmationToken for a task that
+  // does not exist on this site.
+  const tasks = await restApi.tasksMethods.listExtractRefreshTasks({ siteId });
+  if (!tasks.some((task) => task.id === taskId)) {
+    return new UnknownError(
+      `Extract refresh task '${taskId}' not found. Deleting an extract refresh task is Tableau ` +
+        "Cloud only — verify you're connected to a Cloud site (not Server) and that the taskId " +
+        'came from list-extract-refresh-tasks.',
+      404,
+    ).toErr();
+  }
 
-  const evidence = new RegistryEvidence();
+  // Enrich the audit target with the underlying content's name/project/owner (AC-3). The already-
+  // fetched `tasks` list carries only the underlying content id, so this pays ONE content lookup +
+  // ONE owner lookup on the preview/confirm path — the same cost the workbook/datasource branches
+  // already pay. The shared helper is best-effort: a lookup failure degrades to an id-only target and
+  // never fails the mutation. Feed it the already-fetched `tasks` to avoid re-listing.
+  const resolveTarget = async (): Promise<MutationTarget> =>
+    resolveExtractRefreshTaskTarget({
+      restApi,
+      siteId,
+      taskId,
+      logger: 'delete-content',
+      tasks,
+    });
+
+  const registryEvidence = new RegistryEvidence();
 
   const guardResult = await guardMutation({
     restApi,
@@ -498,9 +528,9 @@ async function runExtractRefreshTaskBranch({
     action: 'delete',
     mode: 'preview-confirm',
     phase: confirm ? 'confirm' : 'preview',
-    evidence,
+    evidence: registryEvidence,
     resolveTarget,
-    confirmationToken,
+    ...(confirm ? { confirmationToken } : {}),
     fallbackTargetKind: 'extract-refresh-task',
   });
   if (guardResult.isErr()) {
@@ -523,13 +553,11 @@ async function runExtractRefreshTaskBranch({
   }
 
   if (mcpAppsEnabled) {
-    // Flag-ON preview: confirmationToken already minted by guardMutation; additionally establish
-    // AppApprovalEvidence under legacy 'delete-extract-refresh-task' namespace (see workbook branch).
-    await new AppApprovalEvidence('delete-extract-refresh-task').establish({
+    await new AppApprovalEvidence('delete-content').establish({
       restApi,
       siteId,
       target: { id: taskId, kind: 'extract-refresh-task' },
-      tool: 'confirm-delete-extract-refresh-task',
+      tool: 'delete-content',
       userLuid: extra.getUserLuid(),
     });
     const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
@@ -543,14 +571,16 @@ async function runExtractRefreshTaskBranch({
     });
   }
 
-  const nonce = evidence.getEstablishedNonce();
+  const nonce = registryEvidence.getEstablishedNonce();
   return new Ok<DeleteContentResult>(
     `Preview — extract refresh task '${taskId}' would be permanently deleted (the underlying data ` +
       'source or workbook is unaffected, but it will no longer be refreshed on this schedule). ' +
-      'NEXT STEP — REQUIRED: present this task to the user and ask them to explicitly confirm ' +
-      'deleting it. Do NOT delete without the user’s approval. ' +
-      `Once approved, call again with confirm: true and confirmationToken: "${nonce}" ` +
-      '(the server will verify and consume this single-use token before deleting).',
+      renderTokenConfirmNextStep({
+        subject: 'present this task',
+        approvalClause: 'confirm deleting it. Do NOT delete',
+        nonce,
+        tail: ' before deleting).',
+      }),
   );
 }
 

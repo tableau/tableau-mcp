@@ -1,16 +1,15 @@
 /**
- * @file MCP-Apps HITL confirm panel for delete-extract-refresh-task (W-23202047, mirroring
- * delete-workbook).
+ * @file MCP-Apps HITL confirm panel for extract-refresh-task deletion.
  *
- * The delete-extract-refresh-task preview returns an AppToolResult whose `data.kind` is
- * 'delete-extract-refresh-task-confirm'. This module renders that into a confirm panel inside the
- * iframe: the task id, a live countdown to the approval expiry, and Confirm/Cancel buttons. (A task
- * has no name/project/owner.)
+ * The `delete-content` (resourceType: extract-refresh-task) preview returns an AppToolResult whose
+ * `data.kind` is 'delete-extract-refresh-task-confirm'. This module renders that into a confirm
+ * panel inside the iframe: the task id, a live countdown to the approval expiry, and Confirm/Cancel
+ * buttons. (A task has no name/project/owner.)
  *
- * Clicking Confirm invokes the model-invisible `confirm-delete-extract-refresh-task` tool via
- * `app.callServerTool` — that human gesture IS the approval the server's AppApprovalEvidence
- * verifies. The countdown is advisory only: the server independently rejects an expired approval, so
- * disabling the button past expiry is a UX nicety, not the security boundary.
+ * Clicking Confirm invokes the app-only `confirm-delete-content` tool via `app.callServerTool` —
+ * that human gesture IS the approval the server's AppApprovalEvidence verifies. The countdown is
+ * advisory only: the server independently rejects an expired approval, so disabling the button past
+ * expiry is a UX nicety, not the security boundary.
  *
  * The panel is built entirely with DOM APIs (createElement + textContent) — never innerHTML — so no
  * server-derived string is ever interpreted as markup.
@@ -159,8 +158,11 @@ export function renderDeleteExtractRefreshTaskConfirm(app: App, result: unknown)
     confirmBtn.disabled = true;
     void app
       .callServerTool({
-        name: 'confirm-delete-extract-refresh-task',
-        arguments: { taskId: panel.taskId },
+        name: 'confirm-delete-content',
+        arguments: {
+          resourceType: 'extract-refresh-task',
+          resourceId: panel.taskId,
+        },
       })
       .then((res) => {
         const text = callToolResultSchema.safeParse(res).success

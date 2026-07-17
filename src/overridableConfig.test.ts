@@ -56,13 +56,7 @@ describe('OverridableConfig', () => {
       vi.stubEnv('INCLUDE_TOOLS', 'query-datasource,workbook');
 
       const config = new OverridableConfig({});
-      expect(config.includeTools).toEqual([
-        'query-datasource',
-        'list-workbooks',
-        'get-workbook',
-        'delete-workbook',
-        'confirm-delete-workbook',
-      ]);
+      expect(config.includeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
     });
 
     it('should parse EXCLUDE_TOOLS into an array of valid tool names', () => {
@@ -76,13 +70,7 @@ describe('OverridableConfig', () => {
       vi.stubEnv('EXCLUDE_TOOLS', 'query-datasource,workbook');
 
       const config = new OverridableConfig({});
-      expect(config.excludeTools).toEqual([
-        'query-datasource',
-        'list-workbooks',
-        'get-workbook',
-        'delete-workbook',
-        'confirm-delete-workbook',
-      ]);
+      expect(config.excludeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
     });
 
     it('should filter out invalid tool names from INCLUDE_TOOLS', () => {
