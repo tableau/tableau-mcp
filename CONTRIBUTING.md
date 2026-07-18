@@ -61,6 +61,10 @@ Use GitHub Issues page to submit issues, enhancement requests and discuss ideas.
 
 > **NOTE**: Be sure to [sync your fork](https://help.github.com/articles/syncing-a-fork/) before making a pull request.
 
+# Releasing
+
+Normal releases and the hotfix process (shipping a fix off an already-deployed version without moving the npm `latest` dist-tag) are documented in [docs/RELEASE.md](docs/RELEASE.md).
+
 # Contributor License Agreement ("CLA")
 In order to accept your pull request, we need you to submit a CLA. You only need
 to do this once to work on any of Salesforce's open source projects.

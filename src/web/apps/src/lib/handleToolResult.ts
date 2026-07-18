@@ -37,7 +37,7 @@ export function extractUrlObjectFromResult(result: CallToolResult): string {
 }
 
 /**
- * Handles the tool result from the MCP app and embeds the Tableau viz
+ * Handles a tool result from an embed-Tableau-viz tool (get-view / get-workbook) and embeds the viz.
  * @param app - The MCP App instance
  * @param result - The tool result containing the view URL
  */

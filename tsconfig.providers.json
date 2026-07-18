@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./build",
+    "rootDir": "./src",
+    "types": []
+  },
+  "include": ["src/features/featureGateProvider.ts", "src/telemetry/telemetryProvider.ts"],
+  "exclude": ["node_modules", "tests"]
+}

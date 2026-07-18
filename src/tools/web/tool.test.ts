@@ -6,6 +6,7 @@ import { z, ZodError } from 'zod';
 import { DatasourceNotAllowedError, ZodiosValidationError } from '../../errors/mcpToolError.js';
 import { notifier } from '../../logging/notification.js';
 import { WebMcpServer } from '../../server.web.js';
+import { TableauAuthInfo } from '../../server/oauth/schemas.js';
 import invariant from '../../utils/invariant.js';
 import { WebTool } from './tool.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
@@ -315,6 +316,137 @@ describe('Tool', () => {
           is_hyperforce: false,
           success: true,
           error_code: '',
+        }),
+      );
+    });
+
+    const bearerAuthInfo = (clientId: string | undefined): TableauAuthInfo => ({
+      type: 'Bearer',
+      username: 'user@example.com',
+      server: 'https://my-tableau.example.com',
+      siteId: 'abc123',
+      siteName: 'my-site',
+      userId: 'uid-1',
+      raw: 'fake-token',
+      clientId,
+    });
+
+    it('should include raw oauth_client_id and mapped display name for a known Bearer client', async () => {
+      const tool = new WebTool(mockParams);
+      const clientId = 'https://claude.ai/.well-known/oauth/client-metadata.json';
+
+      await tool.logAndExecute({
+        extra: { ...mockExtra, tableauAuthInfo: bearerAuthInfo(clientId) },
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          oauth_client_id: clientId,
+          oauth_client_display_name: 'Claude',
+        }),
+      );
+    });
+
+    it('should fall back oauth_client_display_name to the raw client_id for an unknown Bearer client', async () => {
+      const tool = new WebTool(mockParams);
+      const clientId = 'https://www.unknown-client.com/.well-known/oauth/client-metadata.json';
+
+      await tool.logAndExecute({
+        extra: { ...mockExtra, tableauAuthInfo: bearerAuthInfo(clientId) },
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          oauth_client_id: clientId,
+          oauth_client_display_name: clientId,
+        }),
+      );
+    });
+
+    it('should emit empty oauth client fields when there is no Bearer client id', async () => {
+      const tool = new WebTool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          oauth_client_id: '',
+          oauth_client_display_name: '',
+        }),
+      );
+    });
+
+    // Embedded OAuth normalizes tableauAuthInfo to 'X-Tableau-Auth' (see
+    // accessTokenValidator), but the MCP-level authInfo still carries the client id. This
+    // constructs that production shape rather than a synthetic Bearer.
+    const embeddedTableauAuthInfo: TableauAuthInfo = {
+      type: 'X-Tableau-Auth',
+      username: 'user@example.com',
+      server: 'https://my-tableau.example.com',
+      siteName: 'my-site',
+      userId: 'uid-1',
+    };
+
+    it('should populate oauth client telemetry from authInfo.clientId on the embedded-OAuth path', async () => {
+      const tool = new WebTool(mockParams);
+      const clientId = 'https://claude.ai/.well-known/oauth/client-metadata.json';
+
+      await tool.logAndExecute({
+        extra: {
+          ...mockExtra,
+          tableauAuthInfo: embeddedTableauAuthInfo,
+          authInfo: {
+            token: 'fake-mcp-access-token',
+            clientId,
+            scopes: [],
+            extra: embeddedTableauAuthInfo,
+          },
+        },
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          oauth_client_id: clientId,
+          oauth_client_display_name: 'Claude',
+        }),
+      );
+    });
+
+    it('should sanitize an attacker-influenceable Bearer client_id before emitting telemetry', async () => {
+      const tool = new WebTool(mockParams);
+      const rawClientId =
+        'https://user:secret@claude.ai/.well-known/oauth/client-metadata.json?token=abc#frag';
+
+      await tool.logAndExecute({
+        extra: { ...mockExtra, tableauAuthInfo: bearerAuthInfo(rawClientId) },
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          oauth_client_id: 'https://claude.ai/.well-known/oauth/client-metadata.json',
+          oauth_client_display_name: 'Claude',
         }),
       );
     });

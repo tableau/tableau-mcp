@@ -3,7 +3,7 @@ import path from 'path';
 
 import { log } from '../logging/logger.js';
 import { getDirname } from '../utils/getDirname.js';
-import { FeatureGateProvider } from './types.js';
+import type { FeatureGateProvider } from './featureGateProvider.js';
 
 const FEATURES_CONFIG_PATH = 'features.json';
 
@@ -22,8 +22,11 @@ export class ServerFeatureGate implements FeatureGateProvider {
    * Check if a feature is enabled
    * @param featureName - Name of the feature to check
    * @returns true if enabled, false if disabled or not found
+   *
+   * Async to satisfy the FeatureGateProvider contract; the value is already
+   * in memory (loaded once in the constructor), so this just resolves it.
    */
-  isFeatureEnabled(featureName: string): boolean {
+  async isFeatureEnabled(featureName: string): Promise<boolean> {
     return this.features.get(featureName) ?? false;
   }
 
