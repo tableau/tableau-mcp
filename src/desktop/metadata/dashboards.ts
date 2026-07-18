@@ -158,16 +158,6 @@ export function listWorkbookDashboards(workbookXml: string): string[] {
   return dashboards.map((db) => db['@_name']).filter((name): name is string => !!name);
 }
 
-// Returns a standalone `<dashboard>` fragment (not a whole workbook), or null if absent.
-export function extractDashboardXml(workbookXml: string, dashboardName: string): string | null {
-  const workbook = parseXML(workbookXml);
-  const dashboard = findDashboard(workbook, dashboardName);
-  if (!dashboard) {
-    return null;
-  }
-  return serializeXML({ dashboard });
-}
-
 // Builds a whole-workbook document carrying only the one edited dashboard (and its window).
 // The workbook POST upserts by name: it overwrites the colliding live dashboard and leaves the
 // rest of the live workbook untouched. Worksheets are stripped from the doc — they stay live and

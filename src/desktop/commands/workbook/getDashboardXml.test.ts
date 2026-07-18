@@ -145,22 +145,28 @@ describe('getDashboardXml (External Client API transport, TABLEAU_EXTERNAL_API g
   const mockSignal = new AbortController().signal;
   const dashboardName = 'Sales Dashboard';
 
-  function workbookWith(dashboardNames: string[]): string {
-    const dashboards = dashboardNames
-      .map((name) => `<dashboard name='${name}'><zones /></dashboard>`)
-      .join('');
-    return `<?xml version='1.0'?><workbook><dashboards>${dashboards}</dashboards></workbook>`;
-  }
-
-  function executorReturning(text: string): LocalExecutor {
+  function executorFor(
+    dashboards: Array<{ id: string; name: string }>,
+    documentById: Record<string, string> = {},
+  ): LocalExecutor {
     return {
-      executeCommand: vi.fn().mockResolvedValue(
-        Ok({
-          command_id: 'cmd-123',
-          status: 'completed',
-          parsedResult: { text },
-        }),
-      ),
+      executeCommand: vi.fn().mockImplementation((params) => {
+        if (params.command === 'list-dashboards') {
+          return Promise.resolve(
+            Ok({ command_id: 'cmd-1', status: 'completed', parsedResult: { dashboards } }),
+          );
+        }
+        if (params.command === 'get-dashboard-document') {
+          return Promise.resolve(
+            Ok({
+              command_id: 'cmd-2',
+              status: 'completed',
+              parsedResult: { text: documentById[params.args.id] ?? '' },
+            }),
+          );
+        }
+        return Promise.resolve(Err({ type: 'command-failed', error: { code: 'x', message: 'x' } }));
+      }),
     } as unknown as LocalExecutor;
   }
 
@@ -177,8 +183,14 @@ describe('getDashboardXml (External Client API transport, TABLEAU_EXTERNAL_API g
     vi.restoreAllMocks();
   });
 
-  it('should slice the requested dashboard out of the whole-workbook document', async () => {
-    const mockExecutor = executorReturning(workbookWith(['Sales Dashboard', 'Other Dashboard']));
+  it('should resolve the name to an id and return the dashboard document', async () => {
+    const mockExecutor = executorFor(
+      [
+        { id: 'd1', name: 'Sales Dashboard' },
+        { id: 'd2', name: 'Other Dashboard' },
+      ],
+      { d1: '<dashboard name="Sales Dashboard"><zones /></dashboard>' },
+    );
 
     const result = await getDashboardXml({
       dashboardName,
@@ -188,21 +200,19 @@ describe('getDashboardXml (External Client API transport, TABLEAU_EXTERNAL_API g
 
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
-      expect(result.value).toContain('<dashboard');
       expect(result.value).toContain('name="Sales Dashboard"');
-      expect(result.value).not.toContain('Other Dashboard');
     }
 
     expect(mockExecutor.executeCommand).toHaveBeenCalledWith({
       namespace: 'tabui',
-      command: 'save-underlying-metadata',
-      args: { 'is-json': false },
+      command: 'get-dashboard-document',
+      args: { id: 'd1' },
       schema: expect.any(Object),
       signal: mockSignal,
     });
   });
 
-  it('should return execute-command-error when the workbook fetch fails', async () => {
+  it('should return execute-command-error when the list command fails', async () => {
     const error = {
       type: 'command-failed' as const,
       error: { code: 'ERROR', message: 'Fetch failed' },
@@ -224,8 +234,8 @@ describe('getDashboardXml (External Client API transport, TABLEAU_EXTERNAL_API g
     }
   });
 
-  it('should return no-dashboard-found when the workbook has no matching dashboard', async () => {
-    const mockExecutor = executorReturning(workbookWith(['Some Other Dashboard']));
+  it('should return no-dashboard-found when no dashboard matches the name', async () => {
+    const mockExecutor = executorFor([{ id: 'd9', name: 'Some Other Dashboard' }]);
 
     const result = await getDashboardXml({
       dashboardName,

@@ -175,6 +175,75 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.worksheets) {
+      sendJson(res, 200, {
+        worksheets: [
+          { id: 'w1', name: 'Sheet 1', hidden: false },
+          { id: 'w2', name: 'Sales', hidden: false },
+        ],
+      });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.dashboards) {
+      sendJson(res, 200, {
+        dashboards: [{ id: 'd1', name: 'Sales Dashboard', hidden: false }],
+      });
+      return;
+    }
+
+    const worksheetDocMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)\/document$/);
+    if (method === 'GET' && worksheetDocMatch) {
+      const id = decodeURIComponent(worksheetDocMatch[1]);
+      if (id !== 'w1' && id !== 'w2') {
+        sendProblem(res, 404, 'sheet-not-found', `Unknown worksheet: ${id}`);
+        return;
+      }
+      res.writeHead(200, {
+        'content-type': 'text/xml',
+        [HEADER_APPLICATION_VERSION]: '2026.1',
+        [HEADER_XSD_PAYLOAD_VERSION]: '2026.1.0',
+      });
+      res.end(`<worksheet name='${id}'><table /></worksheet>`);
+      return;
+    }
+
+    const summaryDataMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)\/summaryData$/);
+    if (method === 'GET' && summaryDataMatch) {
+      const id = decodeURIComponent(summaryDataMatch[1]);
+      if (id !== 'w1' && id !== 'w2') {
+        sendProblem(res, 404, 'sheet-not-found', `Unknown worksheet: ${id}`);
+        return;
+      }
+      sendJson(res, 200, {
+        columns: [
+          { name: 'Category', dataType: 'string' },
+          { name: 'Sales', dataType: 'real' },
+        ],
+        rows: [
+          ['Furniture', 1000],
+          ['Technology', 2000],
+        ],
+      });
+      return;
+    }
+
+    const dashboardDocMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+)\/document$/);
+    if (method === 'GET' && dashboardDocMatch) {
+      const id = decodeURIComponent(dashboardDocMatch[1]);
+      if (id !== 'd1') {
+        sendProblem(res, 404, 'sheet-not-found', `Unknown dashboard: ${id}`);
+        return;
+      }
+      res.writeHead(200, {
+        'content-type': 'text/xml',
+        [HEADER_APPLICATION_VERSION]: '2026.1',
+        [HEADER_XSD_PAYLOAD_VERSION]: '2026.1.0',
+      });
+      res.end(`<dashboard name='${id}'><zones /></dashboard>`);
+      return;
+    }
+
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.openapi) {
       sendJson(res, 200, {
         openapi: '3.1.0',

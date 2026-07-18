@@ -27,7 +27,7 @@ describe('listWorksheetsTool', () => {
     const listWorksheetsTool = getListWorksheetsTool(new DesktopMcpServer());
     expect(listWorksheetsTool.name).toBe('list-worksheets');
     expect(listWorksheetsTool.description).toContain(
-      'Gets a list of all worksheet names in the current workbook',
+      'List all worksheet names in the current workbook',
     );
     expect(listWorksheetsTool.paramsSchema).toMatchObject({
       session: expect.any(Object),

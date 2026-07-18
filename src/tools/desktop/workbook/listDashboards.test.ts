@@ -27,7 +27,7 @@ describe('listDashboardsTool', () => {
     const listDashboardsTool = getListDashboardsTool(new DesktopMcpServer());
     expect(listDashboardsTool.name).toBe('list-dashboards');
     expect(listDashboardsTool.description).toContain(
-      'Gets a list of all dashboard names in the current workbook',
+      'List all dashboard names in the current workbook',
     );
     expect(listDashboardsTool.paramsSchema).toMatchObject({
       session: expect.any(Object),

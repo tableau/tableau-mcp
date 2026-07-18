@@ -2,12 +2,11 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getDesktopConfig } from '../../../config.desktop.js';
-import { extractDashboardXml } from '../../metadata/dashboards.js';
 import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
-import { getWorkbookXml } from './getWorkbookXml.js';
+import { findByName, listDashboardItems } from './sheetItems.js';
 
 export type GetDashboardXmlError = (
   | { type: 'no-dashboard-found' }
@@ -23,8 +22,6 @@ type GetDashboardXmlResult = Result<
 export async function getDashboardXml(
   args: { dashboardName: string } & WithExecutorAndAbortSignal,
 ): Promise<GetDashboardXmlResult> {
-  // External Client API ("Athena V0") exposes no per-sheet route — tabui:save-dashboard is not
-  // in its command registry. Fetch the whole-workbook document and slice client-side instead.
   return getDesktopConfig().externalApiEnabled
     ? getDashboardXmlViaExternalApi(args)
     : getDashboardXmlViaAgentApi(args);
@@ -79,24 +76,29 @@ async function getDashboardXmlViaExternalApi({
   executor,
   signal,
 }: { dashboardName: string } & WithExecutorAndAbortSignal): Promise<GetDashboardXmlResult> {
-  const workbookResult = await getWorkbookXml({ executor, signal });
-  if (workbookResult.isErr()) {
-    return Err({ type: 'execute-command-error', error: workbookResult.error });
+  const listed = await listDashboardItems({ executor, signal });
+  if (listed.isErr()) {
+    return Err({ type: 'execute-command-error', error: listed.error });
   }
 
-  let dashboardXml: string | null;
-  try {
-    dashboardXml = extractDashboardXml(workbookResult.value, dashboardName);
-  } catch (error) {
-    return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
-  }
-
-  if (dashboardXml === null) {
+  const dashboard = findByName(listed.value, dashboardName);
+  if (!dashboard) {
     return Err({
       type: 'get-dashboard-xml-error',
       error: { type: 'no-dashboard-found', message: `No dashboard found for "${dashboardName}".` },
     });
   }
 
-  return Ok(dashboardXml);
+  const result = await executor.executeCommand({
+    namespace: 'tabui',
+    command: 'get-dashboard-document',
+    args: { id: dashboard.id },
+    schema: z.object({ text: z.string() }),
+    signal,
+  });
+  if (result.isErr()) {
+    return Err({ type: 'execute-command-error', error: result.error });
+  }
+
+  return Ok(result.value.parsedResult.text);
 }

@@ -170,20 +170,13 @@ describe('listDashboards (Agent API transport, default)', () => {
 describe('listDashboards (External Client API transport, TABLEAU_EXTERNAL_API gate)', () => {
   const mockSignal = new AbortController().signal;
 
-  function workbookWith(dashboardNames: string[]): string {
-    const dashboards = dashboardNames
-      .map((name) => `<dashboard name='${name}'><zones /></dashboard>`)
-      .join('');
-    return `<?xml version='1.0'?><workbook><dashboards>${dashboards}</dashboards></workbook>`;
-  }
-
-  function executorReturning(text: string): LocalExecutor {
+  function executorReturning(dashboards: Array<{ id: string; name: string }>): LocalExecutor {
     return {
       executeCommand: vi.fn().mockResolvedValue(
         Ok({
           command_id: 'cmd-123',
           status: 'completed',
-          parsedResult: { text },
+          parsedResult: { dashboards },
         }),
       ),
     } as unknown as LocalExecutor;
@@ -202,8 +195,11 @@ describe('listDashboards (External Client API transport, TABLEAU_EXTERNAL_API ga
     vi.restoreAllMocks();
   });
 
-  it('should return dashboard names sliced from the whole-workbook document', async () => {
-    const mockExecutor = executorReturning(workbookWith(['Sales Dashboard', 'Executive Summary']));
+  it('should return dashboard names from the typed list route', async () => {
+    const mockExecutor = executorReturning([
+      { id: 'd1', name: 'Sales Dashboard' },
+      { id: 'd2', name: 'Executive Summary' },
+    ]);
 
     const result = await listDashboards({ executor: mockExecutor, signal: mockSignal });
 
@@ -217,15 +213,14 @@ describe('listDashboards (External Client API transport, TABLEAU_EXTERNAL_API ga
 
     expect(mockExecutor.executeCommand).toHaveBeenCalledWith({
       namespace: 'tabui',
-      command: 'save-underlying-metadata',
-      args: { 'is-json': false },
+      command: 'list-dashboards',
       schema: expect.any(Object),
       signal: mockSignal,
     });
   });
 
   it('should return empty list when no dashboards exist', async () => {
-    const mockExecutor = executorReturning('<?xml version="1.0"?><workbook></workbook>');
+    const mockExecutor = executorReturning([]);
 
     const result = await listDashboards({ executor: mockExecutor, signal: mockSignal });
 
@@ -235,7 +230,7 @@ describe('listDashboards (External Client API transport, TABLEAU_EXTERNAL_API ga
     }
   });
 
-  it('should return error when the workbook fetch fails', async () => {
+  it('should return error when the list command fails', async () => {
     const error = { type: 'command-timed-out' as const, error: 'Command timeout' };
     const mockExecutor = {
       executeCommand: vi.fn().mockResolvedValue(Err(error)),
@@ -249,21 +244,12 @@ describe('listDashboards (External Client API transport, TABLEAU_EXTERNAL_API ga
     }
   });
 
-  it('should return invalid-response when the workbook XML cannot be parsed', async () => {
-    const mockExecutor = executorReturning('not valid xml <<<');
-
-    const result = await listDashboards({ executor: mockExecutor, signal: mockSignal });
-
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error.type).toBe('invalid-response');
-    }
-  });
-
-  it('should handle dashboard names with special characters', async () => {
-    const mockExecutor = executorReturning(
-      workbookWith(['Dashboard &amp; Analysis', 'Sales: Q1-Q4', 'CEO&apos;s Report']),
-    );
+  it('should preserve dashboard names verbatim', async () => {
+    const mockExecutor = executorReturning([
+      { id: 'd1', name: 'Dashboard & Analysis' },
+      { id: 'd2', name: 'Sales: Q1-Q4' },
+      { id: 'd3', name: "CEO's Report" },
+    ]);
 
     const result = await listDashboards({ executor: mockExecutor, signal: mockSignal });
 

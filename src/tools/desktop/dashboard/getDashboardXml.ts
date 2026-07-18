@@ -45,10 +45,8 @@ export const getGetDashboardXmlTool = (
     server,
     name: 'get-dashboard-xml',
     title,
-    description: [
-      'Get layout for an existing dashboard. mode=file is default; mode=inline returns dashboard layout content.',
-      'IMPORTANT: only works for an existing dashboard (see list-dashboards); to create one use apply-workbook. Use apply-dashboard to apply changes.',
-    ].join(' '),
+    description:
+      'Get layout for an existing dashboard (see list-dashboards). mode=file (default) or inline. apply-dashboard applies changes.',
     paramsSchema,
     annotations: {
       title,

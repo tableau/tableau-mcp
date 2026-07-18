@@ -126,6 +126,65 @@ describe('ExternalApiClient', () => {
     expect(result.unwrap()).toMatchObject({ openapi: '3.1.0' });
   });
 
+  it('lists worksheets from GET /v0/workbook/worksheets', async () => {
+    const result = await client.listWorksheets();
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().worksheets).toEqual([
+      { id: 'w1', name: 'Sheet 1', hidden: false },
+      { id: 'w2', name: 'Sales', hidden: false },
+    ]);
+    expect(server.requests.at(-1)?.path).toBe('/v0/workbook/worksheets');
+  });
+
+  it('lists dashboards from GET /v0/workbook/dashboards', async () => {
+    const result = await client.listDashboards();
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().dashboards).toEqual([
+      { id: 'd1', name: 'Sales Dashboard', hidden: false },
+    ]);
+  });
+
+  it('gets a worksheet document by id with version headers', async () => {
+    const result = await client.getWorksheetDocument('w1');
+    expect(result.isOk()).toBe(true);
+    const value = result.unwrap();
+    expect(value.xml).toContain("<worksheet name='w1'>");
+    expect(value.applicationVersion).toBe('2026.1');
+    expect(server.requests.at(-1)?.path).toBe('/v0/workbook/worksheets/w1/document');
+  });
+
+  it('gets a dashboard document by id', async () => {
+    const result = await client.getDashboardDocument('d1');
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().xml).toContain("<dashboard name='d1'>");
+  });
+
+  it('maps a sheet-not-found problem for an unknown worksheet id', async () => {
+    const result = await client.getWorksheetDocument('nope');
+    expect(result.isErr()).toBe(true);
+    const error = result.unwrapErr();
+    if (error.type === 'problem') {
+      expect(error.status).toBe(404);
+      expect(error.code).toBe('sheet-not-found');
+    } else {
+      throw new Error(`expected problem error, got ${error.type}`);
+    }
+  });
+
+  it('gets worksheet summary data and forwards query options', async () => {
+    const result = await client.getWorksheetSummaryData('w1', { maxRows: 10, ignoreAliases: true });
+    expect(result.isOk()).toBe(true);
+    const value = result.unwrap();
+    expect(value.columns).toHaveLength(2);
+    expect(value.rows).toEqual([
+      ['Furniture', 1000],
+      ['Technology', 2000],
+    ]);
+
+    const requested = server.requests.at(-1);
+    expect(requested?.path).toBe('/v0/workbook/worksheets/w1/summaryData');
+  });
+
   it('surfaces a 401 as an unauthorized error when the token is stale', async () => {
     const staleClient = new ExternalApiClient(makeInstance(server.baseUrl, 'stale-token'));
     const result = await staleClient.getWorkbookDocument();

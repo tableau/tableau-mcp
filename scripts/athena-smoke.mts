@@ -33,7 +33,7 @@ const client = new ExternalApiClient(inst);
 const health = await client.health();
 out(
   health.isOk() && health.value.healthy,
-  'GET /v1/health',
+  'GET /v0/health',
   health.isErr() ? errDetail(health.error) : '',
 );
 
@@ -43,22 +43,21 @@ if (doc.isOk()) {
   xml = doc.value.xml;
   out(
     xml.includes('<workbook'),
-    'GET /v1/workbook/document',
+    'GET /v0/workbook/document',
     `${xml.length} bytes · appVersion=${doc.value.applicationVersion ?? '?'}`,
   );
 } else {
-  out(false, 'GET /v1/workbook/document', errDetail(doc.error));
+  out(false, 'GET /v0/workbook/document', errDetail(doc.error));
 }
 
 if (xml) {
   const applied = await client.applyWorkbookDocument(xml); // byte-identical round-trip — a no-op apply
   out(
     applied.isOk(),
-    'POST /v1/workbook/document',
+    'POST /v0/workbook/document',
     applied.isOk()
       ? `operation state=${String((applied.value as { state?: unknown }).state ?? '?')}`
-      : errDetail(applied.error) +
-          '  ← a 400 invalid-request-body here usually means the build predates #59238/#59383',
+      : errDetail(applied.error),
   );
 }
 
@@ -67,11 +66,39 @@ if (xml) {
 const op = await client.invokeCommand('tabdoc', 'undo', {});
 out(
   op.isOk(),
-  'POST /v1/app:invokeCommand',
+  'POST /v0/app:invokeCommand',
   op.isOk()
     ? `state=${String((op.value as { state?: unknown }).state ?? '?')}`
-    : errDetail(op.error) +
-        '  ← if THIS fails with command-not-found too, send us your invokeCommand example — the body field names need aligning',
+    : errDetail(op.error),
+);
+
+let firstWorksheetId: string | undefined;
+const worksheets = await client.listWorksheets();
+if (worksheets.isOk()) {
+  firstWorksheetId = worksheets.value.worksheets[0]?.id;
+  out(true, 'GET /v0/workbook/worksheets', `${worksheets.value.worksheets.length} worksheets`);
+} else {
+  out(false, 'GET /v0/workbook/worksheets', errDetail(worksheets.error));
+}
+
+if (firstWorksheetId) {
+  const summary = await client.getWorksheetSummaryData(firstWorksheetId, { maxRows: 5 });
+  out(
+    summary.isOk(),
+    'GET .../worksheets/{id}/summaryData',
+    summary.isOk()
+      ? `${summary.value.rows?.length ?? 0} rows · ${summary.value.columns?.length ?? 0} columns`
+      : errDetail(summary.error),
+  );
+}
+
+const dashboards = await client.listDashboards();
+out(
+  dashboards.isOk(),
+  'GET /v0/workbook/dashboards',
+  dashboards.isOk()
+    ? `${dashboards.value.dashboards.length} dashboards`
+    : errDetail(dashboards.error),
 );
 
 const spec = await client.fetchOpenApi();

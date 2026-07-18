@@ -6,6 +6,7 @@ export const desktopToolNames = [
   'list-worksheets',
   'list-dashboards',
   'get-worksheet-xml',
+  'get-worksheet-summary-data',
   'apply-worksheet',
   'delete-worksheet',
   'refine-worksheet',

@@ -113,16 +113,6 @@ export function listSheets(workbookXml: string): string[] {
   return worksheets.map((ws) => ws['@_name']).filter((name): name is string => !!name);
 }
 
-// Returns a standalone `<worksheet>` fragment (not a whole workbook), or null if absent.
-export function extractSheetXml(workbookXml: string, sheetName: string): string | null {
-  const workbook = parseXML(workbookXml);
-  const worksheet = findWorksheet(workbook, sheetName);
-  if (!worksheet) {
-    return null;
-  }
-  return serializeXML({ worksheet });
-}
-
 // Builds a whole-workbook document carrying only the one edited worksheet (and its window).
 // The workbook POST upserts by name: it overwrites the colliding live sheet and, because the
 // doc carries no other sheets, leaves the rest of the live workbook untouched.

@@ -1,6 +1,10 @@
 import { Err, Ok, Result } from 'ts-results-es';
+import { z } from 'zod';
 
 import {
+  dashboardDocumentRoute,
+  DashboardList,
+  dashboardListSchema,
   EXTERNAL_API_ROUTES,
   ExternalApiError,
   ExternalApiInstance,
@@ -9,6 +13,12 @@ import {
   OperationEnvelope,
   operationEnvelopeSchema,
   problemResponseSchema,
+  SummaryData,
+  summaryDataSchema,
+  worksheetDocumentRoute,
+  WorksheetList,
+  worksheetListSchema,
+  worksheetSummaryDataRoute,
 } from './types.js';
 
 export type ExternalApiClientOptions = {
@@ -22,6 +32,14 @@ export type WorkbookDocument = {
   xml: string;
   applicationVersion: string | undefined;
   xsdPayloadVersion: string | undefined;
+};
+
+/** Query options for `GET /v0/workbook/worksheets/{id}/summaryData`. */
+export type SummaryDataOptions = {
+  maxRows?: number;
+  ignoreAliases?: boolean;
+  ignoreSelection?: boolean;
+  columnsToIncludeByFieldName?: string;
 };
 
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -67,26 +85,43 @@ export class ExternalApiClient {
   async getWorkbookDocument(
     signal?: AbortSignal,
   ): Promise<Result<WorkbookDocument, ExternalApiError>> {
-    const response = await this.request('GET', EXTERNAL_API_ROUTES.workbookDocument, { signal });
-    if (response.isErr()) {
-      return Err(response.error);
-    }
+    return this.getDocument(EXTERNAL_API_ROUTES.workbookDocument, signal);
+  }
 
-    const res = response.value;
-    if (!res.ok) {
-      return Err(await mapErrorResponse(res));
-    }
+  async listWorksheets(signal?: AbortSignal): Promise<Result<WorksheetList, ExternalApiError>> {
+    return this.getDecoded(EXTERNAL_API_ROUTES.worksheets, worksheetListSchema, signal);
+  }
 
-    try {
-      const xml = await res.text();
-      return Ok({
-        xml,
-        applicationVersion: res.headers.get(HEADER_APPLICATION_VERSION) ?? undefined,
-        xsdPayloadVersion: res.headers.get(HEADER_XSD_PAYLOAD_VERSION) ?? undefined,
-      });
-    } catch (error) {
-      return Err({ type: 'invalid-response', error });
-    }
+  async getWorksheetDocument(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExternalApiError>> {
+    return this.getDocument(worksheetDocumentRoute(id), signal);
+  }
+
+  async getWorksheetSummaryData(
+    id: string,
+    options: SummaryDataOptions = {},
+    signal?: AbortSignal,
+  ): Promise<Result<SummaryData, ExternalApiError>> {
+    const route = appendQuery(worksheetSummaryDataRoute(id), {
+      maxRows: options.maxRows,
+      ignoreAliases: options.ignoreAliases,
+      ignoreSelection: options.ignoreSelection,
+      columnsToIncludeByFieldName: options.columnsToIncludeByFieldName,
+    });
+    return this.getDecoded(route, summaryDataSchema, signal);
+  }
+
+  async listDashboards(signal?: AbortSignal): Promise<Result<DashboardList, ExternalApiError>> {
+    return this.getDecoded(EXTERNAL_API_ROUTES.dashboards, dashboardListSchema, signal);
+  }
+
+  async getDashboardDocument(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExternalApiError>> {
+    return this.getDocument(dashboardDocumentRoute(id), signal);
   }
 
   async applyWorkbookDocument(
@@ -132,6 +167,63 @@ export class ExternalApiClient {
     } catch (error) {
       return Err({ type: 'invalid-response', error });
     }
+  }
+
+  /** GET an XML document route, surfacing the `x-tableau-*` version headers. */
+  private async getDocument(
+    route: string,
+    signal?: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExternalApiError>> {
+    const response = await this.request('GET', route, { signal });
+    if (response.isErr()) {
+      return Err(response.error);
+    }
+
+    const res = response.value;
+    if (!res.ok) {
+      return Err(await mapErrorResponse(res));
+    }
+
+    try {
+      const xml = await res.text();
+      return Ok({
+        xml,
+        applicationVersion: res.headers.get(HEADER_APPLICATION_VERSION) ?? undefined,
+        xsdPayloadVersion: res.headers.get(HEADER_XSD_PAYLOAD_VERSION) ?? undefined,
+      });
+    } catch (error) {
+      return Err({ type: 'invalid-response', error });
+    }
+  }
+
+  /** GET a JSON route and validate it against `schema`. */
+  private async getDecoded<T>(
+    route: string,
+    schema: z.ZodType<T>,
+    signal?: AbortSignal,
+  ): Promise<Result<T, ExternalApiError>> {
+    const response = await this.request('GET', route, { signal });
+    if (response.isErr()) {
+      return Err(response.error);
+    }
+
+    const res = response.value;
+    if (!res.ok) {
+      return Err(await mapErrorResponse(res));
+    }
+
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch (error) {
+      return Err({ type: 'invalid-response', error });
+    }
+
+    const parsed = schema.safeParse(json);
+    if (!parsed.success) {
+      return Err({ type: 'invalid-response', error: parsed.error });
+    }
+    return Ok(parsed.data);
   }
 
   private async parseEnvelope(
@@ -190,6 +282,20 @@ export class ExternalApiClient {
   private url(route: string): string {
     return `${this.instance.baseUrl.replace(/\/$/, '')}${route}`;
   }
+}
+
+function appendQuery(
+  route: string,
+  params: Record<string, string | number | boolean | undefined>,
+): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) {
+      query.set(key, String(value));
+    }
+  }
+  const qs = query.toString();
+  return qs ? `${route}?${qs}` : route;
 }
 
 async function mapErrorResponse(res: Response): Promise<ExternalApiError> {

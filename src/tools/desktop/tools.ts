@@ -39,6 +39,7 @@ import { getListDashboardsTool } from './workbook/listDashboards.js';
 import { getListWorksheetsTool } from './workbook/listWorksheets.js';
 import { getApplyWorksheetTool } from './worksheet/applyWorksheet.js';
 import { getDeleteWorksheetTool } from './worksheet/deleteWorksheet.js';
+import { getGetWorksheetSummaryDataTool } from './worksheet/getWorksheetSummaryData.js';
 import { getGetWorksheetXmlTool } from './worksheet/getWorksheetXml.js';
 import { getRefineWorksheetTool } from './worksheet/refineWorksheet.js';
 
@@ -50,6 +51,7 @@ export const desktopToolFactories = [
   getListWorksheetsTool,
   getListDashboardsTool,
   getGetWorksheetXmlTool,
+  getGetWorksheetSummaryDataTool,
   getApplyWorksheetTool,
   getDeleteWorksheetTool,
   getRefineWorksheetTool,

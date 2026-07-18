@@ -19,10 +19,7 @@ export const getListWorksheetsTool = (
     server,
     name: 'list-worksheets',
     title,
-    description: [
-      'Gets a list of all worksheet names in the current workbook.',
-      'Use this to see what worksheets exist before editing them.',
-    ].join(' '),
+    description: 'List all worksheet names in the current workbook.',
     paramsSchema,
     annotations: {
       title,

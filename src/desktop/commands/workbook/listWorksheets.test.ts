@@ -158,20 +158,13 @@ describe('listWorksheets (Agent API transport, default)', () => {
 describe('listWorksheets (External Client API transport, TABLEAU_EXTERNAL_API gate)', () => {
   const mockSignal = new AbortController().signal;
 
-  function workbookWith(worksheetNames: string[]): string {
-    const worksheets = worksheetNames
-      .map((name) => `<worksheet name='${name}'><table /></worksheet>`)
-      .join('');
-    return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets></workbook>`;
-  }
-
-  function executorReturning(text: string): LocalExecutor {
+  function executorReturning(worksheets: Array<{ id: string; name: string }>): LocalExecutor {
     return {
       executeCommand: vi.fn().mockResolvedValue(
         Ok({
           command_id: 'cmd-123',
           status: 'completed',
-          parsedResult: { text },
+          parsedResult: { worksheets },
         }),
       ),
     } as unknown as LocalExecutor;
@@ -190,8 +183,12 @@ describe('listWorksheets (External Client API transport, TABLEAU_EXTERNAL_API ga
     vi.restoreAllMocks();
   });
 
-  it('should return worksheet names sliced from the whole-workbook document', async () => {
-    const mockExecutor = executorReturning(workbookWith(['Sheet 1', 'Sales', 'Analysis']));
+  it('should return worksheet names from the typed list route', async () => {
+    const mockExecutor = executorReturning([
+      { id: 'w1', name: 'Sheet 1' },
+      { id: 'w2', name: 'Sales' },
+      { id: 'w3', name: 'Analysis' },
+    ]);
 
     const result = await listWorksheets({ executor: mockExecutor, signal: mockSignal });
 
@@ -205,15 +202,14 @@ describe('listWorksheets (External Client API transport, TABLEAU_EXTERNAL_API ga
 
     expect(mockExecutor.executeCommand).toHaveBeenCalledWith({
       namespace: 'tabui',
-      command: 'save-underlying-metadata',
-      args: { 'is-json': false },
+      command: 'list-worksheets',
       schema: expect.any(Object),
       signal: mockSignal,
     });
   });
 
   it('should return empty list when no worksheets exist', async () => {
-    const mockExecutor = executorReturning('<?xml version="1.0"?><workbook></workbook>');
+    const mockExecutor = executorReturning([]);
 
     const result = await listWorksheets({ executor: mockExecutor, signal: mockSignal });
 
@@ -223,7 +219,7 @@ describe('listWorksheets (External Client API transport, TABLEAU_EXTERNAL_API ga
     }
   });
 
-  it('should return error when the workbook fetch fails', async () => {
+  it('should return error when the list command fails', async () => {
     const error = { type: 'command-failed' as const, error: { code: 'ERROR', message: 'Failed' } };
     const mockExecutor = {
       executeCommand: vi.fn().mockResolvedValue(Err(error)),
@@ -234,17 +230,6 @@ describe('listWorksheets (External Client API transport, TABLEAU_EXTERNAL_API ga
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
       expect(result.error).toEqual(error);
-    }
-  });
-
-  it('should return invalid-response when the workbook XML cannot be parsed', async () => {
-    const mockExecutor = executorReturning('this is not xml <<<');
-
-    const result = await listWorksheets({ executor: mockExecutor, signal: mockSignal });
-
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error.type).toBe('invalid-response');
     }
   });
 });

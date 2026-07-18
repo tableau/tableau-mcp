@@ -10,7 +10,11 @@ import {
   GetEventsArgs,
   ToolExecutor,
 } from '../toolExecutor/toolExecutor.js';
-import { ExternalApiClient, ExternalApiClientOptions } from './externalApiClient.js';
+import {
+  ExternalApiClient,
+  ExternalApiClientOptions,
+  SummaryDataOptions,
+} from './externalApiClient.js';
 import {
   ExternalApiError,
   ExternalApiInstance,
@@ -22,6 +26,13 @@ import {
 const SAVE_UNDERLYING_METADATA = 'save-underlying-metadata';
 /** The single "apply whole workbook document" command, routed to POST /v0/workbook/document. */
 const LOAD_UNDERLYING_METADATA = 'load-underlying-metadata';
+
+/** Commands routed to the typed per-sheet read routes (all under tabui). */
+const LIST_WORKSHEETS = 'list-worksheets';
+const GET_WORKSHEET_DOCUMENT = 'get-worksheet-document';
+const GET_WORKSHEET_SUMMARY_DATA = 'get-worksheet-summary-data';
+const LIST_DASHBOARDS = 'list-dashboards';
+const GET_DASHBOARD_DOCUMENT = 'get-dashboard-document';
 
 const LOGGER = 'ExternalApiToolExecutor';
 
@@ -53,14 +64,8 @@ type RawOutcome = {
 
 /**
  * {@link ToolExecutor} implementation that speaks the Tableau Desktop External Client
- * API ("Athena V0") instead of the legacy Agent API.
- *
- * Command surface → endpoint mapping (thin, verified against localToolExecutor's
- * command shapes):
- *   - `tabui:save-underlying-metadata` (is-json !== true) → GET  /v0/workbook/document
- *   - `tabui:load-underlying-metadata` (with `text`)      → POST /v0/workbook/document
- *   - everything else                                     → POST /v0/app:invokeCommand
- *     (the API resolves the SAME legacy command registry, so params pass through as-is)
+ * API ("Athena V0") instead of the legacy Agent API. {@link callEndpoint} maps each
+ * command to a typed route, falling back to POST /v0/app:invokeCommand.
  *
  * On a 401 (stale discovery file) the executor rescans discovery exactly once and
  * retries with the fresh instance/token.
@@ -288,12 +293,77 @@ export class ExternalApiToolExecutor extends ToolExecutor {
       return Ok(normalizeEnvelope(result.value));
     }
 
+    if (namespace === 'tabui' && command === LIST_WORKSHEETS) {
+      const result = await client.listWorksheets(signal);
+      return result.map((value) => succeeded({ worksheets: value.worksheets }));
+    }
+
+    if (
+      namespace === 'tabui' &&
+      command === GET_WORKSHEET_DOCUMENT &&
+      typeof args.id === 'string'
+    ) {
+      const result = await client.getWorksheetDocument(args.id, signal);
+      return result.map((value) => succeeded({ text: value.xml }));
+    }
+
+    if (
+      namespace === 'tabui' &&
+      command === GET_WORKSHEET_SUMMARY_DATA &&
+      typeof args.id === 'string'
+    ) {
+      const result = await client.getWorksheetSummaryData(
+        args.id,
+        summaryDataOptions(args),
+        signal,
+      );
+      return result.map((value) => succeeded({ columns: value.columns, rows: value.rows }));
+    }
+
+    if (namespace === 'tabui' && command === LIST_DASHBOARDS) {
+      const result = await client.listDashboards(signal);
+      return result.map((value) => succeeded({ dashboards: value.dashboards }));
+    }
+
+    if (
+      namespace === 'tabui' &&
+      command === GET_DASHBOARD_DOCUMENT &&
+      typeof args.id === 'string'
+    ) {
+      const result = await client.getDashboardDocument(args.id, signal);
+      return result.map((value) => succeeded({ text: value.xml }));
+    }
+
     const result = await client.invokeCommand(namespace, command, args, signal);
     if (result.isErr()) {
       return Err(result.error);
     }
     return Ok(normalizeEnvelope(result.value));
   }
+}
+
+/** Wrap a typed-read result into the succeeded {@link RawOutcome} shape the executor expects. */
+function succeeded(result: Record<string, unknown>): RawOutcome {
+  return {
+    result,
+    state: 'succeeded',
+    envelopeError: undefined,
+    createdAt: undefined,
+    completedAt: undefined,
+    operationId: undefined,
+  };
+}
+
+function summaryDataOptions(args: Record<string, unknown>): SummaryDataOptions {
+  return {
+    maxRows: typeof args.maxRows === 'number' ? args.maxRows : undefined,
+    ignoreAliases: typeof args.ignoreAliases === 'boolean' ? args.ignoreAliases : undefined,
+    ignoreSelection: typeof args.ignoreSelection === 'boolean' ? args.ignoreSelection : undefined,
+    columnsToIncludeByFieldName:
+      typeof args.columnsToIncludeByFieldName === 'string'
+        ? args.columnsToIncludeByFieldName
+        : undefined,
+  };
 }
 
 function normalizeEnvelope(envelope: OperationEnvelope): RawOutcome {

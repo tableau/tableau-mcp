@@ -227,22 +227,30 @@ describe('getWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API g
   const mockSignal = new AbortController().signal;
   const worksheetName = 'Sheet 1';
 
-  function workbookWith(worksheetNames: string[]): string {
-    const worksheets = worksheetNames
-      .map((name) => `<worksheet name='${name}'><table><rows /></table></worksheet>`)
-      .join('');
-    return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets></workbook>`;
-  }
-
-  function executorReturning(text: string): LocalExecutor {
+  // Serves the typed reads the external branch issues: list-worksheets (name→id resolve, also
+  // used by the did-you-mean miss path) and get-worksheet-document (returns the sheet's XML).
+  function executorFor(
+    worksheets: Array<{ id: string; name: string }>,
+    documentById: Record<string, string> = {},
+  ): LocalExecutor {
     return {
-      executeCommand: vi.fn().mockResolvedValue(
-        Ok({
-          command_id: 'cmd-123',
-          status: 'completed',
-          parsedResult: { text },
-        }),
-      ),
+      executeCommand: vi.fn().mockImplementation((params) => {
+        if (params.command === 'list-worksheets') {
+          return Promise.resolve(
+            Ok({ command_id: 'cmd-1', status: 'completed', parsedResult: { worksheets } }),
+          );
+        }
+        if (params.command === 'get-worksheet-document') {
+          return Promise.resolve(
+            Ok({
+              command_id: 'cmd-2',
+              status: 'completed',
+              parsedResult: { text: documentById[params.args.id] ?? '' },
+            }),
+          );
+        }
+        return Promise.resolve(Err({ type: 'command-failed', error: { code: 'x', message: 'x' } }));
+      }),
     } as unknown as LocalExecutor;
   }
 
@@ -259,8 +267,14 @@ describe('getWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API g
     vi.restoreAllMocks();
   });
 
-  it('should slice the requested worksheet out of the whole-workbook document', async () => {
-    const mockExecutor = executorReturning(workbookWith(['Sheet 1', 'Sheet 2']));
+  it('should resolve the name to an id and return the worksheet document', async () => {
+    const mockExecutor = executorFor(
+      [
+        { id: 'w1', name: 'Sheet 1' },
+        { id: 'w2', name: 'Sheet 2' },
+      ],
+      { w1: '<worksheet name="Sheet 1"><table /></worksheet>' },
+    );
 
     const result = await getWorksheetXml({
       worksheetName,
@@ -270,21 +284,19 @@ describe('getWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API g
 
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
-      expect(result.value).toContain('<worksheet');
       expect(result.value).toContain('name="Sheet 1"');
-      expect(result.value).not.toContain('Sheet 2');
     }
 
     expect(mockExecutor.executeCommand).toHaveBeenCalledWith({
       namespace: 'tabui',
-      command: 'save-underlying-metadata',
-      args: { 'is-json': false },
+      command: 'get-worksheet-document',
+      args: { id: 'w1' },
       schema: expect.any(Object),
       signal: mockSignal,
     });
   });
 
-  it('should return execute-command-error when the workbook fetch fails', async () => {
+  it('should return execute-command-error when the list command fails', async () => {
     const error = {
       type: 'command-failed' as const,
       error: { code: 'ERROR', message: 'Fetch failed' },
@@ -306,8 +318,8 @@ describe('getWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API g
     }
   });
 
-  it('should return no-worksheet-found when the workbook has no matching worksheet', async () => {
-    const mockExecutor = executorReturning(workbookWith(['Some Other Sheet']));
+  it('should return no-worksheet-found when no worksheet matches the name', async () => {
+    const mockExecutor = executorFor([{ id: 'w9', name: 'Some Other Sheet' }]);
 
     const result = await getWorksheetXml({
       worksheetName,
@@ -323,8 +335,10 @@ describe('getWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API g
     }
   });
 
-  it('should handle worksheet names with special characters', async () => {
-    const mockExecutor = executorReturning(workbookWith(['Sales &amp; Data']));
+  it('should match a worksheet name with special characters', async () => {
+    const mockExecutor = executorFor([{ id: 'w1', name: 'Sales & Data' }], {
+      w1: '<worksheet name="Sales &amp; Data"><table /></worksheet>',
+    });
 
     const result = await getWorksheetXml({
       worksheetName: 'Sales & Data',

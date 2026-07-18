@@ -2,13 +2,12 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getDesktopConfig } from '../../../config.desktop.js';
-import { extractSheetXml } from '../../metadata/sheets.js';
 import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
-import { getWorkbookXml } from './getWorkbookXml.js';
 import { listWorksheets } from './listWorksheets.js';
+import { findByName, listWorksheetItems } from './sheetItems.js';
 
 /**
  * Best-effort "did you mean" suffix for a worksheet-name miss (W6, cluster H). Lists the
@@ -56,8 +55,6 @@ type GetWorksheetXmlResult = Result<
 export async function getWorksheetXml(
   args: { worksheetName: string } & WithExecutorAndAbortSignal,
 ): Promise<GetWorksheetXmlResult> {
-  // External Client API ("Athena V0") exposes no per-sheet route — tabui:save-worksheet is not
-  // in its command registry. Fetch the whole-workbook document and slice client-side instead.
   return getDesktopConfig().externalApiEnabled
     ? getWorksheetXmlViaExternalApi(args)
     : getWorksheetXmlViaAgentApi(args);
@@ -116,19 +113,13 @@ async function getWorksheetXmlViaExternalApi({
   executor,
   signal,
 }: { worksheetName: string } & WithExecutorAndAbortSignal): Promise<GetWorksheetXmlResult> {
-  const workbookResult = await getWorkbookXml({ executor, signal });
-  if (workbookResult.isErr()) {
-    return Err({ type: 'execute-command-error', error: workbookResult.error });
+  const listed = await listWorksheetItems({ executor, signal });
+  if (listed.isErr()) {
+    return Err({ type: 'execute-command-error', error: listed.error });
   }
 
-  let worksheetXml: string | null;
-  try {
-    worksheetXml = extractSheetXml(workbookResult.value, worksheetName);
-  } catch (error) {
-    return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
-  }
-
-  if (worksheetXml === null) {
+  const worksheet = findByName(listed.value, worksheetName);
+  if (!worksheet) {
     const didYouMean = await worksheetNameSuggestions(worksheetName, { executor, signal });
     return Err({
       type: 'get-worksheet-xml-error',
@@ -139,5 +130,16 @@ async function getWorksheetXmlViaExternalApi({
     });
   }
 
-  return Ok(worksheetXml);
+  const result = await executor.executeCommand({
+    namespace: 'tabui',
+    command: 'get-worksheet-document',
+    args: { id: worksheet.id },
+    schema: z.object({ text: z.string() }),
+    signal,
+  });
+  if (result.isErr()) {
+    return Err({ type: 'execute-command-error', error: result.error });
+  }
+
+  return Ok(result.value.parsedResult.text);
 }

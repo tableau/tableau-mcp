@@ -15,10 +15,20 @@ export const EXTERNAL_API_ROUTES = {
   health: '/v0/health',
   app: '/v0/app',
   workbookDocument: '/v0/workbook/document',
+  worksheets: '/v0/workbook/worksheets',
+  dashboards: '/v0/workbook/dashboards',
   invokeCommand: '/v0/app:invokeCommand',
   openapi: '/openapi.json',
   oauthProtectedResource: '/.well-known/oauth-protected-resource',
 } as const;
+
+/** `GET /v0/workbook/worksheets/{id}/document` etc. build off the collection base. */
+export const worksheetDocumentRoute = (id: string): string =>
+  `${EXTERNAL_API_ROUTES.worksheets}/${encodeURIComponent(id)}/document`;
+export const worksheetSummaryDataRoute = (id: string): string =>
+  `${EXTERNAL_API_ROUTES.worksheets}/${encodeURIComponent(id)}/summaryData`;
+export const dashboardDocumentRoute = (id: string): string =>
+  `${EXTERNAL_API_ROUTES.dashboards}/${encodeURIComponent(id)}/document`;
 
 /** Response headers on `GET /v0/workbook/document`. Matched case-insensitively. */
 export const HEADER_APPLICATION_VERSION = 'x-tableau-application-version';
@@ -51,23 +61,39 @@ export type ExternalApiInstance = {
   apiVersion?: string;
 };
 
-/** RFC-7807-style Problem codes surfaced by the API's error model. */
+/**
+ * Problem `code` values the API documents (RFC 9457). Open set: the spec marks `code` an
+ * `x-extensible-enum`, so `problemResponseSchema` accepts any string and this list is the
+ * known set callers may branch on.
+ */
 export const PROBLEM_CODES = [
+  'api-disabled',
+  'host-not-allowed',
+  'origin-not-allowed',
+  'unauthenticated',
+  'missing-user-agent',
   'invalid-request-body',
   'unsupported-content-type',
+  'missing-payload-version',
+  'payload-version-unsupported',
+  'not-found',
+  'sheet-not-found',
+  'method-not-allowed',
+  'not-implemented',
   'command-not-found',
   'invalid-command-parameter',
   'operation-failed',
 ] as const;
 export type ProblemCode = (typeof PROBLEM_CODES)[number];
 
-/** RFC-7807 Problem response body. `code` carries the API-specific error code. */
+/** RFC 9457 Problem response body. `code` carries the API-specific error code. */
 export const problemResponseSchema = z
   .object({
     type: z.string().optional(),
     title: z.string().optional(),
     status: z.number().optional(),
     detail: z.string().optional(),
+    instance: z.string().optional(),
     code: z.string().optional(),
   })
   .passthrough();
@@ -80,10 +106,13 @@ export type ProblemResponse = z.infer<typeof problemResponseSchema>;
  */
 export const operationEnvelopeSchema = z
   .object({
+    id: z.string().optional(),
+    kind: z.string().optional(),
     operationId: z.string().optional(),
     state: z.string().optional(),
     result: z.unknown().optional(),
     error: problemResponseSchema.optional(),
+    warnings: z.array(z.unknown()).optional(),
     createdAt: z.string().optional(),
     completedAt: z.string().optional(),
   })
@@ -96,3 +125,52 @@ export type ExternalApiError =
   | { type: 'problem'; status: number; code?: string; title?: string; detail?: string }
   | { type: 'invalid-response'; error: unknown }
   | { type: 'network'; error: unknown };
+
+/** A worksheet in the open workbook (`GET /v0/workbook/worksheets`). Addressed by `id`. */
+export const worksheetItemSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    hidden: z.boolean(),
+    type: z.string().optional(),
+    index: z.number().optional(),
+    datasources: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type WorksheetItem = z.infer<typeof worksheetItemSchema>;
+
+export const worksheetListSchema = z
+  .object({ worksheets: z.array(worksheetItemSchema) })
+  .passthrough();
+export type WorksheetList = z.infer<typeof worksheetListSchema>;
+
+/** A dashboard in the open workbook (`GET /v0/workbook/dashboards`). Addressed by `id`. */
+export const dashboardItemSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    hidden: z.boolean(),
+    type: z.string().optional(),
+    index: z.number().optional(),
+    containedSheets: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type DashboardItem = z.infer<typeof dashboardItemSchema>;
+
+export const dashboardListSchema = z
+  .object({ dashboards: z.array(dashboardItemSchema) })
+  .passthrough();
+export type DashboardList = z.infer<typeof dashboardListSchema>;
+
+/** Worksheet summary (logical table) data (`GET /v0/workbook/worksheets/{id}/summaryData`). */
+export const summaryDataSchema = z
+  .object({
+    columns: z
+      .array(
+        z.object({ name: z.string().optional(), dataType: z.string().optional() }).passthrough(),
+      )
+      .optional(),
+    rows: z.array(z.array(z.unknown())).optional(),
+  })
+  .passthrough();
+export type SummaryData = z.infer<typeof summaryDataSchema>;
