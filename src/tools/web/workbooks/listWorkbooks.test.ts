@@ -55,7 +55,7 @@ describe('listWorkbooksTool', () => {
     expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filter: 'name:eq:Superstore',
-      pageSize: undefined,
+      pageSize: 1000,
       pageNumber: undefined,
     });
   });
@@ -146,7 +146,7 @@ async function getToolResult(params: { filter: string }): Promise<CallToolResult
   const listWorkbooksTool = getListWorkbooksTool(new WebMcpServer());
   const callback = await Provider.from(listWorkbooksTool.callback);
   return await callback(
-    { filter: params.filter, pageSize: undefined, limit: undefined },
+    { filter: params.filter, limit: undefined },
     getMockRequestHandlerExtra(),
   );
 }

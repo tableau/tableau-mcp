@@ -47,19 +47,6 @@ Example: `updatedAt:gt:2023-01-01T00:00:00Z`
 
 <hr />
 
-### `pageSize`
-
-The value of the `page-size` argument provided to the
-[Query Projects](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_projects.htm#query_projects)
-REST API. The tool automatically performs pagination and will repeatedly call the REST API until
-either all projects are retrieved or the `limit` argument has been reached. The `pageSize` argument
-will determine how many projects to return in each call. You may want to provide a larger value if
-you know in advance that you have more than 100 projects to retrieve.
-
-Example: `1000`
-
-<hr />
-
 ### `limit`
 
 The maximum number of projects to return. The tool will return at most this many projects.

@@ -6,14 +6,13 @@ import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Project } from '../../../sdks/tableau/types/project.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { paginate } from '../../../utils/paginate.js';
+import { MAX_PAGE_SIZE, paginate } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateProjectsFilterString } from './projectsFilterUtils.js';
 
 const paramsSchema = {
   filter: z.string().optional(),
-  pageSize: z.number().gt(0).optional(),
   limit: z.number().gt(0).optional(),
 };
 
@@ -56,7 +55,7 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {
+    callback: async ({ filter, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateProjectsFilterString(filter) : undefined;
 
@@ -73,9 +72,9 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
 
                 const projects = await paginate({
                   pageConfig: {
-                    pageSize,
+                    pageSize: MAX_PAGE_SIZE,
                     limit: maxResultLimit
-                      ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                      ? Math.min(maxResultLimit, limit ?? maxResultLimit)
                       : limit,
                   },
                   getDataFn: async (pageConfig) => {

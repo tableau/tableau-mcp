@@ -55,7 +55,7 @@ describe('listProjectsTool', () => {
     expect(mocks.mockQueryProjects).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filter: 'name:eq:Samples',
-      pageSize: undefined,
+      pageSize: 1000,
       pageNumber: undefined,
     });
   });
@@ -146,7 +146,7 @@ async function getToolResult(params: { filter: string }): Promise<CallToolResult
   const listProjectsTool = getListProjectsTool(new WebMcpServer());
   const callback = await Provider.from(listProjectsTool.callback);
   return await callback(
-    { filter: params.filter, pageSize: undefined, limit: undefined },
+    { filter: params.filter, limit: undefined },
     getMockRequestHandlerExtra(),
   );
 }

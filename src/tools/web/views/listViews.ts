@@ -13,14 +13,13 @@ import {
 import { View } from '../../../sdks/tableau/types/view.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { paginate } from '../../../utils/paginate.js';
+import { MAX_PAGE_SIZE, paginate } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateViewsFilterString } from './viewsFilterUtils.js';
 
 const paramsSchema = {
   filter: z.string().optional(),
-  pageSize: z.number().gt(0).optional(),
   limit: z.number().gt(0).optional(),
 };
 
@@ -74,7 +73,7 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {
+    callback: async ({ filter, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateViewsFilterString(filter) : undefined;
 
@@ -90,9 +89,9 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
                 const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
                 const views = await paginate({
                   pageConfig: {
-                    pageSize,
+                    pageSize: MAX_PAGE_SIZE,
                     limit: maxResultLimit
-                      ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                      ? Math.min(maxResultLimit, limit ?? maxResultLimit)
                       : limit,
                   },
                   getDataFn: async (pageConfig) => {

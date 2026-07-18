@@ -8,7 +8,7 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { CustomView } from '../../../sdks/tableau/types/customView.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { paginate } from '../../../utils/paginate.js';
+import { MAX_PAGE_SIZE, paginate } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
@@ -17,7 +17,6 @@ import { parseAndValidateCustomViewsFilterString } from './customViewsFilterUtil
 const paramsSchema = {
   workbookId: z.string().min(1),
   filter: z.string().optional(),
-  pageSize: z.number().gt(0).optional(),
   limit: z.number().gt(0).optional(),
 };
 
@@ -54,7 +53,7 @@ export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof par
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ workbookId, filter, pageSize, limit }, extra): Promise<CallToolResult> => {
+    callback: async ({ workbookId, filter, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
 
       if (filter?.includes('workbookId:')) {
@@ -116,10 +115,8 @@ export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof par
 
               const customViews = await paginate({
                 pageConfig: {
-                  pageSize,
-                  limit: maxResultLimit
-                    ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
-                    : limit,
+                  pageSize: MAX_PAGE_SIZE,
+                  limit: maxResultLimit ? Math.min(maxResultLimit, limit ?? maxResultLimit) : limit,
                 },
                 getDataFn: async (pageConfig) => {
                   const { pagination, customViews: data } =

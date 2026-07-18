@@ -23,19 +23,6 @@ Example: `name:eq:Project Views`
 
 <hr />
 
-### `pageSize`
-
-The value of the `page-size` argument provided to the
-[Query Data Sources](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources)
-REST API. The tool automatically performs pagination and will repeatedly call the REST API until
-either all data sources are retrieved or the `limit` argument has been reached. The `pageSize`
-argument will determine how many data sources to return in each call. You may want to provide a
-larger value if you know in advance that you have more than 100 data sources to retrieve.
-
-Example: `1000`
-
-<hr />
-
 ### `limit`
 
 The maximum number of data sources to return. The tool will return at most this many data sources.

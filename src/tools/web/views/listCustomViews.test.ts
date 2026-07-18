@@ -60,7 +60,6 @@ describe('listCustomViewsTool', () => {
     expect(listCustomViewsTool.paramsSchema).toMatchObject({
       workbookId: expect.any(Object),
       filter: expect.any(Object),
-      pageSize: expect.any(Object),
       limit: expect.any(Object),
     });
   });
@@ -79,7 +78,7 @@ describe('listCustomViewsTool', () => {
       siteId: 'test-site-id',
       filter: `workbookId:eq:${mockWorkbook.id},viewId:eq:${mockCustomView.view.id}`,
       pageNumber: undefined,
-      pageSize: undefined,
+      pageSize: 1000,
     });
   });
 
@@ -126,7 +125,7 @@ describe('listCustomViewsTool', () => {
       siteId: 'test-site-id',
       filter: `workbookId:eq:${mockWorkbook.id},viewId:eq:${mockCustomView.view.id}`,
       pageNumber: undefined,
-      pageSize: undefined,
+      pageSize: 1000,
     });
   });
 
@@ -263,7 +262,7 @@ async function getToolResult(params: {
   const listCustomViewsTool = getListCustomViewsTool(new WebMcpServer());
   const callback = await Provider.from(listCustomViewsTool.callback);
   return await callback(
-    { workbookId: params.workbookId, filter: params.filter, pageSize: undefined, limit: undefined },
+    { workbookId: params.workbookId, filter: params.filter, limit: undefined },
     getMockRequestHandlerExtra(),
   );
 }

@@ -60,7 +60,7 @@ describe('listViewsTool', () => {
       filter: 'name:eq:Overview',
       includeUsageStatistics: true,
       pageNumber: undefined,
-      pageSize: undefined,
+      pageSize: 1000,
     });
   });
 
@@ -171,7 +171,7 @@ async function getToolResult(params: { filter: string }): Promise<CallToolResult
   const listViewsTool = getListViewsTool(new WebMcpServer());
   const callback = await Provider.from(listViewsTool.callback);
   return await callback(
-    { filter: params.filter, pageSize: undefined, limit: undefined },
+    { filter: params.filter, limit: undefined },
     getMockRequestHandlerExtra(),
   );
 }

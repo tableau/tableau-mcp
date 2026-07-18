@@ -36,7 +36,11 @@ export const getSearchContentTool = (server: WebMcpServer): WebTool<typeof param
     server,
     name: 'search-content',
     description: `
-This tool searches across all supported content types for objects relevant to the search expression specified by search terms and filters.
+This tool performs a free-text, relevance-ranked search across many Tableau content types at once — including workbooks, views, datasources, projects, lenses, flows, tables, databases, virtual connections, data roles, and collections.
+It is backed by Tableau's indexed Content Exploration service, which ranks results by relevance to your search terms (or by usage/popularity when you specify an \`orderBy\`).
+
+Use this tool for keyword or free-text discovery: when you want to find content by name or topic, when you do not know which content type an item is, when you want to search several content types in a single call, or when you want the most relevant or most-viewed items surfaced first.
+It returns a single relevance-ranked page (the top N matches — default 100, max 2000) rather than an exhaustive enumeration of every match, so it is best suited to finding the most relevant items rather than returning every matching item.
 
 **Parameters:**
 
@@ -47,7 +51,7 @@ This tool searches across all supported content types for objects relevant to th
   - \`ownerIds\`: Filter by specific owner IDs (array of integers)
   - \`modifiedTime\`: Filter by last modified times using ISO 8601 date-time strings. Can be either a range (with startDate/endDate) or an array of specific date-times to include
 
-- \`limit\` (optional): The number of items to return in the search response (default: 100, max: 2000)
+- \`limit\` (optional): The maximum number of items to return in the search response (default: 100, max: 2000). Results are a single relevance-ranked page (top N); this tool does not exhaustively enumerate every match.
 
 - \`orderBy\` (optional): Determines the sorting method for returned items. Available sorting methods:
   - \`hitsTotal\`: Number of times a content item has been viewed since it was created

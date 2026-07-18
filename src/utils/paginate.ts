@@ -19,7 +19,7 @@ type PaginateArgs<T> = {
   getDataFn: (pagination: PageConfig) => Promise<{ pagination: Pagination; data: Array<T> }>;
 };
 
-const MAX_PAGE_SIZE = 1000;
+export const MAX_PAGE_SIZE = 1000;
 
 /**
  * Result of {@link paginateWithMetadata}: the items plus enough server-side
