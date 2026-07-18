@@ -26,8 +26,7 @@ const paramsSchema = {
     .optional()
     .describe(
       "'full' (default): table + full metadata incl. column_ref. " +
-        "'slim': fields grouped by datasource — { count, datasources: [{ datasource, contentUrl?, fields: [{ caption, role, datatype }] }] }, no table — much smaller for a wide datasource. " +
-        'slim omits column_ref; use resolve-field for it.',
+        "'slim': caption/role/datatype grouped by datasource, no table — much smaller for a wide datasource; get column_ref via resolve-field.",
     ),
 };
 
