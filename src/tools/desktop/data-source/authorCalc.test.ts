@@ -78,6 +78,32 @@ describe('authorCalcTool', () => {
     );
   });
 
+  it('ignores worksheet-dependencies datasource clones (live 2026-07-19: splicing a clone is silently discarded)', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const xml = BASE_XML.replace(
+      "<worksheets><worksheet name='Sheet 1' /></worksheets>",
+      "<worksheets><worksheet name='Sheet 1'><table><view><datasources><datasource name='Superstore' /></datasources><datasource-dependencies datasource='Superstore'><column caption='Sales' datatype='real' name='[Sales]' role='measure' type='quantitative' /></datasource-dependencies></view></table></worksheet></worksheets>",
+    );
+
+    const { result, executeCommand } = await getToolResult({
+      args: { caption: 'Margin', formula: '[Sales] * 0.2' },
+      initialXml: xml,
+      readbackXml: withColumn(
+        xml,
+        "<column caption='Margin' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[Sales] * 0.2' /></column>",
+      ),
+    });
+
+    expect(result.isError).toBe(false);
+    const loadCall = commandCalls(executeCommand).find(
+      (call) => call.command === 'load-underlying-metadata',
+    );
+    invariant(loadCall?.args && typeof loadCall.args.text === 'string');
+    // the splice must land INSIDE the top-level <datasources> block, before its close
+    const loaded = loadCall.args.text;
+    expect(loaded.indexOf("caption='Margin'")).toBeLessThan(loaded.indexOf('</datasources>'));
+  });
+
   it('rejects multiple candidate datasources without a selector and lists them', async () => {
     const xml = BASE_XML.replace(
       '</datasources>',

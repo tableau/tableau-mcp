@@ -169,8 +169,18 @@ function selectTargetDatasource(
 
 function findDatasourceElements(xml: string): DatasourceElement[] {
   const elements: DatasourceElement[] = [];
+  // Worksheet <dependencies> blocks clone <datasource name='...'> elements —
+  // splicing into a clone is silently discarded by Tableau (live, 2026-07-19).
+  // Only the top-level <datasources> block holds the real ones.
+  const blockStart = xml.indexOf('<datasources>');
+  const blockEnd = xml.indexOf('</datasources>', blockStart);
+  const scanFrom = blockStart === -1 ? 0 : blockStart;
+  const scanTo = blockEnd === -1 ? xml.length : blockEnd;
   const openTagRe = /<datasource\b[^>]*(?:\/>|>)/g;
   for (const match of xml.matchAll(openTagRe)) {
+    if (match.index < scanFrom || match.index >= scanTo) {
+      continue;
+    }
     const openTag = match[0];
     const openStart = match.index;
     const openEnd = openStart + openTag.length;
