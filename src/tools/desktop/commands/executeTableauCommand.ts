@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { validateKnownCommand } from '../../../desktop/commandRegistry.js';
+import { validateNotionalSpecArgs } from '../../../desktop/notionalSpecGuard.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -64,6 +65,11 @@ export const getExecuteTableauCommandTool = (
           const commandValidation = validateKnownCommand(command);
           if (!commandValidation.ok) {
             return new ArgsValidationError(commandValidation.message).toErr();
+          }
+
+          const notionalSpecValidation = validateNotionalSpecArgs(command, args);
+          if (!notionalSpecValidation.ok) {
+            return new ArgsValidationError(notionalSpecValidation.message).toErr();
           }
 
           const executor = await extra.getExecutor(resolvedSession);
