@@ -88,6 +88,24 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     requiredEvidence: [],
   },
   {
+    kind: 'route',
+    id: 'dynamic-authoring',
+    trigger:
+      'a DYNAMIC ask — a parameter the user drives (pick N, pick a period), computed top/bottom-N membership, click-to-change interaction, or mark labels',
+    action:
+      "use the author-* verbs, never raw commands or hand-written XML. Author parameters FIRST via author-parameter (it reopens Desktop and re-pins the session itself — when it returns { reopened: true } continue immediately; stagePath is optional). Then author-set for param-linked top/bottom-N membership (count accepts '[Parameters].[Parameter N]' — that binding is what makes it dynamic), author-calc for calculated fields, author-action for click-to-parameter wiring, format-labels for mark labels. Build the sheets and dashboard around them with the notional-spec loop (execute-tableau-command).",
+    toolSequence: [
+      'author-parameter',
+      'author-set',
+      'author-calc',
+      'author-action',
+      'format-labels',
+      'execute-tableau-command',
+    ],
+    stopConditions: ['when it returns { reopened: true } continue immediately'],
+    requiredEvidence: ["each author-* verb's readback-verified result object"],
+  },
+  {
     kind: 'prose',
     id: 'ask-user-ambiguity',
     text: 'If ambiguity changes workbook content, call ask-user with urgency=blocking; stop for answer.',
