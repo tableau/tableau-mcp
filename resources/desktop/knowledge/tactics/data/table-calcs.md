@@ -2,6 +2,8 @@
 
 Complete empirically-confirmed reference for all table calculation types in Tableau Desktop: Quick Table Calcs (applied to native measures) and custom `derivation="User"` calculated fields. All patterns captured via `tableau-get-worksheet` after manual authoring (2026-06-25).
 
+**⇒ Wrong-fork check (live Desktop):** CREATING a running total / moving average / rank on a running Tableau Desktop via the External API? Do NOT hand-edit worksheet or workbook XML with these patterns — author the calc through the whole-document round-trip in [NotionalSpec Calc Authoring](notional-spec-calc-authoring.md), then chart it by caption with a spec. These XML patterns are for file-mode authoring and for READING existing table calcs.
+
 ---
 
 ## Scope Check
