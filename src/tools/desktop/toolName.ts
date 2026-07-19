@@ -36,6 +36,7 @@ export const desktopToolNames = [
   'batch-create-and-cache-sheets',
   'build-and-apply-worksheet',
   'list-xml-templates',
+  'author-calc',
   'validate-worksheet-xml',
   'validate-workbook-xml',
   'read-cached-xml',
