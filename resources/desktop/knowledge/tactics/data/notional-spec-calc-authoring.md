@@ -1,5 +1,7 @@
 # Calculated Fields for the Semantic Loop (Whole-Document Round-Trip)
 
+**Dynamic-dashboard companion:** `notional-spec-dynamic-authoring.md` — the router for the full author-* verb set (sets, parameters, actions, formatting) and the key-signature/melody law. This doc is the calc detail within it.
+
 The NotionalSpec schema cannot express calculated fields — but calcs are how analytic asks (running totals, moving averages, ratios, rank) become chartable. This module covers the ONE working path for authoring calcs on the semantic loop: the whole-workbook-document round-trip, live-proven with Workout-Wednesday-grade window calcs (2026-07-19, 12 calcs in one splice, no dialogs, no Cloud sign-in).
 
 ---
