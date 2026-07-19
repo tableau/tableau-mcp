@@ -53,6 +53,27 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
 ]);
 
 /**
+ * EXPERIMENT (experiment/spec-loop-studio): the ruthless spec-loop-first surface,
+ * selected by TOOL_PROFILE=spec-loop. Hypothesis under test: the native semantic
+ * loop — generate-viz-from-notional-spec for charts, the whole-document GET/POST
+ * for calcs, both dispatched through execute-tableau-command on the /v0 External
+ * API — is sufficient on its own, with NO XML tools, NO templates, NO bind-template.
+ * Everything a chart/calc/dashboard ask needs routes through execute-tableau-command;
+ * the rest is discovery + readback (the /v0 generic route is write-blind, so the
+ * list-* tools are how the model observes state). Proven by hand 2026-07-19: a full
+ * analytics workbook (calcs + charts + dashboard) authored live in seconds, zero XML.
+ * The known-command guard (from #542) makes the single execute-tableau-command tool
+ * safe against hallucinated verbs.
+ */
+export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopToolName>([
+  'execute-tableau-command',
+  'list-instances',
+  'list-available-fields',
+  'list-worksheets',
+  'list-dashboards',
+]);
+
+/**
  * Select the tools to register for a given TOOL_PROFILE value (already normalized by
  * Config: trim + lowercase). 'demo' → the slim {@link DEMO_TOOL_PROFILE} subset; '' (unset)
  * or 'full' → the full set unchanged (same array reference — byte-identical behavior); any
@@ -65,6 +86,9 @@ export function selectToolsForProfile<T extends { name: DesktopToolName }>(
 ): T[] {
   if (profile === 'demo') {
     return tools.filter((tool) => DEMO_TOOL_PROFILE.has(tool.name));
+  }
+  if (profile === 'spec-loop') {
+    return tools.filter((tool) => SPEC_LOOP_TOOL_PROFILE.has(tool.name));
   }
   // 'combined-lean' means "full desktop surface, lazy web surface" — the web half is
   // handled by WebMcpServer; the desktop half registers everything, same as 'full'.
