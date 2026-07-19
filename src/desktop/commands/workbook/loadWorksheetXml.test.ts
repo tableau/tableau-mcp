@@ -130,7 +130,9 @@ describe('loadWorksheetXml (Agent API transport, default)', () => {
         command_id: 'cmd-list',
         status: 'completed',
         submitted_at: '',
-        parsedResult: { worksheets: JSON.stringify({ count: 0, worksheets: [] as Array<{ name: string }> }) },
+        parsedResult: {
+          worksheets: JSON.stringify({ count: 0, worksheets: [] as Array<{ name: string }> }),
+        },
       }),
     });
 
