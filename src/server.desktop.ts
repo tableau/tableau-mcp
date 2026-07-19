@@ -80,7 +80,9 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * dynamic dialect authorable with ZERO agent-visible XML — author-calc (ratios/rank/
  * running-total/LOD), author-set (param-linked Top/Bottom-N), author-parameter (the
  * key signature, born at OPEN), author-action (parameter-change wiring), format-labels
- * (mark labels). Ten tools cover the full Workout-Wednesday-W44 dialect; no raw XML
+ * (mark labels) — PLUS ask-user (ambiguity goes to the human, never to a guess) and
+ * search-commands (how the singer discovers the execute-tableau-command dialect).
+ * Twelve tools cover the full Workout-Wednesday-W44 dialect; no raw XML
  * get/apply, no cache, no validation, no templates. This is the "make it shorter"
  * answer — a lean, semantically-named surface under the 46k tools/list cliff, not a
  * describe-stub trim of the 45-tool default. Mechanism map live-proven 2026-07-19
@@ -89,6 +91,8 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
 export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
   new Set<DesktopToolName>([
     'execute-tableau-command',
+    'search-commands',
+    'ask-user',
     'list-instances',
     'list-available-fields',
     'list-worksheets',

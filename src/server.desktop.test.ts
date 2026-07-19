@@ -340,16 +340,19 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 10-tool singable surface — the spec-loop 5 + the author-* 5, no XML/cache/template tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 12-tool singable surface — the spec-loop 5 + the author-* 5 + ask-user + search-commands, no XML/cache/template tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    // The full dynamic dialect, semantically named — every author-* verb present.
+    // The full dynamic dialect, semantically named — every author-* verb present,
+    // plus the ask-for-help and command-discovery doors (CODA's joy-cut overshot).
     for (const verb of [
       'author-calc',
       'author-set',
       'author-parameter',
       'author-action',
       'format-labels',
+      'ask-user',
+      'search-commands',
     ]) {
       expect(selected.map((t) => t.name)).toContain(verb);
     }
