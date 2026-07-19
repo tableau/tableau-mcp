@@ -9,6 +9,14 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getExecuteTableauCommandTool } from './executeTableauCommand.js';
 
 const SESSION = 'session-1';
+const LIVE_UNDERLYING_METADATA_XML = `<workbook>
+  <datasources><datasource name='ds' /></datasources>
+  <worksheets><worksheet name='A' /><worksheet name='B' /></worksheets>
+</workbook>`;
+const STALE_UNDERLYING_METADATA_XML = `<workbook>
+  <datasources><datasource name='ds' /></datasources>
+  <worksheets><worksheet name='A' /></worksheets>
+</workbook>`;
 
 function makeExtra(
   executeCommandImpl: (...args: any[]) => any,
@@ -292,6 +300,75 @@ describe('executeTableauCommandTool', () => {
           namespace: 'tabdoc',
           command: 'delete-sheet',
           args: { Sheet: 'Sheet1' },
+        }),
+      );
+    });
+  });
+
+  describe('underlying metadata guard', () => {
+    it('rejects a stale whole-document load before dispatching it', async () => {
+      const executeCommand = vi.fn(async (params: any) => {
+        if (params.command === 'save-underlying-metadata') {
+          return new Ok({
+            command_id: 'save-1',
+            parsedResult: { text: LIVE_UNDERLYING_METADATA_XML },
+          });
+        }
+        return new Ok({ command_id: 'load-1', result: null });
+      });
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabui:load-underlying-metadata',
+          args: { text: STALE_UNDERLYING_METADATA_XML },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('DROP worksheet(s) B');
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          namespace: 'tabui',
+          command: 'save-underlying-metadata',
+          args: {},
+        }),
+      );
+      expect(
+        executeCommand.mock.calls.some(([params]) => params.command === 'load-underlying-metadata'),
+      ).toBe(false);
+    });
+
+    it('fails open and dispatches when the live document fetch fails', async () => {
+      const executeCommand = vi.fn(async (params: any) => {
+        if (params.command === 'save-underlying-metadata') {
+          return {
+            isErr: (): boolean => true,
+            error: { type: 'command-timed-out' as const, error: 'Timeout' },
+          };
+        }
+        return new Ok({ command_id: 'load-1', result: null });
+      });
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabui:load-underlying-metadata',
+          args: { text: LIVE_UNDERLYING_METADATA_XML },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          namespace: 'tabui',
+          command: 'load-underlying-metadata',
+          args: { text: LIVE_UNDERLYING_METADATA_XML },
         }),
       );
     });
