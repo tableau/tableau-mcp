@@ -12,6 +12,7 @@ import { getBuildAndApplyWorksheetTool } from './coordination/buildAndApplyWorks
 import { getListXmlTemplatesTool } from './coordination/listXmlTemplates.js';
 import { getPlanDashboardCreationTool } from './coordination/planDashboardCreation.js';
 import { getAuthorCalcTool } from './data-source/authorCalc.js';
+import { getAuthorSetTool } from './data-source/authorSet.js';
 import { getApplyDashboardTool } from './dashboard/applyDashboard.js';
 import { getApplyDashboardWithViewpointsTool } from './dashboard/applyDashboardWithViewpoints.js';
 import { getBuildAndApplyDashboardTool } from './dashboard/buildAndApplyDashboard.js';
@@ -81,6 +82,7 @@ export const desktopToolFactories = [
   getBuildAndApplyWorksheetTool,
   getListXmlTemplatesTool,
   getAuthorCalcTool,
+  getAuthorSetTool,
   getValidateWorksheetXmlTool,
   getValidateWorkbookXmlTool,
   getReadCachedXmlTool,

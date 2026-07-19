@@ -37,6 +37,7 @@ export const desktopToolNames = [
   'build-and-apply-worksheet',
   'list-xml-templates',
   'author-calc',
+  'author-set',
   'validate-worksheet-xml',
   'validate-workbook-xml',
   'read-cached-xml',
