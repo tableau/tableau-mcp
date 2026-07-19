@@ -5,15 +5,19 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
+import { getExternalApiDiscoveryDir } from '../../../desktop/externalApi/discovery.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
+import { deriveStageSiblingPath, reopenFromStage } from '../../../desktop/stageReopen.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   FileReadError,
+  McpToolError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
+import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 
 const datatypeSchema = z.enum(['integer', 'real', 'string', 'boolean', 'date']);
 
@@ -21,25 +25,39 @@ const datatypeSchema = z.enum(['integer', 'real', 'string', 'boolean', 'date']);
 // PROVEN live 2026-07-19 (CODA): the Parameters datasource is FROZEN to live merge —
 // create/add/value-edit are all silently refused (envelope SUCCEEDED, readback
 // unchanged). A parameter is born ONLY at OPEN time: seed it into the document on
-// disk, then reopen. So this verb writes the seeded stage and reports reopenRequired;
-// the serving layer performs the reopen + re-pin (a session-lifecycle event, never
-// hidden). Parameters are the "key signature" — established once, at the top.
+// disk, then reopen and re-pin when the live Desktop stack can prove the reopened
+// document contains the new parameter. Parameters are the "key signature" —
+// established once, at the top.
 const paramsSchema = {
   session: z.string().optional().describe(''),
   caption: z.string().describe(''),
   datatype: datatypeSchema.default('integer').describe(''),
   value: z.string().describe(''),
   members: z.array(z.string()).optional().describe(''),
-  stagePath: z.string().describe(''),
+  stagePath: z.string().optional().describe(''),
 };
 
-type AuthorParameterResult = {
+type AuthorParameterFallbackResult = {
   parameterName: string;
   caption: string;
   stagePath: string;
   reopenRequired: true;
   hint: string;
+  reopenError?: string;
 };
+
+type AuthorParameterReopenedResult = {
+  parameterName: string;
+  caption: string;
+  stagePath: string;
+  reopened: true;
+  oldSession: string;
+  newSession: string;
+  hint: string;
+  killWarning?: string;
+};
+
+type AuthorParameterResult = AuthorParameterFallbackResult | AuthorParameterReopenedResult;
 
 const title = 'Author Parameter';
 export const getAuthorParameterTool = (
@@ -69,13 +87,21 @@ export const getAuthorParameterTool = (
           if (caption.trim().length === 0) {
             return new ArgsValidationError('caption empty').toErr();
           }
-          if (stagePath.trim().length === 0) {
-            return new ArgsValidationError('stagePath empty').toErr();
-          }
 
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
+          }
+
+          // Untaught agents should not have to invent filesystem paths: when stagePath
+          // is omitted, stage beside the live workbook's own file.
+          let effectiveStagePath = stagePath?.trim() ?? '';
+          if (effectiveStagePath.length === 0) {
+            const derivedResult = await deriveStageSiblingPath({ oldPid: sessionResult.value });
+            if (derivedResult.isErr()) {
+              return derivedResult.error.toErr();
+            }
+            effectiveStagePath = derivedResult.value;
           }
 
           const executor = await extra.getExecutor(sessionResult.value);
@@ -98,18 +124,62 @@ export const getAuthorParameterTool = (
             return editResult.error.toErr();
           }
 
+          const trimmedStagePath = effectiveStagePath;
           try {
-            writeFileSync(resolve(stagePath.trim()), editResult.value, 'utf-8');
+            writeFileSync(resolve(trimmedStagePath), editResult.value, 'utf-8');
           } catch (error) {
             return new FileReadError(error).toErr();
           }
 
+          const fallback = (reopenError?: string): Ok<AuthorParameterFallbackResult> =>
+            new Ok({
+              parameterName: paramName,
+              caption,
+              stagePath: trimmedStagePath,
+              reopenRequired: true,
+              hint: 'parameters are born at OPEN — reopen Desktop from stagePath and re-pin the session; merged calcs/sets/actions/formatting carry through the reopen',
+              ...(reopenError ? { reopenError } : {}),
+            });
+
+          // Same resolution as instance discovery: env override, else the platform's
+          // standard dir — the serving path never forwards the env, so a hard guard
+          // here would silently kill the reopen in production.
+          const discoveryDir = getExternalApiDiscoveryDir();
+
+          const reopenResult = await reopenFromStage({
+            stagePath: trimmedStagePath,
+            oldPid: sessionResult.value,
+            discoveryDir,
+          });
+          if (reopenResult.isErr()) {
+            return fallback(oneLineReason(reopenResult.error));
+          }
+
+          const verifyResult = await verifyReopenedParameter({
+            getExecutor: extra.getExecutor,
+            newPid: reopenResult.value.newPid,
+            signal: extra.signal,
+            caption,
+          });
+          if (verifyResult.isErr()) {
+            return fallback(oneLineReason(verifyResult.error));
+          }
+
+          if (process.env.TABLEAU_DESKTOP_SESSION_ID !== undefined) {
+            process.env.TABLEAU_DESKTOP_SESSION_ID = String(reopenResult.value.newPid);
+          }
+
+          const killWarning = terminateOldSession(sessionResult.value);
+
           return new Ok({
             parameterName: paramName,
             caption,
-            stagePath: stagePath.trim(),
-            reopenRequired: true,
-            hint: 'parameters are born at OPEN — reopen Desktop from stagePath and re-pin the session; merged calcs/sets/actions/formatting carry through the reopen',
+            stagePath: trimmedStagePath,
+            reopened: true,
+            oldSession: sessionResult.value,
+            newSession: reopenResult.value.newPid,
+            hint: 'parameter born at reopen; session re-pinned — continue authoring, melody merges (calcs/sets/actions/formatting) now target the reopened instance',
+            ...(killWarning ? { killWarning } : {}),
           });
         },
       });
@@ -118,6 +188,48 @@ export const getAuthorParameterTool = (
 
   return tool;
 };
+
+async function verifyReopenedParameter({
+  getExecutor,
+  newPid,
+  signal,
+  caption,
+}: {
+  getExecutor: TableauDesktopRequestHandlerExtra['getExecutor'];
+  newPid: string;
+  signal: AbortSignal;
+  caption: string;
+}): Promise<Result<void, McpToolError>> {
+  try {
+    const executor = await getExecutor(newPid);
+    const readResult = await getWorkbookXml({ executor, signal });
+    if (readResult.isErr()) {
+      return new DesktopCommandExecutionError(readResult.error).toErr();
+    }
+    if (!hasParameterCaption(readResult.value, caption)) {
+      return new ArgsValidationError(
+        `reopened workbook did not contain parameter caption ${caption}`,
+      ).toErr();
+    }
+    return Ok.EMPTY;
+  } catch (error) {
+    return new ArgsValidationError(`failed to verify reopened workbook: ${oneLineReason(error)}`).toErr();
+  }
+}
+
+function terminateOldSession(oldPid: string): string | undefined {
+  try {
+    process.kill(Number(oldPid), 'SIGTERM');
+    return undefined;
+  } catch (error) {
+    return `failed to terminate old Tableau Desktop pid ${oldPid}: ${oneLineReason(error)}`;
+  }
+}
+
+function oneLineReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/\s+/g, ' ').trim();
+}
 
 function hasParameterCaption(xml: string, caption: string): boolean {
   const ds = parametersDatasource(xml);
