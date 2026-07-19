@@ -1,7 +1,45 @@
 import { log } from '../../../logging/logger.js';
 import { WithExecutorAndAbortSignal } from '../../toolExecutor/toolExecutor.js';
+import { listDashboards } from './listDashboards.js';
+import { listWorksheets } from './listWorksheets.js';
 
 type ApplyCommand = 'load-worksheet' | 'load-dashboard';
+
+// goto-sheet at a name Desktop doesn't know throws a BLOCKING modal
+// (47BF7751 "bad value: sheet") instead of returning an error — and an apply
+// is async enough that its sheet can be missing at focus time (live-reproduced
+// twice, 2026-07-19). Confirm the sheet exists before offering to focus it;
+// a skipped focus is a log line, a modal is a wedged stage.
+const FOCUS_POLL_ATTEMPTS = 4;
+const FOCUS_POLL_DELAY_MS = 250;
+
+async function appliedSheetVisible({
+  sheetName,
+  appliedVia,
+  executor,
+  signal,
+}: {
+  sheetName: string;
+  appliedVia: ApplyCommand;
+} & WithExecutorAndAbortSignal): Promise<boolean> {
+  for (let attempt = 0; attempt < FOCUS_POLL_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, FOCUS_POLL_DELAY_MS));
+    }
+    if (appliedVia === 'load-dashboard') {
+      const result = await listDashboards({ executor, signal });
+      if (result.isOk() && result.value.dashboards.includes(sheetName)) {
+        return true;
+      }
+    } else {
+      const result = await listWorksheets({ executor, signal });
+      if (result.isOk() && result.value.worksheets.includes(sheetName)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 export async function focusAppliedSheetBestEffort({
   sheetName,
@@ -13,6 +51,17 @@ export async function focusAppliedSheetBestEffort({
   appliedVia: ApplyCommand;
 } & WithExecutorAndAbortSignal): Promise<void> {
   try {
+    if (!(await appliedSheetVisible({ sheetName, appliedVia, executor, signal }))) {
+      log({
+        level: 'warning',
+        message:
+          'skipping goto-sheet: applied sheet not visible yet — focusing an unknown name throws a blocking Desktop modal',
+        logger: 'workbookCommands',
+        data: { sheetName, appliedVia },
+      });
+      return;
+    }
+
     const result = await executor.executeCommand({
       namespace: 'tabdoc',
       command: 'goto-sheet',

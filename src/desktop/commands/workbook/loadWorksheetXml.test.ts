@@ -78,6 +78,24 @@ describe('loadWorksheetXml (Agent API transport, default)', () => {
           parsedResult: { worksheetXml: readbackXml },
         });
       }
+      if (params.command === 'list-worksheets') {
+        // The pre-focus existence check (modal-killer) polls this; answer
+        // with the names present in the applied XML (canonical spellings)
+        // unless a test overrides it.
+        const xmlNames = [...readbackXml.matchAll(/worksheet name="([^"]*)"/g)].map((m) => m[1]);
+        const names = xmlNames.length > 0 ? xmlNames : [worksheetName];
+        return Ok({
+          command_id: 'cmd-list',
+          status: 'completed',
+          submitted_at: '',
+          parsedResult: {
+            worksheets: JSON.stringify({
+              count: names.length,
+              worksheets: names.map((name) => ({ name })),
+            }),
+          },
+        });
+      }
       return Ok({ command_id: 'cmd-ok', status: 'completed', submitted_at: '' });
     });
     return { executor: { executeCommand } as unknown as LocalExecutor, calls, executeCommand };
@@ -101,6 +119,32 @@ describe('loadWorksheetXml (Agent API transport, default)', () => {
       command: 'goto-sheet',
       args: { sheet: worksheetName },
     });
+  });
+
+  it('skips goto-sheet when the applied sheet never becomes visible (modal-killer)', async () => {
+    // goto-sheet at an unknown name throws blocking Desktop modal 47BF7751
+    // instead of returning an error — reproduce the async-apply race by
+    // answering the existence poll with an empty workbook.
+    const { executor, calls } = dispatchingAgentExecutor(validXml, {
+      'list-worksheets': Ok({
+        command_id: 'cmd-list',
+        status: 'completed',
+        submitted_at: '',
+        parsedResult: {
+          worksheets: JSON.stringify({ count: 0, worksheets: [] as Array<{ name: string }> }),
+        },
+      }),
+    });
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true); // apply still succeeds
+    expect(calls.some((c) => c.command === 'goto-sheet')).toBe(false); // no focus, no modal
   });
 
   it('suppresses the post-apply goto-sheet when suppressFocus is set (compose-focus seam)', async () => {
