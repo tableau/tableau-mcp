@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { validateKnownCommand } from '../../../desktop/commandRegistry.js';
 import { validateNotionalSpecArgs } from '../../../desktop/notionalSpecGuard.js';
+import { validateCommandParams } from '../../../desktop/paramContractGuard.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -65,6 +66,14 @@ export const getExecuteTableauCommandTool = (
           const commandValidation = validateKnownCommand(command);
           if (!commandValidation.ok) {
             return new ArgsValidationError(commandValidation.message).toErr();
+          }
+
+          // Generic param-contract guard: runs after the verb is confirmed known,
+          // before the deeper NotionalSpec payload guard. Fails open on commands
+          // with zero declared "in" params so the two never contradict.
+          const paramValidation = validateCommandParams(command, args);
+          if (!paramValidation.ok) {
+            return new ArgsValidationError(paramValidation.message).toErr();
           }
 
           const notionalSpecValidation = validateNotionalSpecArgs(command, args);
