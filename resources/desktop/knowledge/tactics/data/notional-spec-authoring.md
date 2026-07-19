@@ -2,6 +2,8 @@
 
 Use NotionalSpec when the right abstraction is a semantic chart request, not workbook XML. This module covers the native Tableau command pair that generates a worksheet from a compact semantic spec — the fastest, safest authoring path for every chart family in the v0.2 enum.
 
+**Failure recovery companion:** when this loop errors, lands wrong, or the workbook changes underneath you, see `../workflow/notional-spec-recovery.md` before falling back or retrying.
+
 Verification status: LIVE-VERIFIED on Tableau Desktop (main, 2026-07-19) via `execute-tableau-command`: `bar`, `line`, `filledmap`, `treemap`, `scatterplot`, `pie`, descending sort, top-N categorical filter, color/size/detail encodings, dashboard assembly alongside `new-dashboard`/`add-sheet-to-dashboard`. Per-command wall time 37–120 ms.
 
 ---
