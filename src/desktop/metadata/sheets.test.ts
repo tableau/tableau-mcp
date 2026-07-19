@@ -1,0 +1,77 @@
+import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
+import { addSheet, deleteSheet, extractSheetXml, listSheets } from './sheets.js';
+
+// Real-world shape: the <workbook> root declares xmlns:user, and a worksheet's level-members
+// filter carries a user:-prefixed attribute (confirmed pattern, see refineWorksheet.test.ts).
+// The declaration lives on the ancestor <workbook> element, not on <worksheet> itself.
+const WORKBOOK_WITH_USER_NAMESPACE = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook original-version='18.1' source-build='0.0.0 (0000.26.0531.2046)' source-platform='mac' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <worksheets>
+    <worksheet name='Sales by Region'>
+      <table>
+        <view>
+          <filter class='categorical' column='[none:Region:nk]'>
+            <groupfilter function='level-members' level='[none:Region:nk]' user:ui-enumeration='all' />
+          </filter>
+        </view>
+      </table>
+    </worksheet>
+  </worksheets>
+</workbook>`;
+
+describe('extractSheetXml', () => {
+  it('finds and extracts an existing worksheet', () => {
+    const xml = extractSheetXml(WORKBOOK_WITH_USER_NAMESPACE, 'Sales by Region');
+    expect(xml).not.toBeNull();
+    expect(xml).toContain('<worksheet');
+    expect(xml).toContain('name="Sales by Region"');
+  });
+
+  it('returns null for a worksheet that does not exist', () => {
+    expect(extractSheetXml(WORKBOOK_WITH_USER_NAMESPACE, 'Does Not Exist')).toBeNull();
+  });
+
+  // Live-bug regression (Tableau Desktop, get-worksheet-xml -> unmodified apply-worksheet):
+  // extracting a <worksheet> subtree that uses a user:-prefixed attribute, out of a <workbook>
+  // that declares xmlns:user only on its own root, must not strip the namespace declaration.
+  // An untouched get -> apply round-trip must always pass the same well-formed-xml preflight
+  // that apply-worksheet runs — a NamespaceError here is exactly the live failure mode.
+  it('carries the xmlns:user declaration from the workbook root onto the extracted worksheet', () => {
+    const xml = extractSheetXml(WORKBOOK_WITH_USER_NAMESPACE, 'Sales by Region');
+    expect(xml).not.toBeNull();
+    expect(xml).toContain('user:ui-enumeration');
+
+    const issues = wellFormedXmlRule.validate(xml!);
+    const errors = issues.filter((i) => i.severity === 'error');
+    expect(errors).toEqual([]);
+  });
+
+  it('does not overwrite a namespace declaration the worksheet already carries itself', () => {
+    const workbookWithConflict = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <worksheets>
+    <worksheet name='q' xmlns:user='http://example.com/already-declared'>
+      <table></table>
+    </worksheet>
+  </worksheets>
+</workbook>`;
+    const xml = extractSheetXml(workbookWithConflict, 'q');
+    expect(xml).toContain('http://example.com/already-declared');
+    expect(xml).not.toContain('http://www.tableausoftware.com/xml/user');
+  });
+});
+
+describe('listSheets', () => {
+  it('lists worksheet names', () => {
+    expect(listSheets(WORKBOOK_WITH_USER_NAMESPACE)).toEqual(['Sales by Region']);
+  });
+});
+
+describe('addSheet / deleteSheet', () => {
+  it('round-trips add then delete', () => {
+    const added = addSheet(WORKBOOK_WITH_USER_NAMESPACE, 'New Sheet');
+    expect(listSheets(added)).toContain('New Sheet');
+    const deleted = deleteSheet(added, 'New Sheet');
+    expect(listSheets(deleted)).not.toContain('New Sheet');
+  });
+});

@@ -1,4 +1,11 @@
-import { findWorksheet, generateUUID, normalizeArray, parseXML, serializeXML } from './parser.js';
+import {
+  carryNamespaceDeclarations,
+  findWorksheet,
+  generateUUID,
+  normalizeArray,
+  parseXML,
+  serializeXML,
+} from './parser.js';
 import type { ParsedWindow, ParsedWorksheet } from './types.js';
 
 export function addSheet(workbookXml: string, sheetName: string): string {
@@ -120,6 +127,7 @@ export function extractSheetXml(workbookXml: string, sheetName: string): string 
   if (!worksheet) {
     return null;
   }
+  carryNamespaceDeclarations(workbook.workbook, worksheet);
   return serializeXML({ worksheet });
 }
 
