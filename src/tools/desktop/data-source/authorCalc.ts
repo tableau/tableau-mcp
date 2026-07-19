@@ -100,7 +100,18 @@ export const getAuthorCalcTool = (server: DesktopMcpServer): DesktopTool<typeof 
           }
 
           const calcName = nextCalculationName(liveXml, Date.now());
-          const columnXml = renderCalculationColumn({ caption, formula, role, datatype, calcName });
+          // Layered calcs reference siblings by CAPTION, but Tableau formulas
+          // resolve internal names — and authored calcs get [Calculation_N]
+          // names the agent cannot know (live: 5 of 6 calcs red-! broken,
+          // 2026-07-19). Rewrite bracketed caption tokens to internal names.
+          const resolvedFormula = resolveCaptionReferences(formula, target.xml);
+          const columnXml = renderCalculationColumn({
+            caption,
+            formula: resolvedFormula,
+            role,
+            datatype,
+            calcName,
+          });
           const editedXml = spliceColumnIntoDatasource(liveXml, target, columnXml);
           const validation = validateUnderlyingMetadataLoad(editedXml, liveXml);
           if (!validation.ok) {
@@ -235,6 +246,27 @@ function hasColumnNameAndCaption(xml: string, name: string, caption: string): bo
 
 function findColumnTags(xml: string): string[] {
   return [...xml.matchAll(/<column\b[\s\S]*?(?:<\/column>|\/>)/g)].map((match) => match[0]);
+}
+
+function resolveCaptionReferences(formula: string, datasourceXml: string): string {
+  const captionToName = new Map<string, string>();
+  for (const tag of findColumnTags(datasourceXml)) {
+    const cap = getAttr(tag, 'caption');
+    const name = getAttr(tag, 'name');
+    if (cap === undefined || name === undefined) continue;
+    const capText = unescapeXml(cap);
+    const nameText = unescapeXml(name).replace(/^\[|\]$/g, '');
+    if (capText !== nameText) {
+      captionToName.set(capText, nameText);
+    }
+  }
+  if (captionToName.size === 0) return formula;
+  // Bracketed tokens only; captions containing ']' and bracket-like text inside
+  // string literals are out of scope for this pass.
+  return formula.replace(/\[([^\]]+)\]/g, (whole, token: string) => {
+    const internal = captionToName.get(token);
+    return internal === undefined ? whole : `[${internal}]`;
+  });
 }
 
 function nextCalculationName(xml: string, epochMillis: number): string {

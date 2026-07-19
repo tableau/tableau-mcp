@@ -1,6 +1,5 @@
 import { readFileSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
@@ -87,7 +86,15 @@ describe('authorCalcTool', () => {
     // live verse to find. This replays the tool against a real saved document.
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const realXml = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), '__fixtures__', 'real-superstore-document.twb.xml'),
+      join(
+        process.cwd(),
+        'src',
+        'tools',
+        'desktop',
+        'data-source',
+        '__fixtures__',
+        'real-superstore-document.twb.xml',
+      ),
       'utf8',
     );
     const calcXml =
@@ -117,6 +124,35 @@ describe('authorCalcTool', () => {
     expect(relStart === -1 || relEnd < at).toBe(true);
     expect(at).toBeLessThan(loaded.indexOf('</datasource>', at) + '</datasource>'.length);
     expect(at).toBeLessThan(loaded.indexOf('</datasources>'));
+  });
+
+  it('resolves sibling-calc caption references to internal names (live 2026-07-19: 5 of 6 layered calcs broken)', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const priorCalc =
+      "<column caption='Member Profit' datatype='real' name='[Calculation_900]' role='measure' type='quantitative'><calculation class='tableau' formula='{ FIXED [Sub-Category] : SUM([Profit]) }' /></column>";
+    const xml = BASE_XML.replace('</datasource>', `${priorCalc}</datasource>`);
+
+    const { result, executeCommand } = await getToolResult({
+      args: {
+        caption: 'Top Threshold',
+        formula: '{ FIXED : PERCENTILE([Member Profit], 0.80) }',
+      },
+      readbackXml: withColumn(
+        xml,
+        "<column caption='Top Threshold' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='{ FIXED : PERCENTILE([Calculation_900], 0.80) }' /></column>",
+      ),
+      initialXml: xml,
+    });
+
+    expect(result.isError).toBe(false);
+    const loadCall = commandCalls(executeCommand).find(
+      (call) => call.command === 'load-underlying-metadata',
+    );
+    invariant(loadCall?.args && typeof loadCall.args.text === 'string');
+    expect(loadCall.args.text).toContain('PERCENTILE([Calculation_900], 0.80)');
+    expect(loadCall.args.text).not.toContain('PERCENTILE([Member Profit]');
+    // base-field references (caption == name) stay untouched
+    expect(loadCall.args.text).toContain('{ FIXED [Sub-Category] : SUM([Profit]) }');
   });
 
   it('ignores worksheet-dependencies datasource clones (live 2026-07-19: splicing a clone is silently discarded)', async () => {
