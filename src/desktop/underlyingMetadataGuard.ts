@@ -1,6 +1,9 @@
 import type { CommandValidationResult } from './commandRegistry.js';
 
-const WORKBOOK_ROOT_RE = /^\s*(?:<\?xml\b[\s\S]*?\?>\s*)?<workbook(?:\s|>|\/)/;
+// Real Desktop documents carry comments between the prolog and the root
+// (e.g. "<!-- build main.26.0715.2311 -->") — a root check that forgets them
+// rejects every legitimate whole document (live false-positive, 2026-07-19).
+const WORKBOOK_ROOT_RE = /^\s*(?:<\?xml\b[\s\S]*?\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<workbook(?:\s|>|\/)/;
 const WORKSHEET_NAME_RE = /<worksheet\b[^>]*\bname='([^']*)'/g;
 
 function fail(problem: string, fix: string): CommandValidationResult {

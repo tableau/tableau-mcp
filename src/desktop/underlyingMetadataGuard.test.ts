@@ -21,7 +21,18 @@ const SPLICED_WORKBOOK_XML = LIVE_WORKBOOK_XML.replace(
   "<column name='[Sales]' />\n      <column name='[Profit]' />",
 );
 
+// Verbatim head shape of a real Desktop document (build main.26.0715.2311):
+// prolog, then a COMMENT, then the root. The guard must accept this — the
+// 2026-07-19 live false-positive rejected every legitimate whole document.
+const REAL_HEAD_WORKBOOK_XML =
+  `<?xml version='1.0' encoding='utf-8' ?>\n\n<!-- build main.26.0715.2311                                -->\n` +
+  LIVE_WORKBOOK_XML;
+
 describe('validateUnderlyingMetadataLoad', () => {
+  it('accepts a real document head (prolog + build comment before the root)', () => {
+    expect(validateUnderlyingMetadataLoad(REAL_HEAD_WORKBOOK_XML, null).ok).toBe(true);
+  });
+
   it('rejects the reviewed fragment receipt', () => {
     const result = validateUnderlyingMetadataLoad('<workbook><applied /></workbook>', null);
 
