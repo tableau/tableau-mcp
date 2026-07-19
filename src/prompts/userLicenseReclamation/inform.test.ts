@@ -87,7 +87,8 @@ describe('user-license-reclamation-inform prompt', () => {
     const { text } = result.messages[0].content;
     expect(text).toContain('"Event Type"');
     expect(text).toContain('"Access"');
-    expect(text).toContain('"Actor User Id"');
+    expect(text).toContain('"Actor User Name"');
+    expect(text).toContain('"Event Date"');
   });
 
   it('instructs cross-referencing to exclude active users', async () => {
@@ -100,6 +101,19 @@ describe('user-license-reclamation-inform prompt', () => {
     expect(text).toContain('excluded from the final candidate list');
     expect(text).toContain('Recommendation');
     expect(text).toContain('Unlicensed');
+    expect(text).toContain('INFORM-only');
+    expect(text).toContain('ETL lag');
+  });
+
+  it('includes instruction to fetch null-lastLogin users', async () => {
+    const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('never signed in');
+    expect(text).toContain('Never');
   });
 
   it('reads LICENSE_RECLAIM_INACTIVE_DAYS from env when no arg provided', async () => {

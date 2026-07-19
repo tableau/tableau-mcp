@@ -78,11 +78,12 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
 
     const listUsersFilter = `siteRole:in:${roles.join('|')},lastLogin:lt:${cutoffIso}`;
 
-    // Field captions per Tableau Admin Insights TS Events datasource schema:
-    // https://help.tableau.com/current/online/en-us/adminview_ts_events.htm
+    // Field captions verified against live TS Events VDS schema (2026-07-19).
+    // `Actor User Name` is a STRING matching the user's Tableau username (email).
+    // `Event Date` is DATETIME (UTC) — NOT `Created At` which doesn't exist on TS Events.
     const tsEventsQuery = {
       fields: [
-        { fieldCaption: 'Actor User Id' },
+        { fieldCaption: 'Actor User Name' },
         { fieldCaption: 'Item Type' },
         { fieldCaption: 'Item Name' },
       ],
@@ -94,7 +95,7 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
           exclude: false,
         },
         {
-          field: { fieldCaption: 'Created At' },
+          field: { fieldCaption: 'Event Date' },
           filterType: 'DATE',
           periodType: 'DAYS',
           dateRangeType: 'LASTN',
@@ -116,6 +117,8 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
       '',
       `This returns users with site roles [${roles.join(', ')}] whose \`lastLogin\` is before ${cutoffIso} (inactive ≥ ${inactiveDays} days).`,
       '',
+      'Then call `list-users` a second time with the same `siteRole` filter but **without** the `lastLogin` filter, and include only users whose `lastLogin` is empty/null (never signed in). These are also reclamation candidates — licensed users who were provisioned but never logged in.',
+      '',
       '## Step 2 — Cross-reference recent activity',
       '',
       'Call `query-admin-insights` with `kind: "ts-events"` to look for recent Access events by these users:',
@@ -124,19 +127,20 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
       JSON.stringify({ kind: 'ts-events', query: tsEventsQuery, limit: 10000 }, null, 2),
       '```',
       '',
-      `Group the TS Events results by \`Actor User Id\` to determine if any candidate user has accessed content within the ${activityLookbackDays}-day lookback window. Users with recent Access events should be excluded from the final candidate list — they are active despite a stale \`lastLogin\` timestamp.`,
+      `Group the TS Events results by \`Actor User Name\` to determine if any candidate user has accessed content within the ${activityLookbackDays}-day lookback window. Match \`Actor User Name\` against the candidate's \`name\` or \`email\` field from Step 1. Users with recent Access events should be excluded from the final candidate list — they are active despite a stale \`lastLogin\` timestamp.`,
       '',
       '## Step 3 — Render the report',
       '',
       '1. Print a header line: `License reclamation candidates (threshold = <inactiveDays> days, roles = [<roles>], total candidates = <count>)`.',
       '2. Render the final candidates (those NOT seen in TS Events) as a Markdown table with columns: `User Name | Email | Site Role | Last Login | Days Inactive | Auth Setting`.',
-      '   - Sort by Days Inactive descending.',
-      '   - Days Inactive = number of days between now and their `lastLogin`.',
+      '   - Sort by Days Inactive descending. Users with null `lastLogin` (never signed in) go at the top with Days Inactive = "Never".',
+      '   - Days Inactive = number of days between now and their `lastLogin`, or "Never" if null.',
       '3. If no candidates remain after the TS Events cross-reference, state: "No reclamation candidates found above the threshold." and stop.',
       '4. Below the table, append the following fixed notes:',
-      '   - Recommendation: These users are candidates for downgrade to **Unlicensed**. Review the list and confirm before taking action.',
+      '   - Recommendation: These users are candidates for downgrade to **Unlicensed**. This is an INFORM-only report — review the list with a human before taking any action.',
       '   - Note: TS Events caps at 90 days lookback on Tableau Cloud (365 days with Advanced Management). Users inactive longer than the lookback window may have been active earlier than records suggest.',
-      '   - Note: `lastLogin` reflects Tableau UI sign-in only — API-only or embedded users may show as inactive despite usage.',
+      '   - Note: TS Events data is subject to ETL lag (typically 24–48h). A user who accessed content very recently may not yet appear in TS Events — treat candidates as provisional, not definitive.',
+      '   - Note: `lastLogin` reflects Tableau UI sign-in only — API-only, embedded, or PAT-authenticated users may show as inactive despite usage. The TS Events cross-reference partially compensates but is not exhaustive due to ETL lag.',
       '   - Note: This report is read-only. No user modifications, notifications, or role changes are performed.',
     ].join('\n');
 
