@@ -48,15 +48,19 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a plain viz ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot)',
     action:
-      "FIRST call bind-template with the user's ask and auto_apply: true — a confident bind renders the viz in ONE call (~2s server-side, no further tool calls). On propose/escalate, fall back to the general authoring tools (get-workbook-xml -> edit -> apply-workbook, or inject-template for a known template).",
-    toolSequence: ['bind-template', 'get-workbook-xml', 'apply-workbook', 'inject-template'],
+      "FIRST try the semantic loop: call execute-tableau-command with tabdoc:generate-viz-from-notional-spec and a NotionalSpec of the ask (see the notional-spec-authoring knowledge) — it renders the viz in one sub-second command, and a refinement is the same call with the full edited spec on the same sheet. For families outside the NotionalSpec vocabulary (waterfall, KPI, funnel) or when the ask needs candidate proposals, call bind-template with the user's ask and auto_apply: true; on propose/escalate, fall back to the general authoring tools (get-workbook-xml -> edit -> apply-workbook, or inject-template for a known template).",
+    toolSequence: [
+      'execute-tableau-command',
+      'bind-template',
+      'get-workbook-xml',
+      'apply-workbook',
+      'inject-template',
+    ],
     stopConditions: [
-      'a confident bind renders the viz in ONE call (~2s server-side, no further tool calls)',
-      'On propose/escalate, fall back to the general authoring tools',
+      'it renders the viz in one sub-second command',
+      'on propose/escalate, fall back to the general authoring tools',
     ],
-    requiredEvidence: [
-      "bind-template success: { status: 'bound', applied: true, sheet_name, phase_ms }",
-    ],
+    requiredEvidence: ["execute-tableau-command success envelope: { state: 'SUCCEEDED' }"],
   },
   {
     kind: 'route',

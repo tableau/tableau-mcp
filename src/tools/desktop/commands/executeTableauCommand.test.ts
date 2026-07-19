@@ -55,6 +55,36 @@ describe('executeTableauCommandTool', () => {
     expect(result.content[0].text).toContain('Invalid namespace "badns"');
   });
 
+  it('should return error for an unknown command before resolving an executor', async () => {
+    const extra = getMockRequestHandlerExtra();
+    extra.getExecutor = vi.fn();
+
+    const result = await getResult({ session: SESSION, command: 'tabdoc:not-a-command' }, extra);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Unknown Tableau command "tabdoc:not-a-command"');
+    expect(result.content[0].text).toContain('Did you mean:');
+    expect(extra.getExecutor).not.toHaveBeenCalled();
+  });
+
+  it('should return error for a crash-prone command before resolving an executor', async () => {
+    const extra = getMockRequestHandlerExtra();
+    extra.getExecutor = vi.fn();
+
+    const result = await getResult(
+      { session: SESSION, command: 'tabdoc:show-parameter-controls' },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      'Refusing to execute crash-prone Tableau command "tabdoc:show-parameter-controls".',
+    );
+    expect(extra.getExecutor).not.toHaveBeenCalled();
+  });
+
   it('should call executeCommand with parsed namespace and command', async () => {
     const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
     const extra = makeExtra(executeCommand);
