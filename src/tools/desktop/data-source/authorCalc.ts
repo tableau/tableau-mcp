@@ -280,15 +280,12 @@ function spliceColumnIntoDatasource(
     )}`;
   }
 
-  const content = xml.slice(datasource.openEnd, datasource.closeStart);
-  const columnMatches = [...content.matchAll(/<column\b[\s\S]*?(?:<\/column>|\/>)/g)];
-  const insertAt =
-    columnMatches.length > 0
-      ? datasource.openEnd +
-        columnMatches[columnMatches.length - 1].index +
-        columnMatches[columnMatches.length - 1][0].length
-      : datasource.closeStart;
-  return `${xml.slice(0, insertAt)}${columnXml}${xml.slice(insertAt)}`;
+  // Always insert at the datasource END: "after the last <column>" is a trap —
+  // <connection>/<relation>/<columns> holds schema <column ordinal=.../> nodes,
+  // and a calc spliced inside the relation block is silently discarded by
+  // Tableau (live, 2026-07-19). End-of-datasource is the position every
+  // successful live splice used.
+  return `${xml.slice(0, datasource.closeStart)}${columnXml}${xml.slice(datasource.closeStart)}`;
 }
 
 function getAttr(tag: string, name: string): string | undefined {
