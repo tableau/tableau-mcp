@@ -28,7 +28,7 @@ This is the one blessed use of XML on the semantic loop: whole-document, the way
 
 - **Prefer this over the calculation-dialog commands**: `apply-calculation-for-create-or-update` and friends are Analytics-Assistant-gated (require a signed-in Cloud+AI session) and observed failing 400/500 without it. The document round-trip needs no sign-in and opens no dialog.
 - **Whole document in, whole document out**: read fresh, edit, write back promptly. Do not cache a document across user edits — re-read before each splice.
-- **The POST is your validity gate**: Tableau's parser validates the document on load and rejects malformed calc XML with actionable error text. A clean load means the calc parsed — it does NOT mean the numbers are right.
+- **The POST is your validity gate — but VERIFY BY READBACK**: Tableau's parser validates the document on load and rejects malformed calc XML with actionable error text. A clean load means the calc parsed — it does NOT mean the numbers are right, and a `completed` envelope does not by itself prove the change APPLIED (see the column-removal no-op below). After every load, re-read with `tabui:save-underlying-metadata` and confirm your change is present before building on it.
 - **Numbers are unverified until verified** (non-negotiable): generation success and coherence checks never validate values. Plain aggregates (SUM/AVG of a physical column) are Tableau's own math and trustworthy; window calcs, rank, and anything with Compute-Using/addressing can render beautifully wrong. Verify against an independent computation before presenting a number as fact — or present the chart while saying the values are unverified.
 - **Close dialogs first**: an open calculation-editor (or any modal) can fail subsequent applies with 500s. If applies start failing after a user interaction, ask the user to close open dialogs before retrying.
 - **Keep the user's tree sacred**: splice adds your calc columns; never drop or rewrite nodes you didn't author.
@@ -76,6 +76,7 @@ Write the whole edited document back via `tabui:load-underlying-metadata` (`text
 - Raw `tabdoc:`/`tabui:save-underlying-metadata` over the External API command route (`command-not-found` 404) — these verb names are THIS server's mapping to the document endpoints, not registered app commands.
 - Expressing formulas, LODs, or table-calc addressing inside NotionalSpec JSON.
 - Any claim that a spliced calc's VALUES are correct because the load succeeded or a chart rendered.
+- **REMOVING a datasource `<column>` via document load: silently ignored** (live-proven 2026-07-19, Desktop main.26.0715): the load reports `completed` but the column survives — column adds and worksheet-content rewrites apply; column deletes no-op. Do not "clean up" calcs by round-trip; the readback will show them still there.
 
 ## Source and Confidence
 
