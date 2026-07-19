@@ -1,6 +1,6 @@
 # Dialog Commands the Reference Marks as Safe (Do Not Invoke Unattended)
 
-The searchable command reference (`tableau-desktop-commands-reference.json`) is a search INDEX, not a capability census, and its `opens_blocking_dialog` flag lies for a whole class of commands. Fifteen commands whose source is a `*DialogCommand` are marked `opens_blocking_dialog: false` AND `agent_can_invoke: true` — invoking them on an unattended session pops a modal that holds the UI thread and wedges every subsequent command. Live-proven 2026-07-19: `tabdoc:edit-existing-parameter` (marked non-blocking) hung a session 12s on a parameter dialog while `/v0/health` stayed OK.
+The searchable command reference (`tableau-desktop-commands-reference.json`) is a search INDEX, not a capability census, and its `opens_blocking_dialog` flag lies for a whole class of commands. Sixteen commands (fifteen `*DialogCommand`-sourced plus `tabdoc:revert-workbook-ui`) whose source is a `*DialogCommand` are marked `opens_blocking_dialog: false` AND `agent_can_invoke: true` — invoking them on an unattended session pops a modal that holds the UI thread and wedges every subsequent command. Live-proven 2026-07-19: `tabdoc:edit-existing-parameter` (marked non-blocking) hung a session 12s on a parameter dialog while `/v0/health` stayed OK.
 
 ---
 
@@ -12,6 +12,8 @@ The searchable command reference (`tableau-desktop-commands-reference.json`) is 
 - Out-of-scope risk: This is about dispatch safety, not a workbook XML shape.
 - Tags: command-reference, blocking-dialog, dispatch-safety, unattended, misclassification
 - Relevant user prompts/search terms: "edit parameter", "sort dialog", "filter dialog", "custom sql", "goto sheet", "why did it hang"
+
+**ENFORCED since 2026-07-19 (ATTACCA):** the param-contract guard refuses every command on this list outright with a FIX redirect — the modal class cannot reach a screen through execute-tableau-command anymore. This doc remains the WHY and the census.
 
 ## When to Use
 
@@ -49,6 +51,7 @@ tabdoc:show-action-list-dialog-for-worksheet (HybridActionsListDialogCommand)
 tabdoc:show-sort-dialog                      (SortDialogCommand)
 tabdoc:create-new-parameter                  (ParameterDialogCommand)
 tabdoc:edit-existing-parameter               (ParameterDialogCommand)
+tabdoc:revert-workbook-ui                    (probed modal 2026-07-19 — Error 47BF7751 "missing: workspace" fired on a live screen 3x in one verse; not *DialogCommand-sourced, same class)
 ```
 
 Detection heuristic (for a future reference-generator fix): if `source_file` matches `/Dialog(Command)?/`, force `opens_blocking_dialog: true` and `agent_can_invoke: false`. The generator currently derives these flags from classification metadata that does not see the dialog-ness of the source class.

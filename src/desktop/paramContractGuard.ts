@@ -133,10 +133,52 @@ const LIVE_PARAM_OVERRIDES: Map<string, { allowed: Set<string>; required: Set<st
   ['tabdoc:goto-sheet', { allowed: new Set(['Sheet']), required: new Set(['Sheet']) }],
 ]);
 
+/**
+ * Commands live-proven to open a blocking dialog (or modal error) headlessly, which the
+ * reference misclassifies as safely invocable — the 15 `*DialogCommand`-sourced entries
+ * from the dialog-command-misclassification knowledge doc, plus revert-workbook-ui
+ * (probed modal 2026-07-19; it fired Error 47BF7751 on a live user's screen TWICE in one
+ * session before this blocklist existed). Refused outright with a redirect to the
+ * sanctioned alternative: the modal never reaches a human again.
+ */
+const LIVE_DIALOG_BLOCKLIST: Map<string, string> = new Map(
+  (
+    [
+      ['tabdoc:launch-map-service-edit-dialog', 'no headless alternative'],
+      ['tabdoc:show-goto-sheet-dialog', 'use tabdoc:goto-sheet with {"Sheet": name}'],
+      ['tabui:show-feature-flag-dialog', 'no headless alternative'],
+      ['tabdoc:edit-filter-dialog', 'express filters in the NotionalSpec (categoricalFilters/rangeFilters/...)'],
+      ['tabdoc:launch-shared-filter-dialog', 'express filters in the NotionalSpec'],
+      ['tabdoc:launch-map-services-dialog', 'no headless alternative'],
+      ['tabdoc:get-button-config-dialog', 'no headless alternative'],
+      ['tabui:launch-accelerator-data-mapper-dialog', 'no headless alternative'],
+      ['tabdoc:launch-custom-sql-dialog', 'no headless alternative'],
+      ['tabdoc:launch-web-url-dialog', 'no headless alternative'],
+      ['tabdoc:show-action-list-dialog-for-dashboard', 'use author-action'],
+      ['tabdoc:show-action-list-dialog-for-worksheet', 'use author-action'],
+      ['tabdoc:show-sort-dialog', "express sort in the NotionalSpec's sort key"],
+      ['tabdoc:create-new-parameter', 'use author-parameter'],
+      ['tabdoc:edit-existing-parameter', 'use author-parameter for new parameters'],
+      ['tabdoc:revert-workbook-ui', 'there is no headless revert — author forward instead (a wrong node is corrected by a follow-up author-* call or document round-trip)'],
+    ] as const
+  ).map(([name, fix]) => [name, fix]),
+);
+
 export function validateCommandParams(
   command: string,
   args: Record<string, unknown> | undefined,
 ): CommandValidationResult {
+  const dialogFix = LIVE_DIALOG_BLOCKLIST.get(command);
+  if (dialogFix !== undefined) {
+    return {
+      ok: false,
+      message:
+        `Tableau command "${command}" opens a BLOCKING dialog/modal on the user's screen when called ` +
+        'headlessly (live-proven; the reference misclassifies it as safe). NOT sent. ' +
+        `FIX: ${dialogFix}.`,
+    };
+  }
+
   const override = LIVE_PARAM_OVERRIDES.get(command);
   if (override) {
     const providedArgs = args && typeof args === 'object' ? args : {};
