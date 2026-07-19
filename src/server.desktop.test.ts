@@ -9,6 +9,7 @@ import {
   DesktopMcpServer,
   selectToolsForProfile,
   SPEC_LOOP_TOOL_PROFILE,
+  DYNAMIC_AUTHORING_TOOL_PROFILE,
 } from './server.desktop.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';
@@ -337,6 +338,52 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     }
     // execute-tableau-command is the one load-bearing tool — it must survive.
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
+  });
+
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 10-tool singable surface — the spec-loop 5 + the author-* 5, no XML/cache/template tools', () => {
+    const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
+    expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
+    // The full dynamic dialect, semantically named — every author-* verb present.
+    for (const verb of [
+      'author-calc',
+      'author-set',
+      'author-parameter',
+      'author-action',
+      'format-labels',
+    ]) {
+      expect(selected.map((t) => t.name)).toContain(verb);
+    }
+    // Zero agent-visible XML/cache/template/validation tools.
+    for (const banished of [
+      'get-workbook-xml',
+      'apply-workbook',
+      'get-worksheet-xml',
+      'apply-worksheet',
+      'read-cached-xml',
+      'write-cached-xml',
+      'validate-workbook-xml',
+      'validate-worksheet-xml',
+      'inject-template',
+      'list-templates',
+      'bind-template',
+    ]) {
+      expect(selected.map((t) => t.name)).not.toContain(banished);
+    }
+  });
+
+  it('dynamic-authoring surface sits well under the 46k tools/list cliff (the whole point of a lean profile)', async () => {
+    const server = new DesktopMcpServer();
+    const selected = selectToolsForProfile(
+      desktopToolFactories.map((f) => f(server)),
+      'dynamic-authoring',
+    );
+    let total = DESKTOP_INSTRUCTIONS.length;
+    for (const tool of selected) {
+      total += (await serializeDesktopToolSurface(tool)).length;
+    }
+    // A 10-tool surface must have generous headroom — this is a structural win, not a
+    // describe-stub squeeze. If this ever approaches 46k something is very wrong.
+    expect(total).toBeLessThanOrEqual(30_000);
   });
 
   it('unset ("") profile returns the full set unchanged, byte-identical order', () => {

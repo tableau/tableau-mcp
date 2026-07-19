@@ -74,6 +74,33 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
 ]);
 
 /**
+ * The full SINGABLE surface, selected by TOOL_PROFILE=dynamic-authoring: the spec-loop
+ * five (charts/dashboards via generate-viz-from-notional-spec + discovery/readback
+ * through execute-tableau-command) PLUS the five author-* verbs that make the WHOLE
+ * dynamic dialect authorable with ZERO agent-visible XML — author-calc (ratios/rank/
+ * running-total/LOD), author-set (param-linked Top/Bottom-N), author-parameter (the
+ * key signature, born at OPEN), author-action (parameter-change wiring), format-labels
+ * (mark labels). Ten tools cover the full Workout-Wednesday-W44 dialect; no raw XML
+ * get/apply, no cache, no validation, no templates. This is the "make it shorter"
+ * answer — a lean, semantically-named surface under the 46k tools/list cliff, not a
+ * describe-stub trim of the 45-tool default. Mechanism map live-proven 2026-07-19
+ * (CODA): calcs/sets/actions/formatting MERGE; parameters born at OPEN via author-parameter.
+ */
+export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
+  new Set<DesktopToolName>([
+    'execute-tableau-command',
+    'list-instances',
+    'list-available-fields',
+    'list-worksheets',
+    'list-dashboards',
+    'author-calc',
+    'author-set',
+    'author-parameter',
+    'author-action',
+    'format-labels',
+  ]);
+
+/**
  * Select the tools to register for a given TOOL_PROFILE value (already normalized by
  * Config: trim + lowercase). 'demo' → the slim {@link DEMO_TOOL_PROFILE} subset; '' (unset)
  * or 'full' → the full set unchanged (same array reference — byte-identical behavior); any
@@ -90,9 +117,17 @@ export function selectToolsForProfile<T extends { name: DesktopToolName }>(
   if (profile === 'spec-loop') {
     return tools.filter((tool) => SPEC_LOOP_TOOL_PROFILE.has(tool.name));
   }
+  if (profile === 'dynamic-authoring') {
+    return tools.filter((tool) => DYNAMIC_AUTHORING_TOOL_PROFILE.has(tool.name));
+  }
   // 'combined-lean' means "full desktop surface, lazy web surface" — the web half is
   // handled by WebMcpServer; the desktop half registers everything, same as 'full'.
-  if (profile !== '' && profile !== 'full' && profile !== 'combined-lean') {
+  if (
+    profile !== '' &&
+    profile !== 'full' &&
+    profile !== 'combined-lean' &&
+    profile !== 'dynamic-authoring'
+  ) {
     log({
       message: `Unknown TOOL_PROFILE "${profile}" — registering the full tool set.`,
       level: 'warning',
