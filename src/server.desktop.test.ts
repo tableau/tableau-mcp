@@ -5,10 +5,10 @@ import * as configModule from './config.desktop.js';
 import * as loggerModule from './logging/logger.js';
 import {
   DEMO_TOOL_PROFILE,
-  SPEC_LOOP_TOOL_PROFILE,
   DESKTOP_INSTRUCTIONS,
   DesktopMcpServer,
   selectToolsForProfile,
+  SPEC_LOOP_TOOL_PROFILE,
 } from './server.desktop.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';
