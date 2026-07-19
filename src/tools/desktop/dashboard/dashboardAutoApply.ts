@@ -178,9 +178,7 @@ export const getDashboardAutoApplyTool = (
     server,
     name: 'dashboard-auto-apply',
     title,
-    description: [
-      'Build dashboard from 2-6 asks; all-or-nothing — bind/dup/edit/preflight fail refuses the batch.',
-    ].join(' '),
+    description: 'Build dashboard from 2-6 asks; all-or-nothing.',
     paramsSchema,
     annotations: {
       title,

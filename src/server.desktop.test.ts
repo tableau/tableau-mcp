@@ -216,14 +216,13 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // DO NOT GROW these: trim them down and lower/remove the entry. Never raise a
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
-    ['bind-template', 1898], // ratcheted down in the 46k trim (W65/#534); do not grow
+    ['bind-template', 1632], // ratcheted down in the author-calc funding trim (Call-2 proposal provenance kept); do not grow
     ['plan-dashboard-creation', 1797], // ratcheted down in the 46k trim (W65/#534); do not grow
-    ['build-and-apply-dashboard', 2033], // do not grow
-    ['validate-proposal', 1557], // ratcheted down in the 46k trim (W65/#534); do not grow
-    ['dashboard-auto-apply', 1300], // +5 (Andy #521 review): restore ask/title noun-role (Viz ask/Sheet title) — funded by byte-negative all-or-nothing description reword; do not grow
-    ['dashboard-health-check', 1453], // do not grow
+    ['build-and-apply-dashboard', 1734], // ratcheted down in the author-calc funding trim; do not grow
+    ['validate-proposal', 1511], // ratcheted down in the author-calc funding trim; do not grow
+    ['dashboard-auto-apply', 1251], // ratcheted down in the author-calc funding trim; do not grow
+    ['dashboard-health-check', 1421], // ratcheted down in the author-calc funding trim; do not grow
     ['inject-template', 1356], // do not grow
-    ['build-and-apply-worksheet', 1274], // do not grow
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {

@@ -91,15 +91,15 @@ function inferSingleDatasourceFromColumnRefs(
 }
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+  session: z.string().optional().describe('Session.'),
   taskSpec: z
     .object({
       worksheetName: z.string(),
-      worksheetFile: z.string().describe('Cached worksheet file.'),
+      worksheetFile: z.string().describe('File.'),
       type: z.enum(['kpi', 'chart']),
-      template: z.string().optional().describe('Template name.'),
-      fields: z.array(z.string()).describe('Column refs to use.'),
-      workbookFile: z.string().describe('Cached workbook file.'),
+      template: z.string().optional().describe('Template.'),
+      fields: z.array(z.string()).describe('Fields.'),
+      workbookFile: z.string().describe('Workbook.'),
     })
     .describe('Task spec from plan-dashboard-creation.'),
 };
@@ -112,10 +112,7 @@ export const getBuildAndApplyWorksheetTool = (
     server,
     name: 'build-and-apply-worksheet',
     title: toolTitle,
-    description: [
-      'Build a worksheet from a template and immediately APPLY it to the live workbook.',
-      'Designed for parallel Phase-2 execution by subagents. Details: expertise://tableau/tactics/viz/worksheets.',
-    ].join(' '),
+    description: 'Build a worksheet from a template and APPLY it to the live workbook.',
     paramsSchema,
     annotations: {
       title: toolTitle,

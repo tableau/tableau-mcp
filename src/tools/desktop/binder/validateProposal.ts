@@ -79,10 +79,7 @@ export const getValidateProposalTool = (
     server,
     name: 'validate-proposal',
     title,
-    description: [
-      'Dry-run bind-template gate; no apply.',
-      'Returns inject args/blockers; if valid, call bind-template.',
-    ].join(' '),
+    description: 'Dry-run proposal; no apply. Valid -> bind-template.',
     paramsSchema,
     annotations: {
       title,

@@ -393,10 +393,7 @@ export const getDashboardHealthCheckTool = (
     server,
     name: 'dashboard-health-check',
     title,
-    description: [
-      'Read-only.',
-      'Flags sheet/field/zone/source drift; no repairs; D9 render undetectable.',
-    ].join(' '),
+    description: 'Read-only drift check; no repairs; D9 undetectable.',
     paramsSchema,
     annotations: {
       title,
