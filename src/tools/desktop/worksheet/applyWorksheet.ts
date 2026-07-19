@@ -29,15 +29,15 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  worksheetName: z.string().describe('Name of the worksheet to update (must already exist).'),
+  session: z.string().optional().describe(''),
+  worksheetName: z.string().describe(''),
   mode: z
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe('file reads worksheetFile; inline uses worksheetXml.'),
-  worksheetFile: z.string().optional().describe('Modified worksheet cache file for mode=file.'),
-  worksheetXml: z.string().optional().describe('Worksheet content for mode=inline.'),
+    .describe(''),
+  worksheetFile: z.string().optional().describe(''),
+  worksheetXml: z.string().optional().describe(''),
 };
 
 const title = 'Apply Worksheet';

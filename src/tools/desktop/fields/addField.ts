@@ -35,16 +35,16 @@ const ENCODING_TYPES = [
 const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
 const paramsSchema = {
-  session: z.string().describe('Session ID.'),
-  worksheetFile: z.string().describe('Worksheet cache file.'),
-  target: z.enum(FIELD_TARGETS).describe('Destination: rows=Rows, cols=Columns, or encoding.'),
-  columnRef: z.string().describe('Column reference.'),
+  session: z.string().describe(''),
+  worksheetFile: z.string().describe(''),
+  target: z.enum(FIELD_TARGETS).describe(''),
+  columnRef: z.string().describe(''),
   encodingType: z
     .enum(ENCODING_TYPES)
     .optional()
     .describe("Encoding channel ('text'=labels); required iff target=encoding."),
-  index: z.number().optional().describe('0-based insert position.'),
-  workbookFile: z.string().optional().describe('Workbook cache file for caption.'),
+  index: z.number().optional().describe(''),
+  workbookFile: z.string().optional().describe(''),
 };
 
 const title = 'Add Field';

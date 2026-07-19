@@ -33,16 +33,16 @@ import { proposalSchema } from './proposalSchema.js';
 // manifest.template == filename, and listTemplateManifests() is [...loadManifests().values()]).
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session.'),
-  ask: z.string().describe('Ask.'),
+  session: z.string().optional().describe(''),
+  ask: z.string().describe(''),
   // WATCH-CLASS (required): bind-template makes `proposal` OPTIONAL (Call-1 classify vs
   // Call-2 validate). validate-proposal has one job — validate a filled proposal — so the
   // proposal is REQUIRED. Left optional, an omitted proposal would drive bindTemplate down
   // the Call-1 classify path and silently return a propose payload instead of a validation
   // (fail-open). Requiring it at the schema fails closed. The proposal shape itself is the
   // SHARED proposalSchema (confidence required, title <= 80, derivation closed enum).
-  proposal: proposalSchema.describe('Proposal.'),
-  minConfidence: z.number().min(0).max(1).optional().describe('Min confidence.'),
+  proposal: proposalSchema.describe(''),
+  minConfidence: z.number().min(0).max(1).optional().describe(''),
 };
 
 /** Result of a validate-proposal call: a dry-run verdict, never an applied change. */

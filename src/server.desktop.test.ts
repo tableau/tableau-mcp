@@ -217,12 +217,9 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
     ['bind-template', 1632], // ratcheted down in the author-calc funding trim (Call-2 proposal provenance kept); do not grow
-    ['plan-dashboard-creation', 1797], // ratcheted down in the 46k trim (W65/#534); do not grow
-    ['build-and-apply-dashboard', 1734], // ratcheted down in the author-calc funding trim; do not grow
-    ['validate-proposal', 1511], // ratcheted down in the author-calc funding trim; do not grow
-    ['dashboard-auto-apply', 1251], // ratcheted down in the author-calc funding trim; do not grow
-    ['dashboard-health-check', 1421], // ratcheted down in the author-calc funding trim; do not grow
-    ['inject-template', 1356], // do not grow
+    ['plan-dashboard-creation', 1509], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
+    ['build-and-apply-dashboard', 1558], // ratcheted down in the CODA funding trim; do not grow
+    ['validate-proposal', 1407], // ratcheted down in the CODA funding trim; do not grow
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {

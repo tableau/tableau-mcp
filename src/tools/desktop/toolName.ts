@@ -39,6 +39,7 @@ export const desktopToolNames = [
   'author-calc',
   'author-set',
   'author-action',
+  'format-labels',
   'validate-worksheet-xml',
   'validate-workbook-xml',
   'read-cached-xml',

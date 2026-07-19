@@ -14,6 +14,7 @@ import { getPlanDashboardCreationTool } from './coordination/planDashboardCreati
 import { getAuthorCalcTool } from './data-source/authorCalc.js';
 import { getAuthorSetTool } from './data-source/authorSet.js';
 import { getAuthorActionTool } from './data-source/authorAction.js';
+import { getFormatLabelsTool } from './data-source/formatLabels.js';
 import { getApplyDashboardTool } from './dashboard/applyDashboard.js';
 import { getApplyDashboardWithViewpointsTool } from './dashboard/applyDashboardWithViewpoints.js';
 import { getBuildAndApplyDashboardTool } from './dashboard/buildAndApplyDashboard.js';
@@ -85,6 +86,7 @@ export const desktopToolFactories = [
   getAuthorCalcTool,
   getAuthorSetTool,
   getAuthorActionTool,
+  getFormatLabelsTool,
   getValidateWorksheetXmlTool,
   getValidateWorkbookXmlTool,
   getReadCachedXmlTool,

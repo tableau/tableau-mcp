@@ -91,17 +91,17 @@ function inferSingleDatasourceFromColumnRefs(
 }
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session.'),
+  session: z.string().optional().describe(''),
   taskSpec: z
     .object({
       worksheetName: z.string(),
-      worksheetFile: z.string().describe('File.'),
+      worksheetFile: z.string().describe(''),
       type: z.enum(['kpi', 'chart']),
-      template: z.string().optional().describe('Template.'),
-      fields: z.array(z.string()).describe('Fields.'),
-      workbookFile: z.string().describe('Workbook.'),
+      template: z.string().optional().describe(''),
+      fields: z.array(z.string()).describe(''),
+      workbookFile: z.string().describe(''),
     })
-    .describe('Task spec from plan-dashboard-creation.'),
+    .describe(''),
 };
 
 const toolTitle = 'Build and Apply Worksheet';
