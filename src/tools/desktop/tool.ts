@@ -2,6 +2,12 @@ import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/z
 import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
 import { ZodRawShape } from 'zod';
 
+import {
+  currentEpisodeId,
+  emitEpisodeEvent,
+  emitToolErrorEvent,
+  episodeSessionIdFromArgs,
+} from '../../desktop/episode-events.js';
 import { log } from '../../logging/logger.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
@@ -39,6 +45,16 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     this.notifyInvocation({ requestId, args });
 
     let toolResult: CallToolResult;
+    const startedAt = Date.now();
+    const sessionId = episodeSessionIdFromArgs(extra.config, args);
+    const episodeId = currentEpisodeId(sessionId);
+
+    await emitEpisodeEvent(extra.config, {
+      type: 'tool_start',
+      session_id: sessionId,
+      episode_id: episodeId,
+      tool: this.name,
+    });
 
     try {
       const result = await callback();
@@ -49,6 +65,14 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
               isError: false,
               content: [{ type: 'text', text: JSON.stringify(result.value) }],
             };
+        await emitEpisodeEvent(extra.config, {
+          type: 'tool_end',
+          session_id: sessionId,
+          episode_id: episodeId,
+          tool: this.name,
+          duration_ms: Date.now() - startedAt,
+          success: true,
+        });
         return toolResult;
       }
 
@@ -58,6 +82,20 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         content: [{ type: 'text', text: result.error.getErrorText() }],
         ...(structuredContent ? { structuredContent } : {}),
       };
+      await emitToolErrorEvent({
+        config: extra.config,
+        sessionId,
+        tool: this.name,
+        error: result.error.getErrorText(),
+      });
+      await emitEpisodeEvent(extra.config, {
+        type: 'tool_end',
+        session_id: sessionId,
+        episode_id: episodeId,
+        tool: this.name,
+        duration_ms: Date.now() - startedAt,
+        success: false,
+      });
       return toolResult;
     } catch (error) {
       log({
@@ -66,7 +104,16 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         logger: 'tool',
         data: error,
       });
+      await emitToolErrorEvent({ config: extra.config, sessionId, tool: this.name, error });
       toolResult = getErrorResult(requestId, error);
+      await emitEpisodeEvent(extra.config, {
+        type: 'tool_end',
+        session_id: sessionId,
+        episode_id: episodeId,
+        tool: this.name,
+        duration_ms: Date.now() - startedAt,
+        success: false,
+      });
       return toolResult;
     }
   }

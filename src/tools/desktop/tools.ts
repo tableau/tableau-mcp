@@ -24,6 +24,7 @@ import { getRemoveFieldTool } from './fields/removeField.js';
 import { getResolveFieldTool } from './fields/resolveField.js';
 import { getDashboardHealthCheckTool } from './health/dashboardHealthCheck.js';
 import { getAskUserTool } from './interaction/askUser.js';
+import { getBeginEpisodeTool, getEndEpisodeTool } from './interaction/episodeTools.js';
 import { getListKnowledgeResourcesTool } from './knowledge/listKnowledgeResources.js';
 import { getReadKnowledgeResourceTool } from './knowledge/readKnowledgeResource.js';
 import { getLookupWorkbookSchemaTool } from './search/lookupWorkbookSchema.js';
@@ -87,3 +88,5 @@ export const desktopToolFactories = [
   getListKnowledgeResourcesTool,
   getReadKnowledgeResourceTool,
 ];
+
+export const episodeToolFactories = [getBeginEpisodeTool, getEndEpisodeTool];

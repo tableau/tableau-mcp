@@ -24,6 +24,8 @@ export const desktopToolNames = [
   'search-workbook-examples',
   'execute-tableau-command',
   'ask-user',
+  'tableau-begin-episode',
+  'tableau-end-episode',
   'bind-template',
   'dashboard-auto-apply',
   'dashboard-health-check',

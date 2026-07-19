@@ -85,6 +85,60 @@ export interface SessionRouteState {
   current_ask?: SessionAskClassification;
 }
 
+export interface RouteReceipt {
+  route?: RouteClass;
+  shape?: AskShape;
+  template?: string;
+  bind_attempts?: { count: number; outcomes: BindOutcome[] };
+  deflections?: Array<{
+    tool: string;
+    ts: string;
+    template?: string;
+    shape?: AskShape;
+    next_route: RouteClass;
+  }>;
+  route_overrides?: Array<{
+    tool: string;
+    ts: string;
+    template?: string;
+    shape?: AskShape;
+  }>;
+}
+
+export function serializeRouteReceipt(
+  state: SessionRouteState | undefined,
+): RouteReceipt | undefined {
+  if (!state) return undefined;
+  const receipt: RouteReceipt = {};
+  if (state.current_ask) {
+    receipt.route = state.current_ask.route;
+    receipt.shape = state.current_ask.shape;
+    receipt.template = state.current_ask.template ?? undefined;
+    receipt.bind_attempts = {
+      count: state.current_ask.last_outcome === null ? 0 : 1,
+      outcomes: state.current_ask.last_outcome === null ? [] : [state.current_ask.last_outcome],
+    };
+  }
+  if (state.deflections.length > 0) {
+    receipt.deflections = state.deflections.map((deflection) => ({
+      tool: deflection.tool,
+      ts: deflection.ts,
+      template: deflection.template,
+      shape: deflection.shape,
+      next_route: deflection.next_route,
+    }));
+  }
+  if (state.route_overrides.length > 0) {
+    receipt.route_overrides = state.route_overrides.map((override) => ({
+      tool: override.tool,
+      ts: override.ts,
+      template: override.template,
+      shape: override.shape,
+    }));
+  }
+  return Object.keys(receipt).length > 0 ? receipt : undefined;
+}
+
 export class SessionRouteStateStore {
   private bySession = new Map<string, SessionRouteState>();
 

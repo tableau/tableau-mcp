@@ -631,6 +631,23 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  EPISODE_EVENTS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Episode Events',
+    description: 'Set to "on" to emit Desktop eval episode JSONL events. Defaults to off.',
+    required: false,
+    sensitive: false,
+  },
+  EPISODE_EVENTS_DIR: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Episode Events Directory',
+    description:
+      'Optional directory for Desktop eval episode JSONL events. Defaults to FILE_LOGGER_DIRECTORY.',
+    required: false,
+    sensitive: false,
+  },
   BREAK_GLASS_DISABLE_GLOBALLY: {
     includeInUserConfig: false,
     type: 'boolean',

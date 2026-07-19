@@ -20,7 +20,7 @@ import { getListInstancesTool } from './tools/desktop/session/listInstances.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { DesktopToolName } from './tools/desktop/toolName.js';
-import { desktopToolFactories } from './tools/desktop/tools.js';
+import { desktopToolFactories, episodeToolFactories } from './tools/desktop/tools.js';
 import { Provider } from './utils/provider.js';
 
 const serverName = 'tableau-desktop-mcp';
@@ -173,7 +173,10 @@ export class DesktopMcpServer extends Server {
       excluded.add(getListInstancesTool);
     }
 
-    const factories = desktopToolFactories.filter((factory) => !excluded.has(factory));
+    const factories = [
+      ...desktopToolFactories,
+      ...(config.episodeEventsEnabled ? episodeToolFactories : []),
+    ].filter((factory) => !excluded.has(factory));
     const allTools = factories.map((toolFactory) => toolFactory(this));
     return selectToolsForProfile(allTools, config.toolProfile);
   };

@@ -5,13 +5,17 @@ import { z } from 'zod';
 
 import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
+import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
 import {
   buildApplyOverCapNote,
   isOverInlineXmlCap,
   xmlByteLength,
 } from '../../../desktop/inlineXmlCap.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
-import { formatWorksheetPromiseCheck } from '../../../desktop/validation/promise-check.js';
+import {
+  classifyWorksheetPromiseOutcome,
+  formatWorksheetPromiseCheck,
+} from '../../../desktop/validation/promise-check.js';
 import { formatReadbackVerificationWarnings } from '../../../desktop/validation/readback-verify.js';
 import {
   ArgsValidationError,
@@ -153,13 +157,28 @@ export const getApplyWorksheetTool = (
           // Host verification receipt (W-23447506) — subsumes the old readback
           // status sentence: one host-truth line, derived from preflight +
           // readback, never model-filled.
-          const receipt = result.isOk()
-            ? formatWorksheetPromiseCheck({
+          const receiptInput = result.isOk()
+            ? {
                 validationWarnings: result.value.validationWarnings ?? [],
                 readback: result.value.readbackVerification,
                 readbackFindings: result.value.readbackWarnings,
-              })
-            : '';
+              }
+            : undefined;
+          const promiseOutcome = receiptInput
+            ? classifyWorksheetPromiseOutcome(receiptInput)
+            : 'unverified';
+          if (result.isOk()) {
+            await emitWorksheetPromiseEvents({
+              config: extra.config,
+              sessionId: resolvedSession,
+              tool: 'apply-worksheet',
+              operation: 'load-worksheet',
+              readback: result.value.readbackVerification,
+              findings: result.value.readbackWarnings,
+              promiseOutcome,
+            });
+          }
+          const receipt = receiptInput ? formatWorksheetPromiseCheck(receiptInput) : '';
 
           return new Ok({
             message: `Successfully applied worksheet update for "${worksheetName}". The worksheet has been updated.${note}${readbackWarning}${receipt}`,
