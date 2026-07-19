@@ -54,7 +54,7 @@
   },
   "total_commands": 333,
   "usage_notes_for_agents": "Invoke via ExecuteCommand(CommandId, params). Use serialized_name when calling from JavaScript. Context-filled params (e.g. UPI_Workspace) are provided by the app; only required binary/unserialized params set requires_binary_or_unserialized_args. See command_names_requiring_context_or_binary_args for commands that cannot be fully invoked via executeCommandAsync. Filter by agent_can_invoke: true for commands safe to invoke via MCP; when no such command matches, use recommendation_when_no_invocable_match. Commands with opens_blocking_dialog: true open a blocking UI dialog and can cause CDP socket hang. Evidence paths and usage_count may include references from test/ and testlib/; treat those as non-customer usage.",
-  "recommendation_when_no_invocable_match": "No MCP-invocable command found for this action. Use workbook JSON editing instead.",
+  "recommendation_when_no_invocable_match": "No MCP-invocable command found for this action. For a chart/viz ask, use the NotionalSpec loop (tabdoc:generate-viz-from-notional-spec — see expertise://tableau/tactics/data/notional-spec-authoring); for calculated fields, use the workbook-document round-trip (see notional-spec-calc-authoring). Fall back to workbook XML editing only when neither covers the ask.",
   "command_names_requiring_context_or_binary_args": [
     "AddReferenceLine",
     "AddSubtotals",
