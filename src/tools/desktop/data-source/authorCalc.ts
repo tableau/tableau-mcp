@@ -104,7 +104,7 @@ export const getAuthorCalcTool = (server: DesktopMcpServer): DesktopTool<typeof 
           // resolve internal names — and authored calcs get [Calculation_N]
           // names the agent cannot know (live: 5 of 6 calcs red-! broken,
           // 2026-07-19). Rewrite bracketed caption tokens to internal names.
-          const resolvedFormula = resolveCaptionReferences(formula, target.xml);
+          const resolvedFormula = resolveCaptionReferences(formula, target.xml, liveXml);
           const columnXml = renderCalculationColumn({
             caption,
             formula: resolvedFormula,
@@ -248,8 +248,14 @@ function findColumnTags(xml: string): string[] {
   return [...xml.matchAll(/<column\b[\s\S]*?(?:<\/column>|\/>)/g)].map((match) => match[0]);
 }
 
-function resolveCaptionReferences(formula: string, datasourceXml: string): string {
-  const captionToName = new Map<string, string>();
+export { resolveCaptionReferences as resolveCaptionReferencesForTest };
+
+function resolveCaptionReferences(
+  formula: string,
+  datasourceXml: string,
+  workbookXml?: string,
+): string {
+  const captionToRef = new Map<string, string>();
   for (const tag of findColumnTags(datasourceXml)) {
     const cap = getAttr(tag, 'caption');
     const name = getAttr(tag, 'name');
@@ -257,16 +263,39 @@ function resolveCaptionReferences(formula: string, datasourceXml: string): strin
     const capText = unescapeXml(cap);
     const nameText = unescapeXml(name).replace(/^\[|\]$/g, '');
     if (capText !== nameText) {
-      captionToName.set(capText, nameText);
+      captionToRef.set(capText, `[${nameText}]`);
     }
   }
-  if (captionToName.size === 0) return formula;
+  // Parameters live in their OWN datasource, not the target's — a formula that
+  // names one by caption must resolve to the QUALIFIED [Parameters].[Parameter N]
+  // form or the calc silently fails to bind (live: verse-3 empty sheet,
+  // 2026-07-19 — the filter calc referenced two parameter captions unresolved).
+  // Set after the field map so a caption collision resolves to the parameter,
+  // which is what a dynamic-ask formula means.
+  if (workbookXml !== undefined) {
+    const paramsDs = parametersDatasourceBlock(workbookXml);
+    if (paramsDs !== undefined) {
+      for (const tag of findColumnTags(paramsDs)) {
+        const cap = getAttr(tag, 'caption');
+        const name = getAttr(tag, 'name');
+        if (cap === undefined || name === undefined) continue;
+        captionToRef.set(unescapeXml(cap), `[Parameters].${unescapeXml(name)}`);
+      }
+    }
+  }
+  if (captionToRef.size === 0) return formula;
   // Bracketed tokens only; captions containing ']' and bracket-like text inside
   // string literals are out of scope for this pass.
   return formula.replace(/\[([^\]]+)\]/g, (whole, token: string) => {
-    const internal = captionToName.get(token);
-    return internal === undefined ? whole : `[${internal}]`;
+    return captionToRef.get(token) ?? whole;
   });
+}
+
+function parametersDatasourceBlock(xml: string): string | undefined {
+  const open = /<datasource\b[^>]*\bname=(['"])Parameters\1[^>]*>/.exec(xml);
+  if (!open || open.index === undefined) return undefined;
+  const close = xml.indexOf('</datasource>', open.index);
+  return close === -1 ? undefined : xml.slice(open.index, close + '</datasource>'.length);
 }
 
 function nextCalculationName(xml: string, epochMillis: number): string {

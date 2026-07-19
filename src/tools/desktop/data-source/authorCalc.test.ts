@@ -289,6 +289,30 @@ async function getToolResult({
     }
     return new Ok({ command_id: 'load-1', status: 'completed', result: null });
   });
+describe('parameter caption resolution (verse-3 empty-sheet fix)', () => {
+  it('resolves parameter captions to qualified [Parameters].[Parameter N] references', async () => {
+    const { resolveCaptionReferencesForTest } = await import('./authorCalc.js');
+    const workbookXml = [
+      "<workbook><datasources>",
+      "<datasource hasconnection='false' inline='true' name='Parameters' version='18.1'>",
+      "<column caption='Top or Bottom' datatype='string' name='[Parameter 1]' param-domain-type='list' role='measure' type='nominal' value='&quot;Top&quot;' />",
+      "<column caption='Number of Sub-Categories' datatype='integer' name='[Parameter 2]' param-domain-type='any' role='measure' type='quantitative' value='5' />",
+      "</datasource>",
+      "<datasource name='Sample - Superstore'><column caption='Profit' name='[Profit]' /></datasource>",
+      "</datasources></workbook>",
+    ].join('');
+    const targetXml = "<datasource name='Sample - Superstore'><column caption='Profit' name='[Profit]' /></datasource>";
+    const resolved = resolveCaptionReferencesForTest(
+      'IF [Top or Bottom] = "Top" THEN RANK(SUM([Profit])) <= [Number of Sub-Categories] END',
+      targetXml,
+      workbookXml,
+    );
+    expect(resolved).toBe(
+      'IF [Parameters].[Parameter 1] = "Top" THEN RANK(SUM([Profit])) <= [Parameters].[Parameter 2] END',
+    );
+  });
+});
+
   const extra = {
     ...getMockRequestHandlerExtra(),
     getExecutor: vi.fn().mockResolvedValue({ executeCommand }),
