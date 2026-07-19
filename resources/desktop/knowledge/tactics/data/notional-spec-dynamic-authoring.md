@@ -23,15 +23,15 @@ When an ask is DYNAMIC — the user wants to drive the viz (pick N, pick a perio
 |---|---|---|
 | Calculated field (ratio, rank, running total, LOD, YoY) | `author-calc` | live MERGE |
 | Computed Top/Bottom-N set (param-linked or fixed) | `author-set` | live MERGE |
-| **Parameter** (the control the user drives) | `author-parameter` | **OPEN — reopen required** |
+| **Parameter** (the control the user drives) | `author-parameter` | **OPEN — the verb reopens for you, in-call** |
 | Parameter-change action (click a mark → set a param) | `author-action` | live MERGE |
 | Mark labels on/off | `format-labels` | live MERGE |
 
-The build ORDER follows the law: **author the parameters FIRST** (they need a reopen to be born), then merge calcs/sets/actions/formatting over them, then build the sheets/dashboard with the NotionalSpec loop.
+The build ORDER follows the law: **author the parameters FIRST** (they need a reopen to be born — `author-parameter` performs that reopen itself and re-pins the session before returning), then merge calcs/sets/actions/formatting over them, then build the sheets/dashboard with the NotionalSpec loop.
 
 ## Best Practices
 
-- **Author parameters first, everything else after.** A parameter is born only at OPEN time — `author-parameter` writes a reopen-ready stage and returns `{ stagePath, reopenRequired: true }`. Reopen (and re-pin the session) BEFORE authoring the calcs/sets/actions that reference the parameter. The reopen preserves all previously merged work (live-proven).
+- **Author parameters first, everything else after.** A parameter is born only at OPEN time — `author-parameter` seeds it into a stage on disk, relaunches Desktop from that stage, readback-verifies the parameter in the reopened document, re-pins the session, and closes the old instance, all inside the one call (returns `{ reopened: true, newSession }`; ~5s, live-proven). `stagePath` is optional — omit it and the verb stages under the user's Tableau repository. Only if the reopen cannot complete does it degrade to `{ stagePath, reopenRequired: true, reopenError }` — the seeded stage on disk is then the honest fallback. The reopen preserves all previously merged work (live-proven).
 - **Reference a parameter by its token in downstream verbs**: `author-set` takes `count: '[Parameters].[Parameter 3]'` and Tableau resolves it at runtime — that is what makes the set dynamic. You do not mutate parameter VALUES to make a dashboard dynamic; the end user does that by moving the control.
 - **Every verb readback-verifies.** Each `author-*` verb reads the document back after the load and confirms its change is present before returning. A `completed`/`SUCCEEDED` envelope does NOT prove the change applied — the verb's readback is the truth. Trust the verb's result, not the envelope.
 - **Numbers stay unverified until verified** (non-negotiable, inherited from `notional-spec-calc-authoring.md`): the verbs prove STRUCTURE (the node is present, the link is intact), never VALUES. Present a computed number only after an independent check, or say it is unverified.
@@ -51,11 +51,11 @@ The build ORDER follows the law: **author the parameters FIRST** (they need a re
 
 The law made concrete — key signature first, melody over it:
 
-1. **Key signature — author the parameters, then reopen:**
+1. **Key signature — author the parameters (each call reopens + re-pins itself):**
    ```
-   author-parameter { caption: 'p.Top N Sub-Category', datatype: 'integer', value: '5', stagePath: '<fresh stage>.twb' }
-   author-parameter { caption: 'p.Period', datatype: 'string', value: 'Month', members: ['Month','Quarter','Year'], stagePath: '<same stage>.twb' }
-   → reopen Desktop from stagePath, re-pin the session
+   author-parameter { caption: 'p.Top N Sub-Category', datatype: 'integer', value: '5' }
+   author-parameter { caption: 'p.Period', datatype: 'string', value: 'Month', members: ['Month','Quarter','Year'] }
+   → each returns { reopened: true, newSession } — continue authoring immediately
    ```
 2. **Melody — merge the computed set, linked to the parameter:**
    ```
@@ -85,4 +85,5 @@ The law made concrete — key signature first, melody over it:
 - Source: 2026-07-19 CODA sessions — each shape live-probed and readback-verified (params frozen-to-merge / born-at-open; sets + actions + mark-labels merge; reopen preserves the melody); the five verbs are `author-calc`/`author-set`/`author-parameter`/`author-action`/`format-labels`.
 - Customer-identifying details removed: yes
 - Confidence: live-verified mechanism per shape; per-value numerical correctness explicitly NOT covered (verify values independently)
-- Last reviewed: 2026-07-19
+- Source addendum: 2026-07-20 ATTACCA — in-call reopen shipped and e2e-proven (direct-binary relaunch; `open -a` loses the document Apple Event among multiple instances).
+- Last reviewed: 2026-07-20
