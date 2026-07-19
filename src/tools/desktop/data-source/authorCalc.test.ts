@@ -1,3 +1,7 @@
+import { readFileSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
@@ -76,6 +80,43 @@ describe('authorCalcTool', () => {
     expect(commandCalls(executeCommand).some((call) => call.command === 'load-underlying-metadata')).toBe(
       false,
     );
+  });
+
+  it('splices legally into a REAL Desktop document (regression: relation columns + clones + build comment)', async () => {
+    // Every author-calc bug tonight was invisible to synthetic fixtures and cost a
+    // live verse to find. This replays the tool against a real saved document.
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const realXml = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '__fixtures__', 'real-superstore-document.twb.xml'),
+      'utf8',
+    );
+    const calcXml =
+      "<column caption='Replay Tier' datatype='string' name='[Calculation_1700000000000]' role='dimension' type='nominal'><calculation class='tableau' formula='IF SUM([Profit]) &gt; 0 THEN &apos;Top&apos; ELSE &apos;Bottom&apos; END' /></column>";
+    const { result, executeCommand } = await getToolResult({
+      args: {
+        caption: 'Replay Tier',
+        formula: "IF SUM([Profit]) > 0 THEN 'Top' ELSE 'Bottom' END",
+        role: 'dimension',
+        datatype: 'string',
+      },
+      initialXml: realXml,
+      readbackXml: realXml.replace('</datasource>', `${calcXml}</datasource>`),
+    });
+
+    expect(result.isError).toBe(false);
+    const loadCall = commandCalls(executeCommand).find(
+      (call) => call.command === 'load-underlying-metadata',
+    );
+    invariant(loadCall?.args && typeof loadCall.args.text === 'string');
+    const loaded = loadCall.args.text;
+    const at = loaded.indexOf("caption='Replay Tier'");
+    expect(at).toBeGreaterThan(-1);
+    // legal position: NOT inside <relation>…</relation>, and inside the first datasource
+    const relStart = loaded.lastIndexOf('<relation', at);
+    const relEnd = relStart === -1 ? -1 : loaded.indexOf('</relation>', relStart);
+    expect(relStart === -1 || relEnd < at).toBe(true);
+    expect(at).toBeLessThan(loaded.indexOf('</datasource>', at) + '</datasource>'.length);
+    expect(at).toBeLessThan(loaded.indexOf('</datasources>'));
   });
 
   it('ignores worksheet-dependencies datasource clones (live 2026-07-19: splicing a clone is silently discarded)', async () => {

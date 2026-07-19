@@ -48,6 +48,7 @@ Command (via `execute-tableau-command`):
 
 1. **Treating `ClearSheet:false` as "preserve and add"**: it does not merge. Sending a spec with only the new field wipes the rest of the sheet. Send the full edited spec.
 2. **Passing `WorksheetId`**: observed 500. Use `goto-sheet` + current-sheet default.
+   **The spec renders on the ACTIVE sheet — always `goto-sheet` your target IMMEDIATELY before `generate-viz-from-notional-spec` and re-verify which sheet is active if any call ran in between.** Skipping this clobbered a neighboring sheet live (2026-07-19): the spec silently replaced the still-active previous sheet's content, and the agent spent its whole turn restoring it.
 3. **Reading state immediately after dispatch**: `SUCCEEDED` returns before the app applies. Poll the list tools; don't trust one blind sleep.
 4. **Expecting `generate-notional-spec-from-viz` output**: write-blind over the generic route; no payload comes back.
 5. **Using NotionalSpec for dashboards**: assemble dashboards with `new-dashboard` + `add-sheet-to-dashboard` (both live-verified); the spec covers one worksheet.
