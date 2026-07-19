@@ -13,6 +13,40 @@ describe('loadDashboardXml (Agent API transport, default)', () => {
   const dashboardName = 'Sales Dashboard';
   const validXml = '<dashboard name="Sales Dashboard"><zones></zones></dashboard>';
 
+  // Dispatching mock: the pre-focus existence check (modal-killer) polls
+  // list-dashboards between apply and goto, so strict Nth-call sequences
+  // can't model the wire anymore. Answers the poll with the canonical names
+  // from the applied XML unless overridden.
+  function dispatchingAgentExecutor(
+    appliedXml: string,
+    overrides: Partial<Record<string, unknown>> = {},
+  ): {
+    executor: LocalExecutor;
+    calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }>;
+  } {
+    const calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }> = [];
+    const executeCommand = vi.fn(async (params: any) => {
+      calls.push({ namespace: params.namespace, command: params.command, args: params.args });
+      if (params.command in overrides) return overrides[params.command];
+      if (params.command === 'list-dashboards') {
+        const names = [...appliedXml.matchAll(/dashboard name="([^"]*)"/g)].map((m) => m[1]);
+        return Ok({
+          command_id: 'cmd-list',
+          status: 'completed',
+          submitted_at: '',
+          parsedResult: {
+            dashboards: JSON.stringify({
+              count: names.length,
+              dashboards: names.map((name) => ({ name })),
+            }),
+          },
+        });
+      }
+      return Ok({ command_id: 'cmd-ok', status: 'completed', submitted_at: '' });
+    });
+    return { executor: { executeCommand } as unknown as LocalExecutor, calls };
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
@@ -47,32 +81,44 @@ describe('loadDashboardXml (Agent API transport, default)', () => {
   });
 
   it('focuses the dashboard after a successful apply', async () => {
-    const mockExecutor = {
-      executeCommand: vi
-        .fn()
-        .mockResolvedValueOnce(Ok({ command_id: 'cmd-123', status: 'completed', submitted_at: '' }))
-        .mockResolvedValueOnce(
-          Ok({ command_id: 'cmd-goto', status: 'completed', submitted_at: '' }),
-        ),
-    } as unknown as LocalExecutor;
+    const { executor, calls } = dispatchingAgentExecutor(validXml);
 
     const result = await loadDashboardXml({
       dashboardName,
       xml: validXml,
-      executor: mockExecutor,
+      executor,
       signal: mockSignal,
     });
 
     expect(result.isOk()).toBe(true);
-    expect(mockExecutor.executeCommand).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        namespace: 'tabdoc',
-        command: 'goto-sheet',
-        args: { sheet: dashboardName },
-        signal: mockSignal,
+    expect(calls.at(-1)).toMatchObject({
+      namespace: 'tabdoc',
+      command: 'goto-sheet',
+      args: { sheet: dashboardName },
+    });
+  });
+
+  it('skips goto-sheet when the applied dashboard never becomes visible (modal-killer)', async () => {
+    const { executor, calls } = dispatchingAgentExecutor(validXml, {
+      'list-dashboards': Ok({
+        command_id: 'cmd-list',
+        status: 'completed',
+        submitted_at: '',
+        parsedResult: {
+          dashboards: JSON.stringify({ count: 0, dashboards: [] as Array<{ name: string }> }),
+        },
       }),
-    );
+    });
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true); // apply still succeeds
+    expect(calls.some((c) => c.command === 'goto-sheet')).toBe(false); // no focus, no modal
   });
 
   it('keeps dashboard apply successful when focusing the dashboard throws', async () => {
@@ -181,71 +227,48 @@ describe('loadDashboardXml (Agent API transport, default)', () => {
     expect(nfcName).not.toBe(nfdName); // different code points…
     expect(nfcName.normalize('NFC')).toBe(nfdName.normalize('NFC')); // …but NFC-equal
     const nfcXml = `<dashboard name="${nfcName}"><zones></zones></dashboard>`;
-    const executeCommand = vi
-      .fn()
-      .mockResolvedValueOnce(Ok({ command_id: 'cmd-123', status: 'completed', submitted_at: '' }))
-      .mockResolvedValueOnce(Ok({ command_id: 'cmd-goto', status: 'completed', submitted_at: '' }));
-    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+    const { executor, calls } = dispatchingAgentExecutor(nfcXml);
 
     const result = await loadDashboardXml({
       dashboardName: nfdName,
       xml: nfcXml,
-      executor: mockExecutor,
+      executor,
       signal: mockSignal,
     });
 
     expect(result.isOk()).toBe(true);
-    expect(executeCommand).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        namespace: 'tabui',
-        command: 'load-dashboard',
-        args: { dashboardName: nfcName, dashboardXml: nfcXml },
-      }),
-    );
-    expect(executeCommand).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        namespace: 'tabdoc',
-        command: 'goto-sheet',
-        args: { sheet: nfcName },
-      }),
-    );
+    expect(calls.find((c) => c.command === 'load-dashboard')?.args).toMatchObject({
+      dashboardName: nfcName,
+      dashboardXml: nfcXml,
+    });
+    expect(calls.at(-1)).toMatchObject({
+      namespace: 'tabdoc',
+      command: 'goto-sheet',
+      args: { sheet: nfcName },
+    });
   });
 
   it('focuses the canonical XML dashboard name (not the raw caller arg) after a matched apply', async () => {
-    const executeCommand = vi
-      .fn()
-      .mockResolvedValueOnce(Ok({ command_id: 'cmd-123', status: 'completed', submitted_at: '' }))
-      .mockResolvedValueOnce(Ok({ command_id: 'cmd-goto', status: 'completed', submitted_at: '' }));
-    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+    const { executor, calls } = dispatchingAgentExecutor(validXml);
 
     const result = await loadDashboardXml({
       dashboardName: '  Sales Dashboard  ', // matches "Sales Dashboard" after trim
       xml: validXml,
-      executor: mockExecutor,
+      executor,
       signal: mockSignal,
     });
 
     expect(result.isOk()).toBe(true);
     // The load command and the final goto-sheet both use the canonical, trimmed name.
-    expect(mockExecutor.executeCommand).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        namespace: 'tabui',
-        command: 'load-dashboard',
-        args: { dashboardName: 'Sales Dashboard', dashboardXml: validXml },
-      }),
-    );
-    expect(mockExecutor.executeCommand).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        namespace: 'tabdoc',
-        command: 'goto-sheet',
-        args: { sheet: 'Sales Dashboard' },
-        signal: mockSignal,
-      }),
-    );
+    expect(calls.find((c) => c.command === 'load-dashboard')?.args).toMatchObject({
+      dashboardName: 'Sales Dashboard',
+      dashboardXml: validXml,
+    });
+    expect(calls.at(-1)).toMatchObject({
+      namespace: 'tabdoc',
+      command: 'goto-sheet',
+      args: { sheet: 'Sales Dashboard' },
+    });
   });
 
   it('should return invalid-xml error when xml is empty', async () => {
