@@ -1,4 +1,10 @@
-import { generateUUID, normalizeArray, parseXML, serializeXML } from './parser.js';
+import {
+  carryNamespaceDeclarations,
+  generateUUID,
+  normalizeArray,
+  parseXML,
+  serializeXML,
+} from './parser.js';
 import type { ParsedDashboard, ParsedWindow, ParsedWorkbook } from './types.js';
 
 type SizingMode =
@@ -165,6 +171,7 @@ export function extractDashboardXml(workbookXml: string, dashboardName: string):
   if (!dashboard) {
     return null;
   }
+  carryNamespaceDeclarations(workbook.workbook, dashboard);
   return serializeXML({ dashboard });
 }
 

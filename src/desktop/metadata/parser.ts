@@ -95,6 +95,28 @@ export function findAllWorksheets(workbook: ParsedWorkbook): ParsedWorksheet[] {
   return normalizeArray(workbook.workbook?.worksheets?.worksheet);
 }
 
+// fast-xml-parser attaches an `xmlns`/`xmlns:*` declaration as a plain attribute on whichever
+// element declares it — typically the <workbook> root (e.g. `xmlns:user`). Lifting a subtree
+// (a <worksheet> or <dashboard>) out of the document with a naive `{ worksheet }` re-serialize
+// drops that declaration even though descendants of the subtree may use the prefix (e.g.
+// `user:ui-enumeration` on a level-members groupfilter) — the extracted fragment is then
+// namespace-invalid on its own, even though it was never modified. Call this before serializing
+// an extracted subtree to carry ancestor namespace declarations forward onto its root, without
+// overwriting a declaration the subtree already carries itself.
+export function carryNamespaceDeclarations<T extends Record<string, any>>(
+  ancestor: Record<string, any> | undefined,
+  element: T,
+): T {
+  if (!ancestor) return element;
+  const target: Record<string, any> = element;
+  for (const key of Object.keys(ancestor)) {
+    if ((key === '@_xmlns' || key.startsWith('@_xmlns:')) && !(key in target)) {
+      target[key] = ancestor[key];
+    }
+  }
+  return element;
+}
+
 export function generateUUID(): string {
   const uuid = randomUUID();
   return `{${uuid.toUpperCase()}}`;
