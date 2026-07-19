@@ -89,8 +89,10 @@ describe('executeTableauCommandTool', () => {
     const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
     const extra = makeExtra(executeCommand);
 
+    // Live-verified /v0 contract (2026-07-19): goto-sheet takes "Sheet"; the bundled
+    // reference's WindowLocator is wrong at runtime (500 + blocking modal).
     await getResult(
-      { session: SESSION, command: 'tabdoc:goto-sheet', args: { sheet: 'Sheet1' } },
+      { session: SESSION, command: 'tabdoc:goto-sheet', args: { Sheet: 'Sheet1' } },
       extra,
     );
 
@@ -99,7 +101,7 @@ describe('executeTableauCommandTool', () => {
       expect.objectContaining({
         namespace: 'tabdoc',
         command: 'goto-sheet',
-        args: { sheet: 'Sheet1' },
+        args: { Sheet: 'Sheet1' },
       }),
     );
   });
@@ -138,7 +140,12 @@ describe('executeTableauCommandTool', () => {
     const executeCommand = vi.fn().mockResolvedValue({ isErr: () => true, error: commandError });
     const extra = makeExtra(executeCommand);
 
-    const result = await getResult({ session: SESSION, command: 'tabdoc:goto-sheet' }, extra);
+    // "Sheet" is the live-verified param for goto-sheet; provide it so the param guard
+    // lets this call through to the (mocked) failing executor, per this test's intent.
+    const result = await getResult(
+      { session: SESSION, command: 'tabdoc:goto-sheet', args: { Sheet: 'Sheet1' } },
+      extra,
+    );
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -164,6 +171,130 @@ describe('executeTableauCommandTool', () => {
     expect(executeCommand).toHaveBeenCalledWith(
       expect.objectContaining({ namespace: 'tabui', command: 'export-theme' }),
     );
+  });
+
+  describe('param-contract guard', () => {
+    it('rejects goto-sheet called with an invalid param key before resolving an executor (the live-incident shape)', async () => {
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      // THE live-incident shape (2026-07-19, twice): {"WindowLocator": ...} → 500 +
+      // blocking modal 47BF7751. The reference DECLARES WindowLocator required, but the
+      // /v0 runtime accepts "Sheet" — the guard's live-override encodes the runtime truth.
+      const result = await getResult(
+        { session: SESSION, command: 'tabdoc:goto-sheet', args: { WindowLocator: 'Sheet1' } },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Unknown parameter(s) for Tableau command "tabdoc:goto-sheet": WindowLocator',
+      );
+      expect(result.content[0].text).toContain('"Sheet"');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('accepts goto-sheet called with its correct required param', async () => {
+      const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabdoc:goto-sheet', args: { Sheet: 'Sheet1' } },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(executeCommand).toHaveBeenCalled();
+    });
+
+    it('rejects a missing required param before resolving an executor', async () => {
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabdoc:goto-sheet', args: {} },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Missing required parameter(s) for Tableau command "tabdoc:goto-sheet": Sheet',
+      );
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('gives a stricter message for an unknown param key on an opens_blocking_dialog command', async () => {
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabui:copy-sheet-image-u-i', args: { SheetName: 'Sheet1' } },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Unknown parameter(s) for Tableau command "tabui:copy-sheet-image-u-i"',
+      );
+      expect(result.content[0].text).toContain('opens_blocking_dialog=true');
+      expect(result.content[0].text).toContain(
+        "pops a blocking modal error dialog on the user's screen",
+      );
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('lets generate-viz-from-notional-spec pass through with its NotionalSpecJson/ClearSheet args', async () => {
+      const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:generate-viz-from-notional-spec',
+          args: {
+            NotionalSpecJson:
+              '{"version":"0.2.0","chart":"bar","fields":[{"caption":"Region","data":"string","type":"discrete","role":"dimension","encoding":"x"},{"caption":"Sales","data":"number","type":"continuous","role":"measure","aggregation":"sum","encoding":"y"}]}',
+            ClearSheet: true,
+          },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          namespace: 'tabdoc',
+          command: 'generate-viz-from-notional-spec',
+          args: {
+            NotionalSpecJson:
+              '{"version":"0.2.0","chart":"bar","fields":[{"caption":"Region","data":"string","type":"discrete","role":"dimension","encoding":"x"},{"caption":"Sales","data":"number","type":"continuous","role":"measure","aggregation":"sum","encoding":"y"}]}',
+            ClearSheet: true,
+          },
+        }),
+      );
+    });
+
+    it('leaves an arbitrary valid command call untouched', async () => {
+      const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabdoc:delete-sheet', args: { Sheet: 'Sheet1' } },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          namespace: 'tabdoc',
+          command: 'delete-sheet',
+          args: { Sheet: 'Sheet1' },
+        }),
+      );
+    });
   });
 });
 
