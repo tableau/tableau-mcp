@@ -2,6 +2,8 @@
 
 Confirmed patterns for calculated fields, parameters, parameter controls, count of records, Percent-of-Total table calcs, and tooltips — all validated via `tableau-get-workbook`.
 
+**⇒ Wrong-fork check (live Desktop):** CREATING a calculated field on a running Tableau Desktop via the External API? Do NOT hand-edit workbook XML with these patterns — use the whole-document round-trip in [NotionalSpec Calc Authoring](notional-spec-calc-authoring.md) (save/load-underlying-metadata → GET/POST /v0/workbook/document), then chart the calc by caption with a spec. This module's XML patterns are for file-mode workbook authoring and for READING what a calc looks like.
+
 **⇒ Wrong-fork check:** assigning GROUP MEMBERSHIP (tag rows Top/Bottom/Everyone-Else to color or drive a click action)? Don't hand-roll `IF RANK(...) <= [param] THEN "Top"...` — swapping RANK for `INDEX()`/`FIRST()`/`LAST()` is the SAME wrong turn. That's a **SET**, not a calc (sets ARE parameter-driven in XML — `count='[Parameters].[N]'` re-ranks live). See [Membership vs. Value](data/knowledge/strategy/analytics/calc-fields-strategy.md#membership-vs-value).
 
 ---
