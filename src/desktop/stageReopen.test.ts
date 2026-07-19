@@ -6,7 +6,8 @@ const appBundle = '/Applications/Tableau Desktop (Apple silicon) main.app';
 const oldCommand = `${appBundle}/Contents/MacOS/Tableau ${stagePath}`;
 
 describe('reopenFromStage', () => {
-  it('derives an app bundle with spaces and launches using an args array', async () => {
+  it('derives the bundle executable (spaces in path) and spawns it detached with the stage as argv', async () => {
+    const spawnDetached = vi.fn();
     const execFile = vi.fn(async (file: string, args: string[]) => {
       if (file === 'ps' && args[1] === '123') {
         return { stdout: `${oldCommand}\n`, stderr: '' };
@@ -37,6 +38,7 @@ describe('reopenFromStage', () => {
       discoveryDir,
       deps: {
         execFile,
+        spawnDetached,
         readdir,
         readFile,
         fetchFn,
@@ -46,11 +48,12 @@ describe('reopenFromStage', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(execFile).toHaveBeenCalledWith('open', ['-n', '-a', appBundle, stagePath]);
+    expect(spawnDetached).toHaveBeenCalledWith(`${appBundle}/Contents/MacOS/Tableau`, [stagePath]);
   });
 
   it('errors when the old process command does not contain an app bundle', async () => {
     const execFile = vi.fn(async () => ({ stdout: '/usr/bin/not-tableau\n', stderr: '' }));
+    const spawnDetached = vi.fn();
 
     const result = await reopenFromStage({
       stagePath,
@@ -58,6 +61,7 @@ describe('reopenFromStage', () => {
       discoveryDir,
       deps: {
         execFile,
+        spawnDetached,
         readdir: vi.fn(),
         readFile: vi.fn(),
         fetchFn: vi.fn(),
@@ -70,18 +74,14 @@ describe('reopenFromStage', () => {
     if (result.isErr()) {
       expect(result.error.message).toContain('does not contain a .app bundle');
     }
-    expect(execFile).not.toHaveBeenCalledWith('open', expect.anything());
+    expect(spawnDetached).not.toHaveBeenCalled();
   });
 
-  it('ignores pre-existing manifests, dead pids, and commands not opened from the stage path', async () => {
+  it('ignores pre-existing manifests and dead pids, matching the first new live manifest', async () => {
+    // No command-line matching is possible: macOS `open -a` passes the document via
+    // Apple Events, never argv — the caller's readback verify is the true gate.
     const execFile = vi.fn(async (file: string, args: string[]) => {
       if (file === 'ps' && args[1] === '123') {
-        return { stdout: `${oldCommand}\n`, stderr: '' };
-      }
-      if (file === 'ps' && args[1] === '201') {
-        return { stdout: `${appBundle}/Contents/MacOS/Tableau /tmp/other.twb\n`, stderr: '' };
-      }
-      if (file === 'ps' && args[1] === '202') {
         return { stdout: `${oldCommand}\n`, stderr: '' };
       }
       return { stdout: '', stderr: '' };
@@ -89,17 +89,16 @@ describe('reopenFromStage', () => {
     const readdir = vi
       .fn()
       .mockResolvedValueOnce(['100.json'])
-      .mockResolvedValue(['100.json', '200.json', '201.json', '202.json']);
-    const readFile = vi.fn(async (path: string) => {
-      const pid = path.endsWith('201.json') ? 201 : 202;
-      return JSON.stringify({
+      .mockResolvedValue(['100.json', '200.json', '202.json']);
+    const readFile = vi.fn(async () =>
+      JSON.stringify({
         schemaVersion: 1,
-        instanceId: `instance-${pid}`,
-        pid,
-        baseUrl: `http://127.0.0.1:${pid}`,
-        token: `token-${pid}`,
-      });
-    });
+        instanceId: 'instance-202',
+        pid: 202,
+        baseUrl: 'http://127.0.0.1:202',
+        token: 'token-202',
+      }),
+    );
     const isPidAlive = vi.fn((pid: number) => pid !== 200);
 
     const result = await reopenFromStage({
@@ -204,49 +203,41 @@ describe('reopenFromStage', () => {
 });
 
 describe('deriveStageSiblingPath', () => {
-  const APP = "/Applications/Tableau Desktop (Apple silicon) main.app/Contents/MacOS/Tableau";
-
-  it('derives the first free .param-stage-<n> sibling of the open workbook (spaces in path)', async () => {
+  it('derives the first free param-stage-<n>.twb under My Tableau Repository/Workbooks', async () => {
     const result = await deriveStageSiblingPath({
-      oldPid: '123',
       deps: {
-        execFile: vi.fn(async () => ({
-          stdout: `${APP} /Users/m/My Stages/solfa stage.twb\n`,
-          stderr: '',
-        })),
-        exists: vi.fn((path: string) => path.endsWith('.param-stage-1.twb')),
+        homeDir: () => '/Users/m',
+        exists: vi.fn(
+          (path: string) =>
+            path === '/Users/m/Documents/My Tableau Repository/Workbooks' ||
+            path.endsWith('param-stage-1.twb'),
+        ),
       },
     });
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
-      expect(result.value).toBe('/Users/m/My Stages/solfa stage.param-stage-2.twb');
+      expect(result.value).toBe(
+        '/Users/m/Documents/My Tableau Repository/Workbooks/param-stage-2.twb',
+      );
     }
   });
 
-  it('strips a chained .param-stage-<n> suffix so repeated reopens do not compound', async () => {
+  it('falls back to ~/Documents when the Tableau repository dir is absent', async () => {
     const result = await deriveStageSiblingPath({
-      oldPid: '123',
       deps: {
-        execFile: vi.fn(async () => ({
-          stdout: `${APP} /tmp/s/base.param-stage-3.twb\n`,
-          stderr: '',
-        })),
-        exists: vi.fn(() => false),
+        homeDir: () => '/Users/m',
+        exists: vi.fn((path: string) => path === '/Users/m/Documents'),
       },
     });
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
-      expect(result.value).toBe('/tmp/s/base.param-stage-1.twb');
+      expect(result.value).toBe('/Users/m/Documents/param-stage-1.twb');
     }
   });
 
-  it('errors actionably when the process has no open .twb file argument', async () => {
+  it('errors actionably when no default stage directory exists', async () => {
     const result = await deriveStageSiblingPath({
-      oldPid: '123',
-      deps: {
-        execFile: vi.fn(async () => ({ stdout: `${APP}\n`, stderr: '' })),
-        exists: vi.fn(() => false),
-      },
+      deps: { homeDir: () => '/Users/m', exists: vi.fn(() => false) },
     });
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {

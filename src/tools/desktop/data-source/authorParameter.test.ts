@@ -193,7 +193,7 @@ describe('authorParameterTool', () => {
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed).toMatchObject({ reopened: true, stagePath: derived });
-    expect(deriveStageSiblingPathMock).toHaveBeenCalledWith({ oldPid: '12345' });
+    expect(deriveStageSiblingPathMock).toHaveBeenCalledOnce();
     expect(readFileSync(derived, 'utf-8')).toContain("caption='p.Period'");
   });
 

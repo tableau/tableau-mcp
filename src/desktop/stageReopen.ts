@@ -1,7 +1,8 @@
-import { execFile as nodeExecFile } from 'child_process';
+import { execFile as nodeExecFile, spawn as nodeSpawn } from 'child_process';
 import { existsSync } from 'fs';
 import { readdir as nodeReaddir, readFile as nodeReadFile } from 'fs/promises';
-import { basename, dirname, join } from 'path';
+import { homedir } from 'os';
+import { join } from 'path';
 
 import { Ok, Result } from 'ts-results-es';
 
@@ -20,6 +21,7 @@ type ExecFileResult = {
 
 type StageReopenDeps = {
   execFile?: (file: string, args: string[]) => Promise<ExecFileResult>;
+  spawnDetached?: (file: string, args: string[]) => void;
   readdir?: (path: string) => Promise<string[]> | string[];
   readFile?: (path: string) => Promise<string> | string;
   fetchFn?: (url: string, init: { headers: { Authorization: string } }) => Promise<{ status: number }>;
@@ -63,9 +65,9 @@ export async function reopenFromStage({
     return oldCommandResult.error.toErr();
   }
 
-  const appBundleResult = deriveAppBundle(oldCommandResult.value, oldPid);
-  if (appBundleResult.isErr()) {
-    return appBundleResult.error.toErr();
+  const executableResult = deriveExecutable(oldCommandResult.value, oldPid);
+  if (executableResult.isErr()) {
+    return executableResult.error.toErr();
   }
 
   const snapshotResult = await readManifestBasenames(readdir, discoveryDir);
@@ -73,8 +75,13 @@ export async function reopenFromStage({
     return snapshotResult.error.toErr();
   }
 
+  // Execute the binary directly with the stage as argv. `open -n -a` is NOT usable
+  // here: with multiple instances of the bundle running, LaunchServices routes the
+  // document Apple Event unpredictably — live-probed 2026-07-19, the new instance
+  // came up EMPTY while the document landed elsewhere.
+  const spawnDetached = deps.spawnDetached ?? defaultSpawnDetached;
   try {
-    await execFile('open', ['-n', '-a', appBundleResult.value, stagePath]);
+    spawnDetached(executableResult.value, [stagePath]);
   } catch (error) {
     return new ServiceUnavailableError(
       `Failed to launch reopened Tableau Desktop from stage ${stagePath}: ${oneLine(error)}`,
@@ -85,7 +92,6 @@ export async function reopenFromStage({
     snapshot: snapshotResult.value,
     discoveryDir,
     stagePath,
-    execFile,
     readdir,
     readFile,
     sleep,
@@ -109,58 +115,39 @@ export async function reopenFromStage({
 }
 
 /**
- * Derive a default stage path for a parameter reopen from the live Desktop process's
- * own command line: its open file argument's sibling `<base>.param-stage-<n>.twb`,
- * first free n. A chained `.param-stage-<n>` suffix is stripped first so repeated
- * reopens don't compound the name. Untaught agents should never have to invent a
- * filesystem path — and defaults must stay on real user paths (Desktop has crashed
- * saving workbooks opened from sandboxed tmp dirs).
+ * Derive a default stage path for a parameter reopen: `param-stage-<n>.twb` (first
+ * free n) under `~/Documents/My Tableau Repository/Workbooks` when present, else
+ * `~/Documents`. Untaught agents should never have to invent a filesystem path —
+ * and defaults must stay on real user paths (Desktop has crashed saving workbooks
+ * opened from sandboxed tmp dirs). The live process's own open file is NOT
+ * recoverable: macOS `open -a` hands documents over via Apple Events (never argv),
+ * and Tableau releases the file handle after load (lsof-probed 2026-07-19).
  */
 export async function deriveStageSiblingPath({
-  oldPid,
   deps = {},
 }: {
-  oldPid: string;
-  deps?: { execFile?: StageReopenDeps['execFile']; exists?: (path: string) => boolean };
-}): Promise<Result<string, McpToolError>> {
-  const execFile = deps.execFile ?? defaultExecFile;
+  deps?: { exists?: (path: string) => boolean; homeDir?: () => string };
+} = {}): Promise<Result<string, McpToolError>> {
   const exists = deps.exists ?? existsSync;
+  const home = deps.homeDir ?? homedir;
 
-  const commandResult = await getProcessCommand(execFile, oldPid);
-  if (commandResult.isErr()) {
-    return commandResult.error.toErr();
-  }
-
-  const markerIndex = commandResult.value.indexOf(APP_MARKER);
-  if (markerIndex === -1) {
+  const docs = join(home(), 'Documents');
+  const repoWorkbooks = join(docs, 'My Tableau Repository', 'Workbooks');
+  const dir = exists(repoWorkbooks) ? repoWorkbooks : docs;
+  if (!exists(dir)) {
     return new ArgsValidationError(
-      `Tableau Desktop process ${oldPid} command does not contain a .app bundle`,
-    ).toErr();
-  }
-  const afterBundle = commandResult.value.slice(markerIndex + APP_MARKER.length);
-  const firstSpace = afterBundle.indexOf(' ');
-  if (firstSpace === -1) {
-    return new ArgsValidationError(
-      `Tableau Desktop process ${oldPid} has no open workbook file to stage beside — pass stagePath explicitly`,
-    ).toErr();
-  }
-  const openFile = afterBundle.slice(firstSpace + 1).trim();
-  if (openFile.length === 0 || !openFile.toLowerCase().endsWith('.twb')) {
-    return new ArgsValidationError(
-      `Tableau Desktop process ${oldPid} open file '${openFile}' is not a .twb — pass stagePath explicitly`,
+      `No writable default stage directory (${dir}) — pass stagePath explicitly`,
     ).toErr();
   }
 
-  const dir = dirname(openFile);
-  const base = basename(openFile, '.twb').replace(/\.param-stage-\d+$/, '');
   for (let n = 1; n <= 99; n += 1) {
-    const candidate = join(dir, `${base}.param-stage-${n}.twb`);
+    const candidate = join(dir, `param-stage-${n}.twb`);
     if (!exists(candidate)) {
       return new Ok(candidate);
     }
   }
   return new ArgsValidationError(
-    `Could not find a free stage sibling for ${openFile} after 99 tries — pass stagePath explicitly`,
+    `Could not find a free param-stage-<n>.twb under ${dir} after 99 tries — pass stagePath explicitly`,
   ).toErr();
 }
 
@@ -184,14 +171,24 @@ async function getProcessCommand(
   }
 }
 
-function deriveAppBundle(command: string, pid: string): Result<string, McpToolError> {
+// The full executable path inside the bundle: everything through the marker plus the
+// binary name (first space-free token after it — bundle paths carry spaces, binary
+// names do not).
+function deriveExecutable(command: string, pid: string): Result<string, McpToolError> {
   const markerIndex = command.indexOf(APP_MARKER);
   if (markerIndex === -1) {
     return new ArgsValidationError(
       `Tableau Desktop process ${pid} command does not contain a .app bundle`,
     ).toErr();
   }
-  return new Ok(command.slice(0, markerIndex + '.app'.length));
+  const prefix = command.slice(0, markerIndex + APP_MARKER.length);
+  const binaryName = command.slice(prefix.length).split(' ')[0];
+  if (!binaryName) {
+    return new ArgsValidationError(
+      `Tableau Desktop process ${pid} command has no executable name after the .app bundle`,
+    ).toErr();
+  }
+  return new Ok(prefix + binaryName);
 }
 
 async function readManifestBasenames(
@@ -208,11 +205,15 @@ async function readManifestBasenames(
   }
 }
 
+// The launched instance CANNOT be matched by command line: macOS `open -a` hands the
+// document over via Apple Events, so the stage path never appears in argv (live-probed
+// 2026-07-19 — the argv filter made every reopen time out). A new-since-snapshot live
+// manifest is the match; the caller's param-caption readback verify is the true gate
+// against a racing unrelated launch.
 async function pollForNewManifest({
   snapshot,
   discoveryDir,
   stagePath,
-  execFile,
   readdir,
   readFile,
   sleep,
@@ -221,7 +222,6 @@ async function pollForNewManifest({
   snapshot: Set<string>;
   discoveryDir: string;
   stagePath: string;
-  execFile: NonNullable<StageReopenDeps['execFile']>;
   readdir: NonNullable<StageReopenDeps['readdir']>;
   readFile: NonNullable<StageReopenDeps['readFile']>;
   sleep: NonNullable<StageReopenDeps['sleep']>;
@@ -240,11 +240,6 @@ async function pollForNewManifest({
 
       const pid = Number(name.replace(/\.json$/, ''));
       if (!isPidAlive(pid)) {
-        continue;
-      }
-
-      const commandResult = await getProcessCommand(execFile, String(pid));
-      if (commandResult.isErr() || !commandResult.value.includes(stagePath)) {
         continue;
       }
 
@@ -313,6 +308,11 @@ async function pollApiReady({
   return new ServiceUnavailableError(
     `Timed out waiting for reopened Tableau Desktop API at ${baseUrl}: last response ${lastFailure}`,
   ).toErr();
+}
+
+function defaultSpawnDetached(file: string, args: string[]): void {
+  const child = nodeSpawn(file, args, { detached: true, stdio: 'ignore' });
+  child.unref();
 }
 
 function defaultExecFile(file: string, args: string[]): Promise<ExecFileResult> {

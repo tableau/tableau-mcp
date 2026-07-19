@@ -94,10 +94,10 @@ export const getAuthorParameterTool = (
           }
 
           // Untaught agents should not have to invent filesystem paths: when stagePath
-          // is omitted, stage beside the live workbook's own file.
+          // is omitted, stage under the user's Tableau repository.
           let effectiveStagePath = stagePath?.trim() ?? '';
           if (effectiveStagePath.length === 0) {
-            const derivedResult = await deriveStageSiblingPath({ oldPid: sessionResult.value });
+            const derivedResult = await deriveStageSiblingPath();
             if (derivedResult.isErr()) {
               return derivedResult.error.toErr();
             }
