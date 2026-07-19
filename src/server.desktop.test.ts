@@ -5,6 +5,7 @@ import * as configModule from './config.desktop.js';
 import * as loggerModule from './logging/logger.js';
 import {
   DEMO_TOOL_PROFILE,
+  SPEC_LOOP_TOOL_PROFILE,
   DESKTOP_INSTRUCTIONS,
   DesktopMcpServer,
   selectToolsForProfile,
@@ -316,6 +317,30 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     ]) {
       expect(selected.map((t) => t.name)).toContain(fallback);
     }
+  });
+
+  it('every spec-loop-profile name is a real desktop tool name', () => {
+    for (const name of SPEC_LOOP_TOOL_PROFILE) {
+      expect(desktopToolNames).toContain(name);
+    }
+  });
+
+  it('TOOL_PROFILE=spec-loop registers exactly the ruthless 5-tool set — no XML tools, no templates', () => {
+    const selected = selectToolsForProfile(allTools(), 'spec-loop');
+    expect(new Set(selected.map((t) => t.name))).toEqual(SPEC_LOOP_TOOL_PROFILE);
+    // The whole point: the XML/template surface must be GONE.
+    for (const banished of [
+      'get-workbook-xml',
+      'apply-workbook',
+      'apply-worksheet',
+      'inject-template',
+      'bind-template',
+      'batch-create-and-cache-sheets',
+    ]) {
+      expect(selected.map((t) => t.name)).not.toContain(banished);
+    }
+    // execute-tableau-command is the one load-bearing tool — it must survive.
+    expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
   it('unset ("") profile returns the full set unchanged, byte-identical order', () => {
