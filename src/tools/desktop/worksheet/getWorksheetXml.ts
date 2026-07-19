@@ -24,13 +24,13 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  worksheetName: z.string().describe('Existing worksheet name.'),
+  session: z.string().optional().describe(''),
+  worksheetName: z.string().describe(''),
   mode: z
     .enum(['file', 'inline'])
     .optional()
     .default('file')
-    .describe('file writes cache path; inline returns worksheet content.'),
+    .describe(''),
 };
 
 type InlineResult = {

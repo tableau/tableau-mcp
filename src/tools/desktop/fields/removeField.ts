@@ -35,10 +35,10 @@ const ENCODING_TYPES = [
 const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
 const paramsSchema = {
-  session: z.string().describe('Session ID.'),
-  worksheetFile: z.string().describe('Worksheet cache file.'),
-  target: z.enum(FIELD_TARGETS).describe('Source: rows, cols, or encoding.'),
-  columnRef: z.string().describe('Column reference to remove.'),
+  session: z.string().describe(''),
+  worksheetFile: z.string().describe(''),
+  target: z.enum(FIELD_TARGETS).describe(''),
+  columnRef: z.string().describe(''),
   encodingType: z
     .enum(ENCODING_TYPES)
     .optional()
