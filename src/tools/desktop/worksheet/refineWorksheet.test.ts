@@ -69,8 +69,16 @@ interface MockOpts {
   source?: string;
   fetchErr?: ErrOf<GetResult>;
   applyErr?: ErrOf<LoadResult>;
-  /** Readback: 'echo' (the applied XML, default) or 'source' (Tableau silently dropped it). */
-  readback?: 'echo' | 'source';
+  /**
+   * Readback shape:
+   *  - 'echo' (default): every readback poll immediately returns the applied XML.
+   *  - 'source': the async apply NEVER settles within the poll budget — every readback
+   *    poll keeps returning the un-patched source (Tableau silently dropped the change).
+   *  - a number N: simulates the confirmed live race — the apply landed, but the FIRST
+   *    readback(s) run before it settles. Polls 1..N-1 return the pre-apply source; poll N
+   *    onward returns the applied XML.
+   */
+  readback?: 'echo' | 'source' | number;
 }
 
 const getMock = (): ReturnType<typeof vi.mocked<typeof getWorksheetXmlModule.getWorksheetXml>> =>
@@ -82,6 +90,7 @@ function setupMocks(opts: MockOpts = {}): { applied: () => string | null } {
   const source = opts.source ?? SOURCE;
   let lastApplied: string | null = null;
   let getCalls = 0;
+  let readbackCalls = 0;
 
   getMock().mockImplementation(async (): Promise<GetResult> => {
     getCalls += 1;
@@ -89,8 +98,13 @@ function setupMocks(opts: MockOpts = {}): { applied: () => string | null } {
       // The fetch.
       return (opts.fetchErr ? Err(opts.fetchErr) : Ok(source)) as GetResult;
     }
-    // The readback.
-    return (opts.readback === 'source' ? Ok(source) : Ok(lastApplied ?? source)) as GetResult;
+    // A readback poll.
+    readbackCalls += 1;
+    if (opts.readback === 'source') return Ok(source) as GetResult;
+    if (typeof opts.readback === 'number') {
+      return (readbackCalls < opts.readback ? Ok(source) : Ok(lastApplied ?? source)) as GetResult;
+    }
+    return Ok(lastApplied ?? source) as GetResult;
   });
 
   loadMock().mockImplementation(async ({ xml }: { xml: string }): Promise<LoadResult> => {
@@ -171,6 +185,75 @@ describe('refineWorksheetTool — sort_direction happy path', () => {
   });
 });
 
+describe('refineWorksheetTool — readback race (async apply settle)', () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.useRealTimers());
+
+  it('confirms refined:true once a later poll catches the async apply landing', async () => {
+    // The live bug: the apply DID land, but the first 2 readback polls race the async
+    // settle and still see the pre-apply source. Poll 3 catches the landed XML.
+    vi.useFakeTimers();
+    const { applied } = setupMocks({ readback: 3 });
+    const resultPromise = getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'top_n',
+      topN: { n: 5 },
+    });
+    await vi.advanceTimersByTimeAsync(8 * 250);
+    const result = await resultPromise;
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = successSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.refined).toBe(true);
+
+    // Applied exactly once — the fix polls the READBACK, it never re-applies.
+    expect(loadMock()).toHaveBeenCalledTimes(1);
+    // 1 fetch + 3 readback polls (2 misses that raced the settle, then the hit).
+    expect(getMock()).toHaveBeenCalledTimes(4);
+    expect(applied()!).toMatch(/function='end'\s+end='top'\s+count='5'/);
+  });
+
+  it('confirms refined:true on the very last poll (attempt 8 of 8)', async () => {
+    vi.useFakeTimers();
+    setupMocks({ readback: 8 });
+    const resultPromise = getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'top_n',
+      topN: { n: 5 },
+    });
+    await vi.advanceTimersByTimeAsync(8 * 250);
+    const result = await resultPromise;
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = successSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.refined).toBe(true);
+    expect(getMock()).toHaveBeenCalledTimes(9); // 1 fetch + 8 readback polls
+  });
+
+  it('a filter that genuinely never lands still reports refined:false after exhausting the polls', async () => {
+    // Distinguishes "raced the settle" (above, eventually true) from "never applied"
+    // (always false) — both must reach the SAME poll budget before the tool decides.
+    vi.useFakeTimers();
+    setupMocks({ readback: 'source' });
+    const resultPromise = getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'top_n',
+      topN: { n: 5 },
+    });
+    await vi.advanceTimersByTimeAsync(8 * 250);
+    const result = await resultPromise;
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.refined).toBe(false);
+    expect(parsed.reason).toMatch(/async-settle miss/);
+    expect(getMock()).toHaveBeenCalledTimes(9);
+  });
+});
+
 describe('refineWorksheetTool — refusals and errors', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -239,20 +322,29 @@ describe('refineWorksheetTool — refusals and errors', () => {
     expect(loadMock()).toHaveBeenCalledTimes(1);
   });
 
-  it('refuses when readback does not confirm the expected node (applied once)', async () => {
-    // Apply succeeds, but readback returns the un-patched source (Tableau silently
-    // dropped the filter) → confirmation fails → refuse, no retry.
+  it('refuses when readback never confirms the expected node, after exhausting all polls (applied once)', async () => {
+    // Apply succeeds, but every readback poll returns the un-patched source (the filter
+    // genuinely never lands) → confirmation fails on every poll → refuse after the poll
+    // budget, no retry beyond it.
+    vi.useFakeTimers();
     setupMocks({ readback: 'source' });
-    const result = await getToolResult({
+    const resultPromise = getToolResult({
       worksheetName: 'Sales by Region',
       operation: 'top_n',
       topN: { n: 5 },
     });
+    await vi.advanceTimersByTimeAsync(8 * 250);
+    const result = await resultPromise;
+    vi.useRealTimers();
+
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
     expect(parsed.reason).toMatch(/readback did not contain/);
+    expect(parsed.reason).toMatch(/after 8 polls/);
     expect(loadMock()).toHaveBeenCalledTimes(1);
+    // 1 fetch + 8 readback polls, all exhausted — never retries the apply.
+    expect(getMock()).toHaveBeenCalledTimes(9);
   });
 
   it('refuses an out-of-range n (kill criterion surfaced through the tool)', async () => {
