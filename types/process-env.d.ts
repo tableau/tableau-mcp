@@ -4,6 +4,8 @@ interface ProcessEnvBase {
   LOG_LEVEL: string | undefined;
   ENABLED_LOGGERS: string | undefined;
   FILE_LOGGER_DIRECTORY: string | undefined;
+  EPISODE_EVENTS: string | undefined;
+  EPISODE_EVENTS_DIR: string | undefined;
   MAX_REQUEST_TIMEOUT_MS: string | undefined;
   TOOL_PROFILE: string | undefined;
 }
@@ -85,6 +87,11 @@ export interface ProcessEnvDesktop extends ProcessEnvBase {
   AGENT_API_BASE: string | undefined;
   AGENT_API_AUTH_TOKEN: string | undefined;
   AGENT_API_POLL_INTERVAL_MS: string | undefined;
+  TABLEAU_DESKTOP_SESSION_ID: string | undefined;
+  AGENT_TYPES: string | undefined;
+  SYSTEM_PROMPT_VERSION: string | undefined;
+  LANGSMITH_RUN_ID: string | undefined;
+  LANGSMITH_TRACE_ID: string | undefined;
 }
 
 declare global {

@@ -9,6 +9,7 @@ import { getDashboardXml } from '../../../desktop/commands/workbook/getDashboard
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
+import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
 import { addDashboard, addSheet } from '../../../desktop/metadata/index.js';
 import {
   checkRouteGateForScratchEntry,
@@ -186,6 +187,16 @@ export const getBatchCreateAndCacheSheetsTool = (
           msg += applyResult.isOk()
             ? formatWorkbookPromiseCheck(applyResult.value.validationWarnings)
             : '';
+          if (applyResult.isOk()) {
+            await emitEpisodeEvent(extra.config, {
+              type: 'apply_succeeded',
+              session_id: resolvedSession,
+              episode_id: currentEpisodeId(resolvedSession),
+              tool: 'batch-create-and-cache-sheets',
+              operation: 'load-workbook',
+              promise_outcome: 'unverified',
+            });
+          }
 
           return new Ok({
             message: msg,

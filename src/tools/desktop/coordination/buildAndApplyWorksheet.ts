@@ -11,6 +11,7 @@ import {
 } from '../../../desktop/binder/explicit-bind.js';
 import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
+import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
 import { parseDatasourceQualifiedColumnRef } from '../../../desktop/metadata/field-resolver.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import {
@@ -23,7 +24,10 @@ import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenc
 import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
-import { formatWorksheetPromiseCheck } from '../../../desktop/validation/promise-check.js';
+import {
+  classifyWorksheetPromiseOutcome,
+  formatWorksheetPromiseCheck,
+} from '../../../desktop/validation/promise-check.js';
 import {
   ArgsValidationError,
   CacheSessionMismatchError,
@@ -330,13 +334,28 @@ export const getBuildAndApplyWorksheetTool = (
 
           // Host verification receipt (W-23447506) — subsumes the old readback
           // status sentence: one host-truth line derived from preflight + readback.
-          const receipt = applyResult.isOk()
-            ? formatWorksheetPromiseCheck({
+          const receiptInput = applyResult.isOk()
+            ? {
                 validationWarnings: applyResult.value.validationWarnings ?? [],
                 readback: applyResult.value.readbackVerification,
                 readbackFindings: applyResult.value.readbackWarnings,
-              })
-            : '';
+              }
+            : undefined;
+          const promiseOutcome = receiptInput
+            ? classifyWorksheetPromiseOutcome(receiptInput)
+            : 'unverified';
+          if (applyResult.isOk()) {
+            await emitWorksheetPromiseEvents({
+              config: extra.config,
+              sessionId: resolvedSession,
+              tool: 'build-and-apply-worksheet',
+              operation: 'load-worksheet',
+              readback: applyResult.value.readbackVerification,
+              findings: applyResult.value.readbackWarnings,
+              promiseOutcome,
+            });
+          }
+          const receipt = receiptInput ? formatWorksheetPromiseCheck(receiptInput) : '';
 
           return new Ok({
             message: `Built and applied worksheet "${worksheetName}" using template "${template}" with ${fields.length} fields.${receipt}`,

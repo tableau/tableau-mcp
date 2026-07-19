@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { loadDashboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
+import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
 import {
   buildApplyOverCapNote,
   isOverInlineXmlCap,
@@ -150,6 +151,16 @@ export const getApplyDashboardTool = (
           const receipt = result.isOk()
             ? formatDashboardPromiseCheck(result.value.validationWarnings)
             : '';
+          if (result.isOk()) {
+            await emitEpisodeEvent(extra.config, {
+              type: 'apply_succeeded',
+              session_id: resolvedSession,
+              episode_id: currentEpisodeId(resolvedSession),
+              tool: 'apply-dashboard',
+              operation: 'load-dashboard',
+              promise_outcome: 'unverified',
+            });
+          }
 
           return new Ok({
             message: `Successfully applied dashboard update for "${dashboardName}". The dashboard has been updated.${note}${receipt}`,

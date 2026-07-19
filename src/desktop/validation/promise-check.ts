@@ -37,30 +37,52 @@ function formatPreflight(validationWarnings: ValidationIssue[]): string {
 }
 
 /** One compact line: outcome + the checks that back it + the claim guard. */
-export function formatWorksheetPromiseCheck(input: WorksheetReceiptInput): string {
-  const parts: string[] = [formatPreflight(input.validationWarnings), 'apply completed'];
+export function classifyWorksheetPromiseOutcome(input: WorksheetReceiptInput): PromiseOutcome {
   let outcome: PromiseOutcome;
   switch (input.readback?.status) {
     case 'passed':
       outcome = 'verified';
-      parts.push('readback clean');
       break;
     case 'warning':
       outcome = 'verified';
-      parts.push('readback warnings (listed above)');
       break;
     case 'failed':
       outcome = 'failed';
-      parts.push('readback FAILED (nodes dropped)');
       break;
     case 'skipped':
     default:
       outcome = 'unverified';
-      parts.push('readback unavailable');
       break;
   }
   if (outcome === 'verified' && input.readbackFindings?.some(isPromisedSortLossWarning)) {
     outcome = 'failed';
+  }
+  return outcome;
+}
+
+/** One compact line: outcome + the checks that back it + the claim guard. */
+export function formatWorksheetPromiseCheck(input: WorksheetReceiptInput): string {
+  const parts: string[] = [formatPreflight(input.validationWarnings), 'apply completed'];
+  switch (input.readback?.status) {
+    case 'passed':
+      parts.push('readback clean');
+      break;
+    case 'warning':
+      parts.push('readback warnings (listed above)');
+      break;
+    case 'failed':
+      parts.push('readback FAILED (nodes dropped)');
+      break;
+    case 'skipped':
+    default:
+      parts.push('readback unavailable');
+      break;
+  }
+  const outcome = classifyWorksheetPromiseOutcome(input);
+  if (
+    (input.readback?.status === 'passed' || input.readback?.status === 'warning') &&
+    input.readbackFindings?.some(isPromisedSortLossWarning)
+  ) {
     parts.push('promised sort NOT verified (sort node dropped/changed on readback)');
   }
   const guard =

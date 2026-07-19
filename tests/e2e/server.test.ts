@@ -99,7 +99,9 @@ describe('server', () => {
 
     it('should list tools', async () => {
       const names = await client.listTools();
-      const expectedToolNames = [...desktopToolNames];
+      // Episode-lite lifecycle tools are gated by EPISODE_EVENTS=on (default off):
+      const episodeLiteTools = ['tableau-begin-episode', 'tableau-end-episode'];
+      const expectedToolNames = desktopToolNames.filter((name) => !episodeLiteTools.includes(name));
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });
@@ -170,7 +172,12 @@ describe('server', () => {
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedWebToolNames = expectedWebToolNames.filter((name) => !mcpAppsTools.includes(name));
 
-      const expectedToolNames = [...desktopToolNames, ...expectedWebToolNames];
+      // Episode-lite lifecycle tools are gated by EPISODE_EVENTS=on (default off):
+      const episodeLiteTools = ['tableau-begin-episode', 'tableau-end-episode'];
+      const expectedDesktopToolNames = desktopToolNames.filter(
+        (name) => !episodeLiteTools.includes(name),
+      );
+      const expectedToolNames = [...expectedDesktopToolNames, ...expectedWebToolNames];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });

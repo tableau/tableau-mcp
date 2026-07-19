@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  classifyWorksheetPromiseOutcome,
   formatDashboardPromiseCheck,
   formatWorkbookPromiseCheck,
   formatWorksheetPromiseCheck,
@@ -22,6 +23,34 @@ const sortWarning = (
 });
 
 describe('promise check receipt (W-23447506)', () => {
+  it('classifies worksheet promise outcomes with formatter parity', () => {
+    expect(
+      classifyWorksheetPromiseOutcome({
+        validationWarnings: [],
+        readback: { ok: true, status: 'passed' },
+      }),
+    ).toBe('verified');
+    expect(
+      classifyWorksheetPromiseOutcome({
+        validationWarnings: [],
+        readback: { ok: true, status: 'skipped' },
+      }),
+    ).toBe('unverified');
+    expect(
+      classifyWorksheetPromiseOutcome({
+        validationWarnings: [],
+        readback: { ok: false, status: 'failed' },
+      }),
+    ).toBe('failed');
+    expect(
+      classifyWorksheetPromiseOutcome({
+        validationWarnings: [],
+        readback: { ok: true, status: 'warning' },
+        readbackFindings: [sortWarning('computed-sort')],
+      }),
+    ).toBe('failed');
+  });
+
   it('formats clean readback as verified', () => {
     const text = formatWorksheetPromiseCheck({
       validationWarnings: [],

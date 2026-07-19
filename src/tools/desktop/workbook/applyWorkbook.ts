@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
+import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
 import {
   buildApplyOverCapNote,
   isOverInlineXmlCap,
@@ -150,6 +151,16 @@ export const getApplyWorkbookTool = (
           const receipt = result.isOk()
             ? formatWorkbookPromiseCheck(result.value.validationWarnings)
             : '';
+          if (result.isOk()) {
+            await emitEpisodeEvent(extra.config, {
+              type: 'apply_succeeded',
+              session_id: resolvedSession,
+              episode_id: currentEpisodeId(resolvedSession),
+              tool: 'apply-workbook',
+              operation: 'load-workbook',
+              promise_outcome: 'unverified',
+            });
+          }
 
           return new Ok({
             message: `Successfully applied workbook update. The workbook has been updated.${note}${receipt}`,

@@ -4,6 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import * as loadWorksheetXmlModule from '../../../desktop/commands/workbook/loadWorksheetXml.js';
+import * as episodeEvents from '../../../desktop/episode-events.js';
 import type { ReadbackFinding } from '../../../desktop/validation/readback-verify.js';
 import {
   ArgsValidationError,
@@ -41,6 +42,10 @@ describe('applyWorksheetTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    episodeEvents.resetEpisodeEventsForTests();
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -81,8 +86,9 @@ describe('applyWorksheetTool', () => {
     invariant(result.content[0].type === 'text');
 
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
-    expect(resultObj.message).toContain('Successfully applied worksheet update');
-    expect(resultObj.message).toContain('HOST VERIFICATION');
+    expect(resultObj.message).toBe(
+      'Successfully applied worksheet update for "Sheet 1". The worksheet has been updated.\n\nHOST VERIFICATION — unverified: preflight clean · apply completed · readback unavailable. Do not claim the change is confirmed; report only the evidence above.',
+    );
   });
 
   it('should successfully apply worksheet XML in file mode', async () => {
@@ -186,6 +192,38 @@ describe('applyWorksheetTool', () => {
     expect(message).toContain('HOST VERIFICATION — failed');
     expect(message).toContain('promised sort NOT verified');
     expect(message).not.toContain('HOST VERIFICATION — verified');
+  });
+
+  it('emits apply and readback events with promise_outcome without changing response text', async () => {
+    const eventSpy = vi.spyOn(episodeEvents, 'emitWorksheetPromiseEvents');
+    const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
+    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
+      Ok({ readbackWarnings: [], readbackVerification: { ok: true, status: 'passed' } }),
+    );
+
+    const result = await getToolResult({
+      session: '12345',
+      worksheetName: 'Sheet 1',
+      mode: 'inline',
+      worksheetXml: mockXml,
+      mockExecutor: vi.fn().mockResolvedValue({}),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(resultSchema.parse(JSON.parse(result.content[0].text)).message).toBe(
+      'Successfully applied worksheet update for "Sheet 1". The worksheet has been updated.\n\nHOST VERIFICATION — verified: preflight clean · apply completed · readback clean. No host evidence of any workbook problem beyond the findings listed above — do not report unlisted issues.',
+    );
+    expect(eventSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: '12345',
+        tool: 'apply-worksheet',
+        operation: 'load-worksheet',
+        readback: { ok: true, status: 'passed' },
+        findings: [],
+        promiseOutcome: 'verified',
+      }),
+    );
   });
 
   it('should return error when inline mode is used without worksheetXml', async () => {
@@ -378,6 +416,7 @@ async function getToolResult({
   worksheetXml,
   mockExecutor,
   customSignal,
+  configOverrides,
 }: {
   session: string;
   worksheetName: string;
@@ -386,6 +425,7 @@ async function getToolResult({
   worksheetXml?: string;
   mockExecutor: TableauDesktopToolContext['getExecutor'];
   customSignal?: AbortSignal;
+  configOverrides?: Partial<TableauDesktopToolContext['config']>;
 }): Promise<CallToolResult> {
   const tool = getApplyWorksheetTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -395,6 +435,7 @@ async function getToolResult({
     getExecutor: mockExecutor,
     ...(customSignal && { signal: customSignal }),
   };
+  extra.config = { ...extra.config, ...configOverrides };
 
   return await callback({ session, worksheetName, mode, worksheetFile, worksheetXml }, extra);
 }

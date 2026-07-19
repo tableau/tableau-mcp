@@ -16,6 +16,8 @@ export class BaseConfig {
   logLevel: LogLevel;
   loggers: Set<LoggerType>;
   fileLoggerDirectory: string;
+  episodeEventsEnabled: boolean;
+  episodeEventsDirectory: string;
   disableLogMasking: boolean;
   maxRequestTimeoutMs: number;
   notificationPayloadMaxBytes: number;
@@ -34,6 +36,8 @@ export class BaseConfig {
       LOG_LEVEL: logLevel,
       ENABLED_LOGGERS: logging,
       FILE_LOGGER_DIRECTORY: fileLoggerDirectory,
+      EPISODE_EVENTS: episodeEvents,
+      EPISODE_EVENTS_DIR: episodeEventsDirectory,
       DISABLE_LOG_MASKING: disableLogMasking,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       NOTIFICATION_PAYLOAD_MAX_BYTES: notificationPayloadMaxBytes,
@@ -45,6 +49,8 @@ export class BaseConfig {
     this.logLevel = parseLogLevel(logLevel);
     this.loggers = parseLoggerTypes(logging);
     this.fileLoggerDirectory = fileLoggerDirectory || join(__dirname, 'logs');
+    this.episodeEventsEnabled = episodeEvents === 'on';
+    this.episodeEventsDirectory = episodeEventsDirectory || this.fileLoggerDirectory;
     this.disableLogMasking = disableLogMasking === 'true';
     this.maxRequestTimeoutMs = parseNumber(maxRequestTimeoutMs, {
       defaultValue: milliseconds.fromMinutes(10),
