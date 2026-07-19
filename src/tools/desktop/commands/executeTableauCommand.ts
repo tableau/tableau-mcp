@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { validateKnownCommand } from '../../../desktop/commandRegistry.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -58,6 +59,11 @@ export const getExecuteTableauCommandTool = (
             return new ArgsValidationError(
               `Invalid namespace "${namespace}". Expected 'tabui' or 'tabdoc'.`,
             ).toErr();
+          }
+
+          const commandValidation = validateKnownCommand(command);
+          if (!commandValidation.ok) {
+            return new ArgsValidationError(commandValidation.message).toErr();
           }
 
           const executor = await extra.getExecutor(resolvedSession);
