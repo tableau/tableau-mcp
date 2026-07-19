@@ -11,6 +11,7 @@
 // under src/desktop/refine/refineWorksheet.ts; this file is the I/O wrapper + registration.
 
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { setTimeout as setTimeoutPromise } from 'timers/promises';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -43,6 +44,16 @@ type RefineOperation = 'top_n' | 'sort_direction';
 type RefineWorksheetToolResult =
   | { refined: true; operation: RefineOperation; worksheetName: string; message: string }
   | { refined: false; operation: RefineOperation; worksheetName: string; reason: string };
+
+// Commands apply asynchronously after SUCCEEDED (see
+// resources/desktop/knowledge/tactics/data/notional-spec-authoring.md) — the apply-once
+// call above returning does not mean the patch has landed in Desktop's live document yet.
+// A single readback immediately after apply can race that settle and see the PRE-apply
+// XML, which would misreport a durable apply as `refined: false`. Poll instead of reading
+// once; 250ms intervals are the interval documented to work for this same class of race
+// elsewhere (list-worksheets/list-dashboards polling after new-worksheet/new-dashboard).
+const READBACK_POLL_MAX_ATTEMPTS = 8;
+const READBACK_POLL_INTERVAL_MS = 250;
 
 /** A hand-back-to-the-standard-path refusal — not an error, so isError stays false. */
 function refusal(
@@ -207,40 +218,51 @@ export const getRefineWorksheetTool = (
             }
           }
 
-          // 6. Read back and confirm the expected node landed durably.
-          const readback = await getWorksheetXml({
-            worksheetName,
-            executor,
-            signal: extra.signal,
-          });
-          if (readback.isErr()) {
-            const { type, error } = readback.error;
-            switch (type) {
-              case 'get-worksheet-xml-error':
-                return new GetWorksheetXmlFailedError(error).toErr();
-              case 'execute-command-error':
-                return new DesktopCommandExecutionError(error).toErr();
-              default: {
-                const _: never = type;
-                return new UnknownError(error).toErr();
+          // 6. Read back and confirm the expected node landed durably. The apply is async
+          // after SUCCEEDED, so poll rather than trusting one immediate readback — the
+          // first read can race the settle and still show pre-apply XML.
+          for (let attempt = 1; attempt <= READBACK_POLL_MAX_ATTEMPTS; attempt++) {
+            const readback = await getWorksheetXml({
+              worksheetName,
+              executor,
+              signal: extra.signal,
+            });
+            if (readback.isErr()) {
+              const { type, error } = readback.error;
+              switch (type) {
+                case 'get-worksheet-xml-error':
+                  return new GetWorksheetXmlFailedError(error).toErr();
+                case 'execute-command-error':
+                  return new DesktopCommandExecutionError(error).toErr();
+                default: {
+                  const _: never = type;
+                  return new UnknownError(error).toErr();
+                }
               }
             }
-          }
-          if (!confirm(readback.value)) {
-            return refusal(
-              operation,
-              worksheetName,
-              `applied, but the readback did not contain the expected ${nodeLabel} — the ` +
-                'refinement was not durable. Not retrying; fall back to the standard path.',
-            );
+            if (confirm(readback.value)) {
+              return new Ok({
+                refined: true,
+                operation,
+                worksheetName,
+                message: `Applied ${operation} to worksheet "${worksheetName}" and confirmed the ${nodeLabel} on readback.`,
+              });
+            }
+            if (attempt < READBACK_POLL_MAX_ATTEMPTS) {
+              await setTimeoutPromise(READBACK_POLL_INTERVAL_MS, undefined, {
+                signal: extra.signal,
+              });
+            }
           }
 
-          return new Ok({
-            refined: true,
+          return refusal(
             operation,
             worksheetName,
-            message: `Applied ${operation} to worksheet "${worksheetName}" and confirmed the ${nodeLabel} on readback.`,
-          });
+            `applied, but the readback did not contain the expected ${nodeLabel} after ` +
+              `${READBACK_POLL_MAX_ATTEMPTS} polls (${READBACK_POLL_INTERVAL_MS}ms apart) — ` +
+              'the refinement was not durable, or this is an async-settle miss. Not retrying ' +
+              'further; fall back to the standard path.',
+          );
         },
       });
     },
