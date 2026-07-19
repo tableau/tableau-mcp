@@ -15,6 +15,8 @@ The NotionalSpec schema cannot express calculated fields — but calcs are how a
 
 ## When to Use
 
+**If the `author-calc` tool is available, use it first** — it takes `caption` + `formula` primitives and performs this whole round-trip internally (splice, load, readback-verify), so no document ever passes through your hands. Fall back to the manual round-trip below only when `author-calc` is absent or you need a multi-column batch splice.
+
 Use the document round-trip when an ask needs a field that doesn't exist yet — then chart it with the NotionalSpec loop:
 
 1. `tabui:save-underlying-metadata` → returns the full workbook document (routed to GET `/v0/workbook/document`).
@@ -73,6 +75,7 @@ Write the whole edited document back via `tabui:load-underlying-metadata` (`text
 ### What does NOT work
 
 - `apply-calculation-for-create-or-update` without a Cloud+AI session (400/500).
+- `tabdoc:open-calc-editor-with-custom-calc` as a headless calc door: it returns `completed` but does NOT commit the calc — it opens the calculation editor with the formula pre-filled, and the open editor holds the UI thread so subsequent commands fail until a human closes it (live-proven 2026-07-19, twice). Human-in-the-loop only; never call it in an unattended run.
 - Raw `tabdoc:`/`tabui:save-underlying-metadata` over the External API command route (`command-not-found` 404) — these verb names are THIS server's mapping to the document endpoints, not registered app commands.
 - Expressing formulas, LODs, or table-calc addressing inside NotionalSpec JSON.
 - Any claim that a spliced calc's VALUES are correct because the load succeeded or a chart rendered.
