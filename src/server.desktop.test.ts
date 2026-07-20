@@ -225,7 +225,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // DO NOT GROW these: trim them down and lower/remove the entry. Never raise a
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
-    ['bind-template', 1632], // ratcheted down in the author-calc funding trim (Call-2 proposal provenance kept); do not grow
+    ['bind-template', 1629], // ratcheted down again in the auto-apply describe trim (Call-2 auto-apply); do not grow
     ['plan-dashboard-creation', 1509], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1558], // ratcheted down in the CODA funding trim; do not grow
     ['validate-proposal', 1407], // ratcheted down in the CODA funding trim; do not grow

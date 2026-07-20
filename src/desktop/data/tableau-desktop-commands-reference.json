@@ -23568,7 +23568,7 @@
           "local_name": "VizGenerationStatusList",
           "type_id": "",
           "required": false,
-          "comment": "NOT returned by the /v0 External Client API (write-blind envelope). Verify by readback instead.",
+          "comment": "NOT returned by the /v0 External Client API, but execute-tableau-command appends a compact post-apply readback to successful tabdoc:generate-viz-from-notional-spec results. Trust that line; use tabui:save-underlying-metadata only for deeper inspection.",
           "cannot_provide_from_mcp": false
         }
       ],

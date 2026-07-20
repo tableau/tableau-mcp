@@ -3,15 +3,30 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { validateKnownCommand } from '../../../desktop/commandRegistry.js';
+import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
+import {
+  findAllWorksheets,
+  findWorksheet,
+  normalizeArray,
+  parseXML,
+} from '../../../desktop/metadata/parser.js';
+import type {
+  ParsedPane,
+  ParsedWindow,
+  ParsedWorkbook,
+  ParsedWorksheet,
+} from '../../../desktop/metadata/types.js';
 import { validateNotionalSpecArgs } from '../../../desktop/notionalSpecGuard.js';
 import { validateCommandParams } from '../../../desktop/paramContractGuard.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
+import type { ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { validateUnderlyingMetadataLoad } from '../../../desktop/underlyingMetadataGuard.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const LOAD_UNDERLYING_METADATA_COMMAND = 'tabui:load-underlying-metadata';
+const GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND = 'tabdoc:generate-viz-from-notional-spec';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
@@ -124,9 +139,13 @@ export const getExecuteTableauCommandTool = (
           const resultText = result.value.result
             ? JSON.stringify(result.value.result, null, 2)
             : 'Command completed successfully (no result data)';
+          let message = `Command executed successfully:\n\n${resultText}`;
+          if (command === GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND) {
+            message = await appendGenerateVizReadback({ message, executor, signal: extra.signal });
+          }
 
           return new Ok({
-            message: `Command executed successfully:\n\n${resultText}`,
+            message,
           });
         },
       });
@@ -156,4 +175,145 @@ function extractDocumentText(value: unknown): string | null {
   }
 
   return typeof result === 'string' ? result : null;
+}
+
+async function appendGenerateVizReadback({
+  message,
+  executor,
+  signal,
+}: {
+  message: string;
+  executor: ToolExecutor;
+  signal: AbortSignal;
+}): Promise<string> {
+  try {
+    const workbookXml = await getWorkbookXml({ executor, signal });
+    if (workbookXml.isErr()) {
+      return message;
+    }
+    const readback = formatCurrentWorksheetReadback(workbookXml.value);
+    return readback ? `${message}\n\n${readback}` : message;
+  } catch {
+    return message;
+  }
+}
+
+function formatCurrentWorksheetReadback(workbookXml: string): string | null {
+  const workbook = parseXML(workbookXml);
+  const worksheet = pickCurrentWorksheet(workbook);
+  if (!worksheet) {
+    return null;
+  }
+
+  const rows = formatShelf(worksheet.table?.rows);
+  const cols = formatShelf(worksheet.table?.cols);
+  const markClass = getMarkClass(worksheet);
+  const sort = getSortSummary(worksheet);
+  const pieces = [
+    `readback: sheet "${worksheet['@_name']}" - Rows: ${rows}; Cols: ${cols}`,
+    markClass ? `mark: ${markClass}` : undefined,
+    sort ? `sort: ${sort}` : undefined,
+  ].filter(Boolean);
+
+  return `${pieces.join('; ')}.`;
+}
+
+function pickCurrentWorksheet(workbook: ParsedWorkbook): ParsedWorksheet | null {
+  const worksheets = findAllWorksheets(workbook);
+  if (worksheets.length === 0) {
+    return null;
+  }
+
+  const worksheetWindows = normalizeArray<ParsedWindow>(workbook.workbook?.windows?.window).filter(
+    (window) => (window['@_class'] ?? 'worksheet') === 'worksheet',
+  );
+  const activeWindow = worksheetWindows.find((window) =>
+    ['true', '1'].includes(String(window['@_active'] ?? '').toLowerCase()),
+  );
+  if (activeWindow?.['@_name']) {
+    return findWorksheet(workbook, activeWindow['@_name']);
+  }
+
+  const maximizedWindow = worksheetWindows.find((window) =>
+    ['true', '1'].includes(String(window['@_maximized'] ?? '').toLowerCase()),
+  );
+  if (maximizedWindow?.['@_name']) {
+    return findWorksheet(workbook, maximizedWindow['@_name']);
+  }
+
+  if (worksheets.length === 1) {
+    return worksheets[0];
+  }
+  if (worksheetWindows.length === 1 && worksheetWindows[0]['@_name']) {
+    return findWorksheet(workbook, worksheetWindows[0]['@_name']);
+  }
+
+  return null;
+}
+
+function formatShelf(value: unknown): string {
+  const parts = normalizeArray(value)
+    .map((entry) => textValue(entry))
+    .filter((entry): entry is string => Boolean(entry));
+  return parts.length > 0 ? parts.join(', ') : '[]';
+}
+
+function getMarkClass(worksheet: ParsedWorksheet): string | null {
+  const panes = normalizeArray<ParsedPane>(worksheet.table?.panes?.pane);
+  const paneWithMark = panes.find((pane) => typeof pane.mark?.['@_class'] === 'string');
+  return paneWithMark?.mark?.['@_class'] ?? null;
+}
+
+function getSortSummary(worksheet: ParsedWorksheet): string | null {
+  const sort = findFirstSort(worksheet.table);
+  if (!isRecord(sort)) {
+    return null;
+  }
+
+  const column = stringAttr(sort, '@_column');
+  const direction = stringAttr(sort, '@_direction')?.toLowerCase();
+  const using = stringAttr(sort, '@_using');
+  if (!column && !direction && !using) {
+    return null;
+  }
+
+  return [column, direction, using ? `by ${using}` : undefined].filter(Boolean).join(' ');
+}
+
+function findFirstSort(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return null;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (key.toLowerCase().endsWith('sort')) {
+      return Array.isArray(child) ? child[0] : child;
+    }
+  }
+  for (const child of Object.values(value)) {
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        const sort = findFirstSort(item);
+        if (sort) return sort;
+      }
+      continue;
+    }
+    const sort = findFirstSort(child);
+    if (sort) return sort;
+  }
+  return null;
+}
+
+function textValue(value: unknown): string | null {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (isRecord(value) && typeof value['#text'] === 'string') {
+    return value['#text'];
+  }
+  return null;
+}
+
+function stringAttr(value: Record<string, unknown>, key: string): string | null {
+  const attr = value[key];
+  return typeof attr === 'string' && attr.length > 0 ? attr : null;
 }

@@ -108,7 +108,8 @@ const sampleProposal: BindingProposal & { confidence: number } = {
 };
 
 // A Call-2 proposal that validated into a bound result is marked used_llm:true.
-// The auto-apply gate must refuse it even with the flag set AND a fast-path manifest.
+// The auto-apply gate should preserve that field on non-applied results, but it no
+// longer blocks server-side auto-apply by itself.
 const boundViaProposalResult: BinderResult = { ...boundResult, used_llm: true };
 
 describe('bindTemplateTool', () => {
@@ -482,8 +483,10 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect((body.guidance as string).length).toBeLessThan(200);
   });
 
-  it('auto_apply=true NEVER applies a Call-2 proposal (used_llm) even with a fast-path manifest', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({ bind: boundViaProposalResult });
+  it('auto_apply=true applies a validated Call-2 proposal bind with the events anchor', async () => {
+    const { executeCommand, getEvents, getExecutor } = setupAutoApplyMocks({
+      bind: boundViaProposalResult,
+    });
 
     const result = await getToolResult({
       session: '1',
@@ -496,9 +499,15 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBeUndefined();
-    expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(body.applied).toBe(true);
+    expect(body.used_llm).toBeUndefined();
+    expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(getEvents).toHaveBeenCalledTimes(2);
+    expect(getEvents).toHaveBeenNthCalledWith(2, {
+      signal: expect.any(AbortSignal),
+      sinceSequence: 41,
+    });
   });
 
   it('auto_apply=true leaves a propose outcome unchanged (no apply)', async () => {

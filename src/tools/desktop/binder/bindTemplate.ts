@@ -50,7 +50,7 @@ const paramsSchema = {
     .optional()
     .describe("Call 2 only: proposal from a Call-1 'propose' payload."),
   minConfidence: z.number().min(0).max(1).optional().describe('Floor.'),
-  auto_apply: z.boolean().optional().describe('Apply Call 1 only; default false.'),
+  auto_apply: z.boolean().optional().describe('Apply on bound; default false.'),
 };
 
 /**
@@ -453,17 +453,17 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               : { ...res, guidance: buildGuidance(res) };
 
           // ── Auto-apply gate (defense in depth) ───────────────────────────
-          // Only a deterministic Call-1 bind (used_llm === false) of a fast-path-
-          // eligible template auto-applies. A Call-2 proposal (used_llm === true) or
-          // any non-bound outcome NEVER auto-applies, even with the flag set. Both
-          // conditions are implied by a Call-1 bound result today; we assert them.
+          // Auto-apply only for a bound result whose manifest remains fast-path eligible.
+          // A Call-2 proposal bind is validated by the binder against the live workbook and
+          // the apply runs under the SAME events-anchor user-change guard; on the slim
+          // surface the manual apply tools do not exist, so the alternative is the model
+          // freehand-building the same chart with FEWER guards. Applying a validated bind is
+          // the safer branch. The defense-in-depth guard is now binder validation plus the
+          // events anchor, not Call-1/Call-2 parity.
           const manifest =
             res.status === 'bound' ? manifests.get(res.args.template_name) : undefined;
           const canAutoApply =
-            auto_apply === true &&
-            res.status === 'bound' &&
-            res.used_llm === false &&
-            manifest?.fast_path_eligible === true;
+            auto_apply === true && res.status === 'bound' && manifest?.fast_path_eligible === true;
 
           if (!canAutoApply || res.status !== 'bound') {
             return new Ok(base);
