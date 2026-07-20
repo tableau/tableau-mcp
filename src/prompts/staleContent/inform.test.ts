@@ -61,4 +61,22 @@ describe('stale-content-cleanup-inform prompt', () => {
     }
     expect(result.messages[0].content.text).not.toContain('"projectIds"');
   });
+
+  it('handles the ROW_CAP_EXCEEDED withheld-rows path before the empty-rows rule', async () => {
+    // Regression guard: on the over-cap path the tool returns rows:[] with a large
+    // totalStaleItems and a ROW_CAP_EXCEEDED warning. The render instructions must branch
+    // on that warning BEFORE the "rows empty → No stale items found" rule, or the model
+    // prints a large total immediately followed by "No stale items found" — hiding them.
+    const prompt = getStaleContentCleanupInformPrompt(new WebMcpServer());
+    const result = await prompt.callback({});
+    if (result.messages[0].content.type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const { text } = result.messages[0].content;
+    expect(text).toContain('ROW_CAP_EXCEEDED');
+    expect(text).toContain('withheld');
+    expect(text).toContain('narrow scope');
+    // The cap branch must be described before the empty-rows "No stale items found" rule.
+    expect(text.indexOf('ROW_CAP_EXCEEDED')).toBeLessThan(text.indexOf('No stale items found'));
+  });
 });

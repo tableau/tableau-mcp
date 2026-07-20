@@ -10,10 +10,12 @@ const DEFAULT_PENDING_DELETION_TAG = 'pending-deletion';
  * Above this many report rows, the workflow refuses to tag/delete in one pass and asks the user to
  * narrow scope first — guards against an unreviewed mass write across other owners' content (F1).
  *
- * SOFT GUARD: this is enforced only via prompt text (Step 1 below), so the guarantee is only as
- * strong as the model's compliance — a model that ignores the instruction can still resolve every
- * row. Making it hard would require enforcing the cap server-side inside query-admin-insights;
- * tracked as a follow-up.
+ * DEFENSE-IN-DEPTH (redundant second layer): the row cap is now enforced SERVER-SIDE inside
+ * `query-admin-insights` (kind: stale-content) via the configurable `STALE_CONTENT_MAX_ROWS`
+ * (default 100). Above that cap the tool withholds the row payload entirely and returns a
+ * `ROW_CAP_EXCEEDED` warning, so a model that ignores this prompt text can no longer receive a huge
+ * actionable set. This prompt-text guard is kept as a redundant second layer; the value mirrors the
+ * server default so the two layers agree.
  */
 const LARGE_REPORT_THRESHOLD = 100;
 
@@ -189,7 +191,8 @@ export const getStaleContentCleanupApplyPrompt: WebPromptFactory = () => ({
       JSON.stringify({ toolArgs: reportArgs }, null, 2),
       '```',
       '',
-      'If `rows` is empty, state "No stale items found above the threshold." and stop.',
+      'If `mcp.warnings` contains an entry with `type: "ROW_CAP_EXCEEDED"`, the server withheld the row payload (`rows` is empty) because `totalStaleItems` exceeds the server safety cap (`maxRows`). Do NOT say "No stale items found" and do NOT proceed to tag or delete. Tell the user the site has `<totalStaleItems>` stale items — too many to tag/delete safely in one pass — and ask them to narrow scope (e.g. by `projectIds`, a higher `minAgeDays`, or a specific item subset) and re-run before continuing. Then stop.',
+      'If `rows` is empty (and no ROW_CAP_EXCEEDED warning is present), state "No stale items found above the threshold." and stop.',
       `If the report returns more than ${LARGE_REPORT_THRESHOLD} rows, do NOT proceed to resolve or act on all of them. ` +
         'Tell the user how many stale items were found and that this is too many to tag/delete safely in one pass, ' +
         'and ask them to narrow the scope (e.g. by `projectIds`, a higher `minAgeDays`, or a specific item subset) ' +
