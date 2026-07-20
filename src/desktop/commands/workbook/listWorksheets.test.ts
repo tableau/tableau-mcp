@@ -47,6 +47,36 @@ describe('listWorksheets (Agent API transport, default)', () => {
     });
   });
 
+  it('decodes XML entities in worksheet names returned by Desktop', async () => {
+    const mockExecutor = {
+      executeCommand: vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'cmd-123',
+          status: 'completed',
+          parsedResult: {
+            worksheets: JSON.stringify({
+              count: 2,
+              worksheets: [
+                { name: 'P&amp;L Waterfall: Revenue to Net Income' },
+                { name: 'Revenue &lt; &quot;Gross&quot;' },
+              ],
+            }),
+          },
+        }),
+      ),
+    } as unknown as LocalExecutor;
+
+    const result = await listWorksheets({ executor: mockExecutor, signal: mockSignal });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value).toEqual({
+        count: 2,
+        worksheets: ['P&L Waterfall: Revenue to Net Income', 'Revenue < "Gross"'],
+      });
+    }
+  });
+
   it('should return empty list when no worksheets exist', async () => {
     const mockExecutor = {
       executeCommand: vi.fn().mockResolvedValue(

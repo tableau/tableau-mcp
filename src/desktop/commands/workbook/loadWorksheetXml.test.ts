@@ -286,6 +286,31 @@ describe('loadWorksheetXml (Agent API transport, default)', () => {
     });
   });
 
+  it('passes the gate for escaped caller input and dispatches the raw Desktop command name', async () => {
+    const literalName = 'P&L Waterfall: Revenue to Net Income';
+    const commandName = 'P&amp;L Waterfall: Revenue to Net Income';
+    const xml = `<worksheet name="${commandName}"><table></table></worksheet>`;
+    const { executor, calls } = dispatchingAgentExecutor(xml);
+
+    const result = await loadWorksheetXml({
+      worksheetName: commandName,
+      xml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(calls.find((c) => c.command === 'load-worksheet')?.args).toMatchObject({
+      worksheetName: commandName,
+    });
+    expect(calls.some((c) => c.command === 'goto-sheet' && c.args?.sheet === commandName)).toBe(
+      true,
+    );
+    expect(calls.some((c) => c.command === 'goto-sheet' && c.args?.sheet === literalName)).toBe(
+      false,
+    );
+  });
+
   it('focuses the canonical XML worksheet name (not the raw caller arg) after a matched apply', async () => {
     const { executor, calls } = dispatchingAgentExecutor(validXml);
 

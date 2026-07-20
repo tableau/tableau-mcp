@@ -11,6 +11,8 @@ import {
   type Blocker,
   DERIVATION_OVERRIDE_INSTRUCTION,
   type EscalateReason,
+  resolveInSummary,
+  summarizeSchema,
 } from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
@@ -20,14 +22,24 @@ import {
   type LoadWorkbookXmlError,
 } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
+import {
+  planSortByFieldOnCategoricalAxis,
+  planTopN,
+  type SortDirection,
+} from '../../../desktop/refine/refineWorksheet.js';
 import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { ExecuteCommandError, ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
+import { decodeXmlEntities } from '../../../desktop/xmlElement.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import {
+  type AuthorCalcInput,
+  authorCalculationsInWorkbook,
+} from '../data-source/authorCalcCore.js';
 import {
   jsonToolResult,
   type NextAction,
@@ -44,13 +56,22 @@ import { DesktopTool } from '../tool.js';
 import { proposalSchema } from './proposalSchema.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session.'),
-  ask: z.string().describe('Viz ask.'),
-  proposal: proposalSchema
+  session: z.string().optional(),
+  ask: z.string(),
+  proposal: proposalSchema.optional(),
+  minConfidence: z.number().min(0).max(1).optional(),
+  auto_apply: z.boolean().optional().describe('Apply on bound; default false.'),
+  calcs: z
+    .array(
+      z.object({
+        caption: z.string(),
+        formula: z.string(),
+        datatype: z.string().optional(),
+        role: z.string().optional(),
+      }),
+    )
     .optional()
-    .describe("Call 2 only: proposal from a Call-1 'propose' payload."),
-  minConfidence: z.number().min(0).max(1).optional().describe('Floor.'),
-  auto_apply: z.boolean().optional().describe('Apply Call 1 only; default false.'),
+    .describe('Authored before binding.'),
 };
 
 /**
@@ -61,6 +82,7 @@ const paramsSchema = {
  */
 type BindTemplateToolResultBase = BinderResult & {
   guidance: string;
+  authored_calcs?: string[];
   applied?: boolean;
   sheet_name?: string;
   phase_ms?: { bind: number; inject: number; apply: number };
@@ -78,6 +100,7 @@ type BindTemplateToolResultBase = BinderResult & {
 type AppliedFastPathResult = {
   status: 'bound';
   applied: true;
+  authored_calcs?: string[];
   sheet_name: string;
   phase_ms: { bind: number; inject: number; apply: number };
   guidance: string;
@@ -194,6 +217,38 @@ function describeApplyError(
 
 type BoundResult = Extract<BinderResult, { status: 'bound' }>;
 
+function sortDirectionForApply(direction: 'asc' | 'desc'): SortDirection {
+  return direction === 'desc' ? 'DESC' : 'ASC';
+}
+
+function applyProposalSplices({
+  xml,
+  args,
+  workbookXml,
+}: {
+  xml: string;
+  args: BoundResult['args'];
+  workbookXml: string;
+}): { ok: true; xml: string } | { ok: false; reason: string } {
+  let out = xml;
+  if (args.sort) {
+    const sortField = resolveInSummary(summarizeSchema(workbookXml), args.sort.by);
+    const sorted = planSortByFieldOnCategoricalAxis(out, {
+      sortByField: args.sort.by,
+      sortByColumnRef: sortField.field?.column_ref,
+      direction: sortDirectionForApply(args.sort.direction),
+    });
+    if (!sorted.ok) return { ok: false, reason: `sort splice failed: ${sorted.reason}` };
+    out = sorted.xml;
+  }
+  if (args.top_n !== undefined) {
+    const filtered = planTopN(out, { n: args.top_n });
+    if (!filtered.ok) return { ok: false, reason: `top_n splice failed: ${filtered.reason}` };
+    out = filtered.xml;
+  }
+  return { ok: true, xml: out };
+}
+
 /**
  * Build the graceful-fallback result: the bound args are intact + why apply didn't run.
  * Default guidance points at the manual inject/apply chain using the returned args — that
@@ -207,11 +262,12 @@ function applyFallback(
   apply_error: string,
   guidance?: string,
 ): BindTemplateToolResultBase {
+  const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, base.status);
   return {
     ...base,
     guidance:
       guidance ??
-      `Server-side auto-apply did not complete (${apply_error}). The bound args are intact — fall back to the manual chain: get workbook structure in file mode → inject-template → apply-workbook using the returned args.`,
+      `${calcPrefix}Server-side auto-apply did not complete (${apply_error}). The bound args are intact — fall back to the manual chain: get workbook structure in file mode → inject-template → apply-workbook using the returned args.`,
     applied: false,
     apply_error,
   };
@@ -297,11 +353,15 @@ async function performAutoApply({
   if (!injected.ok) {
     return applyFallback(base, `inject failed: ${injected.issues.join('; ')}`);
   }
+  const spliced = applyProposalSplices({ xml: injected.xml, args, workbookXml });
+  if (!spliced.ok) {
+    return applyFallback(base, spliced.reason);
+  }
   const injectMs = Date.now() - injectStart;
 
   // ── Apply leg (SAME validated path; runValidation preflight runs) ─
   const applyStart = Date.now();
-  const applyResult = await loadWorkbookXml({ xml: injected.xml, executor, signal });
+  const applyResult = await loadWorkbookXml({ xml: spliced.xml, executor, signal });
   const applyMs = Date.now() - applyStart;
   if (applyResult.isErr()) {
     return applyFallback(base, `apply failed: ${describeApplyError(applyResult.error)}`);
@@ -310,23 +370,49 @@ async function performAutoApply({
   // W60 response-shape trim (P4): on success, return ONLY the trimmed fast-path shape —
   // drop the args echo, apply_instruction, apply_hint, and used_llm from `base`. Those
   // enable a manual second call that never happens once the apply succeeds.
+  const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, res.status);
+  const literalTitle = decodeXmlEntities(args.title);
   return {
     status: res.status,
-    guidance: `Applied "${args.title}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
+    ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
+    guidance: `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
     applied: true,
-    sheet_name: args.title,
+    sheet_name: literalTitle,
     phase_ms: { bind: bindMs, inject: injectMs, apply: applyMs },
   };
 }
 
-const title = 'Bind a Viz Template to an Ask (Fast Path)';
+function renderAuthoredCalcPrefix(
+  captions: string[] | undefined,
+  status: BinderResult['status'],
+): string {
+  return captions && captions.length > 0
+    ? `Calcs authored: ${captions.join(', ')}. Bind outcome: ${status}. `
+    : '';
+}
+
+function annotateAuthoredCalcs<T extends StructuredBindTemplateToolResult>(
+  result: T,
+  captions: string[],
+): T {
+  if (captions.length === 0) {
+    return result;
+  }
+  return {
+    ...result,
+    authored_calcs: captions,
+    guidance: `${renderAuthoredCalcPrefix(captions, result.status)}${result.guidance}`,
+  };
+}
+
+const title = 'Bind Template';
 
 export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const bindTemplateTool = new DesktopTool({
     server,
     name: 'bind-template',
     title,
-    description: 'Bind template: Call1 bound/propose; Call2 bound/escalate.',
+    description: 'Bind/apply template; calcs[] first.',
     paramsSchema,
     annotations: {
       title,
@@ -336,12 +422,12 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
       idempotentHint: true,
     },
     callback: async (
-      { session, ask, proposal, minConfidence, auto_apply },
+      { session, ask, proposal, minConfidence, auto_apply, calcs },
       extra,
     ): Promise<CallToolResult> => {
       return await bindTemplateTool.logAndExecute<BindTemplateToolResult>({
         extra,
-        args: { session, ask, proposal, minConfidence, auto_apply },
+        args: { session, ask, proposal, minConfidence, auto_apply, calcs },
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -382,6 +468,21 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           if (xmlResult.isErr()) {
             return new DesktopCommandExecutionError(xmlResult.error).toErr();
           }
+          let workbookXml = xmlResult.value;
+          let authoredCalcCaptions: string[] = [];
+          if (calcs && calcs.length > 0) {
+            const authored = await authorCalculationsInWorkbook({
+              workbookXml,
+              calcs: calcs as AuthorCalcInput[],
+              executor,
+              signal: extra.signal,
+            });
+            if (authored.isErr()) {
+              return authored.error.toErr();
+            }
+            workbookXml = authored.value.workbookXml;
+            authoredCalcCaptions = authored.value.authoredCalcs.map((calc) => calc.caption);
+          }
 
           // SEAM: source manifests through bundledIntelligenceProvider (never raw
           // loadManifests) so a milestone-2 remote content-pack provider swaps in without
@@ -421,7 +522,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           try {
             res = await bindTemplate({
               ask,
-              workbookXml: xmlResult.value,
+              workbookXml,
               manifests,
               ...(proposal ? { proposal: proposal as BindingProposal } : {}),
               ...(minConfidence !== undefined ? { minConfidence } : {}),
@@ -444,26 +545,28 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
           const bindMs = Date.now() - bindStart;
 
-          const base: StructuredBindTemplateToolResult =
+          const base: StructuredBindTemplateToolResult = annotateAuthoredCalcs(
             res.status === 'escalate'
               ? withNextAction(
                   { ...res, guidance: buildGuidance(res) },
                   nextActionForEscalation(res.reason),
                 )
-              : { ...res, guidance: buildGuidance(res) };
+              : { ...res, guidance: buildGuidance(res) },
+            authoredCalcCaptions,
+          );
 
           // ── Auto-apply gate (defense in depth) ───────────────────────────
-          // Only a deterministic Call-1 bind (used_llm === false) of a fast-path-
-          // eligible template auto-applies. A Call-2 proposal (used_llm === true) or
-          // any non-bound outcome NEVER auto-applies, even with the flag set. Both
-          // conditions are implied by a Call-1 bound result today; we assert them.
+          // Auto-apply only for a bound result whose manifest remains fast-path eligible.
+          // A Call-2 proposal bind is validated by the binder against the live workbook and
+          // the apply runs under the SAME events-anchor user-change guard; on the slim
+          // surface the manual apply tools do not exist, so the alternative is the model
+          // freehand-building the same chart with FEWER guards. Applying a validated bind is
+          // the safer branch. The defense-in-depth guard is now binder validation plus the
+          // events anchor, not Call-1/Call-2 parity.
           const manifest =
             res.status === 'bound' ? manifests.get(res.args.template_name) : undefined;
           const canAutoApply =
-            auto_apply === true &&
-            res.status === 'bound' &&
-            res.used_llm === false &&
-            manifest?.fast_path_eligible === true;
+            auto_apply === true && res.status === 'bound' && manifest?.fast_path_eligible === true;
 
           if (!canAutoApply || res.status !== 'bound') {
             return new Ok(base);
@@ -473,7 +576,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             await performAutoApply({
               res,
               base,
-              workbookXml: xmlResult.value,
+              workbookXml,
               session: resolvedSession,
               executor,
               signal: extra.signal,

@@ -49,7 +49,7 @@ describe('authorCalcTool', () => {
       calcName: '[Calculation_1700000000000]',
       caption: 'Profit & "Growth"',
       datasource: 'Superstore',
-      hint: 'reference it by caption in generate-viz-from-notional-spec',
+      hint: 'reference it by caption in a bind-template ask (name the caption plus a chart shape), auto_apply: true',
     });
 
     const loadCall = commandCalls(executeCommand).find(

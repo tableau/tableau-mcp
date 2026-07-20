@@ -29,20 +29,21 @@ const LIST_INSTANCES_TOOL: DesktopToolName = 'list-instances';
  * differently, so step 3 reads whichever the active transport uses.
  */
 export function resolveSession(session: string | undefined): Result<string, McpToolError> {
+  const requestedSession = session?.trim() ? session : undefined;
   const config = getDesktopConfig();
   if (config.desktopSessionId !== undefined) {
-    if (session !== undefined && session !== config.desktopSessionId) {
+    if (requestedSession !== undefined && requestedSession !== config.desktopSessionId) {
       return Err(
         new ArgsValidationError(
-          `This agent is pinned to Tableau Desktop (pid ${config.desktopSessionId}), but session '${session}' was requested. Omit the 'session' parameter — the pinned Desktop is used automatically.`,
+          `This agent is pinned to Tableau Desktop (pid ${config.desktopSessionId}), but session '${requestedSession}' was requested. Omit the 'session' parameter — the pinned Desktop is used automatically.`,
         ),
       );
     }
     return Ok(config.desktopSessionId);
   }
 
-  if (session !== undefined) {
-    return Ok(session);
+  if (requestedSession !== undefined) {
+    return Ok(requestedSession);
   }
 
   const pids = config.externalApiEnabled

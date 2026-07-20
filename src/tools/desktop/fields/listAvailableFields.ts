@@ -3,17 +3,39 @@ import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
-import { FileNotFoundError, FileReadError } from '../../../errors/mcpToolError.js';
+import {
+  DesktopCommandExecutionError,
+  FileReadError,
+  McpToolError,
+} from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 import { refreshWorkbookCache } from './refreshWorkbookCache.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; refreshes live workbook first.'),
-  workbookFile: z.string().describe('Workbook cache file, not worksheet.'),
+  workbookFile: z
+    .string()
+    .optional()
+    .describe('Optional cached workbook file; omit for the live session workbook.'),
 };
+
+class WorkbookFileNotFoundError extends McpToolError {
+  constructor(workbookFile: string) {
+    super({
+      type: 'file-not-found',
+      message: [
+        `File not found: ${workbookFile}.`,
+        'Provide an absolute path to a cached workbook file.',
+        'Omit workbookFile to read fields from the live session workbook.',
+      ].join(' '),
+      statusCode: 404,
+    });
+  }
+}
 
 const pad = (str: string, len: number): string => str + ' '.repeat(Math.max(0, len - str.length));
 
@@ -54,7 +76,7 @@ export const getListAvailableFieldsTool = (
     description: [
       'List ALL fields available in workbook datasources.',
       'Returns exact column_ref inputs for field tools. Call before adding fields to Rows, Columns, or encodings.',
-      'Reads cache; session refreshes live workbook first. NOT a worksheet file.',
+      'Omit workbookFile to read the live session workbook. Cached workbook file only; NOT a worksheet file.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -69,33 +91,45 @@ export const getListAvailableFieldsTool = (
         extra,
         args: { session, workbookFile },
         callback: async () => {
-          if (!existsSync(workbookFile)) {
-            return new FileNotFoundError(workbookFile).toErr();
+          const cacheWorkbookFile = workbookFile?.trim() ? workbookFile : undefined;
+
+          if (cacheWorkbookFile && !existsSync(cacheWorkbookFile)) {
+            return new WorkbookFileNotFoundError(cacheWorkbookFile).toErr();
           }
 
           let workbookXml: string;
-          if (session) {
+          if (session || cacheWorkbookFile === undefined) {
             const sessionResult = resolveSession(session);
             if (sessionResult.isErr()) {
               return sessionResult.error.toErr();
             }
+            const resolvedSession = sessionResult.value;
 
-            // Shared refresh seam (W-23447478): resolve-field reuses the identical
-            // re-snapshot + cache/sidecar-rewrite path. list-available-fields fails
-            // hard on a refresh failure (never silently lists stale fields).
-            const refresh = await refreshWorkbookCache({
-              extra,
-              workbookFile,
-              resolvedSession: sessionResult.value,
-              action: 'listing fields',
-            });
-            if (!refresh.ok) {
-              return refresh.error.toErr();
+            if (cacheWorkbookFile) {
+              // Shared refresh seam (W-23447478): resolve-field reuses the identical
+              // re-snapshot + cache/sidecar-rewrite path. list-available-fields fails
+              // hard on a refresh failure (never silently lists stale fields).
+              const refresh = await refreshWorkbookCache({
+                extra,
+                workbookFile: cacheWorkbookFile,
+                resolvedSession,
+                action: 'listing fields',
+              });
+              if (!refresh.ok) {
+                return refresh.error.toErr();
+              }
+              workbookXml = refresh.xml;
+            } else {
+              const executor = await extra.getExecutor(resolvedSession);
+              const liveWorkbook = await getWorkbookXml({ executor, signal: extra.signal });
+              if (liveWorkbook.isErr()) {
+                return new DesktopCommandExecutionError(liveWorkbook.error).toErr();
+              }
+              workbookXml = liveWorkbook.value;
             }
-            workbookXml = refresh.xml;
           } else {
             try {
-              workbookXml = readFileSync(workbookFile, 'utf-8');
+              workbookXml = readFileSync(cacheWorkbookFile, 'utf-8');
             } catch (error) {
               return new FileReadError(error).toErr();
             }

@@ -131,14 +131,33 @@ function blockingDialogNote(entry: CommandReferenceEntry): string {
  */
 const LIVE_PARAM_OVERRIDES: Map<string, { allowed: Set<string>; required: Set<string> }> = new Map([
   ['tabdoc:goto-sheet', { allowed: new Set(['Sheet']), required: new Set(['Sheet']) }],
+  [
+    'tabdoc:sort-nested',
+    {
+      allowed: new Set([
+        'DimensionToSort',
+        'Worksheet',
+        'MeasureName',
+        'ShelfType',
+        'Direction',
+        'ClearSort',
+        'Dashboard',
+        'LevelNames',
+        'MemberValues',
+        'KeepFieldFilters',
+      ]),
+      required: new Set(['DimensionToSort', 'Worksheet', 'MeasureName', 'ShelfType']),
+    },
+  ],
 ]);
 
 /**
  * Commands live-proven to open a blocking dialog (or modal error) headlessly, which the
- * reference misclassifies as safely invocable — the 15 `*DialogCommand`-sourced entries
+ * reference misclassifies as safely invocable — the `*DialogCommand`-sourced entries
  * from the dialog-command-misclassification knowledge doc, plus revert-workbook-ui
  * (probed modal 2026-07-19; it fired Error 47BF7751 on a live user's screen TWICE in one
- * session before this blocklist existed). Refused outright with a redirect to the
+ * session before this blocklist existed) and tabdoc:sort (dialog-notification-based sort UI).
+ * Refused outright with a redirect to the
  * sanctioned alternative: the modal never reaches a human again.
  */
 const LIVE_DIALOG_BLOCKLIST: Map<string, string> = new Map(
@@ -160,6 +179,10 @@ const LIVE_DIALOG_BLOCKLIST: Map<string, string> = new Map(
       ['tabdoc:show-action-list-dialog-for-dashboard', 'use author-action'],
       ['tabdoc:show-action-list-dialog-for-worksheet', 'use author-action'],
       ['tabdoc:show-sort-dialog', "express sort in the NotionalSpec's sort key"],
+      [
+        'tabdoc:sort',
+        'tabdoc:sort drives a UI dialog and blocks the screen. Use refine-worksheet with operation sort_by_field (sort a dimension by a field/measure), or tabdoc:sort-nested',
+      ],
       ['tabdoc:create-new-parameter', 'use author-parameter'],
       ['tabdoc:edit-existing-parameter', 'use author-parameter for new parameters'],
       [

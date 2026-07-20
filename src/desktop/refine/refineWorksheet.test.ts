@@ -2,8 +2,10 @@ import { ensureUserNamespace } from '../templates/injectTemplateCore.js';
 import { runValidation } from '../validation/registry.js';
 import { parseXml } from '../validation/rules/parseXml.js';
 import {
+  confirmSortByFieldApplied,
   confirmSortDirectionApplied,
   confirmTopNApplied,
+  planSortByField,
   planSortDirection,
   planTopN,
 } from './refineWorksheet.js';
@@ -53,6 +55,14 @@ const REGION_CI =
   "<column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />";
 const SALES_CI =
   "<column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />";
+const LINE_ITEM_COL =
+  "<column caption='Line Item' datatype='string' name='[line_item]' role='dimension' type='nominal' />";
+const DISPLAY_ORDER_COL =
+  "<column caption='display_order' datatype='integer' name='[display_order]' role='measure' type='quantitative' />";
+const LINE_ITEM_CI =
+  "<column-instance column='[line_item]' derivation='None' name='[none:line_item:nk]' pivot='key' type='nominal' />";
+const DISPLAY_ORDER_CI =
+  "<column-instance column='[display_order]' derivation='Sum' name='[sum:display_order:qk]' pivot='key' type='quantitative' />";
 
 describe('planTopN — happy path', () => {
   it('inserts a function=end top filter and a slices entry before aggregation', () => {
@@ -345,6 +355,55 @@ describe('planSortDirection', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.reason).toMatch(/nested/i);
+  });
+});
+
+describe('planSortByField', () => {
+  const WATERFALL = BASE.replace(
+    /<datasource-dependencies datasource='Superstore'>[\s\S]*?<\/datasource-dependencies>/,
+    `<datasource-dependencies datasource='Superstore'>${LINE_ITEM_COL}${DISPLAY_ORDER_COL}${LINE_ITEM_CI}${DISPLAY_ORDER_CI}</datasource-dependencies>`,
+  )
+    .replaceAll('[Superstore].[none:Region:nk]', '[Superstore].[none:line_item:nk]')
+    .replaceAll('[Superstore].[sum:Sales:qk]', '[Superstore].[sum:display_order:qk]')
+    .replace(/<computed-sort[^>]*\/>/, '');
+
+  it('inserts a computed-sort for a target caption using a separate sort-by caption', () => {
+    const r = planSortByField(WATERFALL, {
+      targetField: 'Line Item',
+      sortByField: 'display_order',
+      direction: 'ASC',
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.column).toBe('[Superstore].[none:line_item:nk]');
+    expect(r.using).toBe('[Superstore].[sum:display_order:qk]');
+    expect(r.xml).toContain(
+      "<computed-sort column='[Superstore].[none:line_item:nk]' direction='ASC' using='[Superstore].[sum:display_order:qk]' />",
+    );
+    expect(confirmSortByFieldApplied(r.xml, r.column, r.using, 'ASC')).toBe(true);
+  });
+
+  it('defaults direction to ASC', () => {
+    const r = planSortByField(WATERFALL, {
+      targetField: 'Line Item',
+      sortByField: 'display_order',
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.direction).toBe('ASC');
+    expect(r.xml).toContain("direction='ASC'");
+  });
+
+  it('refuses an unknown target caption with a clear field message', () => {
+    const r = planSortByField(WATERFALL, {
+      targetField: 'Missing Field',
+      sortByField: 'display_order',
+      direction: 'DESC',
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/target field/i);
+    expect(r.reason).toMatch(/Missing Field/);
   });
 });
 

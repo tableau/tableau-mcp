@@ -35,9 +35,23 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     );
   });
 
+  it('ships a compact command census for the common semantic path', () => {
+    const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
+    expect(rendered).toContain('Command census:');
+    expect(rendered).not.toContain('tabdoc:generate-viz-from-notional-spec');
+    expect(rendered).toContain('tabdoc:goto-sheet');
+    expect(rendered).toContain('tabui:save-underlying-metadata');
+    expect(rendered).toContain('Use search-commands ONLY for commands not listed here.');
+  });
+
   it('directs the agent to load the authoring skill before building', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
     expect(rendered).toContain('tableau-desktop-authoring');
+  });
+
+  it('teaches plain-chart proposals may carry sort and top_n', () => {
+    const plainChart = routes.find((route) => route.id === 'plain-chart');
+    expect(plainChart?.action).toContain('proposals may carry sort and top_n.');
   });
 
   it('names the debug skill by its exact slug so recovery does not rely on description-matching', () => {

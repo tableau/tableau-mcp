@@ -165,6 +165,33 @@ describe('listDashboards (Agent API transport, default)', () => {
       ]);
     }
   });
+
+  it('decodes XML entities in dashboard names returned by Desktop', async () => {
+    const mockExecutor = {
+      executeCommand: vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'cmd-123',
+          status: 'completed',
+          parsedResult: {
+            dashboards: JSON.stringify({
+              count: 2,
+              dashboards: [
+                { name: 'P&amp;L Overview' },
+                { name: 'Revenue &lt; &quot;Gross&quot;' },
+              ],
+            }),
+          },
+        }),
+      ),
+    } as unknown as LocalExecutor;
+
+    const result = await listDashboards({ executor: mockExecutor, signal: mockSignal });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.dashboards).toEqual(['P&L Overview', 'Revenue < "Gross"']);
+    }
+  });
 });
 
 describe('listDashboards (External Client API transport, TABLEAU_EXTERNAL_API gate)', () => {

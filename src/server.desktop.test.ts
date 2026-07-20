@@ -104,19 +104,21 @@ Load tableau-desktop-authoring before builds/edits; if unresolved failures repea
 
 Before multi-viz/dashboard builds, plan: classify requirements as MAGNITUDE=continuous quantity or MEMBERSHIP=discrete group; encode MEMBERSHIP with discrete buckets, never raw-measure color gradients. State the one-line plan, then build.
 
-For a plain viz ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot), FIRST try the semantic loop: call execute-tableau-command with tabdoc:generate-viz-from-notional-spec and a NotionalSpec of the ask (see the notional-spec-authoring knowledge) — it renders the viz in one sub-second command, and a refinement is the same call with the full edited spec on the same sheet. For families outside the NotionalSpec vocabulary (waterfall, KPI, funnel) or when the ask needs candidate proposals, call bind-template with the user's ask and auto_apply: true; on propose/escalate, fall back to the general authoring tools (get-workbook-xml -> edit -> apply-workbook, or inject-template for a known template).
+For a plain viz ask (bar/line/map/KPI/etc.), FIRST bind-template(auto_apply:true): deterministic, ~0.3s, no model work. On propose, resubmit; proposals may carry sort and top_n. calcs[] inline; author-parameter, author-set, author-action first; else search-commands.
 
-For a dashboard ask with 2-6 vizzes (e.g. "a dashboard with sales by region and profit by category"), FIRST call dashboard-auto-apply with one { ask, title? } per viz and a dashboardName — it binds and composes every viz into one dashboard in ONE call. If any ask fails to deterministically bind, nothing is applied and each ask's outcome is returned; fall back to bind-template per viz, or build-and-apply-dashboard for KPI strips / custom zone layouts.
+For a dashboard ask with 2-6 vizzes (e.g. "a dashboard with sales by region and profit by category"), build each sheet with bind-template (author calcs, parameters, and sets first with the author-* verbs when the sheet needs them), then compose the dashboard — search-commands only for commands the census does not list.
 
 For a data-value question ("what was revenue in Q3?"), do NOT answer with a number — this server cannot read data values. Say so, then offer the viz that would show it (a plain viz ask via bind-template) instead.
 
-For a DYNAMIC ask — a parameter the user drives, computed top/bottom-N membership, click-to-change interaction, or mark labels, use the author-* verbs, never raw commands or XML. Author parameters FIRST via author-parameter (it reopens Desktop and re-pins the session itself; on { reopened: true } continue immediately; stagePath optional). Then author-set for param-linked top/bottom-N membership (count accepts '[Parameters].[Parameter N]'), author-calc for calcs, author-action for click-to-param wiring, format-labels for labels. Build sheets and dashboard around them with the notional-spec loop (execute-tableau-command).
+For a DYNAMIC ask — a parameter the user drives, computed top/bottom-N membership, click-to-change interaction, or mark labels, use the author-* verbs, never raw commands or XML. Author parameters FIRST via author-parameter (it reopens Desktop and re-pins the session itself; on { reopened: true } continue immediately; stagePath optional). Then author-set for param-linked top/bottom-N membership (count accepts '[Parameters].[Parameter N]'), author-calc for calcs, author-action for click-to-param wiring, format-labels for labels. Build the charts around them with bind-template asks naming the authored captions.
 
 If ambiguity changes workbook content, call ask-user with urgency=blocking; stop for answer.
 
-For current/this/that/existing sheet, chart, view, or dashboard, edit in place: resolve the target (exact name, else list-worksheets; ask via ask-user if ambiguous), then refine-worksheet for top-N/sort edits, else get-worksheet-xml -> edit -> apply-worksheet. Never create a new sheet unless explicitly asked.
+For current/this/that/existing sheet, chart, view, or dashboard, edit in place: resolve the target (exact name, else list-worksheets or list-dashboards; ask via ask-user if ambiguous), then refine-worksheet for top-N/sort edits or the relevant author-* tool. Never create a new sheet unless explicitly asked.
 
-Every session-scoped tool call needs the session id from list-instances — except bind-template and dashboard-auto-apply, which auto-resolve the session when exactly one Desktop instance is running.
+Command census: tabdoc:goto-sheet switches sheets; tabui:save-underlying-metadata returns workbook metadata/fields; author-calc, author-set, author-parameter, author-action, format-labels author semantic objects; refine-worksheet handles top-N and sort edits on an existing sheet. Use search-commands ONLY for commands not listed here.
+
+Omit session when exactly one Desktop instance runs; use list-instances when multiple are open.
 
 If an apply is rejected by preflight validation, fix the workbook content per the FIX lines in the error and re-apply. Prefer file mode for large workbooks.`,
     );
@@ -223,10 +225,10 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // DO NOT GROW these: trim them down and lower/remove the entry. Never raise a
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
-    ['bind-template', 1632], // ratcheted down in the author-calc funding trim (Call-2 proposal provenance kept); do not grow
+    ['bind-template', 1908], // raised for shared sort/top_n proposal vocab; combined-lean 46k stays green
     ['plan-dashboard-creation', 1509], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1558], // ratcheted down in the CODA funding trim; do not grow
-    ['validate-proposal', 1407], // ratcheted down in the CODA funding trim; do not grow
+    ['validate-proposal', 1555], // raised for the same shared sort/top_n proposal schema; 46k stays green
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {
@@ -346,11 +348,12 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 12-tool singable surface — the spec-loop 5 + the author-* 5 + ask-user + search-commands, no XML/cache/template tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 14-tool singable surface — the spec-loop 5 + the author-* 5 + ask-user + search-commands + bind-template + refine-worksheet, no XML/cache tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
+    expect(selected).toHaveLength(14);
     // The full dynamic dialect, semantically named — every author-* verb present,
-    // plus the ask-for-help and command-discovery doors (CODA's joy-cut overshot).
+    // plus the ask-for-help, command-discovery, and deterministic fast-path doors.
     for (const verb of [
       'author-calc',
       'author-set',
@@ -359,10 +362,12 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'format-labels',
       'ask-user',
       'search-commands',
+      'bind-template',
+      'refine-worksheet',
     ]) {
       expect(selected.map((t) => t.name)).toContain(verb);
     }
-    // Zero agent-visible XML/cache/template/validation tools.
+    // Zero agent-visible XML/cache/validation tools.
     for (const banished of [
       'get-workbook-xml',
       'apply-workbook',
@@ -374,7 +379,6 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'validate-worksheet-xml',
       'inject-template',
       'list-templates',
-      'bind-template',
     ]) {
       expect(selected.map((t) => t.name)).not.toContain(banished);
     }

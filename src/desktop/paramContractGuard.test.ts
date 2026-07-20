@@ -228,6 +228,20 @@ describe('live param overrides (runtime truth beats the reference)', () => {
 });
 
 describe('LIVE_DIALOG_BLOCKLIST', () => {
+  it('refuses tabdoc:sort outright with the headless sort FIX', async () => {
+    const { validateCommandParams } = await import('./paramContractGuard.js');
+    const result = validateCommandParams('tabdoc:sort', {
+      FieldName: '[Sample - Superstore].[Category]',
+      Worksheet: 'Sheet 1',
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain('tabdoc:sort drives a UI dialog and blocks the screen');
+      expect(result.message).toContain('refine-worksheet with operation sort_by_field');
+      expect(result.message).toContain('tabdoc:sort-nested');
+    }
+  });
+
   it('refuses revert-workbook-ui outright with an author-forward FIX (the triple-boo modal, 2026-07-19)', async () => {
     const { validateCommandParams } = await import('./paramContractGuard.js');
     const result = validateCommandParams('tabdoc:revert-workbook-ui', { workspace: 'anything' });
@@ -245,6 +259,7 @@ describe('LIVE_DIALOG_BLOCKLIST', () => {
       'tabdoc:create-new-parameter',
       'tabdoc:edit-existing-parameter',
       'tabdoc:show-sort-dialog',
+      'tabdoc:sort',
       'tabdoc:edit-filter-dialog',
       'tabdoc:show-action-list-dialog-for-worksheet',
     ]) {
@@ -254,5 +269,35 @@ describe('LIVE_DIALOG_BLOCKLIST', () => {
         expect(result.message).toContain('FIX:');
       }
     }
+  });
+});
+
+describe('live param overrides for sort commands', () => {
+  it('rejects sort-nested with missing required params before dispatch', async () => {
+    const { validateCommandParams } = await import('./paramContractGuard.js');
+    const result = validateCommandParams('tabdoc:sort-nested', {
+      DimensionToSort: '[Sample - Superstore].[Category]',
+      Worksheet: 'Sheet 1',
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain(
+        'Missing required parameter(s) for Tableau command "tabdoc:sort-nested": MeasureName, ShelfType',
+      );
+      expect(result.message).toContain('FIX: provide "MeasureName", "ShelfType"');
+    }
+  });
+
+  it('accepts sort-nested with its required live contract params', async () => {
+    const { validateCommandParams } = await import('./paramContractGuard.js');
+    expect(
+      validateCommandParams('tabdoc:sort-nested', {
+        DimensionToSort: '[Sample - Superstore].[Category]',
+        Worksheet: 'Sheet 1',
+        MeasureName: '[Sample - Superstore].[Sales]',
+        ShelfType: 'rows',
+      }),
+    ).toEqual({ ok: true });
   });
 });

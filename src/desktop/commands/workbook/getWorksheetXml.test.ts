@@ -221,6 +221,60 @@ describe('getWorksheetXml (Agent API transport, default)', () => {
       expect(result.value).toContain('&amp;');
     }
   });
+
+  it('falls back to the raw escaped Desktop command name for a literal ampersand name', async () => {
+    const mockXml =
+      '<worksheet name="P&amp;L Waterfall: Revenue to Net Income"><table></table></worksheet>';
+    const mockExecutor = {
+      executeCommand: vi.fn(async (params: any) => {
+        if (params.command === 'list-worksheets') {
+          return Ok({
+            command_id: 'cmd-list',
+            status: 'completed',
+            parsedResult: {
+              worksheets: JSON.stringify({
+                count: 1,
+                worksheets: [{ name: 'P&amp;L Waterfall: Revenue to Net Income' }],
+              }),
+            },
+          });
+        }
+        return Ok({
+          command_id: 'cmd-123',
+          status: 'completed',
+          parsedResult: {
+            worksheetXml:
+              params.args.worksheetName === 'P&amp;L Waterfall: Revenue to Net Income'
+                ? mockXml
+                : '<empty></empty>',
+          },
+        });
+      }),
+    } as unknown as LocalExecutor;
+
+    const result = await getWorksheetXml({
+      worksheetName: 'P&L Waterfall: Revenue to Net Income',
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value).toBe(mockXml);
+    }
+    expect(mockExecutor.executeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'save-worksheet',
+        args: { worksheetName: 'P&L Waterfall: Revenue to Net Income' },
+      }),
+    );
+    expect(mockExecutor.executeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'save-worksheet',
+        args: { worksheetName: 'P&amp;L Waterfall: Revenue to Net Income' },
+      }),
+    );
+  });
 });
 
 describe('getWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API gate)', () => {
@@ -335,6 +389,32 @@ describe('getWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API g
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
       expect(result.value).toContain('Sales &amp; Data');
+    }
+  });
+
+  it('matches escaped worksheetName input against decoded workbook XML names', async () => {
+    const mockExecutor = executorReturning(
+      workbookWith(['P&amp;L Waterfall: Revenue to Net Income', 'Revenue &lt; &quot;Gross&quot;']),
+    );
+
+    const ampResult = await getWorksheetXml({
+      worksheetName: 'P&amp;L Waterfall: Revenue to Net Income',
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+    const angleQuoteResult = await getWorksheetXml({
+      worksheetName: 'Revenue < "Gross"',
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(ampResult.isOk()).toBe(true);
+    if (ampResult.isOk()) {
+      expect(ampResult.value).toContain('P&amp;L Waterfall: Revenue to Net Income');
+    }
+    expect(angleQuoteResult.isOk()).toBe(true);
+    if (angleQuoteResult.isOk()) {
+      expect(angleQuoteResult.value).toContain('Revenue &lt; &quot;Gross&quot;');
     }
   });
 });

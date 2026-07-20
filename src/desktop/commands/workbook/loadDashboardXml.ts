@@ -12,11 +12,13 @@ import {
 } from '../../toolExecutor/toolExecutor.js';
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
+import { xmlNamesEqual } from '../../xmlElement.js';
 import { formatApplyFailureForAgent } from './applyFailureClassifier.js';
 import { withApplyLock } from './applyMutex.js';
 import { focusAppliedSheetBestEffort } from './focusAppliedSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { applyWorkbookText, interpretLoadOutcome } from './loadWorkbookXml.js';
+import { nameMayNeedRawCommandResolution, resolveDashboardCommandName } from './nameResolution.js';
 
 export type LoadDashboardXmlError =
   | { type: 'invalid-xml' }
@@ -92,7 +94,7 @@ function resolveCanonicalDashboardName(
     });
   }
 
-  if (xmlName.normalize('NFC') !== callerName.normalize('NFC')) {
+  if (!xmlNamesEqual(xmlName, callerName)) {
     return Err({
       type: 'name-mismatch',
       message:
@@ -189,12 +191,15 @@ async function loadDashboardXmlViaAgentApi({
   dashboardName: string;
   xml: string;
 } & WithExecutorAndAbortSignal): Promise<LoadDashboardHelperResult> {
+  const commandDashboardName = nameMayNeedRawCommandResolution(dashboardName)
+    ? ((await resolveDashboardCommandName(dashboardName, { executor, signal })) ?? dashboardName)
+    : dashboardName;
   const result = await executor.executeCommand({
     namespace: 'tabui',
     command: 'load-dashboard',
     signal,
     args: {
-      dashboardName,
+      dashboardName: commandDashboardName,
       dashboardXml: xml,
     },
   });

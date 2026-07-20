@@ -54,6 +54,13 @@ describe('resolveSession', () => {
     expect(result.unwrap()).toBe('4242');
   });
 
+  it('treats an empty explicit session as absent when pinned', () => {
+    mockConfig({ desktopSessionId: '4242', externalApiEnabled: false });
+    const result = resolveSession('');
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toBe('4242');
+  });
+
   it('returns an explicit session id verbatim when nothing is pinned', () => {
     mockConfig({ desktopSessionId: undefined, externalApiEnabled: false });
     const result = resolveSession('7');
@@ -65,6 +72,14 @@ describe('resolveSession', () => {
     mockConfig({ desktopSessionId: undefined, externalApiEnabled: false });
     mockAgentApiInstances([99]);
     const result = resolveSession(undefined);
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toBe('99');
+  });
+
+  it('treats a whitespace-only explicit session as absent when auto-resolving', () => {
+    mockConfig({ desktopSessionId: undefined, externalApiEnabled: false });
+    mockAgentApiInstances([99]);
+    const result = resolveSession('   ');
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toBe('99');
   });

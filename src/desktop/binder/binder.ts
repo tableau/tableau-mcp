@@ -31,13 +31,20 @@ import {
   type BindingProposal,
   type Blocker,
   type EscalateReason,
+  resolveInSummary,
   validateBinding,
 } from './validate.js';
 
 // Re-exported as the binder's public surface. Bare (source-less) re-exports of the
 // locally-imported bindings — a single `export ... from './x.js'` alongside the
 // import above would trip the target's `no-duplicate-imports` (includeExports).
-export { classifyNoLlm, MAX_CLASSIFIABLE_FIELDS, summarizeSchema, validateBinding };
+export {
+  classifyNoLlm,
+  MAX_CLASSIFIABLE_FIELDS,
+  resolveInSummary,
+  summarizeSchema,
+  validateBinding,
+};
 export type { BindingProposal, Blocker, EscalateReason, SchemaField, SchemaSummary };
 
 type ProposeField = CoreLlmProposeInput['fields'][number] & { semanticRole?: string };
@@ -98,6 +105,8 @@ export interface InjectTemplateArgs {
   sheet_type: 'worksheet';
   template_parameters: { DATASOURCE: string } & Record<string, string>;
   field_mapping: Record<string, string>;
+  sort?: { by: string; direction: 'asc' | 'desc' };
+  top_n?: number;
 }
 
 export type LlmProposeFn = (input: LlmProposeInput) => Promise<BindingProposal>;
@@ -199,6 +208,16 @@ export const PROPOSAL_OUTPUT_SCHEMA: Record<string, unknown> = {
       },
     },
     confidence: { type: 'number', minimum: 0, maximum: 1 },
+    sort: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['by', 'direction'],
+      properties: {
+        by: { type: 'string', description: 'Sort field.' },
+        direction: { type: 'string', enum: ['asc', 'desc'], description: 'Sort dir.' },
+      },
+    },
+    top_n: { type: 'integer', minimum: 1, description: 'Top N.' },
   },
 };
 
@@ -278,6 +297,47 @@ function validateAndBuild(
     return { status: 'escalate', reason, blockers: v.blockers, proposal };
   }
 
+  if (proposal.sort) {
+    const sortField = resolveInSummary(summary, proposal.sort.by);
+    if (sortField.kind === 'ambiguous') {
+      return {
+        status: 'escalate',
+        reason: 'ambiguous-field',
+        blockers: [
+          {
+            code: 'ambiguous-field',
+            detail: `"${proposal.sort.by}" matches ${sortField.candidates?.length ?? 0} sort fields; disambiguate before binding`,
+            candidates: (sortField.candidates ?? []).map((c) => c.column_ref),
+          },
+        ],
+        proposal,
+      };
+    }
+    if (sortField.kind === 'not_found' || !sortField.field) {
+      return {
+        status: 'escalate',
+        reason: 'field-not-found',
+        blockers: [
+          {
+            code: 'field-not-found',
+            detail: `no sort.by field named "${proposal.sort.by}" in datasource(s)`,
+            candidates: (sortField.candidates ?? []).map((c) => c.column_ref),
+          },
+        ],
+        proposal,
+      };
+    }
+  }
+
+  if (proposal.top_n !== undefined && (!Number.isInteger(proposal.top_n) || proposal.top_n < 1)) {
+    return {
+      status: 'escalate',
+      reason: 'kind-mismatch',
+      blockers: [{ code: 'kind-mismatch', detail: 'top_n must be a positive integer' }],
+      proposal,
+    };
+  }
+
   if (proposal.confidence !== undefined && proposal.confidence < minConfidence) {
     return {
       status: 'escalate',
@@ -302,6 +362,8 @@ function validateAndBuild(
     sheet_type: 'worksheet',
     template_parameters: { DATASOURCE: v.datasource },
     field_mapping: v.field_mapping,
+    ...(proposal.sort ? { sort: proposal.sort } : {}),
+    ...(proposal.top_n !== undefined ? { top_n: proposal.top_n } : {}),
   };
   return {
     status: 'bound',

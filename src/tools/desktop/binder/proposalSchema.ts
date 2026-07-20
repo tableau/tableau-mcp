@@ -54,5 +54,13 @@ export const proposalSchema = z
     // bypass the low-confidence escalation entirely (fail-open). The source implementation's own tool schema left
     // this optional; the repo hardens it to required.
     confidence: z.number().min(0).max(1).describe('Confidence.'),
+    sort: z
+      .object({
+        by: z.string(),
+        direction: z.enum(['asc', 'desc']),
+      })
+      .strict()
+      .optional(),
+    top_n: z.number().int().positive().optional(),
   })
   .strict();

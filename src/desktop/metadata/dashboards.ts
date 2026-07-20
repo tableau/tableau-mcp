@@ -1,3 +1,4 @@
+import { xmlNamesEqual } from '../xmlElement.js';
 import {
   carryNamespaceDeclarations,
   generateUUID,
@@ -69,7 +70,9 @@ function createValidSize(
 
 function findDashboard(workbook: ParsedWorkbook, dashboardName: string): ParsedDashboard | null {
   const dashboards = normalizeArray(workbook.workbook?.dashboards?.dashboard);
-  return dashboards.find((db) => db['@_name'] === dashboardName) || null;
+  return (
+    dashboards.find((db) => db['@_name'] && xmlNamesEqual(db['@_name'], dashboardName)) || null
+  );
 }
 
 export function addDashboard(workbookXml: string, dashboardName: string): string {

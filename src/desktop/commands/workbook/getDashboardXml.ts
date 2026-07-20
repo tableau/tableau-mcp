@@ -8,6 +8,7 @@ import {
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
+import { nameMayNeedRawCommandResolution, resolveDashboardCommandName } from './nameResolution.js';
 
 export type GetDashboardXmlError = (
   | { type: 'no-dashboard-found' }
@@ -35,6 +36,40 @@ async function getDashboardXmlViaAgentApi({
   executor,
   signal,
 }: { dashboardName: string } & WithExecutorAndAbortSignal): Promise<GetDashboardXmlResult> {
+  const result = await getDashboardXmlViaAgentApiName({ dashboardName, executor, signal });
+  if (result.isOk() || !nameMayNeedRawCommandResolution(dashboardName)) {
+    return result;
+  }
+
+  if (
+    result.error.type !== 'get-dashboard-xml-error' ||
+    result.error.error.type !== 'no-dashboard-found'
+  ) {
+    return result;
+  }
+
+  const commandName = await resolveDashboardCommandName(dashboardName, { executor, signal });
+  if (!commandName || commandName === dashboardName) {
+    return result;
+  }
+
+  return getDashboardXmlViaAgentApiName({
+    dashboardName: commandName,
+    requestedDashboardName: dashboardName,
+    executor,
+    signal,
+  });
+}
+
+async function getDashboardXmlViaAgentApiName({
+  dashboardName,
+  requestedDashboardName = dashboardName,
+  executor,
+  signal,
+}: {
+  dashboardName: string;
+  requestedDashboardName?: string;
+} & WithExecutorAndAbortSignal): Promise<GetDashboardXmlResult> {
   const result = await executor.executeCommand({
     namespace: 'tabui',
     command: 'save-dashboard',
@@ -57,7 +92,10 @@ async function getDashboardXmlViaAgentApi({
   if (dashboardCount === 0) {
     return Err({
       type: 'get-dashboard-xml-error',
-      error: { type: 'no-dashboard-found', message: `No dashboard found for "${dashboardName}".` },
+      error: {
+        type: 'no-dashboard-found',
+        message: `No dashboard found for "${requestedDashboardName}".`,
+      },
     });
   }
 

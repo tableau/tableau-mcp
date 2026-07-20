@@ -9,6 +9,7 @@ import {
 } from '../../toolExecutor/toolExecutor.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { listWorksheets } from './listWorksheets.js';
+import { nameMayNeedRawCommandResolution, resolveWorksheetCommandName } from './nameResolution.js';
 
 /**
  * Best-effort "did you mean" suffix for a worksheet-name miss (W6, cluster H). Lists the
@@ -68,6 +69,40 @@ async function getWorksheetXmlViaAgentApi({
   executor,
   signal,
 }: { worksheetName: string } & WithExecutorAndAbortSignal): Promise<GetWorksheetXmlResult> {
+  const result = await getWorksheetXmlViaAgentApiName({ worksheetName, executor, signal });
+  if (result.isOk() || !nameMayNeedRawCommandResolution(worksheetName)) {
+    return result;
+  }
+
+  if (
+    result.error.type !== 'get-worksheet-xml-error' ||
+    result.error.error.type !== 'no-worksheet-found'
+  ) {
+    return result;
+  }
+
+  const commandName = await resolveWorksheetCommandName(worksheetName, { executor, signal });
+  if (!commandName || commandName === worksheetName) {
+    return result;
+  }
+
+  return getWorksheetXmlViaAgentApiName({
+    worksheetName: commandName,
+    requestedWorksheetName: worksheetName,
+    executor,
+    signal,
+  });
+}
+
+async function getWorksheetXmlViaAgentApiName({
+  worksheetName,
+  requestedWorksheetName = worksheetName,
+  executor,
+  signal,
+}: {
+  worksheetName: string;
+  requestedWorksheetName?: string;
+} & WithExecutorAndAbortSignal): Promise<GetWorksheetXmlResult> {
   const result = await executor.executeCommand({
     namespace: 'tabui',
     command: 'save-worksheet',
@@ -88,12 +123,12 @@ async function getWorksheetXmlViaAgentApi({
   const worksheetCount = (worksheetXml.match(/<worksheet/g) || []).length;
 
   if (worksheetCount === 0) {
-    const didYouMean = await worksheetNameSuggestions(worksheetName, { executor, signal });
+    const didYouMean = await worksheetNameSuggestions(requestedWorksheetName, { executor, signal });
     return Err({
       type: 'get-worksheet-xml-error',
       error: {
         type: 'no-worksheet-found',
-        message: `No worksheet found for ${worksheetName}.${didYouMean}`,
+        message: `No worksheet found for ${requestedWorksheetName}.${didYouMean}`,
       },
     });
   }

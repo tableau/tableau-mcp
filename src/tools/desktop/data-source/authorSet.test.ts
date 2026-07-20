@@ -52,7 +52,7 @@ describe('authorSetTool', () => {
       setName: '[Top N Sub-Category Set]',
       caption: 'Top N Sub-Category Set',
       datasource: 'Sample - Superstore',
-      hint: 'reference it by caption in generate-viz-from-notional-spec, or as a filter/color field',
+      hint: 'reference it by caption in a bind-template ask, or as a filter/color field',
     });
 
     const loadCall = commandCalls(executeCommand).find(
