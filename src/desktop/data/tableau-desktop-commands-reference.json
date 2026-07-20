@@ -23503,14 +23503,23 @@
       "source_file": "AnalyticsAssistantDesktopPaneCommand",
       "editor_type": "D",
       "server_permission": "UNRESTRICTED",
-      "description": "Generate a notional specification from the current viz.",
+      "description": "Generate a NotionalSpec from the current viz — BUT the /v0 External Client API does NOT return this command's output (write-blind envelope: state SUCCEEDED, no result). Do not rely on it to read the current spec. To inspect current state, use tabui:save-underlying-metadata (whole-document readback) or the list tools, then author a fresh v0.2 spec for tabdoc:generate-viz-from-notional-spec.",
       "classification": "user_initiated",
       "usage_count": 0,
       "is_user_initiated": true,
       "is_autonomous": false,
       "value_to_users": "Generate a notional specification from the current viz.",
       "how_invoked": "Pane-invoked command surfaced for agent use.",
-      "parameters": [],
+      "parameters": [
+        {
+          "direction": "out",
+          "local_name": "NotionalSpecJson",
+          "type_id": "",
+          "required": false,
+          "comment": "NOT returned by the /v0 External Client API. Known product gap; use document readback instead.",
+          "cannot_provide_from_mcp": false
+        }
+      ],
       "requires_binary_or_unserialized_args": false,
       "mcp_can_invoke_without_binary_args": true,
       "opens_blocking_dialog": false,
@@ -23530,14 +23539,39 @@
       "source_file": "AnalyticsAssistantDesktopPaneCommand",
       "editor_type": "D",
       "server_permission": "UNRESTRICTED",
-      "description": "Generate a viz from a notional specification.",
+      "description": "Generate a viz from a NotionalSpec v0.2 JSON. Args: NotionalSpecJson (REQUIRED, a JSON STRING), ClearSheet (optional boolean; true=fresh build, false=refinement). NO WorksheetId — target the sheet with tabdoc:goto-sheet first. Spec shape: {version:'0.2.0', chart?: one of text|heatmap|bar|stackedbar|line|area|gantt|scatterplot|histogram|symbolmap|filledmap|treemap|pie|dualline|boxplot|bullet|bubble, fields:[{caption, data: number|string|date|boolean|geographic|set, type: discrete|continuous, role: dimension|measure, aggregation: default|count|countd|sum|avg|max|min|median|year|qtr|month|week|day|hour|minute|second, encoding: x|y|color|size|text|shape}], categoricalFilters?:[{type:'categorical',field,values?,exclude?,limit?,condition?}], rangeFilters?:[{field,start?,end?,includeNull?}] (start/end, NOT min/max), relativeDateFilters?:[{type:'relative-date',field,amount,period: days|weeks|months|quarters|years (PLURAL),direction: next|previous}], sort?:{field, by, aggregation?, direction: asc|desc}}. CALCULATED FIELDS: create with author-calc FIRST, then reference by caption with aggregation 'default' (never 'none' — not v0.2 vocabulary). STRING DATES ('YYYY-MM' columns): author-calc a DATE() conversion (e.g. DATE([month] + \"-01\")) before a line chart — a line over a discrete string is a false trend. WRITE-BLIND: the /v0 API returns NO VizGenerationStatusList/VizCoherenceResult — a success envelope can hide an empty sheet. ALWAYS verify after apply: read the sheet back (tabui:save-underlying-metadata) and confirm rows/cols landed.",
       "classification": "user_initiated",
       "usage_count": 0,
       "is_user_initiated": true,
       "is_autonomous": false,
       "value_to_users": "Generate a viz from a notional specification.",
       "how_invoked": "Pane-invoked command surfaced for agent use.",
-      "parameters": [],
+      "parameters": [
+        {
+          "direction": "in",
+          "local_name": "NotionalSpecJson",
+          "type_id": "",
+          "required": true,
+          "comment": "The NotionalSpec v0.2 as a JSON STRING (serialize the object).",
+          "cannot_provide_from_mcp": false
+        },
+        {
+          "direction": "in",
+          "local_name": "ClearSheet",
+          "type_id": "",
+          "required": false,
+          "comment": "true = fresh build (default for a new chart); false = refinement of the current sheet.",
+          "cannot_provide_from_mcp": false
+        },
+        {
+          "direction": "out",
+          "local_name": "VizGenerationStatusList",
+          "type_id": "",
+          "required": false,
+          "comment": "NOT returned by the /v0 External Client API (write-blind envelope). Verify by readback instead.",
+          "cannot_provide_from_mcp": false
+        }
+      ],
       "requires_binary_or_unserialized_args": false,
       "mcp_can_invoke_without_binary_args": true,
       "opens_blocking_dialog": false,
