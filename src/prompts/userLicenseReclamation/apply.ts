@@ -92,12 +92,7 @@ const TS_EVENTS_FIELDS = ['Actor User Name', 'Event Type', 'Event Date'];
 
 // Site Content verified captions — `Owner LUID` does NOT exist on this datasource;
 // join on `Owner Email` against the user email from Step 1.
-const SITE_CONTENT_FIELDS = [
-  'Item Type',
-  'Item Name',
-  'Owner Email',
-  'Item Parent Project Name',
-];
+const SITE_CONTENT_FIELDS = ['Item Type', 'Item Name', 'Owner Email', 'Item Parent Project Name'];
 
 const buildActivityQuery = (inactiveDays: number): Record<string, unknown> => ({
   kind: 'ts-events',
