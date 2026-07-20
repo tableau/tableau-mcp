@@ -49,6 +49,10 @@ export interface SortPlan {
   column: string;
   direction: SortDirection;
 }
+export interface SortByFieldPlan extends SortPlan {
+  /** The computed-sort `using` field — the readback confirmation target. */
+  using: string;
+}
 export interface RefineRefusal {
   ok: false;
   reason: string;
@@ -75,6 +79,11 @@ interface ColumnInstance {
   column: string;
   derivation: string;
   type: string;
+}
+
+interface ColumnDefinition {
+  name: string;
+  caption: string;
 }
 
 const refuse = (reason: string): RefineRefusal => ({ ok: false, reason });
@@ -135,6 +144,23 @@ function parseColumnInstances(xml: string): ColumnInstance[] {
   return out;
 }
 
+/** All field `<column>` declarations keyed by their internal field name. */
+function parseColumns(xml: string): Map<string, ColumnDefinition> {
+  const out = new Map<string, ColumnDefinition>();
+  const re = /<column(?=[\s>/])([^>]*?)\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const attrs = m[1];
+    const name = attrVal(attrs, 'name');
+    if (!name) continue;
+    out.set(name, {
+      name,
+      caption: attrVal(attrs, 'caption'),
+    });
+  }
+  return out;
+}
+
 /** The datasource name — from the dependencies block, else the first <datasource>. */
 function datasourceName(xml: string): string {
   const dep = xml.match(/<datasource-dependencies\b[^>]*\bdatasource=(?:'([^']*)'|"([^"]*)")/);
@@ -164,6 +190,58 @@ function isMeasureCi(ci: ColumnInstance): boolean {
     ci.type === 'quantitative' &&
     Object.prototype.hasOwnProperty.call(AGG_DERIVATIONS, ci.derivation)
   );
+}
+
+function unbracket(value: string): string {
+  const m = value.match(/^\[(.*)\]$/);
+  return m ? m[1] : value;
+}
+
+function normalizeCaption(value: string): string {
+  return value.trim().toLocaleLowerCase();
+}
+
+function fieldCaptionCandidates(
+  ci: ColumnInstance,
+  columns: Map<string, ColumnDefinition>,
+): string[] {
+  const col = columns.get(ci.column);
+  return [
+    ...new Set(
+      [col?.caption, col?.name && unbracket(col.name), unbracket(ci.column)].filter(
+        Boolean,
+      ) as string[],
+    ),
+  ];
+}
+
+function resolveCiByCaption(
+  cis: ColumnInstance[],
+  columns: Map<string, ColumnDefinition>,
+  caption: string,
+  kind: 'target field' | 'sort-by field',
+  predicate: (ci: ColumnInstance) => boolean,
+): ColumnInstance | RefineRefusal {
+  const wanted = normalizeCaption(caption);
+  if (!wanted) return refuse(`${kind} caption is required.`);
+
+  const candidates = cis.filter(predicate);
+  const matches = candidates.filter((ci) =>
+    fieldCaptionCandidates(ci, columns).some((value) => normalizeCaption(value) === wanted),
+  );
+  if (matches.length === 1) return matches[0];
+
+  const available = candidates
+    .flatMap((ci) => fieldCaptionCandidates(ci, columns))
+    .filter(Boolean)
+    .sort()
+    .join(', ');
+  if (matches.length === 0) {
+    return refuse(
+      `unknown ${kind} caption "${caption}". Available ${kind} captions: ${available || '(none)'}.`,
+    );
+  }
+  return refuse(`ambiguous ${kind} caption "${caption}" matched ${matches.length} fields.`);
 }
 
 /**
@@ -433,6 +511,63 @@ export function planSortDirection(
 }
 
 /**
+ * Plan a computed sort for one caption-addressed dimension by one caption-addressed
+ * measure. This is the explicit sort primitive for sheets where "flip direction" is not
+ * enough: callers name the displayed fields, never Tableau's internal CI refs.
+ */
+export function planSortByField(
+  xml: string,
+  opts: { targetField: string; sortByField: string; direction?: SortDirection },
+): SortByFieldPlan | RefineRefusal {
+  const direction = opts.direction ?? 'ASC';
+  if (direction !== 'ASC' && direction !== 'DESC') {
+    return refuse(
+      `sort_by_field.direction must be "ASC" or "DESC" (got ${JSON.stringify(opts.direction)}).`,
+    );
+  }
+
+  const hasNestedSortEl = /<sort\b[^>]*\bclass=(?:'computed-sort'|"computed-sort")[^>]*>/.test(xml);
+  const nonSelfClosingComputedSort = /<computed-sort\b[^>]*[^/]>/.test(xml);
+  if (hasNestedSortEl || nonSelfClosingComputedSort) {
+    return refuse(
+      'the sort uses the nested <sort class="computed-sort"> form; only the safe self-closing <computed-sort/> can be changed.',
+    );
+  }
+
+  if ((xml.match(/<datasource-dependencies\b/g) ?? []).length !== 1) {
+    return refuse('expected exactly one datasource-dependencies block to resolve field captions.');
+  }
+  if (!/<\/datasource-dependencies>/.test(xml)) {
+    return refuse('the worksheet <view> has no <datasource-dependencies> anchor.');
+  }
+
+  const ds = datasourceName(xml);
+  if (!ds) return refuse('could not determine the worksheet datasource name.');
+
+  const cis = parseColumnInstances(xml);
+  const columns = parseColumns(xml);
+  const target = resolveCiByCaption(cis, columns, opts.targetField, 'target field', isDimensionCi);
+  if (!('name' in target)) return target;
+  const sortBy = resolveCiByCaption(cis, columns, opts.sortByField, 'sort-by field', isMeasureCi);
+  if (!('name' in sortBy)) return sortBy;
+
+  const column = `[${ds}].${target.name}`;
+  const using = `[${ds}].${sortBy.name}`;
+  const node = `<computed-sort column='${escapeXml(column)}' direction='${direction}' using='${escapeXml(using)}' />`;
+  const selfClosing = [...xml.matchAll(/<computed-sort\b[^>]*\/>/g)].map((m) => m[0]);
+  const targetSorts = selfClosing.filter((tag) => attrVal(tag, 'column') === column);
+  if (targetSorts.length > 1) {
+    return refuse(`more than one <computed-sort> present for target field "${opts.targetField}".`);
+  }
+
+  const out =
+    targetSorts.length === 1
+      ? xml.replace(targetSorts[0], node)
+      : xml.replace(/<\/datasource-dependencies>/, (m) => `${m}\n      ${node}`);
+  return { ok: true, xml: out, column, using, direction };
+}
+
+/**
  * Confirm on readback that a Top-N filter for `filterColumn` (a groupfilter with
  * `function="end"`) is present. Quote-agnostic (parses the DOM).
  */
@@ -464,6 +599,21 @@ export function confirmSortDirectionApplied(
   // Same quote-safety rule as confirmTopNApplied: attribute match in JS.
   const sorts = (xpath.select('//computed-sort', doc as unknown as Node) as Element[]).filter(
     (s) => !column || s.getAttribute('column') === column,
+  );
+  return sorts.some((s) => (s.getAttribute('direction') ?? '') === direction);
+}
+
+/** Confirm that the computed-sort column/using/direction tuple landed on readback. */
+export function confirmSortByFieldApplied(
+  readbackXml: string,
+  column: string,
+  using: string,
+  direction: SortDirection,
+): boolean {
+  const doc = parseXml(readbackXml);
+  if (!doc) return false;
+  const sorts = (xpath.select('//computed-sort', doc as unknown as Node) as Element[]).filter(
+    (s) => s.getAttribute('column') === column && s.getAttribute('using') === using,
   );
   return sorts.some((s) => (s.getAttribute('direction') ?? '') === direction);
 }

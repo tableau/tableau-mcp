@@ -61,6 +61,19 @@ const PREFLIGHT_FAIL_SOURCE = SOURCE.replace(
   "<column-instance column='[Sales]' derivation='Attr' name='[attr:Sales:xk]' pivot='key' type='ordinal' /></datasource-dependencies>",
 );
 
+const SORT_BY_FIELD_SOURCE = SOURCE.replace(
+  /<datasource-dependencies datasource='Superstore'>[\s\S]*?<\/datasource-dependencies>/,
+  `<datasource-dependencies datasource='Superstore'>
+        <column caption='Line Item' datatype='string' name='[line_item]' role='dimension' type='nominal' />
+        <column caption='display_order' datatype='integer' name='[display_order]' role='measure' type='quantitative' />
+        <column-instance column='[line_item]' derivation='None' name='[none:line_item:nk]' pivot='key' type='nominal' />
+        <column-instance column='[display_order]' derivation='Sum' name='[sum:display_order:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>`,
+)
+  .replaceAll('[Superstore].[none:Region:nk]', '[Superstore].[none:line_item:nk]')
+  .replaceAll('[Superstore].[sum:Sales:qk]', '[Superstore].[sum:display_order:qk]')
+  .replace(/<computed-sort[^>]*\/>/, '');
+
 type GetResult = Awaited<ReturnType<typeof getWorksheetXmlModule.getWorksheetXml>>;
 type LoadResult = Awaited<ReturnType<typeof loadWorksheetXmlModule.loadWorksheetXml>>;
 type ErrOf<R> = R extends Err<infer E> ? E : never;
@@ -121,13 +134,16 @@ describe('refineWorksheetTool — instance', () => {
   it('creates a tool instance with the expected properties', () => {
     const tool = getRefineWorksheetTool(new DesktopMcpServer());
     expect(tool.name).toBe('refine-worksheet');
-    expect(tool.description).toContain('Refine a worksheet');
+    expect(tool.description).toContain('by-field');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),
       operation: expect.any(Object),
       topN: expect.any(Object),
       sortDirection: expect.any(Object),
+      targetField: expect.any(Object),
+      sortByField: expect.any(Object),
+      direction: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
       title: 'Refine Worksheet',
@@ -182,6 +198,46 @@ describe('refineWorksheetTool — sort_direction happy path', () => {
     expect(loadMock()).toHaveBeenCalledTimes(1);
     expect(applied()!).toContain("direction='ASC'");
     expect(applied()!).not.toContain("direction='DESC'");
+  });
+});
+
+describe('refineWorksheetTool — sort_by_field happy path', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('applies a computed-sort by field caption and confirms column/using/direction on readback', async () => {
+    const { applied } = setupMocks({ source: SORT_BY_FIELD_SOURCE });
+    const result = await getToolResult({
+      worksheetName: 'Waterfall',
+      operation: 'sort_by_field',
+      targetField: 'Line Item',
+      sortByField: 'display_order',
+      direction: 'asc',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = successSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.message).toMatch(/Applied sort_by_field/);
+    expect(loadMock()).toHaveBeenCalledTimes(1);
+    expect(applied()!).toContain(
+      "<computed-sort column='[Superstore].[none:line_item:nk]' direction='ASC' using='[Superstore].[sum:display_order:qk]' />",
+    );
+  });
+
+  it('defaults sort_by_field direction to ascending', async () => {
+    const { applied } = setupMocks({ source: SORT_BY_FIELD_SOURCE });
+    const result = await getToolResult({
+      worksheetName: 'Waterfall',
+      operation: 'sort_by_field',
+      targetField: 'Line Item',
+      sortByField: 'display_order',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = successSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.refined).toBe(true);
+    expect(applied()!).toContain("direction='ASC'");
   });
 });
 
@@ -360,18 +416,35 @@ describe('refineWorksheetTool — refusals and errors', () => {
     expect(parsed.reason).toMatch(/between 1 and 50/);
     expect(loadMock()).not.toHaveBeenCalled();
   });
+
+  it('refuses an unknown sort_by_field caption and never applies', async () => {
+    setupMocks({ source: SORT_BY_FIELD_SOURCE });
+    const result = await getToolResult({
+      worksheetName: 'Waterfall',
+      operation: 'sort_by_field',
+      targetField: 'Missing Field',
+      sortByField: 'display_order',
+      direction: 'desc',
+    });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.reason).toMatch(/target field/i);
+    expect(parsed.reason).toMatch(/Missing Field/);
+    expect(loadMock()).not.toHaveBeenCalled();
+  });
 });
 
 const successSchema = z.object({
   refined: z.literal(true),
-  operation: z.enum(['top_n', 'sort_direction']),
+  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field']),
   worksheetName: z.string(),
   message: z.string(),
 });
 
 const refusalSchema = z.object({
   refined: z.literal(false),
-  operation: z.enum(['top_n', 'sort_direction']),
+  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field']),
   worksheetName: z.string(),
   reason: z.string(),
 });
@@ -381,12 +454,18 @@ async function getToolResult({
   operation,
   topN,
   sortDirection,
+  targetField,
+  sortByField,
+  direction,
   session = '12345',
 }: {
   worksheetName: string;
-  operation: 'top_n' | 'sort_direction';
+  operation: 'top_n' | 'sort_direction' | 'sort_by_field';
   topN?: { n: number; end?: 'top' | 'bottom' };
   sortDirection?: { direction: 'ASC' | 'DESC' };
+  targetField?: string;
+  sortByField?: string;
+  direction?: 'asc' | 'desc';
   session?: string;
 }): Promise<CallToolResult> {
   const tool = getRefineWorksheetTool(new DesktopMcpServer());
@@ -397,5 +476,8 @@ async function getToolResult({
     getExecutor: vi.fn().mockResolvedValue({}),
   };
 
-  return await callback({ session, worksheetName, operation, topN, sortDirection }, extra);
+  return await callback(
+    { session, worksheetName, operation, topN, sortDirection, targetField, sortByField, direction },
+    extra,
+  );
 }

@@ -18,8 +18,10 @@ import { z } from 'zod';
 import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import {
+  confirmSortByFieldApplied,
   confirmSortDirectionApplied,
   confirmTopNApplied,
+  planSortByField,
   planSortDirection,
   planTopN,
   type SortDirection,
@@ -39,7 +41,7 @@ import {
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
-type RefineOperation = 'top_n' | 'sort_direction';
+type RefineOperation = 'top_n' | 'sort_direction' | 'sort_by_field';
 
 type RefineWorksheetToolResult =
   | { refined: true; operation: RefineOperation; worksheetName: string; message: string }
@@ -73,28 +75,30 @@ function formatValidationErrors(issues: ValidationIssue[]): string {
 }
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID.'),
-  worksheetName: z.string().min(1).describe('Worksheet name.'),
-  operation: z.enum(['top_n', 'sort_direction']).describe('Refinement.'),
+  session: z.string().optional().describe(''),
+  worksheetName: z.string().min(1).describe(''),
+  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field']).describe(''),
   topN: z
     .object({
-      n: z.number().int().min(1).max(50).describe('Members.'),
-      end: z.enum(['top', 'bottom']).optional().describe('Default top.'),
+      n: z.number().int().min(1).max(50).describe(''),
+      end: z.enum(['top', 'bottom']).optional().describe(''),
     })
     .optional()
-    .describe('For top_n.'),
+    .describe(''),
   sortDirection: z
     .object({
-      direction: z.enum(['ASC', 'DESC']).describe('Sort order.'),
+      direction: z.enum(['ASC', 'DESC']).describe(''),
     })
     .optional()
-    .describe('For sort_direction.'),
+    .describe(''),
+  targetField: z.string().min(1).optional().describe(''),
+  sortByField: z.string().min(1).optional().describe(''),
+  direction: z.enum(['asc', 'desc']).optional().describe(''),
 };
 
 const title = 'Refine Worksheet';
 
-export const REFINE_WORKSHEET_DESCRIPTION =
-  'Refine a worksheet: top/bottom N or flip sort; else refuses to normal path.';
+export const REFINE_WORKSHEET_DESCRIPTION = 'Refine sheet: top-N/sort/by-field.';
 
 export const getRefineWorksheetTool = (
   server: DesktopMcpServer,
@@ -113,12 +117,30 @@ export const getRefineWorksheetTool = (
       idempotentHint: false,
     },
     callback: async (
-      { session, worksheetName, operation, topN, sortDirection },
+      {
+        session,
+        worksheetName,
+        operation,
+        topN,
+        sortDirection,
+        targetField,
+        sortByField,
+        direction,
+      },
       extra,
     ): Promise<CallToolResult> => {
       return await refineWorksheetTool.logAndExecute<RefineWorksheetToolResult>({
         extra,
-        args: { session, worksheetName, operation, topN, sortDirection },
+        args: {
+          session,
+          worksheetName,
+          operation,
+          topN,
+          sortDirection,
+          targetField,
+          sortByField,
+          direction,
+        },
         callback: async () => {
           if (!worksheetName || !worksheetName.trim()) {
             return new ArgsValidationError('worksheetName is required.').toErr();
@@ -169,7 +191,7 @@ export const getRefineWorksheetTool = (
             const col = plan.filterColumn;
             confirm = (rb) => confirmTopNApplied(rb, col);
             nodeLabel = `Top-N filter (function="end") on ${col}`;
-          } else {
+          } else if (operation === 'sort_direction') {
             const plan = planSortDirection(sourceXml, {
               direction: sortDirection?.direction as SortDirection,
             });
@@ -181,6 +203,23 @@ export const getRefineWorksheetTool = (
             const dir = plan.direction;
             confirm = (rb) => confirmSortDirectionApplied(rb, col, dir);
             nodeLabel = `<computed-sort direction="${dir}">${col ? ` on ${col}` : ''}`;
+          } else {
+            const sortByDirection =
+              direction === 'desc' ? 'DESC' : direction === 'asc' ? 'ASC' : undefined;
+            const plan = planSortByField(sourceXml, {
+              targetField: targetField as string,
+              sortByField: sortByField as string,
+              direction: sortByDirection,
+            });
+            if (!plan.ok) {
+              return refusal(operation, worksheetName, plan.reason);
+            }
+            patched = plan.xml;
+            const col = plan.column;
+            const using = plan.using;
+            const dir = plan.direction;
+            confirm = (rb) => confirmSortByFieldApplied(rb, col, using, dir);
+            nodeLabel = `<computed-sort direction="${dir}" column="${col}" using="${using}">`;
           }
 
           // 3. Declare the user: namespace before the patch is parsed/applied.
