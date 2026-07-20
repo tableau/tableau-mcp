@@ -48,18 +48,9 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a plain viz ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot)',
     action:
-      "FIRST try the semantic loop: call execute-tableau-command with tabdoc:generate-viz-from-notional-spec and a NotionalSpec of the ask (see the notional-spec-authoring knowledge) — it renders the viz in one sub-second command, and a refinement is the same call with the full edited spec on the same sheet. For families outside the NotionalSpec vocabulary (waterfall, KPI, funnel) or when the ask needs candidate proposals, call bind-template with the user's ask and auto_apply: true; on propose/escalate, fall back to the general authoring tools (get-workbook-xml -> edit -> apply-workbook, or inject-template for a known template).",
-    toolSequence: [
-      'execute-tableau-command',
-      'bind-template',
-      'get-workbook-xml',
-      'apply-workbook',
-      'inject-template',
-    ],
-    stopConditions: [
-      'it renders the viz in one sub-second command',
-      'on propose/escalate, fall back to the general authoring tools',
-    ],
+      "FIRST call bind-template with the user's ask and auto_apply: true — deterministic, ~0.3s, no model work. On propose/escalate, or when the ask involves calcs, parameters, sets, actions, or custom sorts, use the semantic loop: execute-tableau-command with tabdoc:generate-viz-from-notional-spec (see notional-spec-authoring).",
+    toolSequence: ['bind-template', 'execute-tableau-command'],
+    stopConditions: ['deterministic, ~0.3s, no model work'],
     requiredEvidence: ["execute-tableau-command success envelope: { state: 'SUCCEEDED' }"],
   },
   {
@@ -68,14 +59,10 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a dashboard ask with 2-6 vizzes (e.g. "a dashboard with sales by region and profit by category")',
     action:
-      "FIRST call dashboard-auto-apply with one { ask, title? } per viz and a dashboardName — it binds and composes every viz into one dashboard in ONE call. If any ask fails to deterministically bind, nothing is applied and each ask's outcome is returned; fall back to bind-template per viz, or build-and-apply-dashboard for KPI strips / custom zone layouts.",
-    toolSequence: ['dashboard-auto-apply', 'bind-template', 'build-and-apply-dashboard'],
-    stopConditions: [
-      "If any ask fails to deterministically bind, nothing is applied and each ask's outcome is returned",
-    ],
-    requiredEvidence: [
-      'dashboard-auto-apply success: { applied: true, dashboard, sheets: [{ title, template_name }], phase_ms }',
-    ],
+      'build each sheet with bind-template for plain charts or execute-tableau-command with tabdoc:generate-viz-from-notional-spec for semantic specs, then compose the dashboard — search-commands only for commands the census does not list.',
+    toolSequence: ['bind-template', 'execute-tableau-command', 'search-commands'],
+    stopConditions: ['search-commands only for commands the census does not list'],
+    requiredEvidence: ['each sheet build returns a success envelope before dashboard composition'],
   },
   {
     kind: 'route',
@@ -115,21 +102,20 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'edit-in-place',
     trigger: 'current/this/that/existing sheet, chart, view, or dashboard',
     action:
-      'edit in place: resolve the target (exact name, else list-worksheets; ask via ask-user if ambiguous), then refine-worksheet for top-N/sort edits, else get-worksheet-xml -> edit -> apply-worksheet. Never create a new sheet unless explicitly asked.',
-    toolSequence: [
-      'list-worksheets',
-      'ask-user',
-      'refine-worksheet',
-      'get-worksheet-xml',
-      'apply-worksheet',
-    ],
+      'edit in place: resolve the target (exact name, else list-worksheets or list-dashboards; ask via ask-user if ambiguous), then use execute-tableau-command with the full edited NotionalSpec or the relevant author-* tool. Never create a new sheet unless explicitly asked.',
+    toolSequence: ['list-worksheets', 'list-dashboards', 'ask-user', 'execute-tableau-command'],
     stopConditions: ['Never create a new sheet unless explicitly asked'],
     requiredEvidence: ['resolved worksheet/dashboard target before applying'],
   },
   {
     kind: 'prose',
+    id: 'command-census',
+    text: 'Command census: tabdoc:generate-viz-from-notional-spec renders/replaces the CURRENT sheet from a NotionalSpec (refine = same call, full edited spec); tabdoc:goto-sheet switches sheets; tabui:save-underlying-metadata returns workbook metadata/fields; author-calc, author-set, author-parameter, author-action, format-labels author semantic objects. Use search-commands ONLY for commands not listed here.',
+  },
+  {
+    kind: 'prose',
     id: SESSION_RESOLUTION_ID,
-    text: 'Every session-scoped tool call needs the session id from list-instances — except bind-template and dashboard-auto-apply, which auto-resolve the session when exactly one Desktop instance is running.',
+    text: 'Omit session when exactly one Desktop instance runs; use list-instances when multiple are open.',
   },
   {
     kind: 'prose',

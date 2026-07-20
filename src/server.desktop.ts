@@ -81,15 +81,17 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * running-total/LOD), author-set (param-linked Top/Bottom-N), author-parameter (the
  * key signature, born at OPEN), author-action (parameter-change wiring), format-labels
  * (mark labels) — PLUS ask-user (ambiguity goes to the human, never to a guess) and
- * search-commands (how the singer discovers the execute-tableau-command dialect).
- * Twelve tools cover the full Workout-Wednesday-W44 dialect; no raw XML
- * get/apply, no cache, no validation, no templates. This is the "make it shorter"
- * answer — a lean, semantically-named surface under the 46k tools/list cliff, not a
- * describe-stub trim of the 45-tool default. Mechanism map live-proven 2026-07-19
- * (CODA): calcs/sets/actions/formatting MERGE; parameters born at OPEN via author-parameter.
+ * search-commands (how the singer discovers the execute-tableau-command dialect) — PLUS
+ * bind-template, the deterministic fast-path (no LLM, ~0.3s) for plain chart shapes.
+ * Thirteen tools cover the full Workout-Wednesday-W44 dialect; no raw XML get/apply,
+ * no cache, no validation. This is the "make it shorter" answer — a lean,
+ * semantically-named surface under the 46k tools/list cliff, not a describe-stub trim
+ * of the 45-tool default. Mechanism map live-proven 2026-07-19 (CODA): calcs/sets/
+ * actions/formatting MERGE; parameters born at OPEN via author-parameter.
  */
 export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
   new Set<DesktopToolName>([
+    'bind-template',
     'execute-tableau-command',
     'search-commands',
     'ask-user',

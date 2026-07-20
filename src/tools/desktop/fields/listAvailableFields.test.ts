@@ -6,7 +6,7 @@ import { z } from 'zod';
 import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as metadataModule from '../../../desktop/metadata/index.js';
-import { FileNotFoundError, FileReadError } from '../../../errors/mcpToolError.js';
+import { FileReadError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -89,14 +89,19 @@ describe('listAvailableFieldsTool', () => {
     });
   });
 
-  it('should return error when workbook file does not exist', async () => {
+  it('should return helpful error when workbook file does not exist', async () => {
     vi.mocked(existsSync).mockReturnValue(false);
 
     const result = await getResult({ workbookFile: '/missing/workbook.xml' });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe(new FileNotFoundError('/missing/workbook.xml').message);
+    expect(result.content[0].text).toContain('File not found: /missing/workbook.xml.');
+    expect(result.content[0].text).toContain('cached workbook file');
+    expect(result.content[0].text).toContain(
+      'Omit workbookFile to read fields from the live session workbook',
+    );
+    expect(result.content[0].text).not.toContain('get-*-xml');
   });
 
   it('should return error when readFileSync throws', async () => {
@@ -156,6 +161,33 @@ describe('listAvailableFieldsTool', () => {
     });
     expect(writeFileSync).toHaveBeenCalledWith(WORKBOOK_FILE, LIVE_XML, 'utf-8');
     expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKBOOK_FILE, SESSION);
+    expect(metadataModule.listAvailableFields).toHaveBeenCalledWith(LIVE_XML);
+  });
+
+  it('without workbookFile reads fields from the resolved live session workbook', async () => {
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(LIVE_XML));
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue(mockLiveFields as any);
+    const mockExecutor = {} as any;
+    const extra = {
+      ...getMockRequestHandlerExtra(),
+      getExecutor: vi.fn().mockResolvedValue(mockExecutor),
+    };
+
+    const result = await getResult({ session: SESSION, extra });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(body.message).toContain('Sales');
+    expect(existsSync).not.toHaveBeenCalled();
+    expect(readFileSync).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
+    expect(cacheFingerprintModule.writeSidecar).not.toHaveBeenCalled();
+    expect(extra.getExecutor).toHaveBeenCalledWith(SESSION);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledWith({
+      executor: mockExecutor,
+      signal: extra.signal,
+    });
     expect(metadataModule.listAvailableFields).toHaveBeenCalledWith(LIVE_XML);
   });
 
@@ -222,7 +254,7 @@ async function getResult({
   session,
   extra,
 }: {
-  workbookFile: string;
+  workbookFile?: string;
   session?: string;
   extra?: ReturnType<typeof getMockRequestHandlerExtra>;
 }): Promise<CallToolResult> {
