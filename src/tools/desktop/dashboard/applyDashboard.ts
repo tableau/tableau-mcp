@@ -25,15 +25,11 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  dashboardName: z.string().describe('Name of the dashboard to update (must already exist).'),
-  mode: z
-    .enum(['file', 'inline'])
-    .optional()
-    .default('file')
-    .describe('file reads dashboardFile; inline uses dashboardXml.'),
-  dashboardFile: z.string().optional().describe('Modified dashboard cache file for mode=file.'),
-  dashboardXml: z.string().optional().describe('Dashboard layout content for mode=inline.'),
+  session: z.string().optional().describe(''),
+  dashboardName: z.string().describe(''),
+  mode: z.enum(['file', 'inline']).optional().default('file').describe(''),
+  dashboardFile: z.string().optional().describe(''),
+  dashboardXml: z.string().optional().describe(''),
 };
 
 const title = 'Apply Dashboard';

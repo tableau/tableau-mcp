@@ -63,25 +63,21 @@ const MIN_ASKS = 2;
 const MAX_ASKS = 6;
 
 const askSchema = z.object({
-  ask: z.string().min(1).describe('Viz ask'),
-  title: z.string().min(1).max(80).optional().describe('Sheet title'),
+  ask: z.string().min(1).describe(''),
+  title: z.string().min(1).max(80).optional().describe(''),
 });
 
 const layoutSchema = z.object({
-  layoutType: z
-    .enum(['auto-grid', 'rows', 'columns'])
-    .optional()
-    .default('auto-grid')
-    .describe('Grid.'),
-  gridColumns: z.number().optional().describe('Cols.'),
+  layoutType: z.enum(['auto-grid', 'rows', 'columns']).optional().default('auto-grid').describe(''),
+  gridColumns: z.number().optional().describe(''),
 });
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session.'),
+  session: z.string().optional().describe(''),
   asks: z.array(askSchema).min(MIN_ASKS).max(MAX_ASKS).describe(`2-${MAX_ASKS} asks.`),
-  dashboardName: z.string().min(1).describe('Name.'),
-  title: z.string().optional().describe('Title.'),
-  layout: layoutSchema.optional().describe('Layout.'),
+  dashboardName: z.string().min(1).describe(''),
+  title: z.string().optional().describe(''),
+  layout: layoutSchema.optional().describe(''),
 };
 
 /** One ask's outcome, tagged with its position and original ask text for diagnostics. */
@@ -178,9 +174,7 @@ export const getDashboardAutoApplyTool = (
     server,
     name: 'dashboard-auto-apply',
     title,
-    description: [
-      'Build dashboard from 2-6 asks; all-or-nothing — bind/dup/edit/preflight fail refuses the batch.',
-    ].join(' '),
+    description: 'Build dashboard from 2-6 asks; all-or-nothing.',
     paramsSchema,
     annotations: {
       title,

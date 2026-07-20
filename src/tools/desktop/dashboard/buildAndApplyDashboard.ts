@@ -21,13 +21,13 @@ import { DesktopTool } from '../tool.js';
 import { buildDashboardXml, computeZones, layoutSpecSchema } from './dashboardZones.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  dashboardName: z.string().describe('Name of the dashboard to build and apply.'),
-  dashboardFile: z.string().describe('Cached dashboard layout file.'),
-  workbookFile: z.string().describe('Cached workbook file.'),
-  title: z.string().optional().describe('Optional dashboard title.'),
-  layoutSpec: layoutSpecSchema.describe('KPI/viz layout specification.'),
-  worksheetNames: z.array(z.string()).describe('Worksheet viewpoints to register.'),
+  session: z.string().optional().describe(''),
+  dashboardName: z.string().describe(''),
+  dashboardFile: z.string().describe(''),
+  workbookFile: z.string().describe(''),
+  title: z.string().optional().describe(''),
+  layoutSpec: layoutSpecSchema.describe(''),
+  worksheetNames: z.array(z.string()).describe(''),
 };
 
 const title = 'Build and Apply Dashboard';
@@ -38,10 +38,7 @@ export const getBuildAndApplyDashboardTool = (
     server,
     name: 'build-and-apply-dashboard',
     title,
-    description: [
-      'Build dashboard layout from a layout spec and APPLY it to the live workbook; registers viewpoints. Use with worksheet builders.',
-      'Details: expertise://tableau/tactics/dashboard/zones.',
-    ].join(' '),
+    description: 'Build/apply dashboard; registers viewpoints.',
     paramsSchema,
     annotations: {
       title,

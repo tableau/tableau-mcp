@@ -24,18 +24,15 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().describe('Session ID.'),
-  workbookFile: z.string().describe('Workbook cache file.'),
-  templateName: z.string().describe('Template name.'),
-  title: z.string().describe('New sheet name; replaces {{TITLE}}.'),
-  sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe('Sheet type.'),
-  templateParameters: z.record(z.string()).optional().describe('Placeholder substitutions.'),
-  fieldMapping: z.record(z.string()).optional().describe('Template field to column-ref map.'),
-  insertPosition: z
-    .enum(['end', 'before_sheet', 'after_sheet'])
-    .optional()
-    .describe('Tab insertion position.'),
-  relativeSheetName: z.string().optional().describe('Anchor for before/after insertion.'),
+  session: z.string().describe(''),
+  workbookFile: z.string().describe(''),
+  templateName: z.string().describe(''),
+  title: z.string().describe(''),
+  sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe(''),
+  templateParameters: z.record(z.string()).optional().describe(''),
+  fieldMapping: z.record(z.string()).optional().describe(''),
+  insertPosition: z.enum(['end', 'before_sheet', 'after_sheet']).optional().describe(''),
+  relativeSheetName: z.string().optional().describe(''),
 };
 
 function inferSingleDatasourceFromFieldMapping(

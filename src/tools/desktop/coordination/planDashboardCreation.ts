@@ -28,20 +28,20 @@ type PlannerFieldResolution = {
 const plannerFieldSchema = z.union([
   z.string(),
   z.object({
-    query: z.string().describe('Q.'),
-    datasource: z.string().optional().describe('DS.'),
+    query: z.string().describe(''),
+    datasource: z.string().optional().describe(''),
   }),
 ]);
 
 const paramsSchema = {
-  session: z.string().optional().describe('S.'),
-  dashboardName: z.string().describe('N.'),
-  title: z.string().optional().describe('T.'),
+  session: z.string().optional().describe(''),
+  dashboardName: z.string().describe(''),
+  title: z.string().optional().describe(''),
   layout: z
     .object({
-      type: z.enum(['auto-grid', 'rows', 'columns', 'custom']).describe('L.'),
-      gridColumns: z.number().optional().describe('C.'),
-      kpiStripHeight: z.number().optional().describe('K.'),
+      type: z.enum(['auto-grid', 'rows', 'columns', 'custom']).describe(''),
+      gridColumns: z.number().optional().describe(''),
+      kpiStripHeight: z.number().optional().describe(''),
       zones: z
         .array(
           z.object({
@@ -53,20 +53,20 @@ const paramsSchema = {
           }),
         )
         .optional()
-        .describe('Z.'),
+        .describe(''),
     })
     .optional()
-    .describe('L.'),
+    .describe(''),
   worksheets: z
     .array(
       z.object({
-        name: z.string().describe('N.'),
-        type: z.enum(['kpi', 'chart']).describe('T.'),
-        template: z.string().optional().describe('Tpl.'),
-        fields: z.array(plannerFieldSchema).describe('F.'),
+        name: z.string().describe(''),
+        type: z.enum(['kpi', 'chart']).describe(''),
+        template: z.string().optional().describe(''),
+        fields: z.array(plannerFieldSchema).describe(''),
       }),
     )
-    .describe('W.'),
+    .describe(''),
 };
 
 function selectTemplate(ws: { type: string; template?: string }): string {

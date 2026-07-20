@@ -1,4 +1,5 @@
 import pkg from '../../package.json';
+import { DYNAMIC_AUTHORING_TOOL_PROFILE } from '../../src/server.desktop.js';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
 import { resetEnv, setEnv } from '../testEnv.js';
@@ -99,9 +100,13 @@ describe('server', () => {
 
     it('should list tools', async () => {
       const names = await client.listTools();
-      // Episode-lite lifecycle tools are gated by EPISODE_EVENTS=on (default off):
-      const episodeLiteTools = ['tableau-begin-episode', 'tableau-end-episode'];
-      const expectedToolNames = desktopToolNames.filter((name) => !episodeLiteTools.includes(name));
+      // Unset TOOL_PROFILE now defaults to the lean dynamic-authoring native surface
+      // (the singer sings native by default); the raw XML get/apply tools are opt-in
+      // via TOOL_PROFILE=full. Episode-lite tools are gated by EPISODE_EVENTS and are
+      // not in the lean set anyway.
+      const expectedToolNames = desktopToolNames.filter((name) =>
+        DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
+      );
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });
@@ -172,10 +177,11 @@ describe('server', () => {
       // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
       expectedWebToolNames = expectedWebToolNames.filter((name) => !mcpAppsTools.includes(name));
 
-      // Episode-lite lifecycle tools are gated by EPISODE_EVENTS=on (default off):
-      const episodeLiteTools = ['tableau-begin-episode', 'tableau-end-episode'];
-      const expectedDesktopToolNames = desktopToolNames.filter(
-        (name) => !episodeLiteTools.includes(name),
+      // Unset TOOL_PROFILE defaults the desktop half to the lean dynamic-authoring
+      // native surface (raw XML tools opt-in via TOOL_PROFILE=full); episode-lite
+      // tools are gated by EPISODE_EVENTS and not in the lean set.
+      const expectedDesktopToolNames = desktopToolNames.filter((name) =>
+        DYNAMIC_AUTHORING_TOOL_PROFILE.has(name),
       );
       const expectedToolNames = [...expectedDesktopToolNames, ...expectedWebToolNames];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));

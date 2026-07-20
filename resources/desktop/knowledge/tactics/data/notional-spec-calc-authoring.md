@@ -1,5 +1,7 @@
 # Calculated Fields for the Semantic Loop (Whole-Document Round-Trip)
 
+**Dynamic-dashboard companion:** `notional-spec-dynamic-authoring.md` — the router for the full author-* verb set (sets, parameters, actions, formatting) and the key-signature/melody law. This doc is the calc detail within it.
+
 The NotionalSpec schema cannot express calculated fields — but calcs are how analytic asks (running totals, moving averages, ratios, rank) become chartable. This module covers the ONE working path for authoring calcs on the semantic loop: the whole-workbook-document round-trip, live-proven with Workout-Wednesday-grade window calcs (2026-07-19, 12 calcs in one splice, no dialogs, no Cloud sign-in).
 
 ---
@@ -15,6 +17,8 @@ The NotionalSpec schema cannot express calculated fields — but calcs are how a
 
 ## When to Use
 
+**If the `author-calc` tool is available, use it first** — it takes `caption` + `formula` primitives and performs this whole round-trip internally (splice, load, readback-verify), so no document ever passes through your hands. Fall back to the manual round-trip below only when `author-calc` is absent or you need a multi-column batch splice.
+
 Use the document round-trip when an ask needs a field that doesn't exist yet — then chart it with the NotionalSpec loop:
 
 1. `tabui:save-underlying-metadata` → returns the full workbook document (routed to GET `/v0/workbook/document`).
@@ -28,7 +32,7 @@ This is the one blessed use of XML on the semantic loop: whole-document, the way
 
 - **Prefer this over the calculation-dialog commands**: `apply-calculation-for-create-or-update` and friends are Analytics-Assistant-gated (require a signed-in Cloud+AI session) and observed failing 400/500 without it. The document round-trip needs no sign-in and opens no dialog.
 - **Whole document in, whole document out**: read fresh, edit, write back promptly. Do not cache a document across user edits — re-read before each splice.
-- **The POST is your validity gate**: Tableau's parser validates the document on load and rejects malformed calc XML with actionable error text. A clean load means the calc parsed — it does NOT mean the numbers are right.
+- **The POST is your validity gate — but VERIFY BY READBACK**: Tableau's parser validates the document on load and rejects malformed calc XML with actionable error text. A clean load means the calc parsed — it does NOT mean the numbers are right, and a `completed` envelope does not by itself prove the change APPLIED (see the column-removal no-op below). After every load, re-read with `tabui:save-underlying-metadata` and confirm your change is present before building on it.
 - **Numbers are unverified until verified** (non-negotiable): generation success and coherence checks never validate values. Plain aggregates (SUM/AVG of a physical column) are Tableau's own math and trustworthy; window calcs, rank, and anything with Compute-Using/addressing can render beautifully wrong. Verify against an independent computation before presenting a number as fact — or present the chart while saying the values are unverified.
 - **Close dialogs first**: an open calculation-editor (or any modal) can fail subsequent applies with 500s. If applies start failing after a user interaction, ask the user to close open dialogs before retrying.
 - **Keep the user's tree sacred**: splice adds your calc columns; never drop or rewrite nodes you didn't author.
@@ -73,9 +77,11 @@ Write the whole edited document back via `tabui:load-underlying-metadata` (`text
 ### What does NOT work
 
 - `apply-calculation-for-create-or-update` without a Cloud+AI session (400/500).
+- `tabdoc:open-calc-editor-with-custom-calc` as a headless calc door: it returns `completed` but does NOT commit the calc — it opens the calculation editor with the formula pre-filled, and the open editor holds the UI thread so subsequent commands fail until a human closes it (live-proven 2026-07-19, twice). Human-in-the-loop only; never call it in an unattended run.
 - Raw `tabdoc:`/`tabui:save-underlying-metadata` over the External API command route (`command-not-found` 404) — these verb names are THIS server's mapping to the document endpoints, not registered app commands.
 - Expressing formulas, LODs, or table-calc addressing inside NotionalSpec JSON.
 - Any claim that a spliced calc's VALUES are correct because the load succeeded or a chart rendered.
+- **REMOVING a datasource `<column>` via document load: silently ignored** (live-proven 2026-07-19, Desktop main.26.0715): the load reports `completed` but the column survives — column adds and worksheet-content rewrites apply; column deletes no-op. Do not "clean up" calcs by round-trip; the readback will show them still there.
 
 ## Source and Confidence
 

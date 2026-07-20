@@ -44,21 +44,13 @@ import { DesktopTool } from '../tool.js';
 import { proposalSchema } from './proposalSchema.js';
 
 const paramsSchema = {
-  session: z
-    .string()
-    .optional()
-    .describe('Session; optional when one Desktop instance is running.'),
+  session: z.string().optional().describe('Session.'),
   ask: z.string().describe('Viz ask.'),
   proposal: proposalSchema
     .optional()
-    .describe("Call 2 only: filled proposal from a Call-1 'propose' payload."),
-  minConfidence: z.number().min(0).max(1).optional().describe('Confidence floor; default 0.6.'),
-  auto_apply: z
-    .boolean()
-    .optional()
-    .describe(
-      'True applies deterministic Call-1 binds server-side; never auto-applies Call-2 proposals. Default false/read-only.',
-    ),
+    .describe("Call 2 only: proposal from a Call-1 'propose' payload."),
+  minConfidence: z.number().min(0).max(1).optional().describe('Floor.'),
+  auto_apply: z.boolean().optional().describe('Apply Call 1 only; default false.'),
 };
 
 /**
@@ -334,11 +326,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'bind-template',
     title,
-    description: [
-      'Bind a checked-in template to an ask.',
-      "Call 1 returns 'bound' or 'propose'; Call 2 returns 'bound' or 'escalate'.",
-      'auto_apply:true renders deterministic Call-1 binds.',
-    ].join(' '),
+    description: 'Bind template: Call1 bound/propose; Call2 bound/escalate.',
     paramsSchema,
     annotations: {
       title,

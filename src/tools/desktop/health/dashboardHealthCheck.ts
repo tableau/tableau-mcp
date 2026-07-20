@@ -43,18 +43,18 @@ import { DesktopTool } from '../tool.js';
 // ── Binding manifest (input) ─────────────────────────────────────────────────
 
 const boundSheetSchema = z.object({
-  title: z.string().describe('Sheet.'),
-  templateName: z.string().describe('Template.'),
-  fieldMapping: z.record(z.string()).describe('Mapping.'),
-  schemaHash: z.string().describe('Schema.'),
-  primaryDatasource: z.string().describe('Source.'),
+  title: z.string().describe(''),
+  templateName: z.string().describe(''),
+  fieldMapping: z.record(z.string()).describe(''),
+  schemaHash: z.string().describe(''),
+  primaryDatasource: z.string().describe(''),
 });
 
 const bindingRecordSchema = z.object({
-  dashboardName: z.string().describe('Dashboard.'),
-  sheets: z.array(boundSheetSchema).describe('Sheets.'),
-  workbookHashAtBind: z.string().describe('Workbook.'),
-  recordedAt: z.string().describe('Time.'),
+  dashboardName: z.string().describe(''),
+  sheets: z.array(boundSheetSchema).describe(''),
+  workbookHashAtBind: z.string().describe(''),
+  recordedAt: z.string().describe(''),
 });
 
 export type DashboardBoundSheet = z.infer<typeof boundSheetSchema>;
@@ -381,8 +381,8 @@ export function runDashboardHealthCheck({
 // ── Tool registration ────────────────────────────────────────────────────────
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session.'),
-  manifest: bindingRecordSchema.describe('Bind record.'),
+  session: z.string().optional().describe(''),
+  manifest: bindingRecordSchema.describe(''),
 };
 
 const title = 'Dashboard Health Check (Flag-Only)';
@@ -393,10 +393,7 @@ export const getDashboardHealthCheckTool = (
     server,
     name: 'dashboard-health-check',
     title,
-    description: [
-      'Read-only.',
-      'Flags sheet/field/zone/source drift; no repairs; D9 render undetectable.',
-    ].join(' '),
+    description: 'Read-only drift check; no repairs; D9 undetectable.',
     paramsSchema,
     annotations: {
       title,

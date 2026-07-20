@@ -7,6 +7,7 @@ import {
   DEMO_TOOL_PROFILE,
   DESKTOP_INSTRUCTIONS,
   DesktopMcpServer,
+  DYNAMIC_AUTHORING_TOOL_PROFILE,
   selectToolsForProfile,
   SPEC_LOOP_TOOL_PROFILE,
 } from './server.desktop.js';
@@ -17,6 +18,10 @@ import { Provider } from './utils/provider.js';
 
 describe('DesktopMcpServer', () => {
   it('should register tools', async () => {
+    // Pin the full surface: this test is about registration mechanics (every tool
+    // registered with its title/schema/annotations), independent of the profile
+    // default (unset now selects the lean dynamic-authoring surface).
+    vi.stubEnv('TOOL_PROFILE', 'full');
     const server = getServer();
     await server.registerTools();
 
@@ -104,6 +109,8 @@ For a plain viz ask (bar, column, line, treemap, waterfall, scatter, filled map,
 For a dashboard ask with 2-6 vizzes (e.g. "a dashboard with sales by region and profit by category"), FIRST call dashboard-auto-apply with one { ask, title? } per viz and a dashboardName — it binds and composes every viz into one dashboard in ONE call. If any ask fails to deterministically bind, nothing is applied and each ask's outcome is returned; fall back to bind-template per viz, or build-and-apply-dashboard for KPI strips / custom zone layouts.
 
 For a data-value question ("what was revenue in Q3?"), do NOT answer with a number — this server cannot read data values. Say so, then offer the viz that would show it (a plain viz ask via bind-template) instead.
+
+For a DYNAMIC ask — a parameter the user drives, computed top/bottom-N membership, click-to-change interaction, or mark labels, use the author-* verbs, never raw commands or XML. Author parameters FIRST via author-parameter (it reopens Desktop and re-pins the session itself; on { reopened: true } continue immediately; stagePath optional). Then author-set for param-linked top/bottom-N membership (count accepts '[Parameters].[Parameter N]'), author-calc for calcs, author-action for click-to-param wiring, format-labels for labels. Build sheets and dashboard around them with the notional-spec loop (execute-tableau-command).
 
 If ambiguity changes workbook content, call ask-user with urgency=blocking; stop for answer.
 
@@ -216,14 +223,10 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // DO NOT GROW these: trim them down and lower/remove the entry. Never raise a
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
-    ['bind-template', 1898], // ratcheted down in the 46k trim (W65/#534); do not grow
-    ['plan-dashboard-creation', 1797], // ratcheted down in the 46k trim (W65/#534); do not grow
-    ['build-and-apply-dashboard', 2033], // do not grow
-    ['validate-proposal', 1557], // ratcheted down in the 46k trim (W65/#534); do not grow
-    ['dashboard-auto-apply', 1300], // +5 (Andy #521 review): restore ask/title noun-role (Viz ask/Sheet title) — funded by byte-negative all-or-nothing description reword; do not grow
-    ['dashboard-health-check', 1453], // do not grow
-    ['inject-template', 1356], // do not grow
-    ['build-and-apply-worksheet', 1274], // do not grow
+    ['bind-template', 1632], // ratcheted down in the author-calc funding trim (Call-2 proposal provenance kept); do not grow
+    ['plan-dashboard-creation', 1509], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
+    ['build-and-apply-dashboard', 1558], // ratcheted down in the CODA funding trim; do not grow
+    ['validate-proposal', 1407], // ratcheted down in the CODA funding trim; do not grow
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {
@@ -343,11 +346,58 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('unset ("") profile returns the full set unchanged, byte-identical order', () => {
-    const tools = allTools();
-    const selected = selectToolsForProfile(tools, '');
-    expect(selected).toBe(tools);
-    expect(selected.map((t) => t.name)).toEqual(tools.map((t) => t.name));
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 12-tool singable surface — the spec-loop 5 + the author-* 5 + ask-user + search-commands, no XML/cache/template tools', () => {
+    const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
+    expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
+    // The full dynamic dialect, semantically named — every author-* verb present,
+    // plus the ask-for-help and command-discovery doors (CODA's joy-cut overshot).
+    for (const verb of [
+      'author-calc',
+      'author-set',
+      'author-parameter',
+      'author-action',
+      'format-labels',
+      'ask-user',
+      'search-commands',
+    ]) {
+      expect(selected.map((t) => t.name)).toContain(verb);
+    }
+    // Zero agent-visible XML/cache/template/validation tools.
+    for (const banished of [
+      'get-workbook-xml',
+      'apply-workbook',
+      'get-worksheet-xml',
+      'apply-worksheet',
+      'read-cached-xml',
+      'write-cached-xml',
+      'validate-workbook-xml',
+      'validate-worksheet-xml',
+      'inject-template',
+      'list-templates',
+      'bind-template',
+    ]) {
+      expect(selected.map((t) => t.name)).not.toContain(banished);
+    }
+  });
+
+  it('dynamic-authoring surface sits well under the 46k tools/list cliff (the whole point of a lean profile)', async () => {
+    const server = new DesktopMcpServer();
+    const selected = selectToolsForProfile(
+      desktopToolFactories.map((f) => f(server)),
+      'dynamic-authoring',
+    );
+    let total = DESKTOP_INSTRUCTIONS.length;
+    for (const tool of selected) {
+      total += (await serializeDesktopToolSurface(tool)).length;
+    }
+    // A 10-tool surface must have generous headroom — this is a structural win, not a
+    // describe-stub squeeze. If this ever approaches 46k something is very wrong.
+    expect(total).toBeLessThanOrEqual(30_000);
+  });
+
+  it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {
+    const selected = selectToolsForProfile(allTools(), '');
+    expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
   });
 
   it('explicit "full" profile returns the full set unchanged', () => {
@@ -386,7 +436,18 @@ describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
     expect(new Set(registeredNames)).toEqual(DEMO_TOOL_PROFILE);
   });
 
-  it('registers the full set when TOOL_PROFILE is unset', async () => {
+  it('registers the lean dynamic-authoring native surface when TOOL_PROFILE is unset', async () => {
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0]);
+    expect(new Set(registeredNames)).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
+  });
+
+  it('registers the full set when TOOL_PROFILE=full is explicit', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'full');
     const server = getServer();
     await server.registerTools();
 

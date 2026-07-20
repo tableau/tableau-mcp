@@ -226,3 +226,33 @@ describe('live param overrides (runtime truth beats the reference)', () => {
     expect(validateCommandParams('tabdoc:goto-sheet', { Sheet: 'x' })).toEqual({ ok: true });
   });
 });
+
+describe('LIVE_DIALOG_BLOCKLIST', () => {
+  it('refuses revert-workbook-ui outright with an author-forward FIX (the triple-boo modal, 2026-07-19)', async () => {
+    const { validateCommandParams } = await import('./paramContractGuard.js');
+    const result = validateCommandParams('tabdoc:revert-workbook-ui', { workspace: 'anything' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain('BLOCKING dialog');
+      expect(result.message).toContain('NOT sent');
+      expect(result.message).toContain('author forward');
+    }
+  });
+
+  it('refuses every dialog-misclassified command regardless of args', async () => {
+    const { validateCommandParams } = await import('./paramContractGuard.js');
+    for (const name of [
+      'tabdoc:create-new-parameter',
+      'tabdoc:edit-existing-parameter',
+      'tabdoc:show-sort-dialog',
+      'tabdoc:edit-filter-dialog',
+      'tabdoc:show-action-list-dialog-for-worksheet',
+    ]) {
+      const result = validateCommandParams(name, {});
+      expect(result.ok, name).toBe(false);
+      if (!result.ok) {
+        expect(result.message).toContain('FIX:');
+      }
+    }
+  });
+});

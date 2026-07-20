@@ -17,13 +17,10 @@ import { DesktopTool } from '../tool.js';
 import { refreshWorkbookCache } from './refreshWorkbookCache.js';
 
 const paramsSchema = {
-  workbookFile: z.string().describe('Workbook cache file.'),
-  query: z.string().describe('Field reference.'),
-  datasource: z.string().optional().describe('Datasource to resolve ambiguity.'),
-  session: z
-    .string()
-    .optional()
-    .describe('Session ID; on not_found, refreshes live workbook and retries once.'),
+  workbookFile: z.string().describe(''),
+  query: z.string().describe(''),
+  datasource: z.string().optional().describe(''),
+  session: z.string().optional().describe(''),
 };
 
 interface ResolveFieldResult {

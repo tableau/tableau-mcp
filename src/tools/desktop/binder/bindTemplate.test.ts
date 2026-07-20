@@ -119,7 +119,7 @@ describe('bindTemplateTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getBindTemplateTool(new DesktopMcpServer());
     expect(tool.name).toBe('bind-template');
-    expect(tool.description).toContain("Call 1 returns 'bound' or 'propose'");
+    expect(tool.description).toContain('Call1 bound/propose; Call2 bound/escalate');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       ask: expect.any(Object),

@@ -52,9 +52,9 @@
       "UI"
     ]
   },
-  "total_commands": 333,
+  "total_commands": 335,
   "usage_notes_for_agents": "Invoke via ExecuteCommand(CommandId, params). Use serialized_name when calling from JavaScript. Context-filled params (e.g. UPI_Workspace) are provided by the app; only required binary/unserialized params set requires_binary_or_unserialized_args. See command_names_requiring_context_or_binary_args for commands that cannot be fully invoked via executeCommandAsync. Filter by agent_can_invoke: true for commands safe to invoke via MCP; when no such command matches, use recommendation_when_no_invocable_match. Commands with opens_blocking_dialog: true open a blocking UI dialog and can cause CDP socket hang. Evidence paths and usage_count may include references from test/ and testlib/; treat those as non-customer usage.",
-  "recommendation_when_no_invocable_match": "No MCP-invocable command found for this action. For a chart/viz ask, use the NotionalSpec loop (tabdoc:generate-viz-from-notional-spec — see expertise://tableau/tactics/data/notional-spec-authoring); for calculated fields, use the workbook-document round-trip (see notional-spec-calc-authoring). Fall back to workbook XML editing only when neither covers the ask.",
+  "recommendation_when_no_invocable_match": "No MCP-invocable command found for this action. For a chart/viz ask, use the NotionalSpec loop (tabdoc:generate-viz-from-notional-spec — see expertise://tableau/tactics/data/notional-spec-authoring); for calculated fields, use the workbook-document round-trip: tabui:save-underlying-metadata -> splice calc <column> nodes -> tabui:load-underlying-metadata -> chart by caption (see notional-spec-calc-authoring). Fall back to workbook XML editing only when neither covers the ask.",
   "command_names_requiring_context_or_binary_args": [
     "AddReferenceLine",
     "AddSubtotals",
@@ -252,6 +252,7 @@
     "LaunchWorksheetCaptionRichTextEditor",
     "LaunchWorksheetTitleRichTextEditor",
     "LaunchZoneRichTextEditor",
+    "LoadUnderlyingMetadata",
     "MapSourceNone",
     "MapSourceOffline",
     "MapSourceUse",
@@ -298,6 +299,7 @@
     "SaveAsPublic",
     "SaveBookmark",
     "SavePublic",
+    "SaveUnderlyingMetadata",
     "SchemaViewerConvertToUserDrillPath",
     "SelectAxisTuples",
     "SelectFieldsInShelf",
@@ -23501,14 +23503,23 @@
       "source_file": "AnalyticsAssistantDesktopPaneCommand",
       "editor_type": "D",
       "server_permission": "UNRESTRICTED",
-      "description": "Generate a notional specification from the current viz.",
+      "description": "Generate a NotionalSpec from the current viz — BUT the /v0 External Client API does NOT return this command's output (write-blind envelope: state SUCCEEDED, no result). Do not rely on it to read the current spec. To inspect current state, use tabui:save-underlying-metadata (whole-document readback) or the list tools, then author a fresh v0.2 spec for tabdoc:generate-viz-from-notional-spec.",
       "classification": "user_initiated",
       "usage_count": 0,
       "is_user_initiated": true,
       "is_autonomous": false,
       "value_to_users": "Generate a notional specification from the current viz.",
       "how_invoked": "Pane-invoked command surfaced for agent use.",
-      "parameters": [],
+      "parameters": [
+        {
+          "direction": "out",
+          "local_name": "NotionalSpecJson",
+          "type_id": "",
+          "required": false,
+          "comment": "NOT returned by the /v0 External Client API. Known product gap; use document readback instead.",
+          "cannot_provide_from_mcp": false
+        }
+      ],
       "requires_binary_or_unserialized_args": false,
       "mcp_can_invoke_without_binary_args": true,
       "opens_blocking_dialog": false,
@@ -23528,14 +23539,39 @@
       "source_file": "AnalyticsAssistantDesktopPaneCommand",
       "editor_type": "D",
       "server_permission": "UNRESTRICTED",
-      "description": "Generate a viz from a notional specification.",
+      "description": "Generate a viz from a NotionalSpec v0.2 JSON. Args: NotionalSpecJson (REQUIRED, a JSON STRING), ClearSheet (optional boolean; true=fresh build, false=refinement). NO WorksheetId — target the sheet with tabdoc:goto-sheet first. Spec shape: {version:'0.2.0', chart?: one of text|heatmap|bar|stackedbar|line|area|gantt|scatterplot|histogram|symbolmap|filledmap|treemap|pie|dualline|boxplot|bullet|bubble, fields:[{caption, data: number|string|date|boolean|geographic|set, type: discrete|continuous, role: dimension|measure, aggregation: default|count|countd|sum|avg|max|min|median|year|qtr|month|week|day|hour|minute|second, encoding: x|y|color|size|text|shape}], categoricalFilters?:[{type:'categorical',field,values?,exclude?,limit?,condition?}], rangeFilters?:[{field,start?,end?,includeNull?}] (start/end, NOT min/max), relativeDateFilters?:[{type:'relative-date',field,amount,period: days|weeks|months|quarters|years (PLURAL),direction: next|previous}], sort?:{field, by, aggregation?, direction: asc|desc}}. CALCULATED FIELDS: create with author-calc FIRST, then reference by caption with aggregation 'default' (never 'none' — not v0.2 vocabulary). STRING DATES ('YYYY-MM' columns): author-calc a DATE() conversion (e.g. DATE([month] + \"-01\")) before a line chart — a line over a discrete string is a false trend. WRITE-BLIND: the /v0 API returns NO VizGenerationStatusList/VizCoherenceResult — a success envelope can hide an empty sheet. ALWAYS verify after apply: read the sheet back (tabui:save-underlying-metadata) and confirm rows/cols landed.",
       "classification": "user_initiated",
       "usage_count": 0,
       "is_user_initiated": true,
       "is_autonomous": false,
       "value_to_users": "Generate a viz from a notional specification.",
       "how_invoked": "Pane-invoked command surfaced for agent use.",
-      "parameters": [],
+      "parameters": [
+        {
+          "direction": "in",
+          "local_name": "NotionalSpecJson",
+          "type_id": "",
+          "required": true,
+          "comment": "The NotionalSpec v0.2 as a JSON STRING (serialize the object).",
+          "cannot_provide_from_mcp": false
+        },
+        {
+          "direction": "in",
+          "local_name": "ClearSheet",
+          "type_id": "",
+          "required": false,
+          "comment": "true = fresh build (default for a new chart); false = refinement of the current sheet.",
+          "cannot_provide_from_mcp": false
+        },
+        {
+          "direction": "out",
+          "local_name": "VizGenerationStatusList",
+          "type_id": "",
+          "required": false,
+          "comment": "NOT returned by the /v0 External Client API (write-blind envelope). Verify by readback instead.",
+          "cannot_provide_from_mcp": false
+        }
+      ],
       "requires_binary_or_unserialized_args": false,
       "mcp_can_invoke_without_binary_args": true,
       "opens_blocking_dialog": false,
@@ -27129,6 +27165,86 @@
       "user_initiated_evidence_sample": [
         "modules/desktop/tabui/main/infrastructure/commands/AddWorkspaceDependentAffordanceToCommandMapEntries.cpp: AffordanceId mapping"
       ],
+      "modifies_workbook_state": "true",
+      "command_relevant_to_environments": [
+        "desktop"
+      ]
+    },
+    {
+      "command_name": "SaveUnderlyingMetadata",
+      "serialized_name": "save-underlying-metadata",
+      "fully_qualified_serialized_name": "tabui:save-underlying-metadata",
+      "project": "UI",
+      "source_file": "",
+      "editor_type": "U",
+      "server_permission": "UNRESTRICTED",
+      "description": "Read the ENTIRE workbook document XML as text. Step 1 of the whole-document round-trip for authoring calculated fields — LOD expressions, RANK and window calcs, running totals, ratios — that the NotionalSpec schema cannot express. Flow: tabui:save-underlying-metadata -> splice calc <column> nodes into the target datasource -> tabui:load-underlying-metadata -> reference the new calc by CAPTION in tabdoc:generate-viz-from-notional-spec. See expertise://tableau/tactics/data/notional-spec-calc-authoring.",
+      "classification": "user_initiated",
+      "usage_count": 0,
+      "is_user_initiated": true,
+      "is_autonomous": false,
+      "value_to_users": "Read the whole workbook document XML (step 1 of the calculated-field round-trip).",
+      "how_invoked": "Agent-invoked via execute-tableau-command (document round-trip verb).",
+      "parameters": [
+        {
+          "direction": "in",
+          "local_name": "is-json",
+          "type_id": "",
+          "required": false,
+          "comment": "Optional. Omit it or pass false (the tested shape). true reroutes OFF the document fast path and fails command-not-found on the External Client API.",
+          "cannot_provide_from_mcp": false
+        },
+        {
+          "direction": "out",
+          "local_name": "text",
+          "type_id": "",
+          "required": true,
+          "comment": "The complete workbook document XML.",
+          "cannot_provide_from_mcp": false
+        }
+      ],
+      "requires_binary_or_unserialized_args": false,
+      "mcp_can_invoke_without_binary_args": true,
+      "opens_blocking_dialog": false,
+      "agent_can_invoke": true,
+      "provenance_note": "Hand-added 2026-07-19 (discoverability): real tabui command on the legacy Agent API; on the External Client API this server routes it to GET /v0/workbook/document. Absent from the codegen corpus, which only covers affordance-mapped commands.",
+      "user_initiated_evidence_sample": [],
+      "modifies_workbook_state": "false",
+      "command_relevant_to_environments": [
+        "desktop"
+      ]
+    },
+    {
+      "command_name": "LoadUnderlyingMetadata",
+      "serialized_name": "load-underlying-metadata",
+      "fully_qualified_serialized_name": "tabui:load-underlying-metadata",
+      "project": "UI",
+      "source_file": "",
+      "editor_type": "U",
+      "server_permission": "UNRESTRICTED",
+      "description": "Write an edited whole workbook document XML back into Tableau. Step 3 of the calculated-field round-trip (save -> splice calc <column> nodes -> load -> chart the calc by caption via NotionalSpec). Tableau's parser validates on load and rejects malformed XML with actionable errors. WHOLE-DOCUMENT REPLACE: pass the COMPLETE document read from tabui:save-underlying-metadata with your additions spliced in — never a fragment, never drop nodes you did not author (a partial document destroys the user's workbook). Re-read fresh before each load; do not reuse a stale document across user edits. See expertise://tableau/tactics/data/notional-spec-calc-authoring. VERIFY BY READBACK: after load, re-read with tabui:save-underlying-metadata and confirm your change landed — a completed envelope does not by itself prove application (column REMOVALS in particular are silently ignored; live-proven 2026-07-19).",
+      "classification": "user_initiated",
+      "usage_count": 0,
+      "is_user_initiated": true,
+      "is_autonomous": false,
+      "value_to_users": "Apply a whole edited workbook document (step 3 of the calculated-field round-trip).",
+      "how_invoked": "Agent-invoked via execute-tableau-command (document round-trip verb).",
+      "parameters": [
+        {
+          "direction": "in",
+          "local_name": "text",
+          "type_id": "",
+          "required": true,
+          "comment": "The COMPLETE edited workbook document XML from tabui:save-underlying-metadata — whole document, never a fragment.",
+          "cannot_provide_from_mcp": false
+        }
+      ],
+      "requires_binary_or_unserialized_args": false,
+      "mcp_can_invoke_without_binary_args": true,
+      "opens_blocking_dialog": false,
+      "agent_can_invoke": true,
+      "provenance_note": "Hand-added 2026-07-19 (discoverability): real tabui command on the legacy Agent API; on the External Client API this server routes it to POST /v0/workbook/document (the parser validates the document). Absent from the codegen corpus, which only covers affordance-mapped commands.",
+      "user_initiated_evidence_sample": [],
       "modifies_workbook_state": "true",
       "command_relevant_to_environments": [
         "desktop"

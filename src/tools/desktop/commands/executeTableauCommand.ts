@@ -6,9 +6,12 @@ import { validateKnownCommand } from '../../../desktop/commandRegistry.js';
 import { validateNotionalSpecArgs } from '../../../desktop/notionalSpecGuard.js';
 import { validateCommandParams } from '../../../desktop/paramContractGuard.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
+import { validateUnderlyingMetadataLoad } from '../../../desktop/underlyingMetadataGuard.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
+
+const LOAD_UNDERLYING_METADATA_COMMAND = 'tabui:load-underlying-metadata';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
@@ -82,6 +85,31 @@ export const getExecuteTableauCommandTool = (
           }
 
           const executor = await extra.getExecutor(resolvedSession);
+          if (command === LOAD_UNDERLYING_METADATA_COMMAND) {
+            let liveDocumentXml: string | null = null;
+            try {
+              const liveDocumentResult = await executor.executeCommand({
+                namespace: 'tabui',
+                command: 'save-underlying-metadata',
+                args: {},
+                signal: extra.signal,
+              });
+              if (!liveDocumentResult.isErr()) {
+                liveDocumentXml = extractDocumentText(liveDocumentResult.value);
+              }
+            } catch {
+              liveDocumentXml = null;
+            }
+
+            const loadValidation = validateUnderlyingMetadataLoad(
+              typeof args?.text === 'string' ? args.text : '',
+              liveDocumentXml,
+            );
+            if (!loadValidation.ok) {
+              return new ArgsValidationError(loadValidation.message).toErr();
+            }
+          }
+
           const result = await executor.executeCommand({
             namespace,
             command: cmd,
@@ -107,3 +135,25 @@ export const getExecuteTableauCommandTool = (
 
   return tool;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function extractDocumentText(value: unknown): string | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const parsedResult = value.parsedResult;
+  if (isRecord(parsedResult) && typeof parsedResult.text === 'string') {
+    return parsedResult.text;
+  }
+
+  const result = value.result;
+  if (isRecord(result) && typeof result.text === 'string') {
+    return result.text;
+  }
+
+  return typeof result === 'string' ? result : null;
+}

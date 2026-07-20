@@ -74,16 +74,53 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
 ]);
 
 /**
+ * The full SINGABLE surface, selected by TOOL_PROFILE=dynamic-authoring: the spec-loop
+ * five (charts/dashboards via generate-viz-from-notional-spec + discovery/readback
+ * through execute-tableau-command) PLUS the five author-* verbs that make the WHOLE
+ * dynamic dialect authorable with ZERO agent-visible XML — author-calc (ratios/rank/
+ * running-total/LOD), author-set (param-linked Top/Bottom-N), author-parameter (the
+ * key signature, born at OPEN), author-action (parameter-change wiring), format-labels
+ * (mark labels) — PLUS ask-user (ambiguity goes to the human, never to a guess) and
+ * search-commands (how the singer discovers the execute-tableau-command dialect).
+ * Twelve tools cover the full Workout-Wednesday-W44 dialect; no raw XML
+ * get/apply, no cache, no validation, no templates. This is the "make it shorter"
+ * answer — a lean, semantically-named surface under the 46k tools/list cliff, not a
+ * describe-stub trim of the 45-tool default. Mechanism map live-proven 2026-07-19
+ * (CODA): calcs/sets/actions/formatting MERGE; parameters born at OPEN via author-parameter.
+ */
+export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
+  new Set<DesktopToolName>([
+    'execute-tableau-command',
+    'search-commands',
+    'ask-user',
+    'list-instances',
+    'list-available-fields',
+    'list-worksheets',
+    'list-dashboards',
+    'author-calc',
+    'author-set',
+    'author-parameter',
+    'author-action',
+    'format-labels',
+  ]);
+
+/**
  * Select the tools to register for a given TOOL_PROFILE value (already normalized by
- * Config: trim + lowercase). 'demo' → the slim {@link DEMO_TOOL_PROFILE} subset; '' (unset)
- * or 'full' → the full set unchanged (same array reference — byte-identical behavior); any
- * other value → full set + a logged warning. Pure and side-effect-free apart from the
- * warning log, so the selection can be unit-tested without the server or env.
+ * Config: trim + lowercase). '' (unset) → the lean {@link DYNAMIC_AUTHORING_TOOL_PROFILE}
+ * native surface: the Desktop authoring server SINGS in native Tableau by default, no
+ * env var required. 'full' → every tool including the raw XML get/apply surface (the
+ * explicit opt-in escape hatch). 'demo' / 'spec-loop' → their named subsets;
+ * 'combined-lean' → the full desktop surface (its lean half is the web side, handled by
+ * WebMcpServer). Any other value → full set + a logged warning. Pure and side-effect-free
+ * apart from the warning log, so the selection can be unit-tested without the server or env.
  */
 export function selectToolsForProfile<T extends { name: DesktopToolName }>(
   tools: T[],
   profile: string,
 ): T[] {
+  if (profile === '' || profile === 'dynamic-authoring') {
+    return tools.filter((tool) => DYNAMIC_AUTHORING_TOOL_PROFILE.has(tool.name));
+  }
   if (profile === 'demo') {
     return tools.filter((tool) => DEMO_TOOL_PROFILE.has(tool.name));
   }
@@ -92,7 +129,7 @@ export function selectToolsForProfile<T extends { name: DesktopToolName }>(
   }
   // 'combined-lean' means "full desktop surface, lazy web surface" — the web half is
   // handled by WebMcpServer; the desktop half registers everything, same as 'full'.
-  if (profile !== '' && profile !== 'full' && profile !== 'combined-lean') {
+  if (profile !== 'full' && profile !== 'combined-lean') {
     log({
       message: `Unknown TOOL_PROFILE "${profile}" — registering the full tool set.`,
       level: 'warning',
