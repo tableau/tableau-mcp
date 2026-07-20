@@ -3,10 +3,13 @@ import { existsSync } from 'fs';
 import { readdir as nodeReaddir, readFile as nodeReadFile } from 'fs/promises';
 import { homedir } from 'os';
 import { join } from 'path';
-
 import { Ok, Result } from 'ts-results-es';
 
-import { ArgsValidationError, McpToolError, ServiceUnavailableError } from '../errors/mcpToolError.js';
+import {
+  ArgsValidationError,
+  McpToolError,
+  ServiceUnavailableError,
+} from '../errors/mcpToolError.js';
 
 const APP_MARKER = '.app/Contents/MacOS/';
 const MANIFEST_POLL_INTERVAL_MS = 250;
@@ -24,7 +27,10 @@ type StageReopenDeps = {
   spawnDetached?: (file: string, args: string[]) => void;
   readdir?: (path: string) => Promise<string[]> | string[];
   readFile?: (path: string) => Promise<string> | string;
-  fetchFn?: (url: string, init: { headers: { Authorization: string } }) => Promise<{ status: number }>;
+  fetchFn?: (
+    url: string,
+    init: { headers: { Authorization: string } },
+  ) => Promise<{ status: number }>;
   sleep?: (ms: number) => Promise<void>;
   isPidAlive?: (pid: number) => boolean;
 };
@@ -111,7 +117,10 @@ export async function reopenFromStage({
     return readyResult.error.toErr();
   }
 
-  return new Ok({ newPid: String(manifestResult.value.pid), baseUrl: manifestResult.value.baseUrl });
+  return new Ok({
+    newPid: String(manifestResult.value.pid),
+    baseUrl: manifestResult.value.baseUrl,
+  });
 }
 
 /**
@@ -264,8 +273,14 @@ async function readManifest(
   const path = join(discoveryDir, name);
   try {
     const raw = JSON.parse(await readFile(path)) as Partial<Manifest>;
-    if (typeof raw.pid !== 'number' || typeof raw.baseUrl !== 'string' || typeof raw.token !== 'string') {
-      return new ArgsValidationError(`Discovery manifest ${path} is missing pid, baseUrl, or token`).toErr();
+    if (
+      typeof raw.pid !== 'number' ||
+      typeof raw.baseUrl !== 'string' ||
+      typeof raw.token !== 'string'
+    ) {
+      return new ArgsValidationError(
+        `Discovery manifest ${path} is missing pid, baseUrl, or token`,
+      ).toErr();
     }
     return new Ok({ pid: raw.pid, baseUrl: raw.baseUrl, token: raw.token });
   } catch (error) {

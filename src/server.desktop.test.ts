@@ -7,9 +7,9 @@ import {
   DEMO_TOOL_PROFILE,
   DESKTOP_INSTRUCTIONS,
   DesktopMcpServer,
+  DYNAMIC_AUTHORING_TOOL_PROFILE,
   selectToolsForProfile,
   SPEC_LOOP_TOOL_PROFILE,
-  DYNAMIC_AUTHORING_TOOL_PROFILE,
 } from './server.desktop.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';

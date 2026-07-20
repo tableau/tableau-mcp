@@ -147,7 +147,10 @@ const LIVE_DIALOG_BLOCKLIST: Map<string, string> = new Map(
       ['tabdoc:launch-map-service-edit-dialog', 'no headless alternative'],
       ['tabdoc:show-goto-sheet-dialog', 'use tabdoc:goto-sheet with {"Sheet": name}'],
       ['tabui:show-feature-flag-dialog', 'no headless alternative'],
-      ['tabdoc:edit-filter-dialog', 'express filters in the NotionalSpec (categoricalFilters/rangeFilters/...)'],
+      [
+        'tabdoc:edit-filter-dialog',
+        'express filters in the NotionalSpec (categoricalFilters/rangeFilters/...)',
+      ],
       ['tabdoc:launch-shared-filter-dialog', 'express filters in the NotionalSpec'],
       ['tabdoc:launch-map-services-dialog', 'no headless alternative'],
       ['tabdoc:get-button-config-dialog', 'no headless alternative'],
@@ -159,7 +162,10 @@ const LIVE_DIALOG_BLOCKLIST: Map<string, string> = new Map(
       ['tabdoc:show-sort-dialog', "express sort in the NotionalSpec's sort key"],
       ['tabdoc:create-new-parameter', 'use author-parameter'],
       ['tabdoc:edit-existing-parameter', 'use author-parameter for new parameters'],
-      ['tabdoc:revert-workbook-ui', 'there is no headless revert — author forward instead (a wrong node is corrected by a follow-up author-* call or document round-trip)'],
+      [
+        'tabdoc:revert-workbook-ui',
+        'there is no headless revert — author forward instead (a wrong node is corrected by a follow-up author-* call or document round-trip)',
+      ],
     ] as const
   ).map(([name, fix]) => [name, fix]),
 );

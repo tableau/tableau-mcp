@@ -1,12 +1,11 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { writeFileSync } from 'fs';
 import { resolve } from 'path';
-
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getExternalApiDiscoveryDir } from '../../../desktop/externalApi/discovery.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
+import { getExternalApiDiscoveryDir } from '../../../desktop/externalApi/discovery.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { deriveStageSiblingPath, reopenFromStage } from '../../../desktop/stageReopen.js';
 import {
@@ -213,7 +212,9 @@ async function verifyReopenedParameter({
     }
     return Ok.EMPTY;
   } catch (error) {
-    return new ArgsValidationError(`failed to verify reopened workbook: ${oneLineReason(error)}`).toErr();
+    return new ArgsValidationError(
+      `failed to verify reopened workbook: ${oneLineReason(error)}`,
+    ).toErr();
   }
 }
 
@@ -293,15 +294,14 @@ function renderParameterColumn({
 // Splice the parameter column into the Parameters datasource, creating that datasource
 // (right after <datasources>) if the document has none. An EMPTY Parameters ds is
 // dropped by Desktop on load — one carrying a real column survives (live-proven).
-function seedParameterColumn(
-  xml: string,
-  columnXml: string,
-): Result<string, ArgsValidationError> {
+function seedParameterColumn(xml: string, columnXml: string): Result<string, ArgsValidationError> {
   const dsOpen = /<datasource\b[^>]*\bname=(['"])Parameters\1[^>]*>/.exec(xml);
   if (dsOpen && dsOpen.index !== undefined) {
     const close = xml.indexOf('</datasource>', dsOpen.index);
     if (close === -1) {
-      return new ArgsValidationError('malformed document: Parameters datasource is not closed').toErr();
+      return new ArgsValidationError(
+        'malformed document: Parameters datasource is not closed',
+      ).toErr();
     }
     return new Ok(xml.slice(0, close) + columnXml + xml.slice(close));
   }
@@ -312,7 +312,7 @@ function seedParameterColumn(
   }
   const insertAt = blockOpen + '<datasources>'.length;
   const newDs =
-    `<datasource hasconnection='false' inline='true' name='Parameters' version='18.1'>` +
+    "<datasource hasconnection='false' inline='true' name='Parameters' version='18.1'>" +
     `<aliases enabled='yes' />${columnXml}</datasource>`;
   return new Ok(xml.slice(0, insertAt) + newDs + xml.slice(insertAt));
 }

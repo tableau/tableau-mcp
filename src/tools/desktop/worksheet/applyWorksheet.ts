@@ -31,11 +31,7 @@ import { DesktopTool } from '../tool.js';
 const paramsSchema = {
   session: z.string().optional().describe(''),
   worksheetName: z.string().describe(''),
-  mode: z
-    .enum(['file', 'inline'])
-    .optional()
-    .default('file')
-    .describe(''),
+  mode: z.enum(['file', 'inline']).optional().default('file').describe(''),
   worksheetFile: z.string().optional().describe(''),
   worksheetXml: z.string().optional().describe(''),
 };

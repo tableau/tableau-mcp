@@ -27,11 +27,7 @@ import { DesktopTool } from '../tool.js';
 const paramsSchema = {
   session: z.string().optional().describe(''),
   dashboardName: z.string().describe(''),
-  mode: z
-    .enum(['file', 'inline'])
-    .optional()
-    .default('file')
-    .describe(''),
+  mode: z.enum(['file', 'inline']).optional().default('file').describe(''),
   dashboardFile: z.string().optional().describe(''),
   dashboardXml: z.string().optional().describe(''),
 };

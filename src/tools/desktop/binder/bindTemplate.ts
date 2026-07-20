@@ -44,19 +44,13 @@ import { DesktopTool } from '../tool.js';
 import { proposalSchema } from './proposalSchema.js';
 
 const paramsSchema = {
-  session: z
-    .string()
-    .optional()
-    .describe('Session.'),
+  session: z.string().optional().describe('Session.'),
   ask: z.string().describe('Viz ask.'),
   proposal: proposalSchema
     .optional()
     .describe("Call 2 only: proposal from a Call-1 'propose' payload."),
   minConfidence: z.number().min(0).max(1).optional().describe('Floor.'),
-  auto_apply: z
-    .boolean()
-    .optional()
-    .describe('Apply Call 1 only; default false.'),
+  auto_apply: z.boolean().optional().describe('Apply Call 1 only; default false.'),
 };
 
 /**

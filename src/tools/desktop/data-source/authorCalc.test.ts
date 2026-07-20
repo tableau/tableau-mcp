@@ -1,7 +1,6 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
 import { ExecuteCommandArgs } from '../../../desktop/toolExecutor/toolExecutor.js';
@@ -36,7 +35,7 @@ describe('authorCalcTool', () => {
     const { result, executeCommand } = await getToolResult({
       args: {
         caption: 'Profit & "Growth"',
-        formula: "IF [Sales] < 10 AND [Region] = 'West' THEN \"A & B\" END",
+        formula: 'IF [Sales] < 10 AND [Region] = \'West\' THEN "A & B" END',
       },
       readbackXml: withColumn(
         BASE_XML,
@@ -53,7 +52,9 @@ describe('authorCalcTool', () => {
       hint: 'reference it by caption in generate-viz-from-notional-spec',
     });
 
-    const loadCall = commandCalls(executeCommand).find((call) => call.command === 'load-underlying-metadata');
+    const loadCall = commandCalls(executeCommand).find(
+      (call) => call.command === 'load-underlying-metadata',
+    );
     expect(loadCall).toBeDefined();
     expect(loadCall?.args?.text).toContain(
       "<column caption='Profit &amp; &quot;Growth&quot;' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='IF [Sales] &lt; 10 AND [Region] = &apos;West&apos; THEN &quot;A &amp; B&quot; END' /></column>",
@@ -76,9 +77,9 @@ describe('authorCalcTool', () => {
     expect(result.content[0].text).toContain(
       'caption collision — pick a new caption or use the existing field',
     );
-    expect(commandCalls(executeCommand).some((call) => call.command === 'load-underlying-metadata')).toBe(
-      false,
-    );
+    expect(
+      commandCalls(executeCommand).some((call) => call.command === 'load-underlying-metadata'),
+    ).toBe(false);
   });
 
   it('splices legally into a REAL Desktop document (regression: relation columns + clones + build comment)', async () => {
@@ -197,9 +198,9 @@ describe('authorCalcTool', () => {
     expect(result.content[0].text).toContain('Multiple datasources found');
     expect(result.content[0].text).toContain('Superstore');
     expect(result.content[0].text).toContain('Inventory');
-    expect(commandCalls(executeCommand).some((call) => call.command === 'load-underlying-metadata')).toBe(
-      false,
-    );
+    expect(
+      commandCalls(executeCommand).some((call) => call.command === 'load-underlying-metadata'),
+    ).toBe(false);
   });
 
   it('errors when readback does not include the new column and caption', async () => {
@@ -228,9 +229,9 @@ describe('authorCalcTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('whole-document or nothing');
-    expect(commandCalls(executeCommand).some((call) => call.command === 'load-underlying-metadata')).toBe(
-      false,
-    );
+    expect(
+      commandCalls(executeCommand).some((call) => call.command === 'load-underlying-metadata'),
+    ).toBe(false);
   });
 
   it('avoids colliding with existing Calculation ids', async () => {
@@ -251,7 +252,9 @@ describe('authorCalcTool', () => {
     });
 
     expect(result.isError).toBe(false);
-    const loadCall = commandCalls(executeCommand).find((call) => call.command === 'load-underlying-metadata');
+    const loadCall = commandCalls(executeCommand).find(
+      (call) => call.command === 'load-underlying-metadata',
+    );
     expect(loadCall?.args?.text).toContain("name='[Calculation_1700000000001]'");
   });
 });
@@ -289,29 +292,30 @@ async function getToolResult({
     }
     return new Ok({ command_id: 'load-1', status: 'completed', result: null });
   });
-describe('parameter caption resolution (verse-3 empty-sheet fix)', () => {
-  it('resolves parameter captions to qualified [Parameters].[Parameter N] references', async () => {
-    const { resolveCaptionReferencesForTest } = await import('./authorCalc.js');
-    const workbookXml = [
-      "<workbook><datasources>",
-      "<datasource hasconnection='false' inline='true' name='Parameters' version='18.1'>",
-      "<column caption='Top or Bottom' datatype='string' name='[Parameter 1]' param-domain-type='list' role='measure' type='nominal' value='&quot;Top&quot;' />",
-      "<column caption='Number of Sub-Categories' datatype='integer' name='[Parameter 2]' param-domain-type='any' role='measure' type='quantitative' value='5' />",
-      "</datasource>",
-      "<datasource name='Sample - Superstore'><column caption='Profit' name='[Profit]' /></datasource>",
-      "</datasources></workbook>",
-    ].join('');
-    const targetXml = "<datasource name='Sample - Superstore'><column caption='Profit' name='[Profit]' /></datasource>";
-    const resolved = resolveCaptionReferencesForTest(
-      'IF [Top or Bottom] = "Top" THEN RANK(SUM([Profit])) <= [Number of Sub-Categories] END',
-      targetXml,
-      workbookXml,
-    );
-    expect(resolved).toBe(
-      'IF [Parameters].[Parameter 1] = "Top" THEN RANK(SUM([Profit])) <= [Parameters].[Parameter 2] END',
-    );
+  describe('parameter caption resolution (verse-3 empty-sheet fix)', () => {
+    it('resolves parameter captions to qualified [Parameters].[Parameter N] references', async () => {
+      const { resolveCaptionReferencesForTest } = await import('./authorCalc.js');
+      const workbookXml = [
+        '<workbook><datasources>',
+        "<datasource hasconnection='false' inline='true' name='Parameters' version='18.1'>",
+        "<column caption='Top or Bottom' datatype='string' name='[Parameter 1]' param-domain-type='list' role='measure' type='nominal' value='&quot;Top&quot;' />",
+        "<column caption='Number of Sub-Categories' datatype='integer' name='[Parameter 2]' param-domain-type='any' role='measure' type='quantitative' value='5' />",
+        '</datasource>',
+        "<datasource name='Sample - Superstore'><column caption='Profit' name='[Profit]' /></datasource>",
+        '</datasources></workbook>',
+      ].join('');
+      const targetXml =
+        "<datasource name='Sample - Superstore'><column caption='Profit' name='[Profit]' /></datasource>";
+      const resolved = resolveCaptionReferencesForTest(
+        'IF [Top or Bottom] = "Top" THEN RANK(SUM([Profit])) <= [Number of Sub-Categories] END',
+        targetXml,
+        workbookXml,
+      );
+      expect(resolved).toBe(
+        'IF [Parameters].[Parameter 1] = "Top" THEN RANK(SUM([Profit])) <= [Parameters].[Parameter 2] END',
+      );
+    });
   });
-});
 
   const extra = {
     ...getMockRequestHandlerExtra(),
@@ -338,6 +342,8 @@ function withColumn(xml: string, column: string): string {
   return xml.replace('</datasource>', `${column}</datasource>`);
 }
 
-function commandCalls(executeCommand: ReturnType<typeof vi.fn>): Array<ExecuteCommandArgs<undefined>> {
+function commandCalls(
+  executeCommand: ReturnType<typeof vi.fn>,
+): Array<ExecuteCommandArgs<undefined>> {
   return executeCommand.mock.calls.map(([call]) => call);
 }

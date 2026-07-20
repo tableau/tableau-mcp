@@ -278,7 +278,7 @@ function renderGroupSet({
     `<groupfilter count='${escapeXml(count.trim())}' end='${end}' function='end' units='records' user:ui-marker='end' user:ui-top-by-field='true'>` +
     `<groupfilter direction='DESC' expression='${escapeXml(orderBy)}' function='order' user:ui-marker='order'>` +
     `<groupfilter function='level-members' level='${escapeXml(level)}' user:ui-enumeration='all' user:ui-marker='enumerate' />` +
-    `</groupfilter></groupfilter></group>`
+    '</groupfilter></groupfilter></group>'
   );
 }
 

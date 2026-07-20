@@ -25,7 +25,7 @@ const SPLICED_WORKBOOK_XML = LIVE_WORKBOOK_XML.replace(
 // prolog, then a COMMENT, then the root. The guard must accept this — the
 // 2026-07-19 live false-positive rejected every legitimate whole document.
 const REAL_HEAD_WORKBOOK_XML =
-  `<?xml version='1.0' encoding='utf-8' ?>\n\n<!-- build main.26.0715.2311                                -->\n` +
+  "<?xml version='1.0' encoding='utf-8' ?>\n\n<!-- build main.26.0715.2311                                -->\n" +
   LIVE_WORKBOOK_XML;
 
 describe('validateUnderlyingMetadataLoad', () => {
@@ -45,7 +45,7 @@ describe('validateUnderlyingMetadataLoad', () => {
 
   it('rejects a workbook document with zero worksheets', () => {
     const result = validateUnderlyingMetadataLoad(
-      `<workbook><datasources><datasource name='ds' /></datasources></workbook>`,
+      "<workbook><datasources><datasource name='ds' /></datasources></workbook>",
       null,
     );
 

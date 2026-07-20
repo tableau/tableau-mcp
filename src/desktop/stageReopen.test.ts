@@ -17,10 +17,7 @@ describe('reopenFromStage', () => {
       }
       return { stdout: '', stderr: '' };
     });
-    const readdir = vi
-      .fn()
-      .mockResolvedValueOnce([])
-      .mockResolvedValue(['456.json']);
+    const readdir = vi.fn().mockResolvedValueOnce([]).mockResolvedValue(['456.json']);
     const readFile = vi.fn(async () =>
       JSON.stringify({
         schemaVersion: 1,

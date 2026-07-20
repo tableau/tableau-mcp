@@ -8,11 +8,10 @@ vi.mock('../../../desktop/stageReopen.js', () => ({
   deriveStageSiblingPath: deriveStageSiblingPathMock,
 }));
 
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { mkdtempSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { ExecuteCommandArgs, ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
@@ -296,7 +295,11 @@ async function getToolResult({
   process.env.TABLEAU_EXTERNAL_API_DISCOVERY_DIR = join(tmp, 'discovery');
   const executeCommand = vi.fn(async (params: ExecuteCommandArgs<undefined>) => {
     if (params.command === 'save-underlying-metadata') {
-      return new Ok({ command_id: 'save-0', status: 'completed', parsedResult: { text: initialXml } });
+      return new Ok({
+        command_id: 'save-0',
+        status: 'completed',
+        parsedResult: { text: initialXml },
+      });
     }
     return new Ok({ command_id: 'load-1', status: 'completed', result: null });
   });

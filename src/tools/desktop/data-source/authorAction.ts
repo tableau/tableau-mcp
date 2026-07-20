@@ -182,10 +182,10 @@ function renderParameterAction({
     `<edit-parameter-action caption='${escapeXml(caption)}' name='${escapeXml(actionName)}'>` +
     `<activation type='${activation}' />` +
     `<source type='sheet' worksheet='${escapeXml(sourceWorksheet.trim())}' />` +
-    `<agg-type type='attr' />` +
-    `<clear-option type='do-nothing' value='s:LROOT:' />` +
+    "<agg-type type='attr' />" +
+    "<clear-option type='do-nothing' value='s:LROOT:' />" +
     `<params>${params.join('')}</params>` +
-    `</edit-parameter-action>`
+    '</edit-parameter-action>'
   );
 }
 
@@ -212,9 +212,7 @@ function spliceActionIntoWorkbook(
     ).toErr();
   }
   const insertAt = dsClose + '</datasources>'.length;
-  return new Ok(
-    `${xml.slice(0, insertAt)}<actions>${actionXml}</actions>${xml.slice(insertAt)}`,
-  );
+  return new Ok(`${xml.slice(0, insertAt)}<actions>${actionXml}</actions>${xml.slice(insertAt)}`);
 }
 
 function getAttr(tag: string, name: string): string | undefined {

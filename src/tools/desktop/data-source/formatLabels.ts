@@ -139,15 +139,12 @@ function setMarkLabels(
 
   const existing = /<format\b[^>]*attr=(['"])mark-labels-show\1[^>]*\/>/.exec(wsXml);
   if (existing) {
-    newWsXml = wsXml.replace(
-      existing[0],
-      `<format attr='mark-labels-show' value='${value}' />`,
-    );
+    newWsXml = wsXml.replace(existing[0], `<format attr='mark-labels-show' value='${value}' />`);
   } else {
     const styleBlock =
-      `<style><style-rule element='mark'>` +
+      "<style><style-rule element='mark'>" +
       `<format attr='mark-labels-show' value='${value}' />` +
-      `</style-rule></style>`;
+      '</style-rule></style>';
     // Insert immediately after the pane open tag (a pane may carry its own <style>).
     newWsXml = wsXml.slice(0, paneOpenEnd) + styleBlock + wsXml.slice(paneOpenEnd);
   }

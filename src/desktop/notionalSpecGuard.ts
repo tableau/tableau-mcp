@@ -224,7 +224,9 @@ function validateSort(spec: Record<string, unknown>): CommandValidationResult | 
   return undefined;
 }
 
-function validateRelativeDateFilters(spec: Record<string, unknown>): CommandValidationResult | undefined {
+function validateRelativeDateFilters(
+  spec: Record<string, unknown>,
+): CommandValidationResult | undefined {
   if (!Array.isArray(spec.relativeDateFilters)) {
     return undefined;
   }
@@ -272,7 +274,10 @@ function validateRelativeDateFilters(spec: Record<string, unknown>): CommandVali
       !V0_2_RELATIVE_DATE_PERIOD_ENUM.has(relativeDateFilter.period)
     ) {
       const singularPeriods = new Set(['day', 'week', 'month', 'quarter', 'year']);
-      if (typeof relativeDateFilter.period === 'string' && singularPeriods.has(relativeDateFilter.period)) {
+      if (
+        typeof relativeDateFilter.period === 'string' &&
+        singularPeriods.has(relativeDateFilter.period)
+      ) {
         return fail(
           `"relativeDateFilters[${index}].period" value ${JSON.stringify(relativeDateFilter.period)} is singular, not v0.2 vocabulary.`,
           'Use plural relative date periods: days, weeks, months, quarters, years.',
@@ -307,7 +312,9 @@ function validateRelativeDateFilters(spec: Record<string, unknown>): CommandVali
   return undefined;
 }
 
-function validateCategoricalFilters(spec: Record<string, unknown>): CommandValidationResult | undefined {
+function validateCategoricalFilters(
+  spec: Record<string, unknown>,
+): CommandValidationResult | undefined {
   if (!Array.isArray(spec.categoricalFilters)) {
     return undefined;
   }
@@ -347,7 +354,10 @@ function validateCategoricalFilters(spec: Record<string, unknown>): CommandValid
   return undefined;
 }
 
-function validateFieldVocabulary(field: Record<string, unknown>, index: number): CommandValidationResult | undefined {
+function validateFieldVocabulary(
+  field: Record<string, unknown>,
+  index: number,
+): CommandValidationResult | undefined {
   for (const key of Object.keys(field)) {
     if (!ALLOWED_FIELD_KEYS.has(key)) {
       if (key === 'shelf') {
@@ -364,21 +374,30 @@ function validateFieldVocabulary(field: Record<string, unknown>, index: number):
     }
   }
 
-  if (field.data !== undefined && (typeof field.data !== 'string' || !V0_2_FIELD_DATA_ENUM.has(field.data))) {
+  if (
+    field.data !== undefined &&
+    (typeof field.data !== 'string' || !V0_2_FIELD_DATA_ENUM.has(field.data))
+  ) {
     return fail(
       `"data" value ${JSON.stringify(field.data)} on field at index ${index} is not in the v0.2 enum (number, string, date, boolean, geographic, set).`,
       'Use one of: number, string, date, boolean, geographic, set.',
     );
   }
 
-  if (field.type !== undefined && (typeof field.type !== 'string' || !V0_2_FIELD_TYPE_ENUM.has(field.type))) {
+  if (
+    field.type !== undefined &&
+    (typeof field.type !== 'string' || !V0_2_FIELD_TYPE_ENUM.has(field.type))
+  ) {
     return fail(
       `"type" value ${JSON.stringify(field.type)} on field at index ${index} is not in the v0.2 enum (discrete, continuous).`,
       'Use "type": "discrete" or "type": "continuous".',
     );
   }
 
-  if (field.role !== undefined && (typeof field.role !== 'string' || !V0_2_FIELD_ROLE_ENUM.has(field.role))) {
+  if (
+    field.role !== undefined &&
+    (typeof field.role !== 'string' || !V0_2_FIELD_ROLE_ENUM.has(field.role))
+  ) {
     return fail(
       `"role" value ${JSON.stringify(field.role)} on field at index ${index} is not in the v0.2 enum (dimension, measure).`,
       'Use "role": "dimension" or "role": "measure".',

@@ -20,10 +20,7 @@ const paramsSchema = {
   workbookFile: z.string().describe(''),
   query: z.string().describe(''),
   datasource: z.string().optional().describe(''),
-  session: z
-    .string()
-    .optional()
-    .describe(''),
+  session: z.string().optional().describe(''),
 };
 
 interface ResolveFieldResult {

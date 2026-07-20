@@ -68,11 +68,7 @@ const askSchema = z.object({
 });
 
 const layoutSchema = z.object({
-  layoutType: z
-    .enum(['auto-grid', 'rows', 'columns'])
-    .optional()
-    .default('auto-grid')
-    .describe(''),
+  layoutType: z.enum(['auto-grid', 'rows', 'columns']).optional().default('auto-grid').describe(''),
   gridColumns: z.number().optional().describe(''),
 });
 

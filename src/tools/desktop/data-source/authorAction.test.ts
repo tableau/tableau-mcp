@@ -63,7 +63,9 @@ describe('authorActionTool', () => {
     expect(dsClose).toBeLessThan(actionsAt);
     expect(actionsAt).toBeLessThan(wsAt);
     expect(loaded).toContain("<edit-parameter-action caption='Set Period' name='[Action1]'>");
-    expect(loaded).toContain("<param name='target-parameter' value='[Parameters].[Parameter 1]' />");
+    expect(loaded).toContain(
+      "<param name='target-parameter' value='[Parameters].[Parameter 1]' />",
+    );
   });
 
   it('appends into an existing <actions> block with a fresh action name', async () => {
@@ -121,7 +123,12 @@ describe('authorActionTool', () => {
 
   it('rejects empty required primitives', async () => {
     const { result } = await getToolResult({
-      args: { caption: 'X', sourceWorksheet: '', sourceField: '', targetParameter: '[Parameters].[Parameter 1]' },
+      args: {
+        caption: 'X',
+        sourceWorksheet: '',
+        sourceField: '',
+        targetParameter: '[Parameters].[Parameter 1]',
+      },
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');

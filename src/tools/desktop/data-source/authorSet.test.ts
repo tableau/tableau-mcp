@@ -1,7 +1,6 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
 import { ExecuteCommandArgs } from '../../../desktop/toolExecutor/toolExecutor.js';

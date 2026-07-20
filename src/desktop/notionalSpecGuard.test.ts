@@ -233,7 +233,7 @@ const GOLDEN_SPECS = [
   },
 ];
 
-function expectSpecFailure(spec: object, expectedText: string) {
+function expectSpecFailure(spec: object, expectedText: string): void {
   const result = validateNotionalSpecArgs(COMMAND, {
     NotionalSpecJson: JSON.stringify(spec),
   });
@@ -521,7 +521,14 @@ describe('validateNotionalSpecArgs', () => {
   it.each([
     [
       'unknown relative date filter key',
-      { type: 'relative-date', field: 'Order Date', amount: 1, period: 'months', direction: 'previous', unit: 'month' },
+      {
+        type: 'relative-date',
+        field: 'Order Date',
+        amount: 1,
+        period: 'months',
+        direction: 'previous',
+        unit: 'month',
+      },
       'Unknown relativeDateFilters key "unit"',
     ],
     [
@@ -536,17 +543,35 @@ describe('validateNotionalSpecArgs', () => {
     ],
     [
       'relative date filter amount',
-      { type: 'relative-date', field: 'Order Date', amount: '1', period: 'months', direction: 'previous' },
+      {
+        type: 'relative-date',
+        field: 'Order Date',
+        amount: '1',
+        period: 'months',
+        direction: 'previous',
+      },
       '"relativeDateFilters[0].amount" value "1"',
     ],
     [
       'relative date filter singular period',
-      { type: 'relative-date', field: 'Order Date', amount: 1, period: 'month', direction: 'previous' },
+      {
+        type: 'relative-date',
+        field: 'Order Date',
+        amount: 1,
+        period: 'month',
+        direction: 'previous',
+      },
       'Use plural relative date periods',
     ],
     [
       'relative date filter last direction',
-      { type: 'relative-date', field: 'Order Date', amount: 1, period: 'months', direction: 'last' },
+      {
+        type: 'relative-date',
+        field: 'Order Date',
+        amount: 1,
+        period: 'months',
+        direction: 'last',
+      },
       '"last N months" is direction "previous"',
     ],
   ])('rejects invalid %s', (_name, relativeDateFilter, expectedText) => {

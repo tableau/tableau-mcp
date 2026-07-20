@@ -55,9 +55,7 @@ describe('formatLabelsTool', () => {
       (call) => call.command === 'load-underlying-metadata',
     );
     invariant(loadCall?.args && typeof loadCall.args.text === 'string');
-    expect(loadCall.args.text).toContain(
-      "<format attr='mark-labels-show' value='true' />",
-    );
+    expect(loadCall.args.text).toContain("<format attr='mark-labels-show' value='true' />");
     // Exactly one rule — no duplicate style blocks.
     expect(loadCall.args.text.match(/mark-labels-show/g)?.length).toBe(1);
   });
