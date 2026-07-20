@@ -15,6 +15,7 @@ import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serializat
 import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
+import type { ExecuteCommandArgs } from '../../../desktop/toolExecutor/toolExecutor.js';
 import * as validationRegistry from '../../../desktop/validation/registry.js';
 import {
   DesktopCommandExecutionError,
@@ -66,6 +67,20 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 const XML = '<?xml version="1.0"?><workbook></workbook>';
+const CALC_BASE_XML = [
+  "<?xml version='1.0' encoding='utf-8'?>",
+  "<workbook version='18.1'>",
+  '<datasources>',
+  "<datasource name='Superstore'>",
+  "<column caption='Sales' datatype='real' name='[Sales]' role='measure' type='quantitative' />",
+  '</datasource>',
+  '</datasources>',
+  "<worksheets><worksheet name='Sheet 1' /></worksheets>",
+  '</workbook>',
+].join('');
+const CALC_COLUMN_XML =
+  "<column caption='Margin' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[Sales] * 0.2' /></column>";
+const CALC_READBACK_XML = CALC_BASE_XML.replace('</datasource>', `${CALC_COLUMN_XML}</datasource>`);
 
 const boundResult: BinderResult = {
   status: 'bound',
@@ -120,15 +135,16 @@ describe('bindTemplateTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getBindTemplateTool(new DesktopMcpServer());
     expect(tool.name).toBe('bind-template');
-    expect(tool.description).toContain('Call1 bound/propose; Call2 bound/escalate');
+    expect(tool.description).toBe('Bind a chart ask to a template and apply it; calcs[] authors inline first.');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       ask: expect.any(Object),
       proposal: expect.any(Object),
       minConfidence: expect.any(Object),
+      calcs: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Bind a Viz Template to an Ask (Fast Path)',
+      title: 'Bind Template',
       readOnlyHint: true,
       openWorldHint: false,
     });
@@ -298,6 +314,7 @@ async function getToolResult({
   proposal,
   minConfidence,
   auto_apply,
+  calcs,
   customSignal,
   getExecutor,
 }: {
@@ -308,6 +325,12 @@ async function getToolResult({
   proposal?: BindingProposal & { confidence: number };
   minConfidence?: number;
   auto_apply?: boolean;
+  calcs?: Array<{
+    caption: string;
+    formula: string;
+    datatype?: string;
+    role?: string;
+  }>;
   customSignal?: AbortSignal;
   getExecutor?: TableauDesktopToolContext['getExecutor'];
 }): Promise<CallToolResult> {
@@ -322,7 +345,7 @@ async function getToolResult({
     ...(customSignal && { signal: customSignal }),
   };
 
-  return await callback({ session, ask, proposal, minConfidence, auto_apply }, extra);
+  return await callback({ session, ask, proposal, minConfidence, auto_apply, calcs } as any, extra);
 }
 
 /**
@@ -337,6 +360,7 @@ function setupAutoApplyMocks({
   inject = { ok: true as const, xml: '<workbook/>' },
   validationValid = true,
   dispatch = Ok({ command_id: 'cmd-1', status: 'completed', submitted_at: '', result: {} }),
+  workbookReads = [XML],
   // Events-clean gate (W60): 0 = clean workbook (gate passes); N>0 = the user touched
   // the workbook between read and apply; 'unsupported' = executor without events
   // (gate is best-effort and must NOT block auto_apply).
@@ -347,13 +371,18 @@ function setupAutoApplyMocks({
   inject?: { ok: true; xml: string } | { ok: false; issues: string[] };
   validationValid?: boolean;
   dispatch?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
+  workbookReads?: string[];
   userEventsDuringBind?: number | 'unsupported';
 } = {}): {
   executeCommand: ReturnType<typeof vi.fn>;
   getEvents: ReturnType<typeof vi.fn>;
   getExecutor: ReturnType<typeof vi.fn>;
 } {
-  vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+  const getWorkbookXmlSpy = vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml');
+  for (const xml of workbookReads) {
+    getWorkbookXmlSpy.mockResolvedValueOnce(Ok(xml));
+  }
+  getWorkbookXmlSpy.mockResolvedValue(Ok(workbookReads.at(-1) ?? XML));
   vi.mocked(binderModule.bindTemplate).mockResolvedValue(bind);
   vi.spyOn(bundledIntelligenceProvider, 'listTemplateManifests').mockReturnValue([
     { template: 'bar-basic', fast_path_eligible: fastPathEligible } as unknown as TemplateManifest,
@@ -510,6 +539,65 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
   });
 
+  it('authors inline calcs before binding and auto-applies against the readback workbook', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const { executeCommand, getEvents, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [CALC_BASE_XML, CALC_READBACK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Margin by Region',
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.authored_calcs).toEqual(['Margin']);
+    expect(body.guidance).toContain('Calcs authored: Margin');
+    expect(binderModule.bindTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ workbookXml: CALC_READBACK_XML }),
+    );
+    expect(buildInjectedWorkbookXml).toHaveBeenCalledWith(
+      expect.objectContaining({ workbookXml: CALC_READBACK_XML }),
+    );
+    expect(
+      commandCalls(executeCommand).filter((call) => call.command === 'load-underlying-metadata'),
+    ).toHaveLength(2);
+    expect(getEvents).toHaveBeenCalledTimes(2);
+    expect(getEvents).toHaveBeenNthCalledWith(2, {
+      signal: expect.any(AbortSignal),
+      sinceSequence: 41,
+    });
+  });
+
+  it('rejects invalid inline calcs before any document load or bind', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [CALC_BASE_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Margin by Region',
+      calcs: [{ caption: 'Margin', formula: '   ' }],
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('calc "Margin": formula empty');
+    expect(
+      commandCalls(executeCommand).some((call) => call.command === 'load-underlying-metadata'),
+    ).toBe(false);
+    expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+    expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
+  });
+
   it('auto_apply=true leaves a propose outcome unchanged (no apply)', async () => {
     const { executeCommand, getExecutor } = setupAutoApplyMocks({ bind: proposeResult });
 
@@ -526,6 +614,33 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.status).toBe('propose');
     expect(body.applied).toBeUndefined();
     expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('reports authored calcs when the subsequent bind proposes', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      bind: proposeResult,
+      workbookReads: [CALC_BASE_XML, CALC_READBACK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'something weird with Margin',
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.status).toBe('propose');
+    expect(body.authored_calcs).toEqual(['Margin']);
+    expect(body.guidance).toContain('Calcs authored: Margin. Bind outcome: propose.');
+    expect(
+      commandCalls(executeCommand).filter((call) => call.command === 'load-underlying-metadata'),
+    ).toHaveLength(1);
+    expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
   });
 
   it('auto_apply=true leaves an escalate outcome unchanged (no apply)', async () => {
@@ -924,3 +1039,9 @@ describe('bindTemplateTool route-state recording', () => {
     expect(sessionRouteState.get('1')?.current_ask).toBeUndefined();
   });
 });
+
+function commandCalls(
+  executeCommand: ReturnType<typeof vi.fn>,
+): Array<ExecuteCommandArgs<undefined>> {
+  return executeCommand.mock.calls.map(([call]) => call);
+}

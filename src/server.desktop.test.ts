@@ -104,7 +104,7 @@ Load tableau-desktop-authoring before builds/edits; if unresolved failures repea
 
 Before multi-viz/dashboard builds, plan: classify requirements as MAGNITUDE=continuous quantity or MEMBERSHIP=discrete group; encode MEMBERSHIP with discrete buckets, never raw-measure color gradients. State the one-line plan, then build.
 
-For a plain viz ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot), FIRST call bind-template with the user's ask and auto_apply: true — deterministic, ~0.3s, no model work. On propose, fill and resubmit the proposal (a validated bound proposal auto-applies). When the ask needs a calculation, parameter, set, or action, author it first with the author-* verb, then bind-template the chart naming the new field's caption plus a chart shape. If bind-template escalates, find a suitable tabdoc command via search-commands.
+For a plain viz ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot), FIRST call bind-template with the user's ask and auto_apply: true — deterministic, ~0.3s, no model work. On propose, fill and resubmit the proposal (a validated bound proposal auto-applies). Calcs go inline via calcs[] (one call authors + binds); author-parameter, author-set, author-action author-first. If it escalates, use search-commands.
 
 For a dashboard ask with 2-6 vizzes (e.g. "a dashboard with sales by region and profit by category"), build each sheet with bind-template (author calcs, parameters, and sets first with the author-* verbs when the sheet needs them), then compose the dashboard — search-commands only for commands the census does not list.
 
@@ -225,7 +225,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // DO NOT GROW these: trim them down and lower/remove the entry. Never raise a
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
-    ['bind-template', 1629], // ratcheted down again in the auto-apply describe trim (Call-2 auto-apply); do not grow
+    ['bind-template', 1725], // raised for the calcs[] capability + restored affordances (Matt 2026-07-20: per-tool ceilings may rise; slim surface is ~11.6k of 46k); combined-lean cliff stays the hard gate
     ['plan-dashboard-creation', 1509], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1558], // ratcheted down in the CODA funding trim; do not grow
     ['validate-proposal', 1407], // ratcheted down in the CODA funding trim; do not grow

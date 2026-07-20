@@ -48,8 +48,14 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a plain viz ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot)',
     action:
-      "FIRST call bind-template with the user's ask and auto_apply: true — deterministic, ~0.3s, no model work. On propose, fill and resubmit the proposal (a validated bound proposal auto-applies). When the ask needs a calculation, parameter, set, or action, author it first with the author-* verb, then bind-template the chart naming the new field's caption plus a chart shape. If bind-template escalates, find a suitable tabdoc command via search-commands.",
-    toolSequence: ['bind-template', 'search-commands'],
+      "FIRST call bind-template with the user's ask and auto_apply: true — deterministic, ~0.3s, no model work. On propose, fill and resubmit the proposal (a validated bound proposal auto-applies). Calcs go inline via calcs[] (one call authors + binds); author-parameter, author-set, author-action author-first. If it escalates, use search-commands.",
+    toolSequence: [
+      'bind-template',
+      'author-parameter',
+      'author-set',
+      'author-action',
+      'search-commands',
+    ],
     stopConditions: ['deterministic, ~0.3s, no model work'],
     requiredEvidence: ['bind-template applied result (auto-apply receipt)'],
   },

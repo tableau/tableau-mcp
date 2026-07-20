@@ -29,6 +29,10 @@ import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import {
+  type AuthorCalcInput,
+  authorCalculationsInWorkbook,
+} from '../data-source/authorCalcCore.js';
+import {
   jsonToolResult,
   type NextAction,
   prefillNextAction,
@@ -44,13 +48,22 @@ import { DesktopTool } from '../tool.js';
 import { proposalSchema } from './proposalSchema.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session.'),
-  ask: z.string().describe('Viz ask.'),
-  proposal: proposalSchema
-    .optional()
-    .describe("Call 2 only: proposal from a Call-1 'propose' payload."),
-  minConfidence: z.number().min(0).max(1).optional().describe('Floor.'),
+  session: z.string().optional(),
+  ask: z.string(),
+  proposal: proposalSchema.optional(),
+  minConfidence: z.number().min(0).max(1).optional(),
   auto_apply: z.boolean().optional().describe('Apply on bound; default false.'),
+  calcs: z
+    .array(
+      z.object({
+        caption: z.string(),
+        formula: z.string(),
+        datatype: z.string().optional(),
+        role: z.string().optional(),
+      }),
+    )
+    .optional()
+    .describe('Authored before binding.'),
 };
 
 /**
@@ -61,6 +74,7 @@ const paramsSchema = {
  */
 type BindTemplateToolResultBase = BinderResult & {
   guidance: string;
+  authored_calcs?: string[];
   applied?: boolean;
   sheet_name?: string;
   phase_ms?: { bind: number; inject: number; apply: number };
@@ -78,6 +92,7 @@ type BindTemplateToolResultBase = BinderResult & {
 type AppliedFastPathResult = {
   status: 'bound';
   applied: true;
+  authored_calcs?: string[];
   sheet_name: string;
   phase_ms: { bind: number; inject: number; apply: number };
   guidance: string;
@@ -207,11 +222,12 @@ function applyFallback(
   apply_error: string,
   guidance?: string,
 ): BindTemplateToolResultBase {
+  const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, base.status);
   return {
     ...base,
     guidance:
       guidance ??
-      `Server-side auto-apply did not complete (${apply_error}). The bound args are intact — fall back to the manual chain: get workbook structure in file mode → inject-template → apply-workbook using the returned args.`,
+      `${calcPrefix}Server-side auto-apply did not complete (${apply_error}). The bound args are intact — fall back to the manual chain: get workbook structure in file mode → inject-template → apply-workbook using the returned args.`,
     applied: false,
     apply_error,
   };
@@ -310,23 +326,48 @@ async function performAutoApply({
   // W60 response-shape trim (P4): on success, return ONLY the trimmed fast-path shape —
   // drop the args echo, apply_instruction, apply_hint, and used_llm from `base`. Those
   // enable a manual second call that never happens once the apply succeeds.
+  const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, res.status);
   return {
     status: res.status,
-    guidance: `Applied "${args.title}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
+    ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
+    guidance: `${calcPrefix}Applied "${args.title}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
     applied: true,
     sheet_name: args.title,
     phase_ms: { bind: bindMs, inject: injectMs, apply: applyMs },
   };
 }
 
-const title = 'Bind a Viz Template to an Ask (Fast Path)';
+function renderAuthoredCalcPrefix(
+  captions: string[] | undefined,
+  status: BinderResult['status'],
+): string {
+  return captions && captions.length > 0
+    ? `Calcs authored: ${captions.join(', ')}. Bind outcome: ${status}. `
+    : '';
+}
+
+function annotateAuthoredCalcs<T extends StructuredBindTemplateToolResult>(
+  result: T,
+  captions: string[],
+): T {
+  if (captions.length === 0) {
+    return result;
+  }
+  return {
+    ...result,
+    authored_calcs: captions,
+    guidance: `${renderAuthoredCalcPrefix(captions, result.status)}${result.guidance}`,
+  };
+}
+
+const title = 'Bind Template';
 
 export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const bindTemplateTool = new DesktopTool({
     server,
     name: 'bind-template',
     title,
-    description: 'Bind template: Call1 bound/propose; Call2 bound/escalate.',
+    description: 'Bind a chart ask to a template and apply it; calcs[] authors inline first.',
     paramsSchema,
     annotations: {
       title,
@@ -336,12 +377,12 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
       idempotentHint: true,
     },
     callback: async (
-      { session, ask, proposal, minConfidence, auto_apply },
+      { session, ask, proposal, minConfidence, auto_apply, calcs },
       extra,
     ): Promise<CallToolResult> => {
       return await bindTemplateTool.logAndExecute<BindTemplateToolResult>({
         extra,
-        args: { session, ask, proposal, minConfidence, auto_apply },
+        args: { session, ask, proposal, minConfidence, auto_apply, calcs },
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -382,6 +423,21 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           if (xmlResult.isErr()) {
             return new DesktopCommandExecutionError(xmlResult.error).toErr();
           }
+          let workbookXml = xmlResult.value;
+          let authoredCalcCaptions: string[] = [];
+          if (calcs && calcs.length > 0) {
+            const authored = await authorCalculationsInWorkbook({
+              workbookXml,
+              calcs: calcs as AuthorCalcInput[],
+              executor,
+              signal: extra.signal,
+            });
+            if (authored.isErr()) {
+              return authored.error.toErr();
+            }
+            workbookXml = authored.value.workbookXml;
+            authoredCalcCaptions = authored.value.authoredCalcs.map((calc) => calc.caption);
+          }
 
           // SEAM: source manifests through bundledIntelligenceProvider (never raw
           // loadManifests) so a milestone-2 remote content-pack provider swaps in without
@@ -421,7 +477,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           try {
             res = await bindTemplate({
               ask,
-              workbookXml: xmlResult.value,
+              workbookXml,
               manifests,
               ...(proposal ? { proposal: proposal as BindingProposal } : {}),
               ...(minConfidence !== undefined ? { minConfidence } : {}),
@@ -444,13 +500,15 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
           const bindMs = Date.now() - bindStart;
 
-          const base: StructuredBindTemplateToolResult =
+          const base: StructuredBindTemplateToolResult = annotateAuthoredCalcs(
             res.status === 'escalate'
               ? withNextAction(
                   { ...res, guidance: buildGuidance(res) },
                   nextActionForEscalation(res.reason),
                 )
-              : { ...res, guidance: buildGuidance(res) };
+              : { ...res, guidance: buildGuidance(res) },
+            authoredCalcCaptions,
+          );
 
           // ── Auto-apply gate (defense in depth) ───────────────────────────
           // Auto-apply only for a bound result whose manifest remains fast-path eligible.
@@ -473,7 +531,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             await performAutoApply({
               res,
               base,
-              workbookXml: xmlResult.value,
+              workbookXml,
               session: resolvedSession,
               executor,
               signal: extra.signal,
