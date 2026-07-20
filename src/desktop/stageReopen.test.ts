@@ -109,6 +109,7 @@ describe('reopenFromStage', () => {
         fetchFn: vi.fn(async () => ({ status: 200 })),
         sleep: vi.fn(async () => undefined),
         isPidAlive,
+        spawnDetached: vi.fn(),
       },
     });
 
@@ -151,6 +152,7 @@ describe('reopenFromStage', () => {
         fetchFn,
         sleep,
         isPidAlive: vi.fn(() => true),
+        spawnDetached: vi.fn(),
       },
     });
 
@@ -187,6 +189,7 @@ describe('reopenFromStage', () => {
         fetchFn: vi.fn(async () => ({ status: 503 })),
         sleep: vi.fn(async () => undefined),
         isPidAlive: vi.fn(() => true),
+        spawnDetached: vi.fn(),
       },
     });
 
