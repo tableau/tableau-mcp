@@ -106,32 +106,30 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
 
 /**
  * Select the tools to register for a given TOOL_PROFILE value (already normalized by
- * Config: trim + lowercase). 'demo' → the slim {@link DEMO_TOOL_PROFILE} subset; '' (unset)
- * or 'full' → the full set unchanged (same array reference — byte-identical behavior); any
- * other value → full set + a logged warning. Pure and side-effect-free apart from the
- * warning log, so the selection can be unit-tested without the server or env.
+ * Config: trim + lowercase). '' (unset) → the lean {@link DYNAMIC_AUTHORING_TOOL_PROFILE}
+ * native surface: the Desktop authoring server SINGS in native Tableau by default, no
+ * env var required. 'full' → every tool including the raw XML get/apply surface (the
+ * explicit opt-in escape hatch). 'demo' / 'spec-loop' → their named subsets;
+ * 'combined-lean' → the full desktop surface (its lean half is the web side, handled by
+ * WebMcpServer). Any other value → full set + a logged warning. Pure and side-effect-free
+ * apart from the warning log, so the selection can be unit-tested without the server or env.
  */
 export function selectToolsForProfile<T extends { name: DesktopToolName }>(
   tools: T[],
   profile: string,
 ): T[] {
+  if (profile === '' || profile === 'dynamic-authoring') {
+    return tools.filter((tool) => DYNAMIC_AUTHORING_TOOL_PROFILE.has(tool.name));
+  }
   if (profile === 'demo') {
     return tools.filter((tool) => DEMO_TOOL_PROFILE.has(tool.name));
   }
   if (profile === 'spec-loop') {
     return tools.filter((tool) => SPEC_LOOP_TOOL_PROFILE.has(tool.name));
   }
-  if (profile === 'dynamic-authoring') {
-    return tools.filter((tool) => DYNAMIC_AUTHORING_TOOL_PROFILE.has(tool.name));
-  }
   // 'combined-lean' means "full desktop surface, lazy web surface" — the web half is
   // handled by WebMcpServer; the desktop half registers everything, same as 'full'.
-  if (
-    profile !== '' &&
-    profile !== 'full' &&
-    profile !== 'combined-lean' &&
-    profile !== 'dynamic-authoring'
-  ) {
+  if (profile !== 'full' && profile !== 'combined-lean') {
     log({
       message: `Unknown TOOL_PROFILE "${profile}" — registering the full tool set.`,
       level: 'warning',

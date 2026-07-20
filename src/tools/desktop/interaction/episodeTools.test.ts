@@ -75,6 +75,9 @@ describe('episode lifecycle tools', () => {
   });
 
   it('registers episode tools only when EPISODE_EVENTS=on', async () => {
+    // Episode tools are not in the lean default profile; pin the full surface so this
+    // test isolates the EPISODE_EVENTS gate rather than the profile filter.
+    vi.stubEnv('TOOL_PROFILE', 'full');
     const offServer = serverWithRegisterSpy();
     await offServer.registerTools();
     const offNames = vi.mocked(offServer.mcpServer.registerTool).mock.calls.map((call) => call[0]);

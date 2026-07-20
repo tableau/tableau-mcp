@@ -18,6 +18,10 @@ import { Provider } from './utils/provider.js';
 
 describe('DesktopMcpServer', () => {
   it('should register tools', async () => {
+    // Pin the full surface: this test is about registration mechanics (every tool
+    // registered with its title/schema/annotations), independent of the profile
+    // default (unset now selects the lean dynamic-authoring surface).
+    vi.stubEnv('TOOL_PROFILE', 'full');
     const server = getServer();
     await server.registerTools();
 
@@ -391,11 +395,9 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(total).toBeLessThanOrEqual(30_000);
   });
 
-  it('unset ("") profile returns the full set unchanged, byte-identical order', () => {
-    const tools = allTools();
-    const selected = selectToolsForProfile(tools, '');
-    expect(selected).toBe(tools);
-    expect(selected.map((t) => t.name)).toEqual(tools.map((t) => t.name));
+  it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {
+    const selected = selectToolsForProfile(allTools(), '');
+    expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
   });
 
   it('explicit "full" profile returns the full set unchanged', () => {
@@ -434,7 +436,18 @@ describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
     expect(new Set(registeredNames)).toEqual(DEMO_TOOL_PROFILE);
   });
 
-  it('registers the full set when TOOL_PROFILE is unset', async () => {
+  it('registers the lean dynamic-authoring native surface when TOOL_PROFILE is unset', async () => {
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0]);
+    expect(new Set(registeredNames)).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
+  });
+
+  it('registers the full set when TOOL_PROFILE=full is explicit', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'full');
     const server = getServer();
     await server.registerTools();
 

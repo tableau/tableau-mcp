@@ -320,7 +320,7 @@ const envVars = {
     type: 'string',
     title: 'Tool Profile',
     description:
-      "Tool registration profile: unset/'full' registers everything, 'demo' the slim desktop set, 'combined-lean' the full desktop set plus a lazy web-tool loader.",
+      "Tool registration profile: unset/'dynamic-authoring' registers the lean native-authoring surface (semantic loop + author-* verbs, no raw XML tools), 'full' registers everything including the raw XML get/apply tools, 'demo' the slim desktop set, 'combined-lean' the full desktop set plus a lazy web-tool loader.",
     required: false,
     sensitive: false,
   },
