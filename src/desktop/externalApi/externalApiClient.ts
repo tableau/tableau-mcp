@@ -3,8 +3,13 @@ import { z } from 'zod';
 
 import {
   dashboardDocumentRoute,
+  DashboardItem,
+  dashboardItemRoute,
+  dashboardItemSchema,
   DashboardList,
   dashboardListSchema,
+  DatasourceList,
+  datasourceListSchema,
   EXTERNAL_API_ROUTES,
   ExternalApiError,
   ExternalApiInstance,
@@ -13,9 +18,28 @@ import {
   OperationEnvelope,
   operationEnvelopeSchema,
   problemResponseSchema,
+  Site,
+  SiteDatasourceList,
+  siteDatasourceListSchema,
+  siteSchema,
+  SiteWorkbookList,
+  siteWorkbookListSchema,
+  storyboardDocumentRoute,
+  StoryboardItem,
+  storyboardItemRoute,
+  storyboardItemSchema,
+  StoryboardList,
+  storyboardListSchema,
   SummaryData,
   summaryDataSchema,
+  ValidationResult,
+  validationResultSchema,
+  WorkbookInventory,
+  workbookInventorySchema,
   worksheetDocumentRoute,
+  WorksheetItem,
+  worksheetItemRoute,
+  worksheetItemSchema,
   WorksheetList,
   worksheetListSchema,
   worksheetSummaryDataRoute,
@@ -122,6 +146,95 @@ export class ExternalApiClient {
     signal?: AbortSignal,
   ): Promise<Result<WorkbookDocument, ExternalApiError>> {
     return this.getDocument(dashboardDocumentRoute(id), signal);
+  }
+
+  async getWorksheet(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<Result<WorksheetItem, ExternalApiError>> {
+    return this.getDecoded(worksheetItemRoute(id), worksheetItemSchema, signal);
+  }
+
+  async getDashboard(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<Result<DashboardItem, ExternalApiError>> {
+    return this.getDecoded(dashboardItemRoute(id), dashboardItemSchema, signal);
+  }
+
+  async listStoryboards(signal?: AbortSignal): Promise<Result<StoryboardList, ExternalApiError>> {
+    return this.getDecoded(EXTERNAL_API_ROUTES.storyboards, storyboardListSchema, signal);
+  }
+
+  async getStoryboard(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<Result<StoryboardItem, ExternalApiError>> {
+    return this.getDecoded(storyboardItemRoute(id), storyboardItemSchema, signal);
+  }
+
+  async getStoryboardDocument(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExternalApiError>> {
+    return this.getDocument(storyboardDocumentRoute(id), signal);
+  }
+
+  async getWorkbookInventory(
+    signal?: AbortSignal,
+  ): Promise<Result<WorkbookInventory, ExternalApiError>> {
+    return this.getDecoded(EXTERNAL_API_ROUTES.workbook, workbookInventorySchema, signal);
+  }
+
+  async listWorkbookDatasources(
+    signal?: AbortSignal,
+  ): Promise<Result<DatasourceList, ExternalApiError>> {
+    return this.getDecoded(EXTERNAL_API_ROUTES.workbookDatasources, datasourceListSchema, signal);
+  }
+
+  async getSite(signal?: AbortSignal): Promise<Result<Site, ExternalApiError>> {
+    return this.getDecoded(EXTERNAL_API_ROUTES.site, siteSchema, signal);
+  }
+
+  async listSiteDatasources(
+    signal?: AbortSignal,
+  ): Promise<Result<SiteDatasourceList, ExternalApiError>> {
+    return this.getDecoded(EXTERNAL_API_ROUTES.siteDatasources, siteDatasourceListSchema, signal);
+  }
+
+  async listSiteWorkbooks(
+    signal?: AbortSignal,
+  ): Promise<Result<SiteWorkbookList, ExternalApiError>> {
+    return this.getDecoded(EXTERNAL_API_ROUTES.siteWorkbooks, siteWorkbookListSchema, signal);
+  }
+
+  async validateWorkbookDocument(
+    xml: string,
+    signal?: AbortSignal,
+  ): Promise<Result<ValidationResult, ExternalApiError>> {
+    const response = await this.request('POST', EXTERNAL_API_ROUTES.workbookDocumentValidate, {
+      signal,
+      contentType: 'application/xml',
+      body: xml,
+    });
+    if (response.isErr()) {
+      return Err(response.error);
+    }
+    const res = response.value;
+    if (!res.ok) {
+      return Err(await mapErrorResponse(res));
+    }
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch (error) {
+      return Err({ type: 'invalid-response', error });
+    }
+    const parsed = validationResultSchema.safeParse(json);
+    if (!parsed.success) {
+      return Err({ type: 'invalid-response', error: parsed.error });
+    }
+    return Ok(parsed.data);
   }
 
   async applyWorkbookDocument(

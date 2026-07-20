@@ -244,6 +244,113 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const storyboardDocMatch = path.match(/^\/v0\/workbook\/storyboards\/([^/]+)\/document$/);
+    if (method === 'GET' && storyboardDocMatch) {
+      const id = decodeURIComponent(storyboardDocMatch[1]);
+      if (id !== 's1') {
+        sendProblem(res, 404, 'sheet-not-found', `Unknown storyboard: ${id}`);
+        return;
+      }
+      res.writeHead(200, {
+        'content-type': 'text/xml',
+        [HEADER_APPLICATION_VERSION]: '2026.1',
+        [HEADER_XSD_PAYLOAD_VERSION]: '2026.1.0',
+      });
+      res.end(`<story name='${id}'><zones /></story>`);
+      return;
+    }
+
+    // Item (non-document) routes: /v0/workbook/{worksheets,dashboards,storyboards}/{id}
+    const worksheetItemMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)$/);
+    if (method === 'GET' && worksheetItemMatch) {
+      const id = decodeURIComponent(worksheetItemMatch[1]);
+      if (id !== 'w1' && id !== 'w2') {
+        sendProblem(res, 404, 'sheet-not-found', `Unknown worksheet: ${id}`);
+        return;
+      }
+      sendJson(res, 200, { id, name: id === 'w1' ? 'Sheet 1' : 'Sales', hidden: false });
+      return;
+    }
+
+    const dashboardItemMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+)$/);
+    if (method === 'GET' && dashboardItemMatch) {
+      const id = decodeURIComponent(dashboardItemMatch[1]);
+      if (id !== 'd1') {
+        sendProblem(res, 404, 'sheet-not-found', `Unknown dashboard: ${id}`);
+        return;
+      }
+      sendJson(res, 200, { id, name: 'Sales Dashboard', hidden: false });
+      return;
+    }
+
+    const storyboardItemMatch = path.match(/^\/v0\/workbook\/storyboards\/([^/]+)$/);
+    if (method === 'GET' && storyboardItemMatch) {
+      const id = decodeURIComponent(storyboardItemMatch[1]);
+      if (id !== 's1') {
+        sendProblem(res, 404, 'sheet-not-found', `Unknown storyboard: ${id}`);
+        return;
+      }
+      sendJson(res, 200, { id, name: 'Story 1', hidden: false, storyPointCount: 3 });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.storyboards) {
+      sendJson(res, 200, { storyboards: [{ id: 's1', name: 'Story 1', hidden: false }] });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbook) {
+      sendJson(res, 200, {
+        title: 'Book1',
+        location: null,
+        unsavedChanges: true,
+        worksheets: [{ id: 'w1', name: 'Sheet 1', hidden: false }],
+        dashboards: [],
+        storyboards: [],
+      });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookDatasources) {
+      sendJson(res, 200, {
+        datasources: [{ id: 'ds1', name: 'Sample - Superstore', caption: 'Sample - Superstore' }],
+      });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.site) {
+      sendJson(res, 200, { siteId: 'site-1', authenticatedUserId: 'user-1' });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.siteDatasources) {
+      sendJson(res, 200, {
+        datasources: [{ id: 'sds1', luid: 'luid-1', name: 'Published DS', project: 'Default' }],
+      });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.siteWorkbooks) {
+      sendJson(res, 200, {
+        workbooks: [{ id: 'swb1', luid: 'luid-2', name: 'Published WB', project: 'Default' }],
+      });
+      return;
+    }
+
+    if (method === 'POST' && path === EXTERNAL_API_ROUTES.workbookDocumentValidate) {
+      const ct = (contentType ?? '').split(';')[0].trim();
+      if (ct !== 'application/xml' && ct !== 'text/xml') {
+        sendProblem(res, 415, 'unsupported-content-type', `Unsupported content type: ${ct}`);
+        return;
+      }
+      const valid = body.includes('<workbook');
+      sendJson(res, 200, {
+        isValid: valid,
+        validationIssues: valid ? [] : ['Document is not a workbook.'],
+      });
+      return;
+    }
+
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.openapi) {
       sendJson(res, 200, {
         openapi: '3.1.0',

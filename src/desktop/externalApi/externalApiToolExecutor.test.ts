@@ -235,6 +235,51 @@ describe('ExternalApiToolExecutor', () => {
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook/dashboards/d1/document');
     });
 
+    it.each([
+      ['get-worksheet', { id: 'w1' }, '/v0/workbook/worksheets/w1'],
+      ['get-dashboard', { id: 'd1' }, '/v0/workbook/dashboards/d1'],
+      ['list-storyboards', {}, '/v0/workbook/storyboards'],
+      ['get-storyboard', { id: 's1' }, '/v0/workbook/storyboards/s1'],
+      ['get-storyboard-document', { id: 's1' }, '/v0/workbook/storyboards/s1/document'],
+      ['get-workbook-inventory', {}, '/v0/workbook'],
+      ['list-workbook-datasources', {}, '/v0/workbook/datasources'],
+      ['get-site', {}, '/v0/site'],
+      ['list-site-datasources', {}, '/v0/site/datasources'],
+      ['list-site-workbooks', {}, '/v0/site/workbooks'],
+    ])('routes %s to GET %s', async (command, args, expectedPath) => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabui',
+        command,
+        args,
+        signal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(server.requests.at(-1)?.method).toBe('GET');
+      expect(server.requests.at(-1)?.path).toBe(expectedPath);
+    });
+
+    it('routes validate-workbook-document to POST /v0/workbook/document:validate', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabui',
+        command: 'validate-workbook-document',
+        args: { text: '<workbook />' },
+        schema: z.object({ isValid: z.boolean() }),
+        signal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().parsedResult.isValid).toBe(true);
+      expect(server.requests.at(-1)?.method).toBe('POST');
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/document:validate');
+    });
+
     it('maps a failed operation envelope to a command-failed error', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();

@@ -185,6 +185,94 @@ describe('ExternalApiClient', () => {
     expect(requested?.path).toBe('/v0/workbook/worksheets/w1/summaryData');
   });
 
+  it('gets a worksheet item by id', async () => {
+    const result = await client.getWorksheet('w1');
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({ id: 'w1', name: 'Sheet 1', hidden: false });
+    expect(server.requests.at(-1)?.path).toBe('/v0/workbook/worksheets/w1');
+  });
+
+  it('gets a dashboard item by id', async () => {
+    const result = await client.getDashboard('d1');
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({ id: 'd1', name: 'Sales Dashboard' });
+    expect(server.requests.at(-1)?.path).toBe('/v0/workbook/dashboards/d1');
+  });
+
+  it('lists storyboards, gets one by id, and gets its document', async () => {
+    const list = await client.listStoryboards();
+    expect(list.isOk()).toBe(true);
+    expect(list.unwrap().storyboards).toEqual([{ id: 's1', name: 'Story 1', hidden: false }]);
+
+    const item = await client.getStoryboard('s1');
+    expect(item.isOk()).toBe(true);
+    expect(item.unwrap()).toMatchObject({ id: 's1', storyPointCount: 3 });
+
+    const doc = await client.getStoryboardDocument('s1');
+    expect(doc.isOk()).toBe(true);
+    expect(doc.unwrap().xml).toContain("<story name='s1'>");
+    expect(server.requests.at(-1)?.path).toBe('/v0/workbook/storyboards/s1/document');
+  });
+
+  it('gets the workbook inventory', async () => {
+    const result = await client.getWorkbookInventory();
+    expect(result.isOk()).toBe(true);
+    const value = result.unwrap();
+    expect(value.title).toBe('Book1');
+    expect(value.unsavedChanges).toBe(true);
+    expect(value.worksheets?.[0]).toMatchObject({ id: 'w1' });
+  });
+
+  it('lists workbook datasources', async () => {
+    const result = await client.listWorkbookDatasources();
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().datasources[0]).toMatchObject({ name: 'Sample - Superstore' });
+  });
+
+  it('gets the connected site', async () => {
+    const result = await client.getSite();
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({ siteId: 'site-1', authenticatedUserId: 'user-1' });
+  });
+
+  it('lists site datasources and workbooks', async () => {
+    const ds = await client.listSiteDatasources();
+    expect(ds.isOk()).toBe(true);
+    expect(ds.unwrap().datasources[0]).toMatchObject({ name: 'Published DS' });
+
+    const wb = await client.listSiteWorkbooks();
+    expect(wb.isOk()).toBe(true);
+    expect(wb.unwrap().workbooks[0]).toMatchObject({ name: 'Published WB' });
+  });
+
+  it('validates a workbook document', async () => {
+    const ok = await client.validateWorkbookDocument('<workbook />');
+    expect(ok.isOk()).toBe(true);
+    expect(ok.unwrap().isValid).toBe(true);
+
+    const bad = await client.validateWorkbookDocument('<not-a-workbook />');
+    expect(bad.isOk()).toBe(true);
+    const value = bad.unwrap();
+    expect(value.isValid).toBe(false);
+    expect(value.validationIssues).toHaveLength(1);
+
+    const posted = server.requests.at(-1);
+    expect(posted?.method).toBe('POST');
+    expect(posted?.path).toBe('/v0/workbook/document:validate');
+  });
+
+  it('maps a sheet-not-found problem for an unknown storyboard id', async () => {
+    const result = await client.getStoryboard('nope');
+    expect(result.isErr()).toBe(true);
+    const error = result.unwrapErr();
+    if (error.type === 'problem') {
+      expect(error.status).toBe(404);
+      expect(error.code).toBe('sheet-not-found');
+    } else {
+      throw new Error(`expected problem error, got ${error.type}`);
+    }
+  });
+
   it('surfaces a 401 as an unauthorized error when the token is stale', async () => {
     const staleClient = new ExternalApiClient(makeInstance(server.baseUrl, 'stale-token'));
     const result = await staleClient.getWorkbookDocument();

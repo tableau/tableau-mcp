@@ -27,12 +27,23 @@ const SAVE_UNDERLYING_METADATA = 'save-underlying-metadata';
 /** The single "apply whole workbook document" command, routed to POST /v0/workbook/document. */
 const LOAD_UNDERLYING_METADATA = 'load-underlying-metadata';
 
-/** Commands routed to the typed per-sheet read routes (all under tabui). */
+/** Commands routed to the typed read routes (all under tabui). */
 const LIST_WORKSHEETS = 'list-worksheets';
+const GET_WORKSHEET = 'get-worksheet';
 const GET_WORKSHEET_DOCUMENT = 'get-worksheet-document';
 const GET_WORKSHEET_SUMMARY_DATA = 'get-worksheet-summary-data';
 const LIST_DASHBOARDS = 'list-dashboards';
+const GET_DASHBOARD = 'get-dashboard';
 const GET_DASHBOARD_DOCUMENT = 'get-dashboard-document';
+const LIST_STORYBOARDS = 'list-storyboards';
+const GET_STORYBOARD = 'get-storyboard';
+const GET_STORYBOARD_DOCUMENT = 'get-storyboard-document';
+const GET_WORKBOOK_INVENTORY = 'get-workbook-inventory';
+const LIST_WORKBOOK_DATASOURCES = 'list-workbook-datasources';
+const GET_SITE = 'get-site';
+const LIST_SITE_DATASOURCES = 'list-site-datasources';
+const LIST_SITE_WORKBOOKS = 'list-site-workbooks';
+const VALIDATE_WORKBOOK_DOCUMENT = 'validate-workbook-document';
 
 const LOGGER = 'ExternalApiToolExecutor';
 
@@ -332,6 +343,69 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     ) {
       const result = await client.getDashboardDocument(args.id, signal);
       return result.map((value) => succeeded({ text: value.xml }));
+    }
+
+    if (namespace === 'tabui' && command === GET_WORKSHEET && typeof args.id === 'string') {
+      const result = await client.getWorksheet(args.id, signal);
+      return result.map((value) => succeeded({ worksheet: value }));
+    }
+
+    if (namespace === 'tabui' && command === GET_DASHBOARD && typeof args.id === 'string') {
+      const result = await client.getDashboard(args.id, signal);
+      return result.map((value) => succeeded({ dashboard: value }));
+    }
+
+    if (namespace === 'tabui' && command === LIST_STORYBOARDS) {
+      const result = await client.listStoryboards(signal);
+      return result.map((value) => succeeded({ storyboards: value.storyboards }));
+    }
+
+    if (namespace === 'tabui' && command === GET_STORYBOARD && typeof args.id === 'string') {
+      const result = await client.getStoryboard(args.id, signal);
+      return result.map((value) => succeeded({ storyboard: value }));
+    }
+
+    if (
+      namespace === 'tabui' &&
+      command === GET_STORYBOARD_DOCUMENT &&
+      typeof args.id === 'string'
+    ) {
+      const result = await client.getStoryboardDocument(args.id, signal);
+      return result.map((value) => succeeded({ text: value.xml }));
+    }
+
+    if (namespace === 'tabui' && command === GET_WORKBOOK_INVENTORY) {
+      const result = await client.getWorkbookInventory(signal);
+      return result.map((value) => succeeded({ inventory: value }));
+    }
+
+    if (namespace === 'tabui' && command === LIST_WORKBOOK_DATASOURCES) {
+      const result = await client.listWorkbookDatasources(signal);
+      return result.map((value) => succeeded({ datasources: value.datasources }));
+    }
+
+    if (namespace === 'tabui' && command === GET_SITE) {
+      const result = await client.getSite(signal);
+      return result.map((value) => succeeded({ site: value }));
+    }
+
+    if (namespace === 'tabui' && command === LIST_SITE_DATASOURCES) {
+      const result = await client.listSiteDatasources(signal);
+      return result.map((value) => succeeded({ datasources: value.datasources }));
+    }
+
+    if (namespace === 'tabui' && command === LIST_SITE_WORKBOOKS) {
+      const result = await client.listSiteWorkbooks(signal);
+      return result.map((value) => succeeded({ workbooks: value.workbooks }));
+    }
+
+    if (
+      namespace === 'tabui' &&
+      command === VALIDATE_WORKBOOK_DOCUMENT &&
+      typeof args.text === 'string'
+    ) {
+      const result = await client.validateWorkbookDocument(args.text, signal);
+      return result.map((value) => succeeded({ ...value }));
     }
 
     const result = await client.invokeCommand(namespace, command, args, signal);
