@@ -45,7 +45,10 @@ function getConfiguredRoles(): string[] {
 const argsSchema = {
   inactiveDays: z
     .string()
-    .regex(/^(?:[1-9]\d{0,2}|[12]\d{3}|3[0-5]\d{2}|36[0-4]\d|3650)$/, 'inactiveDays must be a positive integer (1–3650)')
+    .regex(
+      /^(?:[1-9]\d{0,2}|[12]\d{3}|3[0-5]\d{2}|36[0-4]\d|3650)$/,
+      'inactiveDays must be a positive integer (1–3650)',
+    )
     .optional()
     .describe(
       'Minimum days since last login for a user to be considered inactive. ' +
