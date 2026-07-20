@@ -56,9 +56,13 @@ const sendJson = (res: ServerResponse, status: number, payload: unknown): void =
   res.end(body);
 };
 
+// Models the live 0.1.0 Problem shape: `type: 'problem'` + required code/status/instance,
+// human text in `title`. `detail` is an RFC-9457 member additionalProperties admits.
 const sendProblem = (res: ServerResponse, status: number, code: string, detail: string): void => {
   res.writeHead(status, { 'content-type': 'application/problem+json' });
-  res.end(JSON.stringify({ type: `about:blank#${code}`, title: code, status, detail, code }));
+  res.end(
+    JSON.stringify({ type: 'problem', title: detail, status, instance: '/v0/mock', detail, code }),
+  );
 };
 
 export async function startMockExternalApiServer(
@@ -79,7 +83,7 @@ export async function startMockExternalApiServer(
 
     // Bearer auth: a mismatched/absent token models a stale discovery file → 401.
     if (authorization !== `Bearer ${token}`) {
-      sendProblem(res, 401, 'unauthorized', 'Stale or missing bearer token.');
+      sendProblem(res, 401, 'unauthenticated', 'Stale or missing bearer token.');
       return;
     }
 
@@ -124,7 +128,8 @@ export async function startMockExternalApiServer(
         return;
       }
       sendJson(res, 200, {
-        operationId: 'op-doc-1',
+        id: 'op-doc-1',
+        kind: 'workbook.document.apply',
         state: 'succeeded',
         createdAt: '2026-07-07T10:00:00Z',
         completedAt: '2026-07-07T10:00:01Z',
@@ -152,17 +157,19 @@ export async function startMockExternalApiServer(
       }
       if (parsed.command === 'fail-op') {
         sendJson(res, 200, {
-          operationId: 'op-fail-1',
+          id: 'op-fail-1',
+          kind: 'command.invoke',
           state: 'failed',
           createdAt: '2026-07-07T10:00:00Z',
           completedAt: '2026-07-07T10:00:01Z',
-          error: { code: 'operation-failed', title: 'operation-failed', detail: 'command blew up' },
+          error: { code: 'operation-failed', message: 'command blew up' },
         });
         return;
       }
 
       sendJson(res, 200, {
-        operationId: 'op-cmd-1',
+        id: 'op-cmd-1',
+        kind: 'command.invoke',
         state: 'succeeded',
         createdAt: '2026-07-07T10:00:00Z',
         completedAt: '2026-07-07T10:00:01Z',

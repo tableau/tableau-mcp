@@ -3,11 +3,11 @@ import { z } from 'zod';
 /**
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
- * Contract derived from monolith PRs #57536 → #59383 (ApiRoutePaths.h + handlers,
- * PR #59238 head 88276855). Where the exact wire shape was not fully pinned down by
- * the PR evidence, schemas are intentionally permissive (`.passthrough()` /
- * optional fields) and the ambiguity is recorded as residual risk in the deliverable
- * report. A live `/openapi.json` diff is the intended follow-up to tighten these.
+ * Contract originally derived from monolith PRs #57536 → #59383, then tightened
+ * against the live `/openapi.json` (OpenAPI 3.1, `info.version` 0.1.0, captured
+ * 2026-07-20) plus live probes against the running 0.1.0 build. Envelope fields the
+ * spec marks required are required here; everything else stays permissive
+ * (`.passthrough()` / optional) because the spec is read-complete but write-thin.
  */
 
 /** Route paths served by the running Desktop loopback host. */
@@ -51,46 +51,93 @@ export type ExternalApiInstance = {
   apiVersion?: string;
 };
 
-/** RFC-7807-style Problem codes surfaced by the API's error model. */
+/**
+ * RFC-9457 Problem `code` values — the `x-extensible-enum` from the live
+ * `/openapi.json` (0.1.0). Extensible on the wire: treat unknown codes as valid.
+ */
 export const PROBLEM_CODES = [
+  'api-disabled',
+  'host-not-allowed',
+  'origin-not-allowed',
+  'unauthenticated',
+  'missing-user-agent',
   'invalid-request-body',
   'unsupported-content-type',
+  'missing-payload-version',
+  'payload-version-unsupported',
+  'not-found',
+  'sheet-not-found',
+  'method-not-allowed',
+  'not-implemented',
   'command-not-found',
   'invalid-command-parameter',
   'operation-failed',
 ] as const;
 export type ProblemCode = (typeof PROBLEM_CODES)[number];
 
-/** RFC-7807 Problem response body. `code` carries the API-specific error code. */
+/**
+ * RFC-9457 Problem Details body. The spec requires `code`/`status`/`instance`, but
+ * this schema keeps every field optional so error extraction fails open — a Problem
+ * we can only partially parse should still surface its `code`/`title`, never fall
+ * back to raw text. (`instance` population is unverified on the live build; `detail`
+ * is an RFC-9457 member the spec omits but `additionalProperties: true` allows.)
+ */
 export const problemResponseSchema = z
   .object({
     type: z.string().optional(),
     title: z.string().optional(),
     status: z.number().optional(),
+    instance: z.string().optional(),
     detail: z.string().optional(),
     code: z.string().optional(),
   })
   .passthrough();
 export type ProblemResponse = z.infer<typeof problemResponseSchema>;
 
+/** Operation-level `error` — distinct from {@link problemResponseSchema} (HTTP-level). */
+export const operationErrorSchema = z
+  .object({
+    code: z.string(),
+    message: z.string().optional(),
+  })
+  .passthrough();
+export type OperationError = z.infer<typeof operationErrorSchema>;
+
+/** Non-fatal warning attached to an Operation. */
+export const operationWarningSchema = z
+  .object({
+    code: z.string(),
+    message: z.string(),
+  })
+  .passthrough();
+export type OperationWarning = z.infer<typeof operationWarningSchema>;
+
 /**
  * Operation envelope returned by `POST /v0/workbook/document` and
- * `POST /v0/app:invokeCommand`. `result` is captured on success; `state` +
- * `createdAt`/`completedAt` (ISO8601-Z) describe the operation lifecycle.
+ * `POST /v0/app:invokeCommand`. `id`/`kind`/`state` are required per the spec.
+ * `result` is ABSENT from the spec's Operation schema but kept optional here until
+ * output-param behavior is confirmed with the API owner (Ask 1(b)) — do not tighten
+ * it out, and do not rely on it being populated.
  */
 export const operationEnvelopeSchema = z
   .object({
-    operationId: z.string().optional(),
-    state: z.string().optional(),
+    id: z.string(),
+    kind: z.string(),
+    state: z.string(),
     result: z.unknown().optional(),
-    error: problemResponseSchema.optional(),
+    error: operationErrorSchema.optional(),
+    warnings: z.array(operationWarningSchema).optional(),
     createdAt: z.string().optional(),
     completedAt: z.string().optional(),
   })
   .passthrough();
 export type OperationEnvelope = z.infer<typeof operationEnvelopeSchema>;
 
-/** Typed error surfaced by {@link ExternalApiClient} methods. */
+/**
+ * Typed error surfaced by {@link ExternalApiClient} methods. The internal
+ * `'unauthorized'` variant corresponds to the wire code `'unauthenticated'` —
+ * mapped at the 401 boundary; the internal name is kept (many refs).
+ */
 export type ExternalApiError =
   | { type: 'unauthorized'; status: number }
   | { type: 'problem'; status: number; code?: string; title?: string; detail?: string }

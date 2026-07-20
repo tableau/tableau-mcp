@@ -15,7 +15,7 @@ import {
   ExternalApiError,
   ExternalApiInstance,
   OperationEnvelope,
-  ProblemResponse,
+  OperationError,
 } from './types.js';
 
 /** The single "get whole workbook document" command, routed to GET /v0/workbook/document. */
@@ -45,7 +45,7 @@ type NoInstance = { type: 'no-instance'; pinnedPid?: number };
 type RawOutcome = {
   result: Record<string, unknown> | undefined;
   state: string | undefined;
-  envelopeError: ProblemResponse | undefined;
+  envelopeError: OperationError | undefined;
   createdAt: string | undefined;
   completedAt: string | undefined;
   operationId: string | undefined;
@@ -303,7 +303,7 @@ function normalizeEnvelope(envelope: OperationEnvelope): RawOutcome {
     envelopeError: envelope.error,
     createdAt: envelope.createdAt,
     completedAt: envelope.completedAt,
-    operationId: envelope.operationId,
+    operationId: envelope.id,
   };
 }
 
@@ -319,10 +319,7 @@ function buildCommandStatus(
       type: 'command-failed',
       error: {
         code: outcome.envelopeError?.code ?? 'operation-failed',
-        message:
-          outcome.envelopeError?.detail ??
-          outcome.envelopeError?.title ??
-          `Command ${namespace}:${command} failed`,
+        message: outcome.envelopeError?.message ?? `Command ${namespace}:${command} failed`,
         recoverable: false,
       },
     });
