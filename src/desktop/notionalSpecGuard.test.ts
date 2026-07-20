@@ -19,6 +19,230 @@ const EXAMPLE_1_SPEC = {
   sort: { field: 'Region', by: 'Sales', aggregation: 'sum', direction: 'desc' },
 };
 
+const GOLDEN_SPECS = [
+  {
+    name: 'e1-bar',
+    spec: {
+      version: '0.2.0',
+      chart: 'bar',
+      fields: [
+        {
+          caption: 'Region',
+          data: 'string',
+          type: 'discrete',
+          role: 'dimension',
+          encoding: 'x',
+        },
+        {
+          caption: 'Revenue',
+          data: 'number',
+          type: 'continuous',
+          role: 'measure',
+          aggregation: 'sum',
+          encoding: 'y',
+        },
+      ],
+      sort: {
+        field: 'Region',
+        by: 'Revenue',
+        aggregation: 'sum',
+        direction: 'desc',
+      },
+    },
+  },
+  {
+    name: 'e2-calc-bar',
+    spec: {
+      version: '0.2.0',
+      chart: 'bar',
+      fields: [
+        {
+          caption: 'Rep Name',
+          data: 'string',
+          type: 'discrete',
+          role: 'dimension',
+          encoding: 'x',
+        },
+        {
+          caption: 'Quota Attainment %',
+          data: 'number',
+          type: 'continuous',
+          role: 'measure',
+          aggregation: 'default',
+          encoding: 'y',
+        },
+      ],
+      sort: {
+        field: 'Rep Name',
+        by: 'Quota Attainment %',
+        direction: 'desc',
+      },
+    },
+  },
+  {
+    name: 'e3-kpi-text',
+    spec: {
+      version: '0.2.0',
+      chart: 'text',
+      fields: [
+        {
+          caption: 'ARR This Quarter',
+          data: 'string',
+          type: 'discrete',
+          role: 'measure',
+          encoding: 'text',
+        },
+        {
+          caption: 'QoQ Change',
+          data: 'string',
+          type: 'discrete',
+          role: 'measure',
+          encoding: 'text',
+        },
+      ],
+      categoricalFilters: [
+        {
+          type: 'categorical',
+          field: 'Metric Name',
+          values: ['ARR'],
+        },
+      ],
+    },
+  },
+  {
+    name: 'e4-line',
+    spec: {
+      version: '0.2.0',
+      chart: 'line',
+      fields: [
+        {
+          caption: 'Month Date',
+          data: 'date',
+          type: 'continuous',
+          role: 'dimension',
+          aggregation: 'month',
+          encoding: 'x',
+        },
+        {
+          caption: 'Mau',
+          data: 'number',
+          type: 'continuous',
+          role: 'measure',
+          aggregation: 'sum',
+          encoding: 'y',
+        },
+        {
+          caption: 'Product',
+          data: 'string',
+          type: 'discrete',
+          role: 'dimension',
+          encoding: 'color',
+        },
+      ],
+    },
+  },
+  {
+    name: 'm1-gantt',
+    spec: {
+      version: '0.2.0',
+      chart: 'gantt',
+      fields: [
+        {
+          caption: 'Line Item',
+          data: 'string',
+          type: 'discrete',
+          role: 'dimension',
+          encoding: 'x',
+        },
+        {
+          caption: 'Running Total',
+          data: 'number',
+          type: 'continuous',
+          role: 'measure',
+          encoding: 'y',
+        },
+        {
+          caption: 'Bar Size',
+          data: 'number',
+          type: 'continuous',
+          role: 'measure',
+          encoding: 'size',
+        },
+        {
+          caption: 'Category',
+          data: 'string',
+          type: 'discrete',
+          role: 'dimension',
+          encoding: 'color',
+        },
+      ],
+      categoricalFilters: [
+        {
+          type: 'categorical',
+          field: 'Category',
+          values: ['subtotal', 'total'],
+          exclude: true,
+        },
+      ],
+      sort: {
+        field: 'Line Item',
+        by: 'Display Order',
+        aggregation: 'min',
+        direction: 'asc',
+      },
+    },
+  },
+  {
+    name: 's7-symbolmap',
+    spec: {
+      version: '0.2.0',
+      chart: 'symbolmap',
+      fields: [
+        {
+          caption: 'Longitude',
+          data: 'number',
+          type: 'continuous',
+          role: 'measure',
+          aggregation: 'avg',
+          encoding: 'x',
+        },
+        {
+          caption: 'Latitude',
+          data: 'number',
+          type: 'continuous',
+          role: 'measure',
+          aggregation: 'avg',
+          encoding: 'y',
+        },
+        {
+          caption: 'City',
+          data: 'string',
+          type: 'discrete',
+          role: 'dimension',
+          encoding: 'text',
+        },
+        {
+          caption: 'PM Name',
+          data: 'string',
+          type: 'discrete',
+          role: 'dimension',
+          encoding: 'text',
+        },
+      ],
+    },
+  },
+];
+
+function expectSpecFailure(spec: object, expectedText: string) {
+  const result = validateNotionalSpecArgs(COMMAND, {
+    NotionalSpecJson: JSON.stringify(spec),
+  });
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error('expected failure');
+  expect(result.message).toContain(expectedText);
+  expect(result.message).toContain('FIX:');
+}
+
 describe('validateNotionalSpecArgs', () => {
   it('passes through other commands unchanged, even with arbitrary args', () => {
     expect(
@@ -37,6 +261,13 @@ describe('validateNotionalSpecArgs', () => {
     const result = validateNotionalSpecArgs(COMMAND, {
       NotionalSpecJson: JSON.stringify(EXAMPLE_1_SPEC),
       ClearSheet: true,
+    });
+    expect(result).toEqual({ ok: true });
+  });
+
+  it.each(GOLDEN_SPECS)('accepts golden spec $name', ({ spec }) => {
+    const result = validateNotionalSpecArgs(COMMAND, {
+      NotionalSpecJson: JSON.stringify(spec),
     });
     expect(result).toEqual({ ok: true });
   });
@@ -146,5 +377,211 @@ describe('validateNotionalSpecArgs', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
     expect(result.message).toContain('field at index 0 is missing a non-empty "caption"');
+  });
+
+  it('rejects a real-world payload using field aggregation none', () => {
+    expectSpecFailure(
+      {
+        version: '0.2.0',
+        chart: 'bar',
+        fields: [
+          {
+            caption: 'Rep Name',
+            data: 'string',
+            type: 'discrete',
+            role: 'dimension',
+            encoding: 'x',
+          },
+          {
+            caption: 'Attainment %',
+            data: 'number',
+            type: 'continuous',
+            role: 'measure',
+            aggregation: 'none',
+            encoding: 'y',
+          },
+        ],
+        sort: {
+          field: 'Rep Name',
+          by: 'Attainment %',
+          aggregation: 'none',
+          direction: 'desc',
+        },
+      },
+      '"none" is not v0.2 vocabulary',
+    );
+  });
+
+  it('rejects a real-world payload using rangeFilter max', () => {
+    expectSpecFailure(
+      {
+        version: '0.2.0',
+        chart: 'bar',
+        fields: [
+          {
+            caption: 'Rep Name',
+            data: 'string',
+            type: 'discrete',
+            role: 'dimension',
+            encoding: 'x',
+          },
+          {
+            caption: 'Attainment %',
+            data: 'number',
+            type: 'continuous',
+            role: 'measure',
+            aggregation: 'none',
+            encoding: 'y',
+          },
+        ],
+        rangeFilters: [{ field: 'Attainment %', aggregation: 'none', max: 1 }],
+        sort: {
+          field: 'Rep Name',
+          by: 'Attainment %',
+          aggregation: 'none',
+          direction: 'desc',
+        },
+      },
+      'v0.2 numeric range filters use "start"/"end", not "min"/"max"',
+    );
+  });
+
+  it('continues to reject the chartType real-world payload', () => {
+    expectSpecFailure(
+      {
+        version: 1,
+        chartType: 'bar',
+        title: 'x',
+        fields: [{ caption: 'Rep Name', role: 'dimension', shelf: 'rows' }],
+      },
+      'Unknown top-level key "chartType"',
+    );
+  });
+
+  it('rejects a field-level shelf key when it is the only offender', () => {
+    expectSpecFailure(
+      {
+        version: '0.2.0',
+        chart: 'bar',
+        fields: [{ caption: 'Rep Name', role: 'dimension', shelf: 'rows' }],
+      },
+      'NotionalSpec v0.2 has no "shelf"',
+    );
+  });
+
+  it.each([
+    ['unknown field key', { extra: 'value' }, 'Unknown field key "extra"'],
+    ['field data value', { data: 'integer' }, '"data" value "integer"'],
+    ['field type value', { type: 'ordinal' }, '"type" value "ordinal"'],
+    ['field role value', { role: 'metric' }, '"role" value "metric"'],
+    ['field encoding value', { encoding: 'detail' }, 'detail/tooltip are v0.3-flag-only'],
+  ])('rejects invalid %s', (_name, fieldPatch, expectedText) => {
+    expectSpecFailure(
+      {
+        version: '0.2.0',
+        chart: 'bar',
+        fields: [{ caption: 'Region', ...fieldPatch }],
+      },
+      expectedText,
+    );
+  });
+
+  it.each([
+    ['unknown sort key', { by: 'Revenue', rank: 1 }, 'Unknown sort key "rank"'],
+    ['missing sort by', { field: 'Region' }, '"sort.by" is required'],
+    ['empty sort by', { by: '   ' }, '"sort.by" is required'],
+    ['sort direction value', { by: 'Revenue', direction: 'down' }, '"sort.direction" value "down"'],
+  ])('rejects invalid %s', (_name, sort, expectedText) => {
+    expectSpecFailure(
+      {
+        ...EXAMPLE_1_SPEC,
+        sort,
+      },
+      expectedText,
+    );
+  });
+
+  it.each([
+    [
+      'unknown range filter key',
+      { field: 'Revenue', aggregation: 'sum', lower: 1 },
+      'Unknown rangeFilters key "lower"',
+    ],
+    ['range filter without field', { start: 1, end: 10 }, '"rangeFilters[0].field" is required'],
+  ])('rejects invalid %s', (_name, rangeFilter, expectedText) => {
+    expectSpecFailure(
+      {
+        ...EXAMPLE_1_SPEC,
+        rangeFilters: [rangeFilter],
+      },
+      expectedText,
+    );
+  });
+
+  it.each([
+    [
+      'unknown relative date filter key',
+      { type: 'relative-date', field: 'Order Date', amount: 1, period: 'months', direction: 'previous', unit: 'month' },
+      'Unknown relativeDateFilters key "unit"',
+    ],
+    [
+      'relative date filter type',
+      { type: 'relative', field: 'Order Date', amount: 1, period: 'months', direction: 'previous' },
+      '"relativeDateFilters[0].type" value "relative"',
+    ],
+    [
+      'relative date filter without field',
+      { type: 'relative-date', amount: 1, period: 'months', direction: 'previous' },
+      '"relativeDateFilters[0].field" is required',
+    ],
+    [
+      'relative date filter amount',
+      { type: 'relative-date', field: 'Order Date', amount: '1', period: 'months', direction: 'previous' },
+      '"relativeDateFilters[0].amount" value "1"',
+    ],
+    [
+      'relative date filter singular period',
+      { type: 'relative-date', field: 'Order Date', amount: 1, period: 'month', direction: 'previous' },
+      'Use plural relative date periods',
+    ],
+    [
+      'relative date filter last direction',
+      { type: 'relative-date', field: 'Order Date', amount: 1, period: 'months', direction: 'last' },
+      '"last N months" is direction "previous"',
+    ],
+  ])('rejects invalid %s', (_name, relativeDateFilter, expectedText) => {
+    expectSpecFailure(
+      {
+        ...EXAMPLE_1_SPEC,
+        relativeDateFilters: [relativeDateFilter],
+      },
+      expectedText,
+    );
+  });
+
+  it.each([
+    [
+      'unknown categorical filter key',
+      { type: 'categorical', field: 'Region', values: ['West'], members: ['West'] },
+      'Unknown categoricalFilters key "members"',
+    ],
+    [
+      'categorical filter type',
+      { type: 'category', field: 'Region', values: ['West'] },
+      '"categoricalFilters[0].type" value "category"',
+    ],
+    [
+      'categorical filter without field',
+      { type: 'categorical', values: ['West'] },
+      '"categoricalFilters[0].field" is required',
+    ],
+  ])('rejects invalid %s', (_name, categoricalFilter, expectedText) => {
+    expectSpecFailure(
+      {
+        ...EXAMPLE_1_SPEC,
+        categoricalFilters: [categoricalFilter],
+      },
+      expectedText,
+    );
   });
 });
