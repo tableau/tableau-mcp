@@ -10,8 +10,9 @@ vi.mock('./deleteWorkbookConfirmClient.js');
 vi.mock('./deleteDatasourceConfirmClient.js');
 vi.mock('./deleteExtractRefreshTaskConfirmClient.js');
 vi.mock('./updateCloudExtractRefreshTaskConfirmClient.js');
-vi.mock('./showError.js');
+vi.mock('../shared/showError.js');
 
+import { showError } from '../shared/showError.js';
 import {
   isDeleteDatasourceConfirmResult,
   renderDeleteDatasourceConfirm,
@@ -25,7 +26,6 @@ import {
   renderDeleteWorkbookConfirm,
 } from './deleteWorkbookConfirmClient.js';
 import { handleConfirmResult } from './handleConfirmResult.js';
-import { showError } from './showError.js';
 import {
   isUpdateCloudExtractRefreshTaskConfirmResult,
   renderUpdateCloudExtractRefreshTaskConfirm,
