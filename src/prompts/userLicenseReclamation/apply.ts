@@ -90,11 +90,12 @@ const argsSchema = {
 // `Event Date` is DATETIME (UTC) — NOT `Created At` which doesn't exist on TS Events.
 const TS_EVENTS_FIELDS = ['Actor User Name', 'Event Type', 'Event Date'];
 
+// Site Content verified captions — `Owner LUID` does NOT exist on this datasource;
+// join on `Owner Email` against the user email from Step 1.
 const SITE_CONTENT_FIELDS = [
   'Item Type',
   'Item Name',
   'Owner Email',
-  'Owner LUID',
   'Item Parent Project Name',
 ];
 
@@ -151,7 +152,7 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
   callback: (args) => {
     const dryRun = args.dryRun !== 'false';
     const inactiveDays = args.inactiveDays
-      ? parseInt(args.inactiveDays, 10)
+      ? Math.min(parseInt(args.inactiveDays, 10), 3650)
       : getConfiguredInactiveDays();
 
     const suppliedRoles: string[] = args.siteRoles
@@ -243,7 +244,7 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       'Group the results by `Actor User Name` to determine if any candidate user has accessed content ' +
         `within the ${activityLookbackDays}-day lookback window. Match \`Actor User Name\` against the candidate's ` +
         '`name` or `email` field from Step 1. A user is considered inactive if they have NO access event ' +
-        'in the result, or if they were absent from Step 1 results entirely (never logged in).',
+        'in the result, or whose `lastLogin` from Step 1 is null (never signed in).',
       '',
       `Note: TS Events caps at ${TS_EVENTS_LOOKBACK_MAX_DAYS} days lookback on standard Tableau Cloud ` +
         '(365 days with Advanced Management). Users inactive longer than the lookback window may have ' +
@@ -259,7 +260,7 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       '```',
       '',
       'For each inactive user identified in Step 2, count how many workbooks and data sources they own ' +
-        '(matching on `Owner LUID` from the Site Content rows against the user LUID from Step 1). ' +
+        '(matching `Owner Email` from the Site Content rows against the user `email` from Step 1). ' +
         'This is informational — ownership is NOT affected by downgrade. ' +
         'Present the owned-content count per user so the admin can decide whether to reassign ownership ' +
         'separately before or after reclamation.',

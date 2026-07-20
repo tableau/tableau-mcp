@@ -158,7 +158,8 @@ describe('user-license-reclamation-apply prompt', () => {
     const text = await textOf();
     expect(text).toContain('"kind": "site-content"');
     expect(text).toContain('"fieldCaption": "Item Type"');
-    expect(text).toContain('"fieldCaption": "Owner LUID"');
+    expect(text).toContain('"fieldCaption": "Owner Email"');
+    expect(text).not.toContain('"fieldCaption": "Owner LUID"');
     expect(text).toContain('"fieldCaption": "Item Name"');
     expect(text).toContain('"limit": 10000');
   });
