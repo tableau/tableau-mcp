@@ -189,6 +189,12 @@ describe('extractRefreshTasksFilterUtils', () => {
       expect(result[1].id).toBe('task-456');
     });
 
+    it('should keep a bracketed in list intact when combined with another filter', () => {
+      const result = applyTaskFilters(tasks, 'id:in:[task-123,task-456],priority:gte:5');
+
+      expect(result.map(({ id }) => id)).toEqual(['task-123', 'task-456']);
+    });
+
     it('should return empty array when no tasks match', () => {
       const result = applyTaskFilters(tasks, 'priority:gt:100');
       expect(result).toHaveLength(0);
