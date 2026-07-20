@@ -250,7 +250,7 @@ if (!finalLangSmithUpdate.ok) {
   console.warn(`Final LangSmith update failed: ${finalLangSmithUpdate.error}`);
 }
 console.log(`Run dir: ${runDir}`);
-console.log(`To grade locally: npx tsx evals/grade.ts ${runDir}`);
+console.log(`To grade locally: npx tsx ${path.join(EVALS_DIR, 'grade.ts')} ${runDir}`);
 
 function getArgValue(flag: string): string | undefined {
   const index = args.indexOf(flag);
