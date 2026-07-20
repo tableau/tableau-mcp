@@ -58,6 +58,8 @@ export interface BindingProposal {
   template: string;
   title: string;
   bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>; // field = a NAME from SchemaSummary.fields
+  sort?: { by: string; direction: 'asc' | 'desc' };
+  top_n?: number;
   confidence?: number;
 }
 
@@ -232,7 +234,7 @@ interface Resolution {
  * but returns the matched SchemaField directly, so gates 3/4/7 have the resolved
  * field's role/type/datatype/isAggregated (which `resolveField` does not expose).
  */
-function resolveInSummary(s: SchemaSummary, query: string): Resolution {
+export function resolveInSummary(s: SchemaSummary, query: string): Resolution {
   const q = query.trim();
   if (!q) return { kind: 'not_found', candidates: [] };
   const qBare = bareName(q);

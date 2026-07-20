@@ -70,7 +70,7 @@ const VALID_GUIDANCE =
   'confidence floor. No worksheet was created — this is a dry run. To apply it, call bind-template with ' +
   'the same { session, ask, proposal }; it returns these same validated inject args plus an apply_instruction.';
 
-const title = 'Validate a Binding Proposal (Dry Run)';
+const title = 'Validate Proposal';
 
 export const getValidateProposalTool = (
   server: DesktopMcpServer,
@@ -79,7 +79,7 @@ export const getValidateProposalTool = (
     server,
     name: 'validate-proposal',
     title,
-    description: 'Dry-run proposal; no apply. Valid -> bind-template.',
+    description: 'Dry-run proposal.',
     paramsSchema,
     annotations: {
       title,
