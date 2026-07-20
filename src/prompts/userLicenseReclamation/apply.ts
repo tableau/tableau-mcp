@@ -7,13 +7,50 @@ const LIST_USERS_TOOL = 'list-users';
 const ADMIN_INSIGHTS_TOOL = 'query-admin-insights';
 const UPDATE_USER_TOOL = 'update-user';
 
+// TS Events lookback cap on Tableau Cloud (365 with Advanced Management).
+const TS_EVENTS_LOOKBACK_MAX_DAYS = 90;
+
+const LICENSE_RECLAIM_INACTIVE_DAYS_DEFAULT = 90;
+
+// Full set of license-consuming roles on Tableau Cloud.
+// Exact-match filters using only base names (e.g. "Creator") miss compound roles
+// like "SiteAdministratorCreator" — include all variants for zero-config UX.
+const LICENSE_RECLAIM_ROLES_DEFAULT = [
+  'Creator',
+  'Explorer',
+  'ExplorerCanPublish',
+  'SiteAdministratorCreator',
+  'SiteAdministratorExplorer',
+  'Viewer',
+];
+
+function getConfiguredInactiveDays(): number {
+  const raw = process.env.LICENSE_RECLAIM_INACTIVE_DAYS;
+  if (!raw) return LICENSE_RECLAIM_INACTIVE_DAYS_DEFAULT;
+  const n = parseInt(raw, 10);
+  if (Number.isNaN(n) || n < 1 || n > 3650) return LICENSE_RECLAIM_INACTIVE_DAYS_DEFAULT;
+  return n;
+}
+
+function getConfiguredRoles(): string[] {
+  const raw = process.env.LICENSE_RECLAIM_ROLES;
+  if (!raw) return LICENSE_RECLAIM_ROLES_DEFAULT;
+  const roles = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return roles.length > 0 ? roles : LICENSE_RECLAIM_ROLES_DEFAULT;
+}
+
 const argsSchema = {
   inactiveDays: z
     .string()
-    .regex(/^[1-9]\d*$/, 'inactiveDays must be a positive integer')
+    .regex(/^[1-9]\d{0,3}$/, 'inactiveDays must be a positive integer (1–3650)')
     .optional()
     .describe(
-      'Minimum days since last login for a user to be considered inactive. Defaults to 90.',
+      'Minimum days since last login for a user to be considered inactive. ' +
+        `Defaults to ${LICENSE_RECLAIM_INACTIVE_DAYS_DEFAULT}. ` +
+        'Bounded by Admin Insights TS Events 90-day lookback window unless Advanced Management is enabled.',
     ),
   siteRoles: z
     .string()
@@ -24,7 +61,8 @@ const argsSchema = {
     .optional()
     .describe(
       'Optional comma-separated list of site roles to scope reclamation to (e.g. "Viewer, Explorer"). ' +
-        'When omitted, all licensed roles (Creator, Explorer, Viewer) are in scope.',
+        'When omitted, all license-consuming roles are in scope (Creator, Explorer, ExplorerCanPublish, ' +
+        'SiteAdministratorCreator, SiteAdministratorExplorer, Viewer).',
     ),
   userIds: z
     .string()
@@ -47,11 +85,10 @@ const argsSchema = {
     ),
 } as const;
 
-const DEFAULT_INACTIVE_DAYS = 90;
-
-const LICENSED_ROLES = ['Creator', 'Explorer', 'ExplorerCanPublish', 'Viewer'] as const;
-
-const TS_EVENTS_FIELDS = ['Actor User ID', 'Actor User Name', 'Event Type', 'Event Created At'];
+// Field captions verified against live TS Events VDS schema (2026-07-19).
+// `Actor User Name` is a STRING matching the user's Tableau username (email).
+// `Event Date` is DATETIME (UTC) — NOT `Created At` which doesn't exist on TS Events.
+const TS_EVENTS_FIELDS = ['Actor User Name', 'Event Type', 'Event Date'];
 
 const SITE_CONTENT_FIELDS = [
   'Item Type',
@@ -69,18 +106,19 @@ const buildActivityQuery = (inactiveDays: number): Record<string, unknown> => ({
       {
         field: { fieldCaption: 'Event Type' },
         filterType: 'SET',
-        values: ['Login', 'Login (Embedded)'],
+        values: ['Access'],
         exclude: false,
       },
       {
-        field: { fieldCaption: 'Event Created At' },
+        field: { fieldCaption: 'Event Date' },
         filterType: 'DATE',
         periodType: 'DAYS',
         dateRangeType: 'LASTN',
-        rangeN: inactiveDays,
+        rangeN: Math.min(inactiveDays, TS_EVENTS_LOOKBACK_MAX_DAYS),
       },
     ],
   },
+  limit: 10000,
 });
 
 const buildOwnershipQuery = (): Record<string, unknown> => ({
@@ -96,6 +134,7 @@ const buildOwnershipQuery = (): Record<string, unknown> => ({
       },
     ],
   },
+  limit: 10000,
 });
 
 export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
@@ -113,7 +152,7 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
     const dryRun = args.dryRun !== 'false';
     const inactiveDays = args.inactiveDays
       ? parseInt(args.inactiveDays, 10)
-      : DEFAULT_INACTIVE_DAYS;
+      : getConfiguredInactiveDays();
 
     const suppliedRoles: string[] = args.siteRoles
       ? Array.from(
@@ -125,7 +164,7 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
           ),
         )
       : [];
-    const scopeRoles = suppliedRoles.length > 0 ? suppliedRoles : [...LICENSED_ROLES];
+    const scopeRoles = suppliedRoles.length > 0 ? suppliedRoles : getConfiguredRoles();
 
     const userIds: string[] = args.userIds
       ? Array.from(
@@ -137,6 +176,8 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
           ),
         )
       : [];
+
+    const activityLookbackDays = Math.min(inactiveDays, TS_EVENTS_LOOKBACK_MAX_DAYS);
 
     const userIdScope =
       userIds.length > 0
@@ -183,6 +224,8 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       `**Step 1 — User inventory (read-only).** Call \`${LIST_USERS_TOOL}\` to retrieve all users on the site. ` +
         'Filter client-side to users whose `siteRole` is one of the roles in scope above ' +
         'and who hold a licensed role (i.e. not already Unlicensed or ServerAdministrator).',
+      'Users whose `lastLogin` is null (never signed in) are also candidates — they were ' +
+        'provisioned but never used their license. Include them with Days Inactive = "Never".',
       ...(userIds.length > 0
         ? [
             'After the call returns, narrow the working set client-side to the user IDs listed in **Scope** above. ' +
@@ -191,16 +234,22 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
         : []),
       '',
       `**Step 2 — Activity signals (read-only).** Call \`${ADMIN_INSIGHTS_TOOL}\` exactly once with the arguments below ` +
-        "to retrieve login events. Use these to determine each user's most recent login date.",
+        `to retrieve access events within the ${activityLookbackDays}-day lookback window.`,
       '',
       '```json',
       JSON.stringify(buildActivityQuery(inactiveDays), null, 2),
       '```',
       '',
-      'The query returns rows of login events within the lookback window. For each user from Step 1, ' +
-        'find their most recent `Event Created At` among the returned rows (matching on `Actor User ID`). ' +
-        `A user is considered inactive if they have NO login row in the result (meaning no login within ${inactiveDays} days), ` +
-        'or if they were absent from Step 1 results entirely (never logged in).',
+      'Group the results by `Actor User Name` to determine if any candidate user has accessed content ' +
+        `within the ${activityLookbackDays}-day lookback window. Match \`Actor User Name\` against the candidate's ` +
+        '`name` or `email` field from Step 1. A user is considered inactive if they have NO access event ' +
+        'in the result, or if they were absent from Step 1 results entirely (never logged in).',
+      '',
+      `Note: TS Events caps at ${TS_EVENTS_LOOKBACK_MAX_DAYS} days lookback on standard Tableau Cloud ` +
+        '(365 days with Advanced Management). Users inactive longer than the lookback window may have ' +
+        'been active earlier than records suggest — treat candidates as provisional.',
+      'Note: TS Events data is subject to ETL lag (typically 24–48h). A user who accessed content very ' +
+        'recently may not yet appear in TS Events.',
       '',
       `**Step 3 — Ownership inventory (read-only).** Call \`${ADMIN_INSIGHTS_TOOL}\` exactly once with the arguments below ` +
         'to retrieve content ownership data.',
@@ -270,6 +319,8 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       '- Downgrading to Unlicensed does NOT delete or reassign content — ownership is retained.',
       `- \`${UPDATE_USER_TOOL}\` is reversible by re-assigning the user's prior site role.`,
       '- Admin-only, Tableau Cloud. Users the admin excluded or that are missing from the inventory are never touched.',
+      `- TS Events lookback is ${TS_EVENTS_LOOKBACK_MAX_DAYS} days on standard Tableau Cloud. ` +
+        'Data is subject to 24–48h ETL lag — candidates are provisional, not definitive.',
     ].join('\n');
 
     return {
