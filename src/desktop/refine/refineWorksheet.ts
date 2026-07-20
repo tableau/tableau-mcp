@@ -457,6 +457,42 @@ function planSortInsertion(xml: string, direction: SortDirection): SortPlan | nu
   return { ok: true, xml: out, column, direction };
 }
 
+function validateComputedSortShape(xml: string): RefineRefusal | null {
+  const hasNestedSortEl = /<sort\b[^>]*\bclass=(?:'computed-sort'|"computed-sort")[^>]*>/.test(xml);
+  const nonSelfClosingComputedSort = /<computed-sort\b[^>]*[^/]>/.test(xml);
+  if (hasNestedSortEl || nonSelfClosingComputedSort) {
+    return refuse(
+      'the sort uses the nested <sort class="computed-sort"> form; only the safe self-closing <computed-sort/> can be changed.',
+    );
+  }
+
+  if ((xml.match(/<datasource-dependencies\b/g) ?? []).length !== 1) {
+    return refuse('expected exactly one datasource-dependencies block to resolve field captions.');
+  }
+  if (!/<\/datasource-dependencies>/.test(xml)) {
+    return refuse('the worksheet <view> has no <datasource-dependencies> anchor.');
+  }
+  return null;
+}
+
+function planComputedSortByRefs(
+  xml: string,
+  opts: { targetField: string; column: string; using: string; direction: SortDirection },
+): SortByFieldPlan | RefineRefusal {
+  const node = `<computed-sort column='${escapeXml(opts.column)}' direction='${opts.direction}' using='${escapeXml(opts.using)}' />`;
+  const selfClosing = [...xml.matchAll(/<computed-sort\b[^>]*\/>/g)].map((m) => m[0]);
+  const targetSorts = selfClosing.filter((tag) => attrVal(tag, 'column') === opts.column);
+  if (targetSorts.length > 1) {
+    return refuse(`more than one <computed-sort> present for target field "${opts.targetField}".`);
+  }
+
+  const out =
+    targetSorts.length === 1
+      ? xml.replace(targetSorts[0], node)
+      : xml.replace(/<\/datasource-dependencies>/, (m) => `${m}\n      ${node}`);
+  return { ok: true, xml: out, column: opts.column, using: opts.using, direction: opts.direction };
+}
+
 /**
  * Plan a direction change on the worksheet's single self-closing <computed-sort>: flip an
  * existing one, or INSERT one on an unsorted simple bar (see planSortInsertion). Refuses if
@@ -526,20 +562,8 @@ export function planSortByField(
     );
   }
 
-  const hasNestedSortEl = /<sort\b[^>]*\bclass=(?:'computed-sort'|"computed-sort")[^>]*>/.test(xml);
-  const nonSelfClosingComputedSort = /<computed-sort\b[^>]*[^/]>/.test(xml);
-  if (hasNestedSortEl || nonSelfClosingComputedSort) {
-    return refuse(
-      'the sort uses the nested <sort class="computed-sort"> form; only the safe self-closing <computed-sort/> can be changed.',
-    );
-  }
-
-  if ((xml.match(/<datasource-dependencies\b/g) ?? []).length !== 1) {
-    return refuse('expected exactly one datasource-dependencies block to resolve field captions.');
-  }
-  if (!/<\/datasource-dependencies>/.test(xml)) {
-    return refuse('the worksheet <view> has no <datasource-dependencies> anchor.');
-  }
+  const invalidShape = validateComputedSortShape(xml);
+  if (invalidShape) return invalidShape;
 
   const ds = datasourceName(xml);
   if (!ds) return refuse('could not determine the worksheet datasource name.');
@@ -553,18 +577,49 @@ export function planSortByField(
 
   const column = `[${ds}].${target.name}`;
   const using = `[${ds}].${sortBy.name}`;
-  const node = `<computed-sort column='${escapeXml(column)}' direction='${direction}' using='${escapeXml(using)}' />`;
-  const selfClosing = [...xml.matchAll(/<computed-sort\b[^>]*\/>/g)].map((m) => m[0]);
-  const targetSorts = selfClosing.filter((tag) => attrVal(tag, 'column') === column);
-  if (targetSorts.length > 1) {
-    return refuse(`more than one <computed-sort> present for target field "${opts.targetField}".`);
+  return planComputedSortByRefs(xml, { targetField: opts.targetField, column, using, direction });
+}
+
+/**
+ * Bind-template shorthand: sort the sheet's single categorical axis by a schema field.
+ * If the sort field is not already a worksheet CI, callers may pass its schema column_ref.
+ */
+export function planSortByFieldOnCategoricalAxis(
+  xml: string,
+  opts: { sortByField: string; sortByColumnRef?: string; direction?: SortDirection },
+): SortByFieldPlan | RefineRefusal {
+  const direction = opts.direction ?? 'ASC';
+  if (direction !== 'ASC' && direction !== 'DESC') {
+    return refuse(
+      `sort.direction must be "ASC" or "DESC" (got ${JSON.stringify(opts.direction)}).`,
+    );
   }
 
-  const out =
-    targetSorts.length === 1
-      ? xml.replace(targetSorts[0], node)
-      : xml.replace(/<\/datasource-dependencies>/, (m) => `${m}\n      ${node}`);
-  return { ok: true, xml: out, column, using, direction };
+  const invalidShape = validateComputedSortShape(xml);
+  if (invalidShape) return invalidShape;
+
+  const ds = datasourceName(xml);
+  if (!ds) return refuse('could not determine the worksheet datasource name.');
+
+  const cis = parseColumnInstances(xml);
+  const dims = cis.filter(isDimensionCi);
+  if (dims.length === 0) return refuse('could not identify a single categorical axis to sort.');
+  if (dims.length > 1)
+    return refuse('more than one categorical axis is present; sort is ambiguous.');
+
+  const columns = parseColumns(xml);
+  const sortBy = resolveCiByCaption(cis, columns, opts.sortByField, 'sort-by field', isMeasureCi);
+  if (!('name' in sortBy) && !opts.sortByColumnRef) return sortBy;
+  const using = 'name' in sortBy ? `[${ds}].${sortBy.name}` : opts.sortByColumnRef!;
+
+  const target = dims[0];
+  const targetField = fieldCaptionCandidates(target, columns)[0] ?? target.column;
+  return planComputedSortByRefs(xml, {
+    targetField,
+    column: `[${ds}].${target.name}`,
+    using,
+    direction,
+  });
 }
 
 /**

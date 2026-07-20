@@ -18,9 +18,26 @@ describe('proposalSchema — strict object contract', () => {
     expect(proposalSchema.safeParse(valid).success).toBe(true);
   });
 
+  it('accepts optional sort and top_n vocabulary', () => {
+    expect(
+      proposalSchema.safeParse({
+        ...valid,
+        sort: { by: 'Sales', direction: 'desc' },
+        top_n: 10,
+      }).success,
+    ).toBe(true);
+  });
+
   it('REJECTS an unknown top-level key instead of stripping it', () => {
     const result = proposalSchema.safeParse({ ...valid, sneaky: 'value' });
     expect(result.success).toBe(false);
+  });
+
+  it('rejects malformed sort and top_n vocabulary', () => {
+    expect(
+      proposalSchema.safeParse({ ...valid, sort: { by: 'Sales', direction: 'down' } }).success,
+    ).toBe(false);
+    expect(proposalSchema.safeParse({ ...valid, top_n: 0 }).success).toBe(false);
   });
 });
 

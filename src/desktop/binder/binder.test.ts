@@ -375,6 +375,55 @@ describe('binder/bindTemplate — Call 2 (agent proposal)', () => {
     if (res.status === 'escalate') expect(res.reason).toBe('low-confidence');
   });
 
+  it('threads sort and top_n from a valid proposal into bound args', async () => {
+    const proposal: BindingProposal = {
+      template: 'ranking-ordered-bar',
+      title: 'Top Sales by Region',
+      bindings: [
+        { slot_id: 'region', field: 'Region' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+      sort: { by: 'Sales', direction: 'desc' },
+      top_n: 10,
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'top 10 regions by sales',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.sort).toEqual({ by: 'Sales', direction: 'desc' });
+      expect(res.args.top_n).toBe(10);
+    }
+  });
+
+  it('bad sort.by escalates before apply can use a broken field', async () => {
+    const proposal: BindingProposal = {
+      template: 'ranking-ordered-bar',
+      title: 'Top Sales by Region',
+      bindings: [
+        { slot_id: 'region', field: 'Region' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+      sort: { by: 'Definitely Not A Field', direction: 'desc' },
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'regions by sales',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('escalate');
+    if (res.status === 'escalate') {
+      expect(res.reason).toBe('field-not-found');
+      expect(res.blockers[0].detail).toContain('Definitely Not A Field');
+    }
+  });
+
   it('unresolvable field → escalate field-not-found (carries candidates)', async () => {
     const proposal: BindingProposal = {
       template: 'ranking-ordered-bar',
@@ -458,6 +507,29 @@ describe('binder/PROPOSAL_OUTPUT_SCHEMA — optional derivation field', () => {
     expect(itemProps.derivation.enum).toContain('avg');
     // derivation is optional: not in the required list.
     expect(schema.properties.bindings.items.required).not.toContain('derivation');
+  });
+
+  it('advertises optional sort and top_n proposal fields', () => {
+    const schema = PROPOSAL_OUTPUT_SCHEMA as {
+      properties: Record<string, unknown>;
+      required: string[];
+    };
+    expect(schema.properties.sort).toEqual({
+      type: 'object',
+      additionalProperties: false,
+      required: ['by', 'direction'],
+      properties: {
+        by: { type: 'string', description: 'Sort field.' },
+        direction: { type: 'string', enum: ['asc', 'desc'], description: 'Sort dir.' },
+      },
+    });
+    expect(schema.properties.top_n).toEqual({
+      type: 'integer',
+      minimum: 1,
+      description: 'Top N.',
+    });
+    expect(schema.required).not.toContain('sort');
+    expect(schema.required).not.toContain('top_n');
   });
 });
 

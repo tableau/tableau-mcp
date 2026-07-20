@@ -81,7 +81,7 @@ describe('validateProposalTool', () => {
       minConfidence: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Validate a Binding Proposal (Dry Run)',
+      title: 'Validate Proposal',
       readOnlyHint: true,
       openWorldHint: false,
     });
@@ -201,6 +201,22 @@ describe('validateProposalTool', () => {
     );
     expect(
       schema.safeParse({ session: '1', ask: 'bar chart', proposal: sampleProposal }).success,
+    ).toBe(true);
+  });
+
+  it('accepts proposal sort and top_n through the shared schema', async () => {
+    const tool = getValidateProposalTool(new DesktopMcpServer());
+    const schema = z.object(await Provider.from(tool.paramsSchema));
+    expect(
+      schema.safeParse({
+        session: '1',
+        ask: 'top 10 bar chart',
+        proposal: {
+          ...sampleProposal,
+          sort: { by: 'Sales', direction: 'desc' },
+          top_n: 10,
+        },
+      }).success,
     ).toBe(true);
   });
 });
