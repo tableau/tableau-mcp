@@ -1,20 +1,14 @@
 import { Err, Ok, Result } from 'ts-results-es';
-import { z } from 'zod';
 
+import { externalApiReads } from '../../externalApi/externalApiReads.js';
+import { SummaryData } from '../../externalApi/types.js';
 import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
 import { findByName, listWorksheetItems } from './sheetItems.js';
 
-const summaryDataSchema = z.object({
-  columns: z
-    .array(z.object({ name: z.string().optional(), dataType: z.string().optional() }).passthrough())
-    .optional(),
-  rows: z.array(z.array(z.unknown())).optional(),
-});
-
-export type WorksheetSummaryData = z.infer<typeof summaryDataSchema>;
+export type WorksheetSummaryData = SummaryData;
 
 export type GetWorksheetSummaryDataError = { type: 'no-worksheet-found' } & { message: string };
 
@@ -46,16 +40,14 @@ export async function getWorksheetSummaryData({
     });
   }
 
-  const result = await executor.executeCommand({
-    namespace: 'tabui',
-    command: 'get-worksheet-summary-data',
-    args: { id: worksheet.id, ...(maxRows !== undefined ? { maxRows } : {}) },
-    schema: summaryDataSchema,
+  const result = await externalApiReads(executor).getWorksheetSummaryData(
+    worksheet.id,
+    { maxRows },
     signal,
-  });
+  );
   if (result.isErr()) {
     return Err({ type: 'execute-command-error', error: result.error });
   }
 
-  return Ok(result.value.parsedResult);
+  return Ok(result.value);
 }

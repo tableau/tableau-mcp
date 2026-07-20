@@ -1,54 +1,33 @@
 import { Err, Ok } from 'ts-results-es';
 
 import invariant from '../../../utils/invariant.js';
-import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
+import { ExecuteCommandError } from '../../toolExecutor/toolExecutor.js';
+import { fakeExternalReadsExecutor } from './externalReadsMock.js';
 import { getWorksheetSummaryData } from './getWorksheetSummaryData.js';
-
-vi.mock('../../toolExecutor/localToolExecutor.js');
 
 describe('getWorksheetSummaryData', () => {
   const mockSignal = new AbortController().signal;
-
-  function executorFor(
-    worksheets: Array<{ id: string; name: string }>,
-    summaryById: Record<string, { columns?: unknown; rows?: unknown }> = {},
-  ): LocalExecutor {
-    return {
-      executeCommand: vi.fn().mockImplementation((params) => {
-        if (params.command === 'list-worksheets') {
-          return Promise.resolve(
-            Ok({ command_id: 'cmd-1', status: 'completed', parsedResult: { worksheets } }),
-          );
-        }
-        if (params.command === 'get-worksheet-summary-data') {
-          return Promise.resolve(
-            Ok({
-              command_id: 'cmd-2',
-              status: 'completed',
-              parsedResult: summaryById[params.args.id] ?? {},
-            }),
-          );
-        }
-        return Promise.resolve(Err({ type: 'command-failed', error: { code: 'x', message: 'x' } }));
-      }),
-    } as unknown as LocalExecutor;
-  }
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('resolves the name to an id and returns the summary data', async () => {
-    const mockExecutor = executorFor([{ id: 'w1', name: 'Sales' }], {
-      w1: {
+    const getSummary = vi.fn().mockResolvedValue(
+      Ok({
         columns: [{ name: 'Category', dataType: 'string' }],
         rows: [['Furniture'], ['Technology']],
-      },
+      }),
+    );
+    const executor = fakeExternalReadsExecutor({
+      listWorksheets: () =>
+        Promise.resolve(Ok({ worksheets: [{ id: 'w1', name: 'Sales', hidden: false }] })),
+      getWorksheetSummaryData: getSummary,
     });
 
     const result = await getWorksheetSummaryData({
       worksheetName: 'Sales',
-      executor: mockExecutor,
+      executor,
       signal: mockSignal,
     });
 
@@ -56,37 +35,36 @@ describe('getWorksheetSummaryData', () => {
     if (result.isOk()) {
       expect(result.value.rows).toEqual([['Furniture'], ['Technology']]);
     }
-
-    expect(mockExecutor.executeCommand).toHaveBeenCalledWith({
-      namespace: 'tabui',
-      command: 'get-worksheet-summary-data',
-      args: { id: 'w1' },
-      schema: expect.any(Object),
-      signal: mockSignal,
-    });
+    expect(getSummary).toHaveBeenCalledWith('w1', { maxRows: undefined }, mockSignal);
   });
 
   it('forwards maxRows when provided', async () => {
-    const mockExecutor = executorFor([{ id: 'w1', name: 'Sales' }], { w1: { rows: [] } });
+    const getSummary = vi.fn().mockResolvedValue(Ok({ rows: [] }));
+    const executor = fakeExternalReadsExecutor({
+      listWorksheets: () =>
+        Promise.resolve(Ok({ worksheets: [{ id: 'w1', name: 'Sales', hidden: false }] })),
+      getWorksheetSummaryData: getSummary,
+    });
 
     await getWorksheetSummaryData({
       worksheetName: 'Sales',
       maxRows: 100,
-      executor: mockExecutor,
+      executor,
       signal: mockSignal,
     });
 
-    expect(mockExecutor.executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({ args: { id: 'w1', maxRows: 100 } }),
-    );
+    expect(getSummary).toHaveBeenCalledWith('w1', { maxRows: 100 }, mockSignal);
   });
 
   it('returns no-worksheet-found when the name does not match', async () => {
-    const mockExecutor = executorFor([{ id: 'w9', name: 'Other' }]);
+    const executor = fakeExternalReadsExecutor({
+      listWorksheets: () =>
+        Promise.resolve(Ok({ worksheets: [{ id: 'w9', name: 'Other', hidden: false }] })),
+    });
 
     const result = await getWorksheetSummaryData({
       worksheetName: 'Sales',
-      executor: mockExecutor,
+      executor,
       signal: mockSignal,
     });
 
@@ -98,15 +76,18 @@ describe('getWorksheetSummaryData', () => {
     }
   });
 
-  it('returns execute-command-error when the list command fails', async () => {
-    const error = { type: 'command-failed' as const, error: { code: 'ERROR', message: 'Failed' } };
-    const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(Err(error)),
-    } as unknown as LocalExecutor;
+  it('returns execute-command-error when the list call fails', async () => {
+    const error: ExecuteCommandError = {
+      type: 'command-failed',
+      error: { code: 'ERROR', message: 'Failed', recoverable: false },
+    };
+    const executor = fakeExternalReadsExecutor({
+      listWorksheets: () => Promise.resolve(Err(error)),
+    });
 
     const result = await getWorksheetSummaryData({
       worksheetName: 'Sales',
-      executor: mockExecutor,
+      executor,
       signal: mockSignal,
     });
 

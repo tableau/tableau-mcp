@@ -5,7 +5,9 @@ import * as configModule from '../../../config.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import * as xmlToJsonModule from '../../libraries/workbook-serialization-converter/index.js';
 import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
+import { ExecuteCommandError, ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import * as validationRegistry from '../../validation/registry.js';
+import { fakeExternalReadsExecutor } from './externalReadsMock.js';
 import { loadWorkbookXml } from './loadWorkbookXml.js';
 
 vi.mock('fs');
@@ -438,17 +440,19 @@ describe('loadWorkbookXml (External Client API transport, TABLEAU_EXTERNAL_API g
     '<worksheets><worksheet name="Sheet 1"><table /></worksheet></worksheets>' +
     '</workbook>';
 
-  // Executor that records every dispatched command so the apply is assertable.
+  // Reads executor that records each applyWorkbookDocument POST so the apply is assertable.
   function dispatchingExecutor(): {
-    executor: LocalExecutor;
-    calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }>;
+    executor: ToolExecutor;
+    posted: string[];
   } {
-    const calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }> = [];
-    const executeCommand = vi.fn(async (params: any) => {
-      calls.push({ namespace: params.namespace, command: params.command, args: params.args });
-      return Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' });
+    const posted: string[] = [];
+    const executor = fakeExternalReadsExecutor({
+      applyWorkbookDocument: (xml: string) => {
+        posted.push(xml);
+        return Promise.resolve(Ok(undefined));
+      },
     });
-    return { executor: { executeCommand } as unknown as LocalExecutor, calls };
+    return { executor, posted };
   }
 
   beforeEach(() => {
@@ -466,20 +470,14 @@ describe('loadWorkbookXml (External Client API transport, TABLEAU_EXTERNAL_API g
   });
 
   it('applies via a single whole-workbook POST with no deletes', async () => {
-    const { executor, calls } = dispatchingExecutor();
+    const { executor, posted } = dispatchingExecutor();
 
     const result = await loadWorkbookXml({ xml: validXml, executor, signal: mockSignal });
 
     expect(result.isOk()).toBe(true);
 
-    // The POST replaces the open workbook; there is no client-side prune.
-    expect(calls.find((c) => c.command === 'delete-sheet')).toBeUndefined();
-    expect(calls.find((c) => c.command === 'save-underlying-metadata')).toBeUndefined();
-
-    const posts = calls.filter((c) => c.command === 'load-underlying-metadata');
-    expect(posts).toHaveLength(1);
-    expect(posts[0].namespace).toBe('tabui');
-    expect(posts[0].args).toEqual({ text: validXml });
+    // The POST replaces the open workbook; there is no client-side prune or read-back.
+    expect(posted).toEqual([validXml]);
   });
 
   it('should return error when XML is invalid', async () => {
@@ -529,17 +527,10 @@ describe('loadWorkbookXml (External Client API transport, TABLEAU_EXTERNAL_API g
   });
 
   it('should return execute-command-error when the apply POST fails', async () => {
-    const error = { type: 'command-timed-out' as const, error: 'Timeout' };
-    const executeCommand = vi.fn(async (params: any) => {
-      if (params.command === 'save-underlying-metadata') {
-        return Ok({ command_id: 'cmd-get', status: 'completed', parsedResult: { text: validXml } });
-      }
-      if (params.command === 'load-underlying-metadata') {
-        return Err(error);
-      }
-      return Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' });
+    const error: ExecuteCommandError = { type: 'command-timed-out', error: 'Timeout' };
+    const mockExecutor = fakeExternalReadsExecutor({
+      applyWorkbookDocument: () => Promise.resolve(Err(error)),
     });
-    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
 
     const result = await loadWorkbookXml({
       xml: validXml,
@@ -555,7 +546,7 @@ describe('loadWorkbookXml (External Client API transport, TABLEAU_EXTERNAL_API g
   });
 
   it('should trim whitespace from XML before validating and applying', async () => {
-    const { executor, calls } = dispatchingExecutor();
+    const { executor, posted } = dispatchingExecutor();
 
     const result = await loadWorkbookXml({
       xml: `\n      ${validXml}\n    `,
@@ -565,8 +556,7 @@ describe('loadWorkbookXml (External Client API transport, TABLEAU_EXTERNAL_API g
 
     expect(result.isOk()).toBe(true);
     expect(validationRegistry.runValidation).toHaveBeenCalledWith(validXml, 'workbook');
-    const post = calls.find((c) => c.command === 'load-underlying-metadata');
-    expect(post?.args).toEqual({ text: validXml });
+    expect(posted).toEqual([validXml]);
   });
 
   it('should proceed with warnings but not errors', async () => {
@@ -575,11 +565,11 @@ describe('loadWorkbookXml (External Client API transport, TABLEAU_EXTERNAL_API g
       issues: [{ ruleId: 'test-rule', severity: 'warning', message: 'Deprecated element' }],
     });
 
-    const { executor, calls } = dispatchingExecutor();
+    const { executor, posted } = dispatchingExecutor();
 
     const result = await loadWorkbookXml({ xml: validXml, executor, signal: mockSignal });
 
     expect(result.isOk()).toBe(true);
-    expect(calls.some((c) => c.command === 'load-underlying-metadata')).toBe(true);
+    expect(posted).toEqual([validXml]);
   });
 });

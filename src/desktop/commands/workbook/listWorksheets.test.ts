@@ -2,6 +2,8 @@ import { Err, Ok } from 'ts-results-es';
 
 import * as configModule from '../../../config.desktop.js';
 import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
+import { ExecuteCommandError, ToolExecutor } from '../../toolExecutor/toolExecutor.js';
+import { fakeExternalReadsExecutor } from './externalReadsMock.js';
 import { listWorksheets } from './listWorksheets.js';
 
 vi.mock('../../toolExecutor/localToolExecutor.js');
@@ -158,16 +160,11 @@ describe('listWorksheets (Agent API transport, default)', () => {
 describe('listWorksheets (External Client API transport, TABLEAU_EXTERNAL_API gate)', () => {
   const mockSignal = new AbortController().signal;
 
-  function executorReturning(worksheets: Array<{ id: string; name: string }>): LocalExecutor {
-    return {
-      executeCommand: vi.fn().mockResolvedValue(
-        Ok({
-          command_id: 'cmd-123',
-          status: 'completed',
-          parsedResult: { worksheets },
-        }),
-      ),
-    } as unknown as LocalExecutor;
+  function executorReturning(worksheets: Array<{ id: string; name: string }>): ToolExecutor {
+    return fakeExternalReadsExecutor({
+      listWorksheets: () =>
+        Promise.resolve(Ok({ worksheets: worksheets.map((w) => ({ hidden: false, ...w })) })),
+    });
   }
 
   beforeEach(() => {
@@ -199,13 +196,6 @@ describe('listWorksheets (External Client API transport, TABLEAU_EXTERNAL_API ga
         worksheets: ['Sheet 1', 'Sales', 'Analysis'],
       });
     }
-
-    expect(mockExecutor.executeCommand).toHaveBeenCalledWith({
-      namespace: 'tabui',
-      command: 'list-worksheets',
-      schema: expect.any(Object),
-      signal: mockSignal,
-    });
   });
 
   it('should return empty list when no worksheets exist', async () => {
@@ -219,11 +209,14 @@ describe('listWorksheets (External Client API transport, TABLEAU_EXTERNAL_API ga
     }
   });
 
-  it('should return error when the list command fails', async () => {
-    const error = { type: 'command-failed' as const, error: { code: 'ERROR', message: 'Failed' } };
-    const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(Err(error)),
-    } as unknown as LocalExecutor;
+  it('should return error when the list call fails', async () => {
+    const error: ExecuteCommandError = {
+      type: 'command-failed',
+      error: { code: 'ERROR', message: 'Failed', recoverable: false },
+    };
+    const mockExecutor = fakeExternalReadsExecutor({
+      listWorksheets: () => Promise.resolve(Err(error)),
+    });
 
     const result = await listWorksheets({ executor: mockExecutor, signal: mockSignal });
 

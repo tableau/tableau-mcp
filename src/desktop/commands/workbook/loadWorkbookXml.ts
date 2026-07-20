@@ -5,6 +5,7 @@ import { getDesktopConfig } from '../../../config.desktop.js';
 import { log } from '../../../logging/logger.js';
 import { GetCommandStatusResponse } from '../../../sdks/desktop/agentApi/types.js';
 import { DesktopCache } from '../../cache.js';
+import { externalApiReads } from '../../externalApi/externalApiReads.js';
 import { xmlToJson } from '../../libraries/workbook-serialization-converter';
 import {
   ExecuteCommandError,
@@ -378,19 +379,12 @@ export async function applyWorkbookText({
   executor,
   signal,
 }: { xml: string } & WithExecutorAndAbortSignal): Promise<Result<void, ExecuteCommandError>> {
-  const result = await executor.executeCommand({
-    namespace: 'tabui',
-    command: 'load-underlying-metadata',
-    signal,
-    args: {
-      text: xml,
-    },
-  });
+  const result = await externalApiReads(executor).applyWorkbookDocument(xml, signal);
 
   if (result.isErr()) {
     log({
       level: 'error',
-      message: 'load-underlying-metadata (text) failed',
+      message: 'apply workbook document (POST /v0/workbook/document) failed',
       logger: 'workbookCommands',
       data: { error: result.error },
     });
@@ -399,12 +393,8 @@ export async function applyWorkbookText({
 
   log({
     level: 'info',
-    message: 'load-underlying-metadata (text) completed',
+    message: 'apply workbook document (POST /v0/workbook/document) completed',
     logger: 'workbookCommands',
-    data: {
-      commandId: result.value.command_id,
-      hasResult: !!result.value.result,
-    },
   });
 
   return Ok.EMPTY;

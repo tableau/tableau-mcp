@@ -2,6 +2,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getDesktopConfig } from '../../../config.desktop.js';
+import { externalApiReads } from '../../externalApi/externalApiReads.js';
 import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
@@ -89,16 +90,10 @@ async function getDashboardXmlViaExternalApi({
     });
   }
 
-  const result = await executor.executeCommand({
-    namespace: 'tabui',
-    command: 'get-dashboard-document',
-    args: { id: dashboard.id },
-    schema: z.object({ text: z.string() }),
-    signal,
-  });
+  const result = await externalApiReads(executor).getDashboardDocument(dashboard.id, signal);
   if (result.isErr()) {
     return Err({ type: 'execute-command-error', error: result.error });
   }
 
-  return Ok(result.value.parsedResult.text);
+  return Ok(result.value.xml);
 }

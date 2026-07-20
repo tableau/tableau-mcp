@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 import * as logger from '../../logging/logger.js';
 import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
 import { MockExternalApiServer, startMockExternalApiServer } from './mockExternalApiServer.js';
@@ -87,48 +85,7 @@ describe('ExternalApiToolExecutor', () => {
   });
 
   describe('executeCommand routing', () => {
-    it('routes save-underlying-metadata to GET /v0/workbook/document', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'save-underlying-metadata',
-        args: { 'is-json': false },
-        schema: z.object({ text: z.string() }),
-        signal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      expect(result.unwrap().parsedResult.text).toBe('<workbook><from-desktop /></workbook>');
-
-      const last = server.requests.at(-1);
-      expect(last?.method).toBe('GET');
-      expect(last?.path).toBe('/v0/workbook/document');
-    });
-
-    it('routes load-underlying-metadata (text) to POST /v0/workbook/document', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const xml = '<workbook><applied /></workbook>';
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'load-underlying-metadata',
-        args: { text: xml },
-        signal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      expect(result.unwrap().status).toBe('completed');
-
-      const last = server.requests.at(-1);
-      expect(last?.method).toBe('POST');
-      expect(last?.path).toBe('/v0/workbook/document');
-      expect(last?.body).toBe(xml);
-    });
-
-    it('routes any other command to POST /v0/app:invokeCommand', async () => {
+    it('routes any command to POST /v0/app:invokeCommand', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
@@ -146,138 +103,6 @@ describe('ExternalApiToolExecutor', () => {
       const last = server.requests.at(-1);
       expect(last?.method).toBe('POST');
       expect(last?.path).toBe('/v0/app:invokeCommand');
-    });
-
-    it('routes list-worksheets to GET /v0/workbook/worksheets', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'list-worksheets',
-        schema: z.object({ worksheets: z.array(z.object({ id: z.string(), name: z.string() })) }),
-        signal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      expect(result.unwrap().parsedResult.worksheets[0]).toMatchObject({
-        id: 'w1',
-        name: 'Sheet 1',
-      });
-
-      const last = server.requests.at(-1);
-      expect(last?.method).toBe('GET');
-      expect(last?.path).toBe('/v0/workbook/worksheets');
-    });
-
-    it('routes get-worksheet-document to GET /v0/workbook/worksheets/{id}/document', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'get-worksheet-document',
-        args: { id: 'w1' },
-        schema: z.object({ text: z.string() }),
-        signal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      expect(result.unwrap().parsedResult.text).toContain("<worksheet name='w1'>");
-      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/worksheets/w1/document');
-    });
-
-    it('routes get-worksheet-summary-data to GET /v0/workbook/worksheets/{id}/summaryData', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'get-worksheet-summary-data',
-        args: { id: 'w1', maxRows: 5 },
-        schema: z.object({ rows: z.array(z.array(z.unknown())) }),
-        signal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      expect(result.unwrap().parsedResult.rows).toHaveLength(2);
-      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/worksheets/w1/summaryData');
-    });
-
-    it('routes list-dashboards to GET /v0/workbook/dashboards', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'list-dashboards',
-        schema: z.object({ dashboards: z.array(z.object({ id: z.string(), name: z.string() })) }),
-        signal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/dashboards');
-    });
-
-    it('routes get-dashboard-document to GET /v0/workbook/dashboards/{id}/document', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'get-dashboard-document',
-        args: { id: 'd1' },
-        schema: z.object({ text: z.string() }),
-        signal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/dashboards/d1/document');
-    });
-
-    it.each([
-      ['get-worksheet', { id: 'w1' }, '/v0/workbook/worksheets/w1'],
-      ['get-dashboard', { id: 'd1' }, '/v0/workbook/dashboards/d1'],
-      ['list-storyboards', {}, '/v0/workbook/storyboards'],
-      ['get-storyboard', { id: 's1' }, '/v0/workbook/storyboards/s1'],
-      ['get-storyboard-document', { id: 's1' }, '/v0/workbook/storyboards/s1/document'],
-      ['get-workbook-inventory', {}, '/v0/workbook'],
-      ['list-workbook-datasources', {}, '/v0/workbook/datasources'],
-      ['get-site', {}, '/v0/site'],
-      ['list-site-datasources', {}, '/v0/site/datasources'],
-      ['list-site-workbooks', {}, '/v0/site/workbooks'],
-    ])('routes %s to GET %s', async (command, args, expectedPath) => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command,
-        args,
-        signal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      expect(server.requests.at(-1)?.method).toBe('GET');
-      expect(server.requests.at(-1)?.path).toBe(expectedPath);
-    });
-
-    it('routes validate-workbook-document to POST /v0/workbook/document:validate', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'validate-workbook-document',
-        args: { text: '<workbook />' },
-        schema: z.object({ isValid: z.boolean() }),
-        signal,
-      });
-
-      expect(result.isOk()).toBe(true);
-      expect(result.unwrap().parsedResult.isValid).toBe(true);
-      expect(server.requests.at(-1)?.method).toBe('POST');
-      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/document:validate');
     });
 
     it('maps a failed operation envelope to a command-failed error', async () => {
@@ -342,16 +167,10 @@ describe('ExternalApiToolExecutor', () => {
       const executor = new ExternalApiToolExecutor({ discover });
       await executor.start();
 
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'save-underlying-metadata',
-        args: { 'is-json': false },
-        schema: z.object({ text: z.string() }),
-        signal,
-      });
+      const result = await executor.getWorkbookDocument(signal);
 
       expect(result.isOk()).toBe(true);
-      expect(result.unwrap().parsedResult.text).toBe('<workbook><from-desktop /></workbook>');
+      expect(result.unwrap().xml).toBe('<workbook><from-desktop /></workbook>');
       expect(discover).toHaveBeenCalledTimes(2);
     });
 
@@ -368,13 +187,7 @@ describe('ExternalApiToolExecutor', () => {
         const executor = new ExternalApiToolExecutor({ pid: 999, discover });
         await executor.start();
 
-        const result = await executor.executeCommand({
-          namespace: 'tabui',
-          command: 'save-underlying-metadata',
-          args: { 'is-json': false },
-          schema: z.object({ text: z.string() }),
-          signal,
-        });
+        const result = await executor.getWorkbookDocument(signal);
 
         expect(result.isErr()).toBe(true);
         const error = result.unwrapErr();
@@ -403,6 +216,132 @@ describe('ExternalApiToolExecutor', () => {
       expect(result.isErr()).toBe(true);
       // start() + one rescan = 2 discover calls, no infinite loop.
       expect(discover).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('typed endpoint methods (ExternalApiReads)', () => {
+    const start = async (): Promise<ExternalApiToolExecutor> => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+      return executor;
+    };
+
+    it('getWorkbookDocument hits GET /v0/workbook/document', async () => {
+      const executor = await start();
+      const result = await executor.getWorkbookDocument(signal);
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().xml).toBe('<workbook><from-desktop /></workbook>');
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/document');
+    });
+
+    it('applyWorkbookDocument POSTs the XML to /v0/workbook/document', async () => {
+      const executor = await start();
+      const xml = '<workbook><applied /></workbook>';
+      const result = await executor.applyWorkbookDocument(xml, signal);
+      expect(result.isOk()).toBe(true);
+      const last = server.requests.at(-1);
+      expect(last?.method).toBe('POST');
+      expect(last?.path).toBe('/v0/workbook/document');
+      expect(last?.body).toBe(xml);
+    });
+
+    it('getWorksheetSummaryData hits the summaryData route and decodes rows', async () => {
+      const executor = await start();
+      const result = await executor.getWorksheetSummaryData('w1', { maxRows: 5 }, signal);
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().rows).toHaveLength(2);
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/worksheets/w1/summaryData');
+    });
+
+    it.each([
+      [
+        'listWorksheets',
+        (e: ExternalApiToolExecutor) => e.listWorksheets(signal),
+        '/v0/workbook/worksheets',
+      ],
+      [
+        'getWorksheet',
+        (e: ExternalApiToolExecutor) => e.getWorksheet('w1', signal),
+        '/v0/workbook/worksheets/w1',
+      ],
+      [
+        'getWorksheetDocument',
+        (e: ExternalApiToolExecutor) => e.getWorksheetDocument('w1', signal),
+        '/v0/workbook/worksheets/w1/document',
+      ],
+      [
+        'listDashboards',
+        (e: ExternalApiToolExecutor) => e.listDashboards(signal),
+        '/v0/workbook/dashboards',
+      ],
+      [
+        'getDashboard',
+        (e: ExternalApiToolExecutor) => e.getDashboard('d1', signal),
+        '/v0/workbook/dashboards/d1',
+      ],
+      [
+        'getDashboardDocument',
+        (e: ExternalApiToolExecutor) => e.getDashboardDocument('d1', signal),
+        '/v0/workbook/dashboards/d1/document',
+      ],
+      [
+        'listStoryboards',
+        (e: ExternalApiToolExecutor) => e.listStoryboards(signal),
+        '/v0/workbook/storyboards',
+      ],
+      [
+        'getStoryboard',
+        (e: ExternalApiToolExecutor) => e.getStoryboard('s1', signal),
+        '/v0/workbook/storyboards/s1',
+      ],
+      [
+        'getStoryboardDocument',
+        (e: ExternalApiToolExecutor) => e.getStoryboardDocument('s1', signal),
+        '/v0/workbook/storyboards/s1/document',
+      ],
+      [
+        'getWorkbookInventory',
+        (e: ExternalApiToolExecutor) => e.getWorkbookInventory(signal),
+        '/v0/workbook',
+      ],
+      [
+        'listWorkbookDatasources',
+        (e: ExternalApiToolExecutor) => e.listWorkbookDatasources(signal),
+        '/v0/workbook/datasources',
+      ],
+      ['getSite', (e: ExternalApiToolExecutor) => e.getSite(signal), '/v0/site'],
+      [
+        'listSiteDatasources',
+        (e: ExternalApiToolExecutor) => e.listSiteDatasources(signal),
+        '/v0/site/datasources',
+      ],
+      [
+        'listSiteWorkbooks',
+        (e: ExternalApiToolExecutor) => e.listSiteWorkbooks(signal),
+        '/v0/site/workbooks',
+      ],
+    ])('%s hits GET %s', async (_label, call, expectedPath) => {
+      const executor = await start();
+      const result = await call(executor);
+      expect(result.isOk()).toBe(true);
+      expect(server.requests.at(-1)?.method).toBe('GET');
+      expect(server.requests.at(-1)?.path).toBe(expectedPath);
+    });
+
+    it('validateWorkbookDocument POSTs to /v0/workbook/document:validate', async () => {
+      const executor = await start();
+      const result = await executor.validateWorkbookDocument('<workbook />', signal);
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().isValid).toBe(true);
+      expect(server.requests.at(-1)?.method).toBe('POST');
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/document:validate');
+    });
+
+    it('maps a transport problem to a command-failed ExecuteCommandError', async () => {
+      const executor = await start();
+      const result = await executor.getWorksheetDocument('nope', signal);
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('command-failed');
     });
   });
 

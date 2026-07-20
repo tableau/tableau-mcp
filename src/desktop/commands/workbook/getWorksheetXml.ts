@@ -2,6 +2,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getDesktopConfig } from '../../../config.desktop.js';
+import { externalApiReads } from '../../externalApi/externalApiReads.js';
 import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
@@ -130,16 +131,10 @@ async function getWorksheetXmlViaExternalApi({
     });
   }
 
-  const result = await executor.executeCommand({
-    namespace: 'tabui',
-    command: 'get-worksheet-document',
-    args: { id: worksheet.id },
-    schema: z.object({ text: z.string() }),
-    signal,
-  });
+  const result = await externalApiReads(executor).getWorksheetDocument(worksheet.id, signal);
   if (result.isErr()) {
     return Err({ type: 'execute-command-error', error: result.error });
   }
 
-  return Ok(result.value.parsedResult.text);
+  return Ok(result.value.xml);
 }

@@ -3,6 +3,8 @@ import { Err, Ok } from 'ts-results-es';
 import * as configModule from '../../../config.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
+import { ExecuteCommandError, ToolExecutor } from '../../toolExecutor/toolExecutor.js';
+import { fakeExternalReadsExecutor } from './externalReadsMock.js';
 import { getWorksheetXml } from './getWorksheetXml.js';
 
 vi.mock('../../toolExecutor/localToolExecutor.js');
@@ -227,31 +229,22 @@ describe('getWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API g
   const mockSignal = new AbortController().signal;
   const worksheetName = 'Sheet 1';
 
-  // Serves the typed reads the external branch issues: list-worksheets (name→id resolve, also
-  // used by the did-you-mean miss path) and get-worksheet-document (returns the sheet's XML).
   function executorFor(
     worksheets: Array<{ id: string; name: string }>,
     documentById: Record<string, string> = {},
-  ): LocalExecutor {
-    return {
-      executeCommand: vi.fn().mockImplementation((params) => {
-        if (params.command === 'list-worksheets') {
-          return Promise.resolve(
-            Ok({ command_id: 'cmd-1', status: 'completed', parsedResult: { worksheets } }),
-          );
-        }
-        if (params.command === 'get-worksheet-document') {
-          return Promise.resolve(
-            Ok({
-              command_id: 'cmd-2',
-              status: 'completed',
-              parsedResult: { text: documentById[params.args.id] ?? '' },
-            }),
-          );
-        }
-        return Promise.resolve(Err({ type: 'command-failed', error: { code: 'x', message: 'x' } }));
-      }),
-    } as unknown as LocalExecutor;
+  ): ToolExecutor {
+    return fakeExternalReadsExecutor({
+      listWorksheets: () =>
+        Promise.resolve(Ok({ worksheets: worksheets.map((w) => ({ hidden: false, ...w })) })),
+      getWorksheetDocument: (id: string) =>
+        Promise.resolve(
+          Ok({
+            xml: documentById[id] ?? '',
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          }),
+        ),
+    });
   }
 
   beforeEach(() => {
@@ -286,24 +279,16 @@ describe('getWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API g
     if (result.isOk()) {
       expect(result.value).toContain('name="Sheet 1"');
     }
-
-    expect(mockExecutor.executeCommand).toHaveBeenCalledWith({
-      namespace: 'tabui',
-      command: 'get-worksheet-document',
-      args: { id: 'w1' },
-      schema: expect.any(Object),
-      signal: mockSignal,
-    });
   });
 
-  it('should return execute-command-error when the list command fails', async () => {
-    const error = {
-      type: 'command-failed' as const,
-      error: { code: 'ERROR', message: 'Fetch failed' },
+  it('should return execute-command-error when the list call fails', async () => {
+    const error: ExecuteCommandError = {
+      type: 'command-failed',
+      error: { code: 'ERROR', message: 'Fetch failed', recoverable: false },
     };
-    const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(Err(error)),
-    } as unknown as LocalExecutor;
+    const mockExecutor = fakeExternalReadsExecutor({
+      listWorksheets: () => Promise.resolve(Err(error)),
+    });
 
     const result = await getWorksheetXml({
       worksheetName,

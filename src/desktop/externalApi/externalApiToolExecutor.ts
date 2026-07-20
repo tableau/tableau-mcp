@@ -14,36 +14,28 @@ import {
   ExternalApiClient,
   ExternalApiClientOptions,
   SummaryDataOptions,
+  WorkbookDocument,
 } from './externalApiClient.js';
+import { ExternalApiReads } from './externalApiReads.js';
 import {
+  DashboardItem,
+  DashboardList,
+  DatasourceList,
   ExternalApiError,
   ExternalApiInstance,
   OperationEnvelope,
   ProblemResponse,
+  Site,
+  SiteDatasourceList,
+  SiteWorkbookList,
+  StoryboardItem,
+  StoryboardList,
+  SummaryData,
+  ValidationResult,
+  WorkbookInventory,
+  WorksheetItem,
+  WorksheetList,
 } from './types.js';
-
-/** The single "get whole workbook document" command, routed to GET /v0/workbook/document. */
-const SAVE_UNDERLYING_METADATA = 'save-underlying-metadata';
-/** The single "apply whole workbook document" command, routed to POST /v0/workbook/document. */
-const LOAD_UNDERLYING_METADATA = 'load-underlying-metadata';
-
-/** Commands routed to the typed read routes (all under tabui). */
-const LIST_WORKSHEETS = 'list-worksheets';
-const GET_WORKSHEET = 'get-worksheet';
-const GET_WORKSHEET_DOCUMENT = 'get-worksheet-document';
-const GET_WORKSHEET_SUMMARY_DATA = 'get-worksheet-summary-data';
-const LIST_DASHBOARDS = 'list-dashboards';
-const GET_DASHBOARD = 'get-dashboard';
-const GET_DASHBOARD_DOCUMENT = 'get-dashboard-document';
-const LIST_STORYBOARDS = 'list-storyboards';
-const GET_STORYBOARD = 'get-storyboard';
-const GET_STORYBOARD_DOCUMENT = 'get-storyboard-document';
-const GET_WORKBOOK_INVENTORY = 'get-workbook-inventory';
-const LIST_WORKBOOK_DATASOURCES = 'list-workbook-datasources';
-const GET_SITE = 'get-site';
-const LIST_SITE_DATASOURCES = 'list-site-datasources';
-const LIST_SITE_WORKBOOKS = 'list-site-workbooks';
-const VALIDATE_WORKBOOK_DOCUMENT = 'validate-workbook-document';
 
 const LOGGER = 'ExternalApiToolExecutor';
 
@@ -75,13 +67,14 @@ type RawOutcome = {
 
 /**
  * {@link ToolExecutor} implementation that speaks the Tableau Desktop External Client
- * API ("Athena V0") instead of the legacy Agent API. {@link callEndpoint} maps each
- * command to a typed route, falling back to POST /v0/app:invokeCommand.
+ * API ("Athena V0") instead of the legacy Agent API. Its endpoints are exposed as
+ * first-class typed calls ({@link ExternalApiReads}); `executeCommand` carries only
+ * genuine Agent-registry commands, routed to POST /v0/app:invokeCommand.
  *
  * On a 401 (stale discovery file) the executor rescans discovery exactly once and
  * retries with the fresh instance/token.
  */
-export class ExternalApiToolExecutor extends ToolExecutor {
+export class ExternalApiToolExecutor extends ToolExecutor implements ExternalApiReads {
   private readonly deps: ExternalApiToolExecutorDeps;
   private client: ExternalApiClient | undefined;
 
@@ -147,9 +140,13 @@ export class ExternalApiToolExecutor extends ToolExecutor {
   > {
     const resolvedArgs = args ?? {};
 
-    const outcomeResult = await this.withRescan((client) =>
-      this.callEndpoint(client, { namespace, command, args: resolvedArgs, signal }),
-    );
+    // `executeCommand` now carries only genuine Agent-registry commands: every command reaches
+    // the generic POST /v0/app:invokeCommand escape hatch. The API's own endpoints are typed
+    // methods on this class ({@link ExternalApiReads}), not commands.
+    const outcomeResult = await this.withRescan(async (client) => {
+      const result = await client.invokeCommand(namespace, command, resolvedArgs, signal);
+      return result.map((envelope) => normalizeEnvelope(envelope));
+    });
 
     if (outcomeResult.isErr()) {
       const mapped = mapClientError(outcomeResult.error);
@@ -237,9 +234,9 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     return this.resolveClient();
   }
 
-  private async withRescan(
-    op: (client: ExternalApiClient) => Promise<Result<RawOutcome, ExternalApiError>>,
-  ): Promise<Result<RawOutcome, ExternalApiError | NoInstance>> {
+  private async withRescan<T>(
+    op: (client: ExternalApiClient) => Promise<Result<T, ExternalApiError>>,
+  ): Promise<Result<T, ExternalApiError | NoInstance>> {
     const first = await this.ensureClient();
     if (first.isErr()) {
       return Err(first.error);
@@ -263,181 +260,134 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     return result;
   }
 
-  private async callEndpoint(
-    client: ExternalApiClient,
-    {
-      namespace,
-      command,
-      args,
-      signal,
-    }: {
-      namespace: 'tabui' | 'tabdoc';
-      command: string;
-      args: Record<string, unknown>;
-      signal: AbortSignal;
-    },
-  ): Promise<Result<RawOutcome, ExternalApiError>> {
-    if (namespace === 'tabui' && command === SAVE_UNDERLYING_METADATA && args['is-json'] !== true) {
-      const result = await client.getWorkbookDocument(signal);
-      if (result.isErr()) {
-        return Err(result.error);
-      }
-      return Ok({
-        result: { text: result.value.xml },
-        state: 'succeeded',
-        envelopeError: undefined,
-        createdAt: undefined,
-        completedAt: undefined,
-        operationId: undefined,
-      });
-    }
+  // --- ExternalApiReads: the API's endpoints as first-class typed calls. Each runs under
+  // withRescan (401 → rescan once) and maps transport errors to ExecuteCommandError so command
+  // modules see the same error shape they get from executeCommand. ---
 
-    if (
-      namespace === 'tabui' &&
-      command === LOAD_UNDERLYING_METADATA &&
-      typeof args.text === 'string'
-    ) {
-      const result = await client.applyWorkbookDocument(args.text, signal);
-      if (result.isErr()) {
-        return Err(result.error);
-      }
-      return Ok(normalizeEnvelope(result.value));
-    }
-
-    if (namespace === 'tabui' && command === LIST_WORKSHEETS) {
-      const result = await client.listWorksheets(signal);
-      return result.map((value) => succeeded({ worksheets: value.worksheets }));
-    }
-
-    if (
-      namespace === 'tabui' &&
-      command === GET_WORKSHEET_DOCUMENT &&
-      typeof args.id === 'string'
-    ) {
-      const result = await client.getWorksheetDocument(args.id, signal);
-      return result.map((value) => succeeded({ text: value.xml }));
-    }
-
-    if (
-      namespace === 'tabui' &&
-      command === GET_WORKSHEET_SUMMARY_DATA &&
-      typeof args.id === 'string'
-    ) {
-      const result = await client.getWorksheetSummaryData(
-        args.id,
-        summaryDataOptions(args),
-        signal,
-      );
-      return result.map((value) => succeeded({ columns: value.columns, rows: value.rows }));
-    }
-
-    if (namespace === 'tabui' && command === LIST_DASHBOARDS) {
-      const result = await client.listDashboards(signal);
-      return result.map((value) => succeeded({ dashboards: value.dashboards }));
-    }
-
-    if (
-      namespace === 'tabui' &&
-      command === GET_DASHBOARD_DOCUMENT &&
-      typeof args.id === 'string'
-    ) {
-      const result = await client.getDashboardDocument(args.id, signal);
-      return result.map((value) => succeeded({ text: value.xml }));
-    }
-
-    if (namespace === 'tabui' && command === GET_WORKSHEET && typeof args.id === 'string') {
-      const result = await client.getWorksheet(args.id, signal);
-      return result.map((value) => succeeded({ worksheet: value }));
-    }
-
-    if (namespace === 'tabui' && command === GET_DASHBOARD && typeof args.id === 'string') {
-      const result = await client.getDashboard(args.id, signal);
-      return result.map((value) => succeeded({ dashboard: value }));
-    }
-
-    if (namespace === 'tabui' && command === LIST_STORYBOARDS) {
-      const result = await client.listStoryboards(signal);
-      return result.map((value) => succeeded({ storyboards: value.storyboards }));
-    }
-
-    if (namespace === 'tabui' && command === GET_STORYBOARD && typeof args.id === 'string') {
-      const result = await client.getStoryboard(args.id, signal);
-      return result.map((value) => succeeded({ storyboard: value }));
-    }
-
-    if (
-      namespace === 'tabui' &&
-      command === GET_STORYBOARD_DOCUMENT &&
-      typeof args.id === 'string'
-    ) {
-      const result = await client.getStoryboardDocument(args.id, signal);
-      return result.map((value) => succeeded({ text: value.xml }));
-    }
-
-    if (namespace === 'tabui' && command === GET_WORKBOOK_INVENTORY) {
-      const result = await client.getWorkbookInventory(signal);
-      return result.map((value) => succeeded({ inventory: value }));
-    }
-
-    if (namespace === 'tabui' && command === LIST_WORKBOOK_DATASOURCES) {
-      const result = await client.listWorkbookDatasources(signal);
-      return result.map((value) => succeeded({ datasources: value.datasources }));
-    }
-
-    if (namespace === 'tabui' && command === GET_SITE) {
-      const result = await client.getSite(signal);
-      return result.map((value) => succeeded({ site: value }));
-    }
-
-    if (namespace === 'tabui' && command === LIST_SITE_DATASOURCES) {
-      const result = await client.listSiteDatasources(signal);
-      return result.map((value) => succeeded({ datasources: value.datasources }));
-    }
-
-    if (namespace === 'tabui' && command === LIST_SITE_WORKBOOKS) {
-      const result = await client.listSiteWorkbooks(signal);
-      return result.map((value) => succeeded({ workbooks: value.workbooks }));
-    }
-
-    if (
-      namespace === 'tabui' &&
-      command === VALIDATE_WORKBOOK_DOCUMENT &&
-      typeof args.text === 'string'
-    ) {
-      const result = await client.validateWorkbookDocument(args.text, signal);
-      return result.map((value) => succeeded({ ...value }));
-    }
-
-    const result = await client.invokeCommand(namespace, command, args, signal);
-    if (result.isErr()) {
-      return Err(result.error);
-    }
-    return Ok(normalizeEnvelope(result.value));
+  getWorkbookDocument(signal: AbortSignal): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
+    return this.read((client) => client.getWorkbookDocument(signal));
   }
-}
 
-/** Wrap a typed-read result into the succeeded {@link RawOutcome} shape the executor expects. */
-function succeeded(result: Record<string, unknown>): RawOutcome {
-  return {
-    result,
-    state: 'succeeded',
-    envelopeError: undefined,
-    createdAt: undefined,
-    completedAt: undefined,
-    operationId: undefined,
-  };
-}
+  async applyWorkbookDocument(
+    xml: string,
+    signal: AbortSignal,
+  ): Promise<Result<void, ExecuteCommandError>> {
+    const outcome = await this.withRescan((client) =>
+      client.applyWorkbookDocument(xml, signal).then((r) => r.map(normalizeEnvelope)),
+    );
+    if (outcome.isErr()) {
+      return Err(mapClientError(outcome.error));
+    }
+    // A completed operation whose envelope reports failure must surface as an error, not success.
+    const status = buildCommandStatus(outcome.value, {
+      namespace: 'external',
+      command: 'apply-workbook-document',
+    });
+    return status.map(() => undefined);
+  }
 
-function summaryDataOptions(args: Record<string, unknown>): SummaryDataOptions {
-  return {
-    maxRows: typeof args.maxRows === 'number' ? args.maxRows : undefined,
-    ignoreAliases: typeof args.ignoreAliases === 'boolean' ? args.ignoreAliases : undefined,
-    ignoreSelection: typeof args.ignoreSelection === 'boolean' ? args.ignoreSelection : undefined,
-    columnsToIncludeByFieldName:
-      typeof args.columnsToIncludeByFieldName === 'string'
-        ? args.columnsToIncludeByFieldName
-        : undefined,
-  };
+  listWorksheets(signal: AbortSignal): Promise<Result<WorksheetList, ExecuteCommandError>> {
+    return this.read((client) => client.listWorksheets(signal));
+  }
+
+  getWorksheet(
+    id: string,
+    signal: AbortSignal,
+  ): Promise<Result<WorksheetItem, ExecuteCommandError>> {
+    return this.read((client) => client.getWorksheet(id, signal));
+  }
+
+  getWorksheetDocument(
+    id: string,
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
+    return this.read((client) => client.getWorksheetDocument(id, signal));
+  }
+
+  getWorksheetSummaryData(
+    id: string,
+    options: SummaryDataOptions,
+    signal: AbortSignal,
+  ): Promise<Result<SummaryData, ExecuteCommandError>> {
+    return this.read((client) => client.getWorksheetSummaryData(id, options, signal));
+  }
+
+  listDashboards(signal: AbortSignal): Promise<Result<DashboardList, ExecuteCommandError>> {
+    return this.read((client) => client.listDashboards(signal));
+  }
+
+  getDashboard(
+    id: string,
+    signal: AbortSignal,
+  ): Promise<Result<DashboardItem, ExecuteCommandError>> {
+    return this.read((client) => client.getDashboard(id, signal));
+  }
+
+  getDashboardDocument(
+    id: string,
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
+    return this.read((client) => client.getDashboardDocument(id, signal));
+  }
+
+  listStoryboards(signal: AbortSignal): Promise<Result<StoryboardList, ExecuteCommandError>> {
+    return this.read((client) => client.listStoryboards(signal));
+  }
+
+  getStoryboard(
+    id: string,
+    signal: AbortSignal,
+  ): Promise<Result<StoryboardItem, ExecuteCommandError>> {
+    return this.read((client) => client.getStoryboard(id, signal));
+  }
+
+  getStoryboardDocument(
+    id: string,
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
+    return this.read((client) => client.getStoryboardDocument(id, signal));
+  }
+
+  getWorkbookInventory(
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookInventory, ExecuteCommandError>> {
+    return this.read((client) => client.getWorkbookInventory(signal));
+  }
+
+  listWorkbookDatasources(
+    signal: AbortSignal,
+  ): Promise<Result<DatasourceList, ExecuteCommandError>> {
+    return this.read((client) => client.listWorkbookDatasources(signal));
+  }
+
+  getSite(signal: AbortSignal): Promise<Result<Site, ExecuteCommandError>> {
+    return this.read((client) => client.getSite(signal));
+  }
+
+  listSiteDatasources(
+    signal: AbortSignal,
+  ): Promise<Result<SiteDatasourceList, ExecuteCommandError>> {
+    return this.read((client) => client.listSiteDatasources(signal));
+  }
+
+  listSiteWorkbooks(signal: AbortSignal): Promise<Result<SiteWorkbookList, ExecuteCommandError>> {
+    return this.read((client) => client.listSiteWorkbooks(signal));
+  }
+
+  validateWorkbookDocument(
+    xml: string,
+    signal: AbortSignal,
+  ): Promise<Result<ValidationResult, ExecuteCommandError>> {
+    return this.read((client) => client.validateWorkbookDocument(xml, signal));
+  }
+
+  /** Run a typed client call under withRescan, mapping transport errors to ExecuteCommandError. */
+  private async read<T>(
+    op: (client: ExternalApiClient) => Promise<Result<T, ExternalApiError>>,
+  ): Promise<Result<T, ExecuteCommandError>> {
+    const result = await this.withRescan(op);
+    return result.mapErr(mapClientError);
+  }
 }
 
 function normalizeEnvelope(envelope: OperationEnvelope): RawOutcome {

@@ -2,6 +2,8 @@ import { Err, Ok } from 'ts-results-es';
 
 import * as configModule from '../../../config.desktop.js';
 import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
+import { ExecuteCommandError, ToolExecutor } from '../../toolExecutor/toolExecutor.js';
+import { fakeExternalReadsExecutor } from './externalReadsMock.js';
 import { listDashboards } from './listDashboards.js';
 
 vi.mock('../../toolExecutor/localToolExecutor.js');
@@ -170,16 +172,11 @@ describe('listDashboards (Agent API transport, default)', () => {
 describe('listDashboards (External Client API transport, TABLEAU_EXTERNAL_API gate)', () => {
   const mockSignal = new AbortController().signal;
 
-  function executorReturning(dashboards: Array<{ id: string; name: string }>): LocalExecutor {
-    return {
-      executeCommand: vi.fn().mockResolvedValue(
-        Ok({
-          command_id: 'cmd-123',
-          status: 'completed',
-          parsedResult: { dashboards },
-        }),
-      ),
-    } as unknown as LocalExecutor;
+  function executorReturning(dashboards: Array<{ id: string; name: string }>): ToolExecutor {
+    return fakeExternalReadsExecutor({
+      listDashboards: () =>
+        Promise.resolve(Ok({ dashboards: dashboards.map((d) => ({ hidden: false, ...d })) })),
+    });
   }
 
   beforeEach(() => {
@@ -210,13 +207,6 @@ describe('listDashboards (External Client API transport, TABLEAU_EXTERNAL_API ga
         dashboards: ['Sales Dashboard', 'Executive Summary'],
       });
     }
-
-    expect(mockExecutor.executeCommand).toHaveBeenCalledWith({
-      namespace: 'tabui',
-      command: 'list-dashboards',
-      schema: expect.any(Object),
-      signal: mockSignal,
-    });
   });
 
   it('should return empty list when no dashboards exist', async () => {
@@ -230,11 +220,11 @@ describe('listDashboards (External Client API transport, TABLEAU_EXTERNAL_API ga
     }
   });
 
-  it('should return error when the list command fails', async () => {
-    const error = { type: 'command-timed-out' as const, error: 'Command timeout' };
-    const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(Err(error)),
-    } as unknown as LocalExecutor;
+  it('should return error when the list call fails', async () => {
+    const error: ExecuteCommandError = { type: 'command-timed-out', error: 'Command timeout' };
+    const mockExecutor = fakeExternalReadsExecutor({
+      listDashboards: () => Promise.resolve(Err(error)),
+    });
 
     const result = await listDashboards({ executor: mockExecutor, signal: mockSignal });
 

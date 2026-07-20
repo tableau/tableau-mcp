@@ -4,7 +4,9 @@ import * as configModule from '../../../config.desktop.js';
 import * as loggerModule from '../../../logging/logger.js';
 import invariant from '../../../utils/invariant.js';
 import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
+import { ExecuteCommandError, ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import * as validationRegistry from '../../validation/registry.js';
+import { fakeExternalReadsExecutor } from './externalReadsMock.js';
 import { loadWorksheetXml } from './loadWorksheetXml.js';
 
 vi.mock('../../toolExecutor/localToolExecutor.js');
@@ -551,25 +553,35 @@ describe('loadWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API 
     return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets><windows>${windows}</windows></workbook>`;
   }
 
-  // Executor that dispatches by command, recording each call so the fetch-then-apply
-  // sequence can be asserted. `save-underlying-metadata` returns the live workbook.
+  // Reads executor that serves the live workbook (getWorkbookDocument) and records the applied
+  // minimal doc (applyWorkbookDocument as command 'load-underlying-metadata') plus any real
+  // executeCommand (e.g. the tabdoc:goto-sheet focus) so the fetch-apply-focus sequence asserts.
   function dispatchingExecutor(workbookXml: string): {
-    executor: LocalExecutor;
+    executor: ToolExecutor;
     calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }>;
   } {
     const calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }> = [];
-    const executeCommand = vi.fn(async (params: any) => {
-      calls.push({ namespace: params.namespace, command: params.command, args: params.args });
-      if (params.command === 'save-underlying-metadata') {
-        return Ok({
-          command_id: 'cmd-get',
-          status: 'completed',
-          parsedResult: { text: workbookXml },
+    const executor = fakeExternalReadsExecutor({
+      getWorkbookDocument: () =>
+        Promise.resolve(
+          Ok({ xml: workbookXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+        ),
+      applyWorkbookDocument: (xml: string) => {
+        calls.push({
+          namespace: 'tabui',
+          command: 'load-underlying-metadata',
+          args: { text: xml },
         });
-      }
-      return Ok({ command_id: 'cmd-ok', status: 'completed', submitted_at: '' });
+        return Promise.resolve(Ok(undefined));
+      },
     });
-    return { executor: { executeCommand } as unknown as LocalExecutor, calls };
+    (executor as unknown as { executeCommand: ReturnType<typeof vi.fn> }).executeCommand = vi.fn(
+      async (params: any) => {
+        calls.push({ namespace: params.namespace, command: params.command, args: params.args });
+        return Ok({ command_id: 'cmd-ok', status: 'completed', submitted_at: '' });
+      },
+    );
+    return { executor, calls };
   }
 
   beforeEach(() => {
@@ -693,13 +705,13 @@ describe('loadWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API 
   });
 
   it('should return execute-command-error when the workbook fetch fails', async () => {
-    const error = {
-      type: 'command-failed' as const,
+    const error: ExecuteCommandError = {
+      type: 'command-failed',
       error: { code: 'ERROR', message: 'Failed', recoverable: false },
     };
-    const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(Err(error)),
-    } as unknown as LocalExecutor;
+    const mockExecutor = fakeExternalReadsExecutor({
+      getWorkbookDocument: () => Promise.resolve(Err(error)),
+    });
 
     const result = await loadWorksheetXml({
       worksheetName,
