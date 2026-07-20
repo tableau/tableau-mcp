@@ -1,6 +1,7 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { extractToolErrorMessage } from '../../../../utils/extractToolErrorMessage.js';
 import {
   isDeleteDatasourceConfirmResult,
   renderDeleteDatasourceConfirm,
@@ -29,7 +30,8 @@ import {
  */
 export function handleConfirmResult(app: App, result: CallToolResult): void {
   if (!result || result.isError) {
-    showError('TOOL_ERROR', undefined, app);
+    const cause = result ? extractToolErrorMessage(result) : undefined;
+    showError('TOOL_ERROR', cause, app);
     return;
   }
 

@@ -56,7 +56,7 @@ describe('handleConfirmResult', () => {
   it('shows error UI when tool returns error result (isError: true)', () => {
     handleConfirmResult(mockApp, { isError: true, content: [{ type: 'text', text: 'boom' }] });
 
-    expect(vi.mocked(showError)).toHaveBeenCalledWith('TOOL_ERROR', undefined, mockApp);
+    expect(vi.mocked(showError)).toHaveBeenCalledWith('TOOL_ERROR', 'boom', mockApp);
     expect(vi.mocked(renderDeleteWorkbookConfirm)).not.toHaveBeenCalled();
   });
 
