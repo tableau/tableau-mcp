@@ -45,7 +45,7 @@ function getConfiguredRoles(): string[] {
 const argsSchema = {
   inactiveDays: z
     .string()
-    .regex(/^[1-9]\d{0,3}$/, 'inactiveDays must be a positive integer (1–3650)')
+    .regex(/^(?:[1-9]\d{0,2}|[12]\d{3}|3[0-5]\d{2}|36[0-4]\d|3650)$/, 'inactiveDays must be a positive integer (1–3650)')
     .optional()
     .describe(
       'Minimum days since last login for a user to be considered inactive. ' +
@@ -238,8 +238,18 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
       '',
       'Group the results by `Actor User Name` to determine if any candidate user has accessed content ' +
         `within the ${activityLookbackDays}-day lookback window. Match \`Actor User Name\` against the candidate's ` +
-        '`name` or `email` field from Step 1. A user is considered inactive if they have NO access event ' +
-        'in the result, or whose `lastLogin` from Step 1 is null (never signed in).',
+        '`name` or `email` field from Step 1.',
+      '',
+      '**Inactivity determination (both conditions must hold):**',
+      `- The user's \`lastLogin\` from Step 1 is either **null** (never signed in) OR older than ${inactiveDays} days ago, AND`,
+      `- The user has NO \`Access\` event in the TS Events result within the ${activityLookbackDays}-day lookback window.`,
+      '',
+      `Users whose \`lastLogin\` is within the last ${inactiveDays} days are NOT candidates, even if they have no Access event ` +
+        '(the absence may be due to ETL lag or non-content activity). Exclude them from the inactive set.',
+      '',
+      `If the query returns exactly ${10000} rows, warn the admin: "⚠️ TS Events results were truncated at the ` +
+        `${10000}-row limit. Some active users may not appear in the result — candidates are not exhaustive. ` +
+        'Consider narrowing the scope with `userIds` or reducing `inactiveDays`."',
       '',
       `Note: TS Events caps at ${TS_EVENTS_LOOKBACK_MAX_DAYS} days lookback on standard Tableau Cloud ` +
         '(365 days with Advanced Management). Users inactive longer than the lookback window may have ' +
@@ -259,6 +269,8 @@ export const getUserLicenseReclamationApplyPrompt: WebPromptFactory = () => ({
         'This is informational — ownership is NOT affected by downgrade. ' +
         'Present the owned-content count per user so the admin can decide whether to reassign ownership ' +
         'separately before or after reclamation.',
+      `If the query returns exactly ${10000} rows, note in the report: "⚠️ Site Content results were ` +
+        `truncated at the ${10000}-row limit — owned-content counts may be understated for some users."`,
       '',
       '**IMPORTANT — Ownership note:** Downgrading a user to Unlicensed does NOT delete, reassign, ' +
         'or affect any content they own. Their workbooks, data sources, and other content remain ' +

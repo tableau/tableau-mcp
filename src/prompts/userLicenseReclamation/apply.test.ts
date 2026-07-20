@@ -200,6 +200,33 @@ describe('user-license-reclamation-apply prompt', () => {
     expect(text).toContain('candidates are provisional, not definitive');
   });
 
+  it('requires lastLogin pre-filter in addition to Access event absence', async () => {
+    const text = await textOf();
+    expect(text).toContain('`lastLogin` from Step 1 is either **null**');
+    expect(text).toContain('older than 90 days ago');
+    expect(text).toContain('Users whose `lastLogin` is within the last 90 days are NOT candidates');
+  });
+
+  it('warns admin when TS Events results hit the row limit', async () => {
+    const text = await textOf();
+    expect(text).toContain('TS Events results were truncated at the 10000-row limit');
+    expect(text).toContain('candidates are not exhaustive');
+  });
+
+  it('warns admin when Site Content results hit the row limit', async () => {
+    const text = await textOf();
+    expect(text).toContain('Site Content results were truncated at the 10000-row limit');
+    expect(text).toContain('owned-content counts may be understated');
+  });
+
+  it('rejects inactiveDays above 3650 via schema validation', () => {
+    const prompt = getUserLicenseReclamationApplyPrompt(new WebMcpServer());
+    const schema = prompt.argsSchema!;
+    expect(schema.inactiveDays.safeParse('3650').success).toBe(true);
+    expect(schema.inactiveDays.safeParse('3651').success).toBe(false);
+    expect(schema.inactiveDays.safeParse('9999').success).toBe(false);
+  });
+
   it('reads LICENSE_RECLAIM_INACTIVE_DAYS from env', async () => {
     process.env.LICENSE_RECLAIM_INACTIVE_DAYS = '45';
     try {
