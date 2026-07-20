@@ -539,6 +539,29 @@ Overridable per-site via [Site Settings](site-settings.md) and per-request via
 
 <hr />
 
+## `LICENSE_RECLAIM_INACTIVE_DAYS`
+
+Default minimum days of inactivity before a user is considered a license reclamation candidate by
+the [`user-license-reclamation-inform`](../../prompts/user-license-reclamation-inform.md) prompt.
+Callers can pass an explicit `inactiveDays` argument to override per-invocation.
+
+- Default: `90`
+- Minimum: `1`
+- Maximum: `3650` (10 years)
+
+<hr />
+
+## `LICENSE_RECLAIM_ROLES`
+
+Comma-separated list of site roles targeted for license reclamation by the
+[`user-license-reclamation-inform`](../../prompts/user-license-reclamation-inform.md) prompt.
+Callers can pass an explicit `roles` argument to override per-invocation.
+
+- Default: `Creator,Explorer`
+- Values must be valid Tableau site role names (e.g., `Creator`, `Explorer`, `Viewer`).
+
+<hr />
+
 ## `BREAK_GLASS_DISABLE_GLOBALLY`
 
 Can be used to force all MCP tools to return a "service unavailable" error message. Use with
