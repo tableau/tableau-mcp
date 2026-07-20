@@ -675,6 +675,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  STALE_CONTENT_MAX_ROWS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Stale content max rows',
+    description:
+      'Maximum number of stale-content rows query-admin-insights (kind: stale-content) will return in one call. Above this the tool withholds rows and returns the true count with a ROW_CAP_EXCEEDED warning so callers narrow scope. Defaults to 100; range 1-10000.',
+    required: false,
+    sensitive: false,
+  },
 } satisfies EnvVars;
 
 const userConfig = Object.entries(envVars).reduce<Record<string, McpbUserConfigurationOption>>(

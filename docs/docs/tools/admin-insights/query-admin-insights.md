@@ -14,7 +14,9 @@ report through a single entry point. Dispatches on `kind` to one of four backend
 - `job-performance` — raw VDS query against the `Job Performance` datasource (extract refresh and
   subscription execution history)
 - `stale-content` — server-side anti-join that returns already-filtered stale rows with no
-  client-side math required
+  client-side math required. Subject to a server-side row cap
+  ([`STALE_CONTENT_MAX_ROWS`](../../configuration/mcp-config/env-vars.md#stale_content_max_rows),
+  default `100`) — see [Row cap](#row-cap-stale-content).
 
 The tool is admin-only — it is registered only when `ADMIN_TOOLS_ENABLED=true`, and at request
 time it verifies the caller's site role and rejects anything below
@@ -121,6 +123,26 @@ Example: `["af59ee84-a375-4cb4-84b9-eaa7864f59fb"]`
 
 Example: `["Datasource"]`
 
+## Row cap (`stale-content`)
+
+The `stale-content` backend enforces a **server-side row cap** to protect the destructive
+stale-content cleanup flow from acting on an unreviewed mass set. The cap is configured by
+[`STALE_CONTENT_MAX_ROWS`](../../configuration/mcp-config/env-vars.md#stale_content_max_rows)
+(default `100`, range `1`–`10000`; overridable per-site and per-request).
+
+When the stale-item count is **at or below** the cap, the full `rows` array is returned as usual.
+
+When the count **exceeds** the cap, the tool:
+
+- returns an empty `rows` array (`rows: []`) — the row payload is withheld so a caller cannot act on
+  an unreviewed batch;
+- still reports the **true** pre-cap totals in `totalStaleItems` and `totalStaleSizeBytes`, so a
+  read-only report can state the magnitude;
+- appends a structured `ROW_CAP_EXCEEDED` warning (severity `ERROR`) to `mcp.warnings` guiding the
+  caller to narrow scope (e.g. a specific `projectIds` subset or a higher `minAgeDays`) and re-run.
+
+This is a **successful** result, not an error — only the row payload is withheld.
+
 ## Notes and caveats
 
 - Tableau Cloud TS Events lookback caps at **90 days by default** (365 days with Advanced
@@ -131,6 +153,10 @@ Example: `["Datasource"]`
 - The `stale-content` backend excludes the Tableau-managed `Admin Insights` project by design.
 - `Last Accessed At` is `null` for never-accessed items; the stale-content backend ages those
   from `Created At` and flags them `neverAccessed: true`.
+- The `stale-content` backend caps returned rows at
+  [`STALE_CONTENT_MAX_ROWS`](../../configuration/mcp-config/env-vars.md#stale_content_max_rows)
+  (default `100`). Above the cap, `rows` is empty but `totalStaleItems` still reflects the true
+  count and a `ROW_CAP_EXCEEDED` warning is attached — see [Row cap](#row-cap-stale-content).
 - This tool intentionally bypasses the standard datasource access checker because Admin Insights
   datasources are internal/known and admin-gated independently.
 
@@ -169,6 +195,29 @@ Example: `["Datasource"]`
       "neverAccessed": true
     }
   ]
+}
+```
+
+### Stale-content report above the row cap (`kind: "stale-content"`)
+
+```json
+{
+  "thresholdDays": 90,
+  "totalStaleItems": 3376,
+  "totalStaleSizeBytes": 894837291,
+  "rows": [],
+  "mcp": {
+    "warnings": [
+      {
+        "type": "ROW_CAP_EXCEEDED",
+        "severity": "ERROR",
+        "message": "Found 3376 stale items, which exceeds the server-configured cap of 100 (STALE_CONTENT_MAX_ROWS). The row payload was withheld to prevent acting on an unreviewed mass set; totalStaleItems reflects the true count. Narrow the scope (e.g. a specific projectIds subset or a higher minAgeDays) and re-run to receive rows.",
+        "totalStaleItems": 3376,
+        "maxRows": 100,
+        "reason": "over-row-cap"
+      }
+    ]
+  }
 }
 ```
 
