@@ -24,6 +24,7 @@ import type {
   ParsedWorksheet,
 } from '../../../desktop/metadata/types.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
+import { xmlNamesEqual } from '../../../desktop/xmlElement.js';
 import {
   DesktopCommandExecutionError,
   WorkbookXmlLoadFailedError,
@@ -57,7 +58,10 @@ function subtreeHasZoneNamed(node: unknown, name: string): boolean {
   if (
     zones.some(
       (zone) =>
-        !!zone && typeof zone === 'object' && (zone as Record<string, unknown>)['@_name'] === name,
+        !!zone &&
+        typeof zone === 'object' &&
+        typeof (zone as Record<string, unknown>)['@_name'] === 'string' &&
+        xmlNamesEqual((zone as Record<string, string>)['@_name'], name),
     )
   ) {
     return true;
@@ -94,7 +98,9 @@ export function removeWorksheetFromWorkbook(
   const wb = workbook.workbook;
   const container = wb?.worksheets;
   const worksheets = normalizeArray<ParsedWorksheet>(container?.worksheet);
-  const kept = worksheets.filter((ws) => ws?.['@_name'] !== worksheetName);
+  const kept = worksheets.filter(
+    (ws) => !ws?.['@_name'] || !xmlNamesEqual(ws['@_name'], worksheetName),
+  );
   if (!wb || !container || kept.length === worksheets.length) {
     return {
       status: 'not-found',
@@ -119,7 +125,12 @@ export function removeWorksheetFromWorkbook(
   container.worksheet = kept.length === 1 ? kept[0] : kept;
   const windows = normalizeArray<ParsedWindow>(wb.windows?.window);
   const keptWindows = windows.filter(
-    (w) => !(w?.['@_class'] === 'worksheet' && w?.['@_name'] === worksheetName),
+    (w) =>
+      !(
+        w?.['@_class'] === 'worksheet' &&
+        w?.['@_name'] &&
+        xmlNamesEqual(w['@_name'], worksheetName)
+      ),
   );
   if (wb.windows && keptWindows.length !== windows.length) {
     if (keptWindows.length === 0) {

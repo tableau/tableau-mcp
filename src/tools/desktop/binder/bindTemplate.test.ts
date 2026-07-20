@@ -67,6 +67,37 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 const XML = '<?xml version="1.0"?><workbook></workbook>';
+const INJECTED_RANKING_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <worksheets>
+    <worksheet name='Sales by Region' xmlns:user='http://www.tableausoftware.com/xml/user'>
+      <table>
+        <view>
+          <datasources>
+            <datasource caption='Superstore' name='Superstore' />
+          </datasources>
+          <datasource-dependencies datasource='Superstore'>
+            <column caption='Region' datatype='string' name='[Region]' role='dimension' type='nominal' />
+            <column caption='Sales' datatype='real' name='[Sales]' role='measure' type='quantitative' />
+            <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />
+            <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+          </datasource-dependencies>
+          <aggregation value='true' />
+        </view>
+        <style />
+        <panes>
+          <pane>
+            <view><breakdown value='auto' /></view>
+            <mark class='Bar' />
+          </pane>
+        </panes>
+        <rows>[Superstore].[none:Region:nk]</rows>
+        <cols>[Superstore].[sum:Sales:qk]</cols>
+      </table>
+      <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+    </worksheet>
+  </worksheets>
+</workbook>`;
 const CALC_BASE_XML = [
   "<?xml version='1.0' encoding='utf-8'?>",
   "<workbook version='18.1'>",
@@ -126,6 +157,42 @@ const sampleProposal: BindingProposal & { confidence: number } = {
 // The auto-apply gate should preserve that field on non-applied results, but it no
 // longer blocks server-side auto-apply by itself.
 const boundViaProposalResult: BinderResult = { ...boundResult, used_llm: true };
+const boundWithSortResult: BinderResult = {
+  ...boundViaProposalResult,
+  args: {
+    ...boundViaProposalResult.args,
+    sort: { by: 'Sales', direction: 'desc' },
+  },
+};
+const boundWithTopNResult: BinderResult = {
+  ...boundViaProposalResult,
+  args: {
+    ...boundViaProposalResult.args,
+    top_n: 10,
+  },
+};
+const boundWithSortAndTopNResult: BinderResult = {
+  ...boundViaProposalResult,
+  args: {
+    ...boundViaProposalResult.args,
+    sort: { by: 'Sales', direction: 'desc' },
+    top_n: 10,
+  },
+};
+const badSortFieldEscalateResult: BinderResult = {
+  status: 'escalate',
+  reason: 'field-not-found',
+  blockers: [
+    {
+      code: 'field-not-found',
+      detail: 'no sort.by field named "Definitely Not A Field" in datasource(s)',
+    },
+  ],
+  proposal: {
+    ...sampleProposal,
+    sort: { by: 'Definitely Not A Field', direction: 'desc' },
+  },
+};
 
 describe('bindTemplateTool', () => {
   beforeEach(() => {
@@ -135,7 +202,7 @@ describe('bindTemplateTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getBindTemplateTool(new DesktopMcpServer());
     expect(tool.name).toBe('bind-template');
-    expect(tool.description).toBe('Bind a chart ask to a template and apply it; calcs[] authors inline first.');
+    expect(tool.description).toBe('Bind/apply template; calcs[] first.');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       ask: expect.any(Object),
@@ -537,6 +604,121 @@ describe('bindTemplateTool auto_apply gate', () => {
       signal: expect.any(AbortSignal),
       sinceSequence: 41,
     });
+  });
+
+  it('returns literal sheet_name and guidance after auto-applying an XML-escaped title', async () => {
+    const escapedTitleResult: BinderResult = {
+      ...boundResult,
+      args: {
+        ...boundResult.args,
+        title: 'P&amp;L Waterfall: Revenue to Net Income',
+      },
+    };
+    const { getExecutor } = setupAutoApplyMocks({ bind: escapedTitleResult });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of P&L',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.sheet_name).toBe('P&L Waterfall: Revenue to Net Income');
+    expect(body.guidance).toContain('Applied "P&L Waterfall: Revenue to Net Income"');
+    expect(body.guidance).not.toContain('P&amp;L');
+    expect(body.args).toBeUndefined();
+  });
+
+  it('auto_apply=true splices proposal sort into the applied workbook XML', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      bind: boundWithSortResult,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region sorted descending',
+      proposal: { ...sampleProposal, sort: { by: 'Sales', direction: 'desc' } },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(appliedXml(executeCommand)).toContain(
+      "<computed-sort column='[Superstore].[none:Region:nk]' direction='DESC' using='[Superstore].[sum:Sales:qk]' />",
+    );
+  });
+
+  it('auto_apply=true splices proposal top_n into the applied workbook XML', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      bind: boundWithTopNResult,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'top 10 regions by sales',
+      proposal: { ...sampleProposal, top_n: 10 },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(appliedXml(executeCommand)).toMatch(/function='end'\s+end='top'\s+count='10'/);
+    expect(appliedXml(executeCommand)).toContain(
+      '<slices><column>[Superstore].[none:Region:nk]</column></slices>',
+    );
+  });
+
+  it('auto_apply=true splices proposal sort and top_n together in one apply', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      bind: boundWithSortAndTopNResult,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'top 10 regions by sales sorted descending',
+      proposal: { ...sampleProposal, sort: { by: 'Sales', direction: 'desc' }, top_n: 10 },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+    const xml = appliedXml(executeCommand);
+    expect(xml).toContain(
+      "<computed-sort column='[Superstore].[none:Region:nk]' direction='DESC' using='[Superstore].[sum:Sales:qk]' />",
+    );
+    expect(xml).toMatch(/function='end'\s+end='top'\s+count='10'/);
+  });
+
+  it('bad sort.by escalation never reaches auto-apply', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      bind: badSortFieldEscalateResult,
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart sorted by definitely not a field',
+      proposal: {
+        ...sampleProposal,
+        sort: { by: 'Definitely Not A Field', direction: 'desc' },
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.status).toBe('escalate');
+    expect(body.blockers[0].detail).toContain('Definitely Not A Field');
+    expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
+    expect(executeCommand).not.toHaveBeenCalled();
   });
 
   it('authors inline calcs before binding and auto-applies against the readback workbook', async () => {
@@ -1044,4 +1226,11 @@ function commandCalls(
   executeCommand: ReturnType<typeof vi.fn>,
 ): Array<ExecuteCommandArgs<undefined>> {
   return executeCommand.mock.calls.map(([call]) => call);
+}
+
+function appliedXml(executeCommand: ReturnType<typeof vi.fn>): string {
+  const call = commandCalls(executeCommand).find(
+    (candidate) => candidate.command === 'load-underlying-metadata',
+  );
+  return String((call?.args as { text?: string } | undefined)?.text ?? '');
 }

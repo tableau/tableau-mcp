@@ -45,10 +45,9 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'route',
     id: 'plain-chart',
-    trigger:
-      'a plain viz ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot)',
+    trigger: 'a plain viz ask (bar/line/map/KPI/etc.)',
     action:
-      "FIRST call bind-template with the user's ask and auto_apply: true — deterministic, ~0.3s, no model work. On propose, fill and resubmit the proposal (a validated bound proposal auto-applies). Calcs go inline via calcs[] (one call authors + binds); author-parameter, author-set, author-action author-first. If it escalates, use search-commands.",
+      'FIRST bind-template(auto_apply:true): deterministic, ~0.3s, no model work. On propose, resubmit; proposals may carry sort and top_n. calcs[] inline; author-parameter, author-set, author-action first; else search-commands.',
     toolSequence: [
       'bind-template',
       'author-parameter',

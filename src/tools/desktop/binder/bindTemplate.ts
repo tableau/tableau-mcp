@@ -11,6 +11,8 @@ import {
   type Blocker,
   DERIVATION_OVERRIDE_INSTRUCTION,
   type EscalateReason,
+  resolveInSummary,
+  summarizeSchema,
 } from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
@@ -20,11 +22,17 @@ import {
   type LoadWorkbookXmlError,
 } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
+import {
+  planSortByFieldOnCategoricalAxis,
+  planTopN,
+  type SortDirection,
+} from '../../../desktop/refine/refineWorksheet.js';
 import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { ExecuteCommandError, ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
+import { decodeXmlEntities } from '../../../desktop/xmlElement.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -209,6 +217,38 @@ function describeApplyError(
 
 type BoundResult = Extract<BinderResult, { status: 'bound' }>;
 
+function sortDirectionForApply(direction: 'asc' | 'desc'): SortDirection {
+  return direction === 'desc' ? 'DESC' : 'ASC';
+}
+
+function applyProposalSplices({
+  xml,
+  args,
+  workbookXml,
+}: {
+  xml: string;
+  args: BoundResult['args'];
+  workbookXml: string;
+}): { ok: true; xml: string } | { ok: false; reason: string } {
+  let out = xml;
+  if (args.sort) {
+    const sortField = resolveInSummary(summarizeSchema(workbookXml), args.sort.by);
+    const sorted = planSortByFieldOnCategoricalAxis(out, {
+      sortByField: args.sort.by,
+      sortByColumnRef: sortField.field?.column_ref,
+      direction: sortDirectionForApply(args.sort.direction),
+    });
+    if (!sorted.ok) return { ok: false, reason: `sort splice failed: ${sorted.reason}` };
+    out = sorted.xml;
+  }
+  if (args.top_n !== undefined) {
+    const filtered = planTopN(out, { n: args.top_n });
+    if (!filtered.ok) return { ok: false, reason: `top_n splice failed: ${filtered.reason}` };
+    out = filtered.xml;
+  }
+  return { ok: true, xml: out };
+}
+
 /**
  * Build the graceful-fallback result: the bound args are intact + why apply didn't run.
  * Default guidance points at the manual inject/apply chain using the returned args — that
@@ -313,11 +353,15 @@ async function performAutoApply({
   if (!injected.ok) {
     return applyFallback(base, `inject failed: ${injected.issues.join('; ')}`);
   }
+  const spliced = applyProposalSplices({ xml: injected.xml, args, workbookXml });
+  if (!spliced.ok) {
+    return applyFallback(base, spliced.reason);
+  }
   const injectMs = Date.now() - injectStart;
 
   // ── Apply leg (SAME validated path; runValidation preflight runs) ─
   const applyStart = Date.now();
-  const applyResult = await loadWorkbookXml({ xml: injected.xml, executor, signal });
+  const applyResult = await loadWorkbookXml({ xml: spliced.xml, executor, signal });
   const applyMs = Date.now() - applyStart;
   if (applyResult.isErr()) {
     return applyFallback(base, `apply failed: ${describeApplyError(applyResult.error)}`);
@@ -327,12 +371,13 @@ async function performAutoApply({
   // drop the args echo, apply_instruction, apply_hint, and used_llm from `base`. Those
   // enable a manual second call that never happens once the apply succeeds.
   const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, res.status);
+  const literalTitle = decodeXmlEntities(args.title);
   return {
     status: res.status,
     ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
-    guidance: `${calcPrefix}Applied "${args.title}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
+    guidance: `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
     applied: true,
-    sheet_name: args.title,
+    sheet_name: literalTitle,
     phase_ms: { bind: bindMs, inject: injectMs, apply: applyMs },
   };
 }
@@ -367,7 +412,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'bind-template',
     title,
-    description: 'Bind a chart ask to a template and apply it; calcs[] authors inline first.',
+    description: 'Bind/apply template; calcs[] first.',
     paramsSchema,
     annotations: {
       title,

@@ -18,12 +18,14 @@ import {
 } from '../../validation/readback-verify.js';
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
+import { xmlNamesEqual } from '../../xmlElement.js';
 import { formatApplyFailureForAgent } from './applyFailureClassifier.js';
 import { withApplyLock } from './applyMutex.js';
 import { focusAppliedSheetBestEffort } from './focusAppliedSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { getWorksheetXml } from './getWorksheetXml.js';
 import { applyWorkbookText, interpretLoadOutcome } from './loadWorkbookXml.js';
+import { nameMayNeedRawCommandResolution, resolveWorksheetCommandName } from './nameResolution.js';
 
 export type LoadWorksheetXmlError =
   | { type: 'invalid-xml' }
@@ -185,7 +187,7 @@ function resolveCanonicalWorksheetName(
     });
   }
 
-  if (xmlName.normalize('NFC') !== callerName.normalize('NFC')) {
+  if (!xmlNamesEqual(xmlName, callerName)) {
     return Err({
       type: 'name-mismatch',
       message:
@@ -307,12 +309,15 @@ async function loadWorksheetXmlViaAgentApi({
   readbackVerificationOut?: ReadbackVerificationResult[];
   suppressFocus?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
+  const commandWorksheetName = nameMayNeedRawCommandResolution(worksheetName)
+    ? ((await resolveWorksheetCommandName(worksheetName, { executor, signal })) ?? worksheetName)
+    : worksheetName;
   const result = await executor.executeCommand({
     namespace: 'tabui',
     command: 'load-worksheet',
     signal,
     args: {
-      worksheetName,
+      worksheetName: commandWorksheetName,
       worksheetXml: xml,
     },
   });

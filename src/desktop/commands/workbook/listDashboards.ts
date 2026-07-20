@@ -7,6 +7,7 @@ import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
+import { decodeXmlEntities } from '../../xmlElement.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 
 const dashboardNamesSchema = z.object({
@@ -63,7 +64,9 @@ async function listDashboardsViaAgentApi({
 
   return Ok({
     count: dashboardsResult.data.dashboards.length,
-    dashboards: dashboardsResult.data.dashboards.map((dashboard) => dashboard.name),
+    dashboards: dashboardsResult.data.dashboards.map((dashboard) =>
+      decodeXmlEntities(dashboard.name),
+    ),
   });
 }
 

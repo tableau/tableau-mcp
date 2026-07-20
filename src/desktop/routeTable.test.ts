@@ -49,6 +49,11 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('tableau-desktop-authoring');
   });
 
+  it('teaches plain-chart proposals may carry sort and top_n', () => {
+    const plainChart = routes.find((route) => route.id === 'plain-chart');
+    expect(plainChart?.action).toContain('proposals may carry sort and top_n.');
+  });
+
   it('names the debug skill by its exact slug so recovery does not rely on description-matching', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
     expect(rendered).toContain('tableau-agent-debug');

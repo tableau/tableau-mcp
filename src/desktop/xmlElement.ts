@@ -27,6 +27,14 @@ export function decodeXmlEntities(value: string): string {
     .replace(/&amp;/g, '&');
 }
 
+export function normalizeXmlName(value: string): string {
+  return decodeXmlEntities(value.trim()).normalize('NFC');
+}
+
+export function xmlNamesEqual(a: string, b: string): boolean {
+  return normalizeXmlName(a) === normalizeXmlName(b);
+}
+
 export type ElementMatch = { start: number; end: number; text: string };
 
 /**
@@ -46,7 +54,7 @@ export function findElement(xml: string, tagName: string, name: string): Element
   );
   let open: RegExpExecArray | null;
   while ((open = openRe.exec(xml)) !== null) {
-    if (decodeXmlEntities(open[2]) !== name) {
+    if (!xmlNamesEqual(open[2], name)) {
       continue;
     }
     const start = open.index;

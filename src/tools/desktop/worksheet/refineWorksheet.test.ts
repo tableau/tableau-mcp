@@ -74,6 +74,16 @@ const SORT_BY_FIELD_SOURCE = SOURCE.replace(
   .replaceAll('[Superstore].[sum:Sales:qk]', '[Superstore].[sum:display_order:qk]')
   .replace(/<computed-sort[^>]*\/>/, '');
 
+const AMP_WORKSHEET_SOURCE = SOURCE.replace(
+  "name='Sales by Region'",
+  "name='P&amp;L Waterfall: Revenue to Net Income'",
+);
+
+const ANGLE_QUOTE_WORKSHEET_SOURCE = SOURCE.replace(
+  "name='Sales by Region'",
+  "name='Revenue &lt; &quot;Gross&quot;'",
+);
+
 type GetResult = Awaited<ReturnType<typeof getWorksheetXmlModule.getWorksheetXml>>;
 type LoadResult = Awaited<ReturnType<typeof loadWorksheetXmlModule.loadWorksheetXml>>;
 type ErrOf<R> = R extends Err<infer E> ? E : never;
@@ -177,6 +187,61 @@ describe('refineWorksheetTool — top_n happy path', () => {
     const out = applied()!;
     expect(out).toMatch(/function='end'\s+end='top'\s+count='5'/);
     expect(out).toContain('<slices><column>[Superstore].[none:Region:nk]</column></slices>');
+  });
+
+  it('refines an ampersand-titled worksheet by literal name', async () => {
+    setupMocks({ source: AMP_WORKSHEET_SOURCE });
+    const result = await getToolResult({
+      worksheetName: 'P&L Waterfall: Revenue to Net Income',
+      operation: 'top_n',
+      topN: { n: 5 },
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = successSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.refined).toBe(true);
+    expect(parsed.worksheetName).toBe('P&L Waterfall: Revenue to Net Income');
+    expect(loadMock()).toHaveBeenCalledWith(
+      expect.objectContaining({ worksheetName: 'P&L Waterfall: Revenue to Net Income' }),
+    );
+  });
+
+  it('normalizes escaped ampersand input and still refines the literal worksheet', async () => {
+    setupMocks({ source: AMP_WORKSHEET_SOURCE });
+    const result = await getToolResult({
+      worksheetName: 'P&amp;L Waterfall: Revenue to Net Income',
+      operation: 'top_n',
+      topN: { n: 5 },
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = successSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.refined).toBe(true);
+    expect(parsed.worksheetName).toBe('P&L Waterfall: Revenue to Net Income');
+    expect(parsed.message).toContain('"P&L Waterfall: Revenue to Net Income"');
+    expect(loadMock()).toHaveBeenCalledWith(
+      expect.objectContaining({ worksheetName: 'P&L Waterfall: Revenue to Net Income' }),
+    );
+  });
+
+  it('refines a worksheet whose title contains angle brackets and quotes', async () => {
+    setupMocks({ source: ANGLE_QUOTE_WORKSHEET_SOURCE });
+    const result = await getToolResult({
+      worksheetName: 'Revenue < "Gross"',
+      operation: 'top_n',
+      topN: { n: 5 },
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = successSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.refined).toBe(true);
+    expect(parsed.worksheetName).toBe('Revenue < "Gross"');
+    expect(loadMock()).toHaveBeenCalledWith(
+      expect.objectContaining({ worksheetName: 'Revenue < "Gross"' }),
+    );
   });
 });
 
