@@ -122,7 +122,8 @@
     "SaveWorkbook",
     "ShowSemiStructDataLevelSelectorUI",
     "ShowWidgetSandboxUI",
-    "Sleep"
+    "Sleep",
+    "Sort"
   ],
   "command_names_agent_can_invoke": [
     "About",
@@ -342,7 +343,6 @@
     "ShowStoryboardTitle",
     "ShowTitle",
     "ShowZoneFriendlyNameConfigDialog",
-    "Sort",
     "SortNested",
     "SwapReferenceLineFields",
     "SwapRowsAndColumns",
@@ -416,6 +416,11 @@
   ],
   "parameter_type_enums_note": "For enum-backed parameters (type_id key), use the listed 'values' when constructing command arguments; 'serialized' is what to send (e.g. via MCP).",
   "parameter_type_enums": {
+    "DPI_GlobalFieldName": {
+      "serialized_param_name": "global-field-name",
+      "usage_notes": "Use a qualified '[datasource].[Field]' reference when constructing command arguments (e.g. executeCommandAsync / MCP).",
+      "values": []
+    },
     "DPI_CardType": {
       "enum_name": "CardType",
       "serialized_param_name": "card-type",
@@ -21522,12 +21527,12 @@
       "source_file": "SortCommand",
       "editor_type": "U",
       "server_permission": "UNRESTRICTED",
-      "description": "Command for setting sort options from the UI dialog, Sends a updateSortDialog notification.",
+      "description": "Command for setting sort options from the UI dialog, sends an updateSortDialog notification.",
       "classification": "user_initiated",
       "usage_count": 401,
       "is_user_initiated": true,
       "is_autonomous": false,
-      "value_to_users": "Command for setting sort options from the UI dialog, Sends a updateSortDialog notification.",
+      "value_to_users": "Command for setting sort options from the UI dialog, sends an updateSortDialog notification. Use refine-worksheet operation sort_by_field for sorting a dimension by a field/measure, or tabdoc:sort-nested for nested sorts; tabdoc:sort itself drives the blocking sort dialog.",
       "how_invoked": "Menu, toolbar, context menu, or keyboard shortcut (AffordanceId mapping in affordance_to_command.json).",
       "parameters": [
         {
@@ -21535,7 +21540,7 @@
           "local_name": "FieldName",
           "type_id": "DPI_GlobalFieldName",
           "required": true,
-          "comment": "The field to be sorted.",
+          "comment": "The field to be sorted; wire name global-field-name; value is a qualified '[datasource].[Field]' reference.",
           "cannot_provide_from_mcp": false
         },
         {
@@ -21567,7 +21572,7 @@
           "local_name": "Direction",
           "type_id": "DPI_SortDirection",
           "required": false,
-          "comment": "",
+          "comment": "Optional; default Asc.",
           "cannot_provide_from_mcp": false
         },
         {
@@ -21583,7 +21588,7 @@
           "local_name": "ClearSort",
           "type_id": "DPI_ClearSort",
           "required": false,
-          "comment": "Clears the sort for the field.",
+          "comment": "Clears the sort for the field; optional, default false.",
           "cannot_provide_from_mcp": false
         },
         {
@@ -21637,8 +21642,8 @@
       ],
       "requires_binary_or_unserialized_args": false,
       "mcp_can_invoke_without_binary_args": true,
-      "opens_blocking_dialog": false,
-      "agent_can_invoke": true,
+      "opens_blocking_dialog": true,
+      "agent_can_invoke": false,
       "user_initiated_evidence_sample": [
         "modules/integration_tests/current/tabdoccontextmenus_integ/main/presentation-model/FieldLabelContextMenuBuilderTest.cpp: AffordanceId mapping",
         "modules/integration_tests/current/tabdoccontextmenus_integ/main/presentation-model/FieldLabelContextMenuBuilderTest.cpp: AffordanceId mapping",
@@ -21702,7 +21707,7 @@
           "local_name": "Direction",
           "type_id": "DPI_SortDirection",
           "required": false,
-          "comment": "",
+          "comment": "Optional; default Asc.",
           "cannot_provide_from_mcp": false
         },
         {

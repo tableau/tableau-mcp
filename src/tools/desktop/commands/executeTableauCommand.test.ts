@@ -273,6 +273,58 @@ describe('executeTableauCommandTool', () => {
       expect(extra.getExecutor).not.toHaveBeenCalled();
     });
 
+    it('rejects tabdoc:sort before resolving an executor because it drives a blocking dialog', async () => {
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:sort',
+          args: {
+            FieldName: '[Sample - Superstore].[Category]',
+            Worksheet: 'Sheet 1',
+            Type: 'SortType::Computed',
+            MeasureName: '[Sample - Superstore].[Sales]',
+          },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'tabdoc:sort drives a UI dialog and blocks the screen',
+      );
+      expect(result.content[0].text).toContain('refine-worksheet with operation sort_by_field');
+      expect(result.content[0].text).toContain('tabdoc:sort-nested');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('rejects tabdoc:sort-nested missing required params before resolving an executor', async () => {
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:sort-nested',
+          args: {
+            DimensionToSort: '[Sample - Superstore].[Category]',
+            Worksheet: 'Sheet 1',
+          },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Missing required parameter(s) for Tableau command "tabdoc:sort-nested": MeasureName, ShelfType',
+      );
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
     it('lets generate-viz-from-notional-spec pass through with its NotionalSpecJson/ClearSheet args', async () => {
       const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
       const extra = makeExtra(executeCommand);
