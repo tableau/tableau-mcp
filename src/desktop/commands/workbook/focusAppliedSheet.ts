@@ -2,6 +2,11 @@ import { log } from '../../../logging/logger.js';
 import { WithExecutorAndAbortSignal } from '../../toolExecutor/toolExecutor.js';
 import { listDashboards } from './listDashboards.js';
 import { listWorksheets } from './listWorksheets.js';
+import {
+  nameMayNeedRawCommandResolution,
+  resolveDashboardCommandName,
+  resolveWorksheetCommandName,
+} from './nameResolution.js';
 
 type ApplyCommand = 'load-worksheet' | 'load-dashboard';
 
@@ -62,10 +67,16 @@ export async function focusAppliedSheetBestEffort({
       return;
     }
 
+    const commandSheetName = nameMayNeedRawCommandResolution(sheetName)
+      ? appliedVia === 'load-dashboard'
+        ? ((await resolveDashboardCommandName(sheetName, { executor, signal })) ?? sheetName)
+        : ((await resolveWorksheetCommandName(sheetName, { executor, signal })) ?? sheetName)
+      : sheetName;
+
     const result = await executor.executeCommand({
       namespace: 'tabdoc',
       command: 'goto-sheet',
-      args: { sheet: sheetName },
+      args: { sheet: commandSheetName },
       signal,
     });
 

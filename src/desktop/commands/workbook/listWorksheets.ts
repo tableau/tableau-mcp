@@ -7,6 +7,7 @@ import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
+import { decodeXmlEntities } from '../../xmlElement.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 
 const worksheetNamesSchema = z.object({
@@ -63,7 +64,9 @@ async function listWorksheetsViaAgentApi({
 
   return Ok({
     count: worksheetsResult.data.worksheets.length,
-    worksheets: worksheetsResult.data.worksheets.map((worksheet) => worksheet.name),
+    worksheets: worksheetsResult.data.worksheets.map((worksheet) =>
+      decodeXmlEntities(worksheet.name),
+    ),
   });
 }
 

@@ -31,6 +31,7 @@ import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
 import { runValidation } from '../../../desktop/validation/registry.js';
 import { ValidationIssue } from '../../../desktop/validation/types.js';
+import { parseOuterElement } from '../../../desktop/xmlElement.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -173,6 +174,8 @@ export const getRefineWorksheetTool = (
             }
           }
           const sourceXml = fetched.value;
+          const canonicalWorksheetName =
+            parseOuterElement(sourceXml)?.name?.trim() || worksheetName;
 
           // 2. Pure minimal patch + the readback confirmation target for this operation.
           let patched: string;
@@ -185,7 +188,7 @@ export const getRefineWorksheetTool = (
               end: topN?.end as TopNEnd | undefined,
             });
             if (!plan.ok) {
-              return refusal(operation, worksheetName, plan.reason);
+              return refusal(operation, canonicalWorksheetName, plan.reason);
             }
             patched = plan.xml;
             const col = plan.filterColumn;
@@ -196,7 +199,7 @@ export const getRefineWorksheetTool = (
               direction: sortDirection?.direction as SortDirection,
             });
             if (!plan.ok) {
-              return refusal(operation, worksheetName, plan.reason);
+              return refusal(operation, canonicalWorksheetName, plan.reason);
             }
             patched = plan.xml;
             const col = plan.column;
@@ -212,7 +215,7 @@ export const getRefineWorksheetTool = (
               direction: sortByDirection,
             });
             if (!plan.ok) {
-              return refusal(operation, worksheetName, plan.reason);
+              return refusal(operation, canonicalWorksheetName, plan.reason);
             }
             patched = plan.xml;
             const col = plan.column;
@@ -230,7 +233,7 @@ export const getRefineWorksheetTool = (
           if (!validation.valid) {
             return refusal(
               operation,
-              worksheetName,
+              canonicalWorksheetName,
               `preflight validation failed — not applying. ${formatValidationErrors(validation.issues)}`,
             );
           }
@@ -238,7 +241,7 @@ export const getRefineWorksheetTool = (
           // 5. Apply ONCE through the shared, validated worksheet apply path. On failure:
           // STOP, no retry, no whole-workbook fallback.
           const applied = await loadWorksheetXml({
-            worksheetName,
+            worksheetName: canonicalWorksheetName,
             xml: prepared,
             executor,
             signal: extra.signal,
@@ -262,7 +265,7 @@ export const getRefineWorksheetTool = (
           // first read can race the settle and still show pre-apply XML.
           for (let attempt = 1; attempt <= READBACK_POLL_MAX_ATTEMPTS; attempt++) {
             const readback = await getWorksheetXml({
-              worksheetName,
+              worksheetName: canonicalWorksheetName,
               executor,
               signal: extra.signal,
             });
@@ -283,8 +286,8 @@ export const getRefineWorksheetTool = (
               return new Ok({
                 refined: true,
                 operation,
-                worksheetName,
-                message: `Applied ${operation} to worksheet "${worksheetName}" and confirmed the ${nodeLabel} on readback.`,
+                worksheetName: canonicalWorksheetName,
+                message: `Applied ${operation} to worksheet "${canonicalWorksheetName}" and confirmed the ${nodeLabel} on readback.`,
               });
             }
             if (attempt < READBACK_POLL_MAX_ATTEMPTS) {
@@ -296,7 +299,7 @@ export const getRefineWorksheetTool = (
 
           return refusal(
             operation,
-            worksheetName,
+            canonicalWorksheetName,
             `applied, but the readback did not contain the expected ${nodeLabel} after ` +
               `${READBACK_POLL_MAX_ATTEMPTS} polls (${READBACK_POLL_INTERVAL_MS}ms apart) — ` +
               'the refinement was not durable, or this is an async-settle miss. Not retrying ' +

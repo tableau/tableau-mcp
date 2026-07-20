@@ -49,6 +49,13 @@ describe('xmlElement', () => {
       expect(match!.text).toBe('<worksheet name="Sales &amp; Profit"><a/></worksheet>');
     });
 
+    it('also accepts escaped selector input for older transcripts', () => {
+      const xml = '<workbook><worksheet name="Sales &amp; Profit"><a/></worksheet></workbook>';
+      const match = findElement(xml, 'worksheet', 'Sales &amp; Profit');
+      expect(match).not.toBeNull();
+      expect(match!.text).toBe('<worksheet name="Sales &amp; Profit"><a/></worksheet>');
+    });
+
     it('decodes <, >, and quote entities in the name attribute before matching', () => {
       const xml =
         '<workbook><worksheet name="A &lt;b&gt; &quot;c&quot;"><a/></worksheet></workbook>';

@@ -139,6 +139,44 @@ describe('getDashboardXml (Agent API transport, default)', () => {
       }),
     );
   });
+
+  it('falls back to the raw escaped Desktop command name for a literal ampersand name', async () => {
+    const mockXml = '<dashboard name="P&amp;L Overview"><zones></zones></dashboard>';
+    const mockExecutor = {
+      executeCommand: vi.fn(async (params: any) => {
+        if (params.command === 'list-dashboards') {
+          return Ok({
+            command_id: 'cmd-list',
+            status: 'completed',
+            parsedResult: {
+              dashboards: JSON.stringify({
+                count: 1,
+                dashboards: [{ name: 'P&amp;L Overview' }],
+              }),
+            },
+          });
+        }
+        return Ok({
+          command_id: 'cmd-123',
+          status: 'completed',
+          parsedResult: {
+            dashboardXml: params.args.dashboardName === 'P&amp;L Overview' ? mockXml : '<empty/>',
+          },
+        });
+      }),
+    } as unknown as LocalExecutor;
+
+    const result = await getDashboardXml({
+      dashboardName: 'P&L Overview',
+      executor: mockExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value).toBe(mockXml);
+    }
+  });
 });
 
 describe('getDashboardXml (External Client API transport, TABLEAU_EXTERNAL_API gate)', () => {

@@ -248,6 +248,31 @@ describe('loadDashboardXml (Agent API transport, default)', () => {
     });
   });
 
+  it('passes the gate for escaped caller input and dispatches the raw Desktop command name', async () => {
+    const literalName = 'P&L Overview';
+    const commandName = 'P&amp;L Overview';
+    const xml = `<dashboard name="${commandName}"><zones></zones></dashboard>`;
+    const { executor, calls } = dispatchingAgentExecutor(xml);
+
+    const result = await loadDashboardXml({
+      dashboardName: commandName,
+      xml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(calls.find((c) => c.command === 'load-dashboard')?.args).toMatchObject({
+      dashboardName: commandName,
+    });
+    expect(calls.some((c) => c.command === 'goto-sheet' && c.args?.sheet === commandName)).toBe(
+      true,
+    );
+    expect(calls.some((c) => c.command === 'goto-sheet' && c.args?.sheet === literalName)).toBe(
+      false,
+    );
+  });
+
   it('focuses the canonical XML dashboard name (not the raw caller arg) after a matched apply', async () => {
     const { executor, calls } = dispatchingAgentExecutor(validXml);
 

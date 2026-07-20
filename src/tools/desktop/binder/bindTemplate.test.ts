@@ -606,6 +606,32 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
   });
 
+  it('returns literal sheet_name and guidance after auto-applying an XML-escaped title', async () => {
+    const escapedTitleResult: BinderResult = {
+      ...boundResult,
+      args: {
+        ...boundResult.args,
+        title: 'P&amp;L Waterfall: Revenue to Net Income',
+      },
+    };
+    const { getExecutor } = setupAutoApplyMocks({ bind: escapedTitleResult });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of P&L',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.sheet_name).toBe('P&L Waterfall: Revenue to Net Income');
+    expect(body.guidance).toContain('Applied "P&L Waterfall: Revenue to Net Income"');
+    expect(body.guidance).not.toContain('P&amp;L');
+    expect(body.args).toBeUndefined();
+  });
+
   it('auto_apply=true splices proposal sort into the applied workbook XML', async () => {
     const { executeCommand, getExecutor } = setupAutoApplyMocks({
       bind: boundWithSortResult,

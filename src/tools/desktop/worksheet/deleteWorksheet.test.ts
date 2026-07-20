@@ -92,6 +92,27 @@ describe('removeWorksheetFromWorkbook', () => {
     expect(windowEntries(result.xml)).toEqual([{ name: 'Alpha', klass: 'worksheet' }]);
   });
 
+  it('removes an entity-escaped worksheet when called with its literal name', () => {
+    const result = removeWorksheetFromWorkbook(
+      buildWorkbook({ sheets: ['Alpha', 'P&amp;L Waterfall: Revenue to Net Income'] }),
+      'P&L Waterfall: Revenue to Net Income',
+    );
+
+    invariant(result.status === 'removed');
+    expect(worksheetNames(result.xml)).toEqual(['Alpha']);
+    expect(windowEntries(result.xml)).toEqual([{ name: 'Alpha', klass: 'worksheet' }]);
+  });
+
+  it('removes a special-character worksheet when called with an escaped legacy name', () => {
+    const result = removeWorksheetFromWorkbook(
+      buildWorkbook({ sheets: ['Alpha', 'Revenue &lt; &quot;Gross&quot;'] }),
+      'Revenue &lt; &quot;Gross&quot;',
+    );
+
+    invariant(result.status === 'removed');
+    expect(worksheetNames(result.xml)).toEqual(['Alpha']);
+  });
+
   it('round-trip: everything except the deleted nodes is byte-stable', () => {
     // Expected = the SAME fixture authored without Beta, normalized through the
     // pipeline's own parse→serialize pair. Any collateral mutation (attribute
@@ -129,6 +150,18 @@ describe('removeWorksheetFromWorkbook', () => {
       buildWorkbook({ dashboards: [dashboardXml('Dash One', 'Alpha')] }),
       'Alpha',
     );
+    expect(result).toEqual({ status: 'dashboard-referenced', dashboards: ['Dash One'] });
+  });
+
+  it('refuses when an escaped dashboard zone references a literal ampersand worksheet', () => {
+    const result = removeWorksheetFromWorkbook(
+      buildWorkbook({
+        sheets: ['Alpha', 'P&amp;L Waterfall: Revenue to Net Income'],
+        dashboards: [dashboardXml('Dash One', 'P&amp;L Waterfall: Revenue to Net Income')],
+      }),
+      'P&L Waterfall: Revenue to Net Income',
+    );
+
     expect(result).toEqual({ status: 'dashboard-referenced', dashboards: ['Dash One'] });
   });
 
