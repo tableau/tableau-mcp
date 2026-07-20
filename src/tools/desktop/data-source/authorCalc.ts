@@ -142,7 +142,7 @@ export const getAuthorCalcTool = (server: DesktopMcpServer): DesktopTool<typeof 
             calcName,
             caption,
             datasource: target.name,
-            hint: 'reference it by caption in generate-viz-from-notional-spec',
+            hint: 'reference it by caption in a bind-template ask (name the caption plus a chart shape), auto_apply: true',
           });
         },
       });

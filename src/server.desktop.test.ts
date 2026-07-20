@@ -104,19 +104,19 @@ Load tableau-desktop-authoring before builds/edits; if unresolved failures repea
 
 Before multi-viz/dashboard builds, plan: classify requirements as MAGNITUDE=continuous quantity or MEMBERSHIP=discrete group; encode MEMBERSHIP with discrete buckets, never raw-measure color gradients. State the one-line plan, then build.
 
-For a plain viz ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot), FIRST call bind-template with the user's ask and auto_apply: true — deterministic, ~0.3s, no model work. On propose/escalate, or when the ask involves calcs, parameters, sets, actions, or custom sorts, use the semantic loop: execute-tableau-command with tabdoc:generate-viz-from-notional-spec (see notional-spec-authoring).
+For a plain viz ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot), FIRST call bind-template with the user's ask and auto_apply: true — deterministic, ~0.3s, no model work. On propose, fill and resubmit the proposal (a validated bound proposal auto-applies). When the ask needs a calculation, parameter, set, or action, author it first with the author-* verb, then bind-template the chart naming the new field's caption plus a chart shape. If bind-template escalates, find a suitable tabdoc command via search-commands.
 
-For a dashboard ask with 2-6 vizzes (e.g. "a dashboard with sales by region and profit by category"), build each sheet with bind-template for plain charts or execute-tableau-command with tabdoc:generate-viz-from-notional-spec for semantic specs, then compose the dashboard — search-commands only for commands the census does not list.
+For a dashboard ask with 2-6 vizzes (e.g. "a dashboard with sales by region and profit by category"), build each sheet with bind-template (author calcs, parameters, and sets first with the author-* verbs when the sheet needs them), then compose the dashboard — search-commands only for commands the census does not list.
 
 For a data-value question ("what was revenue in Q3?"), do NOT answer with a number — this server cannot read data values. Say so, then offer the viz that would show it (a plain viz ask via bind-template) instead.
 
-For a DYNAMIC ask — a parameter the user drives, computed top/bottom-N membership, click-to-change interaction, or mark labels, use the author-* verbs, never raw commands or XML. Author parameters FIRST via author-parameter (it reopens Desktop and re-pins the session itself; on { reopened: true } continue immediately; stagePath optional). Then author-set for param-linked top/bottom-N membership (count accepts '[Parameters].[Parameter N]'), author-calc for calcs, author-action for click-to-param wiring, format-labels for labels. Build sheets and dashboard around them with the notional-spec loop (execute-tableau-command).
+For a DYNAMIC ask — a parameter the user drives, computed top/bottom-N membership, click-to-change interaction, or mark labels, use the author-* verbs, never raw commands or XML. Author parameters FIRST via author-parameter (it reopens Desktop and re-pins the session itself; on { reopened: true } continue immediately; stagePath optional). Then author-set for param-linked top/bottom-N membership (count accepts '[Parameters].[Parameter N]'), author-calc for calcs, author-action for click-to-param wiring, format-labels for labels. Build the charts around them with bind-template asks naming the authored captions.
 
 If ambiguity changes workbook content, call ask-user with urgency=blocking; stop for answer.
 
-For current/this/that/existing sheet, chart, view, or dashboard, edit in place: resolve the target (exact name, else list-worksheets or list-dashboards; ask via ask-user if ambiguous), then use execute-tableau-command with the full edited NotionalSpec or the relevant author-* tool. Never create a new sheet unless explicitly asked.
+For current/this/that/existing sheet, chart, view, or dashboard, edit in place: resolve the target (exact name, else list-worksheets or list-dashboards; ask via ask-user if ambiguous), then refine-worksheet for top-N/sort edits or the relevant author-* tool. Never create a new sheet unless explicitly asked.
 
-Command census: tabdoc:generate-viz-from-notional-spec renders/replaces the CURRENT sheet from a NotionalSpec (refine = same call, full edited spec); tabdoc:goto-sheet switches sheets; tabui:save-underlying-metadata returns workbook metadata/fields; author-calc, author-set, author-parameter, author-action, format-labels author semantic objects. Use search-commands ONLY for commands not listed here.
+Command census: tabdoc:goto-sheet switches sheets; tabui:save-underlying-metadata returns workbook metadata/fields; author-calc, author-set, author-parameter, author-action, format-labels author semantic objects; refine-worksheet handles top-N and sort edits on an existing sheet. Use search-commands ONLY for commands not listed here.
 
 Omit session when exactly one Desktop instance runs; use list-instances when multiple are open.
 
@@ -348,10 +348,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 13-tool singable surface — the spec-loop 5 + the author-* 5 + ask-user + search-commands + bind-template, no XML/cache tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 14-tool singable surface — the spec-loop 5 + the author-* 5 + ask-user + search-commands + bind-template + refine-worksheet, no XML/cache tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(13);
+    expect(selected).toHaveLength(14);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, and deterministic fast-path doors.
     for (const verb of [
@@ -363,6 +363,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'ask-user',
       'search-commands',
       'bind-template',
+      'refine-worksheet',
     ]) {
       expect(selected.map((t) => t.name)).toContain(verb);
     }

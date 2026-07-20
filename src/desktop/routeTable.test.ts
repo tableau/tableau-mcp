@@ -38,7 +38,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
   it('ships a compact command census for the common semantic path', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
     expect(rendered).toContain('Command census:');
-    expect(rendered).toContain('tabdoc:generate-viz-from-notional-spec');
+    expect(rendered).not.toContain('tabdoc:generate-viz-from-notional-spec');
     expect(rendered).toContain('tabdoc:goto-sheet');
     expect(rendered).toContain('tabui:save-underlying-metadata');
     expect(rendered).toContain('Use search-commands ONLY for commands not listed here.');

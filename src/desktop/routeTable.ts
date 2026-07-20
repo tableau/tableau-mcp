@@ -48,10 +48,10 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a plain viz ask (bar, column, line, treemap, waterfall, scatter, filled map, KPI, funnel, box plot)',
     action:
-      "FIRST call bind-template with the user's ask and auto_apply: true — deterministic, ~0.3s, no model work. On propose/escalate, or when the ask involves calcs, parameters, sets, actions, or custom sorts, use the semantic loop: execute-tableau-command with tabdoc:generate-viz-from-notional-spec (see notional-spec-authoring).",
-    toolSequence: ['bind-template', 'execute-tableau-command'],
+      "FIRST call bind-template with the user's ask and auto_apply: true — deterministic, ~0.3s, no model work. On propose, fill and resubmit the proposal (a validated bound proposal auto-applies). When the ask needs a calculation, parameter, set, or action, author it first with the author-* verb, then bind-template the chart naming the new field's caption plus a chart shape. If bind-template escalates, find a suitable tabdoc command via search-commands.",
+    toolSequence: ['bind-template', 'search-commands'],
     stopConditions: ['deterministic, ~0.3s, no model work'],
-    requiredEvidence: ["execute-tableau-command success envelope: { state: 'SUCCEEDED' }"],
+    requiredEvidence: ['bind-template applied result (auto-apply receipt)'],
   },
   {
     kind: 'route',
@@ -59,8 +59,8 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a dashboard ask with 2-6 vizzes (e.g. "a dashboard with sales by region and profit by category")',
     action:
-      'build each sheet with bind-template for plain charts or execute-tableau-command with tabdoc:generate-viz-from-notional-spec for semantic specs, then compose the dashboard — search-commands only for commands the census does not list.',
-    toolSequence: ['bind-template', 'execute-tableau-command', 'search-commands'],
+      'build each sheet with bind-template (author calcs, parameters, and sets first with the author-* verbs when the sheet needs them), then compose the dashboard — search-commands only for commands the census does not list.',
+    toolSequence: ['bind-template', 'search-commands'],
     stopConditions: ['search-commands only for commands the census does not list'],
     requiredEvidence: ['each sheet build returns a success envelope before dashboard composition'],
   },
@@ -80,14 +80,14 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a DYNAMIC ask — a parameter the user drives, computed top/bottom-N membership, click-to-change interaction, or mark labels',
     action:
-      "use the author-* verbs, never raw commands or XML. Author parameters FIRST via author-parameter (it reopens Desktop and re-pins the session itself; on { reopened: true } continue immediately; stagePath optional). Then author-set for param-linked top/bottom-N membership (count accepts '[Parameters].[Parameter N]'), author-calc for calcs, author-action for click-to-param wiring, format-labels for labels. Build sheets and dashboard around them with the notional-spec loop (execute-tableau-command).",
+      "use the author-* verbs, never raw commands or XML. Author parameters FIRST via author-parameter (it reopens Desktop and re-pins the session itself; on { reopened: true } continue immediately; stagePath optional). Then author-set for param-linked top/bottom-N membership (count accepts '[Parameters].[Parameter N]'), author-calc for calcs, author-action for click-to-param wiring, format-labels for labels. Build the charts around them with bind-template asks naming the authored captions.",
     toolSequence: [
       'author-parameter',
       'author-set',
       'author-calc',
       'author-action',
       'format-labels',
-      'execute-tableau-command',
+      'bind-template',
     ],
     stopConditions: ['on { reopened: true } continue immediately'],
     requiredEvidence: ["each author-* verb's readback-verified result object"],
@@ -102,15 +102,15 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'edit-in-place',
     trigger: 'current/this/that/existing sheet, chart, view, or dashboard',
     action:
-      'edit in place: resolve the target (exact name, else list-worksheets or list-dashboards; ask via ask-user if ambiguous), then use execute-tableau-command with the full edited NotionalSpec or the relevant author-* tool. Never create a new sheet unless explicitly asked.',
-    toolSequence: ['list-worksheets', 'list-dashboards', 'ask-user', 'execute-tableau-command'],
+      'edit in place: resolve the target (exact name, else list-worksheets or list-dashboards; ask via ask-user if ambiguous), then refine-worksheet for top-N/sort edits or the relevant author-* tool. Never create a new sheet unless explicitly asked.',
+    toolSequence: ['list-worksheets', 'list-dashboards', 'ask-user', 'refine-worksheet'],
     stopConditions: ['Never create a new sheet unless explicitly asked'],
     requiredEvidence: ['resolved worksheet/dashboard target before applying'],
   },
   {
     kind: 'prose',
     id: 'command-census',
-    text: 'Command census: tabdoc:generate-viz-from-notional-spec renders/replaces the CURRENT sheet from a NotionalSpec (refine = same call, full edited spec); tabdoc:goto-sheet switches sheets; tabui:save-underlying-metadata returns workbook metadata/fields; author-calc, author-set, author-parameter, author-action, format-labels author semantic objects. Use search-commands ONLY for commands not listed here.',
+    text: 'Command census: tabdoc:goto-sheet switches sheets; tabui:save-underlying-metadata returns workbook metadata/fields; author-calc, author-set, author-parameter, author-action, format-labels author semantic objects; refine-worksheet handles top-N and sort edits on an existing sheet. Use search-commands ONLY for commands not listed here.',
   },
   {
     kind: 'prose',
