@@ -70,6 +70,26 @@ describe('validateUnderlyingMetadataLoad', () => {
     expect(result.message).toContain('delete-worksheet tool');
   });
 
+  it('rejects a dropped worksheet whose live name is DOUBLE-quoted (guard must not fail open)', () => {
+    const live = `<workbook>
+  <datasources><datasource name='ds'><column name='[Sales]' /></datasource></datasources>
+  <worksheets>
+    <worksheet name="A"><table><view /></table></worksheet>
+    <worksheet name="B"><table><view /></table></worksheet>
+  </worksheets>
+</workbook>`;
+    const submitted = live.replace(
+      '    <worksheet name="B"><table><view /></table></worksheet>\n',
+      '',
+    );
+
+    const result = validateUnderlyingMetadataLoad(submitted, live);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected failure');
+    expect(result.message).toContain('DROP worksheet(s) B');
+  });
+
   it('accepts a spliced whole workbook document that preserves live worksheets', () => {
     expect(validateUnderlyingMetadataLoad(SPLICED_WORKBOOK_XML, LIVE_WORKBOOK_XML)).toEqual({
       ok: true,

@@ -5,7 +5,11 @@ import type { CommandValidationResult } from './commandRegistry.js';
 // rejects every legitimate whole document (live false-positive, 2026-07-19).
 const WORKBOOK_ROOT_RE =
   /^\s*(?:<\?xml\b[\s\S]*?\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<workbook(?:\s|>|\/)/;
-const WORKSHEET_NAME_RE = /<worksheet\b[^>]*\bname='([^']*)'/g;
+// Match single- OR double-quoted worksheet names: a guard that only saw name='…'
+// would go BLIND to a double-quoted live sheet and silently allow it to be dropped —
+// the exact data-loss this guard exists to prevent, failing OPEN. formatLabels.ts
+// extracts the same attribute with the same both-quotes pattern; keep them consistent.
+const WORKSHEET_NAME_RE = /<worksheet\b[^>]*\bname=(['"])(.*?)\1/g;
 
 function fail(problem: string, fix: string): CommandValidationResult {
   return { ok: false, message: `${problem}\nFIX: ${fix}` };
@@ -14,7 +18,7 @@ function fail(problem: string, fix: string): CommandValidationResult {
 function worksheetNames(xml: string): Set<string> {
   const names = new Set<string>();
   for (const match of xml.matchAll(WORKSHEET_NAME_RE)) {
-    names.add(match[1]);
+    names.add(match[2]);
   }
   return names;
 }
