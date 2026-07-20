@@ -331,7 +331,7 @@ function main(): void {
   console.log(`  Summary: ${summaryPath}`);
   console.log('\nTo grade cases:');
   for (const r of results) {
-    console.log(`  npx tsx evals/grade-bird.ts ${r.run_dir}`);
+    console.log(`  npx tsx ${path.join(EVALS_DIR, 'grade-bird.ts')} ${r.run_dir}`);
   }
 }
 
