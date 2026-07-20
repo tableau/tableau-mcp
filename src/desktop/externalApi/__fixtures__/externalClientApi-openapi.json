@@ -1,0 +1,1743 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Tableau External Client API",
+    "version": "0.1.0",
+    "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "The Tableau Desktop loopback origin. The bound port is published in the per-user discovery file."
+    }
+  ],
+  "paths": {
+    "/.well-known/oauth-protected-resource": {
+      "get": {
+        "summary": "Get protected-resource metadata",
+        "description": "Returns the RFC 9728 OAuth Protected Resource Metadata document.",
+        "operationId": "getOAuthProtectedResource",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Returns the RFC 9728 OAuth Protected Resource Metadata document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtectedResourceMetadata"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "Get the OpenAPI document",
+        "description": "Returns the OpenAPI 3.1 description of this API.",
+        "operationId": "getOpenApi",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Returns the OpenAPI 3.1 description of this API.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v0/": {
+      "get": {
+        "summary": "Get the API root",
+        "description": "Returns the API and application versions and the link map to available resources.",
+        "operationId": "getRoot",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Returns the API and application versions and the link map to available resources.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiRoot"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v0/app": {
+      "get": {
+        "summary": "Get application info",
+        "description": "Returns the running Tableau Desktop version, edition, locale, and paths.",
+        "operationId": "getApp",
+        "responses": {
+          "200": {
+            "description": "Returns the running Tableau Desktop version, edition, locale, and paths.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/health": {
+      "get": {
+        "summary": "Check API liveness",
+        "operationId": "getHealth",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The requested representation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v0/site": {
+      "get": {
+        "summary": "Get the connected site",
+        "description": "Returns the site the user is signed in to, or 404 when there is no connected site.",
+        "operationId": "getSite",
+        "responses": {
+          "200": {
+            "description": "Returns the site the user is signed in to, or 404 when there is no connected site.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/site/datasources": {
+      "get": {
+        "summary": "List published datasources",
+        "description": "Lists datasources published to the connected site.",
+        "operationId": "listSiteDatasources",
+        "responses": {
+          "200": {
+            "description": "Lists datasources published to the connected site.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteDatasourceList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/site/workbooks": {
+      "get": {
+        "summary": "List published workbooks",
+        "description": "Lists workbooks published to the connected site.",
+        "operationId": "listSiteWorkbooks",
+        "responses": {
+          "200": {
+            "description": "Lists workbooks published to the connected site.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteWorkbookList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook": {
+      "get": {
+        "summary": "Get the open workbook",
+        "description": "Returns metadata and the sheet inventory of the open workbook, or 404 when none is open.",
+        "operationId": "getWorkbook",
+        "responses": {
+          "200": {
+            "description": "Returns metadata and the sheet inventory of the open workbook, or 404 when none is open.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookInventory"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/dashboards": {
+      "get": {
+        "summary": "List dashboards",
+        "description": "Lists the dashboards in the open workbook.",
+        "operationId": "listDashboards",
+        "responses": {
+          "200": {
+            "description": "Lists the dashboards in the open workbook.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/dashboards/{id}": {
+      "get": {
+        "summary": "Get a dashboard",
+        "description": "Returns metadata for a single dashboard by id.",
+        "operationId": "getDashboard",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns metadata for a single dashboard by id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/dashboards/{id}/document": {
+      "get": {
+        "summary": "Get a dashboard document",
+        "description": "Returns a single dashboard as a Tableau XML subtree.",
+        "operationId": "getDashboardDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Tableau payload (file-format) version the client authored the document against.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns a single dashboard as a Tableau XML subtree.",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-XSD-Payload-Version": {
+                "description": "Payload (file-format) version the document was served as.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/datasources": {
+      "get": {
+        "summary": "List workbook datasources",
+        "description": "Lists the datasources used by the open workbook.",
+        "operationId": "listWorkbookDatasources",
+        "responses": {
+          "200": {
+            "description": "Lists the datasources used by the open workbook.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasourceList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/document": {
+      "get": {
+        "summary": "Get the workbook document",
+        "description": "Returns the full open workbook as Tableau XML.",
+        "operationId": "getWorkbookDocument",
+        "parameters": [
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Tableau payload (file-format) version the client authored the document against.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the full open workbook as Tableau XML.",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-XSD-Payload-Version": {
+                "description": "Payload (file-format) version the document was served as.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "summary": "Apply a workbook document",
+        "description": "Replaces the open workbook with the submitted Tableau XML.",
+        "operationId": "applyWorkbookDocument",
+        "parameters": [
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Tableau payload (file-format) version the client authored the document against.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The workbook document as Tableau XML.",
+          "content": {
+            "application/xml": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replaces the open workbook with the submitted Tableau XML.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/document:validate": {
+      "post": {
+        "summary": "Validate a workbook document",
+        "description": "Validates the submitted Tableau XML against the schema without applying it.",
+        "operationId": "validateWorkbookDocument",
+        "parameters": [
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Tableau payload (file-format) version the client authored the document against.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The workbook document as Tableau XML.",
+          "content": {
+            "application/xml": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validates the submitted Tableau XML against the schema without applying it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/storyboards": {
+      "get": {
+        "summary": "List storyboards",
+        "description": "Lists the storyboards in the open workbook.",
+        "operationId": "listStoryboards",
+        "responses": {
+          "200": {
+            "description": "Lists the storyboards in the open workbook.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryboardList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/storyboards/{id}": {
+      "get": {
+        "summary": "Get a storyboard",
+        "description": "Returns metadata for a single storyboard by id.",
+        "operationId": "getStoryboard",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns metadata for a single storyboard by id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryboardItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/storyboards/{id}/document": {
+      "get": {
+        "summary": "Get a storyboard document",
+        "description": "Returns a single storyboard as a Tableau XML subtree.",
+        "operationId": "getStoryboardDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Tableau payload (file-format) version the client authored the document against.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns a single storyboard as a Tableau XML subtree.",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-XSD-Payload-Version": {
+                "description": "Payload (file-format) version the document was served as.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/worksheets": {
+      "get": {
+        "summary": "List worksheets",
+        "description": "Lists the worksheets in the open workbook.",
+        "operationId": "listWorksheets",
+        "responses": {
+          "200": {
+            "description": "Lists the worksheets in the open workbook.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorksheetList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}": {
+      "get": {
+        "summary": "Get a worksheet",
+        "description": "Returns metadata for a single worksheet by id.",
+        "operationId": "getWorksheet",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns metadata for a single worksheet by id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorksheetItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}/document": {
+      "get": {
+        "summary": "Get a worksheet document",
+        "description": "Returns a single worksheet as a Tableau XML subtree.",
+        "operationId": "getWorksheetDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Tableau payload (file-format) version the client authored the document against.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns a single worksheet as a Tableau XML subtree.",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-XSD-Payload-Version": {
+                "description": "Payload (file-format) version the document was served as.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}/summaryData": {
+      "get": {
+        "summary": "Get worksheet summary data",
+        "description": "Returns the summary (logical table) data for a worksheet as JSON.",
+        "operationId": "getWorksheetSummaryData",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "maxRows",
+            "in": "query",
+            "required": false,
+            "description": "Maximum number of data rows to return.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "ignoreAliases",
+            "in": "query",
+            "required": false,
+            "description": "Return underlying values instead of display aliases.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "ignoreSelection",
+            "in": "query",
+            "required": false,
+            "description": "Return all data rather than only the current selection.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "columnsToIncludeByFieldName",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated field names to restrict the returned columns.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the summary (logical table) data for a worksheet as JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummaryData"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "Problem": {
+        "type": "object",
+        "description": "RFC 9457 Problem Details. Structured extension members, such as tableauErrorCode, may appear as additional top-level fields.",
+        "required": [
+          "code",
+          "status",
+          "instance"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable error identity clients branch on.",
+            "x-extensible-enum": [
+              "api-disabled",
+              "host-not-allowed",
+              "origin-not-allowed",
+              "unauthenticated",
+              "missing-user-agent",
+              "invalid-request-body",
+              "unsupported-content-type",
+              "missing-payload-version",
+              "payload-version-unsupported",
+              "not-found",
+              "sheet-not-found",
+              "method-not-allowed",
+              "not-implemented",
+              "command-not-found",
+              "invalid-command-parameter",
+              "operation-failed"
+            ]
+          },
+          "status": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Operation": {
+        "type": "object",
+        "description": "The state of a dispatched operation.",
+        "required": [
+          "id",
+          "kind",
+          "state"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "completedAt": {
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/OperationError"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperationWarning"
+            }
+          }
+        }
+      },
+      "OperationError": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "OperationWarning": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "WorksheetItem": {
+        "type": "object",
+        "description": "A worksheet in the open workbook.",
+        "required": [
+          "id",
+          "name",
+          "hidden"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "x-extensible-enum": [
+              "WORKSHEET",
+              "DASHBOARD",
+              "STORYBOARD"
+            ]
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "datasources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "DashboardItem": {
+        "type": "object",
+        "description": "A dashboard in the open workbook.",
+        "required": [
+          "id",
+          "name",
+          "hidden"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "x-extensible-enum": [
+              "WORKSHEET",
+              "DASHBOARD",
+              "STORYBOARD"
+            ]
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "containedSheets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "StoryboardItem": {
+        "type": "object",
+        "description": "A storyboard in the open workbook.",
+        "required": [
+          "id",
+          "name",
+          "hidden"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "x-extensible-enum": [
+              "WORKSHEET",
+              "DASHBOARD",
+              "STORYBOARD"
+            ]
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "storyPointCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "WorkbookInventory": {
+        "type": "object",
+        "description": "Metadata and sheet inventory of the open workbook.",
+        "required": [
+          "title",
+          "unsavedChanges"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string",
+            "nullable": true
+          },
+          "unsavedChanges": {
+            "type": "boolean"
+          },
+          "worksheets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorksheetItem"
+            }
+          },
+          "dashboards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardItem"
+            }
+          },
+          "storyboards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoryboardItem"
+            }
+          }
+        }
+      },
+      "WorksheetList": {
+        "type": "object",
+        "properties": {
+          "worksheets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorksheetItem"
+            }
+          }
+        }
+      },
+      "DashboardList": {
+        "type": "object",
+        "properties": {
+          "dashboards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardItem"
+            }
+          }
+        }
+      },
+      "StoryboardList": {
+        "type": "object",
+        "properties": {
+          "storyboards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoryboardItem"
+            }
+          }
+        }
+      },
+      "DatasourceItem": {
+        "type": "object",
+        "description": "A datasource used by the open workbook.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          }
+        }
+      },
+      "DatasourceList": {
+        "type": "object",
+        "properties": {
+          "datasources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DatasourceItem"
+            }
+          }
+        }
+      },
+      "SiteWorkbookItem": {
+        "type": "object",
+        "description": "A workbook published to the connected site.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "luid": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          }
+        }
+      },
+      "SiteWorkbookList": {
+        "type": "object",
+        "properties": {
+          "workbooks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteWorkbookItem"
+            }
+          }
+        }
+      },
+      "SiteDatasourceItem": {
+        "type": "object",
+        "description": "A datasource published to the connected site.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "luid": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          }
+        }
+      },
+      "SiteDatasourceList": {
+        "type": "object",
+        "properties": {
+          "datasources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteDatasourceItem"
+            }
+          }
+        }
+      },
+      "SummaryData": {
+        "type": "object",
+        "description": "Worksheet summary (logical table) data.",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "dataType": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array"
+            }
+          }
+        }
+      },
+      "ValidationResult": {
+        "type": "object",
+        "description": "The outcome of validating a workbook document.",
+        "required": [
+          "isValid"
+        ],
+        "properties": {
+          "isValid": {
+            "type": "boolean"
+          },
+          "validationIssues": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ApiRoot": {
+        "type": "object",
+        "description": "API versions and the resource link map.",
+        "properties": {
+          "apiVersion": {
+            "type": "string"
+          },
+          "applicationVersion": {
+            "type": "string"
+          },
+          "links": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AppInfo": {
+        "type": "object",
+        "description": "Running Tableau Desktop process information.",
+        "properties": {
+          "applicationVersion": {
+            "type": "string"
+          },
+          "edition": {
+            "type": "string"
+          },
+          "build": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "repositoryLocation": {
+            "type": "string"
+          },
+          "logLocation": {
+            "type": "string"
+          }
+        }
+      },
+      "Site": {
+        "type": "object",
+        "description": "The connected Tableau site.",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "authenticatedUserId": {
+            "type": "string"
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "description": "Liveness probe result.",
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "ProtectedResourceMetadata": {
+        "type": "object",
+        "description": "RFC 9728 OAuth Protected Resource Metadata.",
+        "properties": {
+          "authorization_servers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bearer_methods_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "The request was malformed. The code field identifies the specific problem, such as a missing required header or an unreadable body.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "The bearer token was missing or invalid. The response carries a WWW-Authenticate challenge.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "The request origin was not permitted.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "The addressed resource does not exist. The code field distinguishes an unknown route from a valid resource with an unknown id.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "MethodNotAllowed": {
+        "description": "The path exists but does not support this HTTP method.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "The request conflicts with the current state, such as an unsupported payload version.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "The request Content-Type is not accepted by this endpoint.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "MisdirectedRequest": {
+        "description": "The request Host header was not a loopback address.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "An unexpected error occurred.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "The External Client API is disabled or shutting down.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ]
+}
