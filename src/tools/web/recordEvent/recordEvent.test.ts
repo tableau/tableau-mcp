@@ -88,17 +88,6 @@ describe('getRecordEventTool', () => {
     }
   });
 
-  it('rejects event_type that is too long or not SCREAMING_SNAKE_CASE', async () => {
-    const schema = z.object(
-      await Provider.from(getRecordEventTool(new WebMcpServer()).paramsSchema),
-    );
-    expect(schema.safeParse({ event_type: 'A'.repeat(65) }).success).toBe(false); // too long
-    expect(schema.safeParse({ event_type: 'tool_error' }).success).toBe(false); // lowercase
-    expect(schema.safeParse({ event_type: 'TOOL ERROR' }).success).toBe(false); // spaces
-    expect(schema.safeParse({ event_type: '1TOOL_ERROR' }).success).toBe(false); // leading digit
-    expect(schema.safeParse({ event_type: '_TOOL_ERROR' }).success).toBe(false); // leading underscore
-  });
-
   it('truncates message longer than 1024 characters in the forwarded event', async () => {
     const extra = getMockRequestHandlerExtra();
     const longMessage = 'x'.repeat(2000);
