@@ -218,7 +218,7 @@ async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise
     return new Ok(await callback());
   } catch (error) {
     if (isAxiosError(error)) {
-      if (error.response?.status === 404) {
+      if (error.response?.status === 404 && !error.response?.data?.code) {
         return new PulseNotAvailableError().toErr();
       }
 
