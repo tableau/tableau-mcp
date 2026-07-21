@@ -271,6 +271,37 @@ describe('Config', () => {
     expect(config.breakGlassDisableGlobally).toBe(true);
   });
 
+  it('should set flowToolsEnabled to false by default', () => {
+    const config = new Config();
+    expect(config.flowToolsEnabled).toBe(false);
+  });
+
+  it('should set flowToolsEnabled to true when FLOW_TOOLS_ENABLED is "true"', () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
+
+    const config = new Config();
+    expect(config.flowToolsEnabled).toBe(true);
+  });
+
+  it('should keep flowToolsEnabled false for values other than "true"', () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', 'yes');
+
+    const config = new Config();
+    expect(config.flowToolsEnabled).toBe(false);
+  });
+
+  it('should default insightsToolsEnabled to false', () => {
+    const config = new Config();
+    expect(config.insightsToolsEnabled).toBe(false);
+  });
+
+  it('should set insightsToolsEnabled to true when INSIGHTS_TOOLS_ENABLED is "true"', () => {
+    vi.stubEnv('INSIGHTS_TOOLS_ENABLED', 'true');
+
+    const config = new Config();
+    expect(config.insightsToolsEnabled).toBe(true);
+  });
+
   describe('HTTP server config parsing', () => {
     it('should set sslKey to default when SSL_KEY is not set', () => {
       const config = new Config();

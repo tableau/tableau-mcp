@@ -19,8 +19,8 @@ import { scheduleBinding } from './updateCloudExtractRefreshTask.js';
 vi.mock('../../../logging/logger.js');
 
 // All mutation-audit records emitted so far, each parsed through the authoritative schema so the
-// assertion fails if the guard ever drops a required field. A confirmed update emits two (the
-// allowed authorization decision, then the terminal completed/failed outcome); denied paths emit one.
+// assertion fails if the guard ever drops a required field. A confirmed update emits exactly one
+// terminal record (completed or failed); denied paths also emit exactly one.
 function getAuditRecords(): ReturnType<typeof auditRecordSchema.parse>[] {
   const log = logger.log as MockedFunction<typeof logger.log>;
   return log.mock.calls
@@ -57,6 +57,8 @@ const updatedTask: ExtractRefreshTask = {
 
 const mocks = vi.hoisted(() => ({
   mockUpdateCloudExtractRefreshTask: vi.fn(),
+  mockListExtractRefreshTasks: vi.fn(),
+  mockQueryDatasource: vi.fn(),
   mockQueryUserOnSite: vi.fn(),
   mockAssertAdmin: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
@@ -71,6 +73,10 @@ vi.mock('../../../restApiInstance.js', () => ({
     callback({
       tasksMethods: {
         updateCloudExtractRefreshTask: mocks.mockUpdateCloudExtractRefreshTask,
+        listExtractRefreshTasks: mocks.mockListExtractRefreshTasks,
+      },
+      datasourcesMethods: {
+        queryDatasource: mocks.mockQueryDatasource,
       },
       usersMethods: {
         queryUserOnSite: mocks.mockQueryUserOnSite,
@@ -116,9 +122,25 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
     vi.clearAllMocks();
     delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
     mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
-    mocks.mockQueryUserOnSite.mockResolvedValue({ siteRole: 'SiteAdministratorCreator' });
+    mocks.mockQueryUserOnSite.mockResolvedValue({
+      id: 'owner-1',
+      name: 'Owner One',
+      email: 'owner@example.com',
+      siteRole: 'SiteAdministratorCreator',
+    });
     mocks.mockUpdateCloudExtractRefreshTask.mockResolvedValue(new Ok(updatedTask));
-    mocks.mockIsFeatureEnabled.mockReturnValue(true);
+    // Default: the task list resolves this task to its underlying datasource so the audit target is
+    // enriched (AC-3).
+    mocks.mockListExtractRefreshTasks.mockResolvedValue([
+      { id: validTaskId, datasource: { id: 'ds-1' } },
+    ]);
+    mocks.mockQueryDatasource.mockResolvedValue({
+      id: 'ds-1',
+      name: 'Sales Extract',
+      project: { name: 'Finance' },
+      owner: { id: 'owner-1' },
+    });
+    mocks.mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   it('is a model-invisible app-only tool gated on adminToolsEnabled && mcp-apps', () => {
@@ -139,7 +161,7 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
   });
 
   it('is disabled when the mcp-apps flag is OFF', async () => {
-    mocks.mockIsFeatureEnabled.mockReturnValue(false);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
     const tool = getConfirmUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
@@ -159,13 +181,17 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
       taskId: validTaskId,
       schedule: validSchedule,
     });
-    // A confirmed update emits two records: the allowed authorization decision, then the terminal
-    // 'completed' outcome once the REST update succeeds (audit reflects outcome, not just intent).
+    // A confirmed update emits exactly one record: the terminal 'completed' outcome once the REST
+    // update succeeds (the confirm's authorization is folded into that terminal record).
     const records = getAuditRecords();
-    expect(records.map((r) => r.result)).toEqual(['allowed', 'completed']);
+    expect(records.map((r) => r.result)).toEqual(['completed']);
     expect(records.every((r) => r.phase === 'confirm')).toBe(true);
     expect(records.every((r) => r.action === 'update')).toBe(true);
     expect(records.every((r) => r.confirmationEvidence.kind === 'registry-nonce')).toBe(true);
+    // AC-3 / Gap-B: the audit target is enriched from the task's underlying datasource.
+    expect(records[0].target.name).toBe('Sales Extract');
+    expect(records[0].target.project).toBe('Finance');
+    expect(records[0].target.owner).toBe('owner@example.com');
   });
 
   // --- Missing approval → PreviewNotRunError, no update ---
@@ -183,12 +209,12 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
 
   // --- Cross-namespace isolation: a delete approval must not unlock an update ---
 
-  it('rejects an approval established under the delete-extract-refresh-task namespace', async () => {
-    await new AppApprovalEvidence('delete-extract-refresh-task').establish({
+  it('rejects an approval established under the delete-content namespace', async () => {
+    await new AppApprovalEvidence('delete-content').establish({
       restApi: { siteId: 'test-site-id' } as never,
       siteId: 'test-site-id',
       target: { id: validTaskId, kind: 'extract-refresh-task' },
-      tool: 'confirm-delete-extract-refresh-task',
+      tool: 'delete-content',
       userLuid: getMockRequestHandlerExtra().getUserLuid(),
     });
     const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
@@ -296,9 +322,10 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
     expect(result.content[0].text).toContain('Tableau Cloud only');
     expect(result.content[0].text).toContain('Tableau 404 [404001]');
     // An authorized-but-failed update records the terminal 'failed' outcome (with the Tableau-api
-    // detail) so the audit trail never claims an update that did not happen.
+    // detail) as the sole confirm record, so the audit trail never claims an update that did not
+    // happen.
     const records = getAuditRecords();
-    expect(records.map((r) => r.result)).toEqual(['allowed', 'failed']);
+    expect(records.map((r) => r.result)).toEqual(['failed']);
     const failed = records.find((r) => r.result === 'failed');
     invariant(failed, 'expected a failed audit record');
     expect(failed.failureDetail).toContain('Tableau 404 [404001]');

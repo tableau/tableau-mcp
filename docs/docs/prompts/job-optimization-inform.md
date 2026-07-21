@@ -14,7 +14,7 @@ This prompt is restricted to Tableau site administrators and requires the `ADMIN
 
 ## Workflow
 
-The prompt instructs the model to call [`query-admin-insights-job-performance`](../tools/admin-insights/query-admin-insights-job-performance.md) and render the returned rows as a Markdown table followed by an "Optimization signals" section. Defaults to extract-refresh job types; set `discover` to first enumerate every Job Type on the site and analyze each. Read-only — no schedule, pause, or delete actions.
+The prompt instructs the model to call [`query-admin-insights`](../tools/admin-insights/query-admin-insights.md) with `kind: "job-performance"` and render the returned rows as a Markdown table followed by an "Optimization signals" section. Defaults to extract-refresh job types; set `discover` to first enumerate every Job Type on the site and analyze each. Read-only — no schedule, pause, or delete actions.
 
 ## Arguments
 

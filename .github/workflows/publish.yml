@@ -9,14 +9,18 @@ jobs:
       contents: read
       id-token: write # Needed for OIDC authentication
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '>=22.7.5'
           registry-url: https://registry.npmjs.org/
-      - run: |
+      - env:
+          # Passed via env (not inline ${{ }} in the script) — the tag name is
+          # release-author-controlled input; env keeps it out of shell parsing.
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
           git fetch --tags
-          git checkout -b publish ${{ github.event.release.tag_name }}
+          git checkout -b publish "$RELEASE_TAG"
           npm install -g npm@latest
           npm ci
           npm run build
@@ -27,14 +31,47 @@ jobs:
           test -f build/index.js
           test -f build/index.desktop.js
           test -d build/desktop/data
-          npm publish
+          # Prerelease-aware publish. A SemVer prerelease version (one containing a
+          # `-`, e.g. 2.18.0-hotfix.1; build metadata `+...` is NOT a prerelease)
+          # must NOT reassign the `latest` npm dist-tag — otherwise a hotfix off an
+          # old release line would steal `latest` from the real release line. npm
+          # moves `latest` on EVERY bare `npm publish`, so prereleases publish
+          # under a dedicated dist-tag instead.
+          # NOTE: the dist-tag must NOT itself be a valid SemVer version (npm
+          # rejects that), so we use `hotfix-v<version>` rather than the bare
+          # version. Consumers pin the exact version (`@2.18.0-hotfix.1`)
+          # regardless; the dist-tag is just a non-`latest` pointer.
+          # Fail CLOSED: if the version can't be read, abort before publishing —
+          # a bare publish on an empty version would wrongly move `latest`.
+          # VERSION comes from package.json (the repo's own committed value, not
+          # external input) into a shell var — no GitHub expression interpolation here.
+          VERSION="$(node -p "require('./package.json').version")"
+          if [[ -z "$VERSION" || "$VERSION" == "undefined" ]]; then
+            echo "::error::Could not read version from package.json — aborting publish (refusing to risk moving 'latest')"
+            exit 1
+          fi
+          # PREFLIGHT: the release tag must be exactly v<package.json version>.
+          # npm decides prerelease-vs-stable from package.json while Docker
+          # (docker-publish.yml) decides from the release tag name — a mismatch
+          # would let the two registries disagree about moving `latest`.
+          if [[ "$RELEASE_TAG" != "v$VERSION" ]]; then
+            echo "::error::Release tag '$RELEASE_TAG' != 'v$VERSION' (package.json) — aborting. Tag the exact commit whose package.json matches, or fix the release tag."
+            exit 1
+          fi
+          if [[ "$VERSION" == *-* ]]; then
+            echo "Prerelease $VERSION -> npm publish --tag hotfix-v$VERSION (NOT moving 'latest')"
+            npm publish --tag "hotfix-v$VERSION"
+          else
+            echo "Stable $VERSION -> npm publish (moves 'latest')"
+            npm publish
+          fi
   upload-mcpb:
     runs-on: ubuntu-latest
     permissions:
       contents: write # Needed to upload release assets
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '>=22.7.5'
           cache: 'npm'

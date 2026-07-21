@@ -56,13 +56,7 @@ describe('OverridableConfig', () => {
       vi.stubEnv('INCLUDE_TOOLS', 'query-datasource,workbook');
 
       const config = new OverridableConfig({});
-      expect(config.includeTools).toEqual([
-        'query-datasource',
-        'list-workbooks',
-        'get-workbook',
-        'delete-workbook',
-        'confirm-delete-workbook',
-      ]);
+      expect(config.includeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
     });
 
     it('should parse EXCLUDE_TOOLS into an array of valid tool names', () => {
@@ -76,13 +70,7 @@ describe('OverridableConfig', () => {
       vi.stubEnv('EXCLUDE_TOOLS', 'query-datasource,workbook');
 
       const config = new OverridableConfig({});
-      expect(config.excludeTools).toEqual([
-        'query-datasource',
-        'list-workbooks',
-        'get-workbook',
-        'delete-workbook',
-        'confirm-delete-workbook',
-      ]);
+      expect(config.excludeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
     });
 
     it('should filter out invalid tool names from INCLUDE_TOOLS', () => {
@@ -1111,6 +1099,94 @@ describe('OverridableConfig', () => {
         ).toThrow(
           'MAX_RESULT_LIMITS request override must include a limit for query-datasource that is less than or equal to 100',
         );
+      });
+    });
+  });
+
+  describe('STALE_CONTENT_MAX_ROWS', () => {
+    it('defaults to 100 when unset', () => {
+      const config = new OverridableConfig({});
+      expect(config.staleContentMaxRows).toBe(100);
+    });
+
+    it('reads a valid value from the environment', () => {
+      vi.stubEnv('STALE_CONTENT_MAX_ROWS', '250');
+      const config = new OverridableConfig({});
+      expect(config.staleContentMaxRows).toBe(250);
+    });
+
+    it('falls back to the default when the env value is not a number', () => {
+      vi.stubEnv('STALE_CONTENT_MAX_ROWS', 'abc');
+      const config = new OverridableConfig({});
+      expect(config.staleContentMaxRows).toBe(100);
+    });
+
+    it('falls back to the default when the env value is out of range', () => {
+      vi.stubEnv('STALE_CONTENT_MAX_ROWS', '0');
+      expect(new OverridableConfig({}).staleContentMaxRows).toBe(100);
+
+      vi.stubEnv('STALE_CONTENT_MAX_ROWS', '99999');
+      expect(new OverridableConfig({}).staleContentMaxRows).toBe(100);
+    });
+
+    describe('site overrides', () => {
+      it('applies a valid site override', () => {
+        vi.stubEnv('STALE_CONTENT_MAX_ROWS', '250');
+        const config = new OverridableConfig({ STALE_CONTENT_MAX_ROWS: '500' });
+        expect(config.staleContentMaxRows).toBe(500);
+      });
+
+      it('reverts to the default when the site override is an empty string', () => {
+        vi.stubEnv('STALE_CONTENT_MAX_ROWS', '250');
+        const config = new OverridableConfig({ STALE_CONTENT_MAX_ROWS: '' });
+        expect(config.staleContentMaxRows).toBe(100);
+      });
+
+      it('keeps the env value when the site override is invalid', () => {
+        vi.stubEnv('STALE_CONTENT_MAX_ROWS', '250');
+        const config = new OverridableConfig({ STALE_CONTENT_MAX_ROWS: '99999' });
+        expect(config.staleContentMaxRows).toBe(250);
+      });
+    });
+
+    describe('request overrides', () => {
+      it('applies a valid request override when allowed', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'STALE_CONTENT_MAX_ROWS');
+        const config = new OverridableConfig({}, { STALE_CONTENT_MAX_ROWS: '42' });
+        expect(config.staleContentMaxRows).toBe(42);
+      });
+
+      it('throws when the request override is not allowed', () => {
+        expect(() => new OverridableConfig({}, { STALE_CONTENT_MAX_ROWS: '42' })).toThrow(
+          'STALE_CONTENT_MAX_ROWS is not an allowed request override',
+        );
+      });
+
+      it('throws when the request override value is invalid', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'STALE_CONTENT_MAX_ROWS');
+        expect(() => new OverridableConfig({}, { STALE_CONTENT_MAX_ROWS: '0' })).toThrow(
+          'STALE_CONTENT_MAX_ROWS was provided an invalid request override value',
+        );
+        expect(() => new OverridableConfig({}, { STALE_CONTENT_MAX_ROWS: '99999' })).toThrow(
+          'STALE_CONTENT_MAX_ROWS was provided an invalid request override value',
+        );
+      });
+
+      it('reverts to the default when the request override is an empty string', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'STALE_CONTENT_MAX_ROWS');
+        vi.stubEnv('STALE_CONTENT_MAX_ROWS', '250');
+        const config = new OverridableConfig({}, { STALE_CONTENT_MAX_ROWS: '' });
+        expect(config.staleContentMaxRows).toBe(100);
+      });
+
+      it('applies the request override on top of env and site overrides (precedence)', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'STALE_CONTENT_MAX_ROWS');
+        vi.stubEnv('STALE_CONTENT_MAX_ROWS', '250');
+        const config = new OverridableConfig(
+          { STALE_CONTENT_MAX_ROWS: '500' },
+          { STALE_CONTENT_MAX_ROWS: '42' },
+        );
+        expect(config.staleContentMaxRows).toBe(42);
       });
     });
   });

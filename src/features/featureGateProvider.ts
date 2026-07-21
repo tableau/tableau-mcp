@@ -11,7 +11,11 @@
  */
 export interface FeatureGateProvider {
   /**
-   * Check if a feature is enabled
+   * Check if a feature is enabled.
+   *
+   * Returns a Promise so providers can perform a real async lookup per invocation
+   * (e.g. a cloud provider querying DynamoDB). Synchronous providers simply resolve
+   * an already-in-memory value.
    */
-  isFeatureEnabled(featureName: string): boolean;
+  isFeatureEnabled(featureName: string): Promise<boolean>;
 }

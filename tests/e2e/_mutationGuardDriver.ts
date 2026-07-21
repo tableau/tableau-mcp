@@ -90,9 +90,7 @@ async function main(): Promise<void> {
   // Tool registration under ADMIN_TOOLS_ENABLED=true
   const toolNames = (await client.listTools()).tools.map((t) => t.name);
   for (const tn of [
-    'delete-datasource',
-    'delete-workbook',
-    'delete-extract-refresh-task',
+    'delete-content',
     'update-cloud-extract-refresh-task',
     'list-extract-refresh-tasks',
   ]) {
@@ -117,15 +115,16 @@ async function main(): Promise<void> {
     `count=${tasksBefore.length}`,
   );
 
-  // --- (1) Forged/precomputed confirm on delete-extract-refresh-task: never previewed -> reject ---
+  // --- (1) Forged/precomputed confirm on delete-content (extract-refresh-task): never previewed -> reject ---
   // Use a real task id but jump straight to confirm with a fabricated token. The registry has no
   // nonce for it, so the guard must deny with preview-not-run.
   const targetTaskId = tasksBefore[0]?.id ?? '00000000-0000-4000-8000-000000000000';
   {
     const res = await client.callTool({
-      name: 'delete-extract-refresh-task',
+      name: 'delete-content',
       arguments: {
-        taskId: targetTaskId,
+        resourceType: 'extract-refresh-task',
+        resourceId: targetTaskId,
         confirm: true,
         confirmationToken: 'deadbeef-0000-4000-8000-forgedtoken00',
       },
@@ -134,10 +133,14 @@ async function main(): Promise<void> {
     const denied =
       res.isError === true &&
       /could not verify that a preview ran|preview-not-run|cannot be bypassed/i.test(msg);
-    record('forged-confirm-rejected (delete-extract-refresh-task)', denied, msg.slice(0, 160));
+    record(
+      'forged-confirm-rejected (delete-content:extract-refresh-task)',
+      denied,
+      msg.slice(0, 160),
+    );
   }
 
-  // --- (1b) Forged confirm on delete-datasource (tag evidence): never tagged -> reject ---
+  // --- (1b) Forged confirm on delete-content (datasource, tag evidence): never tagged -> reject ---
   // Need a real datasource id; pull one from list-datasources.
   let dsId: string | undefined;
   try {
@@ -161,35 +164,44 @@ async function main(): Promise<void> {
   }
   if (dsId) {
     const res = await client.callTool({
-      name: 'delete-datasource',
-      arguments: { datasourceId: dsId, confirm: true, tag: 'pending-deletion-driver-never-set' },
+      name: 'delete-content',
+      arguments: {
+        resourceType: 'datasource',
+        resourceId: dsId,
+        confirm: true,
+        tag: 'pending-deletion-driver-never-set',
+      },
     });
     const msg = textOf(res);
     const denied =
       res.isError === true &&
       /could not verify that a preview ran|preview-not-run|cannot be bypassed/i.test(msg);
-    record('forged-confirm-rejected (delete-datasource tag-gate)', denied, msg.slice(0, 160));
+    record(
+      'forged-confirm-rejected (delete-content:datasource tag-gate)',
+      denied,
+      msg.slice(0, 160),
+    );
   } else {
     record(
-      'forged-confirm-rejected (delete-datasource tag-gate)',
+      'forged-confirm-rejected (delete-content:datasource tag-gate)',
       false,
       'no datasource id available',
     );
   }
 
-  // --- (2) Preview leg establishes evidence (non-destructive) for delete-extract-refresh-task ---
+  // --- (2) Preview leg establishes evidence (non-destructive) for delete-content:extract-refresh-task ---
   let mintedNonce: string | undefined;
   {
     const res = await client.callTool({
-      name: 'delete-extract-refresh-task',
-      arguments: { taskId: targetTaskId },
+      name: 'delete-content',
+      arguments: { resourceType: 'extract-refresh-task', resourceId: targetTaskId },
     });
     const msg = textOf(res);
-    const m = msg.match(/confirmationToken:\s*["“]?([0-9a-fA-F-]{36})["”]?/);
+    const m = msg.match(/confirmationToken:\s*[“”]?([0-9a-fA-F-]{36})[“”]?/);
     mintedNonce = m?.[1];
     const ok = res.isError !== true && /Preview/i.test(msg) && !!mintedNonce;
     record(
-      'preview-mints-nonce (delete-extract-refresh-task)',
+      'preview-mints-nonce (delete-content:extract-refresh-task)',
       ok,
       `nonce=${mintedNonce ?? 'NONE'} | ${msg.slice(0, 220)}`,
     );
@@ -200,14 +212,19 @@ async function main(): Promise<void> {
   const disposableTaskId = process.env.DELETE_EXTRACT_REFRESH_TASK_E2E_ID;
   if (disposableTaskId) {
     const prev = await client.callTool({
-      name: 'delete-extract-refresh-task',
-      arguments: { taskId: disposableTaskId },
+      name: 'delete-content',
+      arguments: { resourceType: 'extract-refresh-task', resourceId: disposableTaskId },
     });
     const prevMsg = textOf(prev);
-    const nonce = prevMsg.match(/confirmationToken:\s*"([^"]+)"/)?.[1];
+    const nonce = prevMsg.match(/confirmationToken:\s*”([^”]+)”/)?.[1];
     const confirmRes = await client.callTool({
-      name: 'delete-extract-refresh-task',
-      arguments: { taskId: disposableTaskId, confirm: true, confirmationToken: nonce },
+      name: 'delete-content',
+      arguments: {
+        resourceType: 'extract-refresh-task',
+        resourceId: disposableTaskId,
+        confirm: true,
+        confirmationToken: nonce,
+      },
     });
     const confirmMsg = textOf(confirmRes);
     const mutated = confirmRes.isError !== true && /successfully deleted/i.test(confirmMsg);
@@ -224,13 +241,13 @@ async function main(): Promise<void> {
     }
     const gone = !tasksAfter.some((t) => t.id === disposableTaskId);
     record(
-      'preview->confirm MUTATES (delete-extract-refresh-task)',
+      'preview->confirm MUTATES (delete-content:extract-refresh-task)',
       mutated && gone,
       `mutated=${mutated} after=${tasksAfter.length} gone=${gone}`,
     );
   } else {
     record(
-      'preview->confirm MUTATES (delete-extract-refresh-task)',
+      'preview->confirm MUTATES (delete-content:extract-refresh-task)',
       false,
       'SKIPPED: no DELETE_EXTRACT_REFRESH_TASK_E2E_ID disposable target provided',
     );

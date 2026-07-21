@@ -27,7 +27,7 @@ describe('job-optimization-inform prompt', () => {
 
   it('instructs the model to call the tool once and forbid recomputation', async () => {
     const text = await textOf();
-    expect(text).toContain('`query-admin-insights-job-performance`');
+    expect(text).toContain('`query-admin-insights`');
     expect(text).toContain('exactly once');
     expect(text).toContain('Do **not** recompute');
   });

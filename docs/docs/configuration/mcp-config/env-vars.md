@@ -271,6 +271,7 @@ This means that:
   [`MAX_RESULT_LIMIT`](#max_result_limit) variable will be used instead.
 - Each limit must be a positive number, or `*` to indicate unbounded results.
 
+
 <hr />
 
 ## `DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`
@@ -454,6 +455,21 @@ Enables product telemetry for tool usage tracking.
 
 <hr />
 
+## `FLOW_TOOLS_ENABLED`
+
+Controls whether the Tableau Prep flow tools are registered.
+
+- Default: `false`
+- Set to `true` to enable the Tableau Prep flow tools:
+  - [`list-flows`](../../tools/flows/list-flows.md)
+  - [`get-flow`](../../tools/flows/get-flow.md)
+- Only the exact value `true` enables them; any other value (or leaving it unset) keeps them
+  disabled.
+- When enabled, individual flow tools can still be excluded via
+  [`EXCLUDE_TOOLS`](#exclude_tools) (e.g. `EXCLUDE_TOOLS=flow`).
+
+<hr />
+
 ## `ADMIN_TOOLS_ENABLED`
 
 Enables admin-only tools that require site administrator permissions.
@@ -461,16 +477,11 @@ Enables admin-only tools that require site administrator permissions.
 - Default: `false`
 - When `true`, enables tools that are restricted to Tableau site administrators:
   - [`list-extract-refresh-tasks`](../../tools/tasks/list-extract-refresh-tasks.md)
-  - [`delete-extract-refresh-task`](../../tools/tasks/delete-extract-refresh-task.md)
   - [`update-cloud-extract-refresh-task`](../../tools/tasks/update-cloud-extract-refresh-task.md)
   - [`list-jobs`](../../tools/jobs/list-jobs.md)
   - [`list-users`](../../tools/users/list-users.md)
-  - [`delete-workbook`](../../tools/workbooks/delete-workbook.md)
-  - [`delete-datasource`](../../tools/data-qna/delete-datasource.md)
-  - [`query-admin-insights-ts-events`](../../tools/admin-insights/query-admin-insights-ts-events.md)
-  - [`query-admin-insights-site-content`](../../tools/admin-insights/query-admin-insights-site-content.md)
-  - [`query-admin-insights-job-performance`](../../tools/admin-insights/query-admin-insights-job-performance.md)
-  - [`get-stale-content-report`](../../tools/admin-insights/get-stale-content-report.md)
+  - [`delete-content`](../../tools/content/delete-content.md)
+  - [`query-admin-insights`](../../tools/admin-insights/query-admin-insights.md)
 - These tools require the user to have one of the following site roles:
   - SiteAdministratorCreator
   - SiteAdministratorExplorer
@@ -500,7 +511,7 @@ memory pressure to reduce REST traffic.
 ## `MUTATION_PREVIEW_TTL_MINUTES`
 
 TTL (in minutes) for the single-use confirmation tokens minted by the preview phase of two-phase
-mutation tools (e.g. [`delete-extract-refresh-task`](../../tools/tasks/delete-extract-refresh-task.md)).
+mutation tools (e.g. [`delete-content`](../../tools/content/delete-content.md)).
 A token must be supplied on the confirmed call before it expires, otherwise the caller must re-run
 the preview.
 
@@ -516,7 +527,7 @@ time between preview and confirmation.
 ## `STALE_CONTENT_MIN_AGE_DAYS`
 
 Default minimum days since last access for content to be considered stale by the
-[`get-stale-content-report`](../../tools/admin-insights/get-stale-content-report.md) tool. Callers
+[`query-admin-insights`](../../tools/admin-insights/query-admin-insights.md) tool's `kind: "stale-content"` backend. Callers
 can pass an explicit `minAgeDays` argument to override per-call.
 
 - Default: `90`
@@ -525,6 +536,51 @@ can pass an explicit `minAgeDays` argument to override per-call.
 
 Overridable per-site via [Site Settings](site-settings.md) and per-request via
 [Request Overrides](request-overrides.md#stale_content_min_age_days).
+
+<hr />
+
+## `STALE_CONTENT_MAX_ROWS`
+
+Maximum number of stale-content rows the
+[`query-admin-insights`](../../tools/admin-insights/query-admin-insights.md) tool's
+`kind: "stale-content"` backend will return in a single call. This is a server-side safety cap that
+protects the destructive stale-content cleanup flow from acting on an unreviewed mass set.
+
+When the stale-item count exceeds this cap, the tool **withholds the row payload** (`rows: []`) and
+returns a structured `ROW_CAP_EXCEEDED` warning in `mcp.warnings`. The `totalStaleItems` and
+`totalStaleSizeBytes` fields still report the **true** pre-cap totals so callers can see the
+magnitude and narrow scope (e.g. a specific `projectIds` subset or a higher `minAgeDays`) before
+re-running.
+
+- Default: `100`
+- Minimum: `1`
+- Maximum: `10000`
+
+Overridable per-site via [Site Settings](site-settings.md) and per-request via
+[Request Overrides](request-overrides.md#stale_content_max_rows).
+
+<hr />
+
+## `LICENSE_RECLAIM_INACTIVE_DAYS`
+
+Default minimum days of inactivity before a user is considered a license reclamation candidate by
+the [`user-license-reclamation-inform`](../../prompts/user-license-reclamation-inform.md) prompt.
+Callers can pass an explicit `inactiveDays` argument to override per-invocation.
+
+- Default: `90`
+- Minimum: `1`
+- Maximum: `3650` (10 years)
+
+<hr />
+
+## `LICENSE_RECLAIM_ROLES`
+
+Comma-separated list of site roles targeted for license reclamation by the
+[`user-license-reclamation-inform`](../../prompts/user-license-reclamation-inform.md) prompt.
+Callers can pass an explicit `roles` argument to override per-invocation.
+
+- Default: `Creator,Explorer`
+- Values must be valid Tableau site role names (e.g., `Creator`, `Explorer`, `Viewer`).
 
 <hr />
 

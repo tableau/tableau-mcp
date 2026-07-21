@@ -187,6 +187,58 @@ describe('restApiInstance', () => {
       expect(restApi.signOut).not.toHaveBeenCalled();
     });
 
+    // W-23202034: a sign-out failure during teardown must not mask the callback's real result or
+    // error. A throw in the `finally` sign-out would otherwise replace whatever the callback
+    // returned/threw — e.g. a 404 from a missing resource surfacing to the caller as the sign-out's
+    // 401. Sign-out is best-effort cleanup; its failure is swallowed and logged.
+    it('should not let a sign-out failure mask the callback error', async () => {
+      vi.stubEnv('AUTH', 'pat');
+
+      const callbackError = new Error('Request failed with status code 404');
+
+      await expect(
+        useRestApi({
+          config: getConfig(),
+          requestId: mockRequestId,
+          server: new WebMcpServer(),
+          tableauAuthInfo: undefined,
+          jwtScopes: [],
+          signal: new AbortController().signal,
+          callback: (restApi) => {
+            // Simulate the ephemeral session being torn down: sign-out now rejects (e.g. 401).
+            vi.mocked(restApi.signOut).mockRejectedValueOnce(
+              new Error('Request failed with status code 401'),
+            );
+            // The real failure the caller cares about.
+            return Promise.reject(callbackError);
+          },
+        }),
+        // The caller must see the callback's 404, NOT the sign-out's 401.
+      ).rejects.toBe(callbackError);
+    });
+
+    it('should not let a sign-out failure mask a successful callback result', async () => {
+      vi.stubEnv('AUTH', 'pat');
+
+      const result = await useRestApi({
+        config: getConfig(),
+        requestId: mockRequestId,
+        server: new WebMcpServer(),
+        tableauAuthInfo: undefined,
+        jwtScopes: [],
+        signal: new AbortController().signal,
+        callback: (restApi) => {
+          vi.mocked(restApi.signOut).mockRejectedValueOnce(
+            new Error('Request failed with status code 401'),
+          );
+          return Promise.resolve('ok');
+        },
+      });
+
+      // A best-effort sign-out failure is swallowed; the successful result still reaches the caller.
+      expect(result).toBe('ok');
+    });
+
     it('should set credentials when using Passthrough auth', async () => {
       vi.stubEnv('AUTH', 'pat');
 

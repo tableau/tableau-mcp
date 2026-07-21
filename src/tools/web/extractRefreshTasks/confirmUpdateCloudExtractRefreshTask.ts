@@ -8,8 +8,10 @@ import { getFeatureGate } from '../../../features/init.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { updateCloudExtractRefreshScheduleSchema } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { Provider } from '../../../utils/provider.js';
 import { AppApprovalEvidence } from '../_lib/evidence.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
+import { resolveExtractRefreshTaskTarget } from '../_lib/resolveExtractRefreshTaskTarget.js';
 import { WebTool } from '../tool.js';
 import { scheduleBinding } from './updateCloudExtractRefreshTask.js';
 
@@ -46,7 +48,10 @@ export const getConfirmUpdateCloudExtractRefreshTaskTool = (
   const confirmUpdateCloudExtractRefreshTaskTool = new WebTool({
     server,
     name: 'confirm-update-cloud-extract-refresh-task',
-    disabled: !config.adminToolsEnabled || !getFeatureGate().isFeatureEnabled('mcp-apps'),
+    disabled: new Provider(
+      async () =>
+        !config.adminToolsEnabled || !(await getFeatureGate().isFeatureEnabled('mcp-apps')),
+    ),
     description: `
 Confirms and applies a schedule change to an extract refresh task on Tableau Cloud, previously
 previewed by \`update-cloud-extract-refresh-task\`. This tool is **not visible to the model** — it is
@@ -81,11 +86,17 @@ schedule values.
             jwtScopes: confirmUpdateCloudExtractRefreshTaskTool.requiredApiScopes,
             callback: async (restApi) => {
               // The task carries no durable taggable state; the human gesture in the iframe is the
-              // proof. name/project may be undefined for a task — that's fine, the audit schema allows it.
-              const resolveTarget = async (): Promise<MutationTarget> => ({
-                id: args.taskId,
-                kind: 'extract-refresh-task',
-              });
+              // proof. Enrich the audit target with the underlying content's name/project/owner
+              // (AC-3) via the shared best-effort helper: it lists tasks once, finds this id, then
+              // does ONE content lookup + ONE owner lookup. A resolve failure degrades to an id-only
+              // target and never blocks the update.
+              const resolveTarget = async (): Promise<MutationTarget> =>
+                resolveExtractRefreshTaskTarget({
+                  restApi,
+                  siteId: restApi.siteId,
+                  taskId: args.taskId,
+                  logger: 'confirm-update-cloud-extract-refresh-task',
+                });
 
               // Require a fresh, single-use in-iframe human approval recorded by the preview — bound to
               // the exact schedule that was previewed/approved. `binding` is folded into the approval

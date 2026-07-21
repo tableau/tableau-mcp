@@ -91,4 +91,33 @@ export default class UsersMethods extends AuthenticatedMethods<typeof usersApis>
     });
     return user;
   };
+
+  /**
+   * Updates the site role for the specified user.
+   *
+   * Required scopes (Tableau Cloud): `tableau:users:update`
+   *
+   * @param siteId - The Tableau site ID
+   * @param userId - The user ID
+   * @param siteRole - The new site role to assign
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#update_user
+   */
+  updateUser = async ({
+    siteId,
+    userId,
+    siteRole,
+  }: {
+    siteId: string;
+    userId: string;
+    siteRole: string;
+  }): Promise<Partial<User>> => {
+    const { user } = await this._apiClient.updateUser(
+      { user: { siteRole } },
+      {
+        params: { siteId, userId },
+        ...this.authHeader,
+      },
+    );
+    return user;
+  };
 }

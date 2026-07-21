@@ -162,17 +162,24 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     const appsDir = resolve(process.cwd(), 'src/web/apps');
 
     // Each entry is a self-contained, single-file HTML bundled by functionality:
-    // - mcp-app.html: embeds a Tableau viz (get-view / get-workbook).
-    // - hitl-confirm.html: the MCP-Apps HITL confirm panel for delete/update preview tools.
-    // viteSingleFile inlines all JS/CSS into one HTML per rollup input; to guarantee both outputs
-    // are fully inlined (a single multi-input build does not reliably inline every entry), build
-    // each entry with its own viteBuild call. emptyOutDir:false lets them share the dist directory.
-    const htmlEntries = ['mcp-app.html', 'hitl-confirm.html'];
+    // Each entry is a self-contained, single-file HTML bundled by functionality, and now
+    // lives inside its feature folder next to its entry .ts:
+    // - embed/mcp-app.html: embeds a Tableau viz (get-view / get-workbook).
+    // - hitl/hitl-confirm.html: the MCP-Apps HITL confirm panel for delete/update preview tools.
+    // Setting `root` to each feature folder makes viteSingleFile emit the output flat as
+    // dist/<name>.html (the dist filenames appConfig.ts + server.web.ts depend on are unchanged).
+    // Build each entry separately so every output is fully inlined; emptyOutDir:false lets them
+    // share the dist directory.
+    const htmlEntries = [
+      { root: resolve(appsDir, 'src/embed'), html: 'mcp-app.html' },
+      { root: resolve(appsDir, 'src/hitl'), html: 'hitl-confirm.html' },
+    ];
 
-    for (const htmlEntry of htmlEntries) {
+    const distDir = resolve(appsDir, 'dist');
+    for (const entry of htmlEntries) {
       await viteBuild({
         configFile: false, // Don't load vite.config.ts
-        root: appsDir,
+        root: entry.root,
         plugins: [viteSingleFile()],
         resolve: {
           alias: {
@@ -184,9 +191,9 @@ const globalValues: Record<GlobalIdentifierName, string> = {
           cssMinify: !dev,
           minify: !dev,
           rollupOptions: {
-            input: resolve(appsDir, htmlEntry),
+            input: resolve(entry.root, entry.html),
           },
-          outDir: resolve(appsDir, 'dist'),
+          outDir: distDir,
           emptyOutDir: false,
         },
       });
@@ -195,10 +202,10 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     // Copy each built HTML to the build directory.
     const buildWebApps = './build/web/apps/dist';
     await mkdir(buildWebApps, { recursive: true });
-    for (const htmlEntry of htmlEntries) {
+    for (const entry of htmlEntries) {
       await copyFile(
-        resolve(appsDir, 'dist', htmlEntry),
-        resolve(process.cwd(), buildWebApps, htmlEntry),
+        resolve(distDir, entry.html),
+        resolve(process.cwd(), buildWebApps, entry.html),
       );
     }
 
