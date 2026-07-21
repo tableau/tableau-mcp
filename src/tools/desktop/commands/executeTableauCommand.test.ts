@@ -36,6 +36,8 @@ const GENERATED_VIZ_READBACK_XML = `<workbook>
     <window class="worksheet" name="Revenue by Region" active="true"/>
   </windows>
 </workbook>`;
+const SORT_NESTED_LIVE_500_FIX =
+  'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the bind-template sort proposal (preferred for template-bound sheets) or the document round-trip (tabui:save-underlying-metadata → edit the computed-sort → tabui:load-underlying-metadata).';
 
 function makeExtra(
   executeCommandImpl: (...args: any[]) => any,
@@ -159,7 +161,7 @@ describe('executeTableauCommandTool', () => {
     expect(result.content[0].text).toContain('no result data');
   });
 
-  it('should return error when executeCommand fails', async () => {
+  it('keeps unmapped executeCommand failure text unchanged', async () => {
     const commandError = {
       type: 'command-failed' as const,
       error: { code: 'ERR', message: 'fail', recoverable: false },
@@ -177,6 +179,60 @@ describe('executeTableauCommandTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(new DesktopCommandExecutionError(commandError).message);
+  });
+
+  it('appends the known-live failure fix when mapped command execution fails', async () => {
+    const commandError = {
+      type: 'command-failed' as const,
+      error: { code: 'ERR', message: 'live 500', recoverable: false },
+    };
+    const executeCommand = vi.fn().mockResolvedValue({ isErr: () => true, error: commandError });
+    const extra = makeExtra(executeCommand);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabdoc:sort-nested',
+        args: {
+          DimensionToSort: '[Sample - Superstore].[Category]',
+          Worksheet: 'Sheet 1',
+          MeasureName: '[Sample - Superstore].[Sales]',
+          ShelfType: 'rows',
+        },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      new DesktopCommandExecutionError(commandError).message,
+    );
+    expect(result.content[0].text).toContain(SORT_NESTED_LIVE_500_FIX);
+  });
+
+  it('does not append the known-live failure fix when mapped command execution succeeds', async () => {
+    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const extra = makeExtra(executeCommand);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        command: 'tabdoc:sort-nested',
+        args: {
+          DimensionToSort: '[Sample - Superstore].[Category]',
+          Worksheet: 'Sheet 1',
+          MeasureName: '[Sample - Superstore].[Sales]',
+          ShelfType: 'rows',
+        },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).not.toContain('FIX:');
+    expect(result.content[0].text).not.toContain(SORT_NESTED_LIVE_500_FIX);
   });
 
   it('should default args to empty object when not provided', async () => {
