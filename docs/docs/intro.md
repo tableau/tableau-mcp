@@ -40,10 +40,11 @@ Slack channel in the Tableau #DataDev workspace.
 | [list-projects](tools/projects/list-projects.md)                                                                      | Retrieves a list of projects from a specified Tableau site ([REST API][list-projects])                              | All SKUs     |
 | [list-views](tools/views/list-views.md)                                                                               | Retrieves a list of views from a specified Tableau site ([REST API][list-views])                                    | All SKUs     |
 | [list-custom-views](tools/views/list-custom-views.md)                                                                 | Retrieves a list of custom views for a specified Tableau workbook ([REST API][list-custom-views])                   | All SKUs     |
+| [list-flows](tools/flows/list-flows.md)                                                                               | Retrieves a list of Tableau Prep flows from a specified Tableau site ([REST API][list-flows])                       | All SKUs     |
 | [get-datasource-metadata](tools/data-qna/get-datasource-metadata.md)                                                  | Fetches datasource metadata including table relationships, datasource and field descriptions, field roles and types, calculation strings, and parameters for the specified datasource ([Metadata API][meta] & [VDS API][vds])                         | All SKUs\*   |
 | [get-workbook](tools/workbooks/get-workbook.md)                                                                       | Retrieves information about a workbook for a specified workbook on a Tableau site ([REST API][get-workbook])                        | All SKUs     |
-| [delete-workbook](tools/workbooks/delete-workbook.md)                                                                 | Admin-only. Two-phase (preview/confirm) delete of a workbook; recoverable via recycle bin ([REST API][delete-workbook]) | All SKUs     |
-| [delete-datasource](tools/data-qna/delete-datasource.md)                                                              | Admin-only. Two-phase (preview/confirm) delete of a published data source; warns on dependent workbooks/flows; recoverable via recycle bin ([REST API][delete-datasource]) | All SKUs     |
+| [get-flow](tools/flows/get-flow.md)                                                                                   | Retrieves information on a Tableau Prep flow including output steps and recent runs ([REST API][get-flow])                          | All SKUs     |
+| [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
 | [get-view-data](tools/views/get-view-data.md)                                                                         | Retrieves data in CSV format for the specified view in a Tableau workbook. *Note: the get-view-data api currently has a limitation that when used on a dashboard sheet type, it will only return data for the first worksheet in the dashboard. This will be fixed in the 26.3 fall release.* ([REST API][get-view-data])               | All SKUs     |
 | [get-view-image](tools/views/get-view-image.md)                                                                       | Retrieves an image for the specified view in a Tableau workbook ([REST API][get-view-image])                        | All SKUs     |
 | [get-custom-view-data](tools/views/get-custom-view-data.md)                                                           | Retrieves data in CSV format for the specified custom view in a Tableau workbook. *Note: the same limitation of get-view-data exists for this tool.* ([REST API][get-custom-view-data]) | All SKUs     |
@@ -58,13 +59,11 @@ Slack channel in the Tableau #DataDev workspace.
 | [generate-pulse-insight-brief](tools/pulse/generate-pulse-insight-brief.md)                                           | Generates an AI-powered Pulse [Insight Brief](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#EmbeddingsService_GenerateInsightBrief). | Tableau+ only     |
 | [search-content](tools/content-exploration/search-content.md)                                                         | Searches for content in a Tableau site using Tableau's [search API][content-exploration] | All SKUs     |
 | [list-extract-refresh-tasks](tools/tasks/list-extract-refresh-tasks.md)                                               | Admin-only. Retrieves a list of extract refresh tasks for the site ([REST API][list-extract-refresh-tasks])         | All SKUs     |
-| [delete-extract-refresh-task](tools/tasks/delete-extract-refresh-task.md)                                             | Admin-only. Two-phase (preview/confirm via single-use token) delete of an extract refresh task ([REST API][delete-extract-refresh-task]) | All SKUs     |
 | [update-cloud-extract-refresh-task](tools/tasks/update-cloud-extract-refresh-task.md)                                 | Admin-only. Confirm-gated update of an extract refresh task schedule on Tableau Cloud ([REST API][update-cloud-extract-refresh-task]) | All SKUs     |
 | [list-users](tools/users/list-users.md)                                                                               | Admin-only. Retrieves a list of users on the site ([REST API][list-users-api])                                      | All SKUs     |
-| [query-admin-insights-ts-events](tools/admin-insights/query-admin-insights-ts-events.md)                              | Admin-only. Issues a VDS query against the Admin Insights `TS Events` datasource ([VDS API][vds])                   | All SKUs     |
-| [query-admin-insights-site-content](tools/admin-insights/query-admin-insights-site-content.md)                        | Admin-only. Issues a VDS query against the Admin Insights `Site Content` datasource ([VDS API][vds])                | All SKUs     |
-| [query-admin-insights-job-performance](tools/admin-insights/query-admin-insights-job-performance.md)                  | Admin-only. Issues a VDS query against the Admin Insights `Job Performance` datasource ([VDS API][vds])             | All SKUs     |
-| [get-stale-content-report](tools/admin-insights/get-stale-content-report.md)                                          | Admin-only. Deterministic stale-content report from `Site Content` ([VDS API][vds])                                 | All SKUs     |
+| [update-user](tools/users/update-user.md)                                                                             | Admin-only. Confirm-gated update of a user's site role ([REST API][update-user-api])                               | All SKUs     |
+| [query-admin-insights](tools/admin-insights/query-admin-insights.md)                                                 | Admin-only. Dispatches on `kind` to TS Events, Site Content, Job Performance, or stale-content report ([VDS API][vds]) | All SKUs     |
+| [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
 
 \* The `get-datasource-metadata` tool relies on both the VizQL Data Service and the Metadata API to get rich metadata about a data source. Only sites with Data Management entitlements will be able to execute the Metadata API calls, though the tool will remain functional without it.
 
@@ -78,8 +77,12 @@ Slack channel in the Tableau #DataDev workspace.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_views_for_site
 [list-custom-views]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#list_custom_views
+[list-flows]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#query_flows_for_site
 [get-workbook]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook
+[get-flow]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#query_flow
 [delete-workbook]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#delete_workbook
 [delete-datasource]:
@@ -105,6 +108,8 @@ Slack channel in the Tableau #DataDev workspace.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#update_cloud_extract_refresh_task
 [list-users-api]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#get_users_on_site
+[update-user-api]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#update_user
 
 ## Prompt List
 
@@ -116,3 +121,5 @@ Prompts orchestrate multiple tools into a guided admin workflow. They are gated 
 | [stale-content-cleanup-apply](prompts/stale-content-cleanup-apply.md)         | Admin-only. Destructive. Tags stale content, reports owners to notify, and — after a required human-confirmation break — deletes approved items to the recycle bin. |
 | [job-optimization-inform](prompts/job-optimization-inform.md)                 | Admin-only. Read-only. Analyzes Admin Insights job performance and surfaces optimization signals.                       |
 | [extract-optimization-apply](prompts/extract-optimization-apply.md)           | Admin-only. Destructive. Applies schedule downgrades and deletions to extract refresh tasks after a required human-confirmation break; defaults to a dry-run report. |
+| [user-license-reclamation-inform](prompts/user-license-reclamation-inform.md) | Admin-only. Read-only. Identifies inactive licensed users who are candidates for downgrade to Unlicensed by cross-referencing `list-users` with TS Events activity. |
+| [user-license-reclamation-apply](prompts/user-license-reclamation-apply.md)   | Admin-only. Destructive. Identifies inactive licensed users, surfaces owned-content counts, and — after a required human-confirmation break — downgrades approved users to Unlicensed; defaults to a dry-run report. |

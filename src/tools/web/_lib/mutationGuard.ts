@@ -1,8 +1,8 @@
 /**
  * Common mutation-tool safety layer for the TMCP server (W-23125362).
  *
- * Every in-scope mutation tool (delete-datasource, delete-workbook, delete-extract-refresh-task,
- * update-cloud-extract-refresh-task) routes its mutation through `guardMutation` instead of
+ * Every in-scope mutation tool (delete-content, update-cloud-extract-refresh-task) routes its
+ * mutation through `guardMutation` instead of
  * re-implementing its own admin check, identity resolution, confirmation gate, and audit. The guard:
  *
  *   1. Enforces the admin gate (assertAdmin) uniformly.
@@ -11,6 +11,13 @@
  *      preview phase, and on confirm `verify` it against live server state — rejecting precomputed or
  *      forged confirmations exactly as #414's tag gate does.
  *   4. Emits a single authoritative AuditRecord (allowed OR denied) to the durable log sink.
+ *
+ * DURABILITY CONTRACT (AC-5, honest note): the authoritative audit records emitted below are
+ * structured JSON written to the dedicated `audit` logger, which bypasses the LOG_LEVEL severity
+ * filter (see AUDIT_LOGGER) so an operator cannot suppress them by raising LOG_LEVEL. DURABILITY
+ * itself is the DEPLOYMENT's responsibility: this server emits the records to its log stream
+ * (stderr/stdout/file); operators MUST ship that audit stream to their durable/immutable log store
+ * (SIEM, log archive, etc.) for retention. There is no built-in durable sink here.
  *
  * AC-5 — RESIDUAL GAP (code-enforced human approval): the MCP SDK shipped with this server
  * (@modelcontextprotocol/sdk >=1.26, currently 1.29) DOES expose an elicitation primitive
@@ -36,6 +43,7 @@ import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import { WebToolName } from '../toolName.js';
 import { AuditRecord, auditRecordSchema } from './auditRecord.js';
 import { EvidenceContext, EvidenceStrategy } from './evidence.js';
+import { renderPreviewNotRunMessage } from './hitlText.js';
 
 /** Identity of the principal attempting the mutation, captured for the audit record. */
 export interface MutationActor {
@@ -51,9 +59,6 @@ export interface MutationTarget {
   name?: string;
   project?: string;
   owner?: string;
-  // 'user' is reserved/forward-looking: no user-mutation tool is wired yet. Kept in the union so the
-  // audit schema (auditRecord.ts) stays stable when one is added; removing it now would be a
-  // breaking schema change for downstream audit-log consumers.
   kind: 'datasource' | 'workbook' | 'extract-refresh-task' | 'user';
 }
 
@@ -62,11 +67,11 @@ export interface GuardOutcome {
   actor: MutationActor;
   target: MutationTarget;
   /**
-   * Records the TERMINAL outcome of a confirmed mutation's REST call. The guard's own `allowed`
-   * record captures only the authorization decision (it is emitted before the caller runs the
-   * destructive REST call); the caller MUST call this once the REST result is known so the audit
-   * trail reflects outcome, not just intent. No-op on the preview phase (nothing mutates), so callers
-   * can invoke it unconditionally. See finding: "Audit says 'allowed' before the mutation runs".
+   * Records the TERMINAL outcome of a confirmed mutation's REST call. On a confirm the guard emits NO
+   * 'allowed' record (that would double-log the attempt); this terminal 'completed'/'failed' record
+   * is the SOLE audit entry for the confirm, so the caller MUST invoke it once the REST result is
+   * known or the attempt goes unaudited. No-op on the preview phase (nothing mutates, and the preview
+   * already logged its single 'allowed' record), so callers can invoke it unconditionally.
    */
   recordOutcome: (outcome: { ok: true } | { ok: false; failureDetail?: string }) => void;
 }
@@ -91,6 +96,7 @@ export async function guardMutation<TTarget>({
   confirmationToken,
   previewTool,
   binding,
+  fallbackTargetKind,
 }: {
   restApi: RestApi;
   extra: TableauWebRequestHandlerExtra;
@@ -111,6 +117,10 @@ export async function guardMutation<TTarget>({
   // Optional fingerprint of the caller-controlled parameters (see EvidenceContext.binding). Bound
   // into the evidence so a confirm applies exactly what was previewed, never a swapped-in payload.
   binding?: string;
+  // Optional override for the `target.kind` used in the DENIED audit fallback when `resolveTarget()`
+  // itself fails. Required for polymorphic tools like `delete-content` where the caller knows the
+  // dispatched resource kind but `targetKindHint(tool)` cannot derive it from the tool name alone.
+  fallbackTargetKind?: MutationTarget['kind'];
 }): Promise<Result<GuardOutcome, McpToolError>> {
   // (2) Build the actor identity up front so a denied attempt is still attributable in the audit.
   const actor: MutationActor = {
@@ -132,7 +142,7 @@ export async function guardMutation<TTarget>({
     try {
       deniedTarget = await resolveTarget();
     } catch {
-      deniedTarget = { id: 'unresolved', kind: targetKindHint(tool) };
+      deniedTarget = { id: 'unresolved', kind: fallbackTargetKind ?? targetKindHint(tool) };
     }
     emitAuditRecord({
       actor,
@@ -178,14 +188,14 @@ export async function guardMutation<TTarget>({
       // approving in the rendered panel — it is model-invisible and takes no `confirm` arg, so the
       // "run with confirm omitted" recovery does not apply to it. A model-visible preview-confirm
       // tool (no previewTool) previews and confirms under the SAME name, so it recovers in place.
-      const recovery = previewTool
-        ? `Re-run ${previewTool} to preview again, then approve in the confirmation panel.`
-        : `Run ${tool} with confirm omitted (or false) first to preview, then call again with ` +
-          'confirm: true.';
+      // Wording single-sourced in hitlText.ts (renderPreviewNotRunMessage).
       return new PreviewNotRunError(
-        `Mutation blocked: ${tool} could not verify that a preview ran for ${target.kind} ` +
-          `${target.id}. ${recovery} This gate verifies server-side state and cannot be bypassed by ` +
-          'computing a token.',
+        renderPreviewNotRunMessage({
+          tool,
+          previewTool,
+          targetKind: target.kind,
+          targetId: target.id,
+        }),
       ).toErr();
     }
   }
@@ -195,21 +205,26 @@ export async function guardMutation<TTarget>({
     await evidence.establish(evidenceCtx);
   }
 
-  // (6) Allowed: record the authorization decision and let the tool perform its mutation / build its
-  // response. For a confirm this is NOT the terminal record — the caller reports the REST outcome via
-  // recordOutcome() below so the audit trail distinguishes completed from authorized-but-failed.
-  emitAuditRecord({
-    actor,
-    tool,
-    action,
-    phase,
-    target,
-    confirmationEvidence: evidenceDescriptor,
-    result: 'allowed',
-  });
+  // (6) Allowed: on a PREVIEW, emit the single terminal 'allowed' record — nothing mutates, so the
+  // authorization decision is the whole story. On a CONFIRM this record is deliberately suppressed:
+  // the caller reports the REST outcome via recordOutcome() below, and that terminal
+  // 'completed'/'failed' record is the sole audit entry for the confirm (a confirm logs EXACTLY
+  // once). Emitting 'allowed' here too would double-log every confirmed mutation.
+  if (phase !== 'confirm') {
+    emitAuditRecord({
+      actor,
+      tool,
+      action,
+      phase,
+      target,
+      confirmationEvidence: evidenceDescriptor,
+      result: 'allowed',
+    });
+  }
 
   // Terminal-outcome recorder handed to the caller. Only a confirm phase mutates, so the preview
-  // phase is a deliberate no-op — callers can invoke it unconditionally after their REST call.
+  // phase is a deliberate no-op — callers can invoke it unconditionally after their REST call. On a
+  // confirm this emits the SOLE audit record for the attempt ('completed' or 'failed').
   const recordOutcome = (outcome: { ok: true } | { ok: false; failureDetail?: string }): void => {
     if (phase !== 'confirm') {
       return;
@@ -235,13 +250,14 @@ export async function guardMutation<TTarget>({
  */
 function targetKindHint(tool: WebToolName): MutationTarget['kind'] {
   switch (tool) {
-    case 'delete-datasource':
+    // Defensive default — callers pass fallbackTargetKind which takes precedence; this only fires
+    // if that arg is ever dropped from a call site.
+    case 'delete-content':
       return 'datasource';
-    case 'delete-workbook':
-      return 'workbook';
-    case 'delete-extract-refresh-task':
     case 'update-cloud-extract-refresh-task':
       return 'extract-refresh-task';
+    case 'update-user':
+      return 'user';
     default:
       return 'datasource';
   }

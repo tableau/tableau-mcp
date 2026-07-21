@@ -1,8 +1,17 @@
+import { log } from '../../../logging/logger.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { ExpiringMap } from '../../../utils/expiringMap.js';
 import { milliseconds } from '../../../utils/milliseconds.js';
 import { paginate } from '../../../utils/paginate.js';
 import { parseNumber } from '../../../utils/parseNumber.js';
+
+const RESOLVER_LOGGER = 'admin-insights-resolver';
+
+// Bounded entry cap for the dataset-LUID cache. A plain constant (not an env var) keeps the doc
+// surface tight; the cache is keyed by `${siteId}:${datasetName}` and each site contributes at most
+// a handful of Admin Insights dataset names, so 256 comfortably covers many concurrent sites while
+// still bounding memory. Eviction is oldest-inserted (see ExpiringMap.maxSize).
+const ADMIN_INSIGHTS_CACHE_MAX_ENTRIES = 256;
 
 export const ADMIN_INSIGHTS_PROJECT_NAME = 'Admin Insights';
 
@@ -17,8 +26,12 @@ export type AdminInsightsDataset =
 
 // Lazy-initialized cache to avoid module-level parseNumber call.
 // Mirrors the pattern in `adminGate.ts`: ExpiringMap with env-var-configurable TTL,
-// keyed by `${siteId}:${datasetName}` -> dataset LUID. Full optimization
-// (size limits, eviction policy, telemetry) tracked in W-22551424.
+// keyed by `${siteId}:${datasetName}` -> dataset LUID.
+//
+// W-22551424 hardening: the cache is now size-capped (ADMIN_INSIGHTS_CACHE_MAX_ENTRIES, oldest-
+// inserted eviction) and emits debug telemetry on hit / miss / resolve. Invalidation is
+// intentionally TTL + siteId-keying only — an explicit refresh-on-auth-lifecycle hook does not
+// exist today and would bleed outside admin-insights, so it is deferred to a future ticket.
 let cache: ExpiringMap<string, string> | null = null;
 
 function getCache(): ExpiringMap<string, string> {
@@ -31,6 +44,7 @@ function getCache(): ExpiringMap<string, string> {
     });
     cache = new ExpiringMap<string, string>({
       defaultExpirationTimeMs: milliseconds.fromMinutes(ttlMinutes),
+      maxSize: ADMIN_INSIGHTS_CACHE_MAX_ENTRIES,
     });
   }
   return cache;
@@ -59,8 +73,21 @@ export const adminInsightsResolver = {
     const resolverCache = getCache();
     const cached = resolverCache.get(cacheKey);
     if (cached) {
+      log({
+        message: `${RESOLVER_LOGGER}: cache hit for "${datasetName}"`,
+        level: 'debug',
+        logger: RESOLVER_LOGGER,
+        data: { datasetName, cacheSize: resolverCache.size },
+      });
       return cached;
     }
+
+    log({
+      message: `${RESOLVER_LOGGER}: cache miss for "${datasetName}", resolving via REST`,
+      level: 'debug',
+      logger: RESOLVER_LOGGER,
+      data: { datasetName, cacheSize: resolverCache.size },
+    });
 
     const datasources = await paginate({
       pageConfig: { pageSize: 100 },
@@ -82,6 +109,13 @@ export const adminInsightsResolver = {
         resolvedLuid = ds.id;
       }
     }
+
+    log({
+      message: `${RESOLVER_LOGGER}: resolved ${datasources.length} datasets for site`,
+      level: 'debug',
+      logger: RESOLVER_LOGGER,
+      data: { resolveCount: datasources.length, cacheSize: resolverCache.size },
+    });
 
     if (!resolvedLuid) {
       throw new AdminInsightsDatasetNotFoundError(datasetName);

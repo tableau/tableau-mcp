@@ -55,6 +55,8 @@ function extractConfirmationToken(text: string): string {
 
 const mocks = vi.hoisted(() => ({
   mockUpdateCloudExtractRefreshTask: vi.fn(),
+  mockListExtractRefreshTasks: vi.fn(),
+  mockQueryDatasource: vi.fn(),
   mockQueryUserOnSite: vi.fn(),
   mockAssertAdmin: vi.fn(),
   mockIsFeatureEnabled: vi.fn(),
@@ -69,6 +71,10 @@ vi.mock('../../../restApiInstance.js', () => ({
     callback({
       tasksMethods: {
         updateCloudExtractRefreshTask: mocks.mockUpdateCloudExtractRefreshTask,
+        listExtractRefreshTasks: mocks.mockListExtractRefreshTasks,
+      },
+      datasourcesMethods: {
+        queryDatasource: mocks.mockQueryDatasource,
       },
       usersMethods: {
         queryUserOnSite: mocks.mockQueryUserOnSite,
@@ -120,22 +126,39 @@ describe('updateCloudExtractRefreshTaskTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
-    mocks.mockQueryUserOnSite.mockResolvedValue({ siteRole: 'SiteAdministratorCreator' });
+    mocks.mockQueryUserOnSite.mockResolvedValue({
+      id: 'owner-1',
+      name: 'Owner One',
+      email: 'owner@example.com',
+      siteRole: 'SiteAdministratorCreator',
+    });
     mocks.mockUpdateCloudExtractRefreshTask.mockResolvedValue(new Ok(updatedTask));
+    // Default: the task list resolves this task to its underlying datasource so the audit target is
+    // enriched (AC-3). Tests that don't care about enrichment are unaffected (best-effort, id always
+    // present).
+    mocks.mockListExtractRefreshTasks.mockResolvedValue([
+      { id: validTaskId, datasource: { id: 'ds-1' } },
+    ]);
+    mocks.mockQueryDatasource.mockResolvedValue({
+      id: 'ds-1',
+      name: 'Sales Extract',
+      project: { name: 'Finance' },
+      owner: { id: 'owner-1' },
+    });
     // Default: mcp-apps flag OFF → today's exact confirm-only behavior.
-    mocks.mockIsFeatureEnabled.mockReturnValue(false);
+    mocks.mockIsFeatureEnabled.mockResolvedValue(false);
   });
 
-  it('should create a tool instance with correct properties', () => {
-    const tool = getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+  it('should create a tool instance with correct properties', async () => {
+    const tool = await getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
     expect(tool.name).toBe('update-cloud-extract-refresh-task');
     expect(tool.description).toContain('Updates the schedule of an extract refresh task');
     expect(tool.paramsSchema).toHaveProperty('taskId');
     expect(tool.paramsSchema).toHaveProperty('schedule');
   });
 
-  it('should have correct annotations', () => {
-    const tool = getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+  it('should have correct annotations', async () => {
+    const tool = await getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
     expect(tool.annotations).toEqual({
       title: 'Update Cloud Extract Refresh Task',
       readOnlyHint: false,
@@ -150,7 +173,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     vi.mocked(getConfig).mockReturnValueOnce({
       adminToolsEnabled: false,
     } as ReturnType<typeof getConfig>);
-    const tool = getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+    const tool = await getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
     expect(await Provider.from(tool.disabled)).toBe(true);
   });
 
@@ -495,16 +518,21 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       expect(record.confirmationEvidence.kind).toBe('registry-nonce');
     });
 
-    it('AC-6(b): confirm with a valid preview token applies the update and audits allowed→completed', async () => {
+    it('AC-6(b): confirm with a valid preview token applies the update and audits a single completed', async () => {
       const result = await previewThenConfirm({ taskId: validTaskId, schedule: validSchedule });
       expect(result.isError).toBe(false);
       expect(mocks.mockUpdateCloudExtractRefreshTask).toHaveBeenCalled();
-      // Two phases, three records: preview=allowed, confirm=allowed (intent), confirm=completed (outcome).
+      // A confirm logs exactly once: the preview emitted its own allowed record, and the confirm
+      // emits only the terminal 'completed' outcome.
       const records = getAuditRecords();
       const confirmRecords = records.filter((r) => r.phase === 'confirm');
-      expect(confirmRecords.map((r) => r.result)).toEqual(['allowed', 'completed']);
+      expect(confirmRecords.map((r) => r.result)).toEqual(['completed']);
       expect(confirmRecords.every((r) => r.action === 'update')).toBe(true);
       expect(confirmRecords.every((r) => r.target.id === validTaskId)).toBe(true);
+      // AC-3 / Gap-B: the audit target is enriched from the task's underlying datasource.
+      expect(confirmRecords.every((r) => r.target.name === 'Sales Extract')).toBe(true);
+      expect(confirmRecords.every((r) => r.target.project === 'Finance')).toBe(true);
+      expect(confirmRecords.every((r) => r.target.owner === 'owner@example.com')).toBe(true);
     });
 
     // Fix #1: the confirm is bound to the exact schedule that was previewed. A token minted for
@@ -577,9 +605,9 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     });
 
     // Fix #2: the audit trail must reflect OUTCOME, not just intent. When the confirmed REST call
-    // fails, the terminal record is 'failed' (with detail) — never a bare 'allowed' that would claim
-    // a mutation which never happened.
-    it('AC-6(f): a failed confirmed update audits allowed then failed (not completed)', async () => {
+    // fails, the sole confirm record is 'failed' (with detail) — never a bare 'allowed' that would
+    // claim a mutation which never happened.
+    it('AC-6(f): a failed confirmed update audits a single failed (not completed, not allowed)', async () => {
       mocks.mockUpdateCloudExtractRefreshTask.mockResolvedValue(
         new Err({
           type: 'tableau-api',
@@ -592,7 +620,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       const result = await previewThenConfirm({ taskId: validTaskId, schedule: validSchedule });
       expect(result.isError).toBe(true);
       const confirmRecords = getAuditRecords().filter((r) => r.phase === 'confirm');
-      expect(confirmRecords.map((r) => r.result)).toEqual(['allowed', 'failed']);
+      expect(confirmRecords.map((r) => r.result)).toEqual(['failed']);
       const failed = confirmRecords.find((r) => r.result === 'failed');
       invariant(failed, 'expected a failed audit record');
       expect(failed.failureDetail).toContain('Tableau 409');
@@ -680,11 +708,11 @@ describe('updateCloudExtractRefreshTaskTool', () => {
 
   describe('with mcp-apps flag ON', () => {
     beforeEach(() => {
-      mocks.mockIsFeatureEnabled.mockReturnValue(true);
+      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
     });
 
-    it('carries the update-cloud-extract-refresh-task app config so the host renders the confirm iframe', () => {
-      const tool = getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+    it('carries the update-cloud-extract-refresh-task app config so the host renders the confirm iframe', async () => {
+      const tool = await getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
       expect(tool.app).toBeDefined();
       expect(tool.app?.resourceUri).toContain('update-cloud-extract-refresh-task');
     });
@@ -739,7 +767,7 @@ async function getToolResult(args: {
   confirm?: boolean;
   confirmationToken?: string;
 }): Promise<CallToolResult> {
-  const tool = getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
+  const tool = await getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
     {

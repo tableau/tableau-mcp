@@ -21,11 +21,16 @@ export const overridableVariables = [
   'DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS',
   'DISABLE_METADATA_API_REQUESTS',
   'STALE_CONTENT_MIN_AGE_DAYS',
+  'STALE_CONTENT_MAX_ROWS',
 ] as const satisfies ReadonlyArray<keyof ProcessEnvWeb>;
 
 export const STALE_CONTENT_MIN_AGE_DAYS_DEFAULT = 90;
 const STALE_CONTENT_MIN_AGE_DAYS_MIN = 1;
 const STALE_CONTENT_MIN_AGE_DAYS_MAX = 3650;
+
+export const STALE_CONTENT_MAX_ROWS_DEFAULT = 100;
+const STALE_CONTENT_MAX_ROWS_MIN = 1;
+const STALE_CONTENT_MAX_ROWS_MAX = 10000;
 
 export const requestOverridableVariables = overridableVariables.filter(
   (v) => v !== 'ALLOWED_REQUEST_OVERRIDES' && v !== 'INCLUDE_TOOLS' && v !== 'EXCLUDE_TOOLS',
@@ -68,6 +73,7 @@ export class OverridableConfig {
   disableMetadataApiRequests: boolean;
 
   staleContentMinAgeDays: number;
+  staleContentMaxRows: number;
 
   /**
    * General pattern for overriding variables:
@@ -134,6 +140,13 @@ export class OverridableConfig {
 
     // STALE_CONTENT_MIN_AGE_DAYS
     this.staleContentMinAgeDays = this.getStaleContentMinAgeDaysWithOverrides(
+      envVariables,
+      siteOverrides,
+      requestOverrides,
+    );
+
+    // STALE_CONTENT_MAX_ROWS
+    this.staleContentMaxRows = this.getStaleContentMaxRowsWithOverrides(
       envVariables,
       siteOverrides,
       requestOverrides,
@@ -477,6 +490,52 @@ export class OverridableConfig {
           throw new Error(
             'STALE_CONTENT_MIN_AGE_DAYS was provided an invalid request override value',
           );
+        }
+        value = parsed;
+      }
+    }
+
+    return value;
+  }
+
+  getStaleContentMaxRowsWithOverrides(
+    envVariables: Record<string, string | undefined>,
+    siteOverrides: Record<string, string> = {},
+    requestOverrides: Record<string, string> = {},
+  ): number {
+    const parseRows = (raw: string | undefined): number | null => {
+      if (raw === undefined || raw === '') {
+        return null;
+      }
+      const n = parseInt(raw);
+      if (Number.isNaN(n) || n < STALE_CONTENT_MAX_ROWS_MIN || n > STALE_CONTENT_MAX_ROWS_MAX) {
+        return null;
+      }
+      return n;
+    };
+
+    let value = parseRows(envVariables.STALE_CONTENT_MAX_ROWS) ?? STALE_CONTENT_MAX_ROWS_DEFAULT;
+
+    if (Object.hasOwn(siteOverrides, 'STALE_CONTENT_MAX_ROWS')) {
+      const parsed = parseRows(siteOverrides.STALE_CONTENT_MAX_ROWS);
+      if (parsed !== null) {
+        value = parsed;
+      } else if (siteOverrides.STALE_CONTENT_MAX_ROWS === '') {
+        value = STALE_CONTENT_MAX_ROWS_DEFAULT;
+      }
+    }
+
+    if (Object.hasOwn(requestOverrides, 'STALE_CONTENT_MAX_ROWS')) {
+      if (!this.allowedRequestOverrides.has('STALE_CONTENT_MAX_ROWS')) {
+        throw new Error('STALE_CONTENT_MAX_ROWS is not an allowed request override');
+      }
+      const raw = requestOverrides.STALE_CONTENT_MAX_ROWS;
+      if (raw === '') {
+        value = STALE_CONTENT_MAX_ROWS_DEFAULT;
+      } else {
+        const parsed = parseRows(raw);
+        if (parsed === null) {
+          throw new Error('STALE_CONTENT_MAX_ROWS was provided an invalid request override value');
         }
         value = parsed;
       }

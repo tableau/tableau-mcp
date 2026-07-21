@@ -665,6 +665,24 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  FLOW_TOOLS_ENABLED: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable Tableau Prep flow MCP tools',
+    description:
+      'Registers the Tableau Prep flow tools (list-flows, get-flow). Disabled by default; set to "true" to enable them.',
+    required: false,
+    sensitive: false,
+  },
+  INSIGHTS_TOOLS_ENABLED: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable insight-cards MCP tools',
+    description:
+      'Registers the datasource-context insight tools (generate-insight-cards, resolve-datasource-luid). Disabled by default; set to "true" to enable them.',
+    required: false,
+    sensitive: false,
+  },
   ADMIN_GATE_CACHE_TTL_MINUTES: {
     includeInUserConfig: false,
     type: 'string',
@@ -680,6 +698,15 @@ const envVars = {
     title: 'Stale content min age (days)',
     description:
       'Minimum days since last access for content to be considered stale by the stale-content-cleanup-inform prompt. Defaults to 90.',
+    required: false,
+    sensitive: false,
+  },
+  STALE_CONTENT_MAX_ROWS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Stale content max rows',
+    description:
+      'Maximum number of stale-content rows query-admin-insights (kind: stale-content) will return in one call. Above this the tool withholds rows and returns the true count with a ROW_CAP_EXCEEDED warning so callers narrow scope. Defaults to 100; range 1-10000.',
     required: false,
     sensitive: false,
   },
@@ -770,8 +797,10 @@ async function getEnabledTools(): Promise<Array<string>> {
     // Best effort to get enabled tools.
     // Won't work if any tools are disabled based off some user config value,
     // like Tableau Server version. This script should fail if there was ever the case.
-    const tools = webToolFactories.map((toolFactory) =>
-      toolFactory({} as unknown as WebMcpServer, { value: '0.0.0', build: '0.0.0' }),
+    const tools = await Promise.all(
+      webToolFactories.map((toolFactory) =>
+        toolFactory({} as unknown as WebMcpServer, { value: '0.0.0', build: '0.0.0' }),
+      ),
     );
 
     const disabledResults = await Promise.all(tools.map((tool) => Provider.from(tool.disabled)));
