@@ -334,6 +334,8 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
       'There was a decrease of -$5.53 (-22.1%) over January 2024.',
     );
     expect(group.summaries[0].result.markup).toBe('<b>Summary</b>');
+    // slim strips viz only — it does not add a metric_context sibling.
+    expect(parsed).not.toHaveProperty('metric_context');
   });
 
   it('returns viz verbatim when slim is omitted or false', async () => {
@@ -352,62 +354,6 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     const parsedExplicitFalse = JSON.parse(explicitFalse.content[0].text);
     expect(parsedExplicitFalse).toEqual(mockPopulatedResponse);
     expect(parsedExplicitFalse).not.toHaveProperty('metric_context');
-  });
-
-  it('attaches a metric_context built from the bundleRequest when slim is true', async () => {
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
-      new Ok(mockPopulatedResponse),
-    );
-    const result = await getToolResult('ban', true);
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    const parsed = JSON.parse(result.content[0].text);
-
-    // Curated flat fields only.
-    expect(parsed.metric_context.name).toBe('Pulse Metric');
-    expect(parsed.metric_context.measure).toBe('Sales');
-    expect(parsed.metric_context.time_dimension).toBe('Order Date');
-    expect(parsed.metric_context.breakdown_dimensions).toEqual([]);
-    // The request input is intentionally NOT echoed back — the caller already
-    // holds the request it sent (carried on the tool_use block), so metric_context
-    // stays lean and carries only curated fields.
-    expect(parsed.metric_context).not.toHaveProperty('input');
-    // viz is still stripped alongside the new metric_context.
-    const group = parsed.bundle_response.result.insight_groups[0];
-    expect(group.insights[0].result).not.toHaveProperty('viz');
-    expect(group.summaries[0].result).not.toHaveProperty('viz');
-  });
-
-  it('passes through populated breakdown_dimensions in metric_context when slim is true', async () => {
-    const bundleRequestWithDimensions = {
-      bundle_request: {
-        ...bundleRequest.bundle_request,
-        input: {
-          ...bundleRequest.bundle_request.input,
-          metric: {
-            ...bundleRequest.bundle_request.input.metric,
-            extension_options: {
-              ...bundleRequest.bundle_request.input.metric.extension_options,
-              allowed_dimensions: ['Region', 'Category'],
-            },
-          },
-        },
-      },
-    };
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
-      new Ok(mockPopulatedResponse),
-    );
-
-    const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
-    const callback = await Provider.from(tool.callback);
-    const result = await callback(
-      { bundleRequest: bundleRequestWithDimensions, bundleType: 'ban', slim: true },
-      getMockRequestHandlerExtra(),
-    );
-    invariant(result.content[0].type === 'text');
-    const parsed = JSON.parse(result.content[0].text);
-
-    expect(parsed.metric_context.breakdown_dimensions).toEqual(['Region', 'Category']);
   });
 
   async function getToolResult(

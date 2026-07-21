@@ -480,29 +480,6 @@ export const pulseInsightBriefResponseSchema = z.object({
 export type PulseBundleResponse = z.infer<typeof pulseBundleResponseSchema>;
 export type PulseInsightBriefResponse = z.infer<typeof pulseInsightBriefResponseSchema>;
 
-/**
- * The per-bundle choices from a `bundleRequest`, surfaced so a card UI can read the metric's
- * identity directly instead of parsing it out of markup: curated flat fields (metric name,
- * measure, time dimension, breakdown dimensions). The request `input` is deliberately NOT echoed
- * here — a caller that needs an uncurated request field already holds the request it sent (it is
- * carried on the `tool_use` block, correlated to this result by id), so echoing it back into the
- * response would be redundant payload weight in a param whose purpose is to stay slim.
- */
-export const metricContextSchema = z.object({
-  name: z.string().optional(),
-  measure: z.string().optional(),
-  time_dimension: z.string().optional(),
-  breakdown_dimensions: z.array(z.string()),
-});
-
-export type MetricContext = z.infer<typeof metricContextSchema>;
-
-/**
- * A `PulseBundleResponse` augmented with `metric_context`. Returned by
- * `generate-pulse-metric-value-insight-bundle` when called with `slim: true`.
- */
-export type PulseBundleResponseSlim = PulseBundleResponse & { metric_context: MetricContext };
-
 export const pulseInsightBundleTypeEnum = ['ban', 'springboard', 'basic', 'detail'] as const;
 export type PulseInsightBundleType = (typeof pulseInsightBundleTypeEnum)[number];
 

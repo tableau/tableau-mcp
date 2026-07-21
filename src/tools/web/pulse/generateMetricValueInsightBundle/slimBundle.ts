@@ -1,12 +1,4 @@
-import { z } from 'zod';
-
-import {
-  MetricContext,
-  pulseBundleRequestSchema,
-  PulseBundleResponse,
-} from '../../../../sdks/tableau/types/pulse.js';
-
-type BundleRequest = z.infer<typeof pulseBundleRequestSchema>;
+import { PulseBundleResponse } from '../../../../sdks/tableau/types/pulse.js';
 
 /**
  * Returns a slimmed-down copy of a `PulseBundleResponse` — the response a text/card UI (e.g.
@@ -46,28 +38,5 @@ export function slimBundle(bundle: PulseBundleResponse): PulseBundleResponse {
         })),
       },
     },
-  };
-}
-
-/**
- * Builds the `metric_context` surfaced alongside a slim bundle response — the agent's per-bundle
- * choices, read straight off the `bundleRequest` it called the tool with, so a card UI can read
- * them instead of parsing them out of markup.
- *
- * A handful of CURATED flat fields (name/measure/time_dimension/breakdown_dimensions). The request
- * `input` is intentionally not echoed back — a caller needing an uncurated request field already
- * holds the request it sent (carried on the `tool_use` block, correlated to this result by id), so
- * re-emitting it here would just bloat a response the `slim` param exists to shrink. Every curated
- * field this reads is optional in `pulseBundleRequestSchema`, so every access is defensive. Does
- * not mutate `bundleRequest`.
- */
-export function buildMetricContext(bundleRequest: BundleRequest): MetricContext {
-  const { input } = bundleRequest.bundle_request;
-
-  return {
-    name: input.metadata.name,
-    measure: input.metric.definition.basic_specification?.measure.field,
-    time_dimension: input.metric.definition.basic_specification?.time_dimension.field,
-    breakdown_dimensions: input.metric.extension_options?.allowed_dimensions ?? [],
   };
 }

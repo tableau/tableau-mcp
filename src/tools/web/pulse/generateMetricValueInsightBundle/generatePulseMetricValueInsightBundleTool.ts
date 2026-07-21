@@ -6,13 +6,12 @@ import { useRestApi } from '../../../../restApiInstance.js';
 import {
   pulseBundleRequestSchema,
   PulseBundleResponse,
-  PulseBundleResponseSlim,
   pulseInsightBundleTypeEnum,
 } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { WebTool } from '../../tool.js';
 import { validateBundleRequest } from '../validatePulsePayload.js';
-import { buildMetricContext, slimBundle } from './slimBundle.js';
+import { slimBundle } from './slimBundle.js';
 
 const paramsSchema = {
   bundleRequest: pulseBundleRequestSchema,
@@ -151,9 +150,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
       openWorldHint: false,
     },
     callback: async ({ bundleRequest, bundleType, slim }, extra): Promise<CallToolResult> => {
-      return await generatePulseMetricValueInsightBundleTool.logAndExecute<
-        PulseBundleResponse | PulseBundleResponseSlim
-      >({
+      return await generatePulseMetricValueInsightBundleTool.logAndExecute<PulseBundleResponse>({
         extra,
         args: { bundleRequest, bundleType, slim },
         callback: async () => {
@@ -191,9 +188,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
         constrainSuccessResult: (insightBundle) => {
           return {
             type: 'success',
-            result: slim
-              ? { ...slimBundle(insightBundle), metric_context: buildMetricContext(bundleRequest) }
-              : insightBundle,
+            result: slim ? slimBundle(insightBundle) : insightBundle,
           };
         },
       });
