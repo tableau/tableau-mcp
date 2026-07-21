@@ -3,8 +3,6 @@
  */
 import { TABLEAU_VIZ_CONTAINER_ID } from '../shared/vizContainer.js';
 
-export { TABLEAU_VIZ_CONTAINER_ID };
-
 /**
  * Creates and configures a Tableau viz element for embedding
  * @param vizUrl - The URL of the Tableau view to embed
