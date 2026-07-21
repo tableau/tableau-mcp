@@ -292,7 +292,11 @@ describe('listAvailableFieldsTool', () => {
     expect(groupFields).toHaveLength(2);
     // caption falls back to the bracket-stripped columnName when caption is absent.
     expect(groupFields[0]).toMatchObject({ caption: 'Profit', role: 'measure', datatype: 'real' });
-    expect(groupFields[1]).toMatchObject({ caption: 'Category', role: 'dimension', datatype: 'string' });
+    expect(groupFields[1]).toMatchObject({
+      caption: 'Category',
+      role: 'dimension',
+      datatype: 'string',
+    });
     // Per-field metadata not needed for picking is omitted: column_ref (authoring),
     // and the redundant/near-duplicate name, datasource (it's on the group), semanticRole.
     const first = groupFields[0] as Record<string, unknown>;
@@ -324,8 +328,18 @@ describe('listAvailableFieldsTool', () => {
     // Two datasources: 'Sample - Superstore' is PUBLISHED (has a contentUrl),
     // 'Finance Extract' is EMBEDDED (contentUrl undefined). Both have a 'Profit'.
     const multiDatasourceFields = [
-      { ...mockFields[0], datasource: 'Sample - Superstore', contentUrl: 'SuperstoreDS', caption: 'Profit' },
-      { ...mockFields[1], datasource: 'Sample - Superstore', contentUrl: 'SuperstoreDS', caption: 'Category' },
+      {
+        ...mockFields[0],
+        datasource: 'Sample - Superstore',
+        contentUrl: 'SuperstoreDS',
+        caption: 'Profit',
+      },
+      {
+        ...mockFields[1],
+        datasource: 'Sample - Superstore',
+        contentUrl: 'SuperstoreDS',
+        caption: 'Category',
+      },
       { ...mockFields[0], datasource: 'Finance Extract', contentUrl: undefined, caption: 'Profit' },
       { ...mockFields[1], datasource: 'Finance Extract', contentUrl: undefined, caption: 'Region' },
     ];
@@ -343,7 +357,10 @@ describe('listAvailableFieldsTool', () => {
     expect('datasource' in body).toBe(false);
     expect('fields' in body).toBe(false);
     expect(body.count).toBe(4);
-    expect(body.datasources.map((g) => g.datasource)).toEqual(['Sample - Superstore', 'Finance Extract']);
+    expect(body.datasources.map((g) => g.datasource)).toEqual([
+      'Sample - Superstore',
+      'Finance Extract',
+    ]);
     // contentUrl per group: present for the published one, omitted for the embedded one.
     expect(body.datasources[0].contentUrl).toBe('SuperstoreDS');
     expect(body.datasources[1].contentUrl).toBeUndefined();
@@ -352,6 +369,47 @@ describe('listAvailableFieldsTool', () => {
     expect(body.datasources[1].fields.map((f) => f.caption)).toEqual(['Profit', 'Region']);
     // The datasource string is NOT repeated on individual fields.
     expect((body.datasources[0].fields[0] as Record<string, unknown>).datasource).toBeUndefined();
+  });
+
+  it('verbosity=slim without workbookFile groups fields from the live session workbook', async () => {
+    // Slim over the live-session path (session, no workbookFile): reads the
+    // resolved live workbook, never the file cache, and still returns the
+    // grouped slim shape. 'Fresh DS' is embedded (no contentUrl).
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(LIVE_XML));
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue(mockLiveFields as any);
+    const mockExecutor = {} as any;
+    const extra = {
+      ...getMockRequestHandlerExtra(),
+      getExecutor: vi.fn().mockResolvedValue(mockExecutor),
+    };
+
+    const result = await getResult({ session: SESSION, verbosity: 'slim', extra });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = slimBodySchema.parse(JSON.parse(result.content[0].text));
+
+    // Grouped slim shape, not the ASCII-table shape.
+    expect('message' in body).toBe(false);
+    expect('fields' in body).toBe(false);
+    expect(body.count).toBe(1);
+    expect(body.datasources).toHaveLength(1);
+    expect(body.datasources[0].datasource).toBe('Fresh DS');
+    // Embedded datasource → no contentUrl on the group.
+    expect(body.datasources[0].contentUrl).toBeUndefined();
+    expect(body.datasources[0].fields).toEqual([
+      { caption: 'Sales', role: 'measure', datatype: 'real' },
+    ]);
+
+    // Live-session path: read from the executor's workbook, never the file cache.
+    expect(existsSync).not.toHaveBeenCalled();
+    expect(readFileSync).not.toHaveBeenCalled();
+    expect(extra.getExecutor).toHaveBeenCalledWith(SESSION);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledWith({
+      executor: mockExecutor,
+      signal: extra.signal,
+    });
+    expect(metadataModule.listAvailableFields).toHaveBeenCalledWith(LIVE_XML);
   });
 });
 
@@ -368,5 +426,8 @@ async function getResult({
 }): Promise<CallToolResult> {
   const tool = getListAvailableFieldsTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
-  return await callback({ session, workbookFile, verbosity }, extra ?? getMockRequestHandlerExtra());
+  return await callback(
+    { session, workbookFile, verbosity },
+    extra ?? getMockRequestHandlerExtra(),
+  );
 }
