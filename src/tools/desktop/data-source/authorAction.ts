@@ -3,8 +3,9 @@ import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
+import { applyWorkbookText } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
-import { validateUnderlyingMetadataLoad } from '../../../desktop/underlyingMetadataGuard.js';
+import { validateWorkbookDocumentApply } from '../../../desktop/workbookDocumentGuard.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -102,15 +103,14 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
           const editedXml = editResult.value;
 
-          const validation = validateUnderlyingMetadataLoad(editedXml, liveXml);
+          const validation = validateWorkbookDocumentApply(editedXml, liveXml);
           if (!validation.ok) {
             return new ArgsValidationError(validation.message).toErr();
           }
 
-          const loadResult = await executor.executeCommand({
-            namespace: 'tabui',
-            command: 'load-underlying-metadata',
-            args: { text: editedXml },
+          const loadResult = await applyWorkbookText({
+            xml: editedXml,
+            executor,
             signal: extra.signal,
           });
           if (loadResult.isErr()) {

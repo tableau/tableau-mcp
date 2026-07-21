@@ -39,11 +39,6 @@ import {
   WorksheetList,
 } from './types.js';
 
-/** The single "get whole workbook document" command, routed to GET /v0/workbook/document. */
-const SAVE_UNDERLYING_METADATA = 'save-underlying-metadata';
-/** The single "apply whole workbook document" command, routed to POST /v0/workbook/document. */
-const LOAD_UNDERLYING_METADATA = 'load-underlying-metadata';
-
 const LOGGER = 'ExternalApiToolExecutor';
 
 export type ExternalApiToolExecutorDeps = {
@@ -78,11 +73,8 @@ type RawOutcome = {
  * {@link ToolExecutor} implementation that speaks the Tableau Desktop External Client
  * API ("Athena V0") instead of the legacy Agent API.
  *
- * Command surface → endpoint mapping:
- *   - `tabui:save-underlying-metadata` (is-json !== true) → GET  /v0/workbook/document
- *   - `tabui:load-underlying-metadata` (with `text`)      → POST /v0/workbook/document
- *   - everything else                                     → POST /v0/app:invokeCommand
- *     (the API resolves the SAME legacy command registry, so params pass through as-is)
+ * Command execution uses POST /v0/app:invokeCommand. Workbook document round-trips use
+ * the dedicated GET/POST /v0/workbook/document methods below.
  *
  * On a 401 (stale discovery file) the executor rescans discovery exactly once and
  * retries with the fresh instance/token.
@@ -201,6 +193,50 @@ export class ExternalApiToolExecutor extends ToolExecutor {
 
   async listWorksheets(signal: AbortSignal): Promise<Result<WorksheetList, ExecuteCommandError>> {
     return this.readExternalApi((client) => client.listWorksheets(signal));
+  }
+
+  async getWorkbookDocument(
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.getWorkbookDocument(signal));
+  }
+
+  async applyWorkbookDocument(
+    xml: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    const outcomeResult = await this.withRescan(async (client) => {
+      const result = await client.applyWorkbookDocument(xml, signal);
+      if (result.isErr()) {
+        return Err(result.error);
+      }
+      return Ok(normalizeEnvelope(result.value, client.apiVersion));
+    });
+
+    if (outcomeResult.isErr()) {
+      const mapped = mapClientError(outcomeResult.error);
+      log({
+        message: 'Failed to apply workbook document via External Client API',
+        level: 'error',
+        logger: LOGGER,
+        data: mapped,
+      });
+      return Err(mapped);
+    }
+
+    const statusResult = buildCommandStatus(outcomeResult.value, {
+      namespace: 'external-api',
+      command: 'apply-workbook-document',
+    });
+    if (statusResult.isErr()) {
+      log({
+        message: 'Workbook document apply failed',
+        level: 'error',
+        logger: LOGGER,
+        data: statusResult.error,
+      });
+    }
+    return statusResult;
   }
 
   async health(signal: AbortSignal): Promise<Result<{ healthy: boolean }, ExecuteCommandError>> {
@@ -428,35 +464,6 @@ export class ExternalApiToolExecutor extends ToolExecutor {
       signal: AbortSignal;
     },
   ): Promise<Result<RawOutcome, ExternalApiError>> {
-    if (namespace === 'tabui' && command === SAVE_UNDERLYING_METADATA && args['is-json'] !== true) {
-      const result = await client.getWorkbookDocument(signal);
-      if (result.isErr()) {
-        return Err(result.error);
-      }
-      return Ok({
-        result: { text: result.value.xml },
-        state: 'succeeded',
-        envelopeError: undefined,
-        warnings: undefined,
-        createdAt: undefined,
-        completedAt: undefined,
-        operationId: undefined,
-        apiVersion: client.apiVersion,
-      });
-    }
-
-    if (
-      namespace === 'tabui' &&
-      command === LOAD_UNDERLYING_METADATA &&
-      typeof args.text === 'string'
-    ) {
-      const result = await client.applyWorkbookDocument(args.text, signal);
-      if (result.isErr()) {
-        return Err(result.error);
-      }
-      return Ok(normalizeEnvelope(result.value, client.apiVersion));
-    }
-
     const result = await client.invokeCommand(namespace, command, args, signal);
     if (result.isErr()) {
       return Err(result.error);

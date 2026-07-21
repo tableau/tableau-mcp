@@ -98,13 +98,13 @@ describe('getDashboardXml', () => {
     } as ExecuteCommandError;
     const executor = {
       listDashboards: vi.fn().mockResolvedValue(Err(routeMissing)),
-      executeCommand: vi.fn().mockResolvedValue(
+      getWorkbookDocument: vi.fn().mockResolvedValue(
         Ok({
-          parsedResult: {
-            text: `<workbook><dashboards>
+          xml: `<workbook><dashboards>
             <dashboard name="Sales"><zone /></dashboard>
           </dashboards></workbook>`,
-          },
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
         }),
       ),
     } as unknown as ExternalApiToolExecutor;
@@ -117,11 +117,6 @@ describe('getDashboardXml', () => {
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toContain('<dashboard name="Sales">');
-    expect(executor.executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: 'save-underlying-metadata',
-        namespace: 'tabui',
-      }),
-    );
+    expect(executor.getWorkbookDocument).toHaveBeenCalledWith(signal);
   });
 });

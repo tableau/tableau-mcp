@@ -16,7 +16,7 @@ import {
   planTopN,
 } from './refineWorksheet.js';
 
-// A single-worksheet fragment shaped exactly like `tabui:save-worksheet` returns:
+// A single-worksheet fragment shaped exactly like the sheet document endpoint returns:
 // one nominal dimension CI (Region) + one measure CI (SUM Sales), a safe self-closing
 // <computed-sort>, and <aggregation> — the ranking-ordered-bar envelope.
 const BASE = `<worksheet name='Sales by Region' xmlns:user='http://www.tableausoftware.com/xml/user'>

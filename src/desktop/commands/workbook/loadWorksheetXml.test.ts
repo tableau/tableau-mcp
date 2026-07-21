@@ -25,23 +25,44 @@ describe('loadWorksheetXml (External Client API transport)', () => {
 
   function dispatchingExecutor(workbookXml: string): {
     executor: ToolExecutor;
-    calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }>;
+    calls: Array<{
+      kind: 'command' | 'apply';
+      namespace?: string;
+      command?: string;
+      args?: Record<string, unknown>;
+      xml?: string;
+    }>;
   } {
-    const calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }> = [];
+    const calls: Array<{
+      kind: 'command' | 'apply';
+      namespace?: string;
+      command?: string;
+      args?: Record<string, unknown>;
+      xml?: string;
+    }> = [];
     const executeCommand = vi.fn(async (params: any) => {
-      calls.push({ namespace: params.namespace, command: params.command, args: params.args });
-      if (params.command === 'save-underlying-metadata') {
-        return Ok({
-          command_id: 'cmd-get',
-          status: 'completed',
-          parsedResult: { text: workbookXml },
-        });
-      }
+      calls.push({
+        kind: 'command',
+        namespace: params.namespace,
+        command: params.command,
+        args: params.args,
+      });
       return Ok({ command_id: 'cmd-ok', status: 'completed', submitted_at: '' });
+    });
+    const getWorkbookDocument = vi
+      .fn()
+      .mockResolvedValue(
+        Ok({ xml: workbookXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+      );
+    const applyWorkbookDocument = vi.fn(async (xml: string) => {
+      calls.push({ kind: 'apply', xml });
+      return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
     });
     return {
       executor: {
         executeCommand,
+        getWorkbookDocument,
+        applyWorkbookDocument,
         listWorksheets: vi
           .fn()
           .mockResolvedValue(Ok({ worksheets: [{ id: 'sheet-1', name: worksheetName }] })),
@@ -73,11 +94,10 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(result.isOk()).toBe(true);
     expect(calls.find((c) => c.command === 'delete-sheet')).toBeUndefined();
 
-    const applyCall = calls.find((c) => c.command === 'load-underlying-metadata');
-    expect(applyCall?.namespace).toBe('tabui');
-    expect(typeof applyCall?.args?.text).toBe('string');
-    expect(applyCall?.args?.text).toContain('name="Sheet 1"');
-    expect(applyCall?.args?.text).not.toContain('Other');
+    const applyCall = calls.find((c) => c.kind === 'apply');
+    expect(typeof applyCall?.xml).toBe('string');
+    expect(applyCall?.xml).toContain('name="Sheet 1"');
+    expect(applyCall?.xml).not.toContain('Other');
   });
 
   it('focuses the worksheet after a successful minimal-doc apply', async () => {
@@ -108,7 +128,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
 
     expect(result.isOk()).toBe(true);
     expect(calls.find((c) => c.command === 'delete-sheet')).toBeUndefined();
-    expect(calls.find((c) => c.command === 'load-underlying-metadata')).toBeDefined();
+    expect(calls.find((c) => c.kind === 'apply')).toBeDefined();
   });
 
   it('should return error when XML is invalid', async () => {
@@ -166,7 +186,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       error: { code: 'ERROR', message: 'Failed', recoverable: false },
     };
     const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(Err(error)),
+      getWorkbookDocument: vi.fn().mockResolvedValue(Err(error)),
     } as unknown as ToolExecutor;
 
     const result = await loadWorksheetXml({

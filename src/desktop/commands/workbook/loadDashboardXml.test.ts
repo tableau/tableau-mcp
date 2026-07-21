@@ -24,23 +24,44 @@ describe('loadDashboardXml (External Client API transport)', () => {
 
   function dispatchingExecutor(workbookXml: string): {
     executor: ToolExecutor;
-    calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }>;
+    calls: Array<{
+      kind: 'command' | 'apply';
+      namespace?: string;
+      command?: string;
+      args?: Record<string, unknown>;
+      xml?: string;
+    }>;
   } {
-    const calls: Array<{ namespace: string; command: string; args?: Record<string, unknown> }> = [];
+    const calls: Array<{
+      kind: 'command' | 'apply';
+      namespace?: string;
+      command?: string;
+      args?: Record<string, unknown>;
+      xml?: string;
+    }> = [];
     const executeCommand = vi.fn(async (params: any) => {
-      calls.push({ namespace: params.namespace, command: params.command, args: params.args });
-      if (params.command === 'save-underlying-metadata') {
-        return Ok({
-          command_id: 'cmd-get',
-          status: 'completed',
-          parsedResult: { text: workbookXml },
-        });
-      }
+      calls.push({
+        kind: 'command',
+        namespace: params.namespace,
+        command: params.command,
+        args: params.args,
+      });
       return Ok({ command_id: 'cmd-ok', status: 'completed', submitted_at: '' });
+    });
+    const getWorkbookDocument = vi
+      .fn()
+      .mockResolvedValue(
+        Ok({ xml: workbookXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+      );
+    const applyWorkbookDocument = vi.fn(async (xml: string) => {
+      calls.push({ kind: 'apply', xml });
+      return Ok({ command_id: 'cmd-apply', status: 'completed', submitted_at: '' });
     });
     return {
       executor: {
         executeCommand,
+        getWorkbookDocument,
+        applyWorkbookDocument,
         listDashboards: vi
           .fn()
           .mockResolvedValue(Ok({ dashboards: [{ id: 'dashboard-1', name: dashboardName }] })),
@@ -73,9 +94,8 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(result.isOk()).toBe(true);
     expect(calls.find((c) => c.command === 'delete-sheet')).toBeUndefined();
 
-    const applyCall = calls.find((c) => c.command === 'load-underlying-metadata');
-    expect(applyCall?.namespace).toBe('tabui');
-    const applied = applyCall?.args?.text as string;
+    const applyCall = calls.find((c) => c.kind === 'apply');
+    const applied = applyCall?.xml as string;
     expect(applied).toContain('name="Sales Dashboard"');
     expect(applied).not.toContain('Other DB');
     expect(applied).not.toContain('<worksheet');
@@ -113,9 +133,9 @@ describe('loadDashboardXml (External Client API transport)', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    const applyCall = calls.find((c) => c.command === 'load-underlying-metadata');
-    expect(applyCall?.args?.text).toContain('name="Sheet 1"');
-    expect(applyCall?.args?.text).not.toContain('<worksheet');
+    const applyCall = calls.find((c) => c.kind === 'apply');
+    expect(applyCall?.xml).toContain('name="Sheet 1"');
+    expect(applyCall?.xml).not.toContain('<worksheet');
   });
 
   it('should apply a minimal document for a brand-new dashboard', async () => {
@@ -130,7 +150,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
 
     expect(result.isOk()).toBe(true);
     expect(calls.find((c) => c.command === 'delete-sheet')).toBeUndefined();
-    expect(calls.find((c) => c.command === 'load-underlying-metadata')).toBeDefined();
+    expect(calls.find((c) => c.kind === 'apply')).toBeDefined();
   });
 
   it('should return invalid-xml error when xml is empty', async () => {
@@ -179,7 +199,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
       error: { code: 'ERROR', message: 'Failed', recoverable: false },
     };
     const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(Err(error)),
+      getWorkbookDocument: vi.fn().mockResolvedValue(Err(error)),
     } as unknown as ToolExecutor;
 
     const result = await loadDashboardXml({

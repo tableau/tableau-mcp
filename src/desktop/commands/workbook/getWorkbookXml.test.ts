@@ -13,13 +13,11 @@ describe('getWorkbookXml', () => {
   it('should successfully return workbook XML', async () => {
     const mockXml = '<?xml version="1.0"?><workbook><worksheets></worksheets></workbook>';
     const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(
+      getWorkbookDocument: vi.fn().mockResolvedValue(
         Ok({
-          command_id: 'cmd-123',
-          status: 'completed',
-          parsedResult: {
-            text: mockXml,
-          },
+          xml: mockXml,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
         }),
       ),
     } as unknown as ToolExecutor;
@@ -31,27 +29,17 @@ describe('getWorkbookXml', () => {
       expect(result.value).toBe(mockXml);
     }
 
-    expect(mockExecutor.executeCommand).toHaveBeenCalledWith({
-      namespace: 'tabui',
-      command: 'save-underlying-metadata',
-      args: {
-        'is-json': false,
-      },
-      schema: expect.any(Object),
-      signal: mockSignal,
-    });
+    expect(mockExecutor.getWorkbookDocument).toHaveBeenCalledWith(mockSignal);
   });
 
   it('should return large workbook XML', async () => {
     const largeXml = '<?xml version="1.0"?><workbook>' + '<worksheet>'.repeat(1000) + '</workbook>';
     const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(
+      getWorkbookDocument: vi.fn().mockResolvedValue(
         Ok({
-          command_id: 'cmd-123',
-          status: 'completed',
-          parsedResult: {
-            text: largeXml,
-          },
+          xml: largeXml,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
         }),
       ),
     } as unknown as ToolExecutor;
@@ -65,10 +53,10 @@ describe('getWorkbookXml', () => {
     }
   });
 
-  it('should return error when executeCommand fails', async () => {
+  it('should return error when document read fails', async () => {
     const error = { type: 'command-failed' as const, error: { code: 'ERROR', message: 'Failed' } };
     const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(Err(error)),
+      getWorkbookDocument: vi.fn().mockResolvedValue(Err(error)),
     } as unknown as ToolExecutor;
 
     const result = await getWorkbookXml({ executor: mockExecutor, signal: mockSignal });
@@ -81,13 +69,11 @@ describe('getWorkbookXml', () => {
 
   it('should handle empty XML text', async () => {
     const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(
+      getWorkbookDocument: vi.fn().mockResolvedValue(
         Ok({
-          command_id: 'cmd-123',
-          status: 'completed',
-          parsedResult: {
-            text: '',
-          },
+          xml: '',
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
         }),
       ),
     } as unknown as ToolExecutor;
@@ -108,13 +94,11 @@ describe('getWorkbookXml', () => {
   </worksheet>
 </workbook>`;
     const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(
+      getWorkbookDocument: vi.fn().mockResolvedValue(
         Ok({
-          command_id: 'cmd-123',
-          status: 'completed',
-          parsedResult: {
-            text: mockXml,
-          },
+          xml: mockXml,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
         }),
       ),
     } as unknown as ToolExecutor;
@@ -129,25 +113,19 @@ describe('getWorkbookXml', () => {
     }
   });
 
-  it('should pass correct arguments to save-underlying-metadata command', async () => {
+  it('should read through the workbook document method', async () => {
     const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(
+      getWorkbookDocument: vi.fn().mockResolvedValue(
         Ok({
-          command_id: 'cmd-123',
-          status: 'completed',
-          parsedResult: {
-            text: '<workbook></workbook>',
-          },
+          xml: '<workbook></workbook>',
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
         }),
       ),
     } as unknown as ToolExecutor;
 
     await getWorkbookXml({ executor: mockExecutor, signal: mockSignal });
 
-    expect(mockExecutor.executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        args: { 'is-json': false },
-      }),
-    );
+    expect(mockExecutor.getWorkbookDocument).toHaveBeenCalledWith(mockSignal);
   });
 });

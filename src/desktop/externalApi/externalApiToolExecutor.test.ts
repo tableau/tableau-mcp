@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 import * as logger from '../../logging/logger.js';
 import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
 import { MockExternalApiServer, startMockExternalApiServer } from './mockExternalApiServer.js';
@@ -87,38 +85,27 @@ describe('ExternalApiToolExecutor', () => {
     });
   });
 
-  describe('executeCommand routing', () => {
-    it('routes save-underlying-metadata to GET /v0/workbook/document', async () => {
+  describe('workbook document routing', () => {
+    it('reads the workbook document with GET /v0/workbook/document', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'save-underlying-metadata',
-        args: { 'is-json': false },
-        schema: z.object({ text: z.string() }),
-        signal,
-      });
+      const result = await executor.getWorkbookDocument(signal);
 
       expect(result.isOk()).toBe(true);
-      expect(result.unwrap().parsedResult.text).toBe('<workbook><from-desktop /></workbook>');
+      expect(result.unwrap().xml).toBe('<workbook><from-desktop /></workbook>');
 
       const last = server.requests.at(-1);
       expect(last?.method).toBe('GET');
       expect(last?.path).toBe('/v0/workbook/document');
     });
 
-    it('routes load-underlying-metadata (text) to POST /v0/workbook/document', async () => {
+    it('applies the workbook document with POST /v0/workbook/document', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
       const xml = '<workbook><applied /></workbook>';
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'load-underlying-metadata',
-        args: { text: xml },
-        signal,
-      });
+      const result = await executor.applyWorkbookDocument(xml, signal);
 
       expect(result.isOk()).toBe(true);
       expect(result.unwrap().status).toBe('completed');
@@ -128,7 +115,9 @@ describe('ExternalApiToolExecutor', () => {
       expect(last?.path).toBe('/v0/workbook/document');
       expect(last?.body).toBe(xml);
     });
+  });
 
+  describe('executeCommand routing', () => {
     it('routes any other command to POST /v0/app:invokeCommand', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
@@ -474,16 +463,10 @@ describe('ExternalApiToolExecutor', () => {
       const executor = new ExternalApiToolExecutor({ discover });
       await executor.start();
 
-      const result = await executor.executeCommand({
-        namespace: 'tabui',
-        command: 'save-underlying-metadata',
-        args: { 'is-json': false },
-        schema: z.object({ text: z.string() }),
-        signal,
-      });
+      const result = await executor.getWorkbookDocument(signal);
 
       expect(result.isOk()).toBe(true);
-      expect(result.unwrap().parsedResult.text).toBe('<workbook><from-desktop /></workbook>');
+      expect(result.unwrap().xml).toBe('<workbook><from-desktop /></workbook>');
       expect(discover).toHaveBeenCalledTimes(2);
     });
 
@@ -500,13 +483,7 @@ describe('ExternalApiToolExecutor', () => {
         const executor = new ExternalApiToolExecutor({ pid: 999, discover });
         await executor.start();
 
-        const result = await executor.executeCommand({
-          namespace: 'tabui',
-          command: 'save-underlying-metadata',
-          args: { 'is-json': false },
-          schema: z.object({ text: z.string() }),
-          signal,
-        });
+        const result = await executor.getWorkbookDocument(signal);
 
         expect(result.isErr()).toBe(true);
         const error = result.unwrapErr();

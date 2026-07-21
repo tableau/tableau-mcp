@@ -34,14 +34,14 @@ describe('listWorksheets', () => {
     } as ExecuteCommandError;
     const executor = {
       listWorksheets: vi.fn().mockResolvedValue(Err(routeMissing)),
-      executeCommand: vi.fn().mockResolvedValue(
+      getWorkbookDocument: vi.fn().mockResolvedValue(
         Ok({
-          parsedResult: {
-            text: `<workbook><worksheets>
+          xml: `<workbook><worksheets>
             <worksheet name="Sales &amp; Profit" />
             <worksheet name="Dashboard Source" />
           </worksheets></workbook>`,
-          },
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
         }),
       ),
     } as unknown as ExternalApiToolExecutor;
@@ -53,11 +53,6 @@ describe('listWorksheets', () => {
       count: 2,
       worksheets: ['Sales & Profit', 'Dashboard Source'],
     });
-    expect(executor.executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: 'save-underlying-metadata',
-        namespace: 'tabui',
-      }),
-    );
+    expect(executor.getWorkbookDocument).toHaveBeenCalledWith(signal);
   });
 });

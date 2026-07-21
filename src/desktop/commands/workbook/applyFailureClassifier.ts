@@ -112,7 +112,7 @@ const RULES: Rule[] = [
     failure_class: 'xml-grammar',
     confidence: 0.5,
     patterns: [
-      /load-underlying-metadata[\s\S]*?(?:load was not able to complete|not able to complete successfully|could not be completed)/i,
+      /workbook document apply[\s\S]*?(?:load was not able to complete|not able to complete successfully|could not be completed)/i,
       /(?:load was not able to complete|not able to complete successfully)[\s\S]*?internal error - an unexpected error/i,
       /errors occurred while trying to load the workbook/i,
     ],

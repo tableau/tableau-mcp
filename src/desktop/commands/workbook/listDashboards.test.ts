@@ -34,14 +34,14 @@ describe('listDashboards', () => {
     } as ExecuteCommandError;
     const executor = {
       listDashboards: vi.fn().mockResolvedValue(Err(routeMissing)),
-      executeCommand: vi.fn().mockResolvedValue(
+      getWorkbookDocument: vi.fn().mockResolvedValue(
         Ok({
-          parsedResult: {
-            text: `<workbook><dashboards>
+          xml: `<workbook><dashboards>
             <dashboard name="Executive &amp; Sales" />
             <dashboard name="Operations" />
           </dashboards></workbook>`,
-          },
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
         }),
       ),
     } as unknown as ExternalApiToolExecutor;
@@ -53,11 +53,6 @@ describe('listDashboards', () => {
       count: 2,
       dashboards: ['Executive & Sales', 'Operations'],
     });
-    expect(executor.executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: 'save-underlying-metadata',
-        namespace: 'tabui',
-      }),
-    );
+    expect(executor.getWorkbookDocument).toHaveBeenCalledWith(signal);
   });
 });

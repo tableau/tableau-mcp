@@ -36,6 +36,12 @@ export type ExecuteCommandError =
 
 export type ExecuteCommandWarning = { code: string; message: string };
 
+export type WorkbookDocument = {
+  xml: string;
+  applicationVersion: string | undefined;
+  xsdPayloadVersion: string | undefined;
+};
+
 export type ExecuteCommandResult<Z extends z.ZodTypeAny | undefined = undefined> =
   Z extends z.ZodTypeAny
     ? GetCommandStatusResponse & { parsedResult: z.infer<Z>; warnings?: ExecuteCommandWarning[] }
@@ -51,5 +57,12 @@ export abstract class ToolExecutor {
   abstract executeCommand<Z extends z.ZodTypeAny>(
     args: ExecuteCommandArgs<Z>,
   ): Promise<Result<ExecuteCommandResult<Z>, ExecuteCommandError>>;
+  abstract getWorkbookDocument(
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExecuteCommandError>>;
+  abstract applyWorkbookDocument(
+    xml: string,
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>>;
   abstract getEvents(args: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>>;
 }

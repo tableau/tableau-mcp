@@ -265,8 +265,8 @@ export async function loadWorksheetXml({
   }
   const canonicalName = canonicalNameResult.value;
 
-  // External Client API ("Athena V0") exposes no per-sheet route — tabui:load-worksheet is not in
-  // its command registry, so applying a single sheet re-posts a minimal whole-workbook document.
+  // External Client API ("Athena V0") exposes no per-sheet apply route, so applying a single
+  // sheet re-posts a minimal whole-workbook document.
   // The POST upserts by name: it overwrites the colliding sheet in place and leaves the rest live.
   const result = await loadWorksheetXmlViaExternalApi({
     worksheetName: canonicalName,

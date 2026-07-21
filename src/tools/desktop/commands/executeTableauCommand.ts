@@ -22,12 +22,10 @@ import type {
   ExecuteCommandWarning,
   ToolExecutor,
 } from '../../../desktop/toolExecutor/toolExecutor.js';
-import { validateUnderlyingMetadataLoad } from '../../../desktop/underlyingMetadataGuard.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
-const LOAD_UNDERLYING_METADATA_COMMAND = 'tabui:load-underlying-metadata';
 const GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND = 'tabdoc:generate-viz-from-notional-spec';
 const MAX_RESULT_BYTES = 16 * 1024;
 
@@ -87,31 +85,6 @@ export const getExecuteTableauCommandTool = (
           const { dispatchArgs, warnings: commandGuardWarnings } = commandGuard;
 
           const executor = await extra.getExecutor(resolvedSession);
-          if (command === LOAD_UNDERLYING_METADATA_COMMAND) {
-            let liveDocumentXml: string | null = null;
-            try {
-              const liveDocumentResult = await executor.executeCommand({
-                namespace: 'tabui',
-                command: 'save-underlying-metadata',
-                args: {},
-                signal: extra.signal,
-              });
-              if (!liveDocumentResult.isErr()) {
-                liveDocumentXml = extractDocumentText(liveDocumentResult.value);
-              }
-            } catch {
-              liveDocumentXml = null;
-            }
-
-            const loadValidation = validateUnderlyingMetadataLoad(
-              typeof dispatchArgs.text === 'string' ? dispatchArgs.text : '',
-              liveDocumentXml,
-            );
-            if (!loadValidation.ok) {
-              return new ArgsValidationError(loadValidation.message).toErr();
-            }
-          }
-
           const result = await executor.executeCommand({
             namespace,
             command: cmd,
@@ -198,24 +171,6 @@ function shapeCommandResult({
   }
 
   return payload;
-}
-
-function extractDocumentText(value: unknown): string | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const parsedResult = value.parsedResult;
-  if (isRecord(parsedResult) && typeof parsedResult.text === 'string') {
-    return parsedResult.text;
-  }
-
-  const result = value.result;
-  if (isRecord(result) && typeof result.text === 'string') {
-    return result.text;
-  }
-
-  return typeof result === 'string' ? result : null;
 }
 
 async function appendGenerateVizReadback({

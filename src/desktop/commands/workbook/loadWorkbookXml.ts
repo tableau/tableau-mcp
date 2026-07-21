@@ -12,9 +12,9 @@ import { withApplyLock } from './applyMutex.js';
 export type LoadWorkbookXmlError =
   | { type: 'invalid-xml' }
   | { type: 'validation-failed'; issues: Array<ValidationIssue> }
-  // Bug 1 (P0): the load-underlying-metadata command reported command-level
-  // completion, but Tableau rejected the actual document load (e.g. "Qualified
-  // Name Parse Error"). `message` carries Desktop's own error text.
+  // The workbook document POST reported transport-level completion, but Tableau
+  // rejected the actual document load (e.g. "Qualified Name Parse Error").
+  // `message` carries Desktop's own error text.
   | { type: 'load-rejected'; message: string };
 
 export interface LoadWorkbookXmlOk {
@@ -86,19 +86,12 @@ export async function applyWorkbookText({
   executor,
   signal,
 }: { xml: string } & WithExecutorAndAbortSignal): Promise<Result<void, ExecuteCommandError>> {
-  const result = await executor.executeCommand({
-    namespace: 'tabui',
-    command: 'load-underlying-metadata',
-    signal,
-    args: {
-      text: xml,
-    },
-  });
+  const result = await executor.applyWorkbookDocument(xml, signal);
 
   if (result.isErr()) {
     log({
       level: 'error',
-      message: 'load-underlying-metadata (text) failed',
+      message: 'Workbook document apply failed',
       logger: 'workbookCommands',
       data: { error: result.error },
     });
@@ -107,7 +100,7 @@ export async function applyWorkbookText({
 
   log({
     level: 'info',
-    message: 'load-underlying-metadata (text) completed',
+    message: 'Workbook document apply completed',
     logger: 'workbookCommands',
     data: {
       commandId: result.value.command_id,

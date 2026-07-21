@@ -89,13 +89,13 @@ describe('getWorksheetXml', () => {
     } as ExecuteCommandError;
     const executor = {
       listWorksheets: vi.fn().mockResolvedValue(Err(routeMissing)),
-      executeCommand: vi.fn().mockResolvedValue(
+      getWorkbookDocument: vi.fn().mockResolvedValue(
         Ok({
-          parsedResult: {
-            text: `<workbook><worksheets>
+          xml: `<workbook><worksheets>
             <worksheet name="Profit"><table><view /></table></worksheet>
           </worksheets></workbook>`,
-          },
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
         }),
       ),
     } as unknown as ExternalApiToolExecutor;
@@ -108,11 +108,6 @@ describe('getWorksheetXml', () => {
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toContain('<worksheet name="Profit">');
-    expect(executor.executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: 'save-underlying-metadata',
-        namespace: 'tabui',
-      }),
-    );
+    expect(executor.getWorkbookDocument).toHaveBeenCalledWith(signal);
   });
 });

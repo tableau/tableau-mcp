@@ -165,8 +165,8 @@ export async function loadDashboardXml({
   }
   const canonicalName = canonicalNameResult.value;
 
-  // External Client API ("Athena V0") exposes no per-sheet route — tabui:load-dashboard is not in
-  // its command registry, so applying a single dashboard re-posts a minimal whole-workbook document.
+  // External Client API ("Athena V0") exposes no per-dashboard apply route, so applying a single
+  // dashboard re-posts a minimal whole-workbook document.
   // The POST upserts by name: it overwrites the colliding dashboard in place and leaves the rest live.
   const result = await loadDashboardXmlViaExternalApi({
     dashboardName: canonicalName,

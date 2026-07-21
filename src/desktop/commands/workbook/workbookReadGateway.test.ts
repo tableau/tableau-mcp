@@ -40,13 +40,11 @@ describe('WorkbookReadGateway', () => {
   });
 
   it('falls back to the External API whole-document read when the worksheet list route is missing', async () => {
-    const executeCommand = vi.fn().mockResolvedValue(
+    const getWorkbookDocument = vi.fn().mockResolvedValue(
       Ok({
-        command_id: 'cmd-doc',
-        status: 'completed',
-        parsedResult: {
-          text: '<workbook><worksheets><worksheet name="Sheet From XML"><table /></worksheet></worksheets></workbook>',
-        },
+        xml: '<workbook><worksheets><worksheet name="Sheet From XML"><table /></worksheet></worksheets></workbook>',
+        applicationVersion: undefined,
+        xsdPayloadVersion: undefined,
       }),
     );
     const routeMissing: ExecuteCommandError = {
@@ -58,7 +56,8 @@ describe('WorkbookReadGateway', () => {
       },
     };
     const executor = {
-      ...makeExecutor(executeCommand),
+      ...makeExecutor(),
+      getWorkbookDocument,
       listWorksheets: vi.fn().mockResolvedValue(Err(routeMissing)),
     } as unknown as ExternalApiToolExecutor;
 
@@ -73,18 +72,18 @@ describe('WorkbookReadGateway', () => {
     if (result.isOk()) {
       expect(result.value.worksheets).toEqual(['Sheet From XML']);
     }
-    expect(executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({ command: 'save-underlying-metadata' }),
-    );
+    expect(getWorkbookDocument).toHaveBeenCalledWith(signal);
   });
 });
 
-function makeExecutor(executeCommand: ToolExecutor['executeCommand']): ToolExecutor {
+function makeExecutor(): ToolExecutor {
   return {
     start: vi.fn(),
     stop: vi.fn(),
     isAvailable: vi.fn(() => true),
-    executeCommand,
+    executeCommand: vi.fn(),
+    getWorkbookDocument: vi.fn(),
+    applyWorkbookDocument: vi.fn(),
     getEvents: vi.fn(),
   } as unknown as ToolExecutor;
 }
