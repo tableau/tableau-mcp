@@ -20,7 +20,7 @@
   },
   "datasource_placeholder": true,
   "placeholders": ["TITLE", "DATASOURCE"],
-  "intent_keywords": ["trend", "over-time", "line", "time-series", "timeline", "by-month", "sales-over-time", "year-over-year", "yoy", "prior-year", "current-year", "rolling", "moving-average", "moving-sum", "running-total", "month-over-month", "period-over-period", "forecast", "change-over-time", "calendar-year", "across-the-calendar"],
+  "intent_keywords": ["trend", "over-time", "line", "line-chart", "time-series", "timeline", "by-month", "monthly", "weekly", "daily", "per-month", "over-the-last", "last-12-months", "over-months", "active-users", "mau", "dau", "sales-over-time", "year-over-year", "yoy", "prior-year", "current-year", "rolling", "moving-average", "moving-sum", "running-total", "month-over-month", "period-over-period", "forecast", "change-over-time", "calendar-year", "across-the-calendar"],
   "description": "A line of an aggregated measure over a truncated date on the x-axis; shows trend across time.",
   "avoid_when": [
     "The x-axis is a set of DISCRETE, non-temporal CATEGORIES (categorical members such as products or segments) instead of a continuous time axis. A line CONNECTS adjacent points and so IMPLIES CONTINUITY between them, drawing a misleading slope across unrelated categorical members; a cross-category breakdown with no time axis belongs on a bar chart. Keep this line template for a continuous time x-axis only \u2014 do not bind a discrete category to the x."
@@ -28,7 +28,8 @@
   "slots": [
     { "slot_id": "order_date", "template_field": "Order Date", "derivation": "tmn",
       "role": ["cols"], "kind": "temporal", "bindable": true, "required": true,
-      "notes": "XML instance is [tmn:Order Date:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim (no normalization). templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'." },
+      "temporal_from_string": true,
+      "notes": "XML instance is [tmn:Order Date:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim (no normalization). templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'. temporal_from_string:true — a date-like STRING (e.g. a 'YYYY-MM' month) is accepted here; the apply path injects a DATEPARSE calc and truncates it to a continuous month axis (dateparseTemporalAxis.ts)." },
     { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
       "role": ["rows"], "kind": "quantitative", "bindable": true, "required": true },
     { "slot_id": "facet_col", "template_field": "Facet", "derivation": "none",
