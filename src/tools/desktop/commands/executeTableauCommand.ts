@@ -7,7 +7,6 @@ import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXm
 import {
   ExternalApiCommandRegistryEntry,
   ExternalApiRegistryParam,
-  isExternalApiCommandRegistryEnabled,
   lookupExternalApiCommandRegistry,
 } from '../../../desktop/externalApi/commandRegistry.js';
 import {
@@ -46,7 +45,10 @@ const LIVE_EXTERNAL_API_DIALOG_BLOCKLIST = new Map<string, string>([
     'tabui:copy-zone-to-desktop-clipboard',
     'use XML/readback or image export paths instead of the Desktop clipboard',
   ],
-  ['tabui:workgroup-change-site', 'connect Desktop to the intended site before starting the MCP session'],
+  [
+    'tabui:workgroup-change-site',
+    'connect Desktop to the intended site before starting the MCP session',
+  ],
   ['tabdoc:toggle-ind-join-semantics', 'no headless relationship-semantics alternative'],
   ['tabdoc:toggle-referential-integrity', 'no headless referential-integrity alternative'],
   ['tabdoc:table-calc-add', 'author table calculations through supported calculation tools'],
@@ -300,7 +302,10 @@ function findExternalApiParam(
   );
 }
 
-function hasExternalApiParam(args: Record<string, unknown>, param: ExternalApiRegistryParam): boolean {
+function hasExternalApiParam(
+  args: Record<string, unknown>,
+  param: ExternalApiRegistryParam,
+): boolean {
   return (
     Object.prototype.hasOwnProperty.call(args, param.local) ||
     Object.prototype.hasOwnProperty.call(args, param.camelToDashed) ||
@@ -330,7 +335,8 @@ function formatExternalApiRefusalMessage({
 
 function formatLegalValues(values: string[]): string {
   const displayed = values.slice(0, 15);
-  const suffix = values.length > displayed.length ? `, ... (+${values.length - displayed.length} more)` : '';
+  const suffix =
+    values.length > displayed.length ? `, ... (+${values.length - displayed.length} more)` : '';
   return `${displayed.join(', ')}${suffix}`;
 }
 
