@@ -12,7 +12,7 @@ Confirmed patterns for creating worksheets programmatically, window entries, row
 - In-scope reason: Worksheets require correct table structure, window entries, datasource-dependencies placement, and incremental-add workflow to avoid silent sheet loss or metadata stripping.
 - Out-of-scope risk: none
 - Tags: worksheet, window, view, datasource-dependencies, panes, rows, cols, column-instance, table-calc, trellis, small-multiples, index-partition, round-trip, hidden-worksheet, table-structure
-- Relevant user prompts/search terms: "how do I create a new worksheet from scratch", "window entry required for worksheets", "sheet disappeared after submission", "worksheets silently dropped without window", "add sheets incrementally one at a time", "trellis small multiples INDEX partition calc", "partition calcs must be role measure type quantitative", "hide a worksheet used in dashboard", "delete worksheet via API", "table-calc ordering-type Field vs Rows"
+- Relevant user prompts/search terms: "how do I create a new worksheet from scratch", "window entry required for worksheets", "sheet disappeared after submission", "worksheets silently dropped without window", "add sheets incrementally one at a time", "trellis small multiples INDEX partition calc", "partition calcs must be role measure type quantitative", "hide a worksheet used in dashboard", "delete worksheet via API", "table-calc ordering-type Field vs Rows", "add field to shelf without template", "manual worksheet build"
 
 ## Complete worksheet structure
 

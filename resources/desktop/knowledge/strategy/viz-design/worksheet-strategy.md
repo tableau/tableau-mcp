@@ -14,7 +14,7 @@ Tags: worksheets, shelves, trellis, small-multiples, sorting
 - In-scope reason: Helps Claude choose the right rows/columns shelf structure for a user's analytical question, including trellis chart layouts and nested-dimension configurations.
 - Out-of-scope risk: none
 - Tags: worksheets, shelves, trellis, small-multiples, sorting, rows-columns, hiding-sheets, index-partition
-- Relevant user prompts/search terms: "how to configure Rows and Columns shelf", "trellis chart in Tableau", "small multiples layout", "how to sort dimension by measure", "hiding worksheets used in dashboard", "INDEX partition calc for grid", "discrete vs continuous on shelf", "nested dimensions on Rows", "Measure Names and Measure Values", "when to use a trellis vs filter"
+- Relevant user prompts/search terms: "how to configure Rows and Columns shelf", "trellis chart in Tableau", "small multiples layout", "how to sort dimension by measure", "hiding worksheets used in dashboard", "INDEX partition calc for grid", "discrete vs continuous on shelf", "nested dimensions on Rows", "Measure Names and Measure Values", "when to use a trellis vs filter", "add field to shelf without template", "manual worksheet build"
 
 ## When to Use
 
