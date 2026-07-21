@@ -220,13 +220,25 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     },
   );
 
-  it('should have correct tool properties', () => {
+  it('should have correct tool properties', async () => {
     const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
+    const paramsSchema = await Provider.from(tool.paramsSchema);
     expect(tool.name).toBe('generate-pulse-metric-value-insight-bundle');
     expect(tool.description).toContain(
       'Generate an insight bundle for the current aggregated value',
     );
-    expect(tool.paramsSchema).toMatchObject({ bundleRequest: expect.any(Object) });
+    expect(paramsSchema).toMatchObject({
+      bundleRequest: expect.any(Object),
+      slim: expect.any(Object),
+      verbosity: expect.any(Object),
+    });
+    expect(paramsSchema.slim.description).toContain('Deprecated: use verbosity=slim.');
+    expect(paramsSchema.verbosity.description).toContain(
+      'strips the large viz (Vega chart-spec) blobs',
+    );
+    expect(paramsSchema.verbosity.safeParse('slim').success).toBe(true);
+    expect(paramsSchema.verbosity.safeParse('full').success).toBe(true);
+    expect(paramsSchema.verbosity.safeParse('verbose').success).toBe(false);
   });
 
   it('should handle API errors gracefully', async () => {
@@ -338,6 +350,32 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(parsed).not.toHaveProperty('metric_context');
   });
 
+  it('returns byte-identical output for verbosity slim and deprecated slim alias', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockPopulatedResponse),
+    );
+
+    const verbositySlimResult = await getToolResult('ban', undefined, 'slim');
+    const deprecatedSlimResult = await getToolResult('ban', true);
+
+    invariant(verbositySlimResult.content[0].type === 'text');
+    invariant(deprecatedSlimResult.content[0].type === 'text');
+    expect(verbositySlimResult.content[0].text).toBe(deprecatedSlimResult.content[0].text);
+  });
+
+  it('uses verbosity when both verbosity and deprecated slim alias are supplied', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockPopulatedResponse),
+    );
+
+    const result = await getToolResult('ban', true, 'full');
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed).toEqual(mockPopulatedResponse);
+  });
+
   it('returns viz verbatim when slim is omitted or false', async () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
       new Ok(mockPopulatedResponse),
@@ -359,9 +397,13 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   async function getToolResult(
     bundleType?: PulseInsightBundleType,
     slim?: boolean,
+    verbosity?: 'slim' | 'full',
   ): Promise<CallToolResult> {
     const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
-    return await callback({ bundleRequest, bundleType, slim }, getMockRequestHandlerExtra());
+    return await callback(
+      { bundleRequest, bundleType, slim, verbosity },
+      getMockRequestHandlerExtra(),
+    );
   }
 });
