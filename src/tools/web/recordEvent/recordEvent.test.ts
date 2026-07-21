@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
@@ -71,13 +72,52 @@ describe('getRecordEventTool', () => {
       expect.objectContaining({ event_type: 'EMBED_LOAD_ERROR', message: '' }),
     );
   });
+
+  it('accepts SCREAMING_SNAKE_CASE event_type values', async () => {
+    const schema = z.object(
+      await Provider.from(getRecordEventTool(new WebMcpServer()).paramsSchema),
+    );
+    for (const event_type of [
+      'TOOL_ERROR',
+      'PARSE_ERROR',
+      'AUTH_ERROR',
+      'EMBED_LOAD_ERROR',
+      'MCP_APP_CLICKED',
+    ]) {
+      expect(schema.safeParse({ event_type }).success).toBe(true);
+    }
+  });
+
+  it('rejects event_type that is too long or not SCREAMING_SNAKE_CASE', async () => {
+    const schema = z.object(
+      await Provider.from(getRecordEventTool(new WebMcpServer()).paramsSchema),
+    );
+    expect(schema.safeParse({ event_type: 'A'.repeat(65) }).success).toBe(false); // too long
+    expect(schema.safeParse({ event_type: 'tool_error' }).success).toBe(false); // lowercase
+    expect(schema.safeParse({ event_type: 'TOOL ERROR' }).success).toBe(false); // spaces
+    expect(schema.safeParse({ event_type: '1TOOL_ERROR' }).success).toBe(false); // leading digit
+    expect(schema.safeParse({ event_type: '_TOOL_ERROR' }).success).toBe(false); // leading underscore
+  });
+
+  it('truncates message longer than 1024 characters in the forwarded event', async () => {
+    const extra = getMockRequestHandlerExtra();
+    const longMessage = 'x'.repeat(2000);
+    await getToolResult(extra, { event_type: 'TOOL_ERROR', message: longMessage });
+
+    const sentMessage = sendSpy.mock.calls.find((c) => c[0] === 'tableau_mcp_event')?.[1]?.message;
+    expect(sentMessage).toBe('x'.repeat(1024));
+    expect(sentMessage.length).toBe(1024);
+  });
 });
 
 async function getToolResult(
   extra: Extra,
-  args: { event_type: string; message: string | undefined },
+  args: { event_type: string; message?: string | undefined },
 ): Promise<CallToolResult> {
   const tool = getRecordEventTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
-  return await callback(args, extra);
+  // Mirror the MCP framework: params are validated/transformed against paramsSchema before the
+  // callback runs, so route args through the schema here (this is where message truncation happens).
+  const parsedArgs = z.object(await Provider.from(tool.paramsSchema)).parse(args);
+  return await callback({ event_type: parsedArgs.event_type, message: parsedArgs.message }, extra);
 }

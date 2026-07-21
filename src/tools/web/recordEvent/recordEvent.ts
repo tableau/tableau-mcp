@@ -9,12 +9,22 @@ import { WebTool } from '../tool.js';
 
 // Starting field set — the final app-supplied schema is expected to grow later.
 const paramsSchema = {
+  // Bounded free-form string rather than a hard enum: the event-type set is intentionally
+  // app-extensible (see above), so we reject malformed values but not unknown-yet-valid ones.
   event_type: z
     .string()
+    .max(64)
+    .regex(/^[A-Z][A-Z0-9_]*$/, 'event_type must be SCREAMING_SNAKE_CASE (e.g. TOOL_ERROR).')
     .describe(
       'The event type for product telemetry, e.g. TOOL_ERROR, PARSE_ERROR, AUTH_ERROR, EMBED_LOAD_ERROR, MCP_APP_CLICKED.',
     ),
-  message: z.string().optional().describe('Optional detail or context for the event.'),
+  // Optional free-text detail: truncate rather than reject so an over-long message never fails
+  // the telemetry call (mirrors the length cap in src/telemetry/clientDisplayName.ts).
+  message: z
+    .string()
+    .transform((s) => s.slice(0, 1024))
+    .optional()
+    .describe('Optional detail or context for the event.'),
 };
 
 /**
