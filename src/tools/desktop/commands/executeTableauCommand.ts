@@ -42,12 +42,8 @@ const KNOWN_LIVE_FAILURE_FIXES = new Map<string, string>([
 // Live-swept dialog poppers misclassified as callable: never let the External API open these headlessly.
 const LIVE_EXTERNAL_API_DIALOG_BLOCKLIST = new Map<string, string>([
   [
-    'tabui:copy-zone-to-desktop-clipboard',
-    'use XML/readback or image export paths instead of the Desktop clipboard',
-  ],
-  [
     'tabui:workgroup-change-site',
-    'connect Desktop to the intended site before starting the MCP session',
+    'changing sites is fine, but this command opens a dialog - ask the user to switch sites in Desktop instead',
   ],
   ['tabdoc:toggle-ind-join-semantics', 'no headless relationship-semantics alternative'],
   ['tabdoc:toggle-referential-integrity', 'no headless referential-integrity alternative'],

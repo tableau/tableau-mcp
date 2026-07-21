@@ -612,7 +612,7 @@ describe('executeTableauCommandTool', () => {
 
     it('refuses live-observed dialog commands before resolving an executor', async () => {
       enableExternalApiRegistry({
-        'tabui:copy-zone-to-desktop-clipboard': {
+        'tabui:workgroup-change-site': {
           agent_can_invoke: true,
           opens_blocking_dialog: false,
           modifies_state: 'false',
@@ -623,14 +623,14 @@ describe('executeTableauCommandTool', () => {
       extra.getExecutor = vi.fn();
 
       const result = await getResult(
-        { session: SESSION, command: 'tabui:copy-zone-to-desktop-clipboard', args: {} },
+        { session: SESSION, command: 'tabui:workgroup-change-site', args: {} },
         extra,
       );
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('human-blocking dialog');
-      expect(result.content[0].text).toContain('Desktop clipboard');
+      expect(result.content[0].text).toContain('switch sites in Desktop');
       expect(extra.getExecutor).not.toHaveBeenCalled();
     });
 
@@ -640,7 +640,7 @@ describe('executeTableauCommandTool', () => {
       extra.getExecutor = vi.fn();
 
       const result = await getResult(
-        { session: SESSION, command: 'tabui:copy-zone-to-desktop-clipboard', args: {} },
+        { session: SESSION, command: 'tabui:workgroup-change-site', args: {} },
         extra,
       );
 
