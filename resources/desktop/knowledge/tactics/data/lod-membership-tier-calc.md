@@ -1,6 +1,6 @@
 # LOD Membership Tier Calc: Persistable Top/Bottom/Everyone-Else
 
-The **agent-safe** recipe for parameter-driven membership labeling. Unlike sets (which are silently dropped by `load-underlying-metadata`), this construct uses only `<column><calculation>` nodes that survive the MCP apply round-trip.
+The **agent-safe** recipe for parameter-driven membership labeling. Unlike sets (which are silently dropped by workbook document apply), this construct uses only `<column><calculation>` nodes that survive the MCP apply round-trip.
 
 ---
 
@@ -118,7 +118,7 @@ This is the "discrete groups vs gradient" encoding from `marks-and-encodings` �
 
 1. **Using a table calc (RANK/INDEX) for membership** — table calcs evaluate at Order-of-Operations step 8, after the grouping is needed. The `rank-as-membership` validation rule blocks this pattern and points here.
 
-2. **Using sets for agent-authored workbooks** — sets are silently dropped by `load-underlying-metadata` (both modes). The workbook applies, but the sets are gone on round-trip. Use this LOD pattern instead.
+2. **Using sets for agent-authored workbooks** — sets are silently dropped by workbook document apply. The workbook applies, but the sets are gone on round-trip. Use this LOD pattern instead.
 
 3. **Skipping the inner FIXED** — writing `{ FIXED : PERCENTILE(SUM([Profit]), 0.8) }` without collapsing to member grain first. High-transaction members over-weight the distribution.
 

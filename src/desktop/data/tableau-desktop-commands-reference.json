@@ -52,7 +52,7 @@
       "UI"
     ]
   },
-  "total_commands": 335,
+  "total_commands": 333,
   "usage_notes_for_agents": "Invoke via ExecuteCommand(CommandId, params). Use serialized_name when calling from JavaScript. Context-filled params (e.g. UPI_Workspace) are provided by the app; only required binary/unserialized params set requires_binary_or_unserialized_args. See command_names_requiring_context_or_binary_args for commands that cannot be fully invoked via executeCommandAsync. Filter by agent_can_invoke: true for commands safe to invoke via MCP; when no such command matches, use recommendation_when_no_invocable_match. Commands with opens_blocking_dialog: true open a blocking UI dialog and can cause CDP socket hang. Evidence paths and usage_count may include references from test/ and testlib/; treat those as non-customer usage.",
   "recommendation_when_no_invocable_match": "No MCP-invocable command found for this action. For a chart/viz ask, use bind-template (or refine-worksheet to edit in place); for calculated fields/parameters/sets/actions, use the author-* verbs (author-calc, author-parameter, author-set, author-action), which perform the workbook-document round-trip internally (see expertise://tableau/tactics/data/calc-fields). Fall back to workbook XML editing only when neither covers the ask.",
   "command_names_requiring_context_or_binary_args": [
@@ -253,7 +253,6 @@
     "LaunchWorksheetCaptionRichTextEditor",
     "LaunchWorksheetTitleRichTextEditor",
     "LaunchZoneRichTextEditor",
-    "LoadUnderlyingMetadata",
     "MapSourceNone",
     "MapSourceOffline",
     "MapSourceUse",
@@ -300,7 +299,6 @@
     "SaveAsPublic",
     "SaveBookmark",
     "SavePublic",
-    "SaveUnderlyingMetadata",
     "SchemaViewerConvertToUserDrillPath",
     "SelectAxisTuples",
     "SelectFieldsInShelf",
@@ -27170,86 +27168,6 @@
       "user_initiated_evidence_sample": [
         "modules/desktop/tabui/main/infrastructure/commands/AddWorkspaceDependentAffordanceToCommandMapEntries.cpp: AffordanceId mapping"
       ],
-      "modifies_workbook_state": "true",
-      "command_relevant_to_environments": [
-        "desktop"
-      ]
-    },
-    {
-      "command_name": "SaveUnderlyingMetadata",
-      "serialized_name": "save-underlying-metadata",
-      "fully_qualified_serialized_name": "tabui:save-underlying-metadata",
-      "project": "UI",
-      "source_file": "",
-      "editor_type": "U",
-      "server_permission": "UNRESTRICTED",
-      "description": "Read the ENTIRE workbook document XML as text. Step 1 of the whole-document round-trip that the author-calc verb performs internally for calculated fields — LOD expressions, RANK and window calcs, running totals, ratios. Prefer author-calc; use this manual flow (save-underlying-metadata -> splice calc <column> nodes into the target datasource -> load-underlying-metadata -> reference the new calc by CAPTION) only as a last resort. See expertise://tableau/tactics/data/calc-fields.",
-      "classification": "user_initiated",
-      "usage_count": 0,
-      "is_user_initiated": true,
-      "is_autonomous": false,
-      "value_to_users": "Read the whole workbook document XML (step 1 of the calculated-field round-trip).",
-      "how_invoked": "Agent-invoked via execute-tableau-command (document round-trip verb).",
-      "parameters": [
-        {
-          "direction": "in",
-          "local_name": "is-json",
-          "type_id": "",
-          "required": false,
-          "comment": "Optional. Omit it or pass false (the tested shape). true reroutes OFF the document fast path and fails command-not-found on the External Client API.",
-          "cannot_provide_from_mcp": false
-        },
-        {
-          "direction": "out",
-          "local_name": "text",
-          "type_id": "",
-          "required": true,
-          "comment": "The complete workbook document XML.",
-          "cannot_provide_from_mcp": false
-        }
-      ],
-      "requires_binary_or_unserialized_args": false,
-      "mcp_can_invoke_without_binary_args": true,
-      "opens_blocking_dialog": false,
-      "agent_can_invoke": true,
-      "provenance_note": "Hand-added 2026-07-19 (discoverability): real tabui command on the legacy Agent API; on the External Client API this server routes it to GET /v0/workbook/document. Absent from the codegen corpus, which only covers affordance-mapped commands.",
-      "user_initiated_evidence_sample": [],
-      "modifies_workbook_state": "false",
-      "command_relevant_to_environments": [
-        "desktop"
-      ]
-    },
-    {
-      "command_name": "LoadUnderlyingMetadata",
-      "serialized_name": "load-underlying-metadata",
-      "fully_qualified_serialized_name": "tabui:load-underlying-metadata",
-      "project": "UI",
-      "source_file": "",
-      "editor_type": "U",
-      "server_permission": "UNRESTRICTED",
-      "description": "Write an edited whole workbook document XML back into Tableau. Step 3 of the calculated-field round-trip that the author-calc verb performs internally (save -> splice calc <column> nodes -> load -> chart the calc by caption). Tableau's parser validates on load and rejects malformed XML with actionable errors. WHOLE-DOCUMENT REPLACE: pass the COMPLETE document read from tabui:save-underlying-metadata with your additions spliced in — never a fragment, never drop nodes you did not author (a partial document destroys the user's workbook). Re-read fresh before each load; do not reuse a stale document across user edits. See expertise://tableau/tactics/data/calc-fields. VERIFY BY READBACK: after load, re-read with tabui:save-underlying-metadata and confirm your change landed — a completed envelope does not by itself prove application (column REMOVALS in particular are silently ignored; live-proven 2026-07-19; see expertise://tableau/tactics/data/round-trip-normalization).",
-      "classification": "user_initiated",
-      "usage_count": 0,
-      "is_user_initiated": true,
-      "is_autonomous": false,
-      "value_to_users": "Apply a whole edited workbook document (step 3 of the calculated-field round-trip).",
-      "how_invoked": "Agent-invoked via execute-tableau-command (document round-trip verb).",
-      "parameters": [
-        {
-          "direction": "in",
-          "local_name": "text",
-          "type_id": "",
-          "required": true,
-          "comment": "The COMPLETE edited workbook document XML from tabui:save-underlying-metadata — whole document, never a fragment.",
-          "cannot_provide_from_mcp": false
-        }
-      ],
-      "requires_binary_or_unserialized_args": false,
-      "mcp_can_invoke_without_binary_args": true,
-      "opens_blocking_dialog": false,
-      "agent_can_invoke": true,
-      "provenance_note": "Hand-added 2026-07-19 (discoverability): real tabui command on the legacy Agent API; on the External Client API this server routes it to POST /v0/workbook/document (the parser validates the document). Absent from the codegen corpus, which only covers affordance-mapped commands.",
-      "user_initiated_evidence_sample": [],
       "modifies_workbook_state": "true",
       "command_relevant_to_environments": [
         "desktop"

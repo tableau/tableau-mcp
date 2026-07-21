@@ -259,7 +259,7 @@ Typical flow with XML on disk:
 1. `tableau-get-workbook` → edit the returned `.xml` path (or use `mode=inline` for small workbooks).
 2. Apply structural changes following the modules above.
 3. `tableau-apply-workbook` with the modified file path.
-4. Verify with `tableau-list-worksheets` / `tableau-list-dashboards`.
+4. Verify with worksheet/dashboard list readback.
 
 ---
 
@@ -275,7 +275,7 @@ Typical flow with XML on disk:
 | Rows/cols shelf | `<rows>` and `<cols>` text content inside `<table>` |
 | Filters | `<filter>` children of `<view>` |
 
-**Every new worksheet needs a matching `<window>` node** — missing the window entry causes `load-underlying-metadata` to silently fail.
+**Every new worksheet needs a matching `<window>` node** — missing the window entry causes workbook document apply to silently fail.
 
 ---
 
@@ -299,7 +299,7 @@ For chart-specific XML patterns, see the other knowledge modules (`workbook-work
 - **Always register the `user:` namespace prefix** before writing: `ET.register_namespace('user', 'http://www.tableausoftware.com/xml/user')`. Otherwise `user:` attrs are written in Clark notation.
 - **Call `tableau-get-workbook` immediately before every modification**: The cached file path changes after each `tableau-apply-workbook`. Always use the freshest path.
 - **Navigate by attribute, not by index**: Element order inside `worksheets`, `datasources`, and `windows` is not guaranteed. Use `find()` with attribute predicates, not `[0]`/`[1]` indexing.
-- **Every new worksheet requires a matching `window` entry**: Missing the window entry causes `load-underlying-metadata` to silently fail and the sheet to be dropped.
+- **Every new worksheet requires a matching `window` entry**: Missing the window entry causes workbook document apply to silently fail and the sheet to be dropped.
 
 ---
 
@@ -323,7 +323,7 @@ The standard Python workflow for any workbook modification:
 4. **Modify**: append, set attributes, or remove elements as needed (see other modules for specifics).
 5. **Write**: `tree.write('/tmp/modified_workbook.xml', encoding='utf-8', xml_declaration=True)`.
 6. **Submit**: `tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`.
-7. **Verify**: call `tableau-list-worksheets` or `tableau-get-workbook` to confirm changes applied.
+7. **Verify**: use worksheet-list readback or `tableau-get-workbook` to confirm changes applied.
 
 ## Source and Confidence
 

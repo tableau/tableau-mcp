@@ -192,7 +192,7 @@ Note: The worksheet name goes in the `name` attribute on the zone itself, NOT in
 
 1. **Always wrap zones in a container**: The root `<zones>` element should contain one main zone at
    (0,0) with full dimensions and `type-v2="layout-basic"`
-2. **Check worksheet names**: Use `tableau-list-worksheets` to get available worksheet names - the
+2. **Check worksheet names**: Use worksheet-list readback to get available worksheet names - the
    worksheet MUST exist in the workbook
 3. **Positions must add up**: x + w should not exceed parent width, y + h should not exceed parent
    height
