@@ -2,16 +2,9 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
-import { resolveSession } from '../../../desktop/sessionResolution.js';
-import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { runExternalApiReadTool } from '../externalApiReadHarness.js';
 import { DesktopTool } from '../tool.js';
-import {
-  endpointNotInThisBuild,
-  ExternalApiRequiredError,
-  isRouteMissing,
-} from './externalApiToolUtils.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
@@ -39,22 +32,18 @@ export const getListStoryboardsTool = (
         extra,
         args: { session },
         callback: async () => {
-          const sessionResult = resolveSession(session);
-          if (sessionResult.isErr()) {
-            return sessionResult.error.toErr();
-          }
-
-          const executor = await extra.getExecutor(sessionResult.value);
-          if (!(executor instanceof ExternalApiToolExecutor)) {
-            return new ExternalApiRequiredError(listStoryboards.name).toErr();
-          }
-
-          const result = await executor.listStoryboards(extra.signal);
+          const result = await runExternalApiReadTool({
+            toolName: listStoryboards.name,
+            session,
+            extra,
+            callback: async (_executor, _signal, read) =>
+              await read(
+                'storyboard list',
+                async (executor, signal) => await executor.listStoryboards(signal),
+              ),
+          });
           if (result.isErr()) {
-            if (isRouteMissing(result.error)) {
-              return endpointNotInThisBuild('storyboard list').toErr();
-            }
-            return new DesktopCommandExecutionError(result.error).toErr();
+            return result;
           }
 
           return new Ok({ storyboards: result.value.storyboards ?? [] });

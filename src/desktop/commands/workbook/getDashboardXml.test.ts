@@ -248,6 +248,9 @@ describe('getDashboardXml (External Client API transport)', () => {
       invariant(result.error.type === 'get-dashboard-xml-error');
       expect(result.error.error.type).toBe('no-dashboard-found');
       expect(result.error.error.message).toContain('Missing Dashboard');
+      expect(result.error.error.message).toContain(
+        'Available dashboards: Executive Dashboard (dash-exec)',
+      );
     }
   });
 

@@ -346,6 +346,9 @@ describe('getWorksheetXml (External Client API transport)', () => {
       invariant(result.error.type === 'get-worksheet-xml-error');
       expect(result.error.error.type).toBe('no-worksheet-found');
       expect(result.error.error.message).toContain('Missing Sheet');
+      expect(result.error.error.message).toContain(
+        'Available worksheets: Sales by Region (sheet-sales), Profit by Category (sheet-profit)',
+      );
     }
   });
 

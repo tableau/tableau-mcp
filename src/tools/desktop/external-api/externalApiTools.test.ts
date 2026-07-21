@@ -136,6 +136,8 @@ describe('External API coverage tools', () => {
       const result = await harness.callTool({ session: 'desktop-2' });
 
       expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe('{"healthy":true}');
       expect(sessionResolution.resolveSession).toHaveBeenCalledWith('desktop-2');
     } finally {
       await harness.close();

@@ -1,18 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
-import { resolveSession } from '../../../desktop/sessionResolution.js';
-import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { runExternalApiReadTool } from '../externalApiReadHarness.js';
 import { DesktopTool } from '../tool.js';
-import {
-  endpointNotInThisBuild,
-  ExternalApiRequiredError,
-  isRouteMissing,
-  resolveItemByNameOrId,
-} from './externalApiToolUtils.js';
+import { resolveItemByNameOrId } from './externalApiToolUtils.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
@@ -41,42 +33,36 @@ export const getDashboardInfoTool = (
         extra,
         args: { session, dashboard },
         callback: async () => {
-          const sessionResult = resolveSession(session);
-          if (sessionResult.isErr()) {
-            return sessionResult.error.toErr();
-          }
+          const listResult = await runExternalApiReadTool({
+            toolName: getDashboardInfo.name,
+            session,
+            extra,
+            callback: async (_executor, _signal, read) => {
+              const listResult = await read(
+                'dashboard list',
+                async (executor, signal) => await executor.listDashboards(signal),
+              );
+              if (listResult.isErr()) {
+                return listResult;
+              }
 
-          const executor = await extra.getExecutor(sessionResult.value);
-          if (!(executor instanceof ExternalApiToolExecutor)) {
-            return new ExternalApiRequiredError(getDashboardInfo.name).toErr();
-          }
+              const dashboardResult = resolveItemByNameOrId(
+                'Dashboard',
+                dashboard,
+                listResult.value.dashboards ?? [],
+              );
+              if (dashboardResult.isErr()) {
+                return dashboardResult.error.toErr();
+              }
 
-          const listResult = await executor.listDashboards(extra.signal);
-          if (listResult.isErr()) {
-            if (isRouteMissing(listResult.error)) {
-              return endpointNotInThisBuild('dashboard list').toErr();
-            }
-            return new DesktopCommandExecutionError(listResult.error).toErr();
-          }
-
-          const dashboardResult = resolveItemByNameOrId(
-            'Dashboard',
-            dashboard,
-            listResult.value.dashboards ?? [],
-          );
-          if (dashboardResult.isErr()) {
-            return dashboardResult.error.toErr();
-          }
-
-          const result = await executor.getDashboard(dashboardResult.value.id, extra.signal);
-          if (result.isErr()) {
-            if (isRouteMissing(result.error)) {
-              return endpointNotInThisBuild('dashboard metadata').toErr();
-            }
-            return new DesktopCommandExecutionError(result.error).toErr();
-          }
-
-          return new Ok(result.value);
+              return await read(
+                'dashboard metadata',
+                async (executor, signal) =>
+                  await executor.getDashboard(dashboardResult.value.id, signal),
+              );
+            },
+          });
+          return listResult;
         },
       });
     },

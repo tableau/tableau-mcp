@@ -34,7 +34,7 @@ describe('validateWorkbookXmlTool', () => {
 
     expect(result.isError).toBeFalsy();
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('well-formed');
+    expect(result.content[0].text).toBe('Workbook structure is well-formed.');
   });
 
   it('should return error for malformed workbook content', async () => {
