@@ -41,6 +41,9 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
     - time_zone: 'UTC'
     - language: 'LANGUAGE_EN_US'
     - locale: 'LOCALE_EN_US'
+    - The \`datasource\` field under \`metric.definition\` requires an \`id\` (datasource LUID) and accepts an optional \`id_type\`:
+      - Omit \`id_type\` for standard published datasources (default behavior).
+      - Use \`'DATASOURCE_ID_TYPE_WORKBOOK_DATASOURCE'\` when the metric is based on an embedded workbook datasource rather than a published datasource.
 - \`bundleType\` (optional): The type of bundle to generate.  The default is 'ban'.
   - 'ban' - Return a basic insight bundle with the current aggregated value for the Pulse Metric, period over period change, and the highest ranked insight for each filterable dimension of the metric.
   - 'springboard' - Return a springboard insight bundle with the current value, period over period change, and the highest ranked insight for the metric.
