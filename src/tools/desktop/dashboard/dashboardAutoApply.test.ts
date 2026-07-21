@@ -7,7 +7,7 @@ import * as binderModule from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as injectViewpointsModule from '../../../desktop/commands/workbook/injectViewpoints.js';
-import { DesktopDiscoverer } from '../../../desktop/desktopDiscoverer.js';
+import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
 import * as injectTemplateModule from '../../../desktop/templates/injectTemplate.js';
@@ -37,7 +37,7 @@ vi.mock('../../../desktop/templates/injectTemplateCore.js', async (importOrigina
     await importOriginal<typeof import('../../../desktop/templates/injectTemplateCore.js')>();
   return { ...actual, buildInjectedWorkbookXml: vi.fn() };
 });
-vi.mock('../../../desktop/desktopDiscoverer.js');
+vi.mock('../../../desktop/externalApi/discovery.js');
 vi.mock('../../../desktop/libraries/workbook-serialization-converter/index.js');
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('../../../desktop/validation/registry.js');
@@ -630,9 +630,10 @@ describe('dashboardAutoApplyTool session-default-when-unique', () => {
   });
 
   function mockInstances(pids: number[]): void {
-    const map = new Map(pids.map((pid) => [pid, { pid }]));
-    vi.mocked(DesktopDiscoverer).mockImplementation(
-      () => ({ getInstances: () => map }) as unknown as DesktopDiscoverer,
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue(
+      pids.map(
+        (pid) => ({ pid }) as ReturnType<typeof externalDiscovery.discoverInstances>[number],
+      ),
     );
   }
 
@@ -693,6 +694,6 @@ describe('dashboardAutoApplyTool session-default-when-unique', () => {
 
     expect(result.isError).toBe(false);
     expect(getExecutor).toHaveBeenCalledWith('7');
-    expect(DesktopDiscoverer).not.toHaveBeenCalled();
+    expect(externalDiscovery.discoverInstances).not.toHaveBeenCalled();
   });
 });

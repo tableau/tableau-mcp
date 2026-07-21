@@ -7,7 +7,6 @@ import {
   NoDesktopInstancesFoundError,
 } from '../errors/mcpToolError.js';
 import { DesktopToolName } from '../tools/desktop/toolName.js';
-import { DesktopDiscoverer } from './desktopDiscoverer.js';
 import { discoverInstances } from './externalApi/discovery.js';
 
 const LIST_INSTANCES_TOOL: DesktopToolName = 'list-instances';
@@ -25,8 +24,7 @@ const LIST_INSTANCES_TOOL: DesktopToolName = 'list-instances';
  *   3. Auto-resolve when exactly one Desktop instance is running. 0 or 2+ instances
  *      fail closed with an instance-listing error rather than guessing.
  *
- * Transport-aware: the External Client API and the legacy Agent API discover instances
- * differently, so step 3 reads whichever the active transport uses.
+ * Uses the External Client API discovery files written by Tableau Desktop.
  */
 export function resolveSession(session: string | undefined): Result<string, McpToolError> {
   const requestedSession = session?.trim() ? session : undefined;
@@ -46,9 +44,9 @@ export function resolveSession(session: string | undefined): Result<string, McpT
     return Ok(requestedSession);
   }
 
-  const pids = config.externalApiEnabled
-    ? discoverInstances({ discoveryDir: config.externalApiDiscoveryDir }).map((i) => i.pid)
-    : Array.from(new DesktopDiscoverer().getInstances().values()).map((i) => i.pid);
+  const pids = discoverInstances({ discoveryDir: config.externalApiDiscoveryDir }).map(
+    (i) => i.pid,
+  );
 
   if (pids.length === 0) {
     return Err(new NoDesktopInstancesFoundError());

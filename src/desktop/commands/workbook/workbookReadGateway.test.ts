@@ -1,14 +1,12 @@
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 
-import { getDesktopConfig } from '../../../config.desktop.js';
-import * as logger from '../../../logging/logger.js';
 import { ExternalApiToolExecutor } from '../../externalApi/externalApiToolExecutor.js';
 import {
   MockExternalApiServer,
   startMockExternalApiServer,
 } from '../../externalApi/mockExternalApiServer.js';
 import { ExternalApiInstance } from '../../externalApi/types.js';
-import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
+import { ExecuteCommandError, ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import { WorkbookReadGateway } from './workbookReadGateway.js';
 
 const signal = new AbortController().signal;
@@ -24,7 +22,6 @@ describe('WorkbookReadGateway', () => {
     const gateway = new WorkbookReadGateway({
       executor,
       signal,
-      config: { ...getDesktopConfig(), externalApiEnabled: false },
     });
 
     try {
@@ -42,8 +39,7 @@ describe('WorkbookReadGateway', () => {
     }
   });
 
-  it('selects the whole-document fallback and logs config/executor disagreement once', async () => {
-    const logSpy = vi.spyOn(logger, 'log').mockImplementation(() => undefined);
+  it('falls back to the External API whole-document read when the worksheet list route is missing', async () => {
     const executeCommand = vi.fn().mockResolvedValue(
       Ok({
         command_id: 'cmd-doc',
@@ -53,16 +49,26 @@ describe('WorkbookReadGateway', () => {
         },
       }),
     );
-    const executor = makeExecutor(executeCommand);
+    const routeMissing: ExecuteCommandError = {
+      type: 'command-failed',
+      error: {
+        code: 'not-found',
+        message: 'No route matches GET /v0/workbook/worksheets',
+        recoverable: false,
+      },
+    };
+    const executor = {
+      ...makeExecutor(executeCommand),
+      listWorksheets: vi.fn().mockResolvedValue(Err(routeMissing)),
+    } as unknown as ExternalApiToolExecutor;
 
     const gateway = new WorkbookReadGateway({
       executor,
       signal,
-      config: { ...getDesktopConfig(), externalApiEnabled: true },
     });
     const result = await gateway.listWorksheets();
 
-    expect(gateway.mode).toBe('workbook-document');
+    expect(gateway.mode).toBe('external-api');
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
       expect(result.value.worksheets).toEqual(['Sheet From XML']);
@@ -70,48 +76,6 @@ describe('WorkbookReadGateway', () => {
     expect(executeCommand).toHaveBeenCalledWith(
       expect.objectContaining({ command: 'save-underlying-metadata' }),
     );
-    expect(logSpy).toHaveBeenCalledTimes(1);
-    expect(logSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        level: 'warning',
-        logger: 'WorkbookReadGateway',
-        message: expect.stringContaining('non-External API executor'),
-      }),
-    );
-  });
-
-  it('selects Agent API reads when External API is disabled', async () => {
-    const logSpy = vi.spyOn(logger, 'log').mockImplementation(() => undefined);
-    const executeCommand = vi.fn().mockResolvedValue(
-      Ok({
-        command_id: 'cmd-list',
-        status: 'completed',
-        parsedResult: {
-          worksheets: JSON.stringify({
-            count: 1,
-            worksheets: [{ name: 'Sheet From Agent API' }],
-          }),
-        },
-      }),
-    );
-    const executor = makeExecutor(executeCommand);
-
-    const gateway = new WorkbookReadGateway({
-      executor,
-      signal,
-      config: { ...getDesktopConfig(), externalApiEnabled: false },
-    });
-    const result = await gateway.listWorksheets();
-
-    expect(gateway.mode).toBe('agent-api');
-    expect(result.isOk()).toBe(true);
-    if (result.isOk()) {
-      expect(result.value.worksheets).toEqual(['Sheet From Agent API']);
-    }
-    expect(executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({ command: 'list-worksheets' }),
-    );
-    expect(logSpy).not.toHaveBeenCalled();
   });
 });
 

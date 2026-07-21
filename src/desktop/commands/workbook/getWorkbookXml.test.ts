@@ -1,9 +1,7 @@
 import { Err, Ok } from 'ts-results-es';
 
-import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
+import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
-
-vi.mock('../../toolExecutor/localToolExecutor.js');
 
 describe('getWorkbookXml', () => {
   const mockSignal = new AbortController().signal;
@@ -24,7 +22,7 @@ describe('getWorkbookXml', () => {
           },
         }),
       ),
-    } as unknown as LocalExecutor;
+    } as unknown as ToolExecutor;
 
     const result = await getWorkbookXml({ executor: mockExecutor, signal: mockSignal });
 
@@ -56,7 +54,7 @@ describe('getWorkbookXml', () => {
           },
         }),
       ),
-    } as unknown as LocalExecutor;
+    } as unknown as ToolExecutor;
 
     const result = await getWorkbookXml({ executor: mockExecutor, signal: mockSignal });
 
@@ -71,7 +69,7 @@ describe('getWorkbookXml', () => {
     const error = { type: 'command-failed' as const, error: { code: 'ERROR', message: 'Failed' } };
     const mockExecutor = {
       executeCommand: vi.fn().mockResolvedValue(Err(error)),
-    } as unknown as LocalExecutor;
+    } as unknown as ToolExecutor;
 
     const result = await getWorkbookXml({ executor: mockExecutor, signal: mockSignal });
 
@@ -92,7 +90,7 @@ describe('getWorkbookXml', () => {
           },
         }),
       ),
-    } as unknown as LocalExecutor;
+    } as unknown as ToolExecutor;
 
     const result = await getWorkbookXml({ executor: mockExecutor, signal: mockSignal });
 
@@ -119,7 +117,7 @@ describe('getWorkbookXml', () => {
           },
         }),
       ),
-    } as unknown as LocalExecutor;
+    } as unknown as ToolExecutor;
 
     const result = await getWorkbookXml({ executor: mockExecutor, signal: mockSignal });
 
@@ -142,7 +140,7 @@ describe('getWorkbookXml', () => {
           },
         }),
       ),
-    } as unknown as LocalExecutor;
+    } as unknown as ToolExecutor;
 
     await getWorkbookXml({ executor: mockExecutor, signal: mockSignal });
 

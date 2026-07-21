@@ -50,7 +50,7 @@ export const getValidateWorkbookXmlTool = (
         args: { session, xml },
         callback: async () => {
           const localIssues = wellFormedXmlRule.validate(xml);
-          if (localIssues.length > 0 || !extra.config.externalApiEnabled) {
+          if (localIssues.length > 0) {
             return new Ok({ type: 'local', issues: localIssues });
           }
 
@@ -58,7 +58,6 @@ export const getValidateWorkbookXmlTool = (
             toolName: tool.name,
             session,
             extra,
-            onUnavailable: () => new Ok({ type: 'local', issues: localIssues }),
             callback: async (_executor, _signal, read) => {
               const result = await read(
                 'workbook validation',

@@ -1,10 +1,10 @@
 import invariant from '../../../utils/invariant.js';
-import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
+import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import { loadWorkbookXml } from './loadWorkbookXml.js';
 
 describe('loadWorkbookXml validation preflight', () => {
   it('rejects a whole-workbook document whose dashboard references an omitted worksheet', async () => {
-    const executor = { executeCommand: vi.fn() } as unknown as LocalExecutor;
+    const executor = { executeCommand: vi.fn() } as unknown as ToolExecutor;
 
     const result = await loadWorkbookXml({
       xml:

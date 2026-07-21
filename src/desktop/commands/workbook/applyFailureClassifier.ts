@@ -31,11 +31,11 @@ const GUIDANCE: Record<ApplyFailureClass, string> = {
   'dashboard-composition':
     'The dashboard linkage was rejected. Verify every zone references a real worksheet included in the workbook, avoid guessed ids/window pairings, and patch the specific dashboard zone instead of rebuilding unrelated sheets.',
   'command-rejected':
-    'The Agent API rejected the command or verb. Check the command name and required params; do not retry the same command unchanged.',
+    'The External Client API rejected the command or verb. Check the command name and required params; do not retry the same command unchanged.',
   'worksheet-not-found':
     'The target worksheet does not exist. List the live worksheets, verify the actual sheet name, then target or rename the real sheet before applying. Do not regenerate the workbook.',
   'timeout-or-transport':
-    'Transport failed before Tableau could evaluate the payload. Confirm Tableau Desktop and the Agent API are reachable, then re-issue the same payload once instead of rewriting the XML.',
+    'Transport failed before Tableau could evaluate the payload. Confirm Tableau Desktop and the External Client API are reachable, then re-issue the same payload once instead of rewriting the XML.',
   unknown:
     'Only a generic wrapper survived. Do not blind-retry. First gather evidence: inspect the command result/logs, re-read the current known-good content, structural-diff it against your payload, then retry with a minimal patch.',
 };

@@ -42,10 +42,10 @@ describe('classifyApplyFailure', () => {
     expect(c.guidance).toContain('does not exist');
   });
 
-  it('classifies a rejected Agent API verb as command-rejected', () => {
+  it('classifies a rejected External Client API verb as command-rejected', () => {
     const c = classifyApplyFailure({
       context: 'workbook',
-      serverError: "unknown verb 'frobnicate' — the Agent API rejected the command",
+      serverError: "unknown verb 'frobnicate' - the External Client API rejected the command",
     });
     expect(c.failure_class).toBe('command-rejected');
     expect(c.confidence).toBe(0.85);

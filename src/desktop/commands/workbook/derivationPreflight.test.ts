@@ -11,7 +11,7 @@ import { Ok } from 'ts-results-es';
 
 import invariant from '../../../utils/invariant.js';
 import * as xmlToJsonModule from '../../libraries/workbook-serialization-converter/index.js';
-import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
+import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import { loadWorkbookXml } from './loadWorkbookXml.js';
 import { loadWorksheetXml } from './loadWorksheetXml.js';
 
@@ -58,7 +58,7 @@ describe('derivation preflight — apply-workbook path', () => {
 
   it('rejects an invalid derivation before sending to Tableau', async () => {
     const executeCommand = vi.fn();
-    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+    const mockExecutor = { executeCommand } as unknown as ToolExecutor;
 
     const result = await loadWorkbookXml({
       xml: workbookWithDerivation('TruncMonth'),
@@ -86,7 +86,7 @@ describe('derivation preflight — apply-workbook path', () => {
     const executeCommand = vi
       .fn()
       .mockResolvedValue(Ok({ command_id: 'cmd-1', status: 'completed', submitted_at: '' }));
-    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+    const mockExecutor = { executeCommand } as unknown as ToolExecutor;
 
     const result = await loadWorkbookXml({
       xml: workbookWithDerivation('Month-Trunc'),
@@ -106,7 +106,7 @@ describe('derivation preflight — apply-worksheet path', () => {
 
   it('rejects an invalid derivation before sending to Tableau', async () => {
     const executeCommand = vi.fn();
-    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+    const mockExecutor = { executeCommand } as unknown as ToolExecutor;
 
     const result = await loadWorksheetXml({
       worksheetName: 'Sheet 1',
@@ -131,8 +131,26 @@ describe('derivation preflight — apply-worksheet path', () => {
   it('sends a canonical derivation through to Tableau (positive control)', async () => {
     const executeCommand = vi
       .fn()
-      .mockResolvedValue(Ok({ command_id: 'cmd-1', status: 'completed', submitted_at: '' }));
-    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+      .mockResolvedValueOnce(
+        Ok({
+          command_id: 'cmd-1',
+          status: 'completed',
+          submitted_at: '',
+          parsedResult: { text: workbookWithDerivation('Month-Trunc') },
+        }),
+      )
+      .mockResolvedValue(Ok({ command_id: 'cmd-2', status: 'completed', submitted_at: '' }));
+    const mockExecutor = {
+      executeCommand,
+      listWorksheets: vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [{ id: 'sheet-1', name: 'Sheet 1' }],
+        }),
+      ),
+      getWorksheetDocument: vi
+        .fn()
+        .mockResolvedValue(Ok({ xml: worksheetWithDerivation('Month-Trunc') })),
+    } as unknown as ToolExecutor;
 
     const result = await loadWorksheetXml({
       worksheetName: 'Sheet 1',

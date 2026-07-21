@@ -16,22 +16,10 @@ export type ExternalApiRead = <T>(
   options?: { routeMissingError?: () => McpToolError },
 ) => Promise<Result<T, McpToolError>>;
 
-export class ExternalApiRequiredError extends McpToolError {
-  constructor(toolName: string) {
-    super({
-      type: 'external-api-required',
-      message: `${toolName} requires the Tableau Desktop External Client API transport.`,
-      statusCode: 400,
-    });
-  }
-}
-
 export async function runExternalApiReadTool<T>({
-  toolName,
   session,
   extra,
   callback,
-  onUnavailable,
 }: {
   toolName: string;
   session: string | undefined;
@@ -41,7 +29,6 @@ export async function runExternalApiReadTool<T>({
     signal: AbortSignal,
     read: ExternalApiRead,
   ) => Promise<Result<T, McpToolError>>;
-  onUnavailable?: (toolName: string) => Result<T, McpToolError>;
 }): Promise<Result<T, McpToolError>> {
   const sessionResult = resolveSession(session);
   if (sessionResult.isErr()) {
@@ -49,9 +36,6 @@ export async function runExternalApiReadTool<T>({
   }
 
   const executor = await extra.getExecutor(sessionResult.value);
-  if (!(executor instanceof ExternalApiToolExecutor)) {
-    return onUnavailable ? onUnavailable(toolName) : new ExternalApiRequiredError(toolName).toErr();
-  }
 
   const read: ExternalApiRead = async (endpoint, readEndpoint, options) => {
     const result = await readEndpoint(executor, extra.signal);

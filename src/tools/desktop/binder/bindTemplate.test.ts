@@ -9,7 +9,7 @@ import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js
 import * as routeSpecModule from '../../../desktop/binder/route-spec.js';
 import { normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
-import { DesktopDiscoverer } from '../../../desktop/desktopDiscoverer.js';
+import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
 import { sessionRouteState } from '../../../desktop/route/route-state.js';
@@ -43,10 +43,10 @@ vi.mock('../../../desktop/binder/binder.js', async (importOriginal) => {
 // ── Auto-apply / session-default seams (W60) ──────────────────────────────────
 // The auto-apply leg runs the REAL validated apply path (loadWorkbookXml → real
 // runValidation → executor dispatch) so a bind can never silently skip preflight;
-// only the boundaries are mocked. DesktopDiscoverer is mocked for session-default
+// only the boundaries are mocked. External API discovery is mocked for session-default
 // resolution. The shared inject core is stubbed (its transform is proven by
 // injectTemplate's own suite) so these tests own only the bind-template wiring.
-vi.mock('../../../desktop/desktopDiscoverer.js');
+vi.mock('../../../desktop/externalApi/discovery.js');
 vi.mock('../../../desktop/libraries/workbook-serialization-converter/index.js');
 vi.mock('../../../desktop/templates/injectTemplateCore.js', () => ({
   buildInjectedWorkbookXml: vi.fn(),
@@ -1336,9 +1336,10 @@ describe('bindTemplateTool session-default-when-unique', () => {
   });
 
   function mockInstances(pids: number[]): void {
-    const map = new Map(pids.map((pid) => [pid, { pid }]));
-    vi.mocked(DesktopDiscoverer).mockImplementation(
-      () => ({ getInstances: () => map }) as unknown as DesktopDiscoverer,
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue(
+      pids.map(
+        (pid) => ({ pid }) as ReturnType<typeof externalDiscovery.discoverInstances>[number],
+      ),
     );
   }
 
@@ -1400,7 +1401,7 @@ describe('bindTemplateTool session-default-when-unique', () => {
 
     expect(result.isError).toBe(false);
     expect(getExecutor).toHaveBeenCalledWith('7');
-    expect(DesktopDiscoverer).not.toHaveBeenCalled();
+    expect(externalDiscovery.discoverInstances).not.toHaveBeenCalled();
   });
 });
 

@@ -40,28 +40,6 @@ describe('runExternalApiReadTool', () => {
     expect(extra.getExecutor).toHaveBeenCalledWith('999');
   });
 
-  it('requires the External API executor by default', async () => {
-    const extra = {
-      ...getMockRequestHandlerExtra(),
-      getExecutor: vi.fn().mockResolvedValue({}),
-    };
-
-    const result = await runExternalApiReadTool({
-      toolName: 'get-health',
-      session: undefined,
-      extra,
-      callback: async () => Ok({ healthy: true }),
-    });
-
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error.type).toBe('external-api-required');
-      expect(result.error.message).toBe(
-        'get-health requires the Tableau Desktop External Client API transport.',
-      );
-    }
-  });
-
   it('maps route-missing command errors to honest endpoint 404s', async () => {
     const executor = new ExternalApiToolExecutor({ discover: () => [] });
     const extra = {

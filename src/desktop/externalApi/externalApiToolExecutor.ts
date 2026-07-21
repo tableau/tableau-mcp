@@ -78,8 +78,7 @@ type RawOutcome = {
  * {@link ToolExecutor} implementation that speaks the Tableau Desktop External Client
  * API ("Athena V0") instead of the legacy Agent API.
  *
- * Command surface → endpoint mapping (thin, verified against localToolExecutor's
- * command shapes):
+ * Command surface → endpoint mapping:
  *   - `tabui:save-underlying-metadata` (is-json !== true) → GET  /v0/workbook/document
  *   - `tabui:load-underlying-metadata` (with `text`)      → POST /v0/workbook/document
  *   - everything else                                     → POST /v0/app:invokeCommand

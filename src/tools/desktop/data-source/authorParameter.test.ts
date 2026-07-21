@@ -14,7 +14,8 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { Err, Ok } from 'ts-results-es';
 
-import { ExecuteCommandArgs, ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
+import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
+import { ExecuteCommandArgs } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -354,12 +355,12 @@ function restoreEnv(name: string, value: string | undefined): void {
   process.env[name] = value;
 }
 
-function mockExecutor(executeCommand: ReturnType<typeof vi.fn>): ToolExecutor {
+function mockExecutor(executeCommand: ReturnType<typeof vi.fn>): ExternalApiToolExecutor {
   return {
     start: vi.fn(async () => undefined),
     stop: vi.fn(),
     isAvailable: vi.fn(() => true),
     executeCommand,
     getEvents: vi.fn(),
-  } as unknown as ToolExecutor;
+  } as unknown as ExternalApiToolExecutor;
 }
