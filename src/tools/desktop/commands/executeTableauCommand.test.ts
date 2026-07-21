@@ -803,19 +803,14 @@ describe('executeTableauCommandTool', () => {
         extra,
       );
 
+      // The hack-build load command no longer exists in the reference: it is
+      // refused as unknown before any guard or dispatch can run.
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('DROP worksheet(s) B');
-      expect(executeCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          namespace: 'tabui',
-          command: 'save-underlying-metadata',
-          args: {},
-        }),
+      expect(result.content[0].text).toContain(
+        'Unknown Tableau command "tabui:load-underlying-metadata"',
       );
-      expect(
-        executeCommand.mock.calls.some(([params]) => params.command === 'load-underlying-metadata'),
-      ).toBe(false);
+      expect(executeCommand).not.toHaveBeenCalled();
     });
 
     it('fails open and dispatches when the live document fetch fails', async () => {
@@ -839,14 +834,12 @@ describe('executeTableauCommandTool', () => {
         extra,
       );
 
-      expect(result.isError).toBeFalsy();
-      expect(executeCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          namespace: 'tabui',
-          command: 'load-underlying-metadata',
-          args: { text: LIVE_UNDERLYING_METADATA_XML },
-        }),
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Unknown Tableau command "tabui:load-underlying-metadata"',
       );
+      expect(executeCommand).not.toHaveBeenCalled();
     });
   });
 });
