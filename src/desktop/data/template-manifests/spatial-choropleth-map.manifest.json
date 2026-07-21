@@ -70,7 +70,7 @@
       ],
       "kind": "geo",
       "bindable": true,
-      "required": true,
+      "required": false,
       "notes": "Geographic dimension on level-of-detail (the shaded unit). Binds to a State/Province-class field; XML column-instance [none:State:nk]."
     },
     {

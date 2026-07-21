@@ -22,6 +22,7 @@ import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { spliceBoundFacet } from '../../../desktop/templates/facetSplice.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
+import { pruneUnboundOptionalFields } from '../../../desktop/templates/optionalFieldPrune.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import {
@@ -280,6 +281,7 @@ export const getBuildAndApplyWorksheetTool = (
           // W28-C: splice a BOUND facet pill onto the trellis shelf BEFORE the frozen
           // core rewrite (identity no-op when no facet is bound). The core then maps
           // [Facet] → the bound field so the facet actually renders.
+          templateXml = pruneUnboundOptionalFields(templateXml, explicitBind.optionalFieldPrunes);
           templateXml = ensureUserNamespace(templateXml);
           templateXml = spliceBoundFacet(templateXml, fieldMapping);
           templateXml = rewriteFieldReferences(

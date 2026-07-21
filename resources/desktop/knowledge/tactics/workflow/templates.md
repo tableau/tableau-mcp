@@ -8,6 +8,8 @@
 
 Read this when you are about to build a worksheet from a "template" and need to know which mechanism is current. For a **known chart type / common ask** (bar, line, scatter, treemap, waterfall, KPI, ranking, …) the primary move is **`tableau-bind-template`**: it matches the ask against the manifest `intent_keywords`, and on an exact keyword match to a `fast_path_eligible` template it returns validated inject args model-free (~2s). If there is no eligible template — ambiguous ask, a hazard like sets/drilldown, or a chart type with no proven template — it escalates/proposes instead of guessing, and you fall back to search + duplicate-and-modify.
 
+After template escalation, direct worksheet authoring is normal, not a failure. Use `add-field` to place fields on rows, columns, or encodings, then `refine-worksheet` for top-N, sorting, and other finishing steps.
+
 ## Best Practices
 
 - **Bind first (known chart type):** `tableau-bind-template(ask="ranked bar of sales by sub-category")`. On a confident bind, apply the returned template via `tableau-inject-template` and adapt fields/formatting. Auto-bind only fires on templates that already passed the live-render + parity gate, so a confident bind is safe to apply.

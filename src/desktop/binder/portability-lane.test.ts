@@ -164,14 +164,14 @@ describe('portability-lane — geo semantic-role picks (W2, the Territory-class 
     expect(byId.country).toBe('Country');
   });
 
-  it('a Country map ask auto-completes the state slot with the semantic-role state field', () => {
+  it('a Country map ask stays country-level instead of auto-completing optional state', () => {
     const s = summarizeSchema(SAAS_OPS_WORKBOOK_XML);
     const cls = classifyNoLlm('map of MRR by Country', manifests, s);
     expect(cls).not.toBeNull();
     expect(cls!.template).toBe('spatial-choropleth-map');
     const byId = Object.fromEntries(cls!.bindings.map((b) => [b.slot_id, b.field]));
     expect(byId.country).toBe('Country');
-    expect(byId.state).toBe('Territory');
+    expect(byId.state).toBeUndefined();
   });
 
   it('the Territory map binds end-to-end (used_llm=false, non-Superstore datasource)', async () => {

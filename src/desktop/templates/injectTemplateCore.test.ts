@@ -291,3 +291,90 @@ describe('buildInjectedWorkbookXml — temporal_axis_from_string end-to-end (rea
     expect(normUuid(withUndef.xml)).toBe(normUuid(without.xml));
   });
 });
+
+describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
+  const EMPTY_WORKBOOK = "<?xml version='1.0'?><workbook><worksheets/><windows/></workbook>";
+  const CHOROPLETH_TEMPLATE = readFileSync(
+    join(__dirname, '../data/templates/spatial-choropleth-map.xml'),
+    'utf-8',
+  );
+  const SYMBOL_TEMPLATE = readFileSync(
+    join(__dirname, '../data/templates/spatial-symbol-map.xml'),
+    'utf-8',
+  );
+
+  it('removes an unbound optional state LOD from a country-only choropleth', () => {
+    const result = buildInjectedWorkbookXml({
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml: CHOROPLETH_TEMPLATE,
+      title: 'Goals by Country',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'Football' },
+      fieldMapping: {
+        Country: '[Football].[none:Country:nk]',
+        Profit: '[Football].[sum:Goals For:qk]',
+      },
+      optionalFieldPrunes: [{ templateField: 'State', derivation: 'none', role: 'nk' }],
+      applyNonce: 'country-choropleth',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).toContain('[Football].[none:Country:nk]');
+    expect(result.xml).toContain('[Football].[sum:Goals For:qk]');
+    expect(result.xml).not.toContain('[none:State:nk]');
+    expect(result.xml).not.toContain('name="[State]"');
+    expect(result.xml).not.toContain('column="[State]"');
+  });
+
+  it('removes unbound optional state/city LODs from a country-only symbol map', () => {
+    const result = buildInjectedWorkbookXml({
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml: SYMBOL_TEMPLATE,
+      title: 'Goals by Country',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'Football' },
+      fieldMapping: {
+        'Country/Region': '[Football].[none:Country:nk]',
+        Sales: '[Football].[sum:Goals For:qk]',
+      },
+      optionalFieldPrunes: [
+        { templateField: 'State/Province', derivation: 'none', role: 'nk' },
+        { templateField: 'City', derivation: 'none', role: 'nk' },
+      ],
+      applyNonce: 'country-symbol',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).toContain('[Football].[none:Country:nk]');
+    expect(result.xml).toContain('[Football].[sum:Goals For:qk]');
+    expect(result.xml).not.toContain('[none:State/Province:nk]');
+    expect(result.xml).not.toContain('[none:City:nk]');
+    expect(result.xml).not.toContain('name="[State/Province]"');
+    expect(result.xml).not.toContain('name="[City]"');
+  });
+
+  it('keeps the full symbol-map hierarchy when every geo slot is bound', () => {
+    const result = buildInjectedWorkbookXml({
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml: SYMBOL_TEMPLATE,
+      title: 'Goals by City',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'Football' },
+      fieldMapping: {
+        'Country/Region': '[Football].[none:Country:nk]',
+        'State/Province': '[Football].[none:State:nk]',
+        City: '[Football].[none:City:nk]',
+        Sales: '[Football].[sum:Goals For:qk]',
+      },
+      applyNonce: 'full-symbol',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).toContain('[Football].[none:Country:nk]');
+    expect(result.xml).toContain('[Football].[none:State:nk]');
+    expect(result.xml).toContain('[Football].[none:City:nk]');
+  });
+});

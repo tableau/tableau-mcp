@@ -4042,7 +4042,7 @@
           ],
           "kind": "geo",
           "bindable": true,
-          "required": true,
+          "required": false,
           "notes": "Geographic dimension on level-of-detail (the shaded unit). Binds to a State/Province-class field; XML column-instance [none:State:nk]."
         },
         {
@@ -4235,7 +4235,7 @@
           ],
           "kind": "geo",
           "bindable": true,
-          "required": true,
+          "required": false,
           "notes": "template column carries semantic-role='[State].[Name]'."
         },
         {
@@ -4247,7 +4247,7 @@
           ],
           "kind": "geo",
           "bindable": true,
-          "required": true,
+          "required": false,
           "notes": "template column carries semantic-role='[City].[Name]'; finest geographic grain — one symbol per city."
         },
         {

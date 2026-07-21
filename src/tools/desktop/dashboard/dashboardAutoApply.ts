@@ -364,6 +364,7 @@ export const getDashboardAutoApplyTool = (
                 templateParameters: bound.args.template_parameters,
                 fieldMapping: bound.args.field_mapping,
                 applyNonce,
+                optionalFieldPrunes: bound.args.optional_field_prunes,
               });
             } catch (err) {
               return refusal(

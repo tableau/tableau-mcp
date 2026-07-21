@@ -2,11 +2,11 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.27.0+content.2026-07-21",
+  "content_version": "2.32.0+content.2026-07-21",
   "schema_version": "1",
   "generated": "2026-07-21",
   "engine_compat": {
-    "server_min": "2.27.0",
+    "server_min": "2.32.0",
     "node": ">=22.7.5"
   },
   "resources": [
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "f94bded446f4eaaef21ee2fa15176e48d0cae9b38ab3ad708916aa7c9315adf2",
-      "bytes": 275225
+      "sha256": "69457fb7e921ef51043e2e11b4c27d35eb66b5595ed4e908691b82536ef0fcb7",
+      "bytes": 275697
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -442,8 +442,8 @@
     },
     {
       "path": "template-manifests/spatial-choropleth-map.manifest.json",
-      "sha256": "7655c768c1bb47d0a23d3c3ea793fd3d3259450a0bbcf7ba2f08c8c549abeb30",
-      "bytes": 5913
+      "sha256": "f09ec6cf73bf44358ce44745670ff3994ad8d8121832802e4a96e1a221613e56",
+      "bytes": 5914
     },
     {
       "path": "template-manifests/spatial-symbol-map-latlon.manifest.json",
@@ -452,13 +452,13 @@
     },
     {
       "path": "template-manifests/spatial-symbol-map.manifest.json",
-      "sha256": "678e0d7d6337ad005ef3cb3361a673bbf45dd1976400983533ee683fba4c0de3",
-      "bytes": 4657
+      "sha256": "d95c1bb12c8b827b7a782f131ad098628c0a0785dbb71997594e05852a018852",
+      "bytes": 4659
     },
     {
       "path": "template-manifests/trend-line-chart.manifest.json",
-      "sha256": "cd915dd51cc7dea5e2e1fea757522019f0c147f1d0d3399d0cd771f7fdd51e4f",
-      "bytes": 5222
+      "sha256": "fa6b42af1e6a01fa376c3d300a60c1f95142edbb6bceae9cabce921991c364a9",
+      "bytes": 5599
     },
     {
       "path": "template-manifests/ww-floating-bars.manifest.json",

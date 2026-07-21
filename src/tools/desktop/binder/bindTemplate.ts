@@ -168,6 +168,9 @@ function renderBlockers(blockers: Blocker[]): string {
 
 function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): string {
   let next: string;
+  const outcome = TIER2_REASONS.has(reason)
+    ? 'Fast-path template bind did not apply; direct authoring is available.'
+    : 'No worksheet was produced.';
   if (reason === 'ambiguous-field' || reason === 'field-not-found') {
     next =
       'Resolve the field(s) with the resolve-field tool, then call bind-template again with a corrected proposal; otherwise ask the user with ask-user (present the candidates).';
@@ -176,15 +179,15 @@ function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): 
       'Confidence was below the floor. Re-examine the candidate template(s), pick the best fit, and re-propose with higher confidence.';
   } else if (TIER2_REASONS.has(reason)) {
     next =
-      'This ask is not a fast-path template bind. Author the worksheet with the general field/worksheet build tools instead. ' +
-      'If a blocker names a real but not-fast-path-eligible template, that template can still be applied via the manual chain: ' +
-      'get workbook structure in file mode -> inject-template (that template_name + an explicit field_mapping) -> apply-workbook.';
+      'No fast-path template fits this ask/data - build it directly: add-field places fields ' +
+      'on rows/cols/encodings, then refine-worksheet for top-N/sort. This is a normal ' +
+      'path, not a failure. If a blocker names a real but not-fast-path-eligible template, ' +
+      'the manual template chain is still available: get workbook structure in file mode -> ' +
+      'inject-template (that template_name + an explicit field_mapping) -> apply-workbook.';
   } else {
     next = 'Author the worksheet with the general build tools instead.';
   }
-  return `Escalated (${reason}). No worksheet was produced. Blockers: ${renderBlockers(
-    blockers,
-  )}. Next: ${next}`;
+  return `Escalated (${reason}). ${outcome} Blockers: ${renderBlockers(blockers)}. Next: ${next}`;
 }
 
 function isWaterfallResult(res: BinderResult): boolean {
@@ -607,6 +610,7 @@ async function performAutoApply({
       templateParameters: args.template_parameters,
       fieldMapping: args.field_mapping,
       applyNonce,
+      optionalFieldPrunes: args.optional_field_prunes,
       dateparseAxis: args.dateparse_axis,
     });
   } catch (err) {

@@ -383,6 +383,27 @@ describe('bindTemplateTool', () => {
     expect(body.guidance).toContain('resolve-field');
   });
 
+  it('frames non-fast-path escalation as normal direct authoring', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue({
+      status: 'escalate',
+      reason: 'not-fast-path',
+      blockers: [{ code: 'not-fast-path', detail: 'template not eligible' }],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'unsupported chart',
+      proposal: sampleProposal,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.guidance).toContain('No fast-path template fits this ask/data');
+    expect(body.guidance).toContain('add-field places fields');
+    expect(body.guidance).toContain('This is a normal path, not a failure');
+  });
+
   it('passes proposal and minConfidence through to the binder (Call 2)', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValue(boundResult);

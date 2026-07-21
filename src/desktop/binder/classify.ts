@@ -1140,6 +1140,16 @@ function roleGreedyBind(
   // authored optional (H3) — otherwise the calc's formula ref would dangle and the
   // no-LLM path would needlessly escalate.
   const forced = calcForcedSlotIds(m);
+  const optionalAskNamedGeoSlots = new Set<string>();
+  const initialGeoPool = matched.filter((f) => f.role === 'dimension');
+  for (const slot of m.slots) {
+    if (!slot.bindable || slot.required || forced.has(slot.slot_id) || slot.kind !== 'geo') {
+      continue;
+    }
+    const pick = pickGeoField(initialGeoPool, slot.slot_id);
+    if (pick.kind === 'tie') return null;
+    if (pick.kind === 'ok') optionalAskNamedGeoSlots.add(slot.slot_id);
+  }
 
   const take = (pred: (f: SchemaField) => boolean): SchemaField | null => {
     for (const f of matched) {
@@ -1152,7 +1162,8 @@ function roleGreedyBind(
   };
 
   const isActive = (slot: TemplateManifest['slots'][number]): boolean =>
-    slot.bindable && (slot.required || forced.has(slot.slot_id));
+    slot.bindable &&
+    (slot.required || forced.has(slot.slot_id) || optionalAskNamedGeoSlots.has(slot.slot_id));
   const geoSlots = m.slots.filter((s) => isActive(s) && s.kind === 'geo');
   let geoPicks: Map<string, SchemaField> | null = null;
   let geoAutoCompleted = new Map<string, SchemaField>();
