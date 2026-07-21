@@ -257,11 +257,16 @@ function buildWaterfallDiscoveryGuidance(
   if (!hasAnchorCategoryBinding(res, proposal)) {
     const candidates = waterfallAnchorCandidates(schemaSummary);
     if (candidates.length > 0) {
+      // Imperative, evidence-grounded: a category/row-type column means the P&L data almost
+      // certainly carries subtotal/total rows, which a running total WILL double-count. Do
+      // not offer this as an option or ask the user — a hedged "let me know if…" leaves the
+      // bridge wrong (m1 recurring miss). Bind it now; unbinding is trivial if the data is flat.
       sentences.push(
-        `Waterfall: schema has ${candidates.join(', ')}; re-call bind-template with ` +
-          `proposal.bindings += {slot_id:"${WATERFALL_ANCHOR_SLOT_ID}",field:${JSON.stringify(
+        `Waterfall: schema has ${candidates.join(', ')} — a row-type column means this P&L data ` +
+          'almost certainly has subtotal/total rows that the running total WILL double-count. ' +
+          `Re-bind NOW with proposal.bindings += {slot_id:"${WATERFALL_ANCHOR_SLOT_ID}",field:${JSON.stringify(
             candidates[0],
-          )}}; totals double-count.`,
+          )}} to exclude them; do NOT ask the user or leave it unbound.`,
       );
     }
   }

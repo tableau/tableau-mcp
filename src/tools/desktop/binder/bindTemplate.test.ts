@@ -800,7 +800,9 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.guidance).toContain('schema has category');
     expect(body.guidance).toContain('proposal.bindings');
     expect(body.guidance).toContain('{slot_id:"anchor_category",field:"category"}');
-    expect(body.guidance).toContain('totals double-count');
+    // Imperative, evidence-grounded wording — not an advisory the singer can hedge on.
+    expect(body.guidance).toContain('double-count');
+    expect(body.guidance).toContain('do NOT ask the user');
   });
 
   it('does not add waterfall anchor guidance when anchor_category is already bound', async () => {
