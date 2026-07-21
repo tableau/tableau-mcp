@@ -77,14 +77,22 @@ describe('listAvailableFieldsTool', () => {
     vi.clearAllMocks();
   });
 
-  it('should create a tool instance with correct properties', () => {
+  it('should create a tool instance with correct properties', async () => {
     const tool = getListAvailableFieldsTool(new DesktopMcpServer());
+    const paramsSchema = await Provider.from(tool.paramsSchema);
+
     expect(tool.name).toBe('list-available-fields');
-    expect(tool.description).toContain('List ALL fields available in workbook datasources');
-    expect(tool.paramsSchema).toMatchObject({
+    expect(tool.description).toContain('List datasource fields');
+    expect(paramsSchema).toMatchObject({
       session: expect.any(Object),
       workbookFile: expect.any(Object),
+      verbosity: expect.any(Object),
     });
+    expect(paramsSchema.verbosity.description).toContain('full (default)');
+    expect(paramsSchema.verbosity.description).toContain('slim');
+    expect(paramsSchema.verbosity.safeParse('slim').success).toBe(true);
+    expect(paramsSchema.verbosity.safeParse('full').success).toBe(true);
+    expect(paramsSchema.verbosity.safeParse('verbose').success).toBe(false);
     expect(tool.annotations).toMatchObject({
       title: 'List All Available Fields in Workbook Datasources',
       readOnlyHint: false,
@@ -136,6 +144,25 @@ describe('listAvailableFieldsTool', () => {
     expect(body.message).toContain('Text');
     expect(body.message).toContain('Number (decimal)');
     expect(body.fields).toHaveLength(2);
+  });
+
+  it('omitted verbosity is byte-for-byte identical to explicit full output', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<workbook/>');
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue(mockFields as any);
+
+    const defaultResult = await getResult({ workbookFile: '/workbook.xml' });
+    const fullResult = await getResult({ workbookFile: '/workbook.xml', verbosity: 'full' });
+
+    expect(defaultResult.isError).toBe(false);
+    expect(fullResult.isError).toBe(false);
+    invariant(defaultResult.content[0].type === 'text');
+    invariant(fullResult.content[0].type === 'text');
+    expect(defaultResult.content[0].text).toBe(fullResult.content[0].text);
+    const body = resultSchema.parse(JSON.parse(defaultResult.content[0].text));
+    expect(body.message).toContain('DIMENSIONS');
+    expect(body.message).toContain('MEASURES');
+    expect(body.fields[0].column_ref).toBe('[Sample - Superstore].[sum:Profit:qk]');
   });
 
   it('with session re-snapshots live workbook, rewrites cache and sidecar, and lists new fields', async () => {
@@ -259,8 +286,14 @@ describe('listAvailableFieldsTool', () => {
         fields: z.array(
           z.object({
             caption: z.string(),
+            localName: z.string(),
+            columnInstanceName: z.string(),
+            derivation: z.string(),
+            type: z.string(),
+            typePivot: z.string(),
             role: z.string(),
             datatype: z.string().optional(),
+            isAggregated: z.boolean().optional(),
           }),
         ),
       }),
@@ -291,19 +324,71 @@ describe('listAvailableFieldsTool', () => {
     const groupFields = body.datasources[0].fields;
     expect(groupFields).toHaveLength(2);
     // caption falls back to the bracket-stripped columnName when caption is absent.
-    expect(groupFields[0]).toMatchObject({ caption: 'Profit', role: 'measure', datatype: 'real' });
+    expect(groupFields[0]).toMatchObject({
+      caption: 'Profit',
+      localName: 'Profit',
+      columnInstanceName: '[sum:Profit:qk]',
+      derivation: 'Sum',
+      type: 'quantitative',
+      typePivot: 'qk',
+      role: 'measure',
+      datatype: 'real',
+    });
     expect(groupFields[1]).toMatchObject({
       caption: 'Category',
+      localName: 'Category',
+      columnInstanceName: '[none:Category:nk]',
+      derivation: 'None',
+      type: 'nominal',
+      typePivot: 'nk',
       role: 'dimension',
       datatype: 'string',
     });
-    // Per-field metadata not needed for picking is omitted: column_ref (authoring),
-    // and the redundant/near-duplicate name, datasource (it's on the group), semanticRole.
+    // Slim keeps enough metadata to construct [datasource].[derivation:LocalName:typePivot],
+    // while omitting the full column_ref and less common verbose metadata.
     const first = groupFields[0] as Record<string, unknown>;
     expect(first.column_ref).toBeUndefined();
     expect(first.name).toBeUndefined();
     expect(first.datasource).toBeUndefined();
     expect(first.semanticRole).toBeUndefined();
+  });
+
+  it('verbosity=slim carries usr derivation metadata for already-aggregated calc fields', async () => {
+    const aggregatedCalcFields = [
+      {
+        ...mockFields[0],
+        columnName: '[Calculation_123]',
+        columnInstanceName: '[usr:Calculation_123:qk]',
+        derivation: 'User',
+        caption: 'Profit Ratio',
+        isAggregated: true,
+        formula: 'SUM([Profit]) / SUM([Sales])',
+        column_ref: '[Sample - Superstore].[usr:Calculation_123:qk]',
+      },
+    ];
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<workbook/>');
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue(aggregatedCalcFields as any);
+
+    const result = await getResult({ workbookFile: '/workbook.xml', verbosity: 'slim' });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = slimBodySchema.parse(JSON.parse(result.content[0].text));
+    const calc = body.datasources[0].fields[0] as Record<string, unknown>;
+    expect(calc).toMatchObject({
+      caption: 'Profit Ratio',
+      localName: 'Calculation_123',
+      columnInstanceName: '[usr:Calculation_123:qk]',
+      derivation: 'User',
+      type: 'quantitative',
+      typePivot: 'qk',
+      role: 'measure',
+      datatype: 'real',
+      isAggregated: true,
+    });
+    expect(calc.column_ref).toBeUndefined();
+    expect(calc.formula).toBeUndefined();
   });
 
   it('verbosity=slim on an empty workbook returns count 0 and no datasource groups', async () => {
@@ -398,7 +483,16 @@ describe('listAvailableFieldsTool', () => {
     // Embedded datasource → no contentUrl on the group.
     expect(body.datasources[0].contentUrl).toBeUndefined();
     expect(body.datasources[0].fields).toEqual([
-      { caption: 'Sales', role: 'measure', datatype: 'real' },
+      {
+        caption: 'Sales',
+        localName: 'Sales',
+        columnInstanceName: '[sum:Sales:qk]',
+        derivation: 'Sum',
+        type: 'quantitative',
+        typePivot: 'qk',
+        role: 'measure',
+        datatype: 'real',
+      },
     ]);
 
     // Live-session path: read from the executor's workbook, never the file cache.
