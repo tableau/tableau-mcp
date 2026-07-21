@@ -5,6 +5,12 @@ import { z } from 'zod';
 import { validateKnownCommand } from '../../../desktop/commandRegistry.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import {
+  ExternalApiCommandRegistryEntry,
+  ExternalApiRegistryParam,
+  isExternalApiCommandRegistryEnabled,
+  lookupExternalApiCommandRegistry,
+} from '../../../desktop/externalApi/commandRegistry.js';
+import {
   findAllWorksheets,
   findWorksheet,
   normalizeArray,
@@ -27,11 +33,26 @@ import { DesktopTool } from '../tool.js';
 
 const LOAD_UNDERLYING_METADATA_COMMAND = 'tabui:load-underlying-metadata';
 const GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND = 'tabdoc:generate-viz-from-notional-spec';
+const CONTEXT_FILLED_PARAM_TYPES = new Set(['UPI_Workspace', 'UPI_IWorkspace']);
 const KNOWN_LIVE_FAILURE_FIXES = new Map<string, string>([
   [
     'tabdoc:sort-nested',
     'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the bind-template sort proposal (preferred for template-bound sheets) or the document round-trip (tabui:save-underlying-metadata → edit the computed-sort → tabui:load-underlying-metadata).',
   ],
+]);
+// Live-swept dialog poppers misclassified as callable: never let the External API open these headlessly.
+const LIVE_EXTERNAL_API_DIALOG_BLOCKLIST = new Map<string, string>([
+  [
+    'tabui:copy-zone-to-desktop-clipboard',
+    'use XML/readback or image export paths instead of the Desktop clipboard',
+  ],
+  ['tabui:workgroup-change-site', 'connect Desktop to the intended site before starting the MCP session'],
+  ['tabdoc:toggle-ind-join-semantics', 'no headless relationship-semantics alternative'],
+  ['tabdoc:toggle-referential-integrity', 'no headless referential-integrity alternative'],
+  ['tabdoc:table-calc-add', 'author table calculations through supported calculation tools'],
+  ['tabdoc:table-calc-edit', 'author table calculations through supported calculation tools'],
+  ['tabdoc:change-page', 'use a page navigation call with exactly one of page-number or page-name'],
+  ['tabdoc:hide-unused-fields', 'no headless hide-unused-fields alternative'],
 ]);
 
 const paramsSchema = {
@@ -92,15 +113,43 @@ export const getExecuteTableauCommandTool = (
             return new ArgsValidationError(commandValidation.message).toErr();
           }
 
-          // Generic param-contract guard: runs after the verb is confirmed known,
-          // before the deeper NotionalSpec payload guard. Fails open on commands
-          // with zero declared "in" params so the two never contradict.
-          const paramValidation = validateCommandParams(command, args);
-          if (!paramValidation.ok) {
-            return new ArgsValidationError(paramValidation.message).toErr();
+          // Unconditional: these hang the UI thread headlessly on EVERY deployment
+          // (live-observed dialog-poppers that pass the static safety flags), so the
+          // refusal cannot depend on the optional registry being installed.
+          if (LIVE_EXTERNAL_API_DIALOG_BLOCKLIST.has(command)) {
+            return new ArgsValidationError(
+              formatExternalApiRefusalMessage({
+                command,
+                reasons: ['live-observed dialog-popper'],
+                fix: LIVE_EXTERNAL_API_DIALOG_BLOCKLIST.get(command),
+              }),
+            ).toErr();
           }
 
-          const notionalSpecValidation = validateNotionalSpecArgs(command, args);
+          let dispatchArgs = args ?? {};
+          let externalApiRegistryWarnings: string[] = [];
+          const externalApiCommandRegistry = lookupExternalApiCommandRegistry(namespace, cmd);
+          if (externalApiCommandRegistry) {
+            const externalApiGuard = validateExternalApiCommandRegistry({
+              command,
+              args: dispatchArgs,
+              registry: externalApiCommandRegistry,
+            });
+            if (!externalApiGuard.ok) {
+              return new ArgsValidationError(externalApiGuard.message).toErr();
+            }
+            dispatchArgs = externalApiGuard.args;
+            externalApiRegistryWarnings = externalApiGuard.warnings;
+          } else {
+            // No External-API registry loaded/entry found: preserve today's bundled guard behavior.
+            const paramValidation = validateCommandParams(command, args);
+            if (!paramValidation.ok) {
+              return new ArgsValidationError(paramValidation.message).toErr();
+            }
+          }
+
+          // The deeper NotionalSpec payload guard still runs after param normalization.
+          const notionalSpecValidation = validateNotionalSpecArgs(command, dispatchArgs);
           if (!notionalSpecValidation.ok) {
             return new ArgsValidationError(notionalSpecValidation.message).toErr();
           }
@@ -134,7 +183,7 @@ export const getExecuteTableauCommandTool = (
           const result = await executor.executeCommand({
             namespace,
             command: cmd,
-            args: args ?? {},
+            args: dispatchArgs,
             signal: extra.signal,
           });
 
@@ -152,6 +201,9 @@ export const getExecuteTableauCommandTool = (
           if (command === GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND) {
             message = await appendGenerateVizReadback({ message, executor, signal: extra.signal });
           }
+          if (externalApiRegistryWarnings.length > 0) {
+            message = `${message}\n\n${externalApiRegistryWarnings.join('\n')}`;
+          }
 
           return new Ok({
             message,
@@ -166,6 +218,120 @@ export const getExecuteTableauCommandTool = (
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+type ExternalApiGuardResult =
+  | { ok: true; args: Record<string, unknown>; warnings: string[] }
+  | { ok: false; message: string };
+
+function validateExternalApiCommandRegistry({
+  command,
+  args,
+  registry,
+}: {
+  command: string;
+  args: Record<string, unknown>;
+  registry: ExternalApiCommandRegistryEntry;
+}): ExternalApiGuardResult {
+  const blocklistFix = LIVE_EXTERNAL_API_DIALOG_BLOCKLIST.get(command);
+  if (blocklistFix !== undefined || !registry.invocable || registry.blockingDialog) {
+    const reasons = [
+      blocklistFix !== undefined ? 'live-observed dialog-popper' : undefined,
+      !registry.invocable ? 'agent_can_invoke=false' : undefined,
+      registry.blockingDialog ? 'opens_blocking_dialog=true' : undefined,
+    ].filter((reason): reason is string => reason !== undefined);
+    return {
+      ok: false,
+      message: formatExternalApiRefusalMessage({ command, reasons, fix: blocklistFix }),
+    };
+  }
+
+  const providedArgs = isRecord(args) ? args : {};
+  const rewrittenArgs: Record<string, unknown> = {};
+  const warnings: string[] = [];
+
+  for (const [key, value] of Object.entries(providedArgs)) {
+    const param = findExternalApiParam(registry, key);
+    if (!param) {
+      rewrittenArgs[key] = value;
+      warnings.push(
+        `WARNING: key "${key}" is not in the command registry - a wrong name surfaces as a bare 500.`,
+      );
+      continue;
+    }
+
+    const enumValues = registry.enumValuesForParamType.get(param.type);
+    if (enumValues && !enumValues.includes(String(value))) {
+      return {
+        ok: false,
+        message:
+          `Invalid value for Tableau command "${command}" parameter "${param.wire}": ` +
+          `${JSON.stringify(value)}. Legal values: ${formatLegalValues(enumValues)}.`,
+      };
+    }
+
+    rewrittenArgs[param.wire] = value;
+  }
+
+  const missingRequired = registry.requiredParams.filter(
+    (param) => !isContextFilledParam(param) && !hasExternalApiParam(providedArgs, param),
+  );
+  if (missingRequired.length > 0) {
+    return {
+      ok: false,
+      message:
+        `Missing required parameter(s) for Tableau command "${command}": ` +
+        `${missingRequired.map((param) => param.wire).join(', ')}. NOT sent. ` +
+        'Registry-required UPI_Workspace/UPI_IWorkspace params are context-filled by the active sheet/workspace and are skipped.',
+    };
+  }
+
+  return { ok: true, args: rewrittenArgs, warnings };
+}
+
+function findExternalApiParam(
+  registry: ExternalApiCommandRegistryEntry,
+  key: string,
+): ExternalApiRegistryParam | null {
+  return (
+    registry.params.find(
+      (param) => key === param.local || key === param.camelToDashed || key === param.wire,
+    ) ?? null
+  );
+}
+
+function hasExternalApiParam(args: Record<string, unknown>, param: ExternalApiRegistryParam): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(args, param.local) ||
+    Object.prototype.hasOwnProperty.call(args, param.camelToDashed) ||
+    Object.prototype.hasOwnProperty.call(args, param.wire)
+  );
+}
+
+function isContextFilledParam(param: ExternalApiRegistryParam): boolean {
+  return CONTEXT_FILLED_PARAM_TYPES.has(param.type);
+}
+
+function formatExternalApiRefusalMessage({
+  command,
+  reasons,
+  fix,
+}: {
+  command: string;
+  reasons: string[];
+  fix?: string;
+}): string {
+  return (
+    `Refusing Tableau command "${command}" because it would open a human-blocking dialog ` +
+    `in Tableau Desktop (${reasons.join(', ')}). NOT sent. FIX: ` +
+    `${fix ?? 'use a supported headless authoring alternative or ask a human to drive the dialog.'}`
+  );
+}
+
+function formatLegalValues(values: string[]): string {
+  const displayed = values.slice(0, 15);
+  const suffix = values.length > displayed.length ? `, ... (+${values.length - displayed.length} more)` : '';
+  return `${displayed.join(', ')}${suffix}`;
 }
 
 function extractDocumentText(value: unknown): string | null {
