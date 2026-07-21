@@ -8,7 +8,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  uri: z.string().describe("URI (expertise://tableau/{slug})"),
+  uri: z.string().describe('URI (expertise://tableau/{slug})'),
 };
 
 const toolTitle = 'Read Knowledge Resource';
