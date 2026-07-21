@@ -45,7 +45,9 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
   it('routes calc-derived-field asks through the dynamic-authoring verbs', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
-    expect(rendered).toContain('or a calc/derived field the data lacks (ratio, running total, LOD)');
+    expect(rendered).toContain(
+      'or a calc/derived field the data lacks (ratio, running total, LOD)',
+    );
     expect(rendered).toContain('author-calc for calcs');
     expect(rendered).not.toContain('tabui:save-underlying-metadata');
   });
