@@ -297,6 +297,11 @@ const toolScopeMap: Record<
     mcp: [],
     api: new Set<TableauApiScope>(),
   },
+  // MCP-app event telemetry relay: no Tableau REST API calls, no content scope required.
+  'record-event': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
   // Dispatches on `kind` to ts-events, site-content, job-performance (raw VDS) or stale-content
   // (server-side anti-join). Union of the scopes required by all four kinds.
   'query-admin-insights': {
@@ -362,6 +367,7 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   // human-gesture confirm steps for their preview tools and only exist when the iframe can render.
   if (!mcpAppsEnabled) {
     enabledTools.delete('get-embed-token');
+    enabledTools.delete('record-event');
     enabledTools.delete('confirm-update-cloud-extract-refresh-task');
     enabledTools.delete('confirm-delete-content');
   }

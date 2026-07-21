@@ -39,3 +39,5 @@ src/web/apps/dist/
 .work/reports/*.md
 !.work/specs/TEMPLATE.md
 !.work/**/.gitkeep
+
+.worktrees/

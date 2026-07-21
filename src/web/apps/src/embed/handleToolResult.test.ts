@@ -12,7 +12,9 @@ vi.mock('./getEmbedTokenToolClient.js');
 vi.mock('./embedTableauViz.js');
 vi.mock('./loadTableauEmbeddingApi.js');
 vi.mock('./openInTableauLink.js');
+vi.mock('../shared/recordEventClient.js');
 
+import { recordEvent } from '../shared/recordEventClient.js';
 import { embedTableauViz } from './embedTableauViz.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
@@ -340,5 +342,28 @@ describe('handleToolResult', () => {
 
     // Assert setupOpenInTableauLink WAS called
     expect(vi.mocked(setupOpenInTableauLink)).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports telemetry with the tool error message when a tool error occurs', async () => {
+    const errorResult: CallToolResult = {
+      isError: true,
+      content: [{ type: 'text', text: 'Tool execution failed' }],
+    };
+
+    await handleToolResult(mockApp, errorResult);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(
+      mockApp,
+      'TOOL_ERROR',
+      'Tool execution failed',
+    );
+  });
+
+  it('reports telemetry with undefined cause when the tool result is null', async () => {
+    await handleToolResult(mockApp, null as any);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(mockApp, 'TOOL_ERROR', undefined);
   });
 });

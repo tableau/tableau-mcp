@@ -230,6 +230,7 @@ describe('Tool', () => {
           is_hyperforce: false,
           success: true,
           error_code: '',
+          error_message: '',
         }),
       );
     });
@@ -252,6 +253,7 @@ describe('Tool', () => {
           is_hyperforce: false,
           success: false,
           error_code: '500',
+          error_message: 'requestId: 2, error: Callback failed',
         }),
       );
     });
@@ -582,6 +584,16 @@ describe('Tool', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.data).toEqual(rawApiData.toString());
       expect(parsed.warning).toContain('Expected string, received object');
+
+      // The passthrough result carries the full API payload but is isError: false, so it must
+      // NOT leak into telemetry's error_message (keyed off isError, not the false `success`).
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          success: false,
+          error_message: '',
+        }),
+      );
     });
 
     it('should return isError: false with validation warning for discriminatedUnion schema errors', async () => {
