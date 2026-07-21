@@ -1,6 +1,11 @@
 import { Err, Ok } from 'ts-results-es';
 
-import * as configModule from '../../../config.desktop.js';
+import { ExternalApiToolExecutor } from '../../externalApi/externalApiToolExecutor.js';
+import {
+  MockExternalApiServer,
+  startMockExternalApiServer,
+} from '../../externalApi/mockExternalApiServer.js';
+import { ExternalApiInstance } from '../../externalApi/types.js';
 import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
 import { listDashboards } from './listDashboards.js';
 
@@ -194,113 +199,68 @@ describe('listDashboards (Agent API transport, default)', () => {
   });
 });
 
-describe('listDashboards (External Client API transport, TABLEAU_EXTERNAL_API gate)', () => {
+describe('listDashboards (External Client API transport)', () => {
   const mockSignal = new AbortController().signal;
+  let server: MockExternalApiServer;
 
-  function workbookWith(dashboardNames: string[]): string {
-    const dashboards = dashboardNames
-      .map((name) => `<dashboard name='${name}'><zones /></dashboard>`)
-      .join('');
-    return `<?xml version='1.0'?><workbook><dashboards>${dashboards}</dashboards></workbook>`;
-  }
-
-  function executorReturning(text: string): LocalExecutor {
-    return {
-      executeCommand: vi.fn().mockResolvedValue(
-        Ok({
-          command_id: 'cmd-123',
-          status: 'completed',
-          parsedResult: { text },
-        }),
-      ),
-    } as unknown as LocalExecutor;
-  }
-
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    const base = configModule.getDesktopConfig();
-    vi.spyOn(configModule, 'getDesktopConfig').mockReturnValue({
-      ...base,
-      externalApiEnabled: true,
-    });
+    server = await startMockExternalApiServer();
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  afterEach(async () => {
+    await server.close();
   });
 
-  it('should return dashboard names sliced from the whole-workbook document', async () => {
-    const mockExecutor = executorReturning(workbookWith(['Sales Dashboard', 'Executive Summary']));
+  it('uses the first-class dashboard list endpoint without fetching the workbook document', async () => {
+    const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+    await executor.start();
 
-    const result = await listDashboards({ executor: mockExecutor, signal: mockSignal });
+    const result = await listDashboards({ executor, signal: mockSignal });
 
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
       expect(result.value).toEqual({
-        count: 2,
-        dashboards: ['Sales Dashboard', 'Executive Summary'],
+        count: 1,
+        dashboards: ['Executive Dashboard'],
       });
     }
 
-    expect(mockExecutor.executeCommand).toHaveBeenCalledWith({
-      namespace: 'tabui',
-      command: 'save-underlying-metadata',
-      args: { 'is-json': false },
-      schema: expect.any(Object),
-      signal: mockSignal,
+    expect(server.requests.map((request) => request.path)).toEqual(['/v0/workbook/dashboards']);
+    expect(server.requests.map((request) => request.path)).not.toContain('/v0/workbook/document');
+  });
+
+  it('returns route-missing errors from older Desktop builds', async () => {
+    server.setOverride('GET /v0/workbook/dashboards', {
+      status: 404,
+      body: JSON.stringify({
+        code: 'not-found',
+        status: 404,
+        instance: '/v0/mock',
+        title: 'No route matches GET /v0/workbook/dashboards',
+        detail: 'No route matches GET /v0/workbook/dashboards',
+      }),
     });
-  });
+    const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+    await executor.start();
 
-  it('should return empty list when no dashboards exist', async () => {
-    const mockExecutor = executorReturning('<?xml version="1.0"?><workbook></workbook>');
-
-    const result = await listDashboards({ executor: mockExecutor, signal: mockSignal });
-
-    expect(result.isOk()).toBe(true);
-    if (result.isOk()) {
-      expect(result.value).toEqual({ count: 0, dashboards: [] });
-    }
-  });
-
-  it('should return error when the workbook fetch fails', async () => {
-    const error = { type: 'command-timed-out' as const, error: 'Command timeout' };
-    const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(Err(error)),
-    } as unknown as LocalExecutor;
-
-    const result = await listDashboards({ executor: mockExecutor, signal: mockSignal });
+    const result = await listDashboards({ executor, signal: mockSignal });
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
-      expect(result.error).toEqual(error);
+      expect(result.error.type).toBe('command-failed');
+      if (result.error.type === 'command-failed') {
+        expect(result.error.error?.code).toBe('not-found');
+        expect(result.error.error?.message).toContain('No route matches');
+      }
     }
   });
+});
 
-  it('should return invalid-response when the workbook XML cannot be parsed', async () => {
-    const mockExecutor = executorReturning('not valid xml <<<');
-
-    const result = await listDashboards({ executor: mockExecutor, signal: mockSignal });
-
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error.type).toBe('invalid-response');
-    }
-  });
-
-  it('should handle dashboard names with special characters', async () => {
-    const mockExecutor = executorReturning(
-      workbookWith(['Dashboard &amp; Analysis', 'Sales: Q1-Q4', 'CEO&apos;s Report']),
-    );
-
-    const result = await listDashboards({ executor: mockExecutor, signal: mockSignal });
-
-    expect(result.isOk()).toBe(true);
-    if (result.isOk()) {
-      expect(result.value.dashboards).toEqual([
-        'Dashboard & Analysis',
-        'Sales: Q1-Q4',
-        "CEO's Report",
-      ]);
-    }
-  });
+const instanceFor = (server: MockExternalApiServer): ExternalApiInstance => ({
+  baseUrl: server.baseUrl,
+  token: 'valid-token',
+  pid: 999,
+  instanceId: 'inst-list-dashboards',
+  apiVersion: '1.0',
 });

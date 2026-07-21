@@ -2,6 +2,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getDesktopConfig } from '../../../config.desktop.js';
+import { ExternalApiToolExecutor } from '../../externalApi/externalApiToolExecutor.js';
 import { listWorkbookDashboards } from '../../metadata/dashboards.js';
 import {
   ExecuteCommandError,
@@ -26,10 +27,11 @@ type ListDashboardsResult = Result<
 export async function listDashboards(
   args: WithExecutorAndAbortSignal,
 ): Promise<ListDashboardsResult> {
-  // External Client API ("Athena V0") exposes no per-sheet route — tabui:list-dashboards is not
-  // in its command registry. Fetch the whole-workbook document and slice client-side instead.
+  if (args.executor instanceof ExternalApiToolExecutor) {
+    return listDashboardsViaExternalApi(args);
+  }
   return getDesktopConfig().externalApiEnabled
-    ? listDashboardsViaExternalApi(args)
+    ? listDashboardsViaWorkbookDocument(args)
     : listDashboardsViaAgentApi(args);
 }
 
@@ -71,6 +73,26 @@ async function listDashboardsViaAgentApi({
 }
 
 async function listDashboardsViaExternalApi({
+  executor,
+  signal,
+}: WithExecutorAndAbortSignal): Promise<ListDashboardsResult> {
+  if (!(executor instanceof ExternalApiToolExecutor)) {
+    return listDashboardsViaAgentApi({ executor, signal });
+  }
+
+  const result = await executor.listDashboards(signal);
+  if (result.isErr()) {
+    return result;
+  }
+
+  const dashboards = (result.value.dashboards ?? []).map((dashboard) => dashboard.name);
+  return Ok({
+    count: dashboards.length,
+    dashboards,
+  });
+}
+
+async function listDashboardsViaWorkbookDocument({
   executor,
   signal,
 }: WithExecutorAndAbortSignal): Promise<ListDashboardsResult> {

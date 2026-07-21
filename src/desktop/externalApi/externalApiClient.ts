@@ -4,6 +4,8 @@ import { z } from 'zod';
 import {
   AppInfo,
   appInfoSchema,
+  DashboardList,
+  dashboardListSchema,
   DatasourceList,
   datasourceListSchema,
   EXTERNAL_API_ROUTES,
@@ -18,8 +20,12 @@ import {
   siteDatasourceListSchema,
   SiteWorkbookList,
   siteWorkbookListSchema,
+  StoryboardList,
+  storyboardListSchema,
   SummaryData,
   summaryDataSchema,
+  ValidationResult,
+  validationResultSchema,
   WorkbookInventory,
   workbookInventorySchema,
   WorksheetItem,
@@ -91,26 +97,7 @@ export class ExternalApiClient {
   async getWorkbookDocument(
     signal?: AbortSignal,
   ): Promise<Result<WorkbookDocument, ExternalApiError>> {
-    const response = await this.request('GET', EXTERNAL_API_ROUTES.workbookDocument, { signal });
-    if (response.isErr()) {
-      return Err(response.error);
-    }
-
-    const res = response.value;
-    if (!res.ok) {
-      return Err(await mapErrorResponse(res));
-    }
-
-    try {
-      const xml = await res.text();
-      return Ok({
-        xml,
-        applicationVersion: res.headers.get(HEADER_APPLICATION_VERSION) ?? undefined,
-        xsdPayloadVersion: res.headers.get(HEADER_XSD_PAYLOAD_VERSION) ?? undefined,
-      });
-    } catch (error) {
-      return Err({ type: 'invalid-response', error });
-    }
+    return this.getXml(EXTERNAL_API_ROUTES.workbookDocument, signal);
   }
 
   async applyWorkbookDocument(
@@ -123,6 +110,18 @@ export class ExternalApiClient {
       body: xml,
     });
     return this.parseEnvelope(response);
+  }
+
+  async validateWorkbookDocument(
+    xml: string,
+    signal?: AbortSignal,
+  ): Promise<Result<ValidationResult, ExternalApiError>> {
+    const response = await this.request('POST', EXTERNAL_API_ROUTES.workbookDocumentValidate, {
+      signal,
+      contentType: 'application/xml',
+      body: xml,
+    });
+    return this.parseJson(response, validationResultSchema);
   }
 
   async invokeCommand(
@@ -162,6 +161,14 @@ export class ExternalApiClient {
     return this.getJson(EXTERNAL_API_ROUTES.workbookWorksheets, worksheetListSchema, signal);
   }
 
+  async listDashboards(signal?: AbortSignal): Promise<Result<DashboardList, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.workbookDashboards, dashboardListSchema, signal);
+  }
+
+  async listStoryboards(signal?: AbortSignal): Promise<Result<StoryboardList, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.workbookStoryboards, storyboardListSchema, signal);
+  }
+
   async getWorkbook(signal?: AbortSignal): Promise<Result<WorkbookInventory, ExternalApiError>> {
     return this.getJson(EXTERNAL_API_ROUTES.workbook, workbookInventorySchema, signal);
   }
@@ -183,6 +190,27 @@ export class ExternalApiClient {
     signal?: AbortSignal,
   ): Promise<Result<WorksheetItem, ExternalApiError>> {
     return this.getJson(buildWorksheetByIdRoute(worksheetId), worksheetItemSchema, signal);
+  }
+
+  async getWorksheetDocument(
+    worksheetId: string,
+    signal?: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExternalApiError>> {
+    return this.getXml(buildWorksheetDocumentRoute(worksheetId), signal);
+  }
+
+  async getDashboardDocument(
+    dashboardId: string,
+    signal?: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExternalApiError>> {
+    return this.getXml(buildDashboardDocumentRoute(dashboardId), signal);
+  }
+
+  async getStoryboardDocument(
+    storyboardId: string,
+    signal?: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExternalApiError>> {
+    return this.getXml(buildStoryboardDocumentRoute(storyboardId), signal);
   }
 
   async getApp(signal?: AbortSignal): Promise<Result<AppInfo, ExternalApiError>> {
@@ -214,23 +242,7 @@ export class ExternalApiClient {
       return Err(response.error);
     }
 
-    const res = response.value;
-    if (!res.ok) {
-      return Err(await mapErrorResponse(res));
-    }
-
-    let json: unknown;
-    try {
-      json = await res.json();
-    } catch (error) {
-      return Err({ type: 'invalid-response', error });
-    }
-
-    const parsed = operationEnvelopeSchema.safeParse(json);
-    if (!parsed.success) {
-      return Err({ type: 'invalid-response', error: parsed.error });
-    }
-    return Ok(parsed.data);
+    return this.parseJson(response, operationEnvelopeSchema);
   }
 
   private async getJson<T extends z.ZodTypeAny>(
@@ -239,6 +251,13 @@ export class ExternalApiClient {
     signal?: AbortSignal,
   ): Promise<Result<z.infer<T>, ExternalApiError>> {
     const response = await this.request('GET', route, { signal });
+    return this.parseJson(response, schema);
+  }
+
+  private async parseJson<T extends z.ZodTypeAny>(
+    response: Result<Response, ExternalApiError>,
+    schema: T,
+  ): Promise<Result<z.infer<T>, ExternalApiError>> {
     if (response.isErr()) {
       return Err(response.error);
     }
@@ -260,6 +279,32 @@ export class ExternalApiClient {
       return Err({ type: 'invalid-response', error: parsed.error });
     }
     return Ok(parsed.data);
+  }
+
+  private async getXml(
+    route: string,
+    signal?: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExternalApiError>> {
+    const response = await this.request('GET', route, { signal });
+    if (response.isErr()) {
+      return Err(response.error);
+    }
+
+    const res = response.value;
+    if (!res.ok) {
+      return Err(await mapErrorResponse(res));
+    }
+
+    try {
+      const xml = await res.text();
+      return Ok({
+        xml,
+        applicationVersion: res.headers.get(HEADER_APPLICATION_VERSION) ?? undefined,
+        xsdPayloadVersion: res.headers.get(HEADER_XSD_PAYLOAD_VERSION) ?? undefined,
+      });
+    } catch (error) {
+      return Err({ type: 'invalid-response', error });
+    }
   }
 
   private async request(
@@ -296,6 +341,18 @@ export class ExternalApiClient {
 
 function buildWorksheetByIdRoute(worksheetId: string): string {
   return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(worksheetId)}`;
+}
+
+function buildWorksheetDocumentRoute(worksheetId: string): string {
+  return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(worksheetId)}/document`;
+}
+
+function buildDashboardDocumentRoute(dashboardId: string): string {
+  return `${EXTERNAL_API_ROUTES.workbookDashboards}/${encodeURIComponent(dashboardId)}/document`;
+}
+
+function buildStoryboardDocumentRoute(storyboardId: string): string {
+  return `${EXTERNAL_API_ROUTES.workbookStoryboards}/${encodeURIComponent(storyboardId)}/document`;
 }
 
 function buildWorksheetSummaryDataRoute(

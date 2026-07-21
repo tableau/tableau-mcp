@@ -245,6 +245,63 @@ describe('ExternalApiToolExecutor', () => {
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook/worksheets/sheet-sales');
     });
 
+    it('lists dashboards', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.listDashboards(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().dashboards?.[0]?.id).toBe('dash-exec');
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/dashboards');
+    });
+
+    it('lists storyboards', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.listStoryboards(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().storyboards?.[0]?.id).toBe('story-qbr');
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/storyboards');
+    });
+
+    it('gets per-item worksheet XML without fetching the whole workbook document', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getWorksheetDocument('sheet-sales', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().xml).toContain('<worksheet name="Sales by Region"');
+      expect(server.requests.map((request) => request.path)).not.toContain('/v0/workbook/document');
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/worksheets/sheet-sales/document');
+    });
+
+    it('gets per-item dashboard XML without fetching the whole workbook document', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getDashboardDocument('dash-exec', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().xml).toContain('<dashboard name="Executive Dashboard"');
+      expect(server.requests.map((request) => request.path)).not.toContain('/v0/workbook/document');
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/dashboards/dash-exec/document');
+    });
+
+    it('validates workbook XML via the first-class validation endpoint', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.validateWorkbookDocument('<workbook />', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().isValid).toBe(true);
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/document:validate');
+    });
+
     it('gets application info', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();

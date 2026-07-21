@@ -41,6 +41,11 @@ export type MockExternalApiServer = {
 
 const DEFAULT_TOKEN = 'valid-token';
 const DEFAULT_WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets /></workbook>';
+const DEFAULT_WORKSHEET_XML =
+  '<worksheet name="Sales by Region"><table><rows /></table></worksheet>';
+const DEFAULT_DASHBOARD_XML =
+  '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>';
+const DEFAULT_STORYBOARD_XML = '<storyboard name="QBR Story"><story-points /></storyboard>';
 const DEFAULT_WORKSHEETS = [
   {
     id: 'sheet-sales',
@@ -150,6 +155,15 @@ const sendJson = (res: ServerResponse, status: number, payload: unknown): void =
   res.end(body);
 };
 
+const sendXml = (res: ServerResponse, status: number, xml: string): void => {
+  res.writeHead(status, {
+    'content-type': 'application/xml',
+    [HEADER_APPLICATION_VERSION]: '2026.1',
+    [HEADER_XSD_PAYLOAD_VERSION]: '2026.1.0',
+  });
+  res.end(xml);
+};
+
 // Models the live 0.1.0 Problem shape: `type: 'problem'` + required code/status/instance,
 // human text in `title`. `detail` is an RFC-9457 member additionalProperties admits.
 const sendProblem = (res: ServerResponse, status: number, code: string, detail: string): void => {
@@ -230,17 +244,55 @@ export async function startMockExternalApiServer(
     }
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookDocument) {
-      res.writeHead(200, {
-        'content-type': 'text/xml',
-        [HEADER_APPLICATION_VERSION]: '2026.1',
-        [HEADER_XSD_PAYLOAD_VERSION]: '2026.1.0',
-      });
-      res.end(workbookXml);
+      sendXml(res, 200, workbookXml);
       return;
     }
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookWorksheets) {
       sendJson(res, 200, { worksheets: DEFAULT_WORKSHEETS });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookDashboards) {
+      sendJson(res, 200, { dashboards: DEFAULT_DASHBOARDS });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookStoryboards) {
+      sendJson(res, 200, { storyboards: DEFAULT_STORYBOARDS });
+      return;
+    }
+
+    const worksheetDocumentMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)\/document$/);
+    if (method === 'GET' && worksheetDocumentMatch) {
+      const worksheetId = decodeURIComponent(worksheetDocumentMatch[1]);
+      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      sendXml(res, 200, DEFAULT_WORKSHEET_XML);
+      return;
+    }
+
+    const dashboardDocumentMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+)\/document$/);
+    if (method === 'GET' && dashboardDocumentMatch) {
+      const dashboardId = decodeURIComponent(dashboardDocumentMatch[1]);
+      if (!DEFAULT_DASHBOARDS.some((dashboard) => dashboard.id === dashboardId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Dashboard not found: ${dashboardId}`);
+        return;
+      }
+      sendXml(res, 200, DEFAULT_DASHBOARD_XML);
+      return;
+    }
+
+    const storyboardDocumentMatch = path.match(/^\/v0\/workbook\/storyboards\/([^/]+)\/document$/);
+    if (method === 'GET' && storyboardDocumentMatch) {
+      const storyboardId = decodeURIComponent(storyboardDocumentMatch[1]);
+      if (!DEFAULT_STORYBOARDS.some((storyboard) => storyboard.id === storyboardId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Storyboard not found: ${storyboardId}`);
+        return;
+      }
+      sendXml(res, 200, DEFAULT_STORYBOARD_XML);
       return;
     }
 
@@ -298,6 +350,20 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    if (method === 'POST' && path === EXTERNAL_API_ROUTES.workbookDocumentValidate) {
+      const ct = (contentType ?? '').split(';')[0].trim();
+      if (ct !== 'application/xml' && ct !== 'text/xml') {
+        sendProblem(res, 415, 'unsupported-content-type', `Unsupported content type: ${ct}`);
+        return;
+      }
+      if (body.trim().length === 0) {
+        sendProblem(res, 400, 'invalid-request-body', 'Empty workbook document body.');
+        return;
+      }
+      sendJson(res, 200, { isValid: true, validationIssues: [] });
+      return;
+    }
+
     if (method === 'POST' && path === EXTERNAL_API_ROUTES.invokeCommand) {
       let parsed: { namespace?: string; command?: string; parameters?: unknown };
       try {
@@ -350,7 +416,7 @@ export async function startMockExternalApiServer(
       return;
     }
 
-    sendProblem(res, 404, 'not-found', `No route for ${method} ${path}`);
+    sendProblem(res, 404, 'not-found', `No route matches ${method} ${path}`);
   };
 
   const server: Server = createServer((req, res) => {

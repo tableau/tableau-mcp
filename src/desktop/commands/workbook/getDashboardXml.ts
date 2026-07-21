@@ -2,11 +2,14 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getDesktopConfig } from '../../../config.desktop.js';
+import { ExternalApiToolExecutor } from '../../externalApi/externalApiToolExecutor.js';
+import { DashboardItem } from '../../externalApi/types.js';
 import { extractDashboardXml } from '../../metadata/dashboards.js';
 import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
+import { decodeXmlEntities } from '../../xmlElement.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { nameMayNeedRawCommandResolution, resolveDashboardCommandName } from './nameResolution.js';
 
@@ -24,10 +27,11 @@ type GetDashboardXmlResult = Result<
 export async function getDashboardXml(
   args: { dashboardName: string } & WithExecutorAndAbortSignal,
 ): Promise<GetDashboardXmlResult> {
-  // External Client API ("Athena V0") exposes no per-sheet route — tabui:save-dashboard is not
-  // in its command registry. Fetch the whole-workbook document and slice client-side instead.
+  if (args.executor instanceof ExternalApiToolExecutor) {
+    return getDashboardXmlViaExternalApi(args);
+  }
   return getDesktopConfig().externalApiEnabled
-    ? getDashboardXmlViaExternalApi(args)
+    ? getDashboardXmlViaWorkbookDocument(args)
     : getDashboardXmlViaAgentApi(args);
 }
 
@@ -117,6 +121,39 @@ async function getDashboardXmlViaExternalApi({
   executor,
   signal,
 }: { dashboardName: string } & WithExecutorAndAbortSignal): Promise<GetDashboardXmlResult> {
+  if (!(executor instanceof ExternalApiToolExecutor)) {
+    return getDashboardXmlViaAgentApi({ dashboardName, executor, signal });
+  }
+
+  const dashboardsResult = await executor.listDashboards(signal);
+  if (dashboardsResult.isErr()) {
+    return Err({ type: 'execute-command-error', error: dashboardsResult.error });
+  }
+
+  const dashboardResult = resolveExternalApiDashboard(
+    dashboardName,
+    dashboardsResult.value.dashboards ?? [],
+  );
+  if (dashboardResult.isErr()) {
+    return Err({
+      type: 'get-dashboard-xml-error',
+      error: dashboardResult.error,
+    });
+  }
+
+  const documentResult = await executor.getDashboardDocument(dashboardResult.value.id, signal);
+  if (documentResult.isErr()) {
+    return Err({ type: 'execute-command-error', error: documentResult.error });
+  }
+
+  return Ok(documentResult.value.xml);
+}
+
+async function getDashboardXmlViaWorkbookDocument({
+  dashboardName,
+  executor,
+  signal,
+}: { dashboardName: string } & WithExecutorAndAbortSignal): Promise<GetDashboardXmlResult> {
   const workbookResult = await getWorkbookXml({ executor, signal });
   if (workbookResult.isErr()) {
     return Err({ type: 'execute-command-error', error: workbookResult.error });
@@ -137,4 +174,58 @@ async function getDashboardXmlViaExternalApi({
   }
 
   return Ok(dashboardXml);
+}
+
+function resolveExternalApiDashboard(
+  dashboardName: string,
+  dashboards: DashboardItem[],
+): Result<DashboardItem, GetDashboardXmlError> {
+  const requested = dashboardName.trim();
+  const requestedNames = unique([requested, decodeXmlEntities(requested)]);
+
+  const idMatch = dashboards.find((candidate) => candidate.id === requested);
+  if (idMatch) {
+    return Ok(idMatch);
+  }
+
+  const nameMatches = dashboards.filter((candidate) => requestedNames.includes(candidate.name));
+  if (nameMatches.length === 1) {
+    return Ok(nameMatches[0]);
+  }
+
+  if (nameMatches.length > 1) {
+    return Err({
+      type: 'multiple-dashboards-found',
+      message: `Dashboard "${dashboardName}" matched multiple dashboards. Specify one id: ${formatDashboards(
+        nameMatches,
+      )}.`,
+    });
+  }
+
+  return Err({
+    type: 'no-dashboard-found',
+    message: `No dashboard found for "${dashboardName}".`,
+  });
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function formatDashboards(dashboards: DashboardItem[]): string {
+  return dashboards.map((dashboard) => `${dashboard.name} (${dashboard.id})`).join(', ');
+}
+
+/** A problem-404 route miss: the endpoint is newer than this Desktop build. */
+export function isRouteMissing(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const e = error as { type?: string; error?: { code?: string; message?: string } };
+  return (
+    e.type === 'command-failed' &&
+    e.error?.code === 'not-found' &&
+    typeof e.error?.message === 'string' &&
+    e.error.message.includes('No route matches')
+  );
 }

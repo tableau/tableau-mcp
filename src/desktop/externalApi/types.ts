@@ -14,12 +14,22 @@ import { z } from 'zod';
 export const EXTERNAL_API_ROUTES = {
   health: '/v0/health',
   app: '/v0/app',
+  root: '/v0/',
   workbook: '/v0/workbook',
+  workbookDashboards: '/v0/workbook/dashboards',
   workbookDatasources: '/v0/workbook/datasources',
   workbookDocument: '/v0/workbook/document',
+  workbookDocumentValidate: '/v0/workbook/document:validate',
+  workbookStoryboards: '/v0/workbook/storyboards',
   workbookWorksheets: '/v0/workbook/worksheets',
+  dashboardById: '/v0/workbook/dashboards/{id}',
+  dashboardDocument: '/v0/workbook/dashboards/{id}/document',
+  storyboardById: '/v0/workbook/storyboards/{id}',
+  storyboardDocument: '/v0/workbook/storyboards/{id}/document',
   worksheetById: '/v0/workbook/worksheets/{id}',
+  worksheetDocument: '/v0/workbook/worksheets/{id}/document',
   worksheetSummaryData: '/v0/workbook/worksheets/{id}/summaryData',
+  site: '/v0/site',
   siteDatasources: '/v0/site/datasources',
   siteWorkbooks: '/v0/site/workbooks',
   invokeCommand: '/v0/app:invokeCommand',
@@ -48,6 +58,42 @@ export const discoveryFileSchema = z.object({
   startedAt: z.string().optional(),
 });
 export type DiscoveryFile = z.infer<typeof discoveryFileSchema>;
+
+/** API versions and link map returned by `GET /v0/`. */
+export const apiRootSchema = z
+  .object({
+    apiVersion: z.string().optional(),
+    applicationVersion: z.string().optional(),
+    links: z.record(z.string()).optional(),
+  })
+  .passthrough();
+export type ApiRoot = z.infer<typeof apiRootSchema>;
+
+/** Liveness probe returned by `GET /v0/health`. */
+export const healthSchema = z
+  .object({
+    status: z.string().optional(),
+  })
+  .passthrough();
+export type Health = z.infer<typeof healthSchema>;
+
+/** Connected Tableau site returned by `GET /v0/site`. */
+export const siteSchema = z
+  .object({
+    siteId: z.string().optional(),
+    authenticatedUserId: z.string().optional(),
+  })
+  .passthrough();
+export type Site = z.infer<typeof siteSchema>;
+
+/** RFC-9728 OAuth Protected Resource Metadata returned by the well-known route. */
+export const protectedResourceMetadataSchema = z
+  .object({
+    authorization_servers: z.array(z.string()).optional(),
+    bearer_methods_supported: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type ProtectedResourceMetadata = z.infer<typeof protectedResourceMetadataSchema>;
 
 /** A live, reachable External Client API instance selected from discovery. */
 export type ExternalApiInstance = {
@@ -174,6 +220,14 @@ export const dashboardItemSchema = z
   .passthrough();
 export type DashboardItem = z.infer<typeof dashboardItemSchema>;
 
+/** Dashboard list returned by `GET /v0/workbook/dashboards`. */
+export const dashboardListSchema = z
+  .object({
+    dashboards: z.array(dashboardItemSchema).optional(),
+  })
+  .passthrough();
+export type DashboardList = z.infer<typeof dashboardListSchema>;
+
 /** Storyboard item returned in workbook inventory reads. */
 export const storyboardItemSchema = z
   .object({
@@ -186,6 +240,14 @@ export const storyboardItemSchema = z
   })
   .passthrough();
 export type StoryboardItem = z.infer<typeof storyboardItemSchema>;
+
+/** Storyboard list returned by `GET /v0/workbook/storyboards`. */
+export const storyboardListSchema = z
+  .object({
+    storyboards: z.array(storyboardItemSchema).optional(),
+  })
+  .passthrough();
+export type StoryboardList = z.infer<typeof storyboardListSchema>;
 
 /** Metadata and sheet inventory returned by `GET /v0/workbook`. */
 export const workbookInventorySchema = z
@@ -274,6 +336,15 @@ export const summaryDataSchema = z
   })
   .passthrough();
 export type SummaryData = z.infer<typeof summaryDataSchema>;
+
+/** Validation result returned by `POST /v0/workbook/document:validate`. */
+export const validationResultSchema = z
+  .object({
+    isValid: z.boolean(),
+    validationIssues: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type ValidationResult = z.infer<typeof validationResultSchema>;
 
 /** Running Desktop application info returned by `GET /v0/app`. */
 export const appInfoSchema = z

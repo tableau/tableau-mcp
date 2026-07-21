@@ -13,10 +13,12 @@ import {
 import {
   ExternalApiClient,
   ExternalApiClientOptions,
+  WorkbookDocument,
   WorksheetSummaryDataQuery,
 } from './externalApiClient.js';
 import {
   AppInfo,
+  DashboardList,
   DatasourceList,
   ExternalApiError,
   ExternalApiInstance,
@@ -24,7 +26,9 @@ import {
   OperationError,
   SiteDatasourceList,
   SiteWorkbookList,
+  StoryboardList,
   SummaryData,
+  ValidationResult,
   WorkbookInventory,
   WorksheetItem,
   WorksheetList,
@@ -193,6 +197,14 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     return this.readExternalApi((client) => client.listWorksheets(signal));
   }
 
+  async listDashboards(signal: AbortSignal): Promise<Result<DashboardList, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.listDashboards(signal));
+  }
+
+  async listStoryboards(signal: AbortSignal): Promise<Result<StoryboardList, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.listStoryboards(signal));
+  }
+
   async getWorkbook(signal: AbortSignal): Promise<Result<WorkbookInventory, ExecuteCommandError>> {
     return this.readExternalApi((client) => client.getWorkbook(signal));
   }
@@ -216,6 +228,27 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     return this.readExternalApi((client) => client.getWorksheet(worksheetId, signal));
   }
 
+  async getWorksheetDocument(
+    worksheetId: string,
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.getWorksheetDocument(worksheetId, signal));
+  }
+
+  async getDashboardDocument(
+    dashboardId: string,
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.getDashboardDocument(dashboardId, signal));
+  }
+
+  async getStoryboardDocument(
+    storyboardId: string,
+    signal: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.getStoryboardDocument(storyboardId, signal));
+  }
+
   async getApp(signal: AbortSignal): Promise<Result<AppInfo, ExecuteCommandError>> {
     return this.readExternalApi((client) => client.getApp(signal));
   }
@@ -228,6 +261,13 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     return this.readExternalApi((client) =>
       client.getWorksheetSummaryData(worksheetId, query, signal),
     );
+  }
+
+  async validateWorkbookDocument(
+    xml: string,
+    signal: AbortSignal,
+  ): Promise<Result<ValidationResult, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.validateWorkbookDocument(xml, signal));
   }
 
   async listSiteDatasources(

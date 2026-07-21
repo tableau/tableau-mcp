@@ -2,6 +2,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getDesktopConfig } from '../../../config.desktop.js';
+import { ExternalApiToolExecutor } from '../../externalApi/externalApiToolExecutor.js';
 import { listSheets } from '../../metadata/sheets.js';
 import {
   ExecuteCommandError,
@@ -26,10 +27,11 @@ type ListWorksheetsResult = Result<
 export async function listWorksheets(
   args: WithExecutorAndAbortSignal,
 ): Promise<ListWorksheetsResult> {
-  // External Client API ("Athena V0") exposes no per-sheet route — tabui:list-worksheets is not
-  // in its command registry. Fetch the whole-workbook document and slice client-side instead.
+  if (args.executor instanceof ExternalApiToolExecutor) {
+    return listWorksheetsViaExternalApi(args);
+  }
   return getDesktopConfig().externalApiEnabled
-    ? listWorksheetsViaExternalApi(args)
+    ? listWorksheetsViaWorkbookDocument(args)
     : listWorksheetsViaAgentApi(args);
 }
 
@@ -71,6 +73,26 @@ async function listWorksheetsViaAgentApi({
 }
 
 async function listWorksheetsViaExternalApi({
+  executor,
+  signal,
+}: WithExecutorAndAbortSignal): Promise<ListWorksheetsResult> {
+  if (!(executor instanceof ExternalApiToolExecutor)) {
+    return listWorksheetsViaAgentApi({ executor, signal });
+  }
+
+  const result = await executor.listWorksheets(signal);
+  if (result.isErr()) {
+    return result;
+  }
+
+  const worksheets = (result.value.worksheets ?? []).map((worksheet) => worksheet.name);
+  return Ok({
+    count: worksheets.length,
+    worksheets,
+  });
+}
+
+async function listWorksheetsViaWorkbookDocument({
   executor,
   signal,
 }: WithExecutorAndAbortSignal): Promise<ListWorksheetsResult> {
