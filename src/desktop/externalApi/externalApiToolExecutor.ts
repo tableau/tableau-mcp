@@ -16,12 +16,17 @@ import {
   WorksheetSummaryDataQuery,
 } from './externalApiClient.js';
 import {
+  AppInfo,
+  DatasourceList,
   ExternalApiError,
   ExternalApiInstance,
   OperationEnvelope,
   OperationError,
   SiteDatasourceList,
+  SiteWorkbookList,
   SummaryData,
+  WorkbookInventory,
+  WorksheetItem,
   WorksheetList,
 } from './types.js';
 
@@ -186,6 +191,33 @@ export class ExternalApiToolExecutor extends ToolExecutor {
 
   async listWorksheets(signal: AbortSignal): Promise<Result<WorksheetList, ExecuteCommandError>> {
     return this.readExternalApi((client) => client.listWorksheets(signal));
+  }
+
+  async getWorkbook(signal: AbortSignal): Promise<Result<WorkbookInventory, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.getWorkbook(signal));
+  }
+
+  async listWorkbookDatasources(
+    signal: AbortSignal,
+  ): Promise<Result<DatasourceList, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.listWorkbookDatasources(signal));
+  }
+
+  async listSiteWorkbooks(
+    signal: AbortSignal,
+  ): Promise<Result<SiteWorkbookList, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.listSiteWorkbooks(signal));
+  }
+
+  async getWorksheet(
+    worksheetId: string,
+    signal: AbortSignal,
+  ): Promise<Result<WorksheetItem, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.getWorksheet(worksheetId, signal));
+  }
+
+  async getApp(signal: AbortSignal): Promise<Result<AppInfo, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.getApp(signal));
   }
 
   async getWorksheetSummaryData(

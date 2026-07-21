@@ -24,13 +24,9 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  dashboardName: z.string().describe('Existing dashboard name.'),
-  mode: z
-    .enum(['file', 'inline'])
-    .optional()
-    .default('file')
-    .describe('file writes cache path; inline returns dashboard layout content.'),
+  session: z.string().optional().describe(''),
+  dashboardName: z.string().describe(''),
+  mode: z.enum(['file', 'inline']).optional().default('file').describe(''),
 };
 
 type InlineResult = { dashboardXml: string };
@@ -45,10 +41,7 @@ export const getGetDashboardXmlTool = (
     server,
     name: 'get-dashboard-xml',
     title,
-    description: [
-      'Get layout for an existing dashboard. mode=file is default; mode=inline returns dashboard layout content.',
-      'IMPORTANT: only works for an existing dashboard (see list-dashboards); to create one use apply-workbook. Use apply-dashboard to apply changes.',
-    ].join(' '),
+    description: 'Get layout for an existing dashboard.',
     paramsSchema,
     annotations: {
       title,

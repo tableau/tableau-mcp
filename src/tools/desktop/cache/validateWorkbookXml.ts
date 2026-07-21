@@ -7,7 +7,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  xml: z.string().describe('The workbook content to validate.'),
+  xml: z.string().describe(''),
 };
 
 const toolTitle = 'Check Workbook Structure';
@@ -18,7 +18,7 @@ export const getValidateWorkbookXmlTool = (
     server,
     name: 'validate-workbook-xml',
     title: toolTitle,
-    description: 'Check workbook content is well-formed before apply-workbook.',
+    description: 'Check workbook content before apply-workbook.',
     paramsSchema,
     annotations: {
       title: toolTitle,

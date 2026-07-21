@@ -22,8 +22,12 @@ import { getAuthorCalcTool } from './data-source/authorCalc.js';
 import { getAuthorParameterTool } from './data-source/authorParameter.js';
 import { getAuthorSetTool } from './data-source/authorSet.js';
 import { getFormatLabelsTool } from './data-source/formatLabels.js';
+import { getAppInfoTool } from './data-source/getAppInfo.js';
 import { getSummaryDataTool } from './data-source/getSummaryData.js';
+import { getWorkbookInventoryTool } from './data-source/getWorkbookInventory.js';
 import { getListSiteDatasourcesTool } from './data-source/listSiteDatasources.js';
+import { getListSiteWorkbooksTool } from './data-source/listSiteWorkbooks.js';
+import { getListWorkbookDatasourcesTool } from './data-source/listWorkbookDatasources.js';
 import { getAddFieldTool } from './fields/addField.js';
 import { getListAvailableFieldsTool } from './fields/listAvailableFields.js';
 import { getListFieldsTool } from './fields/listFields.js';
@@ -93,7 +97,11 @@ export const desktopToolFactories = [
   getFormatLabelsTool,
   getAuthorParameterTool,
   getSummaryDataTool,
+  getWorkbookInventoryTool,
+  getListWorkbookDatasourcesTool,
   getListSiteDatasourcesTool,
+  getListSiteWorkbooksTool,
+  getAppInfoTool,
   getValidateWorksheetXmlTool,
   getValidateWorkbookXmlTool,
   getReadCachedXmlTool,

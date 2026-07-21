@@ -4,6 +4,10 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import {
+  appInfoSchema,
+  dashboardItemSchema,
+  datasourceItemSchema,
+  datasourceListSchema,
   EXTERNAL_API_ROUTES,
   operationEnvelopeSchema,
   operationErrorSchema,
@@ -12,7 +16,11 @@ import {
   problemResponseSchema,
   siteDatasourceItemSchema,
   siteDatasourceListSchema,
+  siteWorkbookItemSchema,
+  siteWorkbookListSchema,
+  storyboardItemSchema,
   summaryDataSchema,
+  workbookInventorySchema,
   worksheetItemSchema,
   worksheetListSchema,
 } from './types.js';
@@ -88,8 +96,16 @@ describe('external client API contract (captured openapi fixture)', () => {
 
   describe('data-first read schemas', () => {
     it.each([
+      ['AppInfo', appInfoSchema],
+      ['DashboardItem', dashboardItemSchema],
+      ['DatasourceItem', datasourceItemSchema],
+      ['DatasourceList', datasourceListSchema],
+      ['SiteWorkbookItem', siteWorkbookItemSchema],
+      ['SiteWorkbookList', siteWorkbookListSchema],
       ['WorksheetItem', worksheetItemSchema],
       ['WorksheetList', worksheetListSchema],
+      ['StoryboardItem', storyboardItemSchema],
+      ['WorkbookInventory', workbookInventorySchema],
       ['SiteDatasourceItem', siteDatasourceItemSchema],
       ['SiteDatasourceList', siteDatasourceListSchema],
       ['SummaryData', summaryDataSchema],
@@ -134,10 +150,14 @@ describe('external client API contract (captured openapi fixture)', () => {
     it.each([
       EXTERNAL_API_ROUTES.health,
       EXTERNAL_API_ROUTES.app,
+      EXTERNAL_API_ROUTES.workbook,
+      EXTERNAL_API_ROUTES.workbookDatasources,
       EXTERNAL_API_ROUTES.workbookDocument,
       EXTERNAL_API_ROUTES.workbookWorksheets,
+      EXTERNAL_API_ROUTES.worksheetById,
       EXTERNAL_API_ROUTES.worksheetSummaryData,
       EXTERNAL_API_ROUTES.siteDatasources,
+      EXTERNAL_API_ROUTES.siteWorkbooks,
       EXTERNAL_API_ROUTES.openapi,
       EXTERNAL_API_ROUTES.oauthProtectedResource,
     ])('spec documents %s', (route) => {

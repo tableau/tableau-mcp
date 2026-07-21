@@ -44,10 +44,7 @@ export const getApplyWorksheetTool = (
     server,
     name: 'apply-worksheet',
     title,
-    description: [
-      'Apply modified worksheet content to Tableau (mutating). mode=file is default; mode=inline is for small worksheets.',
-      'IMPORTANT: can only UPDATE an existing worksheet, not create one — use apply-workbook to create.',
-    ].join(' '),
+    description: 'Apply modified worksheet content to Tableau.',
     paramsSchema,
     annotations: {
       title,

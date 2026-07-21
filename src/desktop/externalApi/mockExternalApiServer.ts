@@ -59,6 +59,38 @@ const DEFAULT_WORKSHEETS = [
     datasources: ['Sample - Superstore'],
   },
 ];
+const DEFAULT_DASHBOARDS = [
+  {
+    id: 'dash-exec',
+    name: 'Executive Dashboard',
+    type: 'DASHBOARD',
+    hidden: false,
+    index: 2,
+    containedSheets: ['sheet-sales', 'sheet-profit'],
+  },
+];
+const DEFAULT_STORYBOARDS = [
+  {
+    id: 'story-qbr',
+    name: 'QBR Story',
+    type: 'STORYBOARD',
+    hidden: false,
+    index: 3,
+    storyPointCount: 4,
+  },
+];
+const DEFAULT_WORKBOOK_DATASOURCES = [
+  {
+    id: 'wb-ds-superstore',
+    name: 'Sample - Superstore',
+    caption: 'Sample - Superstore',
+  },
+  {
+    id: 'wb-ds-quota',
+    name: 'Quota Targets',
+    caption: 'Quota Targets',
+  },
+];
 const DEFAULT_SUMMARY_DATA = {
   columns: [
     { name: 'Region', dataType: 'string' },
@@ -86,6 +118,20 @@ const DEFAULT_SITE_DATASOURCES = [
     caption: 'Quota Targets',
     project: 'Sales',
     contentUrl: 'quota-targets',
+  },
+];
+const DEFAULT_SITE_WORKBOOKS = [
+  {
+    id: 'wb-regional-sales',
+    luid: 'luid-regional-sales',
+    name: 'Regional Sales Analysis',
+    project: 'Sales',
+  },
+  {
+    id: 'wb-ops-scorecard',
+    luid: 'luid-ops-scorecard',
+    name: 'Ops Scorecard',
+    project: 'Operations',
   },
 ];
 
@@ -153,7 +199,33 @@ export async function startMockExternalApiServer(
     }
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.app) {
-      sendJson(res, 200, { name: 'Tableau Desktop', applicationVersion: '2026.1' });
+      sendJson(res, 200, {
+        name: 'Tableau Desktop',
+        applicationVersion: '2026.1',
+        build: '20261.26.0701.1234',
+        edition: 'Professional',
+        os: 'macOS',
+        locale: 'en_US',
+        repositoryLocation: '/Users/tableau/Documents/My Tableau Repository',
+        logLocation: '/Users/tableau/Library/Logs/Tableau',
+      });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbook) {
+      sendJson(res, 200, {
+        title: 'Regional Sales Analysis',
+        location: '/Users/tableau/Documents/regional-sales.twb',
+        unsavedChanges: true,
+        worksheets: DEFAULT_WORKSHEETS,
+        dashboards: DEFAULT_DASHBOARDS,
+        storyboards: DEFAULT_STORYBOARDS,
+      });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookDatasources) {
+      sendJson(res, 200, { datasources: DEFAULT_WORKBOOK_DATASOURCES });
       return;
     }
 
@@ -172,6 +244,18 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    const worksheetMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)$/);
+    if (method === 'GET' && worksheetMatch) {
+      const worksheetId = decodeURIComponent(worksheetMatch[1]);
+      const worksheet = DEFAULT_WORKSHEETS.find((candidate) => candidate.id === worksheetId);
+      if (!worksheet) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      sendJson(res, 200, worksheet);
+      return;
+    }
+
     const summaryDataMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)\/summaryData$/);
     if (method === 'GET' && summaryDataMatch) {
       const worksheetId = decodeURIComponent(summaryDataMatch[1]);
@@ -185,6 +269,11 @@ export async function startMockExternalApiServer(
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.siteDatasources) {
       sendJson(res, 200, { datasources: DEFAULT_SITE_DATASOURCES });
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.siteWorkbooks) {
+      sendJson(res, 200, { workbooks: DEFAULT_SITE_WORKBOOKS });
       return;
     }
 

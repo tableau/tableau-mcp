@@ -2,6 +2,10 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
+  AppInfo,
+  appInfoSchema,
+  DatasourceList,
+  datasourceListSchema,
   EXTERNAL_API_ROUTES,
   ExternalApiError,
   ExternalApiInstance,
@@ -12,8 +16,14 @@ import {
   problemResponseSchema,
   SiteDatasourceList,
   siteDatasourceListSchema,
+  SiteWorkbookList,
+  siteWorkbookListSchema,
   SummaryData,
   summaryDataSchema,
+  WorkbookInventory,
+  workbookInventorySchema,
+  WorksheetItem,
+  worksheetItemSchema,
   WorksheetList,
   worksheetListSchema,
 } from './types.js';
@@ -152,6 +162,33 @@ export class ExternalApiClient {
     return this.getJson(EXTERNAL_API_ROUTES.workbookWorksheets, worksheetListSchema, signal);
   }
 
+  async getWorkbook(signal?: AbortSignal): Promise<Result<WorkbookInventory, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.workbook, workbookInventorySchema, signal);
+  }
+
+  async listWorkbookDatasources(
+    signal?: AbortSignal,
+  ): Promise<Result<DatasourceList, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.workbookDatasources, datasourceListSchema, signal);
+  }
+
+  async listSiteWorkbooks(
+    signal?: AbortSignal,
+  ): Promise<Result<SiteWorkbookList, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.siteWorkbooks, siteWorkbookListSchema, signal);
+  }
+
+  async getWorksheet(
+    worksheetId: string,
+    signal?: AbortSignal,
+  ): Promise<Result<WorksheetItem, ExternalApiError>> {
+    return this.getJson(buildWorksheetByIdRoute(worksheetId), worksheetItemSchema, signal);
+  }
+
+  async getApp(signal?: AbortSignal): Promise<Result<AppInfo, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.app, appInfoSchema, signal);
+  }
+
   async getWorksheetSummaryData(
     worksheetId: string,
     query: WorksheetSummaryDataQuery = {},
@@ -255,6 +292,10 @@ export class ExternalApiClient {
   private url(route: string): string {
     return `${this.instance.baseUrl.replace(/\/$/, '')}${route}`;
   }
+}
+
+function buildWorksheetByIdRoute(worksheetId: string): string {
+  return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(worksheetId)}`;
 }
 
 function buildWorksheetSummaryDataRoute(

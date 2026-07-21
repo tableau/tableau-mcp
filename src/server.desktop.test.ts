@@ -346,10 +346,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 19-tool data-first singable surface — existing native authoring plus summary data and site datasource reads, no XML/cache tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 21-tool data-first singable surface — existing native authoring plus first-class workbook reads, no XML/cache tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(19);
+    expect(selected).toHaveLength(21);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the three
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -367,6 +367,8 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'read-knowledge-resource',
       'search-knowledge',
       'get-summary-data',
+      'get-workbook-inventory',
+      'list-workbook-datasources',
       'list-site-datasources',
     ]) {
       expect(selected.map((t) => t.name)).toContain(verb);
@@ -383,6 +385,8 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'validate-worksheet-xml',
       'inject-template',
       'list-templates',
+      'list-site-workbooks',
+      'get-app-info',
     ]) {
       expect(selected.map((t) => t.name)).not.toContain(banished);
     }

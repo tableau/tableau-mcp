@@ -14,10 +14,14 @@ import { z } from 'zod';
 export const EXTERNAL_API_ROUTES = {
   health: '/v0/health',
   app: '/v0/app',
+  workbook: '/v0/workbook',
+  workbookDatasources: '/v0/workbook/datasources',
   workbookDocument: '/v0/workbook/document',
   workbookWorksheets: '/v0/workbook/worksheets',
+  worksheetById: '/v0/workbook/worksheets/{id}',
   worksheetSummaryData: '/v0/workbook/worksheets/{id}/summaryData',
   siteDatasources: '/v0/site/datasources',
+  siteWorkbooks: '/v0/site/workbooks',
   invokeCommand: '/v0/app:invokeCommand',
   openapi: '/openapi.json',
   oauthProtectedResource: '/.well-known/oauth-protected-resource',
@@ -157,6 +161,82 @@ export const worksheetListSchema = z
   .passthrough();
 export type WorksheetList = z.infer<typeof worksheetListSchema>;
 
+/** Dashboard item returned in workbook inventory reads. */
+export const dashboardItemSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string().optional(),
+    hidden: z.boolean(),
+    index: z.number().int().optional(),
+    containedSheets: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type DashboardItem = z.infer<typeof dashboardItemSchema>;
+
+/** Storyboard item returned in workbook inventory reads. */
+export const storyboardItemSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string().optional(),
+    hidden: z.boolean(),
+    index: z.number().int().optional(),
+    storyPointCount: z.number().int().optional(),
+  })
+  .passthrough();
+export type StoryboardItem = z.infer<typeof storyboardItemSchema>;
+
+/** Metadata and sheet inventory returned by `GET /v0/workbook`. */
+export const workbookInventorySchema = z
+  .object({
+    title: z.string(),
+    location: z.string().nullable().optional(),
+    unsavedChanges: z.boolean(),
+    worksheets: z.array(worksheetItemSchema).optional(),
+    dashboards: z.array(dashboardItemSchema).optional(),
+    storyboards: z.array(storyboardItemSchema).optional(),
+  })
+  .passthrough();
+export type WorkbookInventory = z.infer<typeof workbookInventorySchema>;
+
+/** Workbook datasource item returned by `GET /v0/workbook/datasources`. */
+export const datasourceItemSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    caption: z.string().optional(),
+  })
+  .passthrough();
+export type DatasourceItem = z.infer<typeof datasourceItemSchema>;
+
+/** Workbook datasource list returned by `GET /v0/workbook/datasources`. */
+export const datasourceListSchema = z
+  .object({
+    datasources: z.array(datasourceItemSchema).optional(),
+  })
+  .passthrough();
+export type DatasourceList = z.infer<typeof datasourceListSchema>;
+
+/** Published workbook item returned by `GET /v0/site/workbooks`. */
+export const siteWorkbookItemSchema = z
+  .object({
+    id: z.string().optional(),
+    luid: z.string().optional(),
+    name: z.string().optional(),
+    project: z.string().optional(),
+  })
+  .passthrough();
+export type SiteWorkbookItem = z.infer<typeof siteWorkbookItemSchema>;
+
+/** Published workbook list returned by `GET /v0/site/workbooks`. */
+export const siteWorkbookListSchema = z
+  .object({
+    workbooks: z.array(siteWorkbookItemSchema).optional(),
+  })
+  .passthrough();
+export type SiteWorkbookList = z.infer<typeof siteWorkbookListSchema>;
+
 /** Published datasource item returned by `GET /v0/site/datasources`. */
 export const siteDatasourceItemSchema = z
   .object({
@@ -194,6 +274,20 @@ export const summaryDataSchema = z
   })
   .passthrough();
 export type SummaryData = z.infer<typeof summaryDataSchema>;
+
+/** Running Desktop application info returned by `GET /v0/app`. */
+export const appInfoSchema = z
+  .object({
+    applicationVersion: z.string().optional(),
+    edition: z.string().optional(),
+    build: z.string().optional(),
+    os: z.string().optional(),
+    locale: z.string().optional(),
+    repositoryLocation: z.string().optional(),
+    logLocation: z.string().optional(),
+  })
+  .passthrough();
+export type AppInfo = z.infer<typeof appInfoSchema>;
 
 /**
  * Typed error surfaced by {@link ExternalApiClient} methods. The internal

@@ -200,6 +200,63 @@ describe('ExternalApiToolExecutor', () => {
     });
   });
 
+  describe('first-class read endpoints', () => {
+    it('gets the workbook inventory', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getWorkbook(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().title).toBe('Regional Sales Analysis');
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook');
+    });
+
+    it('lists workbook datasources', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.listWorkbookDatasources(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().datasources?.[0]?.id).toBe('wb-ds-superstore');
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/datasources');
+    });
+
+    it('lists published site workbooks', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.listSiteWorkbooks(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().workbooks?.[0]?.luid).toBe('luid-regional-sales');
+      expect(server.requests.at(-1)?.path).toBe('/v0/site/workbooks');
+    });
+
+    it('gets a worksheet item by id', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getWorksheet('sheet-sales', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().datasources).toEqual(['Sample - Superstore']);
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/worksheets/sheet-sales');
+    });
+
+    it('gets application info', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getApp(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().build).toBe('20261.26.0701.1234');
+      expect(server.requests.at(-1)?.path).toBe('/v0/app');
+    });
+  });
+
   describe('401 rescan-once', () => {
     it('rediscovers once on a 401 and retries with the fresh token', async () => {
       const discover = vi

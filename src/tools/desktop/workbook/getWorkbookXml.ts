@@ -20,12 +20,8 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  mode: z
-    .enum(['file', 'inline'])
-    .optional()
-    .default('file')
-    .describe('file writes cache path; inline returns workbook content.'),
+  session: z.string().optional().describe(''),
+  mode: z.enum(['file', 'inline']).optional().default('file').describe(''),
 };
 
 type InlineResult = {
@@ -46,10 +42,7 @@ export const getGetWorkbookXmlTool = (
     server,
     name: 'get-workbook-xml',
     title,
-    description: [
-      'Get current workbook structure. mode=file is default; mode=inline returns workbook content.',
-      'PREFERRED: use the field tools (add-field/remove-field) or batch-create-and-cache-sheets instead of editing workbook content directly; use apply-workbook to apply changes.',
-    ].join(' '),
+    description: 'Get current workbook structure.',
     paramsSchema,
     annotations: {
       title,

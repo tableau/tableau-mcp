@@ -140,6 +140,95 @@ describe('ExternalApiClient', () => {
     expect(last?.path).toBe('/v0/workbook/worksheets');
   });
 
+  it('gets the open workbook inventory from GET /v0/workbook', async () => {
+    const result = await client.getWorkbook();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({
+      title: 'Regional Sales Analysis',
+      unsavedChanges: true,
+      worksheets: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'sheet-sales',
+          name: 'Sales by Region',
+          datasources: ['Sample - Superstore'],
+        }),
+      ]),
+      dashboards: [expect.objectContaining({ id: 'dash-exec', name: 'Executive Dashboard' })],
+      storyboards: [expect.objectContaining({ id: 'story-qbr', name: 'QBR Story' })],
+    });
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook');
+  });
+
+  it('lists workbook datasources from GET /v0/workbook/datasources', async () => {
+    const result = await client.listWorkbookDatasources();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().datasources).toEqual([
+      { id: 'wb-ds-superstore', name: 'Sample - Superstore', caption: 'Sample - Superstore' },
+      { id: 'wb-ds-quota', name: 'Quota Targets', caption: 'Quota Targets' },
+    ]);
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/datasources');
+  });
+
+  it('lists published site workbooks from GET /v0/site/workbooks', async () => {
+    const result = await client.listSiteWorkbooks();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().workbooks).toEqual([
+      expect.objectContaining({
+        id: 'wb-regional-sales',
+        luid: 'luid-regional-sales',
+        name: 'Regional Sales Analysis',
+      }),
+      expect.objectContaining({ id: 'wb-ops-scorecard', name: 'Ops Scorecard' }),
+    ]);
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/site/workbooks');
+  });
+
+  it('gets a worksheet by id from GET /v0/workbook/worksheets/{id}', async () => {
+    const result = await client.getWorksheet('sheet-sales');
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toEqual(
+      expect.objectContaining({
+        id: 'sheet-sales',
+        name: 'Sales by Region',
+        hidden: false,
+        datasources: ['Sample - Superstore'],
+      }),
+    );
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/worksheets/sheet-sales');
+  });
+
+  it('gets application info from GET /v0/app', async () => {
+    const result = await client.getApp();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({
+      applicationVersion: '2026.1',
+      build: '20261.26.0701.1234',
+      edition: 'Professional',
+      os: 'macOS',
+    });
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/app');
+  });
+
   it('gets worksheet summary data with query parameters', async () => {
     const result = await client.getWorksheetSummaryData(
       'sheet-sales',

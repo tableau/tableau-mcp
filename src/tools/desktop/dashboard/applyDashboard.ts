@@ -40,10 +40,7 @@ export const getApplyDashboardTool = (
     server,
     name: 'apply-dashboard',
     title,
-    description: [
-      'Apply modified dashboard layout to Tableau.',
-      'Updates existing dashboards only; use apply-workbook to create.',
-    ].join(' '),
+    description: 'Apply modified dashboard layout to Tableau.',
     paramsSchema,
     annotations: {
       title,
