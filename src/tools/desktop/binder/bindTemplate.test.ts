@@ -149,6 +149,10 @@ const INJECTED_WATERFALL_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
     </worksheet>
   </worksheets>
 </workbook>`;
+const REAL_INJECTED_WATERFALL_SORT_SHAPE_XML = INJECTED_WATERFALL_WORKBOOK_XML.replace(
+  "<computed-sort column='[PL].[none:line_item:nk]' direction='DESC' using='[PL].[sum:amount:qk]' />",
+  '<computed-sort column="[PL].[none:line_item:nk]" direction="DESC" using="[PL].[sum:amount:qk]"></computed-sort>',
+);
 const CALC_BASE_XML = [
   "<?xml version='1.0' encoding='utf-8'?>",
   "<workbook version='18.1'>",
@@ -945,6 +949,35 @@ describe('bindTemplateTool auto_apply gate', () => {
       "<computed-sort column='[PL].[none:line_item:nk]' direction='ASC' using='[PL].[sum:display_order:qk]' />",
     );
     expect(xml).not.toContain("direction='DESC' using='[PL].[sum:amount:qk]'");
+  });
+
+  it('auto_apply=true replaces the real injected waterfall computed-sort pair with a resolvable sort proposal', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallWithSortResult,
+      inject: { ok: true, xml: REAL_INJECTED_WATERFALL_SORT_SHAPE_XML },
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall in display_order',
+      proposal: {
+        ...sampleProposal,
+        sort: { by: 'display_order', direction: 'asc' },
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    const xml = appliedXml(executeCommand);
+    expect(result.isError).toBe(false);
+    expect(body.warnings).toBeUndefined();
+    expect(xml).toContain(
+      "<computed-sort column='[PL].[none:line_item:nk]' direction='ASC' using='[PL].[sum:display_order:qk]' />",
+    );
+    expect(xml).not.toContain('using="[PL].[sum:amount:qk]"></computed-sort>');
   });
 
   it('auto_apply=true keeps the waterfall built-in sort and warns when sort field is unresolvable', async () => {

@@ -86,6 +86,12 @@ interface ColumnDefinition {
   caption: string;
 }
 
+interface ComputedSortTarget {
+  /** XML slice to replace: the whole computed-sort pair, or the child inside a safe wrapper. */
+  tag: string;
+  column: string;
+}
+
 const refuse = (reason: string): RefineRefusal => ({ ok: false, reason });
 
 /**
@@ -457,10 +463,67 @@ function planSortInsertion(xml: string, direction: SortDirection): SortPlan | nu
   return { ok: true, xml: out, column, direction };
 }
 
+function plainNestedComputedSortTargets(
+  xml: string,
+): Array<ComputedSortTarget & { childStart: number }> {
+  const out: Array<ComputedSortTarget & { childStart: number }> = [];
+  const re =
+    /<sort\b([^>]*\bclass=(?:'computed-sort'|"computed-sort")[^>]*)>\s*(<computed-sort\b([^>]*?)\/>)\s*<\/sort>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const tag = m[2];
+    const childOffset = m[0].indexOf(tag);
+    out.push({
+      tag,
+      column: attrVal(m[3], 'column'),
+      childStart: (m.index ?? 0) + childOffset,
+    });
+  }
+  return out;
+}
+
+function isInsidePlainNestedComputedSortChild(
+  index: number,
+  plainNested: Array<{ tag: string; childStart: number }>,
+): boolean {
+  return plainNested.some(
+    ({ tag, childStart }) => index >= childStart && index < childStart + tag.length,
+  );
+}
+
+function computedSortTargets(xml: string): ComputedSortTarget[] {
+  const plainNested = plainNestedComputedSortTargets(xml);
+  const out: ComputedSortTarget[] = plainNested.map(({ tag, column }) => ({ tag, column }));
+
+  for (const m of xml.matchAll(/<computed-sort\b([^>]*?)\/>/g)) {
+    if (isInsidePlainNestedComputedSortChild(m.index ?? 0, plainNested)) continue;
+    out.push({ tag: m[0], column: attrVal(m[1], 'column') });
+  }
+
+  for (const m of xml.matchAll(/<computed-sort\b([^>]*?)>\s*<\/computed-sort>/g)) {
+    out.push({ tag: m[0], column: attrVal(m[1], 'column') });
+  }
+
+  return out;
+}
+
+function stripSafeComputedSortForms(xml: string): string {
+  return xml
+    .replace(
+      /<sort\b[^>]*\bclass=(?:'computed-sort'|"computed-sort")[^>]*>\s*<computed-sort\b[^>]*?\/>\s*<\/sort>/g,
+      '',
+    )
+    .replace(/<computed-sort\b[^>]*?\/>/g, '')
+    .replace(/<computed-sort\b[^>]*?>\s*<\/computed-sort>/g, '');
+}
+
 function validateComputedSortShape(xml: string): RefineRefusal | null {
-  const hasNestedSortEl = /<sort\b[^>]*\bclass=(?:'computed-sort'|"computed-sort")[^>]*>/.test(xml);
-  const nonSelfClosingComputedSort = /<computed-sort\b[^>]*[^/]>/.test(xml);
-  if (hasNestedSortEl || nonSelfClosingComputedSort) {
+  const unsafeSortXml = stripSafeComputedSortForms(xml);
+  const hasNestedSortEl = /<sort\b[^>]*\bclass=(?:'computed-sort'|"computed-sort")[^>]*>/.test(
+    unsafeSortXml,
+  );
+  const nonPlainComputedSort = /<computed-sort\b[^>]*>/.test(unsafeSortXml);
+  if (hasNestedSortEl || nonPlainComputedSort) {
     return refuse(
       'the sort uses the nested <sort class="computed-sort"> form; only the safe self-closing <computed-sort/> can be changed.',
     );
@@ -480,15 +543,14 @@ function planComputedSortByRefs(
   opts: { targetField: string; column: string; using: string; direction: SortDirection },
 ): SortByFieldPlan | RefineRefusal {
   const node = `<computed-sort column='${escapeXml(opts.column)}' direction='${opts.direction}' using='${escapeXml(opts.using)}' />`;
-  const selfClosing = [...xml.matchAll(/<computed-sort\b[^>]*\/>/g)].map((m) => m[0]);
-  const targetSorts = selfClosing.filter((tag) => attrVal(tag, 'column') === opts.column);
+  const targetSorts = computedSortTargets(xml).filter((sort) => sort.column === opts.column);
   if (targetSorts.length > 1) {
     return refuse(`more than one <computed-sort> present for target field "${opts.targetField}".`);
   }
 
   const out =
     targetSorts.length === 1
-      ? xml.replace(targetSorts[0], node)
+      ? xml.replace(targetSorts[0].tag, node)
       : xml.replace(/<\/datasource-dependencies>/, (m) => `${m}\n      ${node}`);
   return { ok: true, xml: out, column: opts.column, using: opts.using, direction: opts.direction };
 }

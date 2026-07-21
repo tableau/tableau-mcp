@@ -394,6 +394,60 @@ describe('planSortByField', () => {
     expect(r.xml).toContain("direction='ASC'");
   });
 
+  it('replaces the empty paired computed-sort shape emitted by the real template inject serializer', () => {
+    const paired = WATERFALL.replace(
+      "<aggregation value='true' />",
+      '<computed-sort column="[Superstore].[none:line_item:nk]" direction="DESC" using="[Superstore].[sum:display_order:qk]"></computed-sort>\n      <aggregation value=\'true\' />',
+    );
+    const r = planSortByField(paired, {
+      targetField: 'Line Item',
+      sortByField: 'display_order',
+      direction: 'ASC',
+    });
+
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.xml).toContain(
+      "<computed-sort column='[Superstore].[none:line_item:nk]' direction='ASC' using='[Superstore].[sum:display_order:qk]' />",
+    );
+    expect(r.xml).not.toContain('</computed-sort>');
+  });
+
+  it('replaces only the computed-sort child inside a plain nested sort wrapper', () => {
+    const nested = WATERFALL.replace(
+      "<aggregation value='true' />",
+      '<sort class="computed-sort">\n        <computed-sort column="[Superstore].[none:line_item:nk]" direction="DESC" using="[Superstore].[sum:display_order:qk]" />\n      </sort>\n      <aggregation value=\'true\' />',
+    );
+    const r = planSortByField(nested, {
+      targetField: 'Line Item',
+      sortByField: 'display_order',
+      direction: 'ASC',
+    });
+
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.xml).toContain('<sort class="computed-sort">');
+    expect(r.xml).toContain(
+      "<computed-sort column='[Superstore].[none:line_item:nk]' direction='ASC' using='[Superstore].[sum:display_order:qk]' />",
+    );
+  });
+
+  it('still refuses a nested sort wrapper with a sort-computation child', () => {
+    const nested = WATERFALL.replace(
+      "<aggregation value='true' />",
+      '<sort class="computed-sort" column="[Superstore].[none:line_item:nk]" direction="DESC">\n        <sort-computation direction="DESC" field="[Superstore].[sum:display_order:qk]" />\n      </sort>\n      <aggregation value=\'true\' />',
+    );
+    const r = planSortByField(nested, {
+      targetField: 'Line Item',
+      sortByField: 'display_order',
+      direction: 'ASC',
+    });
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/nested/);
+  });
+
   it('refuses an unknown target caption with a clear field message', () => {
     const r = planSortByField(WATERFALL, {
       targetField: 'Missing Field',
