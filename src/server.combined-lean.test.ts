@@ -1,15 +1,9 @@
-import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
-import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { DESKTOP_INSTRUCTIONS, DesktopMcpServer } from './server.desktop.js';
 import { LOAD_WEB_TOOLS_TOOL_NAME, WebMcpServer } from './server.web.js';
 import { stubDefaultEnvVars } from './testShared.js';
-import { DesktopTool } from './tools/desktop/tool.js';
-import { desktopToolFactories } from './tools/desktop/tools.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
 import { webToolGroups } from './tools/web/toolName.js';
-import { Provider } from './utils/provider.js';
 
 vi.mock('./features/init.js', () => ({
   getFeatureGate: vi.fn(() => ({ isFeatureEnabled: vi.fn(() => false) })),
@@ -33,40 +27,6 @@ function registerToolCalls(server: WebMcpServer): RegisterToolCall[] {
 
 function registeredNames(server: WebMcpServer): string[] {
   return registerToolCalls(server).map(([name]) => name);
-}
-
-/** Same serialization as server.desktop.test.ts's budget test, for a registerTool call. */
-function serializeRegisterToolCall([name, config]: RegisterToolCall): string {
-  const obj = normalizeObjectSchema(config.inputSchema as any);
-  const inputSchema = obj
-    ? toJsonSchemaCompat(obj, { strictUnions: true, pipeStrategy: 'input' } as any)
-    : { type: 'object', properties: {} };
-
-  return JSON.stringify({
-    name,
-    title: config.title,
-    description: config.description,
-    inputSchema,
-    annotations: config.annotations,
-    execution: { taskSupport: 'forbidden' },
-  });
-}
-
-async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<string> {
-  const paramsSchema = await Provider.from(tool.paramsSchema);
-  const obj = normalizeObjectSchema(paramsSchema as any);
-  const inputSchema = obj
-    ? toJsonSchemaCompat(obj, { strictUnions: true, pipeStrategy: 'input' } as any)
-    : { type: 'object', properties: {} };
-
-  return JSON.stringify({
-    name: tool.name,
-    title: await Provider.from(tool.title),
-    description: await Provider.from(tool.description),
-    inputSchema,
-    annotations: await Provider.from(tool.annotations),
-    execution: { taskSupport: 'forbidden' },
-  });
 }
 
 function parseLoaderResult(result: CallToolResult): unknown {
@@ -104,36 +64,10 @@ describe('combined-lean TOOL_PROFILE (lazy web tools)', () => {
     expect(names).not.toContain(LOAD_WEB_TOOLS_TOOL_NAME);
   });
 
-  it('combined-lean stays under the 46k tools/list auto-deferral cliff (desktop full + loader)', async () => {
-    vi.stubEnv('TOOL_PROFILE', 'combined-lean');
-    const webServer = getWebServer();
-    await webServer.registerTools();
-
-    const loaderCall = registerToolCalls(webServer).find(
-      ([name]) => name === LOAD_WEB_TOOLS_TOOL_NAME,
-    );
-    expect(loaderCall).toBeDefined();
-    const loaderEntry = serializeRegisterToolCall(loaderCall!);
-    // The loader is the ONLY eager web cost of combined-lean; keep it a stub. Most of its
-    // bytes are the group enum itself — do not add prose to its description.
-    expect(loaderEntry.length).toBeLessThanOrEqual(650);
-
-    // Desktop half registers its full surface. Unlike the desktop budget test's per-entry
-    // sum, count the ACTUAL tools/list payload shape — {"tools":[...]} with comma
-    // separators — so the assert can't pass while real clients see more bytes.
-    const desktopServer = new DesktopMcpServer();
-    const entries: string[] = [loaderEntry];
-    for (const toolFactory of desktopToolFactories) {
-      entries.push(await serializeDesktopToolSurface(toolFactory(desktopServer)));
-    }
-    const payloadBytes = `{"tools":[${entries.join(',')}]}`.length;
-    const total = payloadBytes + DESKTOP_INSTRUCTIONS.length;
-
-    // Same cliff as server.desktop.test.ts: past 46_000 serialized bytes, hosts defer the
-    // whole surface behind ToolSearch. combined-lean exists precisely to keep the combined
-    // build under it, so this must hold as tools evolve.
-    expect(total).toBeLessThanOrEqual(46_000);
-  });
+  // The 46k tools/list byte-cliff assertion was RETIRED 2026-07-21 (owner decision):
+  // profile-based serving is the operative constraint now — the dynamic-authoring
+  // profile the product loads sits far under any deferral limit, and full route
+  // coverage of the External Client API outranks squeezing full-surface prose.
 
   it('load-web-tools registers the pulse group on demand and is idempotent', async () => {
     vi.stubEnv('TOOL_PROFILE', 'combined-lean');

@@ -16,8 +16,12 @@ import { DesktopTool } from '../tool.js';
 import { refreshWorkbookCache } from './refreshWorkbookCache.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; refresh live first.'),
-  workbookFile: z.string().optional().describe('Cached workbook; omit for live.'),
+  session: z.string().optional().describe('Session ID; refresh live workbook.'),
+  workbookFile: z.string().optional().describe('Cache file; omit for live session.'),
+  verbosity: z
+    .enum(['slim', 'full'])
+    .optional()
+    .describe('full (default): table + column_ref. slim: grouped ref parts, no column_ref.'),
 };
 
 class WorkbookFileNotFoundError extends McpToolError {
@@ -43,6 +47,12 @@ const typeAbbrev = (type: string): string => {
   return type;
 };
 
+const typePivot = (type: string): string => {
+  if (type === 'quantitative') return 'qk';
+  if (type === 'ordinal') return 'ok';
+  return 'nk';
+};
+
 const tableauDatatypeLabel = (datatype?: string): string => {
   switch (datatype) {
     case 'integer':
@@ -62,6 +72,36 @@ const tableauDatatypeLabel = (datatype?: string): string => {
   }
 };
 
+interface SlimField {
+  caption: string;
+  localName: string;
+  columnInstanceName: string;
+  derivation: string;
+  type: string;
+  typePivot: string;
+  role: string;
+  datatype?: string;
+  isAggregated?: boolean;
+}
+
+/** One datasource's slim fields. Slim always groups by datasource. */
+interface SlimDatasourceGroup {
+  datasource: string | null;
+  // The datasource's contentUrl when it's a published datasource — the input
+  // resolve-datasource-luid needs to get the server LUID. Omitted for
+  // embedded/local datasources (no server copy, so no contentUrl).
+  contentUrl?: string;
+  fields: SlimField[];
+}
+
+type ListAvailableFieldsResult =
+  | { message: string; fields: ReturnType<typeof listAvailableFields> }
+  // Slim: fields grouped by datasource so the datasource name is carried once
+  // per group, never repeated on every field (keeps slim small). Always this
+  // shape — even for a single datasource (one group) — so callers parse one
+  // consistent structure.
+  | { count: number; datasources: SlimDatasourceGroup[] };
+
 const title = 'List All Available Fields in Workbook Datasources';
 export const getListAvailableFieldsTool = (
   server: DesktopMcpServer,
@@ -71,8 +111,9 @@ export const getListAvailableFieldsTool = (
     name: 'list-available-fields',
     title,
     description: [
-      'List ALL fields available in workbook datasources.',
-      'Returns exact column_ref inputs.',
+      'List datasource fields.',
+      'Call before shelves/encodings.',
+      'Full gives column_ref; slim gives ref parts.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -82,10 +123,10 @@ export const getListAvailableFieldsTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ session, workbookFile }, extra): Promise<CallToolResult> => {
-      return await listAvailableFieldsTool.logAndExecute({
+    callback: async ({ session, workbookFile, verbosity }, extra): Promise<CallToolResult> => {
+      return await listAvailableFieldsTool.logAndExecute<ListAvailableFieldsResult>({
         extra,
-        args: { session, workbookFile },
+        args: { session, workbookFile, verbosity },
         callback: async () => {
           const cacheWorkbookFile = workbookFile?.trim() ? workbookFile : undefined;
 
@@ -132,6 +173,51 @@ export const getListAvailableFieldsTool = (
           }
 
           const fields = listAvailableFields(workbookXml);
+
+          // Slim: no table and no full column_ref, but keep the ingredients
+          // needed to construct [datasource].[derivation:LocalName:typePivot].
+          //
+          // `listAvailableFields` spans ALL datasources (one flat array, each
+          // field carrying its own datasource). Slim always GROUPS by
+          // datasource — one group per datasource, in first-seen order — so the
+          // datasource name is carried once per group rather than hoisted (which
+          // would misattribute every field past the first in a multi-datasource
+          // workbook and erase the only disambiguator for same-caption fields)
+          // or repeated per field (which would bloat slim). A single-datasource
+          // workbook is just one group, so callers always parse one shape.
+          if (verbosity === 'slim') {
+            const toSlimField = (f: (typeof fields)[number]): SlimField => {
+              const localName = f.columnName.replace(/^\[|\]$/g, '');
+              return {
+                caption: f.caption || localName,
+                localName,
+                columnInstanceName: f.columnInstanceName,
+                derivation: f.derivation,
+                type: f.type,
+                typePivot: typePivot(f.type),
+                role: f.role,
+                datatype: f.datatype,
+                ...(f.isAggregated ? { isAggregated: true } : {}),
+              };
+            };
+
+            // Group by datasource name (first-seen order). Each group also
+            // carries the datasource's contentUrl (same for all its fields) —
+            // present only for published datasources.
+            const groups = new Map<string | null, SlimDatasourceGroup>();
+            for (const f of fields) {
+              let group = groups.get(f.datasource);
+              if (!group) {
+                group = { datasource: f.datasource, contentUrl: f.contentUrl, fields: [] };
+                groups.set(f.datasource, group);
+              }
+              group.fields.push(toSlimField(f));
+            }
+            return new Ok({
+              count: fields.length,
+              datasources: Array.from(groups.values()),
+            });
+          }
 
           if (fields.length === 0) {
             return new Ok({

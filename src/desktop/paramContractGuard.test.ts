@@ -227,7 +227,7 @@ describe('live param overrides (runtime truth beats the reference)', () => {
   });
 });
 
-describe('LIVE_DIALOG_BLOCKLIST', () => {
+describe('live dialog policy refusals', () => {
   it('refuses tabdoc:sort outright with the headless sort FIX', async () => {
     const { validateCommandParams } = await import('./paramContractGuard.js');
     const result = validateCommandParams('tabdoc:sort', {
@@ -238,7 +238,7 @@ describe('LIVE_DIALOG_BLOCKLIST', () => {
     if (!result.ok) {
       expect(result.message).toContain('tabdoc:sort drives a UI dialog and blocks the screen');
       expect(result.message).toContain('refine-worksheet with operation sort_by_field');
-      expect(result.message).toContain('tabdoc:sort-nested');
+      expect(result.message).toContain('bind-template sort proposal/document round-trip');
     }
   });
 
@@ -285,11 +285,13 @@ describe('live param overrides for sort commands', () => {
       expect(result.message).toContain(
         'Missing required parameter(s) for Tableau command "tabdoc:sort-nested": MeasureName, ShelfType',
       );
-      expect(result.message).toContain('FIX: provide "MeasureName", "ShelfType"');
+      expect(result.message).toContain('Live-verified /v0 contract requires');
+      expect(result.message).toContain('known to fail');
+      expect(result.message).toContain('do not retry');
     }
   });
 
-  it('accepts sort-nested with its required live contract params', async () => {
+  it('keeps sort-nested validation-only params when its live contract is complete', async () => {
     const { validateCommandParams } = await import('./paramContractGuard.js');
     expect(
       validateCommandParams('tabdoc:sort-nested', {
