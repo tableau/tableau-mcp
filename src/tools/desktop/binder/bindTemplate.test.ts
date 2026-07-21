@@ -857,10 +857,11 @@ describe('bindTemplateTool auto_apply gate', () => {
 
     invariant(withoutSortResult.content[0].type === 'text');
     const withoutSortBody = JSON.parse(withoutSortResult.content[0].text);
+    // Fixture has display_order → the specific, field-named order hint fires (routes to the bind).
+    expect(withoutSortBody.guidance).toContain('Waterfall step order: schema has display_order');
     expect(withoutSortBody.guidance).toContain(
-      'Waterfall default sort is DESC by the bound measure',
+      'proposal.sort:{by:"display_order",direction:"asc"}',
     );
-    expect(withoutSortBody.guidance).toContain('proposal.sort:{by:<field>,direction:"asc"|"desc"}');
 
     vi.clearAllMocks();
     const withSort = setupAutoApplyMocks({
@@ -916,7 +917,29 @@ describe('bindTemplateTool auto_apply gate', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.status).toBe('propose');
     expect(body.guidance).toContain('{slot_id:"anchor_category",field:"category"}');
+    // Schema has display_order → the sort hint NAMES it and routes to the bind (not refine).
+    expect(body.guidance).toContain('Waterfall step order: schema has display_order');
+    expect(body.guidance).toContain('proposal.sort:{by:"display_order",direction:"asc"}');
+    expect(body.guidance).toContain('Do NOT use refine-worksheet');
+  });
+
+  it('falls back to the generic sort hint when the waterfall schema has no order column', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: waterfallProposeResult,
+      workbookReads: [P_AND_L_WORKBOOK_XML_WITHOUT_DISPLAY_ORDER],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
     expect(body.guidance).toContain('proposal.sort:{by:<field>,direction:"asc"|"desc"}');
+    expect(body.guidance).not.toContain('Waterfall step order: schema has');
   });
 
   it('auto_apply=true replaces the waterfall built-in sort with a resolvable sort proposal', async () => {
