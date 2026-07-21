@@ -664,7 +664,22 @@ export function planSortByFieldOnCategoricalAxis(
   if (!ds) return refuse('could not determine the worksheet datasource name.');
 
   const cis = parseColumnInstances(xml);
-  const dims = cis.filter(isDimensionCi);
+  // The sortable "categorical axis" is a dimension CI placed ON A SHELF (rows/cols) — never a
+  // filter-only dimension. A waterfall's anchor_category exclude-filter adds a nominal/None CI
+  // that lives only inside <filter>; counting it as a second axis wrongly trips the ambiguity
+  // refusal below (the seam that kept anchor+sort from co-existing). Restrict axis candidates
+  // to dims whose DS-qualified ref appears on a shelf, mirroring planSortInsertion's proven
+  // membership check — a filter-only CI has no axis to order, so it can never be the target.
+  // Substring membership is exact for CI refs: `[${ds}].${ci.name}` ends in the CI's closing
+  // bracket (e.g. `[none:Region:nk]`), and the `:suffix]` structure means one CI ref is never a
+  // substring of a longer one (`[none:Region:nk]` ≠ inside `[none:RegionName:nk]`). `ds` and
+  // `ci.name` are read raw from the same document as the shelf text, so any XML escaping in the
+  // DS name (e.g. `P&amp;L Data`) is identical on both sides of the comparison.
+  const rows = shelfText(xml, 'rows');
+  const cols = shelfText(xml, 'cols');
+  const dims = cis
+    .filter(isDimensionCi)
+    .filter((ci) => rows.includes(`[${ds}].${ci.name}`) || cols.includes(`[${ds}].${ci.name}`));
   if (dims.length === 0) return refuse('could not identify a single categorical axis to sort.');
   if (dims.length > 1)
     return refuse('more than one categorical axis is present; sort is ambiguous.');

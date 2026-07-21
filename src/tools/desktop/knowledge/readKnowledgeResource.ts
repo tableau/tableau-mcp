@@ -24,7 +24,7 @@ export const getReadKnowledgeResourceTool = (
     name: 'read-knowledge-resource',
     title: toolTitle,
     description:
-      'Read an expertise module by URI (e.g., expertise://tableau/tactics/viz/filters). Use list-knowledge-resources to enumerate available URIs.',
+      'Read an expertise module by URI for verified rules before an unfamiliar build. Use list-knowledge-resources to find URIs.',
     paramsSchema,
     annotations: {
       title: toolTitle,

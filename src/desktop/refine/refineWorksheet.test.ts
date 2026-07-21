@@ -1,4 +1,9 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+import { rewriteFieldReferences } from '../templates/fieldReferenceRewriter.js';
 import { ensureUserNamespace } from '../templates/injectTemplateCore.js';
+import { spliceWaterfallAnchorFilter } from '../templates/waterfallAnchorFilter.js';
 import { runValidation } from '../validation/registry.js';
 import { parseXml } from '../validation/rules/parseXml.js';
 import {
@@ -6,6 +11,7 @@ import {
   confirmSortDirectionApplied,
   confirmTopNApplied,
   planSortByField,
+  planSortByFieldOnCategoricalAxis,
   planSortDirection,
   planTopN,
 } from './refineWorksheet.js';
@@ -667,5 +673,109 @@ describe('confirmSortDirectionApplied', () => {
     expect(confirmSortDirectionApplied(withSort, quoted, 'ASC')).toBe(true);
     expect(confirmSortDirectionApplied(withSort, quoted, 'DESC')).toBe(false);
     expect(confirmSortDirectionApplied(withSort, "x' or @column!='", 'ASC')).toBe(false);
+  });
+});
+
+describe('planSortByFieldOnCategoricalAxis — anchor_category coexistence (waterfall seam)', () => {
+  // The real part-to-whole-waterfall template, field-rewritten and anchor-spliced exactly as
+  // bind-template produces it: <cols> carries the axis [none:line_item:nk], while binding
+  // anchor_category adds a SECOND nominal/None CI [none:category:nk] that lives ONLY inside
+  // the exclude <filter>. Before the fix, that filter-only CI was counted as a rival axis and
+  // tripped "more than one categorical axis is present; sort is ambiguous." — so a waterfall
+  // could never carry both an anchor AND a proposal sort. The DS name is `P&L Data` (ampersand)
+  // to prove the shelf-membership check works against XML-escaped refs, not just clean names.
+  const WATERFALL_XML = readFileSync(
+    join(process.cwd(), 'src', 'desktop', 'data', 'templates', 'part-to-whole-waterfall.xml'),
+    'utf8',
+  );
+  const DS = 'P&L Data';
+  const anchoredWaterfall = (): string => {
+    const mapping = {
+      Profit: `[${DS}].[sum:amount:qk]`,
+      'Sub-Category': `[${DS}].[none:line_item:nk]`,
+      'Anchor Category': `[${DS}].[none:category:nk]`,
+    };
+    const rewritten = rewriteFieldReferences(ensureUserNamespace(WATERFALL_XML), mapping, DS);
+    return spliceWaterfallAnchorFilter(rewritten, mapping);
+  };
+
+  it('sorts the shelf axis even when an anchor_category filter adds a second dimension CI', () => {
+    const xml = anchoredWaterfall();
+    // Sanity: two nominal/None CIs are present (the axis + the anchor filter's), so this
+    // exercises the exact multi-dimension shape that used to be refused.
+    const nominalNoneCis = [...xml.matchAll(/<column-instance\b[^>]*\/?>/g)].filter(
+      (m) => /derivation=(?:'None'|"None")/.test(m[0]) && /type=(?:'nominal'|"nominal")/.test(m[0]),
+    );
+    expect(nominalNoneCis.length).toBeGreaterThanOrEqual(2);
+
+    // Production path (bindTemplate.applyProposalSplices): the sort-by measure resolves
+    // exactly in the schema, so a DS-qualified columnRef is passed in — caption resolution of
+    // the measure is bypassed. The seam being tested is the DIMENSION-axis selection, not the
+    // measure lookup, so pin the measure deterministically the way the real caller does.
+    const sorted = planSortByFieldOnCategoricalAxis(xml, {
+      sortByField: 'Profit',
+      sortByColumnRef: `[${DS}].[sum:amount:qk]`,
+      direction: 'DESC',
+    });
+
+    // Fail-before: this returned { ok:false, reason:'more than one categorical axis…' }.
+    expect(sorted.ok).toBe(true);
+    if (!sorted.ok) return;
+    // The sort targets the SHELF axis (line_item), never the filter-only anchor (category).
+    // datasourceName() reads the DS name raw from the attribute, so the ref carries the
+    // XML-escaped ampersand ([P&amp;L Data]) — exactly what lands in the <computed-sort>.
+    expect(sorted.column).toBe('[P&amp;L Data].[none:line_item:nk]');
+    expect(sorted.column).not.toContain('none:category:nk');
+    expect(confirmSortByFieldApplied(sorted.xml, sorted.column, sorted.using, 'DESC')).toBe(true);
+  });
+
+  it('does not mistake a filter-only dim whose name PREFIXES the shelf axis for a rival axis', () => {
+    // Boundary hazard (raised in review): if membership used a loose substring, a filter-only
+    // CI [none:Region:nk] could false-match a shelf axis [none:RegionName:nk]. The `:suffix]`
+    // grammar makes the ref match exact — prove it: the axis is RegionName (on cols), and a
+    // filter-only Region CI shares the prefix. Only the shelf axis must count.
+    const xml = `<worksheet name='x' xmlns:user='http://www.tableausoftware.com/xml/user'>
+      <table><view>
+        <datasource-dependencies datasource='DS'>
+          <column-instance column='[RegionName]' derivation='None' name='[none:RegionName:nk]' pivot='key' type='nominal' />
+          <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />
+          <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+        </datasource-dependencies>
+        <filter class='categorical' column='[DS].[none:Region:nk]'><groupfilter function='except' /></filter>
+        <aggregation value='true' />
+      </view>
+      <cols>[DS].[none:RegionName:nk]</cols>
+      </table>
+    </worksheet>`;
+    const sorted = planSortByFieldOnCategoricalAxis(xml, {
+      sortByField: 'Sales',
+      sortByColumnRef: '[DS].[sum:Sales:qk]',
+      direction: 'DESC',
+    });
+    expect(sorted.ok).toBe(true);
+    if (!sorted.ok) return;
+    expect(sorted.column).toBe('[DS].[none:RegionName:nk]');
+  });
+
+  it('still refuses when TWO real dimension CIs are both on shelves (genuine ambiguity)', () => {
+    // A crosstab-like shape: two nominal/None CIs, each placed on a shelf. This is the case the
+    // ambiguity refusal is FOR — the fix must not swallow it.
+    const twoAxisXml = `<worksheet name='x' xmlns:user='http://www.tableausoftware.com/xml/user'>
+      <table><view>
+        <datasource-dependencies datasource='DS'>
+          <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />
+          <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
+          <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+        </datasource-dependencies>
+        <aggregation value='true' />
+      </view>
+      <rows>[DS].[none:Region:nk]</rows>
+      <cols>[DS].[none:Category:nk]</cols>
+      </table>
+    </worksheet>`;
+    const r = planSortByFieldOnCategoricalAxis(twoAxisXml, { sortByField: 'Sales' });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/more than one categorical axis/i);
   });
 });
