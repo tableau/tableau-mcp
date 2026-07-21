@@ -39,8 +39,7 @@ export const getSearchExamplesTool = (
     server,
     name: 'search-examples',
     title,
-    description:
-      'Search before/after workbook-change examples. Returns worksheet, dashboard, or workbook diffs; prefer focused diffs when available.',
+    description: 'Search workbook-change examples.',
     paramsSchema,
     annotations: {
       title,

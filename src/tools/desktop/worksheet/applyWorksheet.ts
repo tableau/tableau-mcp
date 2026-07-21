@@ -29,11 +29,11 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe(''),
-  worksheetName: z.string().describe(''),
-  mode: z.enum(['file', 'inline']).optional().default('file').describe(''),
-  worksheetFile: z.string().optional().describe(''),
-  worksheetXml: z.string().optional().describe(''),
+  session: z.string().optional(),
+  worksheetName: z.string(),
+  mode: z.enum(['file', 'inline']).optional().default('file'),
+  worksheetFile: z.string().optional(),
+  worksheetXml: z.string().optional(),
 };
 
 const title = 'Apply Worksheet';
@@ -44,10 +44,7 @@ export const getApplyWorksheetTool = (
     server,
     name: 'apply-worksheet',
     title,
-    description: [
-      'Apply modified worksheet content to Tableau (mutating). mode=file is default; mode=inline is for small worksheets.',
-      'IMPORTANT: can only UPDATE an existing worksheet, not create one — use apply-workbook to create.',
-    ].join(' '),
+    description: 'Apply modified worksheet content to Tableau.',
     paramsSchema,
     annotations: {
       title,

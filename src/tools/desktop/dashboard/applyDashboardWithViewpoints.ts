@@ -20,10 +20,10 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  dashboardName: z.string().describe('Name of the dashboard.'),
-  dashboardFile: z.string().describe('Cached dashboard layout file to apply.'),
-  worksheetNames: z.array(z.string()).describe('Worksheet viewpoints to register.'),
+  session: z.string().optional().describe(''),
+  dashboardName: z.string().describe(''),
+  dashboardFile: z.string().describe(''),
+  worksheetNames: z.array(z.string()).describe(''),
 };
 
 const title = 'Apply Dashboard with Viewpoints';
@@ -34,10 +34,7 @@ export const getApplyDashboardWithViewpointsTool = (
     server,
     name: 'apply-dashboard-with-viewpoints',
     title,
-    description: [
-      'Apply dashboard layout and register worksheet viewpoints (mutating).',
-      'Use after all worksheet files have been applied.',
-    ].join(' '),
+    description: 'Apply dashboard layout and register worksheet viewpoints.',
     paramsSchema,
     annotations: {
       title,

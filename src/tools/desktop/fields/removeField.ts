@@ -36,14 +36,11 @@ const ENCODING_TYPES = [
 const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
 const paramsSchema = {
-  session: z.string().describe(''),
-  worksheetFile: z.string().describe(''),
-  target: z.enum(FIELD_TARGETS).describe(''),
-  columnRef: z.string().describe(''),
-  encodingType: z
-    .enum(ENCODING_TYPES)
-    .optional()
-    .describe("Encoding channel ('text'=labels); required iff target=encoding."),
+  session: z.string(),
+  worksheetFile: z.string(),
+  target: z.enum(FIELD_TARGETS),
+  columnRef: z.string(),
+  encodingType: z.enum(ENCODING_TYPES).optional(),
 };
 
 const title = 'Remove Field';
@@ -52,8 +49,7 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
     server,
     name: 'remove-field',
     title,
-    description:
-      'Remove a field from Rows, Columns, or an encoding; mutates cache. Apply with apply-worksheet.',
+    description: 'Remove a field.',
     paramsSchema,
     annotations: {
       title,

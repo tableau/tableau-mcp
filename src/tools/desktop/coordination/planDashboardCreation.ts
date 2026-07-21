@@ -28,20 +28,20 @@ type PlannerFieldResolution = {
 const plannerFieldSchema = z.union([
   z.string(),
   z.object({
-    query: z.string().describe(''),
-    datasource: z.string().optional().describe(''),
+    query: z.string(),
+    datasource: z.string().optional(),
   }),
 ]);
 
 const paramsSchema = {
-  session: z.string().optional().describe(''),
-  dashboardName: z.string().describe(''),
-  title: z.string().optional().describe(''),
+  session: z.string().optional(),
+  dashboardName: z.string(),
+  title: z.string().optional(),
   layout: z
     .object({
-      type: z.enum(['auto-grid', 'rows', 'columns', 'custom']).describe(''),
-      gridColumns: z.number().optional().describe(''),
-      kpiStripHeight: z.number().optional().describe(''),
+      type: z.enum(['auto-grid', 'rows', 'columns', 'custom']),
+      gridColumns: z.number().optional(),
+      kpiStripHeight: z.number().optional(),
       zones: z
         .array(
           z.object({
@@ -52,21 +52,17 @@ const paramsSchema = {
             height: z.number(),
           }),
         )
-        .optional()
-        .describe(''),
+        .optional(),
     })
-    .optional()
-    .describe(''),
-  worksheets: z
-    .array(
-      z.object({
-        name: z.string().describe(''),
-        type: z.enum(['kpi', 'chart']).describe(''),
-        template: z.string().optional().describe(''),
-        fields: z.array(plannerFieldSchema).describe(''),
-      }),
-    )
-    .describe(''),
+    .optional(),
+  worksheets: z.array(
+    z.object({
+      name: z.string(),
+      type: z.enum(['kpi', 'chart']),
+      template: z.string().optional(),
+      fields: z.array(plannerFieldSchema),
+    }),
+  ),
 };
 
 function selectTemplate(ws: { type: string; template?: string }): string {

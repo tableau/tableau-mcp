@@ -21,13 +21,13 @@ import { DesktopTool } from '../tool.js';
 import { buildDashboardXml, computeZones, layoutSpecSchema } from './dashboardZones.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe(''),
-  dashboardName: z.string().describe(''),
-  dashboardFile: z.string().describe(''),
-  workbookFile: z.string().describe(''),
-  title: z.string().optional().describe(''),
-  layoutSpec: layoutSpecSchema.describe(''),
-  worksheetNames: z.array(z.string()).describe(''),
+  session: z.string().optional(),
+  dashboardName: z.string(),
+  dashboardFile: z.string(),
+  workbookFile: z.string(),
+  title: z.string().optional(),
+  layoutSpec: layoutSpecSchema,
+  worksheetNames: z.array(z.string()),
 };
 
 const title = 'Build and Apply Dashboard';

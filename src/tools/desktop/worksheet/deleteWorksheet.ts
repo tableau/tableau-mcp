@@ -167,8 +167,8 @@ function refusal(
 }
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  worksheetName: z.string().min(1).describe('Existing worksheet name to delete.'),
+  session: z.string().optional(),
+  worksheetName: z.string().min(1),
 };
 
 const title = 'Delete Worksheet';
@@ -179,11 +179,7 @@ export const getDeleteWorksheetTool = (
     server,
     name: 'delete-worksheet',
     title,
-    description: [
-      'Delete a worksheet from the live workbook (mutating) via the validated apply path.',
-      'SAFE BY DEFAULT: refuses when any dashboard zone references the sheet; no cascade delete.',
-      'Also refused: deleting the last remaining worksheet, and a mid-flight user edit (re-run for a fresh read).',
-    ].join(' '),
+    description: 'Delete a worksheet safely.',
     paramsSchema,
     annotations: {
       title,

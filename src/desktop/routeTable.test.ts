@@ -125,6 +125,6 @@ describe('buildDesktopInstructions', () => {
     }
     expect(pinned).not.toContain('list-instances');
     // The other routes must survive the filter untouched.
-    expect(pinned).toContain('You are controlling Tableau Desktop.');
+    expect(pinned).toContain('You control Tableau Desktop.');
   });
 });

@@ -26,7 +26,7 @@ describe('searchWorkbookExamplesTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getSearchWorkbookExamplesTool(new DesktopMcpServer());
     expect(tool.name).toBe('search-workbook-examples');
-    expect(tool.description).toContain('curated workbook examples');
+    expect(tool.description).toBe('Search workbook examples.');
     expect(tool.paramsSchema).toMatchObject({
       feature: expect.any(Object),
       query: expect.any(Object),

@@ -1,6 +1,17 @@
 import { Err, Ok, Result } from 'ts-results-es';
+import { z } from 'zod';
 
 import {
+  ApiRoot,
+  apiRootSchema,
+  AppInfo,
+  appInfoSchema,
+  DashboardItem,
+  dashboardItemSchema,
+  DashboardList,
+  dashboardListSchema,
+  DatasourceList,
+  datasourceListSchema,
   EXTERNAL_API_ROUTES,
   ExternalApiError,
   ExternalApiInstance,
@@ -9,6 +20,26 @@ import {
   OperationEnvelope,
   operationEnvelopeSchema,
   problemResponseSchema,
+  Site,
+  SiteDatasourceList,
+  siteDatasourceListSchema,
+  siteSchema,
+  SiteWorkbookList,
+  siteWorkbookListSchema,
+  StoryboardItem,
+  storyboardItemSchema,
+  StoryboardList,
+  storyboardListSchema,
+  SummaryData,
+  summaryDataSchema,
+  ValidationResult,
+  validationResultSchema,
+  WorkbookInventory,
+  workbookInventorySchema,
+  WorksheetItem,
+  worksheetItemSchema,
+  WorksheetList,
+  worksheetListSchema,
 } from './types.js';
 
 export type ExternalApiClientOptions = {
@@ -22,6 +53,13 @@ export type WorkbookDocument = {
   xml: string;
   applicationVersion: string | undefined;
   xsdPayloadVersion: string | undefined;
+};
+
+export type WorksheetSummaryDataQuery = {
+  maxRows?: number;
+  ignoreAliases?: boolean;
+  ignoreSelection?: boolean;
+  columnsToIncludeByFieldName?: string;
 };
 
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -67,26 +105,7 @@ export class ExternalApiClient {
   async getWorkbookDocument(
     signal?: AbortSignal,
   ): Promise<Result<WorkbookDocument, ExternalApiError>> {
-    const response = await this.request('GET', EXTERNAL_API_ROUTES.workbookDocument, { signal });
-    if (response.isErr()) {
-      return Err(response.error);
-    }
-
-    const res = response.value;
-    if (!res.ok) {
-      return Err(await mapErrorResponse(res));
-    }
-
-    try {
-      const xml = await res.text();
-      return Ok({
-        xml,
-        applicationVersion: res.headers.get(HEADER_APPLICATION_VERSION) ?? undefined,
-        xsdPayloadVersion: res.headers.get(HEADER_XSD_PAYLOAD_VERSION) ?? undefined,
-      });
-    } catch (error) {
-      return Err({ type: 'invalid-response', error });
-    }
+    return this.getXml(EXTERNAL_API_ROUTES.workbookDocument, signal);
   }
 
   async applyWorkbookDocument(
@@ -99,6 +118,18 @@ export class ExternalApiClient {
       body: xml,
     });
     return this.parseEnvelope(response);
+  }
+
+  async validateWorkbookDocument(
+    xml: string,
+    signal?: AbortSignal,
+  ): Promise<Result<ValidationResult, ExternalApiError>> {
+    const response = await this.request('POST', EXTERNAL_API_ROUTES.workbookDocumentValidate, {
+      signal,
+      contentType: 'application/xml',
+      body: xml,
+    });
+    return this.parseJson(response, validationResultSchema);
   }
 
   async invokeCommand(
@@ -134,9 +165,129 @@ export class ExternalApiClient {
     }
   }
 
+  async getRoot(signal?: AbortSignal): Promise<Result<ApiRoot, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.root, apiRootSchema, signal);
+  }
+
+  async listWorksheets(signal?: AbortSignal): Promise<Result<WorksheetList, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.workbookWorksheets, worksheetListSchema, signal);
+  }
+
+  async listDashboards(signal?: AbortSignal): Promise<Result<DashboardList, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.workbookDashboards, dashboardListSchema, signal);
+  }
+
+  async listStoryboards(signal?: AbortSignal): Promise<Result<StoryboardList, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.workbookStoryboards, storyboardListSchema, signal);
+  }
+
+  async getWorkbook(signal?: AbortSignal): Promise<Result<WorkbookInventory, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.workbook, workbookInventorySchema, signal);
+  }
+
+  async listWorkbookDatasources(
+    signal?: AbortSignal,
+  ): Promise<Result<DatasourceList, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.workbookDatasources, datasourceListSchema, signal);
+  }
+
+  async listSiteWorkbooks(
+    signal?: AbortSignal,
+  ): Promise<Result<SiteWorkbookList, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.siteWorkbooks, siteWorkbookListSchema, signal);
+  }
+
+  async getSite(signal?: AbortSignal): Promise<Result<Site, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.site, siteSchema, signal);
+  }
+
+  async getWorksheet(
+    worksheetId: string,
+    signal?: AbortSignal,
+  ): Promise<Result<WorksheetItem, ExternalApiError>> {
+    return this.getJson(buildWorksheetByIdRoute(worksheetId), worksheetItemSchema, signal);
+  }
+
+  async getDashboard(
+    dashboardId: string,
+    signal?: AbortSignal,
+  ): Promise<Result<DashboardItem, ExternalApiError>> {
+    return this.getJson(buildDashboardByIdRoute(dashboardId), dashboardItemSchema, signal);
+  }
+
+  async getStoryboard(
+    storyboardId: string,
+    signal?: AbortSignal,
+  ): Promise<Result<StoryboardItem, ExternalApiError>> {
+    return this.getJson(buildStoryboardByIdRoute(storyboardId), storyboardItemSchema, signal);
+  }
+
+  async getWorksheetDocument(
+    worksheetId: string,
+    signal?: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExternalApiError>> {
+    return this.getXml(buildWorksheetDocumentRoute(worksheetId), signal);
+  }
+
+  async getDashboardDocument(
+    dashboardId: string,
+    signal?: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExternalApiError>> {
+    return this.getXml(buildDashboardDocumentRoute(dashboardId), signal);
+  }
+
+  async getStoryboardDocument(
+    storyboardId: string,
+    signal?: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExternalApiError>> {
+    return this.getXml(buildStoryboardDocumentRoute(storyboardId), signal);
+  }
+
+  async getApp(signal?: AbortSignal): Promise<Result<AppInfo, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.app, appInfoSchema, signal);
+  }
+
+  async getWorksheetSummaryData(
+    worksheetId: string,
+    query: WorksheetSummaryDataQuery = {},
+    signal?: AbortSignal,
+  ): Promise<Result<SummaryData, ExternalApiError>> {
+    return this.getJson(
+      buildWorksheetSummaryDataRoute(worksheetId, query),
+      summaryDataSchema,
+      signal,
+    );
+  }
+
+  async listSiteDatasources(
+    signal?: AbortSignal,
+  ): Promise<Result<SiteDatasourceList, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.siteDatasources, siteDatasourceListSchema, signal);
+  }
+
   private async parseEnvelope(
     response: Result<Response, ExternalApiError>,
   ): Promise<Result<OperationEnvelope, ExternalApiError>> {
+    if (response.isErr()) {
+      return Err(response.error);
+    }
+
+    return this.parseJson(response, operationEnvelopeSchema);
+  }
+
+  private async getJson<T extends z.ZodTypeAny>(
+    route: string,
+    schema: T,
+    signal?: AbortSignal,
+  ): Promise<Result<z.infer<T>, ExternalApiError>> {
+    const response = await this.request('GET', route, { signal });
+    return this.parseJson(response, schema);
+  }
+
+  private async parseJson<T extends z.ZodTypeAny>(
+    response: Result<Response, ExternalApiError>,
+    schema: T,
+  ): Promise<Result<z.infer<T>, ExternalApiError>> {
     if (response.isErr()) {
       return Err(response.error);
     }
@@ -153,11 +304,37 @@ export class ExternalApiClient {
       return Err({ type: 'invalid-response', error });
     }
 
-    const parsed = operationEnvelopeSchema.safeParse(json);
+    const parsed = schema.safeParse(json);
     if (!parsed.success) {
       return Err({ type: 'invalid-response', error: parsed.error });
     }
     return Ok(parsed.data);
+  }
+
+  private async getXml(
+    route: string,
+    signal?: AbortSignal,
+  ): Promise<Result<WorkbookDocument, ExternalApiError>> {
+    const response = await this.request('GET', route, { signal });
+    if (response.isErr()) {
+      return Err(response.error);
+    }
+
+    const res = response.value;
+    if (!res.ok) {
+      return Err(await mapErrorResponse(res));
+    }
+
+    try {
+      const xml = await res.text();
+      return Ok({
+        xml,
+        applicationVersion: res.headers.get(HEADER_APPLICATION_VERSION) ?? undefined,
+        xsdPayloadVersion: res.headers.get(HEADER_XSD_PAYLOAD_VERSION) ?? undefined,
+      });
+    } catch (error) {
+      return Err({ type: 'invalid-response', error });
+    }
   }
 
   private async request(
@@ -190,6 +367,54 @@ export class ExternalApiClient {
   private url(route: string): string {
     return `${this.instance.baseUrl.replace(/\/$/, '')}${route}`;
   }
+}
+
+function buildWorksheetByIdRoute(worksheetId: string): string {
+  return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(worksheetId)}`;
+}
+
+function buildDashboardByIdRoute(dashboardId: string): string {
+  return `${EXTERNAL_API_ROUTES.workbookDashboards}/${encodeURIComponent(dashboardId)}`;
+}
+
+function buildStoryboardByIdRoute(storyboardId: string): string {
+  return `${EXTERNAL_API_ROUTES.workbookStoryboards}/${encodeURIComponent(storyboardId)}`;
+}
+
+function buildWorksheetDocumentRoute(worksheetId: string): string {
+  return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(worksheetId)}/document`;
+}
+
+function buildDashboardDocumentRoute(dashboardId: string): string {
+  return `${EXTERNAL_API_ROUTES.workbookDashboards}/${encodeURIComponent(dashboardId)}/document`;
+}
+
+function buildStoryboardDocumentRoute(storyboardId: string): string {
+  return `${EXTERNAL_API_ROUTES.workbookStoryboards}/${encodeURIComponent(storyboardId)}/document`;
+}
+
+function buildWorksheetSummaryDataRoute(
+  worksheetId: string,
+  query: WorksheetSummaryDataQuery,
+): string {
+  const search = new URLSearchParams();
+  if (query.maxRows !== undefined) {
+    search.set('maxRows', String(query.maxRows));
+  }
+  if (query.ignoreAliases !== undefined) {
+    search.set('ignoreAliases', String(query.ignoreAliases));
+  }
+  if (query.ignoreSelection !== undefined) {
+    search.set('ignoreSelection', String(query.ignoreSelection));
+  }
+  if (query.columnsToIncludeByFieldName !== undefined) {
+    search.set('columnsToIncludeByFieldName', query.columnsToIncludeByFieldName);
+  }
+
+  const suffix = search.size > 0 ? `?${search.toString()}` : '';
+  return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(
+    worksheetId,
+  )}/summaryData${suffix}`;
 }
 
 async function mapErrorResponse(res: Response): Promise<ExternalApiError> {

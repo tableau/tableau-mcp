@@ -6,7 +6,10 @@ import { z } from 'zod';
 import { formatArtifactSummary } from '../../../desktop/artifactSummary.js';
 import { DesktopCache } from '../../../desktop/cache.js';
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
-import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheetXml.js';
+import {
+  getWorksheetXml,
+  isRouteMissing,
+} from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import {
   buildInlineCapFileMessage,
   isOverInlineXmlCap,
@@ -17,6 +20,7 @@ import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   DesktopCommandExecutionError,
   GetWorksheetXmlFailedError,
+  McpToolError,
   UnknownError,
 } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
@@ -24,9 +28,9 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe(''),
-  worksheetName: z.string().describe(''),
-  mode: z.enum(['file', 'inline']).optional().default('file').describe(''),
+  session: z.string().optional(),
+  worksheetName: z.string(),
+  mode: z.enum(['file', 'inline']).optional().default('file'),
 };
 
 type InlineResult = {
@@ -48,10 +52,7 @@ export const getGetWorksheetXmlTool = (
     server,
     name: 'get-worksheet-xml',
     title,
-    description: [
-      'Get structure for an existing worksheet. mode=file is default; mode=inline returns worksheet content.',
-      'IMPORTANT: only works for an existing worksheet (see list-worksheets). Prefer the field tools over editing worksheet content directly. Use apply-worksheet to apply changes.',
-    ].join(' '),
+    description: 'Get structure for an EXISTING worksheet.',
     paramsSchema,
     annotations: {
       title,
@@ -79,6 +80,15 @@ export const getGetWorksheetXmlTool = (
               case 'get-worksheet-xml-error':
                 return new GetWorksheetXmlFailedError(error).toErr();
               case 'execute-command-error':
+                if (isRouteMissing(error)) {
+                  return new McpToolError({
+                    type: 'endpoint-not-in-this-build',
+                    message:
+                      'This Tableau Desktop build does not serve the worksheet document endpoint yet. ' +
+                      'Use get-app-info to identify the build; this read lights up on a newer Desktop update. Do not retry.',
+                    statusCode: 404,
+                  }).toErr();
+                }
                 return new DesktopCommandExecutionError(error).toErr();
               default: {
                 const _: never = type;

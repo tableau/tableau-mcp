@@ -112,7 +112,7 @@ export const getBuildAndApplyWorksheetTool = (
     server,
     name: 'build-and-apply-worksheet',
     title: toolTitle,
-    description: 'Build a worksheet from a template and APPLY it to the live workbook.',
+    description: 'Build/apply worksheet.',
     paramsSchema,
     annotations: {
       title: toolTitle,

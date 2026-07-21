@@ -15,14 +15,11 @@ import { DesktopTool } from '../tool.js';
 import { getCacheDir, isWithinCacheDir } from './cachePath.js';
 
 const paramsSchema = {
-  filePath: z.string().describe('Cached working-copy file path.'),
-  worksheet: z
-    .string()
-    .optional()
-    .describe('Optional worksheet slice selector. One selector at a time.'),
-  dashboard: z.string().optional().describe('Optional dashboard slice selector.'),
-  startByte: z.number().int().min(0).optional().describe('Optional raw byte-slice start.'),
-  endByte: z.number().int().min(0).optional().describe('Optional raw byte-slice end.'),
+  filePath: z.string(),
+  worksheet: z.string().optional(),
+  dashboard: z.string().optional(),
+  startByte: z.number().int().min(0).optional(),
+  endByte: z.number().int().min(0).optional(),
 };
 
 const toolTitle = 'Read Cached Working Copy';
@@ -33,7 +30,7 @@ export const getReadCachedXmlTool = (
     server,
     name: 'read-cached-xml',
     title: toolTitle,
-    description: 'Read cached content. For large files pass ONE selector.',
+    description: 'Read cached content.',
     paramsSchema,
     annotations: {
       title: toolTitle,

@@ -1,9 +1,14 @@
 import { Err, Ok } from 'ts-results-es';
 
-import * as configModule from '../../../config.desktop.js';
 import invariant from '../../../utils/invariant.js';
+import { ExternalApiToolExecutor } from '../../externalApi/externalApiToolExecutor.js';
+import {
+  MockExternalApiServer,
+  startMockExternalApiServer,
+} from '../../externalApi/mockExternalApiServer.js';
+import { ExternalApiInstance } from '../../externalApi/types.js';
 import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
-import { getWorksheetXml } from './getWorksheetXml.js';
+import { getWorksheetXml, isRouteMissing } from './getWorksheetXml.js';
 
 vi.mock('../../toolExecutor/localToolExecutor.js');
 
@@ -277,95 +282,62 @@ describe('getWorksheetXml (Agent API transport, default)', () => {
   });
 });
 
-describe('getWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API gate)', () => {
+describe('getWorksheetXml (External Client API transport)', () => {
   const mockSignal = new AbortController().signal;
-  const worksheetName = 'Sheet 1';
+  let server: MockExternalApiServer;
 
-  function workbookWith(worksheetNames: string[]): string {
-    const worksheets = worksheetNames
-      .map((name) => `<worksheet name='${name}'><table><rows /></table></worksheet>`)
-      .join('');
-    return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets></workbook>`;
-  }
-
-  function executorReturning(text: string): LocalExecutor {
-    return {
-      executeCommand: vi.fn().mockResolvedValue(
-        Ok({
-          command_id: 'cmd-123',
-          status: 'completed',
-          parsedResult: { text },
-        }),
-      ),
-    } as unknown as LocalExecutor;
-  }
-
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    const base = configModule.getDesktopConfig();
-    vi.spyOn(configModule, 'getDesktopConfig').mockReturnValue({
-      ...base,
-      externalApiEnabled: true,
-    });
+    server = await startMockExternalApiServer();
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  afterEach(async () => {
+    await server.close();
   });
 
-  it('should slice the requested worksheet out of the whole-workbook document', async () => {
-    const mockExecutor = executorReturning(workbookWith(['Sheet 1', 'Sheet 2']));
+  it('resolves worksheet name to id and fetches the per-item document', async () => {
+    const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+    await executor.start();
 
     const result = await getWorksheetXml({
-      worksheetName,
-      executor: mockExecutor,
+      worksheetName: 'Sales by Region',
+      executor,
       signal: mockSignal,
     });
 
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
-      expect(result.value).toContain('<worksheet');
-      expect(result.value).toContain('name="Sheet 1"');
-      expect(result.value).not.toContain('Sheet 2');
+      expect(result.value).toContain('<worksheet name="Sales by Region"');
     }
 
-    expect(mockExecutor.executeCommand).toHaveBeenCalledWith({
-      namespace: 'tabui',
-      command: 'save-underlying-metadata',
-      args: { 'is-json': false },
-      schema: expect.any(Object),
-      signal: mockSignal,
-    });
+    expect(server.requests.map((request) => request.path)).toEqual([
+      '/v0/workbook/worksheets',
+      '/v0/workbook/worksheets/sheet-sales/document',
+    ]);
+    expect(server.requests.map((request) => request.path)).not.toContain('/v0/workbook/document');
   });
 
-  it('should return execute-command-error when the workbook fetch fails', async () => {
-    const error = {
-      type: 'command-failed' as const,
-      error: { code: 'ERROR', message: 'Fetch failed' },
-    };
-    const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(Err(error)),
-    } as unknown as LocalExecutor;
+  it('accepts worksheet id directly before name matching', async () => {
+    const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+    await executor.start();
 
     const result = await getWorksheetXml({
-      worksheetName,
-      executor: mockExecutor,
+      worksheetName: 'sheet-sales',
+      executor,
       signal: mockSignal,
     });
 
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      invariant(result.error.type === 'execute-command-error');
-      expect(result.error.error).toEqual(error);
-    }
+    expect(result.isOk()).toBe(true);
+    expect(server.requests.at(-1)?.path).toBe('/v0/workbook/worksheets/sheet-sales/document');
   });
 
-  it('should return no-worksheet-found when the workbook has no matching worksheet', async () => {
-    const mockExecutor = executorReturning(workbookWith(['Some Other Sheet']));
+  it('returns no-worksheet-found when the first-class list has no matching worksheet', async () => {
+    const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+    await executor.start();
 
     const result = await getWorksheetXml({
-      worksheetName,
-      executor: mockExecutor,
+      worksheetName: 'Missing Sheet',
+      executor,
       signal: mockSignal,
     });
 
@@ -373,48 +345,42 @@ describe('getWorksheetXml (External Client API transport, TABLEAU_EXTERNAL_API g
     if (result.isErr()) {
       invariant(result.error.type === 'get-worksheet-xml-error');
       expect(result.error.error.type).toBe('no-worksheet-found');
-      expect(result.error.error.message).toContain(worksheetName);
+      expect(result.error.error.message).toContain('Missing Sheet');
     }
   });
 
-  it('should handle worksheet names with special characters', async () => {
-    const mockExecutor = executorReturning(workbookWith(['Sales &amp; Data']));
+  it('preserves route-missing errors for older Desktop builds', async () => {
+    server.setOverride('GET /v0/workbook/worksheets/sheet-sales/document', {
+      status: 404,
+      body: JSON.stringify({
+        code: 'not-found',
+        status: 404,
+        instance: '/v0/mock',
+        title: 'No route matches GET /v0/workbook/worksheets/sheet-sales/document',
+        detail: 'No route matches GET /v0/workbook/worksheets/sheet-sales/document',
+      }),
+    });
+    const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+    await executor.start();
 
     const result = await getWorksheetXml({
-      worksheetName: 'Sales & Data',
-      executor: mockExecutor,
+      worksheetName: 'Sales by Region',
+      executor,
       signal: mockSignal,
     });
 
-    expect(result.isOk()).toBe(true);
-    if (result.isOk()) {
-      expect(result.value).toContain('Sales &amp; Data');
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'execute-command-error');
+      expect(isRouteMissing(result.error.error)).toBe(true);
     }
   });
+});
 
-  it('matches escaped worksheetName input against decoded workbook XML names', async () => {
-    const mockExecutor = executorReturning(
-      workbookWith(['P&amp;L Waterfall: Revenue to Net Income', 'Revenue &lt; &quot;Gross&quot;']),
-    );
-
-    const ampResult = await getWorksheetXml({
-      worksheetName: 'P&amp;L Waterfall: Revenue to Net Income',
-      executor: mockExecutor,
-      signal: mockSignal,
-    });
-    const angleQuoteResult = await getWorksheetXml({
-      worksheetName: 'Revenue < "Gross"',
-      executor: mockExecutor,
-      signal: mockSignal,
-    });
-
-    expect(ampResult.isOk()).toBe(true);
-    if (ampResult.isOk()) {
-      expect(ampResult.value).toContain('P&amp;L Waterfall: Revenue to Net Income');
-    }
-    expect(angleQuoteResult.isOk()).toBe(true);
-    if (angleQuoteResult.isOk()) {
-      expect(angleQuoteResult.value).toContain('Revenue &lt; &quot;Gross&quot;');
-    }
-  });
+const instanceFor = (server: MockExternalApiServer): ExternalApiInstance => ({
+  baseUrl: server.baseUrl,
+  token: 'valid-token',
+  pid: 999,
+  instanceId: 'inst-worksheet',
+  apiVersion: '1.0',
 });

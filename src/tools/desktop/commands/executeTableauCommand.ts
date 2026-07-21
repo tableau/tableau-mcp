@@ -40,12 +40,8 @@ const CONTEXT_FILLED_PARAM_TYPES = new Set(['UPI_Workspace', 'UPI_IWorkspace']);
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  command: z
-    .string()
-    .describe(
-      "Command name: 'namespace:command' (e.g., 'tabdoc:save', 'tabdoc:delete-sheet'). Use search-commands.",
-    ),
-  args: z.record(z.any()).optional().describe("JSON command args (e.g., { 'Sheet': 'Sheet 1' })."),
+  command: z.string().describe('namespace:command; use search-commands.'),
+  args: z.record(z.any()).optional().describe('JSON command args.'),
 };
 
 const title = 'Execute Tableau Command';
@@ -57,7 +53,7 @@ export const getExecuteTableauCommandTool = (
     name: 'execute-tableau-command',
     title,
     description:
-      "Execute an arbitrary registered Tableau Desktop command. Use search-commands to find available commands; a name not in the registry returns command-not-found. Commands use the format 'namespace:command' (e.g., 'tabdoc:save', 'tabdoc:delete-sheet').",
+      'Execute a registered Tableau Desktop command. Use search-commands first; format namespace:command.',
     paramsSchema,
     annotations: {
       title,

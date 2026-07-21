@@ -1,9 +1,14 @@
 import { Err, Ok } from 'ts-results-es';
 
-import * as configModule from '../../../config.desktop.js';
 import invariant from '../../../utils/invariant.js';
+import { ExternalApiToolExecutor } from '../../externalApi/externalApiToolExecutor.js';
+import {
+  MockExternalApiServer,
+  startMockExternalApiServer,
+} from '../../externalApi/mockExternalApiServer.js';
+import { ExternalApiInstance } from '../../externalApi/types.js';
 import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
-import { getDashboardXml } from './getDashboardXml.js';
+import { getDashboardXml, isRouteMissing } from './getDashboardXml.js';
 
 vi.mock('../../toolExecutor/localToolExecutor.js');
 
@@ -179,95 +184,62 @@ describe('getDashboardXml (Agent API transport, default)', () => {
   });
 });
 
-describe('getDashboardXml (External Client API transport, TABLEAU_EXTERNAL_API gate)', () => {
+describe('getDashboardXml (External Client API transport)', () => {
   const mockSignal = new AbortController().signal;
-  const dashboardName = 'Sales Dashboard';
+  let server: MockExternalApiServer;
 
-  function workbookWith(dashboardNames: string[]): string {
-    const dashboards = dashboardNames
-      .map((name) => `<dashboard name='${name}'><zones /></dashboard>`)
-      .join('');
-    return `<?xml version='1.0'?><workbook><dashboards>${dashboards}</dashboards></workbook>`;
-  }
-
-  function executorReturning(text: string): LocalExecutor {
-    return {
-      executeCommand: vi.fn().mockResolvedValue(
-        Ok({
-          command_id: 'cmd-123',
-          status: 'completed',
-          parsedResult: { text },
-        }),
-      ),
-    } as unknown as LocalExecutor;
-  }
-
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    const base = configModule.getDesktopConfig();
-    vi.spyOn(configModule, 'getDesktopConfig').mockReturnValue({
-      ...base,
-      externalApiEnabled: true,
-    });
+    server = await startMockExternalApiServer();
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  afterEach(async () => {
+    await server.close();
   });
 
-  it('should slice the requested dashboard out of the whole-workbook document', async () => {
-    const mockExecutor = executorReturning(workbookWith(['Sales Dashboard', 'Other Dashboard']));
+  it('resolves dashboard name to id and fetches the per-item document', async () => {
+    const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+    await executor.start();
 
     const result = await getDashboardXml({
-      dashboardName,
-      executor: mockExecutor,
+      dashboardName: 'Executive Dashboard',
+      executor,
       signal: mockSignal,
     });
 
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
-      expect(result.value).toContain('<dashboard');
-      expect(result.value).toContain('name="Sales Dashboard"');
-      expect(result.value).not.toContain('Other Dashboard');
+      expect(result.value).toContain('<dashboard name="Executive Dashboard"');
     }
 
-    expect(mockExecutor.executeCommand).toHaveBeenCalledWith({
-      namespace: 'tabui',
-      command: 'save-underlying-metadata',
-      args: { 'is-json': false },
-      schema: expect.any(Object),
-      signal: mockSignal,
-    });
+    expect(server.requests.map((request) => request.path)).toEqual([
+      '/v0/workbook/dashboards',
+      '/v0/workbook/dashboards/dash-exec/document',
+    ]);
+    expect(server.requests.map((request) => request.path)).not.toContain('/v0/workbook/document');
   });
 
-  it('should return execute-command-error when the workbook fetch fails', async () => {
-    const error = {
-      type: 'command-failed' as const,
-      error: { code: 'ERROR', message: 'Fetch failed' },
-    };
-    const mockExecutor = {
-      executeCommand: vi.fn().mockResolvedValue(Err(error)),
-    } as unknown as LocalExecutor;
+  it('accepts dashboard id directly before name matching', async () => {
+    const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+    await executor.start();
 
     const result = await getDashboardXml({
-      dashboardName,
-      executor: mockExecutor,
+      dashboardName: 'dash-exec',
+      executor,
       signal: mockSignal,
     });
 
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      invariant(result.error.type === 'execute-command-error');
-      expect(result.error.error).toEqual(error);
-    }
+    expect(result.isOk()).toBe(true);
+    expect(server.requests.at(-1)?.path).toBe('/v0/workbook/dashboards/dash-exec/document');
   });
 
-  it('should return no-dashboard-found when the workbook has no matching dashboard', async () => {
-    const mockExecutor = executorReturning(workbookWith(['Some Other Dashboard']));
+  it('returns no-dashboard-found when the first-class list has no matching dashboard', async () => {
+    const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+    await executor.start();
 
     const result = await getDashboardXml({
-      dashboardName,
-      executor: mockExecutor,
+      dashboardName: 'Missing Dashboard',
+      executor,
       signal: mockSignal,
     });
 
@@ -275,7 +247,42 @@ describe('getDashboardXml (External Client API transport, TABLEAU_EXTERNAL_API g
     if (result.isErr()) {
       invariant(result.error.type === 'get-dashboard-xml-error');
       expect(result.error.error.type).toBe('no-dashboard-found');
-      expect(result.error.error.message).toContain(dashboardName);
+      expect(result.error.error.message).toContain('Missing Dashboard');
     }
   });
+
+  it('preserves route-missing errors for older Desktop builds', async () => {
+    server.setOverride('GET /v0/workbook/dashboards/dash-exec/document', {
+      status: 404,
+      body: JSON.stringify({
+        code: 'not-found',
+        status: 404,
+        instance: '/v0/mock',
+        title: 'No route matches GET /v0/workbook/dashboards/dash-exec/document',
+        detail: 'No route matches GET /v0/workbook/dashboards/dash-exec/document',
+      }),
+    });
+    const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+    await executor.start();
+
+    const result = await getDashboardXml({
+      dashboardName: 'Executive Dashboard',
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'execute-command-error');
+      expect(isRouteMissing(result.error.error)).toBe(true);
+    }
+  });
+});
+
+const instanceFor = (server: MockExternalApiServer): ExternalApiInstance => ({
+  baseUrl: server.baseUrl,
+  token: 'valid-token',
+  pid: 999,
+  instanceId: 'inst-dashboard',
+  apiVersion: '1.0',
 });

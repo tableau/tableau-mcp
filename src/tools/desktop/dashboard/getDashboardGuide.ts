@@ -16,8 +16,7 @@ export const getGetDashboardGuideTool = (
     server,
     name: 'get-dashboard-guide',
     title: toolTitle,
-    description:
-      'Get comprehensive documentation on how to manually edit dashboard layouts: zones, viewpoints, sizing, and best practices. Use this before hand-editing dashboard layouts.',
+    description: 'Read dashboard layout guide.',
     paramsSchema,
     annotations: {
       title: toolTitle,

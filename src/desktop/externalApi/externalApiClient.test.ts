@@ -126,6 +126,304 @@ describe('ExternalApiClient', () => {
     expect(result.unwrap()).toMatchObject({ openapi: '3.1.0' });
   });
 
+  it('gets the API root from GET /v0/', async () => {
+    const result = await client.getRoot();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({
+      apiVersion: '0.1.0',
+      applicationVersion: '2026.1',
+      links: expect.objectContaining({
+        health: '/v0/health',
+        workbook: '/v0/workbook',
+      }),
+    });
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/');
+  });
+
+  it('lists worksheets from GET /v0/workbook/worksheets', async () => {
+    const result = await client.listWorksheets();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().worksheets).toEqual([
+      expect.objectContaining({ id: 'sheet-sales', name: 'Sales by Region', hidden: false }),
+      expect.objectContaining({ id: 'sheet-profit', name: 'Profit by Category', hidden: false }),
+    ]);
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/worksheets');
+  });
+
+  it('lists dashboards from GET /v0/workbook/dashboards', async () => {
+    const result = await client.listDashboards();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().dashboards).toEqual([
+      expect.objectContaining({ id: 'dash-exec', name: 'Executive Dashboard', hidden: false }),
+    ]);
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/dashboards');
+  });
+
+  it('lists storyboards from GET /v0/workbook/storyboards', async () => {
+    const result = await client.listStoryboards();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().storyboards).toEqual([
+      expect.objectContaining({ id: 'story-qbr', name: 'QBR Story', hidden: false }),
+    ]);
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/storyboards');
+  });
+
+  it('gets the open workbook inventory from GET /v0/workbook', async () => {
+    const result = await client.getWorkbook();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({
+      title: 'Regional Sales Analysis',
+      unsavedChanges: true,
+      worksheets: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'sheet-sales',
+          name: 'Sales by Region',
+          datasources: ['Sample - Superstore'],
+        }),
+      ]),
+      dashboards: [expect.objectContaining({ id: 'dash-exec', name: 'Executive Dashboard' })],
+      storyboards: [expect.objectContaining({ id: 'story-qbr', name: 'QBR Story' })],
+    });
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook');
+  });
+
+  it('lists workbook datasources from GET /v0/workbook/datasources', async () => {
+    const result = await client.listWorkbookDatasources();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().datasources).toEqual([
+      { id: 'wb-ds-superstore', name: 'Sample - Superstore', caption: 'Sample - Superstore' },
+      { id: 'wb-ds-quota', name: 'Quota Targets', caption: 'Quota Targets' },
+    ]);
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/datasources');
+  });
+
+  it('lists published site workbooks from GET /v0/site/workbooks', async () => {
+    const result = await client.listSiteWorkbooks();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().workbooks).toEqual([
+      expect.objectContaining({
+        id: 'wb-regional-sales',
+        luid: 'luid-regional-sales',
+        name: 'Regional Sales Analysis',
+      }),
+      expect.objectContaining({ id: 'wb-ops-scorecard', name: 'Ops Scorecard' }),
+    ]);
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/site/workbooks');
+  });
+
+  it('gets the connected site from GET /v0/site', async () => {
+    const result = await client.getSite();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({
+      siteId: 'site-sales',
+      authenticatedUserId: 'user-author',
+    });
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/site');
+  });
+
+  it('gets a worksheet by id from GET /v0/workbook/worksheets/{id}', async () => {
+    const result = await client.getWorksheet('sheet-sales');
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toEqual(
+      expect.objectContaining({
+        id: 'sheet-sales',
+        name: 'Sales by Region',
+        hidden: false,
+        datasources: ['Sample - Superstore'],
+      }),
+    );
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/worksheets/sheet-sales');
+  });
+
+  it('gets a dashboard by id from GET /v0/workbook/dashboards/{id}', async () => {
+    const result = await client.getDashboard('dash-exec');
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toEqual(
+      expect.objectContaining({
+        id: 'dash-exec',
+        name: 'Executive Dashboard',
+        hidden: false,
+        containedSheets: ['sheet-sales', 'sheet-profit'],
+      }),
+    );
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/dashboards/dash-exec');
+  });
+
+  it('gets a storyboard by id from GET /v0/workbook/storyboards/{id}', async () => {
+    const result = await client.getStoryboard('story-qbr');
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toEqual(
+      expect.objectContaining({
+        id: 'story-qbr',
+        name: 'QBR Story',
+        hidden: false,
+        storyPointCount: 4,
+      }),
+    );
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/storyboards/story-qbr');
+  });
+
+  it('gets a worksheet document by id from GET /v0/workbook/worksheets/{id}/document', async () => {
+    const result = await client.getWorksheetDocument('sheet-sales');
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().xml).toContain('<worksheet name="Sales by Region"');
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/worksheets/sheet-sales/document');
+  });
+
+  it('gets a dashboard document by id from GET /v0/workbook/dashboards/{id}/document', async () => {
+    const result = await client.getDashboardDocument('dash-exec');
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().xml).toContain('<dashboard name="Executive Dashboard"');
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/dashboards/dash-exec/document');
+  });
+
+  it('gets a storyboard document by id from GET /v0/workbook/storyboards/{id}/document', async () => {
+    const result = await client.getStoryboardDocument('story-qbr');
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().xml).toContain('<storyboard name="QBR Story"');
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/storyboards/story-qbr/document');
+  });
+
+  it('gets application info from GET /v0/app', async () => {
+    const result = await client.getApp();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({
+      applicationVersion: '2026.1',
+      build: '20261.26.0701.1234',
+      edition: 'Professional',
+      os: 'macOS',
+    });
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/app');
+  });
+
+  it('gets worksheet summary data with query parameters', async () => {
+    const result = await client.getWorksheetSummaryData(
+      'sheet-sales',
+      {
+        maxRows: 25,
+        ignoreAliases: true,
+        ignoreSelection: true,
+        columnsToIncludeByFieldName: 'Sales,Profit',
+      },
+      new AbortController().signal,
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toEqual({
+      columns: [
+        { name: 'Region', dataType: 'string' },
+        { name: 'Sales', dataType: 'real' },
+        { name: 'Profit', dataType: 'real' },
+      ],
+      rows: [
+        ['West', 1200, 240],
+        ['East', 900, 120],
+      ],
+    });
+
+    const last = server.requests.at(-1) as any;
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/worksheets/sheet-sales/summaryData');
+    expect(last?.searchParams).toEqual({
+      maxRows: '25',
+      ignoreAliases: 'true',
+      ignoreSelection: 'true',
+      columnsToIncludeByFieldName: 'Sales,Profit',
+    });
+  });
+
+  it('validates a workbook document via POST /v0/workbook/document:validate', async () => {
+    const xml = '<workbook><validated /></workbook>';
+    const result = await client.validateWorkbookDocument(xml);
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toEqual({ isValid: true, validationIssues: [] });
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('POST');
+    expect(last?.path).toBe('/v0/workbook/document:validate');
+    expect(last?.contentType).toContain('application/xml');
+    expect(last?.body).toBe(xml);
+  });
+
+  it('lists published site datasources from GET /v0/site/datasources', async () => {
+    const result = await client.listSiteDatasources();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().datasources).toEqual([
+      expect.objectContaining({
+        id: 'ds-superstore',
+        luid: 'luid-superstore',
+        name: 'Sample - Superstore',
+      }),
+      expect.objectContaining({ id: 'ds-quota', luid: 'luid-quota', name: 'Quota Targets' }),
+    ]);
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/site/datasources');
+  });
+
   it('surfaces a 401 as an unauthorized error when the token is stale', async () => {
     const staleClient = new ExternalApiClient(makeInstance(server.baseUrl, 'stale-token'));
     const result = await staleClient.getWorkbookDocument();

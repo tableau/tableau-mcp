@@ -43,18 +43,18 @@ import { DesktopTool } from '../tool.js';
 // ── Binding manifest (input) ─────────────────────────────────────────────────
 
 const boundSheetSchema = z.object({
-  title: z.string().describe(''),
-  templateName: z.string().describe(''),
-  fieldMapping: z.record(z.string()).describe(''),
-  schemaHash: z.string().describe(''),
-  primaryDatasource: z.string().describe(''),
+  title: z.string(),
+  templateName: z.string(),
+  fieldMapping: z.record(z.string()),
+  schemaHash: z.string(),
+  primaryDatasource: z.string(),
 });
 
 const bindingRecordSchema = z.object({
-  dashboardName: z.string().describe(''),
-  sheets: z.array(boundSheetSchema).describe(''),
-  workbookHashAtBind: z.string().describe(''),
-  recordedAt: z.string().describe(''),
+  dashboardName: z.string(),
+  sheets: z.array(boundSheetSchema),
+  workbookHashAtBind: z.string(),
+  recordedAt: z.string(),
 });
 
 export type DashboardBoundSheet = z.infer<typeof boundSheetSchema>;
@@ -381,8 +381,8 @@ export function runDashboardHealthCheck({
 // ── Tool registration ────────────────────────────────────────────────────────
 
 const paramsSchema = {
-  session: z.string().optional().describe(''),
-  manifest: bindingRecordSchema.describe(''),
+  session: z.string().optional(),
+  manifest: bindingRecordSchema,
 };
 
 const title = 'Dashboard Health Check (Flag-Only)';

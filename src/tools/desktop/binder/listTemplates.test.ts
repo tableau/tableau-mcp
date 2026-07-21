@@ -19,7 +19,7 @@ describe('listTemplatesTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getListTemplatesTool(new DesktopMcpServer());
     expect(tool.name).toBe('list-templates');
-    expect(tool.description).toContain('fast-path');
+    expect(tool.description).toBe('List chart templates.');
     expect(tool.paramsSchema).toMatchObject({
       family: expect.any(Object),
       fastPathOnly: expect.any(Object),

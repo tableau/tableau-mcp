@@ -14,7 +14,24 @@ import { z } from 'zod';
 export const EXTERNAL_API_ROUTES = {
   health: '/v0/health',
   app: '/v0/app',
+  root: '/v0/',
+  workbook: '/v0/workbook',
+  workbookDashboards: '/v0/workbook/dashboards',
+  workbookDatasources: '/v0/workbook/datasources',
   workbookDocument: '/v0/workbook/document',
+  workbookDocumentValidate: '/v0/workbook/document:validate',
+  workbookStoryboards: '/v0/workbook/storyboards',
+  workbookWorksheets: '/v0/workbook/worksheets',
+  dashboardById: '/v0/workbook/dashboards/{id}',
+  dashboardDocument: '/v0/workbook/dashboards/{id}/document',
+  storyboardById: '/v0/workbook/storyboards/{id}',
+  storyboardDocument: '/v0/workbook/storyboards/{id}/document',
+  worksheetById: '/v0/workbook/worksheets/{id}',
+  worksheetDocument: '/v0/workbook/worksheets/{id}/document',
+  worksheetSummaryData: '/v0/workbook/worksheets/{id}/summaryData',
+  site: '/v0/site',
+  siteDatasources: '/v0/site/datasources',
+  siteWorkbooks: '/v0/site/workbooks',
   invokeCommand: '/v0/app:invokeCommand',
   openapi: '/openapi.json',
   oauthProtectedResource: '/.well-known/oauth-protected-resource',
@@ -41,6 +58,42 @@ export const discoveryFileSchema = z.object({
   startedAt: z.string().optional(),
 });
 export type DiscoveryFile = z.infer<typeof discoveryFileSchema>;
+
+/** API versions and link map returned by `GET /v0/`. */
+export const apiRootSchema = z
+  .object({
+    apiVersion: z.string().optional(),
+    applicationVersion: z.string().optional(),
+    links: z.record(z.string()).optional(),
+  })
+  .passthrough();
+export type ApiRoot = z.infer<typeof apiRootSchema>;
+
+/** Liveness probe returned by `GET /v0/health`. */
+export const healthSchema = z
+  .object({
+    status: z.string().optional(),
+  })
+  .passthrough();
+export type Health = z.infer<typeof healthSchema>;
+
+/** Connected Tableau site returned by `GET /v0/site`. */
+export const siteSchema = z
+  .object({
+    siteId: z.string().optional(),
+    authenticatedUserId: z.string().optional(),
+  })
+  .passthrough();
+export type Site = z.infer<typeof siteSchema>;
+
+/** RFC-9728 OAuth Protected Resource Metadata returned by the well-known route. */
+export const protectedResourceMetadataSchema = z
+  .object({
+    authorization_servers: z.array(z.string()).optional(),
+    bearer_methods_supported: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type ProtectedResourceMetadata = z.infer<typeof protectedResourceMetadataSchema>;
 
 /** A live, reachable External Client API instance selected from discovery. */
 export type ExternalApiInstance = {
@@ -132,6 +185,180 @@ export const operationEnvelopeSchema = z
   })
   .passthrough();
 export type OperationEnvelope = z.infer<typeof operationEnvelopeSchema>;
+
+/** Worksheet item returned by `GET /v0/workbook/worksheets`. */
+export const worksheetItemSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string().optional(),
+    hidden: z.boolean(),
+    index: z.number().int().optional(),
+    datasources: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type WorksheetItem = z.infer<typeof worksheetItemSchema>;
+
+/** Worksheet list returned by `GET /v0/workbook/worksheets`. */
+export const worksheetListSchema = z
+  .object({
+    worksheets: z.array(worksheetItemSchema).optional(),
+  })
+  .passthrough();
+export type WorksheetList = z.infer<typeof worksheetListSchema>;
+
+/** Dashboard item returned in workbook inventory reads. */
+export const dashboardItemSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string().optional(),
+    hidden: z.boolean(),
+    index: z.number().int().optional(),
+    containedSheets: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type DashboardItem = z.infer<typeof dashboardItemSchema>;
+
+/** Dashboard list returned by `GET /v0/workbook/dashboards`. */
+export const dashboardListSchema = z
+  .object({
+    dashboards: z.array(dashboardItemSchema).optional(),
+  })
+  .passthrough();
+export type DashboardList = z.infer<typeof dashboardListSchema>;
+
+/** Storyboard item returned in workbook inventory reads. */
+export const storyboardItemSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string().optional(),
+    hidden: z.boolean(),
+    index: z.number().int().optional(),
+    storyPointCount: z.number().int().optional(),
+  })
+  .passthrough();
+export type StoryboardItem = z.infer<typeof storyboardItemSchema>;
+
+/** Storyboard list returned by `GET /v0/workbook/storyboards`. */
+export const storyboardListSchema = z
+  .object({
+    storyboards: z.array(storyboardItemSchema).optional(),
+  })
+  .passthrough();
+export type StoryboardList = z.infer<typeof storyboardListSchema>;
+
+/** Metadata and sheet inventory returned by `GET /v0/workbook`. */
+export const workbookInventorySchema = z
+  .object({
+    title: z.string(),
+    location: z.string().nullable().optional(),
+    unsavedChanges: z.boolean(),
+    worksheets: z.array(worksheetItemSchema).optional(),
+    dashboards: z.array(dashboardItemSchema).optional(),
+    storyboards: z.array(storyboardItemSchema).optional(),
+  })
+  .passthrough();
+export type WorkbookInventory = z.infer<typeof workbookInventorySchema>;
+
+/** Workbook datasource item returned by `GET /v0/workbook/datasources`. */
+export const datasourceItemSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    caption: z.string().optional(),
+  })
+  .passthrough();
+export type DatasourceItem = z.infer<typeof datasourceItemSchema>;
+
+/** Workbook datasource list returned by `GET /v0/workbook/datasources`. */
+export const datasourceListSchema = z
+  .object({
+    datasources: z.array(datasourceItemSchema).optional(),
+  })
+  .passthrough();
+export type DatasourceList = z.infer<typeof datasourceListSchema>;
+
+/** Published workbook item returned by `GET /v0/site/workbooks`. */
+export const siteWorkbookItemSchema = z
+  .object({
+    id: z.string().optional(),
+    luid: z.string().optional(),
+    name: z.string().optional(),
+    project: z.string().optional(),
+  })
+  .passthrough();
+export type SiteWorkbookItem = z.infer<typeof siteWorkbookItemSchema>;
+
+/** Published workbook list returned by `GET /v0/site/workbooks`. */
+export const siteWorkbookListSchema = z
+  .object({
+    workbooks: z.array(siteWorkbookItemSchema).optional(),
+  })
+  .passthrough();
+export type SiteWorkbookList = z.infer<typeof siteWorkbookListSchema>;
+
+/** Published datasource item returned by `GET /v0/site/datasources`. */
+export const siteDatasourceItemSchema = z
+  .object({
+    id: z.string().optional(),
+    luid: z.string().optional(),
+    name: z.string().optional(),
+    caption: z.string().optional(),
+    project: z.string().optional(),
+  })
+  .passthrough();
+export type SiteDatasourceItem = z.infer<typeof siteDatasourceItemSchema>;
+
+/** Published datasource list returned by `GET /v0/site/datasources`. */
+export const siteDatasourceListSchema = z
+  .object({
+    datasources: z.array(siteDatasourceItemSchema).optional(),
+  })
+  .passthrough();
+export type SiteDatasourceList = z.infer<typeof siteDatasourceListSchema>;
+
+/** Worksheet summary logical table returned by `GET /v0/workbook/worksheets/{id}/summaryData`. */
+export const summaryDataSchema = z
+  .object({
+    columns: z
+      .array(
+        z
+          .object({
+            name: z.string().optional(),
+            dataType: z.string().optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+    rows: z.array(z.array(z.unknown())).optional(),
+  })
+  .passthrough();
+export type SummaryData = z.infer<typeof summaryDataSchema>;
+
+/** Validation result returned by `POST /v0/workbook/document:validate`. */
+export const validationResultSchema = z
+  .object({
+    isValid: z.boolean(),
+    validationIssues: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type ValidationResult = z.infer<typeof validationResultSchema>;
+
+/** Running Desktop application info returned by `GET /v0/app`. */
+export const appInfoSchema = z
+  .object({
+    applicationVersion: z.string().optional(),
+    edition: z.string().optional(),
+    build: z.string().optional(),
+    os: z.string().optional(),
+    locale: z.string().optional(),
+    repositoryLocation: z.string().optional(),
+    logLocation: z.string().optional(),
+  })
+  .passthrough();
+export type AppInfo = z.infer<typeof appInfoSchema>;
 
 /**
  * Typed error surfaced by {@link ExternalApiClient} methods. The internal

@@ -46,8 +46,7 @@ export const getSearchWorkbookExamplesTool = (
     server,
     name: 'search-workbook-examples',
     title,
-    description:
-      'Search curated workbook examples and/or the diff corpus. Default source=curated; use diff-corpus or both for workbook-change diffs.',
+    description: 'Search workbook examples.',
     paramsSchema,
     annotations: {
       title,

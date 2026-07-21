@@ -6,7 +6,10 @@ import { z } from 'zod';
 import { formatArtifactSummary } from '../../../desktop/artifactSummary.js';
 import { DesktopCache } from '../../../desktop/cache.js';
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
-import { getDashboardXml } from '../../../desktop/commands/workbook/getDashboardXml.js';
+import {
+  getDashboardXml,
+  isRouteMissing,
+} from '../../../desktop/commands/workbook/getDashboardXml.js';
 import {
   buildInlineCapFileMessage,
   isOverInlineXmlCap,
@@ -17,6 +20,7 @@ import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   DesktopCommandExecutionError,
   GetDashboardXmlFailedError,
+  McpToolError,
   UnknownError,
 } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
@@ -24,13 +28,9 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  dashboardName: z.string().describe('Existing dashboard name.'),
-  mode: z
-    .enum(['file', 'inline'])
-    .optional()
-    .default('file')
-    .describe('file writes cache path; inline returns dashboard layout content.'),
+  session: z.string().optional(),
+  dashboardName: z.string(),
+  mode: z.enum(['file', 'inline']).optional().default('file'),
 };
 
 type InlineResult = { dashboardXml: string };
@@ -45,10 +45,7 @@ export const getGetDashboardXmlTool = (
     server,
     name: 'get-dashboard-xml',
     title,
-    description: [
-      'Get layout for an existing dashboard. mode=file is default; mode=inline returns dashboard layout content.',
-      'IMPORTANT: only works for an existing dashboard (see list-dashboards); to create one use apply-workbook. Use apply-dashboard to apply changes.',
-    ].join(' '),
+    description: 'Get layout for an existing dashboard.',
     paramsSchema,
     annotations: {
       title,
@@ -76,6 +73,15 @@ export const getGetDashboardXmlTool = (
               case 'get-dashboard-xml-error':
                 return new GetDashboardXmlFailedError(error).toErr();
               case 'execute-command-error':
+                if (isRouteMissing(error)) {
+                  return new McpToolError({
+                    type: 'endpoint-not-in-this-build',
+                    message:
+                      'This Tableau Desktop build does not serve the dashboard document endpoint yet. ' +
+                      'Use get-app-info to identify the build; this read lights up on a newer Desktop update. Do not retry.',
+                    statusCode: 404,
+                  }).toErr();
+                }
                 return new DesktopCommandExecutionError(error).toErr();
               default: {
                 const _: never = type;

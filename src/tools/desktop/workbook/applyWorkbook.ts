@@ -25,14 +25,10 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  mode: z
-    .enum(['file', 'inline'])
-    .optional()
-    .default('file')
-    .describe('file reads workbookFile; inline uses workbookXml.'),
-  workbookFile: z.string().optional().describe('Modified workbook cache file for mode=file.'),
-  workbookXml: z.string().optional().describe('Full workbook content for mode=inline.'),
+  session: z.string().optional(),
+  mode: z.enum(['file', 'inline']).optional().default('file'),
+  workbookFile: z.string().optional(),
+  workbookXml: z.string().optional(),
 };
 
 const title = 'Apply Workbook';
@@ -43,10 +39,7 @@ export const getApplyWorkbookTool = (
     server,
     name: 'apply-workbook',
     title,
-    description: [
-      'Apply modified workbook content to Tableau (mutating). mode=file is default; mode=inline is for small workbooks.',
-      'See expertise://tableau/tactics/data/datasources before editing datasource structure.',
-    ].join(' '),
+    description: 'Apply modified workbook content to Tableau.',
     paramsSchema,
     annotations: {
       title,

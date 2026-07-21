@@ -8,17 +8,12 @@ import { DesktopTool } from '../tool.js';
 const urgencySchema = z.enum(['blocking', 'soft']);
 
 const paramsSchema = {
-  question: z.string().min(1).describe('The clarifying question, written for the end user.'),
+  question: z.string().min(1).describe('Question for the user.'),
   urgency: urgencySchema
     .optional()
     .default('blocking')
-    .describe(
-      'blocking = stop; do not call more authoring tools until the user answers. soft = proceed with a stated default.',
-    ),
-  options: z
-    .array(z.string())
-    .optional()
-    .describe('2-5 concrete choices; rendered as a numbered list.'),
+    .describe('blocking=wait; soft=state a default.'),
+  options: z.array(z.string()).optional().describe('2-5 choices.'),
 };
 
 const title = 'Ask the User a Clarifying Question';
@@ -28,8 +23,7 @@ export const getAskUserTool = (server: DesktopMcpServer): DesktopTool<typeof par
     server,
     name: 'ask-user',
     title,
-    description:
-      'Ask instead of guessing when ambiguity would change workbook content: field/sheet/datasource, aggregation/grain, or target. Blocking: stop and wait before more authoring tools.',
+    description: 'Ask instead of guessing; stop and wait.',
     paramsSchema,
     annotations: {
       title,

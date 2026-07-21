@@ -72,7 +72,7 @@ describe('resolveFieldTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getResolveFieldTool(new DesktopMcpServer());
     expect(tool.name).toBe('resolve-field');
-    expect(tool.description).toContain('ambiguity');
+    expect(tool.description).toBe('Resolve a field reference.');
     expect(tool.paramsSchema).toMatchObject({
       workbookFile: expect.any(Object),
       query: expect.any(Object),

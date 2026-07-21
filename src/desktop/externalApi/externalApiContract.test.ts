@@ -4,12 +4,32 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import {
+  apiRootSchema,
+  appInfoSchema,
+  dashboardItemSchema,
+  dashboardListSchema,
+  datasourceItemSchema,
+  datasourceListSchema,
   EXTERNAL_API_ROUTES,
+  healthSchema,
   operationEnvelopeSchema,
   operationErrorSchema,
   operationWarningSchema,
   PROBLEM_CODES,
   problemResponseSchema,
+  protectedResourceMetadataSchema,
+  siteDatasourceItemSchema,
+  siteDatasourceListSchema,
+  siteSchema,
+  siteWorkbookItemSchema,
+  siteWorkbookListSchema,
+  storyboardItemSchema,
+  storyboardListSchema,
+  summaryDataSchema,
+  validationResultSchema,
+  workbookInventorySchema,
+  worksheetItemSchema,
+  worksheetListSchema,
 } from './types.js';
 
 /**
@@ -81,6 +101,35 @@ describe('external client API contract (captured openapi fixture)', () => {
     });
   });
 
+  describe('data-first read schemas', () => {
+    it.each([
+      ['ApiRoot', apiRootSchema],
+      ['AppInfo', appInfoSchema],
+      ['DashboardItem', dashboardItemSchema],
+      ['DashboardList', dashboardListSchema],
+      ['DatasourceItem', datasourceItemSchema],
+      ['DatasourceList', datasourceListSchema],
+      ['Health', healthSchema],
+      ['ProtectedResourceMetadata', protectedResourceMetadataSchema],
+      ['Site', siteSchema],
+      ['SiteWorkbookItem', siteWorkbookItemSchema],
+      ['SiteWorkbookList', siteWorkbookListSchema],
+      ['WorksheetItem', worksheetItemSchema],
+      ['WorksheetList', worksheetListSchema],
+      ['StoryboardItem', storyboardItemSchema],
+      ['StoryboardList', storyboardListSchema],
+      ['WorkbookInventory', workbookInventorySchema],
+      ['SiteDatasourceItem', siteDatasourceItemSchema],
+      ['SiteDatasourceList', siteDatasourceListSchema],
+      ['SummaryData', summaryDataSchema],
+      ['ValidationResult', validationResultSchema],
+    ] as const)('%s: properties and required set match', (name, schema) => {
+      const component = specSchema(name);
+      expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
+      expect(requiredKeys(schema).sort()).toEqual([...(component.required ?? [])].sort());
+    });
+  });
+
   describe('Problem ↔ problemResponseSchema', () => {
     const problem = specSchema('Problem');
 
@@ -115,7 +164,24 @@ describe('external client API contract (captured openapi fixture)', () => {
     it.each([
       EXTERNAL_API_ROUTES.health,
       EXTERNAL_API_ROUTES.app,
+      EXTERNAL_API_ROUTES.root,
+      EXTERNAL_API_ROUTES.workbook,
+      EXTERNAL_API_ROUTES.workbookDashboards,
+      EXTERNAL_API_ROUTES.workbookDatasources,
       EXTERNAL_API_ROUTES.workbookDocument,
+      EXTERNAL_API_ROUTES.workbookDocumentValidate,
+      EXTERNAL_API_ROUTES.workbookStoryboards,
+      EXTERNAL_API_ROUTES.workbookWorksheets,
+      EXTERNAL_API_ROUTES.dashboardById,
+      EXTERNAL_API_ROUTES.dashboardDocument,
+      EXTERNAL_API_ROUTES.storyboardById,
+      EXTERNAL_API_ROUTES.storyboardDocument,
+      EXTERNAL_API_ROUTES.worksheetById,
+      EXTERNAL_API_ROUTES.worksheetDocument,
+      EXTERNAL_API_ROUTES.worksheetSummaryData,
+      EXTERNAL_API_ROUTES.site,
+      EXTERNAL_API_ROUTES.siteDatasources,
+      EXTERNAL_API_ROUTES.siteWorkbooks,
       EXTERNAL_API_ROUTES.openapi,
       EXTERNAL_API_ROUTES.oauthProtectedResource,
     ])('spec documents %s', (route) => {
