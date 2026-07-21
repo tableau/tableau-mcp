@@ -2,11 +2,11 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.11.0+content.2026-07-13",
+  "content_version": "2.27.0+content.2026-07-21",
   "schema_version": "1",
-  "generated": "2026-07-13",
+  "generated": "2026-07-21",
   "engine_compat": {
-    "server_min": "2.11.0",
+    "server_min": "2.27.0",
     "node": ">=22.7.5"
   },
   "resources": [
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "1f38d342199e480d74fe72b822fb3851c6595aac1e33d0ac00d16c8a330140e1",
-      "bytes": 274432
+      "sha256": "f94bded446f4eaaef21ee2fa15176e48d0cae9b38ab3ad708916aa7c9315adf2",
+      "bytes": 275225
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -407,8 +407,8 @@
     },
     {
       "path": "template-manifests/part-to-whole-waterfall.manifest.json",
-      "sha256": "087eed4302f3e4354b893e00e97e375611afc3651d737afc7e9a792eea4f9477",
-      "bytes": 10105
+      "sha256": "d68a7ef14d6e84ec458e92f653d03cb5b6e4775d5166e5eaccd07e9cf5c36244",
+      "bytes": 10850
     },
     {
       "path": "template-manifests/quota-attainment-bullet.manifest.json",

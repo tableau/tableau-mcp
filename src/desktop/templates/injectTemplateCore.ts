@@ -18,6 +18,7 @@ import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import { spliceBoundFacet } from './facetSplice.js';
 import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
 import { injectTemplate, InsertPosition, SheetType } from './injectTemplate.js';
+import { spliceWaterfallAnchorFilter } from './waterfallAnchorFilter.js';
 
 /** Escape the five XML metacharacters (identical to the inject-template tool). */
 /**
@@ -183,6 +184,7 @@ export function buildInjectedWorkbookXml({
       undefined,
       { namespaceCalcs: true, applyNonce },
     );
+    processed = spliceWaterfallAnchorFilter(processed, fieldMapping ?? {});
   }
 
   const modifiedXml = injectTemplate(

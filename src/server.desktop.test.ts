@@ -225,10 +225,10 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // DO NOT GROW these: trim them down and lower/remove the entry. Never raise a
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
-    ['bind-template', 1908], // raised for shared sort/top_n proposal vocab; combined-lean 46k stays green
+    ['bind-template', 1886], // raised for shared sort/top_n proposal vocab; combined-lean 46k stays green
     ['plan-dashboard-creation', 1509], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1558], // ratcheted down in the CODA funding trim; do not grow
-    ['validate-proposal', 1555], // raised for the same shared sort/top_n proposal schema; 46k stays green
+    ['validate-proposal', 1533], // raised for the same shared sort/top_n proposal schema; 46k stays green
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {

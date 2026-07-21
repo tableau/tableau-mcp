@@ -101,6 +101,7 @@ type AppliedFastPathResult = {
   status: 'bound';
   applied: true;
   authored_calcs?: string[];
+  warnings?: string[];
   sheet_name: string;
   phase_ms: { bind: number; inject: number; apply: number };
   guidance: string;
@@ -221,6 +222,100 @@ function sortDirectionForApply(direction: 'asc' | 'desc'): SortDirection {
   return direction === 'desc' ? 'DESC' : 'ASC';
 }
 
+function escapeXmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function bareColumnName(columnName: string): string {
+  return columnName.replace(/^\[|\]$/g, '');
+}
+
+function parseQualifiedColumnInstance(
+  columnRef: string,
+): { datasource: string; instanceName: string; deriv: string; field: string; role: string } | null {
+  const match = columnRef.match(/^\[([^\]]+)\]\.\[([^:]+):([^:]+):([^\]]+)\]$/);
+  if (!match) return null;
+  return {
+    datasource: match[1],
+    instanceName: `[${match[2]}:${match[3]}:${match[4]}]`,
+    deriv: match[2],
+    field: match[3],
+    role: match[4],
+  };
+}
+
+function derivationAttribute(deriv: string): string {
+  if (deriv === 'sum') return 'Sum';
+  if (deriv === 'usr') return 'User';
+  if (deriv === 'none') return 'None';
+  return deriv.charAt(0).toUpperCase() + deriv.slice(1);
+}
+
+function typeForRole(role: string): string {
+  if (role === 'qk') return 'quantitative';
+  if (role === 'ok') return 'ordinal';
+  return 'nominal';
+}
+
+function ensureSortByColumnDependency(
+  xml: string,
+  field: NonNullable<ReturnType<typeof resolveInSummary>['field']>,
+): { ok: true; xml: string; columnRef: string } | { ok: false; reason: string } {
+  const parsed = parseQualifiedColumnInstance(field.column_ref);
+  if (!parsed) {
+    return {
+      ok: false,
+      reason: `sort field "${field.name}" did not resolve to a column-instance ref`,
+    };
+  }
+
+  const columnName = bareColumnName(field.columnName);
+  const columnDeclared = new RegExp(
+    `<column\\s[^>]*\\bname=(['"])\\[${columnName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\1`,
+  ).test(xml);
+  const instanceDeclared =
+    xml.includes(`name='${parsed.instanceName}'`) || xml.includes(`name="${parsed.instanceName}"`);
+  if (columnDeclared && instanceDeclared) {
+    return { ok: true, xml, columnRef: field.column_ref };
+  }
+
+  const declarations: string[] = [];
+  if (!columnDeclared) {
+    declarations.push(
+      `<column datatype='${escapeXmlAttribute(field.datatype)}' name='[${escapeXmlAttribute(
+        columnName,
+      )}]' role='${field.role}' type='${escapeXmlAttribute(field.type)}' />`,
+    );
+  }
+  if (!instanceDeclared) {
+    declarations.push(
+      `<column-instance column='[${escapeXmlAttribute(columnName)}]' derivation='${derivationAttribute(
+        parsed.deriv,
+      )}' name='${escapeXmlAttribute(parsed.instanceName)}' pivot='key' type='${typeForRole(
+        parsed.role,
+      )}' />`,
+    );
+  }
+
+  const out = xml.replace(
+    /^([ \t]*)(<column-instance\b)/m,
+    (_whole, indent: string, columnInstance: string) =>
+      `${indent}${declarations.join(`\n${indent}`)}\n${indent}${columnInstance}`,
+  );
+  if (out === xml) {
+    return {
+      ok: false,
+      reason: `could not declare sort field "${field.name}" in datasource-dependencies`,
+    };
+  }
+  return { ok: true, xml: out, columnRef: field.column_ref };
+}
+
 function applyProposalSplices({
   xml,
   args,
@@ -229,24 +324,51 @@ function applyProposalSplices({
   xml: string;
   args: BoundResult['args'];
   workbookXml: string;
-}): { ok: true; xml: string } | { ok: false; reason: string } {
+}): { ok: true; xml: string; warnings: string[] } | { ok: false; reason: string } {
   let out = xml;
+  const warnings: string[] = [];
   if (args.sort) {
     const sortField = resolveInSummary(summarizeSchema(workbookXml), args.sort.by);
-    const sorted = planSortByFieldOnCategoricalAxis(out, {
-      sortByField: args.sort.by,
-      sortByColumnRef: sortField.field?.column_ref,
-      direction: sortDirectionForApply(args.sort.direction),
-    });
-    if (!sorted.ok) return { ok: false, reason: `sort splice failed: ${sorted.reason}` };
-    out = sorted.xml;
+    if (sortField.kind !== 'exact' && sortField.kind !== 'rewritten') {
+      const sorted = planSortByFieldOnCategoricalAxis(out, {
+        sortByField: args.sort.by,
+        direction: sortDirectionForApply(args.sort.direction),
+      });
+      if (!sorted.ok) {
+        warnings.push(
+          `sort splice skipped: no unique field named "${args.sort.by}"; kept the template's default sort`,
+        );
+      } else {
+        out = sorted.xml;
+      }
+    } else if (!sortField.field) {
+      warnings.push(
+        `sort splice skipped: no field named "${args.sort.by}"; kept the template's default sort`,
+      );
+    } else {
+      const withSortDependency = ensureSortByColumnDependency(out, sortField.field);
+      if (!withSortDependency.ok) {
+        warnings.push(`${withSortDependency.reason}; kept the template's default sort`);
+      } else {
+        const sorted = planSortByFieldOnCategoricalAxis(withSortDependency.xml, {
+          sortByField: args.sort.by,
+          sortByColumnRef: withSortDependency.columnRef,
+          direction: sortDirectionForApply(args.sort.direction),
+        });
+        if (!sorted.ok) {
+          warnings.push(`sort splice failed: ${sorted.reason}; kept the template's default sort`);
+        } else {
+          out = sorted.xml;
+        }
+      }
+    }
   }
   if (args.top_n !== undefined) {
     const filtered = planTopN(out, { n: args.top_n });
     if (!filtered.ok) return { ok: false, reason: `top_n splice failed: ${filtered.reason}` };
     out = filtered.xml;
   }
-  return { ok: true, xml: out };
+  return { ok: true, xml: out, warnings };
 }
 
 /**
@@ -357,6 +479,9 @@ async function performAutoApply({
   if (!spliced.ok) {
     return applyFallback(base, spliced.reason);
   }
+  if (spliced.warnings.length > 0) {
+    base.warnings = [...(base.warnings ?? []), ...spliced.warnings];
+  }
   const injectMs = Date.now() - injectStart;
 
   // ── Apply leg (SAME validated path; runValidation preflight runs) ─
@@ -375,6 +500,7 @@ async function performAutoApply({
   return {
     status: res.status,
     ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
+    ...(base.warnings && base.warnings.length > 0 ? { warnings: base.warnings } : {}),
     guidance: `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
     applied: true,
     sheet_name: literalTitle,

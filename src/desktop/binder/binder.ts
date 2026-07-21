@@ -197,7 +197,10 @@ export const PROPOSAL_OUTPUT_SCHEMA: Record<string, unknown> = {
         required: ['slot_id', 'field'],
         additionalProperties: false,
         properties: {
-          slot_id: { type: 'string' },
+          slot_id: {
+            type: 'string',
+            description: 'Slot id; include optional slots when the ask/data calls for them.',
+          },
           field: { type: 'string' },
           derivation: {
             type: 'string',
@@ -297,35 +300,20 @@ function validateAndBuild(
     return { status: 'escalate', reason, blockers: v.blockers, proposal };
   }
 
+  const warnings = [...(v.warnings ?? [])];
+  let sort = proposal.sort;
   if (proposal.sort) {
     const sortField = resolveInSummary(summary, proposal.sort.by);
     if (sortField.kind === 'ambiguous') {
-      return {
-        status: 'escalate',
-        reason: 'ambiguous-field',
-        blockers: [
-          {
-            code: 'ambiguous-field',
-            detail: `"${proposal.sort.by}" matches ${sortField.candidates?.length ?? 0} sort fields; disambiguate before binding`,
-            candidates: (sortField.candidates ?? []).map((c) => c.column_ref),
-          },
-        ],
-        proposal,
-      };
-    }
-    if (sortField.kind === 'not_found' || !sortField.field) {
-      return {
-        status: 'escalate',
-        reason: 'field-not-found',
-        blockers: [
-          {
-            code: 'field-not-found',
-            detail: `no sort.by field named "${proposal.sort.by}" in datasource(s)`,
-            candidates: (sortField.candidates ?? []).map((c) => c.column_ref),
-          },
-        ],
-        proposal,
-      };
+      warnings.push(
+        `"${proposal.sort.by}" matches ${sortField.candidates?.length ?? 0} sort fields; ignoring optional sort and keeping the template's default sort`,
+      );
+      sort = undefined;
+    } else if (sortField.kind === 'not_found' || !sortField.field) {
+      warnings.push(
+        `no sort.by field named "${proposal.sort.by}" in datasource(s); ignoring optional sort and keeping the template's default sort`,
+      );
+      sort = undefined;
     }
   }
 
@@ -362,7 +350,7 @@ function validateAndBuild(
     sheet_type: 'worksheet',
     template_parameters: { DATASOURCE: v.datasource },
     field_mapping: v.field_mapping,
-    ...(proposal.sort ? { sort: proposal.sort } : {}),
+    ...(sort ? { sort } : {}),
     ...(proposal.top_n !== undefined ? { top_n: proposal.top_n } : {}),
   };
   return {
@@ -371,7 +359,7 @@ function validateAndBuild(
     used_llm: usedLlm,
     apply_hint: APPLY_HINT,
     apply_instruction: APPLY_INSTRUCTION,
-    ...(v.warnings && v.warnings.length > 0 ? { warnings: v.warnings } : {}),
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
 }
 

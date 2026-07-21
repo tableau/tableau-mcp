@@ -400,7 +400,7 @@ describe('binder/bindTemplate — Call 2 (agent proposal)', () => {
     }
   });
 
-  it('bad sort.by escalates before apply can use a broken field', async () => {
+  it('bad sort.by binds fail-open with a warning and no sort arg', async () => {
     const proposal: BindingProposal = {
       template: 'ranking-ordered-bar',
       title: 'Top Sales by Region',
@@ -417,10 +417,34 @@ describe('binder/bindTemplate — Call 2 (agent proposal)', () => {
       manifests,
       proposal,
     });
-    expect(res.status).toBe('escalate');
-    if (res.status === 'escalate') {
-      expect(res.reason).toBe('field-not-found');
-      expect(res.blockers[0].detail).toContain('Definitely Not A Field');
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.sort).toBeUndefined();
+      expect(res.warnings?.join(' ')).toContain('Definitely Not A Field');
+      expect(res.warnings?.join(' ')).toContain("template's default sort");
+    }
+  });
+
+  it('waterfall proposal accepts optional anchor_category as a field_mapping entry', async () => {
+    const proposal: BindingProposal = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'Profit' },
+        { slot_id: 'sub_category', field: 'Sub-Category' },
+        { slot_id: 'anchor_category', field: 'Category' },
+      ],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'P&L waterfall with subtotal and total rows tagged by Category',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.field_mapping['Anchor Category']).toBe('[Superstore].[none:Category:nk]');
     }
   });
 

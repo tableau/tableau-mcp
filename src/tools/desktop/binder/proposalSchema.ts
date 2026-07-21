@@ -25,7 +25,7 @@ import {
 // closed instead of being quietly accepted with the extra dropped.
 export const bindingSchema = z
   .object({
-    slot_id: z.string().describe('Slot.'),
+    slot_id: z.string().describe(''),
     field: z.string().describe('Exact field name.'),
     derivation: z.enum(DERIVATION_SHORT_FORMS).optional().describe('Derivation override.'),
   })
