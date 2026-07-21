@@ -39,7 +39,7 @@ describe('listSiteWorkbooksTool', () => {
 
     expect(tool.name).toBe('list-site-workbooks');
     expect(tool.description).toBe('List workbooks published to the connected site.');
-    expect(tool.paramsSchema).toEqual({});
+    expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
       title: 'List Site Workbooks',
       readOnlyHint: true,
@@ -118,7 +118,7 @@ async function startHarness(
 
   return {
     server,
-    callTool: async () => await callback({}, extra),
+    callTool: async () => await callback({ session: undefined }, extra),
     close: async () => {
       executor.stop();
       await server.close();

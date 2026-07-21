@@ -45,7 +45,7 @@ describe('getWorkbookInventoryTool', () => {
     expect(tool.name).toBe('get-workbook-inventory');
     expect(tool.description).toContain('title, unsaved changes');
     expect(tool.description).toContain('worksheet/dashboard/storyboard inventory');
-    expect(tool.paramsSchema).toEqual({});
+    expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
       title: 'Get Workbook Inventory',
       readOnlyHint: true,
@@ -122,7 +122,7 @@ async function startHarness(
 
   return {
     server,
-    callTool: async () => await callback({}, extra),
+    callTool: async () => await callback({ session: undefined }, extra),
     close: async () => {
       executor.stop();
       await server.close();

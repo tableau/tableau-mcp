@@ -387,6 +387,14 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'list-templates',
       'list-site-workbooks',
       'get-app-info',
+      'get-health',
+      'get-worksheet-info',
+      'list-storyboards',
+      'get-storyboard-xml',
+      'get-api-root',
+      'get-site-info',
+      'get-dashboard-info',
+      'get-storyboard-info',
     ]) {
       expect(selected.map((t) => t.name)).not.toContain(banished);
     }

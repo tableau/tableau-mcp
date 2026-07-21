@@ -3,6 +3,11 @@ import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
+import {
+  endpointNotInThisBuild,
+  isRouteMissing,
+  resolveItemByNameOrId,
+} from '../../../desktop/externalApi/toolUtils.js';
 import { WorksheetItem } from '../../../desktop/externalApi/types.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
@@ -17,6 +22,7 @@ const DEFAULT_MAX_ROWS = 200;
 const MAX_ROWS_CAP = 1000;
 
 const paramsSchema = {
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
   worksheet: z.string().optional().describe('Worksheet name/id; omit if unique.'),
   maxRows: z.number().int().positive().optional().describe('Default 200; max 1000.'),
   columns: z.array(z.string()).optional().describe('Fields.'),
@@ -39,10 +45,9 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
     name: 'get-summary-data',
     title,
     description: [
-      'Read the ACTUAL data behind a worksheet (its summary/logical table).',
-      'FIRST PLAY for data questions and authoring choices: look at the rows before picking charts, calcs, filters, or answering.',
-      'Carries only fields ON the view: to inspect others, add them to Detail on the marks card first, then read.',
-      'Structure shows shelves; this shows data.',
+      'Read the ACTUAL data behind a worksheet.',
+      'FIRST PLAY for data questions and authoring choices: inspect rows before charts, calcs, filters, or answers.',
+      'Carries only fields ON the view; add fields to Detail on the marks card first.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -52,12 +57,12 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ worksheet, maxRows, columns }, extra): Promise<CallToolResult> => {
+    callback: async ({ session, worksheet, maxRows, columns }, extra): Promise<CallToolResult> => {
       return await getSummaryData.logAndExecute({
         extra,
-        args: { worksheet, maxRows, columns },
+        args: { session, worksheet, maxRows, columns },
         callback: async () => {
-          const sessionResult = resolveSession(undefined);
+          const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
           }
@@ -69,6 +74,9 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
 
           const worksheetsResult = await executor.listWorksheets(extra.signal);
           if (worksheetsResult.isErr()) {
+            if (isRouteMissing(worksheetsResult.error)) {
+              return endpointNotInThisBuild('worksheet list').toErr();
+            }
             return new DesktopCommandExecutionError(worksheetsResult.error).toErr();
           }
 
@@ -93,14 +101,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
           );
           if (summaryResult.isErr()) {
             if (isRouteMissing(summaryResult.error)) {
-              return new McpToolError({
-                type: 'endpoint-not-in-this-build',
-                message:
-                  'This Tableau Desktop build does not serve the summary-data endpoint yet ' +
-                  '(it ships in builds after monolith #60211). Everything else still works — ' +
-                  'this data read lights up on the next Desktop update. Do not retry.',
-                statusCode: 404,
-              }).toErr();
+              return endpointNotInThisBuild('summary-data').toErr();
             }
             return new DesktopCommandExecutionError(summaryResult.error).toErr();
           }
@@ -137,26 +138,7 @@ function resolveWorksheet(
     ).toErr();
   }
 
-  const idMatch = worksheets.find((candidate) => candidate.id === requested);
-  if (idMatch) {
-    return new Ok(idMatch);
-  }
-
-  const nameMatches = worksheets.filter((candidate) => candidate.name === requested);
-  if (nameMatches.length === 1) {
-    return new Ok(nameMatches[0]);
-  }
-  if (nameMatches.length > 1) {
-    return new ArgsValidationError(
-      `Worksheet "${requested}" matched multiple worksheets. Specify one id: ${formatWorksheets(
-        nameMatches,
-      )}`,
-    ).toErr();
-  }
-
-  return new ArgsValidationError(
-    `Worksheet "${requested}" was not found. Available worksheets: ${formatWorksheets(worksheets)}`,
-  ).toErr();
+  return resolveItemByNameOrId('Worksheet', worksheet ?? '', worksheets);
 }
 
 function clampMaxRows(maxRows: number | undefined): number {
@@ -165,18 +147,4 @@ function clampMaxRows(maxRows: number | undefined): number {
 
 function formatWorksheets(worksheets: WorksheetItem[]): string {
   return worksheets.map((worksheet) => `${worksheet.name} (${worksheet.id})`).join(', ');
-}
-
-/** A problem-404 route miss: the endpoint is newer than this Desktop build (post-#60211). */
-export function isRouteMissing(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-  const e = error as { type?: string; error?: { code?: string; message?: string } };
-  return (
-    e.type === 'command-failed' &&
-    e.error?.code === 'not-found' &&
-    typeof e.error?.message === 'string' &&
-    e.error.message.includes('No route matches')
-  );
 }

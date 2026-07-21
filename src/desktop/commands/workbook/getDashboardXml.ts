@@ -13,6 +13,8 @@ import { decodeXmlEntities } from '../../xmlElement.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { nameMayNeedRawCommandResolution, resolveDashboardCommandName } from './nameResolution.js';
 
+export { isRouteMissing } from '../../externalApi/toolUtils.js';
+
 export type GetDashboardXmlError = (
   | { type: 'no-dashboard-found' }
   | { type: 'multiple-dashboards-found' }
@@ -214,18 +216,4 @@ function unique(values: string[]): string[] {
 
 function formatDashboards(dashboards: DashboardItem[]): string {
   return dashboards.map((dashboard) => `${dashboard.name} (${dashboard.id})`).join(', ');
-}
-
-/** A problem-404 route miss: the endpoint is newer than this Desktop build. */
-export function isRouteMissing(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-  const e = error as { type?: string; error?: { code?: string; message?: string } };
-  return (
-    e.type === 'command-failed' &&
-    e.error?.code === 'not-found' &&
-    typeof e.error?.message === 'string' &&
-    e.error.message.includes('No route matches')
-  );
 }

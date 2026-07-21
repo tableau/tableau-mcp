@@ -42,9 +42,9 @@ function getSuccessResult(result: unknown): CallToolResult {
 }
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  worksheetNames: z.array(z.string()).describe('Names of worksheets to create.'),
-  dashboardName: z.string().describe('Name of dashboard to create.'),
+  session: z.string().optional(),
+  worksheetNames: z.array(z.string()),
+  dashboardName: z.string(),
 };
 
 const toolTitle = 'Batch Create Sheets and Cache Working Copies';
@@ -55,11 +55,7 @@ export const getBatchCreateAndCacheSheetsTool = (
     server,
     name: 'batch-create-and-cache-sheets',
     title: toolTitle,
-    description: [
-      'Create multiple worksheet sheets and one dashboard in one operation, then cache all empty working copies.',
-      'Phase 1 of the parallel dashboard creation workflow.',
-      'Returns file paths for use in build-and-apply-worksheet and build-and-apply-dashboard.',
-    ].join(' '),
+    description: 'Batch-create dashboard sheet caches.',
     paramsSchema,
     annotations: {
       title: toolTitle,

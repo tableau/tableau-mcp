@@ -63,21 +63,21 @@ const MIN_ASKS = 2;
 const MAX_ASKS = 6;
 
 const askSchema = z.object({
-  ask: z.string().min(1).describe(''),
-  title: z.string().min(1).max(80).optional().describe(''),
+  ask: z.string().min(1),
+  title: z.string().min(1).max(80).optional(),
 });
 
 const layoutSchema = z.object({
-  layoutType: z.enum(['auto-grid', 'rows', 'columns']).optional().default('auto-grid').describe(''),
-  gridColumns: z.number().optional().describe(''),
+  layoutType: z.enum(['auto-grid', 'rows', 'columns']).optional().default('auto-grid'),
+  gridColumns: z.number().optional(),
 });
 
 const paramsSchema = {
-  session: z.string().optional().describe(''),
+  session: z.string().optional(),
   asks: z.array(askSchema).min(MIN_ASKS).max(MAX_ASKS).describe(`2-${MAX_ASKS} asks.`),
-  dashboardName: z.string().min(1).describe(''),
-  title: z.string().optional().describe(''),
-  layout: layoutSchema.optional().describe(''),
+  dashboardName: z.string().min(1),
+  title: z.string().optional(),
+  layout: layoutSchema.optional(),
 };
 
 /** One ask's outcome, tagged with its position and original ask text for diagnostics. */

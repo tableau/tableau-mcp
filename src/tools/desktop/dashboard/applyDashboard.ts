@@ -25,11 +25,11 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe(''),
-  dashboardName: z.string().describe(''),
-  mode: z.enum(['file', 'inline']).optional().default('file').describe(''),
-  dashboardFile: z.string().optional().describe(''),
-  dashboardXml: z.string().optional().describe(''),
+  session: z.string().optional(),
+  dashboardName: z.string(),
+  mode: z.enum(['file', 'inline']).optional().default('file'),
+  dashboardFile: z.string().optional(),
+  dashboardXml: z.string().optional(),
 };
 
 const title = 'Apply Dashboard';

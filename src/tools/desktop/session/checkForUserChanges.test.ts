@@ -25,9 +25,7 @@ describe('checkForUserChangesTool', () => {
   it('should create a tool instance with correct properties', () => {
     const checkForUserChangesTool = getCheckForUserChangesTool(new DesktopMcpServer());
     expect(checkForUserChangesTool.name).toBe('check-for-user-changes');
-    expect(checkForUserChangesTool.description).toContain(
-      'Detect if the user has made changes to the workbook',
-    );
+    expect(checkForUserChangesTool.description).toBe('Check workbook event sequence.');
     expect(checkForUserChangesTool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       sinceSequence: expect.any(Object),

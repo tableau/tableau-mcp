@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
+import { isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { ValidationResult } from '../../../desktop/externalApi/types.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
@@ -109,16 +110,3 @@ export const getValidateWorkbookXmlTool = (
   });
   return tool;
 };
-
-function isRouteMissing(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-  const e = error as { type?: string; error?: { code?: string; message?: string } };
-  return (
-    e.type === 'command-failed' &&
-    e.error?.code === 'not-found' &&
-    typeof e.error?.message === 'string' &&
-    e.error.message.includes('No route matches')
-  );
-}

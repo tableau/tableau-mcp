@@ -15,8 +15,7 @@ export const getListXmlTemplatesTool = (
     server,
     name: 'list-xml-templates',
     title: toolTitle,
-    description:
-      'List all available visualization templates. Use template names with build-and-apply-worksheet.',
+    description: 'List templates.',
     paramsSchema,
     annotations: {
       title: toolTitle,

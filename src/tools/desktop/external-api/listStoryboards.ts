@@ -1,25 +1,31 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { listWorksheets } from '../../../desktop/commands/workbook/listWorksheets.js';
+import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
+import {
+  endpointNotInThisBuild,
+  ExternalApiRequiredError,
+  isRouteMissing,
+} from './externalApiToolUtils.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
 };
+const title = 'List Storyboards';
 
-const title = 'List All Worksheets in Workbook';
-export const getListWorksheetsTool = (
+export const getListStoryboardsTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
-  const listWorksheetsTool = new DesktopTool({
+  const listStoryboards = new DesktopTool({
     server,
-    name: 'list-worksheets',
+    name: 'list-storyboards',
     title,
-    description: 'Gets a list of all worksheet names in the current workbook.',
+    description: 'List storyboards.',
     paramsSchema,
     annotations: {
       title,
@@ -29,7 +35,7 @@ export const getListWorksheetsTool = (
       openWorldHint: false,
     },
     callback: async ({ session }, extra): Promise<CallToolResult> => {
-      return await listWorksheetsTool.logAndExecute({
+      return await listStoryboards.logAndExecute({
         extra,
         args: { session },
         callback: async () => {
@@ -37,19 +43,25 @@ export const getListWorksheetsTool = (
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
           }
-          const resolvedSession = sessionResult.value;
-          const executor = await extra.getExecutor(resolvedSession);
-          const result = await listWorksheets({ executor, signal: extra.signal });
 
+          const executor = await extra.getExecutor(sessionResult.value);
+          if (!(executor instanceof ExternalApiToolExecutor)) {
+            return new ExternalApiRequiredError(listStoryboards.name).toErr();
+          }
+
+          const result = await executor.listStoryboards(extra.signal);
           if (result.isErr()) {
+            if (isRouteMissing(result.error)) {
+              return endpointNotInThisBuild('storyboard list').toErr();
+            }
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 
-          return result;
+          return new Ok({ storyboards: result.value.storyboards ?? [] });
         },
       });
     },
   });
 
-  return listWorksheetsTool;
+  return listStoryboards;
 };

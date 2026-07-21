@@ -9,13 +9,8 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  sinceSequence: z
-    .number()
-    .optional()
-    .describe(
-      'Sequence number to check since. If omitted, returns current latest sequence to establish a checkpoint.',
-    ),
+  session: z.string().optional(),
+  sinceSequence: z.number().optional(),
 };
 
 type CheckForUserChangesResult = {
@@ -33,11 +28,7 @@ export const getCheckForUserChangesTool = (
     server,
     name: 'check-for-user-changes',
     title,
-    description: [
-      'Detect if the user has made changes to the workbook.',
-      'Pass the sequence number from a previous call to check for new events.',
-      'If no sequence is provided, returns the current latest sequence (use this to establish a checkpoint).',
-    ].join(' '),
+    description: 'Check workbook event sequence.',
     paramsSchema,
     annotations: {
       title,

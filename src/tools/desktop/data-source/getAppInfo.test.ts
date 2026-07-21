@@ -35,7 +35,7 @@ describe('getAppInfoTool', () => {
 
     expect(tool.name).toBe('get-app-info');
     expect(tool.description).toBe('Identify the Desktop build when an endpoint 404s as too-new.');
-    expect(tool.paramsSchema).toEqual({});
+    expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
       title: 'Get App Info',
       readOnlyHint: true,
@@ -56,7 +56,7 @@ describe('getAppInfoTool', () => {
         getExecutor: vi.fn().mockResolvedValue(executor),
       };
 
-      const result = await callback({}, extra);
+      const result = await callback({ session: undefined }, extra);
 
       expect(result.isError).toBe(false);
       expect(parseResult(result)).toEqual({

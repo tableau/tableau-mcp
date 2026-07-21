@@ -1,13 +1,17 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
+import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { DesktopCommandExecutionError, McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
-const paramsSchema = {};
+const paramsSchema = {
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+};
 
 class ExternalApiRequiredError extends McpToolError {
   constructor(toolName: string) {
@@ -34,12 +38,12 @@ export const getAppInfoTool = (server: DesktopMcpServer): DesktopTool<typeof par
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async (_args, extra): Promise<CallToolResult> => {
+    callback: async ({ session }, extra): Promise<CallToolResult> => {
       return await getAppInfo.logAndExecute({
         extra,
-        args: {},
+        args: { session },
         callback: async () => {
-          const sessionResult = resolveSession(undefined);
+          const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
           }
@@ -51,6 +55,9 @@ export const getAppInfoTool = (server: DesktopMcpServer): DesktopTool<typeof par
 
           const result = await executor.getApp(extra.signal);
           if (result.isErr()) {
+            if (isRouteMissing(result.error)) {
+              return endpointNotInThisBuild('app info').toErr();
+            }
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 

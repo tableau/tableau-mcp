@@ -1,14 +1,18 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
+import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { SiteDatasourceItem } from '../../../desktop/externalApi/types.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { DesktopCommandExecutionError, McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
-const paramsSchema = {};
+const paramsSchema = {
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+};
 
 class ExternalApiRequiredError extends McpToolError {
   constructor(toolName: string) {
@@ -29,7 +33,7 @@ export const getListSiteDatasourcesTool = (
     name: 'list-site-datasources',
     title,
     description:
-      'List datasources PUBLISHED to the connected site (LUID + contentUrl). Use to map a workbook connection to its published datasource, e.g. before generating insights for it.',
+      'List datasources PUBLISHED to the connected site (LUID; contentUrl when build provides it). Map workbook connections to published datasource LUIDs.',
     paramsSchema,
     annotations: {
       title,
@@ -38,12 +42,12 @@ export const getListSiteDatasourcesTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async (_args, extra): Promise<CallToolResult> => {
+    callback: async ({ session }, extra): Promise<CallToolResult> => {
       return await listSiteDatasources.logAndExecute({
         extra,
-        args: {},
+        args: { session },
         callback: async () => {
-          const sessionResult = resolveSession(undefined);
+          const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
           }
@@ -55,6 +59,9 @@ export const getListSiteDatasourcesTool = (
 
           const result = await executor.listSiteDatasources(extra.signal);
           if (result.isErr()) {
+            if (isRouteMissing(result.error)) {
+              return endpointNotInThisBuild('site datasources').toErr();
+            }
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 

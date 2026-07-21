@@ -14,6 +14,8 @@ import { getWorkbookXml } from './getWorkbookXml.js';
 import { listWorksheets } from './listWorksheets.js';
 import { nameMayNeedRawCommandResolution, resolveWorksheetCommandName } from './nameResolution.js';
 
+export { isRouteMissing } from '../../externalApi/toolUtils.js';
+
 /**
  * Best-effort "did you mean" suffix for a worksheet-name miss (W6, cluster H). Lists the
  * live sheet names, surfaces close matches (case-insensitive substring either direction)
@@ -256,18 +258,4 @@ function unique(values: string[]): string[] {
 
 function formatWorksheets(worksheets: WorksheetItem[]): string {
   return worksheets.map((worksheet) => `${worksheet.name} (${worksheet.id})`).join(', ');
-}
-
-/** A problem-404 route miss: the endpoint is newer than this Desktop build. */
-export function isRouteMissing(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-  const e = error as { type?: string; error?: { code?: string; message?: string } };
-  return (
-    e.type === 'command-failed' &&
-    e.error?.code === 'not-found' &&
-    typeof e.error?.message === 'string' &&
-    e.error.message.includes('No route matches')
-  );
 }

@@ -7,10 +7,10 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  enumType: z.string().optional().describe('Enum type.'),
-  elementType: z.string().optional().describe('Element type.'),
-  keywords: z.array(z.string()).optional().describe('Fuzzy keywords.'),
-  expandRefs: z.boolean().optional().describe('True: expand ref types inline recursively.'),
+  enumType: z.string().optional(),
+  elementType: z.string().optional(),
+  keywords: z.array(z.string()).optional(),
+  expandRefs: z.boolean().optional(),
 };
 
 const title = 'Lookup Workbook Schema (XSD)';
@@ -21,8 +21,7 @@ export const getLookupWorkbookSchemaTool = (
     server,
     name: 'lookup-workbook-schema',
     title,
-    description:
-      'Search the TWB XSD for enum values, element definitions, attributes, and parentPaths.',
+    description: 'Search the TWB XSD.',
     paramsSchema,
     annotations: {
       title,

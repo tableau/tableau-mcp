@@ -7,13 +7,14 @@ import {
   MockExternalApiServer,
   startMockExternalApiServer,
 } from '../../../desktop/externalApi/mockExternalApiServer.js';
+import { isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { ExternalApiInstance } from '../../../desktop/externalApi/types.js';
 import * as sessionResolution from '../../../desktop/sessionResolution.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getSummaryDataTool, isRouteMissing } from './getSummaryData.js';
+import { getSummaryDataTool } from './getSummaryData.js';
 
 vi.mock('../../../desktop/sessionResolution.js');
 
@@ -26,7 +27,12 @@ const resultSchema = z.object({
   }),
 });
 
-type SummaryDataArgs = { worksheet?: string; maxRows?: number; columns?: string[] };
+type SummaryDataArgs = {
+  session?: string;
+  worksheet?: string;
+  maxRows?: number;
+  columns?: string[];
+};
 type SummaryDataHarness = {
   server: MockExternalApiServer;
   callTool: (args: SummaryDataArgs) => Promise<CallToolResult>;
@@ -47,11 +53,11 @@ describe('getSummaryDataTool', () => {
     expect(tool.description).toContain('Detail on the marks card');
     expect(tool.description).toContain('FIRST PLAY');
     expect(tool.paramsSchema).toMatchObject({
+      session: expect.any(Object),
       worksheet: expect.any(Object),
       maxRows: expect.any(Object),
       columns: expect.any(Object),
     });
-    expect(tool.paramsSchema).not.toHaveProperty('session');
     expect(tool.annotations).toMatchObject({
       title: 'Get Summary Data',
       readOnlyHint: true,
@@ -83,6 +89,18 @@ describe('getSummaryDataTool', () => {
         maxRows: '50',
         columnsToIncludeByFieldName: 'Region,Sales',
       });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('passes an explicit session to the session resolver', async () => {
+    const harness = await startHarness();
+    try {
+      const result = await harness.callTool({ session: 'desktop-2', worksheet: 'sheet-sales' });
+
+      expect(result.isError).toBe(false);
+      expect(sessionResolution.resolveSession).toHaveBeenCalledWith('desktop-2');
     } finally {
       await harness.close();
     }
@@ -209,7 +227,12 @@ async function startHarness(
     server,
     callTool: async (args: SummaryDataArgs) =>
       await callback(
-        { worksheet: args.worksheet, maxRows: args.maxRows, columns: args.columns },
+        {
+          session: args.session,
+          worksheet: args.worksheet,
+          maxRows: args.maxRows,
+          columns: args.columns,
+        },
         extra,
       ),
     close: async () => {

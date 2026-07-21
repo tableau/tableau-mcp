@@ -85,11 +85,7 @@ export const getProposeTemplateTool = (
     server,
     name: 'propose-template',
     title,
-    description: [
-      'Classify an ask against fast-path templates: candidates + output_schema. Model-free.',
-      "'deterministic' goes to validate-proposal/bind-template; 'propose' means pick a candidate and fill output_schema.",
-      'Discovery only, never mutates. Details: expertise://tableau/tactics/workflow/templates.',
-    ].join(' '),
+    description: 'Classify template candidates.',
     paramsSchema,
     annotations: {
       title,

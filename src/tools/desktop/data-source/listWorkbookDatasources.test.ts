@@ -33,13 +33,13 @@ describe('listWorkbookDatasourcesTool', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('creates a workbook datasource read tool with no public args', () => {
+  it('creates a workbook datasource read tool with an optional session arg', () => {
     const tool = getListWorkbookDatasourcesTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('list-workbook-datasources');
     expect(tool.description).toContain("workbook's OWN connected datasources");
     expect(tool.description).toContain('pair with list-site-datasources');
-    expect(tool.paramsSchema).toEqual({});
+    expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
       title: 'List Workbook Datasources',
       readOnlyHint: true,
@@ -60,7 +60,7 @@ describe('listWorkbookDatasourcesTool', () => {
         getExecutor: vi.fn().mockResolvedValue(executor),
       };
 
-      const result = await callback({}, extra);
+      const result = await callback({ session: undefined }, extra);
 
       expect(result.isError).toBe(false);
       expect(parseResult(result).datasources).toEqual([

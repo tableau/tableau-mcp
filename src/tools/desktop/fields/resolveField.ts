@@ -17,10 +17,10 @@ import { DesktopTool } from '../tool.js';
 import { refreshWorkbookCache } from './refreshWorkbookCache.js';
 
 const paramsSchema = {
-  workbookFile: z.string().describe(''),
-  query: z.string().describe(''),
-  datasource: z.string().optional().describe(''),
-  session: z.string().optional().describe(''),
+  workbookFile: z.string(),
+  query: z.string(),
+  datasource: z.string().optional(),
+  session: z.string().optional(),
 };
 
 interface ResolveFieldResult {
@@ -36,11 +36,7 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'resolve-field',
     title,
-    description: [
-      'Resolve a free-form field reference to an exact column_ref.',
-      'ALWAYS reports ambiguity; DO NOT GUESS. Re-call with datasource or list-available-fields; if still ambiguous, ask-user with candidates.',
-      'Use before add-field-* when column_ref did not come from list-available-fields.',
-    ].join(' '),
+    description: 'Resolve a field reference.',
     paramsSchema,
     annotations: {
       title,

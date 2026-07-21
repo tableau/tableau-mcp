@@ -212,6 +212,20 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.root) {
+      sendJson(res, 200, {
+        apiVersion: '0.1.0',
+        applicationVersion: '2026.1',
+        links: {
+          health: '/v0/health',
+          app: '/v0/app',
+          workbook: '/v0/workbook',
+          site: '/v0/site',
+        },
+      });
+      return;
+    }
+
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.app) {
       sendJson(res, 200, {
         name: 'Tableau Desktop',
@@ -260,6 +274,30 @@ export async function startMockExternalApiServer(
 
     if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookStoryboards) {
       sendJson(res, 200, { storyboards: DEFAULT_STORYBOARDS });
+      return;
+    }
+
+    const dashboardMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+)$/);
+    if (method === 'GET' && dashboardMatch) {
+      const dashboardId = decodeURIComponent(dashboardMatch[1]);
+      const dashboard = DEFAULT_DASHBOARDS.find((candidate) => candidate.id === dashboardId);
+      if (!dashboard) {
+        sendProblem(res, 404, 'sheet-not-found', `Dashboard not found: ${dashboardId}`);
+        return;
+      }
+      sendJson(res, 200, dashboard);
+      return;
+    }
+
+    const storyboardMatch = path.match(/^\/v0\/workbook\/storyboards\/([^/]+)$/);
+    if (method === 'GET' && storyboardMatch) {
+      const storyboardId = decodeURIComponent(storyboardMatch[1]);
+      const storyboard = DEFAULT_STORYBOARDS.find((candidate) => candidate.id === storyboardId);
+      if (!storyboard) {
+        sendProblem(res, 404, 'sheet-not-found', `Storyboard not found: ${storyboardId}`);
+        return;
+      }
+      sendJson(res, 200, storyboard);
       return;
     }
 
@@ -316,6 +354,14 @@ export async function startMockExternalApiServer(
         return;
       }
       sendJson(res, 200, DEFAULT_SUMMARY_DATA);
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.site) {
+      sendJson(res, 200, {
+        siteId: 'site-sales',
+        authenticatedUserId: 'user-author',
+      });
       return;
     }
 

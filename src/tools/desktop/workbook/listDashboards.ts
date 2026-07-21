@@ -19,10 +19,7 @@ export const getListDashboardsTool = (
     server,
     name: 'list-dashboards',
     title,
-    description: [
-      'Gets a list of all dashboard names in the current workbook.',
-      'Use this to see what dashboards exist before editing them.',
-    ].join(' '),
+    description: 'Gets a list of all dashboard names in the current workbook.',
     paramsSchema,
     annotations: {
       title,

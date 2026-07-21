@@ -25,10 +25,10 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe(''),
-  mode: z.enum(['file', 'inline']).optional().default('file').describe(''),
-  workbookFile: z.string().optional().describe(''),
-  workbookXml: z.string().optional().describe(''),
+  session: z.string().optional(),
+  mode: z.enum(['file', 'inline']).optional().default('file'),
+  workbookFile: z.string().optional(),
+  workbookXml: z.string().optional(),
 };
 
 const title = 'Apply Workbook';

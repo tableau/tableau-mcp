@@ -2,8 +2,12 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
+  ApiRoot,
+  apiRootSchema,
   AppInfo,
   appInfoSchema,
+  DashboardItem,
+  dashboardItemSchema,
   DashboardList,
   dashboardListSchema,
   DatasourceList,
@@ -16,10 +20,14 @@ import {
   OperationEnvelope,
   operationEnvelopeSchema,
   problemResponseSchema,
+  Site,
   SiteDatasourceList,
   siteDatasourceListSchema,
+  siteSchema,
   SiteWorkbookList,
   siteWorkbookListSchema,
+  StoryboardItem,
+  storyboardItemSchema,
   StoryboardList,
   storyboardListSchema,
   SummaryData,
@@ -157,6 +165,10 @@ export class ExternalApiClient {
     }
   }
 
+  async getRoot(signal?: AbortSignal): Promise<Result<ApiRoot, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.root, apiRootSchema, signal);
+  }
+
   async listWorksheets(signal?: AbortSignal): Promise<Result<WorksheetList, ExternalApiError>> {
     return this.getJson(EXTERNAL_API_ROUTES.workbookWorksheets, worksheetListSchema, signal);
   }
@@ -185,11 +197,29 @@ export class ExternalApiClient {
     return this.getJson(EXTERNAL_API_ROUTES.siteWorkbooks, siteWorkbookListSchema, signal);
   }
 
+  async getSite(signal?: AbortSignal): Promise<Result<Site, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.site, siteSchema, signal);
+  }
+
   async getWorksheet(
     worksheetId: string,
     signal?: AbortSignal,
   ): Promise<Result<WorksheetItem, ExternalApiError>> {
     return this.getJson(buildWorksheetByIdRoute(worksheetId), worksheetItemSchema, signal);
+  }
+
+  async getDashboard(
+    dashboardId: string,
+    signal?: AbortSignal,
+  ): Promise<Result<DashboardItem, ExternalApiError>> {
+    return this.getJson(buildDashboardByIdRoute(dashboardId), dashboardItemSchema, signal);
+  }
+
+  async getStoryboard(
+    storyboardId: string,
+    signal?: AbortSignal,
+  ): Promise<Result<StoryboardItem, ExternalApiError>> {
+    return this.getJson(buildStoryboardByIdRoute(storyboardId), storyboardItemSchema, signal);
   }
 
   async getWorksheetDocument(
@@ -341,6 +371,14 @@ export class ExternalApiClient {
 
 function buildWorksheetByIdRoute(worksheetId: string): string {
   return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(worksheetId)}`;
+}
+
+function buildDashboardByIdRoute(dashboardId: string): string {
+  return `${EXTERNAL_API_ROUTES.workbookDashboards}/${encodeURIComponent(dashboardId)}`;
+}
+
+function buildStoryboardByIdRoute(storyboardId: string): string {
+  return `${EXTERNAL_API_ROUTES.workbookStoryboards}/${encodeURIComponent(storyboardId)}`;
 }
 
 function buildWorksheetDocumentRoute(worksheetId: string): string {

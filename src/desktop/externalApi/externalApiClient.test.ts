@@ -126,6 +126,24 @@ describe('ExternalApiClient', () => {
     expect(result.unwrap()).toMatchObject({ openapi: '3.1.0' });
   });
 
+  it('gets the API root from GET /v0/', async () => {
+    const result = await client.getRoot();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({
+      apiVersion: '0.1.0',
+      applicationVersion: '2026.1',
+      links: expect.objectContaining({
+        health: '/v0/health',
+        workbook: '/v0/workbook',
+      }),
+    });
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/');
+  });
+
   it('lists worksheets from GET /v0/workbook/worksheets', async () => {
     const result = await client.listWorksheets();
 
@@ -221,6 +239,20 @@ describe('ExternalApiClient', () => {
     expect(last?.path).toBe('/v0/site/workbooks');
   });
 
+  it('gets the connected site from GET /v0/site', async () => {
+    const result = await client.getSite();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({
+      siteId: 'site-sales',
+      authenticatedUserId: 'user-author',
+    });
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/site');
+  });
+
   it('gets a worksheet by id from GET /v0/workbook/worksheets/{id}', async () => {
     const result = await client.getWorksheet('sheet-sales');
 
@@ -237,6 +269,42 @@ describe('ExternalApiClient', () => {
     const last = server.requests.at(-1);
     expect(last?.method).toBe('GET');
     expect(last?.path).toBe('/v0/workbook/worksheets/sheet-sales');
+  });
+
+  it('gets a dashboard by id from GET /v0/workbook/dashboards/{id}', async () => {
+    const result = await client.getDashboard('dash-exec');
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toEqual(
+      expect.objectContaining({
+        id: 'dash-exec',
+        name: 'Executive Dashboard',
+        hidden: false,
+        containedSheets: ['sheet-sales', 'sheet-profit'],
+      }),
+    );
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/dashboards/dash-exec');
+  });
+
+  it('gets a storyboard by id from GET /v0/workbook/storyboards/{id}', async () => {
+    const result = await client.getStoryboard('story-qbr');
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toEqual(
+      expect.objectContaining({
+        id: 'story-qbr',
+        name: 'QBR Story',
+        hidden: false,
+        storyPointCount: 4,
+      }),
+    );
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/storyboards/story-qbr');
   });
 
   it('gets a worksheet document by id from GET /v0/workbook/worksheets/{id}/document', async () => {

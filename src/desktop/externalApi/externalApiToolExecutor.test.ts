@@ -201,6 +201,28 @@ describe('ExternalApiToolExecutor', () => {
   });
 
   describe('first-class read endpoints', () => {
+    it('gets the API root', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getRoot(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().links?.workbook).toBe('/v0/workbook');
+      expect(server.requests.at(-1)?.path).toBe('/v0/');
+    });
+
+    it('checks liveness', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.health(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().healthy).toBe(true);
+      expect(server.requests.at(-1)?.path).toBe('/v0/health');
+    });
+
     it('gets the workbook inventory', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
@@ -234,6 +256,17 @@ describe('ExternalApiToolExecutor', () => {
       expect(server.requests.at(-1)?.path).toBe('/v0/site/workbooks');
     });
 
+    it('gets the connected site', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getSite(signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().siteId).toBe('site-sales');
+      expect(server.requests.at(-1)?.path).toBe('/v0/site');
+    });
+
     it('gets a worksheet item by id', async () => {
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
@@ -243,6 +276,28 @@ describe('ExternalApiToolExecutor', () => {
       expect(result.isOk()).toBe(true);
       expect(result.unwrap().datasources).toEqual(['Sample - Superstore']);
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook/worksheets/sheet-sales');
+    });
+
+    it('gets a dashboard item by id', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getDashboard('dash-exec', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().containedSheets).toEqual(['sheet-sales', 'sheet-profit']);
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/dashboards/dash-exec');
+    });
+
+    it('gets a storyboard item by id', async () => {
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.getStoryboard('story-qbr', signal);
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().storyPointCount).toBe(4);
+      expect(server.requests.at(-1)?.path).toBe('/v0/workbook/storyboards/story-qbr');
     });
 
     it('lists dashboards', async () => {

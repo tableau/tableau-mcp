@@ -1,14 +1,18 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
+import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { DatasourceItem } from '../../../desktop/externalApi/types.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { DesktopCommandExecutionError, McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
-const paramsSchema = {};
+const paramsSchema = {
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+};
 
 class ExternalApiRequiredError extends McpToolError {
   constructor(toolName: string) {
@@ -29,7 +33,7 @@ export const getListWorkbookDatasourcesTool = (
     name: 'list-workbook-datasources',
     title,
     description:
-      "List the workbook's OWN connected datasources (id/name/caption); pair with list-site-datasources to map a connection to its published LUID.",
+      "List the workbook's OWN connected datasources (id/name/caption); pair with list-site-datasources for published LUIDs.",
     paramsSchema,
     annotations: {
       title,
@@ -38,12 +42,12 @@ export const getListWorkbookDatasourcesTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async (_args, extra): Promise<CallToolResult> => {
+    callback: async ({ session }, extra): Promise<CallToolResult> => {
       return await listWorkbookDatasources.logAndExecute({
         extra,
-        args: {},
+        args: { session },
         callback: async () => {
-          const sessionResult = resolveSession(undefined);
+          const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
           }
@@ -55,6 +59,9 @@ export const getListWorkbookDatasourcesTool = (
 
           const result = await executor.listWorkbookDatasources(extra.signal);
           if (result.isErr()) {
+            if (isRouteMissing(result.error)) {
+              return endpointNotInThisBuild('workbook datasources').toErr();
+            }
             return new DesktopCommandExecutionError(result.error).toErr();
           }
 

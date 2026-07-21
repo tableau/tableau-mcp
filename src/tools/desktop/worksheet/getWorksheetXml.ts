@@ -28,9 +28,9 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe(''),
-  worksheetName: z.string().describe(''),
-  mode: z.enum(['file', 'inline']).optional().default('file').describe(''),
+  session: z.string().optional(),
+  worksheetName: z.string(),
+  mode: z.enum(['file', 'inline']).optional().default('file'),
 };
 
 type InlineResult = {

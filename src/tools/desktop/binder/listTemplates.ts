@@ -20,11 +20,8 @@ import { DesktopTool } from '../tool.js';
 // typo like 'timeseries' would parse and silently return an empty list, masking the
 // mistake as "no such templates". Rejecting it at the schema layer fails closed instead.
 const paramsSchema = {
-  family: z.enum(FAMILY_VALUES).optional().describe('Optional chart-intent family filter.'),
-  fastPathOnly: z
-    .boolean()
-    .optional()
-    .describe('When true, return only fast-path-eligible templates.'),
+  family: z.enum(FAMILY_VALUES).optional(),
+  fastPathOnly: z.boolean().optional(),
 };
 
 /** One template's discovery summary: family / slots / fast-path status. */
@@ -105,10 +102,7 @@ export const getListTemplatesTool = (
     server,
     name: 'list-templates',
     title,
-    description: [
-      'List bundled chart templates: family, slots, fast-path eligibility (authoritative; blockers explain ineligible).',
-      'Use before bind-template. Details: expertise://tableau/tactics/workflow/templates.',
-    ].join(' '),
+    description: 'List chart templates.',
     paramsSchema,
     annotations: {
       title,

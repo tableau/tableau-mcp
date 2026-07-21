@@ -34,12 +34,13 @@ describe('listSiteDatasourcesTool', () => {
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
-  it('creates a read-only tool with no public args', () => {
+  it('creates a read-only tool with an optional session arg', () => {
     const tool = getListSiteDatasourcesTool(new DesktopMcpServer());
 
     expect(tool.name).toBe('list-site-datasources');
     expect(tool.description).toContain('List datasources PUBLISHED to the connected site');
-    expect(tool.paramsSchema).toEqual({});
+    expect(tool.description).toContain('contentUrl when build provides it');
+    expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
       title: 'List Site Datasources',
       readOnlyHint: true,
@@ -47,7 +48,7 @@ describe('listSiteDatasourcesTool', () => {
     });
   });
 
-  it('returns published datasource identifiers from the connected site', async () => {
+  it('includes contentUrl when the build provides it', async () => {
     const server = await startMockExternalApiServer();
     const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
     await executor.start();
@@ -60,7 +61,7 @@ describe('listSiteDatasourcesTool', () => {
         getExecutor: vi.fn().mockResolvedValue(executor),
       };
 
-      const result = await callback({}, extra);
+      const result = await callback({ session: undefined }, extra);
 
       expect(result.isError).toBe(false);
       const body = parseResult(result);
@@ -82,6 +83,40 @@ describe('listSiteDatasourcesTool', () => {
       const last = server.requests.at(-1);
       expect(last?.method).toBe('GET');
       expect(last?.path).toBe('/v0/site/datasources');
+    } finally {
+      executor.stop();
+      await server.close();
+    }
+  });
+
+  it('omits contentUrl when the build does not provide it', async () => {
+    const server = await startMockExternalApiServer();
+    server.setOverride('GET /v0/site/datasources', {
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        datasources: [
+          { id: 'ds-superstore', luid: 'luid-superstore', name: 'Sample - Superstore' },
+        ],
+      }),
+    });
+    const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+    await executor.start();
+
+    try {
+      const tool = getListSiteDatasourcesTool(new DesktopMcpServer());
+      const callback = await Provider.from(tool.callback);
+      const extra = {
+        ...getMockRequestHandlerExtra(),
+        getExecutor: vi.fn().mockResolvedValue(executor),
+      };
+
+      const result = await callback({ session: undefined }, extra);
+
+      expect(result.isError).toBe(false);
+      expect(parseResult(result).datasources).toEqual([
+        { id: 'ds-superstore', luid: 'luid-superstore', name: 'Sample - Superstore' },
+      ]);
     } finally {
       executor.stop();
       await server.close();

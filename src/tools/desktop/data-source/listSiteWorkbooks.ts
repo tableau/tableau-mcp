@@ -1,14 +1,18 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
+import { endpointNotInThisBuild, isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { SiteWorkbookItem } from '../../../desktop/externalApi/types.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { DesktopCommandExecutionError, McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
-const paramsSchema = {};
+const paramsSchema = {
+  session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
+};
 
 class ExternalApiRequiredError extends McpToolError {
   constructor(toolName: string) {
@@ -37,12 +41,12 @@ export const getListSiteWorkbooksTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async (_args, extra): Promise<CallToolResult> => {
+    callback: async ({ session }, extra): Promise<CallToolResult> => {
       return await listSiteWorkbooks.logAndExecute({
         extra,
-        args: {},
+        args: { session },
         callback: async () => {
-          const sessionResult = resolveSession(undefined);
+          const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
           }
@@ -55,13 +59,7 @@ export const getListSiteWorkbooksTool = (
           const result = await executor.listSiteWorkbooks(extra.signal);
           if (result.isErr()) {
             if (isRouteMissing(result.error)) {
-              return new McpToolError({
-                type: 'endpoint-not-in-this-build',
-                message:
-                  'This Tableau Desktop build does not serve the site workbooks endpoint yet. ' +
-                  'Use get-app-info to identify the build; this read lights up on a newer Desktop update. Do not retry.',
-                statusCode: 404,
-              }).toErr();
+              return endpointNotInThisBuild('site workbooks').toErr();
             }
             return new DesktopCommandExecutionError(result.error).toErr();
           }
@@ -89,17 +87,4 @@ function projectWorkbook(workbook: SiteWorkbookItem): {
     ...(workbook.name !== undefined ? { name: workbook.name } : {}),
     ...(workbook.project !== undefined ? { project: workbook.project } : {}),
   };
-}
-
-function isRouteMissing(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-  const e = error as { type?: string; error?: { code?: string; message?: string } };
-  return (
-    e.type === 'command-failed' &&
-    e.error?.code === 'not-found' &&
-    typeof e.error?.message === 'string' &&
-    e.error.message.includes('No route matches')
-  );
 }

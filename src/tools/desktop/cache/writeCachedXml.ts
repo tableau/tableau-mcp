@@ -18,13 +18,11 @@ import { DesktopTool } from '../tool.js';
 import { getCacheDir, isWithinCacheDir } from './cachePath.js';
 
 const paramsSchema = {
-  session: z.string().describe('Session ID.'),
-  filePath: z.string().describe('Cache file path to write.'),
-  xmlContent: z
-    .string()
-    .describe('Content to write; replacement element when a selector is provided.'),
-  worksheet: z.string().optional().describe('Worksheet splice selector. One selector at a time.'),
-  dashboard: z.string().optional().describe('Dashboard splice selector.'),
+  session: z.string(),
+  filePath: z.string(),
+  xmlContent: z.string(),
+  worksheet: z.string().optional(),
+  dashboard: z.string().optional(),
 };
 
 const toolTitle = 'Save Cached Working Copy';
@@ -35,7 +33,7 @@ export const getWriteCachedXmlTool = (
     server,
     name: 'write-cached-xml',
     title: toolTitle,
-    description: 'Save cached content before apply. For large files pass ONE selector.',
+    description: 'Save cached content.',
     paramsSchema,
     annotations: {
       title: toolTitle,

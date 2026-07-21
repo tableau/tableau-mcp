@@ -10,9 +10,7 @@ const paramsSchema = {
   keywords: z
     .union([z.array(z.string()), z.string()])
     .transform((v) => (typeof v === 'string' ? v.split(/[,\s]+/).filter(Boolean) : v))
-    .describe(
-      "Array of keywords to search for (e.g., ['goto', 'sheet']). A single string is accepted and split on whitespace/commas.",
-    ),
+    .describe('Keywords; string splits on whitespace/commas.'),
 };
 
 const title = 'Search Tableau Commands Reference';
@@ -23,8 +21,7 @@ export const getSearchCommandsTool = (
     server,
     name: 'search-commands',
     title,
-    description:
-      'Search the Tableau Desktop commands reference for invocable commands. Returns commands that can be called via MCP, filtered to exclude those requiring binary/internal parameters.',
+    description: 'Search the Tableau Desktop commands reference for invocable commands.',
     paramsSchema,
     annotations: {
       title,

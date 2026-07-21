@@ -16,11 +16,8 @@ import { DesktopTool } from '../tool.js';
 import { refreshWorkbookCache } from './refreshWorkbookCache.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID; refreshes live workbook first.'),
-  workbookFile: z
-    .string()
-    .optional()
-    .describe('Optional cached workbook file; omit for the live session workbook.'),
+  session: z.string().optional().describe('Session ID; refresh live first.'),
+  workbookFile: z.string().optional().describe('Cached workbook; omit for live.'),
 };
 
 class WorkbookFileNotFoundError extends McpToolError {
@@ -75,8 +72,7 @@ export const getListAvailableFieldsTool = (
     title,
     description: [
       'List ALL fields available in workbook datasources.',
-      'Returns exact column_ref inputs for field tools. Call before adding fields to Rows, Columns, or encodings.',
-      'Omit workbookFile to read the live session workbook. Cached workbook file only; NOT a worksheet file.',
+      'Returns exact column_ref inputs.',
     ].join(' '),
     paramsSchema,
     annotations: {

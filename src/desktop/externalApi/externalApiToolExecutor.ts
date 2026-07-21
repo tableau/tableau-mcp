@@ -17,15 +17,19 @@ import {
   WorksheetSummaryDataQuery,
 } from './externalApiClient.js';
 import {
+  ApiRoot,
   AppInfo,
+  DashboardItem,
   DashboardList,
   DatasourceList,
   ExternalApiError,
   ExternalApiInstance,
   OperationEnvelope,
   OperationError,
+  Site,
   SiteDatasourceList,
   SiteWorkbookList,
+  StoryboardItem,
   StoryboardList,
   SummaryData,
   ValidationResult,
@@ -197,6 +201,14 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     return this.readExternalApi((client) => client.listWorksheets(signal));
   }
 
+  async health(signal: AbortSignal): Promise<Result<{ healthy: boolean }, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.health(signal));
+  }
+
+  async getRoot(signal: AbortSignal): Promise<Result<ApiRoot, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.getRoot(signal));
+  }
+
   async listDashboards(signal: AbortSignal): Promise<Result<DashboardList, ExecuteCommandError>> {
     return this.readExternalApi((client) => client.listDashboards(signal));
   }
@@ -221,11 +233,29 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     return this.readExternalApi((client) => client.listSiteWorkbooks(signal));
   }
 
+  async getSite(signal: AbortSignal): Promise<Result<Site, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.getSite(signal));
+  }
+
   async getWorksheet(
     worksheetId: string,
     signal: AbortSignal,
   ): Promise<Result<WorksheetItem, ExecuteCommandError>> {
     return this.readExternalApi((client) => client.getWorksheet(worksheetId, signal));
+  }
+
+  async getDashboard(
+    dashboardId: string,
+    signal: AbortSignal,
+  ): Promise<Result<DashboardItem, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.getDashboard(dashboardId, signal));
+  }
+
+  async getStoryboard(
+    storyboardId: string,
+    signal: AbortSignal,
+  ): Promise<Result<StoryboardItem, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.getStoryboard(storyboardId, signal));
   }
 
   async getWorksheetDocument(

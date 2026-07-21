@@ -13,7 +13,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  worksheetFile: z.string().describe('Worksheet cache file, not workbook.'),
+  worksheetFile: z.string(),
 };
 
 const title = 'List Fields Already Placed on Worksheet';
@@ -22,10 +22,7 @@ export const getListFieldsTool = (server: DesktopMcpServer): DesktopTool<typeof 
     server,
     name: 'list-fields',
     title,
-    description: [
-      'List fields already placed on a worksheet: encodings, Rows, Columns, positions, column refs.',
-      'For available fields use list-available-fields with the workbook file. Use exact column_ref for removals.',
-    ].join(' '),
+    description: 'List fields on a worksheet.',
     paramsSchema,
     annotations: {
       title,

@@ -55,10 +55,7 @@ export const getInjectTemplateTool = (
     server,
     name: 'inject-template',
     title: toolTitle,
-    description: [
-      'Inject a template into a cached workbook (mutates).',
-      'Supports {{TITLE}}. Then apply-workbook.',
-    ].join(' '),
+    description: 'Inject a template.',
     paramsSchema,
     annotations: {
       title: toolTitle,
