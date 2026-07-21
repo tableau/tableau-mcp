@@ -115,6 +115,7 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'format-labels',
     'list-knowledge-resources',
     'read-knowledge-resource',
+    'search-knowledge',
   ]);
 
 /**

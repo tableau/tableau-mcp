@@ -49,6 +49,7 @@ export const desktopToolNames = [
   'get-dashboard-guide',
   'list-knowledge-resources',
   'read-knowledge-resource',
+  'search-knowledge',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 

@@ -18,8 +18,7 @@ export const getValidateWorksheetXmlTool = (
     server,
     name: 'validate-worksheet-xml',
     title: toolTitle,
-    description:
-      'Check that worksheet content is well-formed (parseable). Tableau runs deeper validation when you apply the update. Use this before apply-worksheet to catch basic structure errors early.',
+    description: 'Check worksheet content is well-formed before apply-worksheet.',
     paramsSchema,
     annotations: {
       title: toolTitle,

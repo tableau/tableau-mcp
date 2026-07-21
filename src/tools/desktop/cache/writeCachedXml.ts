@@ -34,8 +34,7 @@ export const getWriteCachedXmlTool = (
     server,
     name: 'write-cached-xml',
     title: toolTitle,
-    description:
-      'Save cached workbook, worksheet, or dashboard content before apply-* tools. For large files, pass ONE selector to splice a replacement element.',
+    description: 'Save cached content before apply. For large files pass ONE selector.',
     paramsSchema,
     annotations: {
       title: toolTitle,

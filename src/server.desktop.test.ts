@@ -348,12 +348,12 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 16-tool singable surface — the spec-loop 5 + the author-* 5 + ask-user + search-commands + bind-template + refine-worksheet + the two knowledge doors, no XML/cache tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 17-tool singable surface — the spec-loop 5 + the author-* 5 + ask-user + search-commands + bind-template + refine-worksheet + the three knowledge doors, no XML/cache tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(16);
+    expect(selected).toHaveLength(17);
     // The full dynamic dialect, semantically named — every author-* verb present,
-    // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
+    // plus the ask-for-help, command-discovery, deterministic fast-path, and the three
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
     for (const verb of [
       'author-calc',
@@ -367,6 +367,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'refine-worksheet',
       'list-knowledge-resources',
       'read-knowledge-resource',
+      'search-knowledge',
     ]) {
       expect(selected.map((t) => t.name)).toContain(verb);
     }

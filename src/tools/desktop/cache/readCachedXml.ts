@@ -33,9 +33,7 @@ export const getReadCachedXmlTool = (
     server,
     name: 'read-cached-xml',
     title: toolTitle,
-    description:
-      'Read cached worksheet, dashboard, or workbook content. For large files, pass exactly ONE selector: ' +
-      'worksheet, dashboard, or startByte/endByte range.',
+    description: 'Read cached content. For large files pass ONE selector.',
     paramsSchema,
     annotations: {
       title: toolTitle,
