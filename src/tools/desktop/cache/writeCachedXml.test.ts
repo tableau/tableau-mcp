@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { resolve } from 'path';
 
+import * as configModule from '../../../config.desktop.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -32,10 +33,19 @@ function setupCacheMock(): void {
   );
 }
 
+function mockPinnedSession(desktopSessionId: string | undefined): void {
+  const base = new configModule.Config();
+  vi.spyOn(configModule, 'getDesktopConfig').mockReturnValue({
+    ...base,
+    desktopSessionId,
+  } as configModule.Config);
+}
+
 describe('writeCachedXmlTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setupCacheMock();
+    mockPinnedSession(undefined);
     vi.mocked(writeFileSync).mockImplementation(() => {});
   });
 
@@ -69,6 +79,26 @@ describe('writeCachedXmlTool', () => {
     await getResult(CACHED_FILE, VALID_XML);
 
     expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(resolve(CACHED_FILE), SESSION);
+  });
+
+  it('stamps the sidecar with the pinned session, not the requested one', async () => {
+    mockPinnedSession(SESSION);
+
+    await getResult(CACHED_FILE, VALID_XML, {}, undefined);
+
+    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(resolve(CACHED_FILE), SESSION);
+  });
+
+  it('rejects and writes no sidecar when the requested session conflicts with the pin', async () => {
+    mockPinnedSession('99999');
+
+    const result = await getResult(CACHED_FILE, VALID_XML, {}, SESSION);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('99999');
+    expect(cacheFingerprintModule.writeSidecar).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
   });
 
   it('should return error for malformed XML without writing', async () => {
@@ -251,12 +281,14 @@ async function getResult(
   filePath: string,
   xmlContent: string,
   selectors: { worksheet?: string; dashboard?: string } = {},
+  ...requestedSession: [string | undefined] | []
 ): Promise<CallToolResult> {
+  const session = (requestedSession.length > 0 ? requestedSession[0] : SESSION) as string;
   const tool = getWriteCachedXmlTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
     {
-      session: SESSION,
+      session,
       filePath,
       xmlContent,
       worksheet: selectors.worksheet,

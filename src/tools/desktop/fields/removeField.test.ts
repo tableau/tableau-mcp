@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { z } from 'zod';
 
+import * as configModule from '../../../config.desktop.js';
 import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import * as metadataModule from '../../../desktop/metadata/index.js';
 import {
@@ -33,9 +34,18 @@ const SESSION = '12345';
 const COLUMN_REF = '[Sample - Superstore].[sum:Profit:qk]';
 const MODIFIED_XML = '<worksheet name="Sheet 1"><table></table></worksheet>';
 
+function mockPinnedSession(desktopSessionId: string | undefined): void {
+  const base = new configModule.Config();
+  vi.spyOn(configModule, 'getDesktopConfig').mockReturnValue({
+    ...base,
+    desktopSessionId,
+  } as configModule.Config);
+}
+
 describe('removeFieldTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPinnedSession(undefined);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -135,6 +145,44 @@ describe('removeFieldTool', () => {
     await getResult({ worksheetFile: WORKSHEET_FILE, target: 'rows', columnRef: COLUMN_REF });
 
     expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKSHEET_FILE, SESSION);
+  });
+
+  it('stamps the sidecar with the pinned session, not the requested one', async () => {
+    mockPinnedSession(SESSION);
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+      session: undefined,
+    });
+
+    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKSHEET_FILE, SESSION);
+  });
+
+  it('rejects and writes no sidecar when the requested session conflicts with the pin', async () => {
+    mockPinnedSession('99999');
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.removeFieldFromRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+      session: SESSION,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('99999');
+    expect(cacheFingerprintModule.writeSidecar).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
   });
 
   it('does not use the Tableau command channel after a successful field edit', async () => {
@@ -322,21 +370,19 @@ describe('removeFieldTool', () => {
   });
 });
 
-async function getResult({
-  worksheetFile,
-  target,
-  columnRef,
-  encodingType,
-}: {
+async function getResult(params: {
   worksheetFile: string;
   target: Target;
   columnRef: string;
   encodingType?: EncodingType;
+  session?: string;
 }): Promise<CallToolResult> {
+  const { worksheetFile, target, columnRef, encodingType } = params;
+  const session = ('session' in params ? params.session : SESSION) as string;
   const tool = getRemoveFieldTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
-    { session: SESSION, worksheetFile, target, columnRef, encodingType },
+    { session, worksheetFile, target, columnRef, encodingType },
     getMockRequestHandlerExtra(),
   );
 }

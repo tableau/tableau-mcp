@@ -12,6 +12,7 @@ import {
 import { summarizeSchema } from '../../../desktop/binder/schema-summary.js';
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { parseDatasourceQualifiedColumnRef } from '../../../desktop/metadata/field-resolver.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import {
@@ -94,6 +95,12 @@ export const getInjectTemplateTool = (
           relativeSheetName,
         },
         callback: async () => {
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+
           if (!existsSync(resolve(workbookFile))) {
             return new FileNotFoundError(workbookFile).toErr();
           }
@@ -179,7 +186,7 @@ export const getInjectTemplateTool = (
             }
 
             writeFileSync(resolve(workbookFile), result.xml, 'utf-8');
-            writeSidecar(resolve(workbookFile), session);
+            writeSidecar(resolve(workbookFile), resolvedSession);
 
             return new Ok({
               workbookFile,
