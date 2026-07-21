@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { searchKnowledge } from '../../../desktop/knowledge/index.js';
+import { searchKnowledgeWithFallback } from '../../../desktop/knowledge/index.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
@@ -20,7 +20,7 @@ export const getSearchKnowledgeTool = (
     name: 'search-knowledge',
     title: toolTitle,
     description:
-      'Find relevant expertise for a task (top N by uri+title). Use THIS to discover knowledge, not list.',
+      'Find relevant expertise for a task (top N by uri+title). Best queried with short concept phrases (e.g. "symbol map latitude longitude"), not tool names. Use THIS to discover knowledge, not list.',
     paramsSchema,
     annotations: {
       title: toolTitle,
@@ -34,11 +34,10 @@ export const getSearchKnowledgeTool = (
         extra,
         args: { query, limit },
         callback: async () => {
-          const hits = searchKnowledge(query, limit);
-          return new Ok({ hits });
+          return new Ok(searchKnowledgeWithFallback(query, limit));
         },
-        getSuccessResult: ({ hits }) => ({
-          content: [{ type: 'text', text: JSON.stringify({ hits }, null, 2) }],
+        getSuccessResult: (result) => ({
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         }),
       });
     },

@@ -1,6 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { _resetKnowledgeSearchCache, searchKnowledge } from './knowledge/index.js';
+import {
+  _resetKnowledgeSearchCache,
+  searchKnowledge,
+  searchKnowledgeWithFallback,
+} from './knowledge/index.js';
 
 // Each fuse.js search scans the full document `body` of the ~108-doc corpus with
 // ignoreLocation:true (~450ms/query — real work, not a leak). A multi-case block
@@ -39,6 +43,120 @@ describe('knowledge/search', { timeout: 30_000 }, () => {
   it('returns [] for an empty query', () => {
     expect(searchKnowledge('', 5)).toEqual([]);
     expect(searchKnowledge('   ', 5)).toEqual([]);
+  });
+
+  it('promotes long natural queries to keyword-ranked hits with expected docs in the top 3', () => {
+    const cases: Array<{ query: string; expectedSlugSuffixes: string[] }> = [
+      {
+        query: 'I need a country symbol map but bind-template only gives country',
+        expectedSlugSuffixes: [
+          'tactics/workflow/templates',
+          'tactics/viz/worksheets',
+          'strategy/viz-design/worksheet-strategy',
+        ],
+      },
+      {
+        query: 'Manually build a worksheet by putting a field on a shelf without a canned template',
+        expectedSlugSuffixes: ['tactics/viz/worksheets', 'strategy/viz-design/worksheet-strategy'],
+      },
+      {
+        query: 'How do I put fields on Rows and Columns shelves when there is no canned template?',
+        expectedSlugSuffixes: ['tactics/viz/worksheets', 'strategy/viz-design/worksheet-strategy'],
+      },
+      {
+        query: 'How can I compare current year to prior year when my date filter changes?',
+        expectedSlugSuffixes: ['tactics/data/year-over-year-date-filter-calc'],
+      },
+      {
+        query: 'Why is prior year value blank after filtering the dashboard to one year?',
+        expectedSlugSuffixes: ['tactics/data/year-over-year-date-filter-calc'],
+      },
+      {
+        query:
+          'What is the safe way to create a cross-sheet region filter across multiple worksheets?',
+        expectedSlugSuffixes: ['tactics/viz/cross-sheet-filter-authoring'],
+      },
+      {
+        query: 'How should I calculate market share by dividing values after aggregation?',
+        expectedSlugSuffixes: ['tactics/data/aggregate-ratio-window-total-semantics'],
+      },
+      {
+        query: 'How do I make a Sankey diagram showing money flowing between departments?',
+        expectedSlugSuffixes: ['strategy/viz-design/flow-and-sankey'],
+      },
+    ];
+
+    for (const { query, expectedSlugSuffixes } of cases) {
+      expect(query.length, query).toBeGreaterThan(32);
+      const result = searchKnowledgeWithFallback(query, 5);
+      const top3 = result.hits.slice(0, 3);
+      expect(top3.length, query).toBeGreaterThan(0);
+      expect(
+        top3.every((hit) => hit.match === 'keyword'),
+        query,
+      ).toBe(true);
+      expect(
+        top3.some((hit) => expectedSlugSuffixes.some((suffix) => hit.slug.endsWith(suffix))),
+        query,
+      ).toBe(true);
+      expect(result).not.toHaveProperty('nearestMatches');
+    }
+  });
+
+  it('returns nearest keyword matches separately for genuine long-query zero hits', () => {
+    const cases: string[] = [
+      'florblesnack quazzlewump blitternode zarpwidget plonkshaft narglebeam',
+      'xqzvbnm ytrplok mnvczrx pqwlkjh zznobble frandship glorpnado',
+    ];
+
+    for (const query of cases) {
+      const result = searchKnowledgeWithFallback(query, 5);
+      expect(query.length, query).toBeGreaterThan(32);
+      expect(result.hits, query).toEqual([]);
+      expect(result.nearestMatches?.length, query).toBeGreaterThan(0);
+      expect(result.note, query).toMatch(/zero exact matches/i);
+    }
+  });
+
+  it('keeps terse field-report queries connected to the expected docs', () => {
+    const cases: Array<[string, string[]]> = [
+      [
+        'country symbol map bind template',
+        [
+          'tactics/workflow/templates',
+          'tactics/viz/worksheets',
+          'strategy/viz-design/worksheet-strategy',
+        ],
+      ],
+      [
+        'manual worksheet authoring put field shelf',
+        ['tactics/viz/worksheets', 'strategy/viz-design/worksheet-strategy'],
+      ],
+      [
+        'manual worksheet field shelf no canned template',
+        ['tactics/viz/worksheets', 'strategy/viz-design/worksheet-strategy'],
+      ],
+    ];
+
+    for (const [query, allowedSlugs] of cases) {
+      const result = searchKnowledgeWithFallback(query, 5);
+      const candidates = result.hits.length > 0 ? result.hits : (result.nearestMatches ?? []);
+      expect(candidates.length, query).toBeGreaterThan(0);
+      expect(
+        candidates.some((hit) => allowedSlugs.includes(hit.slug)),
+        query,
+      ).toBe(true);
+    }
+  });
+
+  it('does not add nearest matches when the primary ranker finds hits', () => {
+    const query = 'high cardinality quick filter';
+    const hits = searchKnowledge(query, 5);
+    const result = searchKnowledgeWithFallback(query, 5);
+
+    expect(hits.length).toBeGreaterThan(0);
+    expect(result).toEqual({ hits });
+    expect(result).not.toHaveProperty('nearestMatches');
   });
 
   it('ranks the expected entry #1 (4 cases)', () => {
