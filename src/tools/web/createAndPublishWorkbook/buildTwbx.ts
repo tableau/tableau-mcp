@@ -1,3 +1,10 @@
+// The pure, deterministic TWBX assembler. It takes an entrypoint `html` string or raw bytes plus
+// content-relative `assets` (bytes) and emits byte-stable archive bytes. Its single feeder is the
+// workspace-snapshot path (`buildWorkspaceTwbx`), which maps an immutable data-app workspace
+// snapshot's index.html + sibling files straight through with no split step. That build backs the
+// validate-workbook-package receipt that create-and-publish-workbook later uploads verbatim.
+// Keep this function pure: identical input → byte-identical output (the determinism tests rely on it).
+
 import { strToU8, zipSync } from 'fflate';
 
 import { BuildTwbxError } from '../../../errors/mcpToolError.js';
@@ -7,7 +14,7 @@ export interface BuildTwbxInput {
    *  Single source of truth — folder must equal id or the reader 404s the content. */
   packageId: string; // e.g. "com.example.myviz"
   workbookName: string; // .twb display name + archive base name
-  html: string; // Claude's index.html (the extension entrypoint)
+  html: string | Uint8Array; // index.html; strings retain compatibility, bytes are preserved exactly
   assets?: Array<{ path: string; bytes: Uint8Array }>; // extra content/ files (js, css, png…)
   toolbar?: { label?: string; iconPngBase64?: string }; // defaults provided
 }
@@ -52,7 +59,7 @@ export function buildTwbx(input: BuildTwbxInput): BuildTwbxResult {
 // .trex points at; assets land beside it.
 function assembleContentFiles(input: BuildTwbxInput): Record<string, Uint8Array> {
   const files: Record<string, Uint8Array> = {
-    'index.html': strToU8(input.html),
+    'index.html': typeof input.html === 'string' ? strToU8(input.html) : input.html,
   };
   for (const asset of input.assets ?? []) {
     files[asset.path] = asset.bytes;

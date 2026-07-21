@@ -1,4 +1,5 @@
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
+import { buildDataAppResourceUri } from './resources/skills/buildDataAppResource.js';
 import { serverName, WebMcpServer } from './server.web.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
@@ -11,11 +12,16 @@ import { webToolFactories } from './tools/web/tools.js';
 import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
 
+// By default only `data-app-workspaces` is enabled so the data-app tool group and its resources
+// register (matching the shipped features.json), while `mcp-apps` stays off so app tools register as
+// standard tools. Individual tests override this per feature as needed.
+const dataAppsOnly = (feature: string): boolean => feature === 'data-app-workspaces';
+
 const mocks = vi.hoisted(() => ({
   mockRegisterAppTool: vi.fn(),
   mockRegisterAppResource: vi.fn(),
   mockFeatureGate: {
-    isFeatureEnabled: vi.fn(() => false),
+    isFeatureEnabled: vi.fn((feature: string) => feature === 'data-app-workspaces'),
   },
   mockReadFile: vi.fn(),
 }));
@@ -40,7 +46,8 @@ describe('server', () => {
     stubDefaultEnvVars();
     mocks.mockRegisterAppTool.mockClear();
     mocks.mockRegisterAppResource.mockClear();
-    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+    mocks.mockFeatureGate.isFeatureEnabled.mockClear();
+    mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(dataAppsOnly);
     mocks.mockReadFile.mockClear();
   });
 
@@ -325,5 +332,129 @@ describe('server', () => {
     // Should NOT register as app tool
     expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
     expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+
+  it('registers the build-data-app skill resource', async () => {
+    const server = getServer();
+    server.mcpServer.registerResource = vi.fn();
+
+    await server.registerTools();
+
+    expect(server.mcpServer.registerResource).toHaveBeenCalledWith(
+      'build-data-app',
+      buildDataAppResourceUri,
+      expect.objectContaining({ mimeType: 'text/markdown' }),
+      expect.any(Function),
+    );
+  });
+
+  describe('data-app-workspaces rollout gate', () => {
+    // The whole scaffold -> author -> validate -> publish workflow, gated as one unit.
+    const dataAppToolNames = [
+      'scaffold-data-app',
+      'upsert-data-app-files',
+      'read-data-app-file',
+      'list-data-app-files',
+      'validate-workbook-package',
+      'create-and-publish-workbook',
+    ] as const;
+
+    it('registers every data-app tool and both workflow resources when the gate is enabled', async () => {
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation(dataAppsOnly);
+      const server = getServer();
+      server.mcpServer.registerResource = vi.fn();
+
+      await server.registerTools();
+
+      const registeredToolNames = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.map((call) => call[0]);
+      for (const name of dataAppToolNames) {
+        expect(registeredToolNames).toContain(name);
+      }
+
+      const registeredResourceNames = vi
+        .mocked(server.mcpServer.registerResource)
+        .mock.calls.map((call) => call[0]);
+      expect(registeredResourceNames).toContain('build-data-app');
+      expect(registeredResourceNames).toContain('data-app-preview');
+    });
+
+    it('advertises no part of the workflow (no tools, no resources) when the gate is disabled', async () => {
+      // Disable the whole feature set: the data-app workflow must disappear entirely, never partially.
+      mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+      const server = getServer();
+      server.mcpServer.registerResource = vi.fn();
+
+      await server.registerTools();
+
+      const registeredToolNames = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.map((call) => call[0]);
+      for (const name of dataAppToolNames) {
+        expect(registeredToolNames).not.toContain(name);
+      }
+
+      // No skill guidance and no preview endpoint are advertised for tools that do not exist.
+      const registeredResourceNames = vi
+        .mocked(server.mcpServer.registerResource)
+        .mock.calls.map((call) => call[0]);
+      expect(registeredResourceNames).not.toContain('build-data-app');
+      expect(registeredResourceNames).not.toContain('data-app-preview');
+    });
+
+    it('still registers non-data-app tools when the gate is disabled', async () => {
+      mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+      const server = getServer();
+
+      await server.registerTools();
+
+      const registeredToolNames = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.map((call) => call[0]);
+      // A representative data-returning tool remains available regardless of the data-app gate.
+      expect(registeredToolNames).toContain('query-datasource');
+      expect(registeredToolNames).toContain('list-datasources');
+    });
+
+    it('reads a time-varying provider once and uses one coordinated gate snapshot', async () => {
+      let dataAppGateReads = 0;
+      mocks.mockFeatureGate.isFeatureEnabled.mockImplementation((feature: string) => {
+        if (feature !== 'data-app-workspaces') {
+          return false;
+        }
+        // A second read would flip to false and expose tools without their resources.
+        dataAppGateReads += 1;
+        return dataAppGateReads === 1;
+      });
+      const server = getServer();
+      server.mcpServer.registerResource = vi.fn();
+
+      await server.registerTools();
+
+      expect(dataAppGateReads).toBe(1);
+      const dataAppGateCalls = mocks.mockFeatureGate.isFeatureEnabled.mock.calls.filter(
+        ([feature]) => feature === 'data-app-workspaces',
+      );
+      expect(dataAppGateCalls).toHaveLength(1);
+      expect(mocks.mockFeatureGate.isFeatureEnabled).toHaveBeenNthCalledWith(1, 'mcp-apps');
+      expect(mocks.mockFeatureGate.isFeatureEnabled).toHaveBeenNthCalledWith(
+        2,
+        'data-app-workspaces',
+      );
+
+      const registeredToolNames = vi
+        .mocked(server.mcpServer.registerTool)
+        .mock.calls.map((call) => call[0]);
+      for (const name of dataAppToolNames) {
+        expect(registeredToolNames).toContain(name);
+      }
+
+      const registeredResourceNames = vi
+        .mocked(server.mcpServer.registerResource)
+        .mock.calls.map((call) => call[0]);
+      expect(registeredResourceNames).toContain('build-data-app');
+      expect(registeredResourceNames).toContain('data-app-preview');
+    });
   });
 });

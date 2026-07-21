@@ -36,6 +36,10 @@ export const webToolNames = [
   'query-admin-insights-site-content',
   'query-admin-insights-job-performance',
   'get-stale-content-report',
+  'scaffold-data-app',
+  'upsert-data-app-files',
+  'read-data-app-file',
+  'list-data-app-files',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
@@ -51,6 +55,7 @@ export const webToolGroupNames = [
   'users',
   'token-management',
   'admin-insights',
+  'data-app',
 ] as const;
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
@@ -101,6 +106,19 @@ export const webToolGroups = {
     'query-admin-insights-site-content',
     'query-admin-insights-job-performance',
     'get-stale-content-report',
+  ],
+  // File-only workspace authoring tools plus the existing validation/publication tools that
+  // consume a data-app workspace. Membership here is additive: validate-workbook-package and
+  // create-and-publish-workbook remain in the `workbook` group too (a tool may belong to more
+  // than one group), so INCLUDE_TOOLS/EXCLUDE_TOOLS='data-app' can gate or keep the whole
+  // scaffold -> author -> validate -> publish workflow together.
+  'data-app': [
+    'scaffold-data-app',
+    'upsert-data-app-files',
+    'read-data-app-file',
+    'list-data-app-files',
+    'validate-workbook-package',
+    'create-and-publish-workbook',
   ],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 

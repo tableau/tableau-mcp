@@ -13,25 +13,32 @@ const CHECK_SVG =
   'stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 // The publish tool returns a flat CreateAndPublishResult; the client reads only these fields. `url`
-// is required and must be a real URL — when the server returns no webpageUrl the tool omits it, the
-// guard fails, and handleToolResult falls back to plain JSON (better an absent card than a broken
-// link). `projectName` is the human-readable destination project (e.g. "Default"); we render it in
-// the meta row so the card names where the workbook landed. `projectId` (the LUID) is kept only as
-// a presence signal for the fallback label. See createAndPublishWorkbook.ts / publishShared.ts.
+// is optional: publishing can succeed even when the server returns no webpageUrl (see
+// publishShared.ts), and that is still a successful publish — the card renders name/id/project as a
+// non-clickable card rather than falling back to plain JSON. `id` is the workbook LUID, shown as a
+// fallback identifier when there is no link to click. `projectName` is the human-readable
+// destination project (e.g. "Default"); we render it in the meta row so the card names where the
+// workbook landed. `projectId` (the LUID) is kept only as a presence signal for the fallback label.
+// See createAndPublishWorkbook.ts / publishShared.ts.
 const publishedWorkbookSchema = z.object({
   appView: z.literal('published-workbook-card'),
   name: z.string(),
-  url: z.string().url(),
+  id: z.string().optional(),
+  url: z.string().url().optional(),
   projectId: z.string().optional(),
   projectName: z.string().optional(),
+  // Non-fatal builder advisories carried over from validation (e.g. "that .parquet asset may 404").
+  // Rendered below the card so the user sees them without them blocking the published link. Never a
+  // storage path — only human-readable advisories. Absent/empty → no warnings section.
+  warnings: z.array(z.string()).optional(),
 });
 
 export type PublishedWorkbookResult = z.infer<typeof publishedWorkbookSchema>;
 
 /**
  * Type guard: is this parsed tool payload a published-workbook card result we can render?
- * Requires a valid `url`; a payload with `appView` but no usable URL returns false so the caller
- * falls back to the default (JSON / embed) path rather than rendering a link-less card.
+ * Only `appView` and `name` are required; `url` is optional — a successful publish with no
+ * `webpageUrl` still renders a card (name/id/project), just without a clickable link.
  */
 export function isPublishedWorkbookResult(value: unknown): value is PublishedWorkbookResult {
   return publishedWorkbookSchema.safeParse(value).success;
@@ -40,10 +47,13 @@ export function isPublishedWorkbookResult(value: unknown): value is PublishedWor
 /**
  * Renders the published-workbook result card into the app container.
  *
- * The whole card is one clickable link to the workbook `url`. When the host supports it we open via
- * the host-mediated `app.openLink` (the host owns the new tab); otherwise the plain anchor `href`
- * navigation is the fallback. All user-derived text (workbook name) is set with `textContent`; the
- * only innerHTML is the static sparkle/arrow/check SVG constants — never user input.
+ * When `url` is present the whole card is one clickable link to it. When the host supports it we
+ * open via the host-mediated `app.openLink` (the host owns the new tab); otherwise the plain anchor
+ * `href` navigation is the fallback. When `url` is absent (a successful publish with no
+ * `webpageUrl`), the card renders as a plain, non-interactive container — still naming the workbook
+ * and, if known, its id — rather than a link that would 404. All user-derived text (workbook name)
+ * is set with `textContent`; the only innerHTML is the static sparkle/arrow/check SVG constants —
+ * never user input.
  *
  * @param app - The MCP App instance (for host-mediated link opening)
  * @param data - The validated published-workbook result
@@ -54,28 +64,35 @@ export function renderPublishedWorkbookCard(app: App, data: PublishedWorkbookRes
     return;
   }
 
-  const card = document.createElement('a');
+  const hasUrl = Boolean(data.url);
+  const card = document.createElement(hasUrl ? 'a' : 'div');
   card.className = 'pub-card';
-  card.setAttribute('href', data.url);
-  card.setAttribute('target', '_blank');
-  card.setAttribute('rel', 'noopener noreferrer');
-  card.setAttribute('aria-label', `Open published workbook ${data.name} in Tableau`);
 
-  // Host-mediated open when the capability is present; otherwise leave the anchor to navigate.
-  const capabilities = app.getHostCapabilities();
-  if (capabilities?.openLinks) {
-    card.onclick = async (e) => {
-      e.preventDefault();
-      try {
-        await app.openLink({ url: data.url });
-      } catch (error) {
-        // The anchor href remains as a fallback; just note the host rejection.
-        console.warn('[mcp-app] Open published workbook link request failed', {
-          url: data.url,
-          error,
-        });
-      }
-    };
+  if (hasUrl) {
+    const url = data.url as string;
+    card.setAttribute('href', url);
+    card.setAttribute('target', '_blank');
+    card.setAttribute('rel', 'noopener noreferrer');
+    card.setAttribute('aria-label', `Open published workbook ${data.name} in Tableau`);
+
+    // Host-mediated open when the capability is present; otherwise leave the anchor to navigate.
+    const capabilities = app.getHostCapabilities();
+    if (capabilities?.openLinks) {
+      card.onclick = async (e) => {
+        e.preventDefault();
+        try {
+          await app.openLink({ url });
+        } catch (error) {
+          // The anchor href remains as a fallback; just note the host rejection.
+          console.warn('[mcp-app] Open published workbook link request failed', {
+            url,
+            error,
+          });
+        }
+      };
+    }
+  } else {
+    card.setAttribute('aria-label', `Published workbook ${data.name}`);
   }
 
   // Left: sparkle tile (static SVG, safe innerHTML).
@@ -119,17 +136,45 @@ export function renderPublishedWorkbookCard(app: App, data: PublishedWorkbookRes
   meta.append(badge, dot, project);
   body.append(title, meta);
 
-  // Right: "Open ↗" affordance (static arrow SVG).
-  const open = document.createElement('span');
-  open.className = 'pub-card-open';
-  const openText = document.createElement('span');
-  openText.textContent = 'Open';
-  const arrow = document.createElement('span');
-  arrow.className = 'pub-card-arrow';
-  arrow.setAttribute('aria-hidden', 'true');
-  arrow.innerHTML = OPEN_ARROW_SVG;
-  open.append(openText, arrow);
+  // Right: "Open ↗" affordance (static arrow SVG) when there is a link to open. When there is no
+  // `url`, show the workbook id instead (if known) so the card still gives the user something
+  // useful to reference — never a broken/dead "Open" affordance.
+  let trailing: HTMLElement | undefined;
+  if (hasUrl) {
+    trailing = document.createElement('span');
+    trailing.className = 'pub-card-open';
+    const openText = document.createElement('span');
+    openText.textContent = 'Open';
+    const arrow = document.createElement('span');
+    arrow.className = 'pub-card-arrow';
+    arrow.setAttribute('aria-hidden', 'true');
+    arrow.innerHTML = OPEN_ARROW_SVG;
+    trailing.append(openText, arrow);
+  } else if (data.id) {
+    trailing = document.createElement('span');
+    trailing.className = 'pub-card-id';
+    trailing.textContent = `ID: ${data.id}`;
+  }
 
-  card.append(logo, body, open);
-  container.replaceChildren(card);
+  card.append(logo, body, ...(trailing ? [trailing] : []));
+
+  // Non-fatal warnings render as a sibling BELOW the card (not inside the clickable anchor) so the
+  // published link stays a single, clean click target. Each warning is set via textContent — never
+  // innerHTML — so a warning string can never inject markup.
+  const warnings = (data.warnings ?? []).filter((w) => w.trim().length > 0);
+  if (warnings.length === 0) {
+    container.replaceChildren(card);
+    return;
+  }
+
+  const warningsEl = document.createElement('div');
+  warningsEl.className = 'pub-card-warnings';
+  warningsEl.setAttribute('role', 'status');
+  for (const warning of warnings) {
+    const item = document.createElement('div');
+    item.className = 'pub-card-warning';
+    item.textContent = warning;
+    warningsEl.append(item);
+  }
+  container.replaceChildren(card, warningsEl);
 }

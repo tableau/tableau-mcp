@@ -379,4 +379,32 @@ describe('handleToolResult', () => {
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
     expect(vi.mocked(setupOpenInTableauLink)).not.toHaveBeenCalled();
   });
+
+  it('published-workbook card: passes builder warnings through to the renderer', async () => {
+    const publishResult: CallToolResult = {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            appView: 'published-workbook-card',
+            name: 'My Viz',
+            url: 'https://main-windows/#/site/AdminProfiles/workbooks/4122',
+            projectName: 'Default',
+            warnings: ['data.parquet may 404 at serve time'],
+            // Traceability fields are additive and must not break dispatch.
+            validationId: 'a'.repeat(32),
+            digest: 'c'.repeat(64),
+          }),
+        },
+      ],
+    };
+
+    await handleToolResult(mockApp, publishResult);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(vi.mocked(renderPublishedWorkbookCard)).toHaveBeenCalledWith(
+      mockApp,
+      expect.objectContaining({ warnings: ['data.parquet may 404 at serve time'] }),
+    );
+  });
 });

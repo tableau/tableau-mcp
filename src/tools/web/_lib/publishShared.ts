@@ -1,8 +1,11 @@
 import { Ok, Result } from 'ts-results-es';
+import { z } from 'zod';
 
 import { PublishWorkbookError } from '../../../errors/mcpToolError.js';
+import { AUDIT_LOGGER, log } from '../../../logging/logger.js';
 import { PublishedWorkbook } from '../../../sdks/tableau/methods/publishingMethods.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 
 // The single-request publish endpoint accepts files up to 64 MB. Larger files require the File
 // Upload session flow, which is not implemented yet — we fail fast with a clear message instead of
@@ -71,6 +74,88 @@ export async function resolveTargetProject(
     ).toErr();
   }
   return new Ok({ id: defaultProject.id, name: defaultProject.name });
+}
+
+// The stable identity of the principal attempting a publish, captured for the audit trail. Derived
+// only from server-verified request signals (`extra`), never from a caller-supplied argument, and
+// never a raw PAT/token.
+export type PublishActor = {
+  username?: string;
+  userLuid?: string;
+  siteLuid: string;
+  siteName: string;
+};
+
+export function buildPublishActor(extra: TableauWebRequestHandlerExtra): PublishActor {
+  return {
+    username: extra.tableauAuthInfo?.username,
+    userLuid: extra.getUserLuid(),
+    siteLuid: extra.getSiteLuid(),
+    siteName: extra.getSiteName(),
+  };
+}
+
+// A single authoritative publish-audit record. Every field is safe to persist: it records WHO
+// published WHICH validated package WHERE and with WHAT terminal outcome. It deliberately carries no
+// source contents, static query rows, tokens, or file bytes — only opaque handles (validationId /
+// appId), the content digest, and the caller-supplied publish-target arguments (bound per call so a
+// reused receipt's audit trail distinguishes each attempt).
+const publishAuditRecordSchema = z.object({
+  schemaVersion: z.literal(1),
+  timestamp: z.string(),
+  tool: z.string(),
+  actor: z.object({
+    username: z.string().optional(),
+    userLuid: z.string().optional(),
+    siteLuid: z.string(),
+    siteName: z.string(),
+  }),
+  appId: z.string(),
+  validationId: z.string(),
+  digest: z.string(),
+  workbookName: z.string().optional(),
+  projectId: z.string().optional(),
+  showTabs: z.boolean(),
+  overwrite: z.boolean(),
+  outcome: z.enum(['published', 'failed']),
+  // Fixed, bounded classifications only. Raw exception messages can contain credentials, request
+  // bodies, or source data and must never enter the durable audit trail.
+  failureCode: z
+    .enum([
+      'rest-api-setup-failed',
+      'target-project-query-failed',
+      'target-project-not-found',
+      'publish-workbook-failed',
+    ])
+    .optional(),
+});
+
+export type PublishAuditRecord = z.infer<typeof publishAuditRecordSchema>;
+
+/**
+ * Validates and emits a single publish-audit record to the durable log sink on the dedicated `audit`
+ * logger (which bypasses the LOG_LEVEL severity filter, so an operator cannot suppress it). Parsing
+ * through the schema guarantees the record only ever carries the safe, whitelisted fields — never
+ * bytes, tokens, or source content. Audit is best-effort and MUST NOT affect tool behavior: malformed
+ * audit data or a failing log sink is contained here so it cannot mask the original REST result.
+ */
+export function emitPublishAudit(
+  record: Omit<PublishAuditRecord, 'schemaVersion' | 'timestamp'>,
+): void {
+  const parsed = publishAuditRecordSchema.safeParse({
+    schemaVersion: 1,
+    timestamp: new Date().toISOString(),
+    ...record,
+  });
+  if (!parsed.success) {
+    return;
+  }
+  try {
+    log({ message: 'publish-audit', level: 'notice', logger: AUDIT_LOGGER, data: parsed.data });
+  } catch {
+    // Deliberately swallow audit-sink failures. The caller's original publish outcome is
+    // authoritative and must never be replaced by a logging exception.
+  }
 }
 
 // Map the SDK's PublishedWorkbook onto the tool result. projectId is the *resolved* target we

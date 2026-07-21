@@ -19,12 +19,14 @@ import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { getFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { registerPrompts } from './prompts/index.js';
+import { registerResources } from './resources/index.js';
 import { ClientInfo, Server } from './server.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
+import { webToolGroups, WebToolName } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
@@ -38,15 +40,25 @@ const __dirname = getDirname();
 
 export class WebMcpServer extends Server {
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
-    super({ mcpServer, clientInfo, serverName, serverVersion });
+    super({
+      mcpServer,
+      clientInfo,
+      serverName,
+      serverVersion,
+      additionalCapabilities: { resources: {} },
+    });
   }
 
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
     const config = getConfig();
+    const featureGate = getFeatureGate();
+    const mcpAppsEnabled = featureGate.isFeatureEnabled('mcp-apps');
+    // Resolve this coordinated gate exactly once for the complete registration lifecycle. Custom
+    // providers may be dynamic; re-reading between tool and resource registration could otherwise
+    // expose only half of the workflow.
+    const dataAppWorkspacesEnabled = featureGate.isFeatureEnabled('data-app-workspaces');
 
-    const mcpAppsEnabled = getFeatureGate().isFeatureEnabled('mcp-apps');
-
-    for (const tool of await this._getToolsToRegister(tableauAuthInfo)) {
+    for (const tool of await this._getToolsToRegister(dataAppWorkspacesEnabled, tableauAuthInfo)) {
       const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
         args: typeof tool.paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
@@ -108,9 +120,13 @@ export class WebMcpServer extends Server {
     }
 
     registerPrompts(this);
+
+    // Pass the same resolved value used for tool filtering so resources cannot disagree.
+    registerResources(this, { dataAppWorkspacesEnabled });
   };
 
   protected _getToolsToRegister = async (
+    dataAppWorkspacesEnabled: boolean,
     tableauAuthInfo?: TableauAuthInfo,
   ): Promise<Array<WebTool<any>>> => {
     const config = getConfig();
@@ -127,12 +143,16 @@ export class WebMcpServer extends Server {
 
     const { includeTools, excludeTools } = configOverrides;
 
+    // The caller must supply the single gate snapshot resolved for this registration lifecycle.
+    const dataAppToolNames: ReadonlySet<WebToolName> = new Set(webToolGroups['data-app']);
+
     const allTools = webToolFactories.map((toolFactory) =>
       toolFactory(this, tableauServerInfo.productVersion),
     );
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {
       if (await Provider.from(tool.disabled)) continue;
+      if (!dataAppWorkspacesEnabled && dataAppToolNames.has(tool.name)) continue;
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
       toolsToRegister.push(tool);

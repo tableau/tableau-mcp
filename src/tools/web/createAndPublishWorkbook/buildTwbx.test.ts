@@ -56,6 +56,17 @@ describe('buildTwbx', () => {
     expect(files['Packages/com.example.myviz/content/index.html']).toContain('<!doctype html>');
   });
 
+  it('accepts raw index.html bytes without changing them', () => {
+    const html = new Uint8Array([0xef, 0xbb, 0xbf, 0x00, 0x80, 0xff, 0x3c]);
+    const archive = unzipSync(buildTwbx({ ...base, html }).bytes);
+    expect(archive['Packages/com.example.myviz/content/index.html']).toEqual(html);
+  });
+
+  it('retains compatibility with the existing raw string caller', () => {
+    const archive = unzipSync(buildTwbx(base).bytes);
+    expect(strFromU8(archive['Packages/com.example.myviz/content/index.html'])).toBe(base.html);
+  });
+
   it('binds the bundled extension to a dashboard so the published workbook is NOT empty', () => {
     // Regression guard for the empty-publish bug: the .twb must carry the full render chain —
     // a dashboard, a dashboard-object zone, an <add-in>, and an inline <referenced-extension> —
@@ -119,6 +130,23 @@ describe('buildTwbx', () => {
 
   it('rejects an illegal packageId', () => {
     expect(() => buildTwbx({ ...base, packageId: '1bad id!' })).toThrow(BuildTwbxError);
+  });
+
+  it('nests directory-prefixed asset paths under content/ verbatim (workspace-snapshot layout)', () => {
+    // The workspace-snapshot path (buildWorkspaceTwbx) maps files like src/app.js / src/styles.css
+    // straight through as assets; buildTwbx must place each under content/<path> preserving the
+    // subdirectory, not flatten it.
+    const files = entries(
+      buildTwbx({
+        ...base,
+        assets: [
+          { path: 'src/app.js', bytes: strToU8('console.log(1)') },
+          { path: 'src/styles.css', bytes: strToU8('body{}') },
+        ],
+      }).bytes,
+    );
+    expect(files['Packages/com.example.myviz/content/src/app.js']).toBe('console.log(1)');
+    expect(files['Packages/com.example.myviz/content/src/styles.css']).toBe('body{}');
   });
 
   it('is deterministic: identical input yields byte-identical output', () => {

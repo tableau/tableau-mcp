@@ -107,8 +107,10 @@ tableau-viz {
   color: #5a6b7b;
 }
 
-/* Published-workbook result card (create-and-publish-workbook). The whole card is one clickable
-   link to the workbook URL: sparkle tile · name + "✓ Published · <project>" · "Open ↗". */
+/* Published-workbook result card (create-and-publish-workbook). When the result has a `url` the
+   whole card is one clickable link (an <a>): sparkle tile · name + "✓ Published · <project>" ·
+   "Open ↗". When the publish succeeded without a `url`, the card renders as a plain <div> (no
+   hover/focus affordance) showing the same name/project plus the workbook id in place of "Open". */
 .pub-card {
   display: flex;
   align-items: center;
@@ -130,13 +132,13 @@ tableau-viz {
     transform 0.16s ease;
 }
 
-.pub-card:hover {
+a.pub-card:hover {
   border-color: #c9d3dd;
   box-shadow: 0 4px 12px rgba(16, 24, 40, 0.12);
   transform: translateY(-1px);
 }
 
-.pub-card:focus-visible {
+a.pub-card:focus-visible {
   outline: 2px solid #0066cc;
   outline-offset: 2px;
 }
@@ -229,4 +231,11 @@ tableau-viz {
   display: block;
   width: 15px;
   height: 15px;
+}
+
+.pub-card-id {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
 }

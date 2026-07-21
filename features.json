@@ -1,3 +1,4 @@
 {
-  "mcp-apps": true
+  "mcp-apps": true,
+  "data-app-workspaces": true
 }

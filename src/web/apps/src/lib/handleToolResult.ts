@@ -64,9 +64,9 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
     return;
   }
 
-  // create-and-publish-workbook: render a link card instead of embedding a viz. Requires a valid
-  // `url`; if absent the guard fails and we fall through to the default path (which will surface a
-  // PARSE_ERROR for a missing url — the correct "no clickable card" fallback).
+  // create-and-publish-workbook: render a link card instead of embedding a viz. `url` is optional —
+  // a successful publish with no server-returned webpageUrl still renders a (non-clickable) card
+  // rather than falling through to the default embed path.
   //
   // No in-feed dashboard preview: the published dashboard's charts are drawn by the model's inline
   // JS, which the host's nonce-based CSP refuses to run inside a sandboxed iframe (a srcdoc frame

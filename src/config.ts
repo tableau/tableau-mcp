@@ -303,6 +303,10 @@ export class Config extends BaseConfig {
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
 
+    // Local-path exposure is only safe for the single-user stdio server; never over HTTP where a
+    // returned absolute path would leak the server's storage layout to remote callers.
+    this.dataApps.exposeLocalPath = this.dataApps.exposeLocalPath && this.transport === 'stdio';
+
     if (this.transport === 'http' && !disableOauthOverride && !this.oauth.issuer) {
       throw new Error(
         'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DANGEROUSLY_DISABLE_OAUTH is "true"',

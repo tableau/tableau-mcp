@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { ViewNotAllowedError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { publishExitClause } from '../publishExitClause.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 
@@ -21,12 +20,11 @@ export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsS
   const getViewDataTool = new WebTool({
     server,
     name: 'get-view-data',
-    description:
-      [
-        "Retrieves comma-separated value (CSV) data for the specified view in a Tableau workbook, including the user's filters.",
-        'Requires the view LUID from the content URL (not the published view id).',
-        'For custom views, use the tool to get custom view data by custom view id instead.',
-      ].join(' ') + `\n\n${publishExitClause}`,
+    description: [
+      "Retrieves comma-separated value (CSV) data for the specified view in a Tableau workbook, including the user's filters.",
+      'Requires the view LUID from the content URL (not the published view id).',
+      'For custom views, use the tool to get custom view data by custom view id instead.',
+    ].join(' '),
     paramsSchema,
     annotations: {
       title: 'Get View Data',

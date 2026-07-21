@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { InitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { InitializeRequest, ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 
@@ -29,11 +29,13 @@ export abstract class Server {
     clientInfo,
     serverName,
     serverVersion,
+    additionalCapabilities,
   }: {
     mcpServer?: McpServer;
     clientInfo?: ClientInfo;
     serverName: string;
     serverVersion: string;
+    additionalCapabilities?: ServerCapabilities;
   }) {
     this.mcpServer =
       mcpServer ??
@@ -47,6 +49,7 @@ export abstract class Server {
             logging: {},
             tools: {},
             prompts: {},
+            ...additionalCapabilities,
           },
         },
       );

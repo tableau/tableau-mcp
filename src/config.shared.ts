@@ -10,6 +10,20 @@ import { parseNumber } from './utils/parseNumber.js';
 
 const __dirname = getDirname();
 
+/**
+ * Configuration for the scoped data-app workspace store. Limits and TTLs are transport-agnostic and
+ * shared across build variants; `exposeLocalPath` is narrowed to stdio in {@link Config}.
+ */
+export type DataAppsConfig = {
+  workspaceRoot: string;
+  workspaceTtlMs: number;
+  validationTtlMs: number;
+  maxFileCount: number;
+  maxFileBytes: number;
+  maxWorkspaceBytes: number;
+  exposeLocalPath: boolean;
+};
+
 export class BaseConfig {
   transport: TransportName;
   defaultNotificationLevel: string;
@@ -19,6 +33,7 @@ export class BaseConfig {
   disableLogMasking: boolean;
   maxRequestTimeoutMs: number;
   notificationPayloadMaxBytes: number;
+  dataApps: DataAppsConfig;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -31,6 +46,13 @@ export class BaseConfig {
       DISABLE_LOG_MASKING: disableLogMasking,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       NOTIFICATION_PAYLOAD_MAX_BYTES: notificationPayloadMaxBytes,
+      DATA_APP_WORKSPACE_ROOT: dataAppWorkspaceRoot,
+      DATA_APP_WORKSPACE_TTL_MS: dataAppWorkspaceTtlMs,
+      DATA_APP_VALIDATION_TTL_MS: dataAppValidationTtlMs,
+      DATA_APP_MAX_FILE_COUNT: dataAppMaxFileCount,
+      DATA_APP_MAX_FILE_BYTES: dataAppMaxFileBytes,
+      DATA_APP_MAX_WORKSPACE_BYTES: dataAppMaxWorkspaceBytes,
+      DATA_APP_EXPOSE_LOCAL_PATH: dataAppExposeLocalPath,
     } = cleansedVars;
 
     this.transport = isTransport(transport) ? transport : 'stdio';
@@ -48,6 +70,38 @@ export class BaseConfig {
       defaultValue: 8192,
       minValue: 1,
     });
+
+    this.dataApps = {
+      // Server-controlled root; never a caller-selected directory.
+      workspaceRoot: dataAppWorkspaceRoot?.trim() || join(__dirname, 'data-app-workspaces'),
+      workspaceTtlMs: parseNumber(dataAppWorkspaceTtlMs, {
+        defaultValue: milliseconds.fromHours(24),
+        minValue: milliseconds.fromMinutes(1),
+        maxValue: milliseconds.fromDays(30),
+      }),
+      validationTtlMs: parseNumber(dataAppValidationTtlMs, {
+        defaultValue: milliseconds.fromHours(1),
+        minValue: milliseconds.fromMinutes(1),
+        maxValue: milliseconds.fromDays(7),
+      }),
+      maxFileCount: parseNumber(dataAppMaxFileCount, {
+        defaultValue: 50,
+        minValue: 1,
+        maxValue: 1000,
+      }),
+      maxFileBytes: parseNumber(dataAppMaxFileBytes, {
+        defaultValue: 5 * 1024 * 1024, // 5 MiB
+        minValue: 1,
+        maxValue: 64 * 1024 * 1024, // 64 MiB single-request publish limit
+      }),
+      maxWorkspaceBytes: parseNumber(dataAppMaxWorkspaceBytes, {
+        defaultValue: 32 * 1024 * 1024, // 32 MiB, comfortably under the 64 MiB publish limit
+        minValue: 1,
+        maxValue: 64 * 1024 * 1024,
+      }),
+      // Narrowed to stdio in Config; only meaningful for a single-user local server.
+      exposeLocalPath: dataAppExposeLocalPath === 'true',
+    };
   }
 }
 

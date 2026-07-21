@@ -13,7 +13,6 @@ import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLeast.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
-import { publishExitClause } from '../publishExitClause.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ToolRules, WebTool } from '../tool.js';
 import { combineFields, simplifyReadMetadataResult } from './datasourceMetadataUtils.js';
@@ -110,8 +109,6 @@ export const getGetDatasourceMetadataTool = (
     The metadata provided by this tool consists of the datasource model, fields, and parameters that belong to the datasource.
     Fields will contain properties such as name and dataType, but may also expose richer context such as descriptions, dataCategories, roles, etc.
     This tool should be used for getting the metadata to ground the use of a tool that queries Tableau published data sources.
-
-    ${publishExitClause}
     `,
     paramsSchema,
     annotations: {

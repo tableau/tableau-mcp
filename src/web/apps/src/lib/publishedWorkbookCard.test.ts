@@ -34,9 +34,9 @@ describe('isPublishedWorkbookResult', () => {
     expect(isPublishedWorkbookResult({ url: validPayload.url })).toBe(false);
   });
 
-  it('rejects a payload with no usable url (server returned no webpageUrl)', () => {
+  it('accepts a payload with no url (a successful publish with no server webpageUrl)', () => {
     const { url: _omitted, ...noUrl } = validPayload;
-    expect(isPublishedWorkbookResult(noUrl)).toBe(false);
+    expect(isPublishedWorkbookResult(noUrl)).toBe(true);
   });
 
   it('rejects a payload whose url is not a valid URL', () => {
@@ -124,6 +124,42 @@ describe('renderPublishedWorkbookCard', () => {
     expect(vi.mocked(app.openLink)).toHaveBeenCalledWith({ url: validPayload.url });
   });
 
+  it('renders non-fatal builder warnings below the card via textContent (no injection)', () => {
+    const xssWarning = '<img src=x onerror=alert(1)> data.parquet may 404';
+    renderPublishedWorkbookCard(makeApp(), {
+      ...validPayload,
+      warnings: ['First advisory', xssWarning],
+    });
+
+    const warnings = document.querySelectorAll('.pub-card-warning');
+    expect(warnings.length).toBe(2);
+    expect(warnings[0].textContent).toBe('First advisory');
+    expect(warnings[1].textContent).toBe(xssWarning);
+    // Set as text, not parsed as HTML — no injected <img> element.
+    expect(document.querySelector('.pub-card-warnings img')).toBeNull();
+    // Warnings live outside the clickable card anchor.
+    expect(document.querySelector('a.pub-card .pub-card-warnings')).toBeNull();
+  });
+
+  it('renders no warnings section when warnings are absent or empty', () => {
+    renderPublishedWorkbookCard(makeApp(), { ...validPayload, warnings: ['   ', ''] });
+    expect(document.querySelector('.pub-card-warnings')).toBeNull();
+
+    renderPublishedWorkbookCard(makeApp(), validPayload);
+    expect(document.querySelector('.pub-card-warnings')).toBeNull();
+  });
+
+  it('accepts a payload carrying warnings and passthrough traceability fields', () => {
+    expect(
+      isPublishedWorkbookResult({
+        ...validPayload,
+        warnings: ['advisory'],
+        validationId: 'a'.repeat(32),
+        digest: 'c'.repeat(64),
+      }),
+    ).toBe(true);
+  });
+
   it('does not attach a host-open handler when openLinks is unsupported', () => {
     const app = makeApp({ getHostCapabilities: vi.fn().mockReturnValue({}) });
     renderPublishedWorkbookCard(app, validPayload);
@@ -131,5 +167,49 @@ describe('renderPublishedWorkbookCard', () => {
     const card = document.querySelector('a.pub-card') as HTMLAnchorElement;
     // No onclick override — the plain anchor href carries the navigation.
     expect(card.onclick).toBeNull();
+  });
+
+  describe('when url is absent (successful publish with no server webpageUrl)', () => {
+    const { url: _omitted, ...noUrlPayload } = validPayload;
+
+    it('renders a non-clickable card instead of a link', () => {
+      renderPublishedWorkbookCard(makeApp(), noUrlPayload);
+
+      const container = document.getElementById('tableauVizContainer');
+      expect(container?.querySelector('a.pub-card')).toBeNull();
+      const card = container?.querySelector('div.pub-card');
+      expect(card).toBeTruthy();
+      expect(card?.hasAttribute('href')).toBe(false);
+    });
+
+    it('still renders the workbook name and project', () => {
+      renderPublishedWorkbookCard(makeApp(), { ...noUrlPayload, projectName: 'Default' });
+
+      expect(document.querySelector('.pub-card-title')?.textContent).toBe(noUrlPayload.name);
+      expect(document.querySelector('.pub-card-project')?.textContent).toBe('Default');
+    });
+
+    it('shows the workbook id in place of the "Open" affordance', () => {
+      renderPublishedWorkbookCard(makeApp(), { ...noUrlPayload, id: 'wb-123' });
+
+      expect(document.querySelector('.pub-card-open')).toBeNull();
+      expect(document.querySelector('.pub-card-id')?.textContent).toBe('ID: wb-123');
+    });
+
+    it('omits the trailing affordance entirely when neither url nor id is known', () => {
+      renderPublishedWorkbookCard(makeApp(), noUrlPayload);
+
+      expect(document.querySelector('.pub-card-open')).toBeNull();
+      expect(document.querySelector('.pub-card-id')).toBeNull();
+    });
+
+    it('never attaches a host-open click handler', () => {
+      const app = makeApp();
+      renderPublishedWorkbookCard(app, noUrlPayload);
+
+      const card = document.querySelector('div.pub-card') as HTMLDivElement;
+      expect(card.onclick).toBeNull();
+      expect(vi.mocked(app.openLink)).not.toHaveBeenCalled();
+    });
   });
 });

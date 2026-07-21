@@ -122,10 +122,11 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
-  // Builds a .twbx from HTML in memory and publishes it into a project (workbooks:create). An omitted
-  // projectId resolves the site's default project (content:read). workbooks:update is retained for the
-  // not-yet-enabled personal-space move (Update Workbook <location>) so re-enabling it needs no
-  // scope/consent change.
+  // Publishes the exact bytes of an approved validate-workbook-package receipt (validationId) into a
+  // project (workbooks:create). No build/upload of caller HTML happens here, but the publish itself
+  // still creates content. An omitted projectId resolves the site's default project (content:read).
+  // workbooks:update is retained for the not-yet-enabled personal-space move (Update Workbook
+  // <location>) so re-enabling it needs no scope/consent change.
   'create-and-publish-workbook': {
     mcp: ['tableau:mcp:workbook:publish'],
     api: new Set(['tableau:workbooks:create', 'tableau:workbooks:update', 'tableau:content:read']),
@@ -308,6 +309,26 @@ const toolScopeMap: Record<
       'tableau:mcp_site_settings:read',
       'tableau:users:read',
     ]),
+  },
+  // Data-app workspace authoring tools operate entirely on the scoped, server-local
+  // DataAppWorkspaceStore (Task 2) — they make no Tableau REST API call, so both scope sets are
+  // empty. Any authenticated (or single-user stdio) caller may scaffold/author/inspect their own
+  // workspace regardless of granted MCP scopes.
+  'scaffold-data-app': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  'upsert-data-app-files': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  'read-data-app-file': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  'list-data-app-files': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
   },
 };
 

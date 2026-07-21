@@ -1,46 +1,61 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { strFromU8, unzipSync } from 'fflate';
+import { createHash } from 'crypto';
 
+import { setDataAppWorkspaceStore } from '../../../dataApps/init.js';
+import { generateOpaqueId } from '../../../dataApps/opaqueId.js';
+import type { WorkspaceScope } from '../../../dataApps/types.js';
+import { resolveWorkspaceScope } from '../../../dataApps/workspaceScope.js';
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { FakeWorkspaceStore } from '../dataApps/workspaceStore.mock.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getCreateAndPublishWorkbookTool } from './createAndPublishWorkbook.js';
 
 const mocks = vi.hoisted(() => ({
+  mockUseRestApi: vi.fn(),
   mockQueryProjects: vi.fn(),
   mockPublishWorkbook: vi.fn(),
+  mockLog: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
-  useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
-    callback({
-      projectsMethods: { queryProjects: mocks.mockQueryProjects },
-      publishingMethods: { publishWorkbook: mocks.mockPublishWorkbook },
-      siteId: 'test-site-id',
-      userId: 'test-user-id',
-    }),
-  ),
+  useRestApi: mocks.mockUseRestApi,
 }));
 
-vi.mock('../../../config.js', () => ({
-  getConfig: vi.fn(() => ({
-    adminToolsEnabled: true,
-    productTelemetryEnabled: false,
-    productTelemetryEndpoint: 'https://test.com',
-    server: 'https://test.tableau.com',
-  })),
-}));
+// Keep AUDIT_LOGGER real; spy on log so we can assert the safe audit payload.
+vi.mock('../../../logging/logger.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../logging/logger.js')>();
+  return { ...actual, log: mocks.mockLog };
+});
 
-const base = {
-  packageId: 'com.example.myviz',
-  workbookName: 'My Viz',
-  html: '<!doctype html><title>hi</title>',
-};
+// Must match what resolveScopeFromExtra derives from getMockRequestHandlerExtra() (stdio transport,
+// config.server from the stubbed SERVER env var, no authenticated Tableau identity).
+const SCOPE: WorkspaceScope = resolveWorkspaceScope({
+  transport: 'stdio',
+  server: 'https://my-tableau-server.com',
+}).unwrap();
+
+// The exact bytes a prior validate-workbook-package call stored in the receipt. Publication must
+// upload these verbatim — they are deliberately NOT a real TWBX to prove nothing rebuilds them.
+const RECEIPT_BYTES = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 0, 255, 128]);
+const RECEIPT_DIGEST = createHash('sha256').update(RECEIPT_BYTES).digest('hex');
 
 describe('createAndPublishWorkbookTool', () => {
+  let store: FakeWorkspaceStore;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    store = new FakeWorkspaceStore();
+    setDataAppWorkspaceStore(store);
+    mocks.mockUseRestApi.mockImplementation(async ({ callback }) =>
+      callback({
+        projectsMethods: { queryProjects: mocks.mockQueryProjects },
+        publishingMethods: { publishWorkbook: mocks.mockPublishWorkbook },
+        siteId: 'test-site-id',
+        userId: 'test-user-id',
+      }),
+    );
     mocks.mockQueryProjects.mockResolvedValue({
       projects: [{ id: 'default-project-id', name: 'Default', topLevelProject: true }],
     });
@@ -52,25 +67,56 @@ describe('createAndPublishWorkbookTool', () => {
     });
   });
 
-  it('creates a tool instance with the correct properties', () => {
+  // Persist an immutable validation receipt under `scope` and return its opaque id.
+  async function saveReceipt(
+    overrides: Partial<{
+      scope: WorkspaceScope;
+      bytes: Uint8Array;
+      workbookName: string;
+      warnings: string[];
+      ttlMs: number;
+    }> = {},
+  ): Promise<string> {
+    const scope = overrides.scope ?? SCOPE;
+    const bytes = overrides.bytes ?? RECEIPT_BYTES;
+    const validationId = generateOpaqueId();
+    if (overrides.ttlMs !== undefined) {
+      store.validationTtlMs = overrides.ttlMs;
+    }
+    await store.saveValidation(scope, {
+      validationId,
+      appId: 'a'.repeat(32),
+      bytes,
+      digest: createHash('sha256').update(bytes).digest('hex'),
+      sourceDigest: 'src-digest',
+      workbookName: overrides.workbookName ?? 'My Viz',
+      warnings: overrides.warnings ?? [],
+      checksPerformed: ['structure', 'asset-references', 'size'],
+      byteLength: bytes.byteLength,
+    });
+    return validationId;
+  }
+
+  it('creates a tool instance that accepts validationId (not html/build params)', () => {
     const tool = getCreateAndPublishWorkbookTool(new WebMcpServer());
     expect(tool.name).toBe('create-and-publish-workbook');
-    expect(tool.description).toContain('in memory');
-    expect(tool.paramsSchema).toHaveProperty('packageId');
-    expect(tool.paramsSchema).toHaveProperty('html');
+    expect(tool.paramsSchema).toHaveProperty('validationId');
     expect(tool.paramsSchema).toHaveProperty('projectId');
+    expect(tool.paramsSchema).toHaveProperty('showTabs');
+    expect(tool.paramsSchema).toHaveProperty('overwrite');
+    // The raw-build contract is gone.
+    expect(tool.paramsSchema).not.toHaveProperty('html');
+    expect(tool.paramsSchema).not.toHaveProperty('assets');
+    expect(tool.paramsSchema).not.toHaveProperty('packageId');
+    expect(tool.paramsSchema).not.toHaveProperty('workbookName');
+    expect(tool.paramsSchema).not.toHaveProperty('toolbarLabel');
   });
 
-  it('builds in memory and publishes a .twbx to the default project', async () => {
-    const result = await getToolResult(base);
+  it('publishes the exact stored receipt bytes and derived filename metadata', async () => {
+    const validationId = await saveReceipt({ workbookName: 'My Viz' });
+    const result = await getToolResult({ validationId });
     expect(result.isError).toBe(false);
 
-    expect(mocks.mockQueryProjects).toHaveBeenCalledWith({
-      siteId: 'test-site-id',
-      filter: 'name:eq:Default',
-    });
-
-    // The published bytes are a real .twbx: unzip and confirm the expected layout.
     const call = mocks.mockPublishWorkbook.mock.calls[0][0];
     expect(call).toMatchObject({
       siteId: 'test-site-id',
@@ -79,74 +125,52 @@ describe('createAndPublishWorkbookTool', () => {
       fileName: 'My Viz.twbx',
       workbookType: 'twbx',
     });
+    // The uploaded bytes are byte-for-byte the receipt bytes — nothing was rebuilt.
     expect(Buffer.isBuffer(call.fileContents)).toBe(true);
-    const paths = Object.keys(unzipSync(new Uint8Array(call.fileContents)));
-    expect(paths).toContain('My Viz.twb');
-    expect(paths).toContain('Packages/com.example.myviz/manifest.json');
-    expect(paths).toContain('Packages/com.example.myviz/content/index.html');
-
-    invariant(result.content[0].type === 'text');
-    const payload = JSON.parse(result.content[0].text);
-    expect(payload.id).toBe('wb-123');
-    expect(payload.projectId).toBe('default-project-id');
-    // The resolver knew the default project's display name — surfaced for the card label.
-    expect(payload.projectName).toBe('Default');
-    // url is the server's webpageUrl passed through verbatim (not reconstructed).
-    expect(payload.url).toBe('https://test.tableau.com/#/workbooks/wb-123');
-    expect(payload.webpageUrl).toBe('https://test.tableau.com/#/workbooks/wb-123');
-    expect(payload.warnings).toEqual([]);
-    // MCP-Apps discriminator: tells the shared client bundle to render the published-workbook card.
-    expect(payload.appView).toBe('published-workbook-card');
+    expect(new Uint8Array(call.fileContents)).toEqual(RECEIPT_BYTES);
   });
 
-  it('splits an inline-script html into a package containing content/app.js (server-side, model-invisible)', async () => {
-    const result = await getToolResult({
-      ...base,
-      html: '<!doctype html><body><script>render([1,2,3]);</script></body>',
+  it('passes the server response URL through verbatim on the card payload', async () => {
+    const validationId = await saveReceipt();
+    const result = await getToolResult({ validationId });
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.url).toBe('https://test.tableau.com/#/workbooks/wb-123');
+    expect(payload.webpageUrl).toBe('https://test.tableau.com/#/workbooks/wb-123');
+    expect(payload.appView).toBe('published-workbook-card');
+    expect(payload.projectName).toBe('Default');
+  });
+
+  it('surfaces the validation package digest for traceability', async () => {
+    const validationId = await saveReceipt();
+    const result = await getToolResult({ validationId });
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.digest).toBe(RECEIPT_DIGEST);
+    expect(payload.validationId).toBe(validationId);
+  });
+
+  it('keeps builder warnings from validation visible on the published-workbook card', async () => {
+    const validationId = await saveReceipt({
+      warnings: ['Asset "data.parquet" may 404 at serve time.'],
     });
-    expect(result.isError).toBe(false);
-    const call = mocks.mockPublishWorkbook.mock.calls[0][0];
-    const files = unzipSync(new Uint8Array(call.fileContents));
-    const paths = Object.keys(files);
-    // The entrypoint is still present...
-    expect(paths).toContain('Packages/com.example.myviz/content/index.html');
-    // ...and the inline script has been externalized beside it.
-    expect(paths).toContain('Packages/com.example.myviz/content/app.js');
-    expect(strFromU8(files['Packages/com.example.myviz/content/app.js'])).toBe('render([1,2,3]);');
-    // index.html now references the external file instead of carrying the inline block.
-    const indexHtml = strFromU8(files['Packages/com.example.myviz/content/index.html']);
-    expect(indexHtml).toContain('<script src="app.js"></script>');
-    expect(indexHtml).not.toContain('render([1,2,3]);');
+    const result = await getToolResult({ validationId });
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.warnings).toEqual(['Asset "data.parquet" may 404 at serve time.']);
   });
 
   it('sanitizes Windows-illegal chars in the .twbx fileName while keeping the display name verbatim', async () => {
-    const result = await getToolResult({ ...base, workbookName: 'Q3: Sales/Ops' });
-    expect(result.isError).toBe(false);
+    const validationId = await saveReceipt({ workbookName: 'Q3: Sales/Ops' });
+    await getToolResult({ validationId });
     const call = mocks.mockPublishWorkbook.mock.calls[0][0];
-    // Display name (the REST `name` param) is passed through untouched...
     expect(call.name).toBe('Q3: Sales/Ops');
-    // ...but the derived on-disk fileName is sanitized (colon/slash → underscore) so the server can
-    // write it to disk on a Windows host without a 500.
     expect(call.fileName).toBe('Q3_ Sales_Ops.twbx');
   });
 
-  it('omits url when the server returns no webpageUrl', async () => {
-    mocks.mockPublishWorkbook.mockResolvedValue({
-      id: 'wb-123',
-      name: 'My Viz',
-      contentUrl: 'MyViz',
-    });
-    const result = await getToolResult(base);
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    const payload = JSON.parse(result.content[0].text);
-    // No fabrication: absent webpageUrl → absent url (JSON drops undefined keys).
-    expect(payload.url).toBeUndefined();
-    expect(payload.contentUrl).toBe('MyViz');
-  });
-
   it('publishes directly to a project when projectId is given', async () => {
-    const result = await getToolResult({ ...base, projectId: 'proj-abc' });
+    const validationId = await saveReceipt();
+    const result = await getToolResult({ validationId, projectId: 'proj-abc' });
     expect(result.isError).toBe(false);
     expect(mocks.mockQueryProjects).not.toHaveBeenCalled();
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
@@ -154,91 +178,248 @@ describe('createAndPublishWorkbookTool', () => {
     );
   });
 
-  it('recovers projectName from the publish response on the explicit-projectId path', async () => {
-    // With an explicit projectId the resolver doesn't know the name (no query), so it comes from
-    // the publish response's project element instead.
-    mocks.mockPublishWorkbook.mockResolvedValue({
-      id: 'wb-123',
-      name: 'My Viz',
-      contentUrl: 'MyViz',
-      webpageUrl: 'https://test.tableau.com/#/workbooks/wb-123',
-      project: { id: 'proj-abc', name: 'Marketing' },
-    });
-    const result = await getToolResult({ ...base, projectId: 'proj-abc' });
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    const payload = JSON.parse(result.content[0].text);
-    expect(payload.projectId).toBe('proj-abc');
-    expect(payload.projectName).toBe('Marketing');
-  });
-
   it('passes showTabs and overwrite through to the publish call', async () => {
-    await getToolResult({ ...base, projectId: 'proj-abc', showTabs: false, overwrite: true });
+    const validationId = await saveReceipt();
+    await getToolResult({ validationId, projectId: 'proj-abc', showTabs: false, overwrite: true });
     expect(mocks.mockPublishWorkbook).toHaveBeenCalledWith(
       expect.objectContaining({ showTabs: false, overwrite: true }),
     );
+    expect(getAuditEntries()).toHaveLength(1);
+    expect(getAuditEntries()[0].data).toMatchObject({ showTabs: false, overwrite: true });
   });
 
-  it('surfaces non-fatal build warnings on the success payload', async () => {
-    const result = await getToolResult({
-      ...base,
-      assets: [{ path: 'data.parquet', base64: Buffer.from('x').toString('base64') }],
-    });
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    const payload = JSON.parse(result.content[0].text);
-    expect(payload.warnings.some((w: string) => w.includes('data.parquet'))).toBe(true);
-  });
-
-  it('returns a clean build error (without publishing) on a bad packageId', async () => {
-    const result = await getToolResult({ ...base, packageId: '1bad id!' });
+  it('rejects a missing validationId before any REST call', async () => {
+    const result = await getToolResult({ validationId: generateOpaqueId() });
     expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    // Clean McpToolError text, not the generic "requestId: ..., error:" catch line.
-    expect(result.content[0].text).toContain('is not a legal extension id');
-    expect(result.content[0].text).not.toContain('requestId:');
+    expect(mocks.mockQueryProjects).not.toHaveBeenCalled();
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+    expect(getAuditEntries()).toHaveLength(0);
   });
 
-  it('rejects a path-traversal asset (without publishing)', async () => {
-    const result = await getToolResult({
-      ...base,
-      assets: [{ path: '../evil.js', base64: Buffer.from('x').toString('base64') }],
-    });
+  it('rejects an expired validationId before any REST call', async () => {
+    const validationId = await saveReceipt({ ttlMs: -1000 });
+    const result = await getToolResult({ validationId });
+    expect(result.isError).toBe(true);
+    expect(mocks.mockQueryProjects).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+    expect(getAuditEntries()).toHaveLength(0);
+  });
+
+  it('rejects a receipt saved under a different actor scope before any REST call', async () => {
+    const otherScope = resolveWorkspaceScope({
+      transport: 'stdio',
+      server: 'https://my-tableau-server.com',
+      siteId: 'other-site',
+      userId: 'other-user',
+    }).unwrap();
+    const validationId = await saveReceipt({ scope: otherScope });
+    const result = await getToolResult({ validationId });
+    expect(result.isError).toBe(true);
+    expect(mocks.mockQueryProjects).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+    expect(getAuditEntries()).toHaveLength(0);
+  });
+
+  it('rejects the call when no trusted actor scope can be resolved (before REST)', async () => {
+    const validationId = await saveReceipt();
+    const extra = getMockRequestHandlerExtra();
+    extra.config.transport = 'http';
+    extra.sessionId = undefined;
+    extra.tableauAuthInfo = undefined;
+
+    const tool = getCreateAndPublishWorkbookTool(new WebMcpServer());
+    const callback = await Provider.from(tool.callback);
+    const result = await callback(
+      { validationId, projectId: undefined, showTabs: undefined, overwrite: undefined },
+      extra,
+    );
     expect(result.isError).toBe(true);
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+    expect(getAuditEntries()).toHaveLength(0);
   });
 
-  it('surfaces a publish API error', async () => {
-    mocks.mockPublishWorkbook.mockRejectedValue(new Error('403 Forbidden'));
-    const result = await getToolResult({ ...base, projectId: 'proj-abc' });
+  it('does not modify published bytes when the workspace changes after validation', async () => {
+    // A receipt is an immutable snapshot; mutating the (unrelated) workspace store cannot change it.
+    const validationId = await saveReceipt({ bytes: RECEIPT_BYTES });
+    const workspace = await store.create(SCOPE, {
+      appName: 'My App',
+      packageId: 'com.example.myapp',
+      template: 'static-html',
+      files: [{ path: 'index.html', content: '<!doctype html><title>hi</title>' }],
+    });
+    await store.upsertFiles(SCOPE, workspace.appId, [
+      { path: 'index.html', content: '<!doctype html><title>CHANGED</title>' },
+    ]);
+
+    await getToolResult({ validationId });
+    const call = mocks.mockPublishWorkbook.mock.calls[0][0];
+    expect(new Uint8Array(call.fileContents)).toEqual(RECEIPT_BYTES);
+  });
+
+  it('allows repeated publishes of the same receipt until expiry (reuse policy)', async () => {
+    const validationId = await saveReceipt();
+    const first = await getToolResult({ validationId, projectId: 'proj-1', overwrite: false });
+    const second = await getToolResult({ validationId, projectId: 'proj-2', overwrite: true });
+    expect(first.isError).toBe(false);
+    expect(second.isError).toBe(false);
+    expect(mocks.mockPublishWorkbook).toHaveBeenCalledTimes(2);
+    expect(getAuditEntries()).toHaveLength(2);
+    // Each call is bound to its own publish-target arguments.
+    expect(mocks.mockPublishWorkbook.mock.calls[0][0]).toMatchObject({ projectId: 'proj-1' });
+    expect(mocks.mockPublishWorkbook.mock.calls[1][0]).toMatchObject({ projectId: 'proj-2' });
+  });
+
+  it('emits a safe publish audit record bound to actor/app/validation/target/outcome', async () => {
+    const validationId = await saveReceipt();
+    await getToolResult({ validationId, projectId: 'proj-abc', overwrite: true });
+
+    const auditCalls = mocks.mockLog.mock.calls.filter(
+      ([entry]) => entry?.logger === 'audit' && entry?.message === 'publish-audit',
+    );
+    expect(auditCalls).toHaveLength(1);
+    const outcome = auditCalls[0][0].data;
+    expect(outcome).toMatchObject({
+      tool: 'create-and-publish-workbook',
+      validationId,
+      appId: 'a'.repeat(32),
+      digest: RECEIPT_DIGEST,
+      projectId: 'proj-abc',
+      showTabs: true,
+      overwrite: true,
+      outcome: 'published',
+    });
+    // Never leaks bytes/tokens/source content.
+    const serialized = JSON.stringify(auditCalls.map(([entry]) => entry));
+    expect(serialized).not.toContain('fileContents');
+    expect(serialized.toLowerCase()).not.toContain('token');
+  });
+
+  it('records a failed audit outcome and surfaces a publish API error', async () => {
+    const secret = 'Bearer super-secret-token';
+    mocks.mockPublishWorkbook.mockRejectedValue(new Error(`403 Forbidden ${secret}`));
+    const validationId = await saveReceipt();
+    const result = await getToolResult({ validationId, projectId: 'proj-abc' });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toMatch(/Forbidden/i);
+
+    const audits = getAuditEntries();
+    expect(audits).toHaveLength(1);
+    expect(audits[0].data).toMatchObject({
+      validationId,
+      projectId: 'proj-abc',
+      showTabs: true,
+      overwrite: false,
+      outcome: 'failed',
+      failureCode: 'publish-workbook-failed',
+    });
+    expect(JSON.stringify(audits[0])).not.toContain(secret);
+    expect(JSON.stringify(audits[0])).not.toContain('403 Forbidden');
+  });
+
+  it('records exactly one failed audit when default-project lookup throws', async () => {
+    const secret = 'password=do-not-log';
+    mocks.mockQueryProjects.mockRejectedValue(new Error(`network failure ${secret}`));
+    const validationId = await saveReceipt();
+
+    const result = await getToolResult({ validationId });
+
+    expect(result.isError).toBe(true);
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+    const audits = getAuditEntries();
+    expect(audits).toHaveLength(1);
+    expect(audits[0].data).toMatchObject({
+      validationId,
+      projectId: undefined,
+      showTabs: true,
+      overwrite: false,
+      outcome: 'failed',
+      failureCode: 'target-project-query-failed',
+    });
+    expect(JSON.stringify(audits[0])).not.toContain(secret);
+  });
+
+  it('records one bounded audit when REST setup rejects before invoking its callback', async () => {
+    const secret = 'Bearer setup-secret-token';
+    mocks.mockUseRestApi.mockRejectedValue(new Error(`REST setup failed: ${secret}`));
+    const validationId = await saveReceipt();
+
+    const result = await getToolResult({ validationId });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('REST setup failed');
+    expect(mocks.mockQueryProjects).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+    const audits = getAuditEntries();
+    expect(audits).toHaveLength(1);
+    expect(audits[0].data).toMatchObject({
+      validationId,
+      showTabs: true,
+      overwrite: false,
+      outcome: 'failed',
+      failureCode: 'rest-api-setup-failed',
+    });
+    expect(JSON.stringify(audits[0])).not.toContain(secret);
+    expect(JSON.stringify(audits[0])).not.toContain('REST setup failed');
+  });
+
+  it('records exactly one failed audit when no default project exists', async () => {
+    mocks.mockQueryProjects.mockResolvedValue({ projects: [] });
+    const validationId = await saveReceipt();
+
+    const result = await getToolResult({ validationId });
+
+    expect(result.isError).toBe(true);
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+    const audits = getAuditEntries();
+    expect(audits).toHaveLength(1);
+    expect(audits[0].data).toMatchObject({
+      validationId,
+      projectId: undefined,
+      showTabs: true,
+      overwrite: false,
+      outcome: 'failed',
+      failureCode: 'target-project-not-found',
+    });
+  });
+
+  it('preserves the original REST failure when durable audit logging throws', async () => {
+    mocks.mockPublishWorkbook.mockRejectedValue(new Error('original publish failure'));
+    mocks.mockLog.mockImplementation((entry) => {
+      if (entry?.logger === 'audit') {
+        throw new Error('audit sink unavailable');
+      }
+    });
+    const validationId = await saveReceipt();
+
+    const result = await getToolResult({ validationId, projectId: 'proj-abc' });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('original publish failure');
+    expect(result.content[0].text).not.toContain('audit sink unavailable');
+    expect(getAuditEntries()).toHaveLength(1);
   });
 });
 
+function getAuditEntries(): Array<{ data: Record<string, unknown> }> {
+  return mocks.mockLog.mock.calls
+    .map(([entry]) => entry)
+    .filter((entry) => entry?.logger === 'audit' && entry?.message === 'publish-audit');
+}
+
 async function getToolResult(args: {
-  packageId: string;
-  workbookName: string;
-  html: string;
-  assets?: Array<{ path: string; base64: string }>;
-  toolbarLabel?: string;
+  validationId: string;
   projectId?: string;
   showTabs?: boolean;
   overwrite?: boolean;
 }): Promise<CallToolResult> {
   const tool = getCreateAndPublishWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
-  // Spell out every key: the tool's arg type maps each optional field to a required key of type
-  // `T | undefined`, so a partial object literal doesn't satisfy it.
   return await callback(
     {
-      packageId: args.packageId,
-      workbookName: args.workbookName,
-      html: args.html,
-      assets: args.assets,
-      toolbarLabel: args.toolbarLabel,
+      validationId: args.validationId,
       projectId: args.projectId,
       showTabs: args.showTabs,
       overwrite: args.overwrite,

@@ -87,6 +87,40 @@ describe('OverridableConfig', () => {
       ]);
     });
 
+    it('should expand the data-app group in EXCLUDE_TOOLS to the complete workflow', () => {
+      // Site/tool scoping must be able to disable the ENTIRE scaffold -> author -> validate -> publish
+      // workflow as one unit, including the validate/publish tools it shares with the workbook group.
+      vi.stubEnv('EXCLUDE_TOOLS', 'data-app');
+
+      const config = new OverridableConfig({});
+      expect([...config.excludeTools].sort()).toEqual(
+        [
+          'scaffold-data-app',
+          'upsert-data-app-files',
+          'read-data-app-file',
+          'list-data-app-files',
+          'validate-workbook-package',
+          'create-and-publish-workbook',
+        ].sort(),
+      );
+    });
+
+    it('should expand the data-app group in INCLUDE_TOOLS to the complete workflow', () => {
+      vi.stubEnv('INCLUDE_TOOLS', 'data-app');
+
+      const config = new OverridableConfig({});
+      expect([...config.includeTools].sort()).toEqual(
+        [
+          'scaffold-data-app',
+          'upsert-data-app-files',
+          'read-data-app-file',
+          'list-data-app-files',
+          'validate-workbook-package',
+          'create-and-publish-workbook',
+        ].sort(),
+      );
+    });
+
     it('should filter out invalid tool names from INCLUDE_TOOLS', () => {
       vi.stubEnv('INCLUDE_TOOLS', 'query-datasource,order-hamburgers');
 

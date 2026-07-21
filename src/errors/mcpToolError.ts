@@ -280,3 +280,57 @@ export class BuildTwbxError extends McpToolError {
     super({ type: 'build-twbx-error', message, statusCode: 400 });
   }
 }
+
+// A requested data-app workspace does not exist for the caller's actor scope, or it has expired and
+// is no longer readable. Opaque handles (`appId`) intentionally return the same not-found signal for
+// "never existed", "belongs to a different actor", and "expired" so a caller cannot probe for the
+// existence of another scope's workspaces. statusCode 404: the handle resolves to nothing usable.
+export class DataAppWorkspaceNotFoundError extends McpToolError {
+  constructor(message = 'Data app workspace not found or expired.') {
+    super({ type: 'data-app-workspace-not-found', message, statusCode: 404 });
+  }
+}
+
+// A requested validation receipt does not exist for the caller's actor scope, or it has expired.
+// Like workspaces, this collapses "wrong scope"/"never existed"/"expired" into one signal so a
+// `validationId` from another actor cannot be probed. statusCode 404.
+export class DataAppValidationNotFoundError extends McpToolError {
+  constructor(message = 'Data app validation not found or expired.') {
+    super({ type: 'data-app-validation-not-found', message, statusCode: 404 });
+  }
+}
+
+// Validation ids are immutable receipt handles. Reusing one must never replace its package bytes or
+// metadata, even when concurrent writers race. statusCode 409: the receipt already exists.
+export class DataAppValidationAlreadyExistsError extends McpToolError {
+  constructor(message = 'Data app validation already exists.') {
+    super({ type: 'data-app-validation-already-exists', message, statusCode: 409 });
+  }
+}
+
+// The caller has no stable actor scope for a persistence operation (e.g. a multi-user HTTP request
+// with neither an authenticated Tableau identity nor an MCP session), or attempted to reach a
+// workspace/validation outside its own scope. Raw PATs/tokens are never used as a scope key, so an
+// unscoped multi-user request is rejected rather than silently sharing storage. statusCode 403.
+export class DataAppWorkspaceAccessDeniedError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-workspace-access-denied', message, statusCode: 403 });
+  }
+}
+
+// A caller-supplied workspace file path failed containment defenses: traversal (`..`), absolute
+// paths, backslashes, NUL bytes, a symlink component, or an attempt to overwrite a protected
+// tool-managed manifest. statusCode 400: the path can never be satisfied safely.
+export class UnsafeWorkspacePathError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'unsafe-workspace-path', message, statusCode: 400 });
+  }
+}
+
+// A workspace mutation would exceed a configured limit: file count, per-file bytes, or total
+// workspace bytes. statusCode 413: the payload is too large to store under policy.
+export class DataAppWorkspaceLimitExceededError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-workspace-limit-exceeded', message, statusCode: 413 });
+  }
+}

@@ -15,7 +15,6 @@ import {
 } from '../../../sdks/tableau/types/contentExploration.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { publishExitClause } from '../publishExitClause.js';
 import { WebTool } from '../tool.js';
 import {
   buildFilterString,
@@ -60,9 +59,7 @@ This tool searches across all supported content types for objects relevant to th
   For each sort method, you can specify a sort direction: 'asc' for ascending or 'desc' for descending (default: 'asc'). The orderBy parameter is an array of objects containing the sorting method and direction. The first element determines primary sorting, with subsequent elements used as tiebreakers.
 
 **Important Notes:**
-- If \`orderBy\` is omitted, the search will sort items by their "relevance score" in descending order, which is Tableau's internal algorithm for providing the most relevant results
-
-${publishExitClause}`,
+- If \`orderBy\` is omitted, the search will sort items by their "relevance score" in descending order, which is Tableau's internal algorithm for providing the most relevant results`,
     paramsSchema,
     annotations: {
       title: 'Search Content',
