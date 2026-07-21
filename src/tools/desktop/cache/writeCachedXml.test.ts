@@ -281,8 +281,9 @@ async function getResult(
   filePath: string,
   xmlContent: string,
   selectors: { worksheet?: string; dashboard?: string } = {},
-  session: string | undefined = SESSION,
+  ...requestedSession: [string | undefined] | []
 ): Promise<CallToolResult> {
+  const session = (requestedSession.length > 0 ? requestedSession[0] : SESSION) as string;
   const tool = getWriteCachedXmlTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(

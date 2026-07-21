@@ -370,19 +370,15 @@ describe('removeFieldTool', () => {
   });
 });
 
-async function getResult({
-  worksheetFile,
-  target,
-  columnRef,
-  encodingType,
-  session = SESSION,
-}: {
+async function getResult(params: {
   worksheetFile: string;
   target: Target;
   columnRef: string;
   encodingType?: EncodingType;
   session?: string;
 }): Promise<CallToolResult> {
+  const { worksheetFile, target, columnRef, encodingType } = params;
+  const session = ('session' in params ? params.session : SESSION) as string;
   const tool = getRemoveFieldTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(

@@ -474,15 +474,7 @@ describe('addFieldTool', () => {
   });
 });
 
-async function getResult({
-  worksheetFile,
-  target,
-  columnRef,
-  encodingType,
-  index,
-  workbookFile,
-  session = SESSION,
-}: {
+async function getResult(params: {
   worksheetFile: string;
   target: Target;
   columnRef: string;
@@ -491,6 +483,8 @@ async function getResult({
   workbookFile?: string;
   session?: string;
 }): Promise<CallToolResult> {
+  const { worksheetFile, target, columnRef, encodingType, index, workbookFile } = params;
+  const session = ('session' in params ? params.session : SESSION) as string;
   const tool = getAddFieldTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
