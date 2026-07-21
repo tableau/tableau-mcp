@@ -342,6 +342,30 @@ export const pulseInsightBriefRequestSchema = z.object({
   time_zone: z.string().optional(),
 });
 
+// The `input` of a bundle request — extracted so `metric_context.input` (the
+// slim response's verbatim echo of the request input) can reuse the same shape.
+export const pulseBundleInputSchema = z.object({
+  metadata: z.object({
+    name: z.string().optional(),
+    metric_id: z.string().optional(),
+    definition_id: z.string().optional(),
+  }),
+  metric: z.object({
+    definition: z.object({
+      datasource: z.object({
+        id: z.string(),
+      }),
+      basic_specification: pulseBasicSpecificationSchema,
+      is_running_total: z.boolean(),
+    }),
+    metric_specification: pulseMetricSpecificationSchema,
+    extension_options: pulseExtensionOptionsSchema.optional(),
+    representation_options: pulseRepresentationOptionsSchema.optional(),
+    insights_options: insightOptionsSchema.optional(),
+    goals: pulseGoalsSchema.optional(),
+  }),
+});
+
 export const pulseBundleRequestSchema = z.object({
   bundle_request: z.object({
     version: z.number(),
@@ -351,27 +375,7 @@ export const pulseBundleRequestSchema = z.object({
       language: languageEnumSchema,
       locale: localeEnumSchema,
     }),
-    input: z.object({
-      metadata: z.object({
-        name: z.string().optional(),
-        metric_id: z.string().optional(),
-        definition_id: z.string().optional(),
-      }),
-      metric: z.object({
-        definition: z.object({
-          datasource: z.object({
-            id: z.string(),
-          }),
-          basic_specification: pulseBasicSpecificationSchema,
-          is_running_total: z.boolean(),
-        }),
-        metric_specification: pulseMetricSpecificationSchema,
-        extension_options: pulseExtensionOptionsSchema.optional(),
-        representation_options: pulseRepresentationOptionsSchema.optional(),
-        insights_options: insightOptionsSchema.optional(),
-        goals: pulseGoalsSchema.optional(),
-      }),
-    }),
+    input: pulseBundleInputSchema,
   }),
 });
 
@@ -479,6 +483,29 @@ export const pulseInsightBriefResponseSchema = z.object({
 
 export type PulseBundleResponse = z.infer<typeof pulseBundleResponseSchema>;
 export type PulseInsightBriefResponse = z.infer<typeof pulseInsightBriefResponseSchema>;
+
+/**
+ * The per-bundle choices from a `bundleRequest`, surfaced so a card UI can read them directly
+ * instead of parsing them out of markup. Two tiers: curated flat fields (metric name, measure,
+ * time dimension, breakdown dimensions) as the clean primary interface, plus `input` — the
+ * request's `input` echoed VERBATIM — as an escape hatch for any request field not surfaced flat
+ * (e.g. the comparison kind at `input.metric.metric_specification.comparison.comparison`).
+ */
+export const metricContextSchema = z.object({
+  name: z.string().optional(),
+  measure: z.string().optional(),
+  time_dimension: z.string().optional(),
+  breakdown_dimensions: z.array(z.string()),
+  input: pulseBundleInputSchema,
+});
+
+export type MetricContext = z.infer<typeof metricContextSchema>;
+
+/**
+ * A `PulseBundleResponse` augmented with `metric_context`. Returned by
+ * `generate-pulse-metric-value-insight-bundle` when called with `slim: true`.
+ */
+export type PulseBundleResponseSlim = PulseBundleResponse & { metric_context: MetricContext };
 
 export const pulseInsightBundleTypeEnum = ['ban', 'springboard', 'basic', 'detail'] as const;
 export type PulseInsightBundleType = (typeof pulseInsightBundleTypeEnum)[number];

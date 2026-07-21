@@ -115,6 +115,52 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     },
   };
 
+  // A populated response with `viz` blobs in both an insight result and a
+  // summary result — used to exercise the `slim` viz-stripping path.
+  const mockPopulatedResponse = {
+    bundle_response: {
+      result: {
+        insight_groups: [
+          {
+            type: 'ban',
+            insights: [
+              {
+                insight_type: 'popc',
+                result: {
+                  type: 'popc',
+                  version: 1,
+                  markup: 'There was a decrease of -$5.53 (-22.1%) over January 2024.',
+                  viz: { $schema: 'https://vega.github.io/schema/vega-lite/v5.json', mark: 'line' },
+                  facts: {
+                    target_period_value: { raw: 19.47, formatted: '$19.47' },
+                    difference: {
+                      direction: 'down',
+                      relative: { raw: -0.221, formatted: '-22.1%' },
+                    },
+                  },
+                  question: 'How has Sales changed?',
+                  score: 1,
+                },
+              },
+            ],
+            summaries: [
+              {
+                result: {
+                  id: 'summary-1',
+                  markup: '<b>Summary</b>',
+                  viz: { $schema: 'https://vega.github.io/schema/vega-lite/v5.json', mark: 'bar' },
+                  generation_id: 'gen-1',
+                },
+              },
+            ],
+          },
+        ],
+        has_errors: false,
+        characterization: 'CHARACTERIZATION_UNSPECIFIED',
+      },
+    },
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
@@ -268,9 +314,110 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(mocks.mockGeneratePulseMetricValueInsightBundle).not.toHaveBeenCalled();
   });
 
-  async function getToolResult(bundleType?: PulseInsightBundleType): Promise<CallToolResult> {
+  it('strips viz from every insight and summary result when slim is true', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockPopulatedResponse),
+    );
+    const result = await getToolResult('ban', true);
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    const group = parsed.bundle_response.result.insight_groups[0];
+    // viz removed everywhere it appears...
+    expect(group.insights[0].result).not.toHaveProperty('viz');
+    expect(group.summaries[0].result).not.toHaveProperty('viz');
+    // ...but the fields the UI renders are retained.
+    expect(group.insights[0].result.facts).toEqual(
+      mockPopulatedResponse.bundle_response.result.insight_groups[0].insights[0].result.facts,
+    );
+    expect(group.insights[0].result.markup).toBe(
+      'There was a decrease of -$5.53 (-22.1%) over January 2024.',
+    );
+    expect(group.summaries[0].result.markup).toBe('<b>Summary</b>');
+  });
+
+  it('returns viz verbatim when slim is omitted or false', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockPopulatedResponse),
+    );
+
+    const defaultResult = await getToolResult('ban');
+    invariant(defaultResult.content[0].type === 'text');
+    const parsedDefault = JSON.parse(defaultResult.content[0].text);
+    expect(parsedDefault).toEqual(mockPopulatedResponse);
+    expect(parsedDefault).not.toHaveProperty('metric_context');
+
+    const explicitFalse = await getToolResult('ban', false);
+    invariant(explicitFalse.content[0].type === 'text');
+    const parsedExplicitFalse = JSON.parse(explicitFalse.content[0].text);
+    expect(parsedExplicitFalse).toEqual(mockPopulatedResponse);
+    expect(parsedExplicitFalse).not.toHaveProperty('metric_context');
+  });
+
+  it('attaches a metric_context built from the bundleRequest when slim is true', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockPopulatedResponse),
+    );
+    const result = await getToolResult('ban', true);
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+
+    // Curated flat fields.
+    expect(parsed.metric_context.name).toBe('Pulse Metric');
+    expect(parsed.metric_context.measure).toBe('Sales');
+    expect(parsed.metric_context.time_dimension).toBe('Order Date');
+    expect(parsed.metric_context.breakdown_dimensions).toEqual([]);
+    // The full request input is echoed verbatim as an escape hatch — e.g. the
+    // comparison kind lives under it.
+    expect(parsed.metric_context.input).toEqual(bundleRequest.bundle_request.input);
+    expect(parsed.metric_context.input.metric.metric_specification.comparison.comparison).toBe(
+      'TIME_COMPARISON_PREVIOUS_PERIOD',
+    );
+    // viz is still stripped alongside the new metric_context.
+    const group = parsed.bundle_response.result.insight_groups[0];
+    expect(group.insights[0].result).not.toHaveProperty('viz');
+    expect(group.summaries[0].result).not.toHaveProperty('viz');
+  });
+
+  it('passes through populated breakdown_dimensions in metric_context when slim is true', async () => {
+    const bundleRequestWithDimensions = {
+      bundle_request: {
+        ...bundleRequest.bundle_request,
+        input: {
+          ...bundleRequest.bundle_request.input,
+          metric: {
+            ...bundleRequest.bundle_request.input.metric,
+            extension_options: {
+              ...bundleRequest.bundle_request.input.metric.extension_options,
+              allowed_dimensions: ['Region', 'Category'],
+            },
+          },
+        },
+      },
+    };
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockPopulatedResponse),
+    );
+
     const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
-    return await callback({ bundleRequest, bundleType }, getMockRequestHandlerExtra());
+    const result = await callback(
+      { bundleRequest: bundleRequestWithDimensions, bundleType: 'ban', slim: true },
+      getMockRequestHandlerExtra(),
+    );
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.metric_context.breakdown_dimensions).toEqual(['Region', 'Category']);
+  });
+
+  async function getToolResult(
+    bundleType?: PulseInsightBundleType,
+    slim?: boolean,
+  ): Promise<CallToolResult> {
+    const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
+    const callback = await Provider.from(tool.callback);
+    return await callback({ bundleRequest, bundleType, slim }, getMockRequestHandlerExtra());
   }
 });

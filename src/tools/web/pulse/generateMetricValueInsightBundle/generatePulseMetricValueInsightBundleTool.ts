@@ -6,15 +6,25 @@ import { useRestApi } from '../../../../restApiInstance.js';
 import {
   pulseBundleRequestSchema,
   PulseBundleResponse,
+  PulseBundleResponseSlim,
   pulseInsightBundleTypeEnum,
 } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { WebTool } from '../../tool.js';
 import { validateBundleRequest } from '../validatePulsePayload.js';
+import { buildMetricContext, slimBundle } from './slimBundle.js';
 
 const paramsSchema = {
   bundleRequest: pulseBundleRequestSchema,
   bundleType: z.optional(z.enum(pulseInsightBundleTypeEnum)),
+  slim: z
+    .optional(z.boolean())
+    .describe(
+      'When true, strips the large viz (Vega chart-spec) blobs from every insight and summary ' +
+        'result, returning only the facts/markup fields a text/card UI renders — use this to ' +
+        'reduce payload size when the caller does not need chart specs. Defaults to false, which ' +
+        'returns the response verbatim, including viz.',
+    ),
 };
 
 export const getGeneratePulseMetricValueInsightBundleTool = (
@@ -37,6 +47,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
   - 'springboard' - Return a springboard insight bundle with the current value, period over period change, and the highest ranked insight for the metric.
   - 'basic' - Similar to a springboard insight, but data is focused on the dimensions of a metric that are low bandwidth because they have small value sets. It shows the current value, period over period change, and the highest ranked insight for the metric for that data.
   - 'detail' - Shows insights on performance over time of the metric, a summary visualization of metric highs and lows and trends, breakdowns of top contributors for each filterable dimension of the metric, and followup insights based on the top ranked insights not already presented.
+- \`slim\` (optional): When true, strips the large \`viz\` (Vega chart-spec) blobs from every insight and summary result, returning only the \`facts\`/\`markup\` fields a text/card UI renders. Use this to reduce payload size when chart specs are not needed. Defaults to false, which returns the response verbatim, including \`viz\`.
 
 **Example Usage:**
 - Generate the default insight bundle for the Pulse metric:
@@ -139,10 +150,12 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ bundleRequest, bundleType }, extra): Promise<CallToolResult> => {
-      return await generatePulseMetricValueInsightBundleTool.logAndExecute<PulseBundleResponse>({
+    callback: async ({ bundleRequest, bundleType, slim }, extra): Promise<CallToolResult> => {
+      return await generatePulseMetricValueInsightBundleTool.logAndExecute<
+        PulseBundleResponse | PulseBundleResponseSlim
+      >({
         extra,
-        args: { bundleRequest, bundleType },
+        args: { bundleRequest, bundleType, slim },
         callback: async () => {
           const validationError = validateBundleRequest(bundleRequest);
           if (validationError) {
@@ -178,7 +191,9 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
         constrainSuccessResult: (insightBundle) => {
           return {
             type: 'success',
-            result: insightBundle,
+            result: slim
+              ? { ...slimBundle(insightBundle), metric_context: buildMetricContext(bundleRequest) }
+              : insightBundle,
           };
         },
       });
