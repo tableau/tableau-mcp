@@ -98,6 +98,61 @@ const INJECTED_RANKING_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
     </worksheet>
   </worksheets>
 </workbook>`;
+const P_AND_L_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='PL'>
+      <column name='[line_item]' role='dimension' type='nominal' datatype='string' />
+      <column name='[amount]' role='measure' type='quantitative' datatype='real' />
+      <column name='[category]' role='dimension' type='nominal' datatype='string' />
+      <column name='[display_order]' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>`;
+const P_AND_L_WORKBOOK_XML_WITHOUT_DISPLAY_ORDER = P_AND_L_WORKBOOK_XML.replace(
+  /\n {6}<column name='\[display_order\]'[^>]* \/>/,
+  '',
+);
+const P_AND_L_WORKBOOK_XML_WITHOUT_CATEGORY = P_AND_L_WORKBOOK_XML.replace(
+  /\n {6}<column name='\[category\]'[^>]* \/>/,
+  '',
+);
+const INJECTED_WATERFALL_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <worksheets>
+    <worksheet name='P&amp;L Waterfall'>
+      <table>
+        <view>
+          <datasources>
+            <datasource name='PL' />
+          </datasources>
+          <datasource-dependencies datasource='PL'>
+            <column caption='-SUM([amount])' datatype='real' name='[Calculation_767019348535836686]' role='measure' type='quantitative'>
+              <calculation class='tableau' formula='-SUM([amount])' />
+            </column>
+            <column datatype='real' name='[amount]' role='measure' type='quantitative' />
+            <column datatype='string' name='[line_item]' role='dimension' type='nominal' />
+            <column-instance column='[amount]' derivation='Sum' name='[cum:sum:amount:qk]' pivot='key' type='quantitative'>
+              <table-calc aggregation='Sum' ordering-type='Rows' type='CumTotal' />
+            </column-instance>
+            <column-instance column='[line_item]' derivation='None' name='[none:line_item:nk]' pivot='key' type='nominal' />
+            <column-instance column='[amount]' derivation='Sum' name='[sum:amount:qk]' pivot='key' type='quantitative' />
+            <column-instance column='[Calculation_767019348535836686]' derivation='User' name='[usr:Calculation_767019348535836686:qk]' pivot='key' type='quantitative' />
+          </datasource-dependencies>
+          <computed-sort column='[PL].[none:line_item:nk]' direction='DESC' using='[PL].[sum:amount:qk]' />
+          <aggregation value='true' />
+        </view>
+        <panes><pane><mark class='GanttBar' /></pane></panes>
+        <rows>[PL].[cum:sum:amount:qk]</rows>
+        <cols>[PL].[none:line_item:nk]</cols>
+      </table>
+    </worksheet>
+  </worksheets>
+</workbook>`;
+const REAL_INJECTED_WATERFALL_SORT_SHAPE_XML = INJECTED_WATERFALL_WORKBOOK_XML.replace(
+  "<computed-sort column='[PL].[none:line_item:nk]' direction='DESC' using='[PL].[sum:amount:qk]' />",
+  '<computed-sort column="[PL].[none:line_item:nk]" direction="DESC" using="[PL].[sum:amount:qk]"></computed-sort>',
+);
 const CALC_BASE_XML = [
   "<?xml version='1.0' encoding='utf-8'?>",
   "<workbook version='18.1'>",
@@ -133,6 +188,26 @@ const proposeResult: BinderResult = {
     ask: 'bar chart of Sales by Region',
     candidate_templates: [],
     fields: [],
+  } as unknown as Extract<BinderResult, { status: 'propose' }>['llm_input'],
+  output_schema: { type: 'object' },
+};
+const waterfallProposeResult: BinderResult = {
+  status: 'propose',
+  llm_input: {
+    ask: 'P&L waterfall',
+    candidate_templates: [
+      {
+        template: 'part-to-whole-waterfall',
+        description: 'Waterfall chart',
+        intent_keywords: ['waterfall'],
+        slots: [
+          { slot_id: 'profit', role: ['measure'], kind: 'measure', required: true },
+          { slot_id: 'sub_category', role: ['dimension'], kind: 'category', required: true },
+          { slot_id: 'anchor_category', role: ['dimension'], kind: 'category', required: false },
+        ],
+      },
+    ],
+    fields: [{ name: 'category', role: 'dimension', type: 'nominal', datatype: 'string' }],
   } as unknown as Extract<BinderResult, { status: 'propose' }>['llm_input'],
   output_schema: { type: 'object' },
 };
@@ -177,6 +252,36 @@ const boundWithSortAndTopNResult: BinderResult = {
     ...boundViaProposalResult.args,
     sort: { by: 'Sales', direction: 'desc' },
     top_n: 10,
+  },
+};
+const boundWaterfallResult: BinderResult = {
+  ...boundViaProposalResult,
+  args: {
+    template_name: 'part-to-whole-waterfall',
+    title: 'P&amp;L Waterfall',
+    sheet_type: 'worksheet',
+    template_parameters: { DATASOURCE: 'PL' },
+    field_mapping: {
+      Profit: '[PL].[sum:amount:qk]',
+      'Sub-Category': '[PL].[none:line_item:nk]',
+    },
+  },
+};
+const boundWaterfallWithSortResult: BinderResult = {
+  ...boundWaterfallResult,
+  args: {
+    ...boundWaterfallResult.args,
+    sort: { by: 'display_order', direction: 'asc' },
+  },
+};
+const boundWaterfallWithAnchorResult: BinderResult = {
+  ...boundWaterfallResult,
+  args: {
+    ...boundWaterfallResult.args,
+    field_mapping: {
+      ...boundWaterfallResult.args.field_mapping,
+      'Anchor Category': '[PL].[none:category:nk]',
+    },
   },
 };
 const badSortFieldEscalateResult: BinderResult = {
@@ -452,7 +557,10 @@ function setupAutoApplyMocks({
   getWorkbookXmlSpy.mockResolvedValue(Ok(workbookReads.at(-1) ?? XML));
   vi.mocked(binderModule.bindTemplate).mockResolvedValue(bind);
   vi.spyOn(bundledIntelligenceProvider, 'listTemplateManifests').mockReturnValue([
-    { template: 'bar-basic', fast_path_eligible: fastPathEligible } as unknown as TemplateManifest,
+    {
+      template: bind.status === 'bound' ? bind.args.template_name : 'bar-basic',
+      fast_path_eligible: fastPathEligible,
+    } as unknown as TemplateManifest,
   ]);
   vi.mocked(readTemplate).mockReturnValue('<template/>');
   vi.mocked(buildInjectedWorkbookXml).mockReturnValue(inject);
@@ -649,6 +757,249 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(result.isError).toBe(false);
     expect(appliedXml(executeCommand)).toContain(
       "<computed-sort column='[Superstore].[none:Region:nk]' direction='DESC' using='[Superstore].[sum:Sales:qk]' />",
+    );
+  });
+
+  it('auto_apply=true keeps the waterfall built-in sort when no sort proposal is present', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallResult,
+      inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(appliedXml(executeCommand)).toContain(
+      "<computed-sort column='[PL].[none:line_item:nk]' direction='DESC' using='[PL].[sum:amount:qk]' />",
+    );
+    expect(appliedXml(executeCommand)).not.toContain('display_order');
+  });
+
+  it('adds waterfall anchor guidance when a category-like string dimension is unbound', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallResult,
+      inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.guidance).toContain('schema has category');
+    expect(body.guidance).toContain('proposal.bindings');
+    expect(body.guidance).toContain('{slot_id:"anchor_category",field:"category"}');
+    expect(body.guidance).toContain('totals double-count');
+  });
+
+  it('does not add waterfall anchor guidance when anchor_category is already bound', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallWithAnchorResult,
+      inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.guidance).not.toContain('anchor_category');
+  });
+
+  it('does not add waterfall anchor guidance without a category-like string dimension', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallResult,
+      inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
+      workbookReads: [P_AND_L_WORKBOOK_XML_WITHOUT_CATEGORY],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.guidance).not.toContain('anchor_category');
+  });
+
+  it('adds waterfall default sort guidance only when sort is absent', async () => {
+    const withoutSort = setupAutoApplyMocks({
+      bind: boundWaterfallResult,
+      inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+
+    const withoutSortResult = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall',
+      auto_apply: true,
+      getExecutor: withoutSort.getExecutor,
+    });
+
+    invariant(withoutSortResult.content[0].type === 'text');
+    const withoutSortBody = JSON.parse(withoutSortResult.content[0].text);
+    expect(withoutSortBody.guidance).toContain(
+      'Waterfall default sort is DESC by the bound measure',
+    );
+    expect(withoutSortBody.guidance).toContain('proposal.sort:{by:<field>,direction:"asc"|"desc"}');
+
+    vi.clearAllMocks();
+    const withSort = setupAutoApplyMocks({
+      bind: boundWaterfallWithSortResult,
+      inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+
+    const withSortResult = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall',
+      auto_apply: true,
+      getExecutor: withSort.getExecutor,
+    });
+
+    invariant(withSortResult.content[0].type === 'text');
+    const withSortBody = JSON.parse(withSortResult.content[0].text);
+    expect(withSortBody.guidance).not.toContain(
+      'Waterfall default sort is DESC by the bound measure',
+    );
+  });
+
+  it('does not add waterfall guidance for non-waterfall templates', async () => {
+    const { getExecutor } = setupAutoApplyMocks();
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.guidance).not.toContain('anchor_category');
+    expect(body.guidance).not.toContain('Waterfall default sort');
+  });
+
+  it('adds waterfall discovery guidance to propose results', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: waterfallProposeResult,
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.status).toBe('propose');
+    expect(body.guidance).toContain('{slot_id:"anchor_category",field:"category"}');
+    expect(body.guidance).toContain('proposal.sort:{by:<field>,direction:"asc"|"desc"}');
+  });
+
+  it('auto_apply=true replaces the waterfall built-in sort with a resolvable sort proposal', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallWithSortResult,
+      inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall in display_order',
+      proposal: {
+        ...sampleProposal,
+        sort: { by: 'display_order', direction: 'asc' },
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    const xml = appliedXml(executeCommand);
+    expect(result.isError).toBe(false);
+    expect(xml).toContain(
+      "<column datatype='integer' name='[display_order]' role='measure' type='quantitative' />",
+    );
+    expect(xml).toContain(
+      "<column-instance column='[display_order]' derivation='Sum' name='[sum:display_order:qk]' pivot='key' type='quantitative' />",
+    );
+    expect(xml).toContain(
+      "<computed-sort column='[PL].[none:line_item:nk]' direction='ASC' using='[PL].[sum:display_order:qk]' />",
+    );
+    expect(xml).not.toContain("direction='DESC' using='[PL].[sum:amount:qk]'");
+  });
+
+  it('auto_apply=true replaces the real injected waterfall computed-sort pair with a resolvable sort proposal', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallWithSortResult,
+      inject: { ok: true, xml: REAL_INJECTED_WATERFALL_SORT_SHAPE_XML },
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall in display_order',
+      proposal: {
+        ...sampleProposal,
+        sort: { by: 'display_order', direction: 'asc' },
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    const xml = appliedXml(executeCommand);
+    expect(result.isError).toBe(false);
+    expect(body.warnings).toBeUndefined();
+    expect(xml).toContain(
+      "<computed-sort column='[PL].[none:line_item:nk]' direction='ASC' using='[PL].[sum:display_order:qk]' />",
+    );
+    expect(xml).not.toContain('using="[PL].[sum:amount:qk]"></computed-sort>');
+  });
+
+  it('auto_apply=true keeps the waterfall built-in sort and warns when sort field is unresolvable', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallWithSortResult,
+      inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
+      workbookReads: [P_AND_L_WORKBOOK_XML_WITHOUT_DISPLAY_ORDER],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall in display_order',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.warnings?.join(' ')).toContain('sort splice skipped');
+    expect(appliedXml(executeCommand)).toContain(
+      "<computed-sort column='[PL].[none:line_item:nk]' direction='DESC' using='[PL].[sum:amount:qk]' />",
     );
   });
 

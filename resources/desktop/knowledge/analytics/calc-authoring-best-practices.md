@@ -113,6 +113,7 @@ To diagnose, double-click the field to open the formula editor. Tableau underlin
 
 - **Use `ZN()` to handle nulls returning 0.** `ZN([Sales])` is cleaner than `IFNULL([Sales], 0)` and is the idiomatic Tableau form.
 - **Use `DATEDIFF` and `DATEADD` for date arithmetic.** Explicit unit parameters such as `'day'` and `'month'` make the intent clear and handle edge cases correctly.
+- **Guard zero denominators in ratio sort keys.** For attainment, margin, and other ratio calcs used for sorting/ranking, use `IIF([Denominator]=0, NULL, [Numerator]/[Denominator])`; NULL sorts honestly, while `ZN()` would rank a no-quota rep as 0% and lie. A bare `[Numerator]/[Denominator]` sort key silently errors or drops rows when a zero-denominator row appears.
 - **Avoid deeply nesting IF inside IF.** More than 3 levels of nesting is hard to maintain. Flatten into sequential `ELSEIF` clauses or break into separate intermediate calculated fields.
 - **Use intermediate calculated fields** to give names to complex sub-expressions. `{ FIXED [Customer ID] : MAX([Order Date]) }` is better as a named field `[Last Order Date per Customer]` that other calcs reference, rather than inlining the LOD into every formula that needs it.
 - **Test edge cases:** nulls, zero denominators, and boundary values in ELSEIF chains.

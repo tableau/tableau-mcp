@@ -16,7 +16,7 @@ export const getListKnowledgeResourcesTool = (
     name: 'list-knowledge-resources',
     title: toolTitle,
     description:
-      'List available expertise modules (Tableau authoring knowledge). Each resource can be read with read-knowledge-resource using its URI (expertise://tableau/{slug}).',
+      'List curated Tableau authoring expertise; consult before an unfamiliar build. Read one with read-knowledge-resource by URI (expertise://tableau/{slug}).',
     paramsSchema,
     annotations: {
       title: toolTitle,

@@ -3351,6 +3351,18 @@
           "bindable": true,
           "required": true,
           "notes": "Categorical axis on cols — one floating bar per member, ordered by the computed-sort (DESC by SUM(Profit)); the running total accumulates left-to-right across these members. XML column-instance [none:Sub-Category:nk]."
+        },
+        {
+          "slot_id": "anchor_category",
+          "template_field": "Anchor Category",
+          "derivation": "none",
+          "role": [
+            "filter"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": false,
+          "notes": "OPTIONAL P&L/waterfall row-type guard. Bind the row-type/category column when the data carries subtotal/total rows; rows whose value in this column is 'subtotal' or 'total' (case-insensitive intent; current XML categorical filters can express only explicit members) are EXCLUDED from the bridge so the running total counts each increment once. Use this for category/row-type fields like category, row_type, or anchor_category that tag summary rows separately from incremental line items."
         }
       ],
       "calcs": [

@@ -31,6 +31,15 @@ const XML_DIR = path.join(
 // (Tableau pseudo-fields like Measure Names, generated geo, parameters).
 const NON_COLUMN_KINDS = new Set(['pseudo', 'generated', 'parameter']);
 
+function isVirtualSpliceSlot(template: string, spec: SlotSpec): boolean {
+  return (
+    template === 'part-to-whole-waterfall' &&
+    spec.slot_id === 'anchor_category' &&
+    spec.role.includes('filter') &&
+    spec.required === false
+  );
+}
+
 function xmlPath(template: string): string {
   return path.join(XML_DIR, `${template}.xml`);
 }
@@ -499,6 +508,7 @@ describe('binder/manifest — XML cross-checks (XML is ground truth)', () => {
       const specs: SlotSpec[] = [...m.slots, ...m.calcs];
       for (const spec of specs) {
         if (NON_COLUMN_KINDS.has(spec.kind)) continue;
+        if (isVirtualSpliceSlot(name, spec)) continue;
         const needle = `name='[${spec.template_field}]'`;
         expect(
           xml.includes(needle),
