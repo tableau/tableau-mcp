@@ -9,6 +9,7 @@ import {
   addFieldToEncoding,
   addFieldToRows,
 } from '../../../desktop/metadata/index.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
 import {
   ArgsValidationError,
@@ -71,6 +72,12 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
         extra,
         args: { session, worksheetFile, target, columnRef, encodingType, index, workbookFile },
         callback: async () => {
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+
           if (!existsSync(worksheetFile)) {
             return new FileNotFoundError(worksheetFile).toErr();
           }
@@ -140,7 +147,7 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
 
           try {
             writeFileSync(worksheetFile, modifiedXml, 'utf-8');
-            writeSidecar(worksheetFile, session);
+            writeSidecar(worksheetFile, resolvedSession);
           } catch (error) {
             return new FileReadError(error).toErr();
           }

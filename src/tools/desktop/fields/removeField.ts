@@ -9,6 +9,7 @@ import {
   removeFieldFromEncoding,
   removeFieldFromRows,
 } from '../../../desktop/metadata/index.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
 import {
   ArgsValidationError,
@@ -69,6 +70,12 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
         extra,
         args: { session, worksheetFile, target, columnRef, encodingType },
         callback: async () => {
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+
           if (!existsSync(worksheetFile)) {
             return new FileNotFoundError(worksheetFile).toErr();
           }
@@ -123,7 +130,7 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
 
           try {
             writeFileSync(worksheetFile, modifiedXml, 'utf-8');
-            writeSidecar(worksheetFile, session);
+            writeSidecar(worksheetFile, resolvedSession);
           } catch (error) {
             return new FileReadError(error).toErr();
           }

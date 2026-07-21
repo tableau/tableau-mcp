@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { resolve } from 'path';
 
+import * as configModule from '../../../config.desktop.js';
 import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { removeSameNamedWorksheet } from '../../../desktop/templates/injectTemplateCore.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -57,9 +58,18 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   return extra;
 }
 
+function mockPinnedSession(desktopSessionId: string | undefined): void {
+  const base = new configModule.Config();
+  vi.spyOn(configModule, 'getDesktopConfig').mockReturnValue({
+    ...base,
+    desktopSessionId,
+  } as configModule.Config);
+}
+
 describe('injectTemplateTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPinnedSession(undefined);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -98,6 +108,29 @@ describe('injectTemplateTool', () => {
       resolve(WORKBOOK_FILE),
       SESSION,
     );
+  });
+
+  it('stamps the sidecar with the pinned session, not the requested one', async () => {
+    mockPinnedSession(SESSION);
+
+    await getResult({ ...BASE_PARAMS, session: undefined as unknown as string });
+
+    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(
+      resolve(WORKBOOK_FILE),
+      SESSION,
+    );
+  });
+
+  it('rejects and writes no sidecar when the requested session conflicts with the pin', async () => {
+    mockPinnedSession('99999');
+
+    const result = await getResult(BASE_PARAMS);
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('99999');
+    expect(cacheFingerprintModule.writeSidecar).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
   });
 
   it('should return error when workbook file does not exist', async () => {

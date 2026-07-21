@@ -5,6 +5,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
+import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
 import { parseOuterElement, replaceElement } from '../../../desktop/xmlElement.js';
 import {
@@ -52,6 +53,12 @@ export const getWriteCachedXmlTool = (
         extra,
         args: { session, filePath, xmlContent, worksheet, dashboard },
         callback: async () => {
+          const sessionResult = resolveSession(session);
+          if (sessionResult.isErr()) {
+            return sessionResult.error.toErr();
+          }
+          const resolvedSession = sessionResult.value;
+
           const absolutePath = resolve(filePath);
           const cacheDir = getCacheDir();
 
@@ -131,7 +138,7 @@ export const getWriteCachedXmlTool = (
 
           try {
             writeFileSync(absolutePath, contentToWrite, 'utf-8');
-            writeSidecar(absolutePath, session);
+            writeSidecar(absolutePath, resolvedSession);
             return new Ok({
               filePath,
               bytes: contentToWrite.length,

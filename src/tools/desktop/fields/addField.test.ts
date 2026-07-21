@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { z } from 'zod';
 
+import * as configModule from '../../../config.desktop.js';
 import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import * as metadataModule from '../../../desktop/metadata/index.js';
 import {
@@ -31,12 +32,21 @@ const resultSchema = z.object({
 const WORKSHEET_FILE = '/cache/worksheet.xml';
 const SESSION = '12345';
 const WORKBOOK_FILE = '/cache/workbook.xml';
+
+function mockPinnedSession(desktopSessionId: string | undefined): void {
+  const base = new configModule.Config();
+  vi.spyOn(configModule, 'getDesktopConfig').mockReturnValue({
+    ...base,
+    desktopSessionId,
+  } as configModule.Config);
+}
 const COLUMN_REF = '[Sample - Superstore].[sum:Profit:qk]';
 const MODIFIED_XML = '<worksheet name="Sheet 1"><table></table></worksheet>';
 
 describe('addFieldTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPinnedSession(undefined);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -135,6 +145,44 @@ describe('addFieldTool', () => {
     await getResult({ worksheetFile: WORKSHEET_FILE, target: 'rows', columnRef: COLUMN_REF });
 
     expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKSHEET_FILE, SESSION);
+  });
+
+  it('stamps the sidecar with the pinned session, not the requested one', async () => {
+    mockPinnedSession(SESSION);
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+      session: undefined,
+    });
+
+    expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKSHEET_FILE, SESSION);
+  });
+
+  it('rejects and writes no sidecar when the requested session conflicts with the pin', async () => {
+    mockPinnedSession('99999');
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+      session: SESSION,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('99999');
+    expect(cacheFingerprintModule.writeSidecar).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
   });
 
   it('does not use the Tableau command channel after a successful field edit', async () => {
@@ -433,6 +481,7 @@ async function getResult({
   encodingType,
   index,
   workbookFile,
+  session = SESSION,
 }: {
   worksheetFile: string;
   target: Target;
@@ -440,11 +489,12 @@ async function getResult({
   encodingType?: EncodingType;
   index?: number;
   workbookFile?: string;
+  session?: string;
 }): Promise<CallToolResult> {
   const tool = getAddFieldTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
-    { session: SESSION, worksheetFile, target, columnRef, encodingType, index, workbookFile },
+    { session, worksheetFile, target, columnRef, encodingType, index, workbookFile },
     getMockRequestHandlerExtra(),
   );
 }
