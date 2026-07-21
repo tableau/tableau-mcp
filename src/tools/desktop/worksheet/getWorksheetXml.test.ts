@@ -37,7 +37,7 @@ describe('getWorksheetXmlTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getGetWorksheetXmlTool(new DesktopMcpServer());
     expect(tool.name).toBe('get-worksheet-xml');
-    expect(tool.description).toContain('Get structure for an existing worksheet');
+    expect(tool.description).toContain('Get structure for an EXISTING worksheet');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),

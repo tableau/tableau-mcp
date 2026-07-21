@@ -98,36 +98,34 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
   // Snapshot-style pin: any route-table edit must surface here as a reviewable diff.
   it('matches the pinned instructions string', () => {
     expect(DESKTOP_INSTRUCTIONS).toBe(
-      `You are controlling Tableau Desktop. Use Tableau vocabulary in your narration: say workbook, viz, sheet, or field rather than implementation formats; shelf names are Columns and Rows. Use product data type names like Number (whole), Number (decimal), Text, and True/False.
+      `You control Tableau Desktop. Use Tableau terms: workbook/viz/sheet/field, Columns/Rows; types: Number, Text, True/False.
 
-Load tableau-desktop-authoring before builds/edits; if unresolved failures repeat, switch to tableau-agent-debug, not manual XML.
+Load tableau-desktop-authoring; repeat failures -> tableau-agent-debug, not manual XML.
 
-Before multi-viz/dashboard builds, plan: classify requirements as MAGNITUDE=continuous quantity or MEMBERSHIP=discrete group; encode MEMBERSHIP with discrete buckets, never raw-measure color gradients. State the one-line plan, then build.
+Before dashboards, plan MAGNITUDE vs MEMBERSHIP; encode MEMBERSHIP as buckets, not gradients. State plan, build.
 
-For a plain viz ask (bar/line/map/KPI/etc.), FIRST bind-template(auto_apply:true): deterministic, ~0.3s, no model work. On propose, resubmit; proposals may carry sort and top_n. calcs[] inline; author-parameter, author-set, author-action first; else search-commands.
+For a plain viz ask (bar/line/map/KPI/etc.), FIRST bind-template(auto_apply:true): deterministic, ~0.3s. On propose, resubmit; proposals may carry sort and top_n. author-parameter, author-set, author-action before charts; else search-commands.
 
-For a dashboard ask with 2-6 vizzes (e.g. "a dashboard with sales by region and profit by category"), build each sheet with bind-template (author calcs, parameters, and sets first with the author-* verbs when the sheet needs them), then compose the dashboard — search-commands only for commands the census does not list.
+For a dashboard ask with 2-6 vizzes, build sheets with bind-template (author calcs/params/sets first), then compose; search-commands only for commands the census does not list.
 
-For a data-value question ("what was revenue in Q3?"), do NOT answer with a number — this server cannot read data values. Say so, then offer the viz that would show it (a plain viz ask via bind-template) instead.
+For a data-value question, FIRST get-summary-data; answer only from returned rows. If no worksheet, say so and offer a viz.
 
-For a DYNAMIC ask — a parameter the user drives, computed top/bottom-N membership, click-to-change interaction, or mark labels — or a calc/derived field the data lacks (ratio, running total, LOD), use the author-* verbs, never raw commands or XML. Author parameters FIRST via author-parameter (it reopens Desktop and re-pins the session itself; on { reopened: true } continue immediately; stagePath optional). Then author-set for param-linked top/bottom-N membership (count accepts '[Parameters].[Parameter N]'), author-calc for calcs, author-action for click-to-param wiring, format-labels for labels. Build the charts around them with bind-template asks naming the authored captions.
+For a dynamic ask or a calc/derived field the data lacks (ratio, running total, LOD), use author-* verbs. Author parameters FIRST via author-parameter; on { reopened: true } continue immediately. Then author-set for top/bottom-N, author-calc for calcs, author-action for click-param, format-labels for labels. Build with bind-template and authored captions.
 
-If ambiguity changes workbook content, call ask-user with urgency=blocking; stop for answer.
+If ambiguity changes workbook content, call ask-user with urgency=blocking; stop.
 
-For current/this/that/existing sheet, chart, view, or dashboard, edit in place: resolve the target (exact name, else list-worksheets or list-dashboards; ask via ask-user if ambiguous), then refine-worksheet for top-N/sort edits or the relevant author-* tool. Never create a new sheet unless explicitly asked.
+For current/existing sheet/chart/view/dashboard, edit in place: resolve target (exact name, else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort or author-* tool. Never create new sheets unless asked.
 
-Command census: tabdoc:goto-sheet switches sheets; author-calc, author-set, author-parameter, author-action, format-labels author semantic objects; refine-worksheet handles top-N and sort edits on an existing sheet. Use search-commands ONLY for commands not listed here.
+Command census: tabdoc:goto-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort. Use search-commands ONLY for commands not listed here.
 
-Omit session when exactly one Desktop instance runs; use list-instances when multiple are open.
+Omit session when one Desktop runs; use list-instances when multiple are open.
 
-If an apply is rejected by preflight validation, fix the workbook content per the FIX lines in the error and re-apply. Prefer file mode for large workbooks.`,
+If preflight rejects an apply, fix per FIX lines. Prefer file mode for large workbooks.`,
     );
   });
 
   it('tells agents to narrate with Tableau vocabulary', () => {
-    expect(DESKTOP_INSTRUCTIONS).toContain(
-      'Use Tableau vocabulary in your narration: say workbook, viz, sheet, or field rather than implementation formats; shelf names are Columns and Rows.',
-    );
+    expect(DESKTOP_INSTRUCTIONS).toContain('Use Tableau terms: workbook/viz/sheet/field');
   });
 });
 
@@ -348,10 +346,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 17-tool singable surface — the spec-loop 5 + the author-* 5 + ask-user + search-commands + bind-template + refine-worksheet + the three knowledge doors, no XML/cache tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 19-tool data-first singable surface — existing native authoring plus summary data and site datasource reads, no XML/cache tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(17);
+    expect(selected).toHaveLength(19);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the three
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -368,6 +366,8 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'list-knowledge-resources',
       'read-knowledge-resource',
       'search-knowledge',
+      'get-summary-data',
+      'list-site-datasources',
     ]) {
       expect(selected.map((t) => t.name)).toContain(verb);
     }

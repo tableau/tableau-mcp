@@ -15,6 +15,9 @@ export const EXTERNAL_API_ROUTES = {
   health: '/v0/health',
   app: '/v0/app',
   workbookDocument: '/v0/workbook/document',
+  workbookWorksheets: '/v0/workbook/worksheets',
+  worksheetSummaryData: '/v0/workbook/worksheets/{id}/summaryData',
+  siteDatasources: '/v0/site/datasources',
   invokeCommand: '/v0/app:invokeCommand',
   openapi: '/openapi.json',
   oauthProtectedResource: '/.well-known/oauth-protected-resource',
@@ -132,6 +135,65 @@ export const operationEnvelopeSchema = z
   })
   .passthrough();
 export type OperationEnvelope = z.infer<typeof operationEnvelopeSchema>;
+
+/** Worksheet item returned by `GET /v0/workbook/worksheets`. */
+export const worksheetItemSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string().optional(),
+    hidden: z.boolean(),
+    index: z.number().int().optional(),
+    datasources: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type WorksheetItem = z.infer<typeof worksheetItemSchema>;
+
+/** Worksheet list returned by `GET /v0/workbook/worksheets`. */
+export const worksheetListSchema = z
+  .object({
+    worksheets: z.array(worksheetItemSchema).optional(),
+  })
+  .passthrough();
+export type WorksheetList = z.infer<typeof worksheetListSchema>;
+
+/** Published datasource item returned by `GET /v0/site/datasources`. */
+export const siteDatasourceItemSchema = z
+  .object({
+    id: z.string().optional(),
+    luid: z.string().optional(),
+    name: z.string().optional(),
+    caption: z.string().optional(),
+    project: z.string().optional(),
+  })
+  .passthrough();
+export type SiteDatasourceItem = z.infer<typeof siteDatasourceItemSchema>;
+
+/** Published datasource list returned by `GET /v0/site/datasources`. */
+export const siteDatasourceListSchema = z
+  .object({
+    datasources: z.array(siteDatasourceItemSchema).optional(),
+  })
+  .passthrough();
+export type SiteDatasourceList = z.infer<typeof siteDatasourceListSchema>;
+
+/** Worksheet summary logical table returned by `GET /v0/workbook/worksheets/{id}/summaryData`. */
+export const summaryDataSchema = z
+  .object({
+    columns: z
+      .array(
+        z
+          .object({
+            name: z.string().optional(),
+            dataType: z.string().optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+    rows: z.array(z.array(z.unknown())).optional(),
+  })
+  .passthrough();
+export type SummaryData = z.infer<typeof summaryDataSchema>;
 
 /**
  * Typed error surfaced by {@link ExternalApiClient} methods. The internal

@@ -10,6 +10,11 @@ import {
   operationWarningSchema,
   PROBLEM_CODES,
   problemResponseSchema,
+  siteDatasourceItemSchema,
+  siteDatasourceListSchema,
+  summaryDataSchema,
+  worksheetItemSchema,
+  worksheetListSchema,
 } from './types.js';
 
 /**
@@ -81,6 +86,20 @@ describe('external client API contract (captured openapi fixture)', () => {
     });
   });
 
+  describe('data-first read schemas', () => {
+    it.each([
+      ['WorksheetItem', worksheetItemSchema],
+      ['WorksheetList', worksheetListSchema],
+      ['SiteDatasourceItem', siteDatasourceItemSchema],
+      ['SiteDatasourceList', siteDatasourceListSchema],
+      ['SummaryData', summaryDataSchema],
+    ] as const)('%s: properties and required set match', (name, schema) => {
+      const component = specSchema(name);
+      expect(declaredKeys(schema).sort()).toEqual(Object.keys(component.properties ?? {}).sort());
+      expect(requiredKeys(schema).sort()).toEqual([...(component.required ?? [])].sort());
+    });
+  });
+
   describe('Problem ↔ problemResponseSchema', () => {
     const problem = specSchema('Problem');
 
@@ -116,6 +135,9 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.health,
       EXTERNAL_API_ROUTES.app,
       EXTERNAL_API_ROUTES.workbookDocument,
+      EXTERNAL_API_ROUTES.workbookWorksheets,
+      EXTERNAL_API_ROUTES.worksheetSummaryData,
+      EXTERNAL_API_ROUTES.siteDatasources,
       EXTERNAL_API_ROUTES.openapi,
       EXTERNAL_API_ROUTES.oauthProtectedResource,
     ])('spec documents %s', (route) => {

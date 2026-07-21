@@ -49,8 +49,8 @@ export const getGetWorksheetXmlTool = (
     name: 'get-worksheet-xml',
     title,
     description: [
-      'Get structure for an existing worksheet. mode=file is default; mode=inline returns worksheet content.',
-      'IMPORTANT: only works for an existing worksheet (see list-worksheets). Prefer the field tools over editing worksheet content directly. Use apply-worksheet to apply changes.',
+      'Get structure for an EXISTING worksheet (see list-worksheets). mode=file default; mode=inline returns content.',
+      'Prefer the field tools over editing content directly; apply-worksheet applies changes.',
     ].join(' '),
     paramsSchema,
     annotations: {

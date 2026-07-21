@@ -1,4 +1,5 @@
 import { Err, Ok, Result } from 'ts-results-es';
+import { z } from 'zod';
 
 import {
   EXTERNAL_API_ROUTES,
@@ -9,6 +10,12 @@ import {
   OperationEnvelope,
   operationEnvelopeSchema,
   problemResponseSchema,
+  SiteDatasourceList,
+  siteDatasourceListSchema,
+  SummaryData,
+  summaryDataSchema,
+  WorksheetList,
+  worksheetListSchema,
 } from './types.js';
 
 export type ExternalApiClientOptions = {
@@ -22,6 +29,13 @@ export type WorkbookDocument = {
   xml: string;
   applicationVersion: string | undefined;
   xsdPayloadVersion: string | undefined;
+};
+
+export type WorksheetSummaryDataQuery = {
+  maxRows?: number;
+  ignoreAliases?: boolean;
+  ignoreSelection?: boolean;
+  columnsToIncludeByFieldName?: string;
 };
 
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -134,6 +148,28 @@ export class ExternalApiClient {
     }
   }
 
+  async listWorksheets(signal?: AbortSignal): Promise<Result<WorksheetList, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.workbookWorksheets, worksheetListSchema, signal);
+  }
+
+  async getWorksheetSummaryData(
+    worksheetId: string,
+    query: WorksheetSummaryDataQuery = {},
+    signal?: AbortSignal,
+  ): Promise<Result<SummaryData, ExternalApiError>> {
+    return this.getJson(
+      buildWorksheetSummaryDataRoute(worksheetId, query),
+      summaryDataSchema,
+      signal,
+    );
+  }
+
+  async listSiteDatasources(
+    signal?: AbortSignal,
+  ): Promise<Result<SiteDatasourceList, ExternalApiError>> {
+    return this.getJson(EXTERNAL_API_ROUTES.siteDatasources, siteDatasourceListSchema, signal);
+  }
+
   private async parseEnvelope(
     response: Result<Response, ExternalApiError>,
   ): Promise<Result<OperationEnvelope, ExternalApiError>> {
@@ -154,6 +190,35 @@ export class ExternalApiClient {
     }
 
     const parsed = operationEnvelopeSchema.safeParse(json);
+    if (!parsed.success) {
+      return Err({ type: 'invalid-response', error: parsed.error });
+    }
+    return Ok(parsed.data);
+  }
+
+  private async getJson<T extends z.ZodTypeAny>(
+    route: string,
+    schema: T,
+    signal?: AbortSignal,
+  ): Promise<Result<z.infer<T>, ExternalApiError>> {
+    const response = await this.request('GET', route, { signal });
+    if (response.isErr()) {
+      return Err(response.error);
+    }
+
+    const res = response.value;
+    if (!res.ok) {
+      return Err(await mapErrorResponse(res));
+    }
+
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch (error) {
+      return Err({ type: 'invalid-response', error });
+    }
+
+    const parsed = schema.safeParse(json);
     if (!parsed.success) {
       return Err({ type: 'invalid-response', error: parsed.error });
     }
@@ -190,6 +255,30 @@ export class ExternalApiClient {
   private url(route: string): string {
     return `${this.instance.baseUrl.replace(/\/$/, '')}${route}`;
   }
+}
+
+function buildWorksheetSummaryDataRoute(
+  worksheetId: string,
+  query: WorksheetSummaryDataQuery,
+): string {
+  const search = new URLSearchParams();
+  if (query.maxRows !== undefined) {
+    search.set('maxRows', String(query.maxRows));
+  }
+  if (query.ignoreAliases !== undefined) {
+    search.set('ignoreAliases', String(query.ignoreAliases));
+  }
+  if (query.ignoreSelection !== undefined) {
+    search.set('ignoreSelection', String(query.ignoreSelection));
+  }
+  if (query.columnsToIncludeByFieldName !== undefined) {
+    search.set('columnsToIncludeByFieldName', query.columnsToIncludeByFieldName);
+  }
+
+  const suffix = search.size > 0 ? `?${search.toString()}` : '';
+  return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(
+    worksheetId,
+  )}/summaryData${suffix}`;
 }
 
 async function mapErrorResponse(res: Response): Promise<ExternalApiError> {

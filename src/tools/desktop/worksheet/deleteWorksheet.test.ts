@@ -246,7 +246,7 @@ describe('deleteWorksheetTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getDeleteWorksheetTool(new DesktopMcpServer());
     expect(tool.name).toBe('delete-worksheet');
-    expect(tool.description).toContain('Delete a worksheet from the live workbook');
+    expect(tool.description).toContain('Delete a worksheet (mutating)');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),

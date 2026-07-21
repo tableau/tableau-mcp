@@ -86,9 +86,9 @@ export const getProposeTemplateTool = (
     name: 'propose-template',
     title,
     description: [
-      'Classify an ask against bundled fast-path templates and return candidates plus output_schema. Model-free.',
-      "status 'deterministic' can go to validate-proposal/bind-template; status 'propose' means choose a candidate and fill output_schema.",
-      'Discovery only: never returns apply-ready args and never changes the workbook. Details: expertise://tableau/tactics/workflow/templates.',
+      'Classify an ask against fast-path templates: candidates + output_schema. Model-free.',
+      "'deterministic' goes to validate-proposal/bind-template; 'propose' means pick a candidate and fill output_schema.",
+      'Discovery only, never mutates. Details: expertise://tableau/tactics/workflow/templates.',
     ].join(' '),
     paramsSchema,
     annotations: {

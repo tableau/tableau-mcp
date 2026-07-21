@@ -30,24 +30,24 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'preamble',
-    text: 'You are controlling Tableau Desktop. Use Tableau vocabulary in your narration: say workbook, viz, sheet, or field rather than implementation formats; shelf names are Columns and Rows. Use product data type names like Number (whole), Number (decimal), Text, and True/False.',
+    text: 'You control Tableau Desktop. Use Tableau terms: workbook/viz/sheet/field, Columns/Rows; types: Number, Text, True/False.',
   },
   {
     kind: 'prose',
     id: 'authoring-skill',
-    text: 'Load tableau-desktop-authoring before builds/edits; if unresolved failures repeat, switch to tableau-agent-debug, not manual XML.',
+    text: 'Load tableau-desktop-authoring; repeat failures -> tableau-agent-debug, not manual XML.',
   },
   {
     kind: 'prose',
     id: 'plan-before-build',
-    text: 'Before multi-viz/dashboard builds, plan: classify requirements as MAGNITUDE=continuous quantity or MEMBERSHIP=discrete group; encode MEMBERSHIP with discrete buckets, never raw-measure color gradients. State the one-line plan, then build.',
+    text: 'Before dashboards, plan MAGNITUDE vs MEMBERSHIP; encode MEMBERSHIP as buckets, not gradients. State plan, build.',
   },
   {
     kind: 'route',
     id: 'plain-chart',
     trigger: 'a plain viz ask (bar/line/map/KPI/etc.)',
     action:
-      'FIRST bind-template(auto_apply:true): deterministic, ~0.3s, no model work. On propose, resubmit; proposals may carry sort and top_n. calcs[] inline; author-parameter, author-set, author-action first; else search-commands.',
+      'FIRST bind-template(auto_apply:true): deterministic, ~0.3s. On propose, resubmit; proposals may carry sort and top_n. author-parameter, author-set, author-action before charts; else search-commands.',
     toolSequence: [
       'bind-template',
       'author-parameter',
@@ -55,16 +55,15 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'author-action',
       'search-commands',
     ],
-    stopConditions: ['deterministic, ~0.3s, no model work'],
+    stopConditions: ['deterministic, ~0.3s'],
     requiredEvidence: ['bind-template applied result (auto-apply receipt)'],
   },
   {
     kind: 'route',
     id: 'dashboard',
-    trigger:
-      'a dashboard ask with 2-6 vizzes (e.g. "a dashboard with sales by region and profit by category")',
+    trigger: 'a dashboard ask with 2-6 vizzes',
     action:
-      'build each sheet with bind-template (author calcs, parameters, and sets first with the author-* verbs when the sheet needs them), then compose the dashboard — search-commands only for commands the census does not list.',
+      'build sheets with bind-template (author calcs/params/sets first), then compose; search-commands only for commands the census does not list.',
     toolSequence: ['bind-template', 'search-commands'],
     stopConditions: ['search-commands only for commands the census does not list'],
     requiredEvidence: ['each sheet build returns a success envelope before dashboard composition'],
@@ -72,20 +71,19 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'route',
     id: 'data-value-question',
-    trigger: 'a data-value question ("what was revenue in Q3?")',
+    trigger: 'a data-value question',
     action:
-      'do NOT answer with a number — this server cannot read data values. Say so, then offer the viz that would show it (a plain viz ask via bind-template) instead.',
-    toolSequence: ['bind-template'],
-    stopConditions: ['do NOT answer with a number — this server cannot read data values'],
-    requiredEvidence: [],
+      'FIRST get-summary-data; answer only from returned rows. If no worksheet, say so and offer a viz.',
+    toolSequence: ['get-summary-data'],
+    stopConditions: ['answer only from returned rows'],
+    requiredEvidence: ['get-summary-data returned rows or a no-suitable-worksheet explanation'],
   },
   {
     kind: 'route',
     id: 'dynamic-authoring',
-    trigger:
-      'a DYNAMIC ask — a parameter the user drives, computed top/bottom-N membership, click-to-change interaction, or mark labels — or a calc/derived field the data lacks (ratio, running total, LOD)',
+    trigger: 'a dynamic ask or a calc/derived field the data lacks (ratio, running total, LOD)',
     action:
-      "use the author-* verbs, never raw commands or XML. Author parameters FIRST via author-parameter (it reopens Desktop and re-pins the session itself; on { reopened: true } continue immediately; stagePath optional). Then author-set for param-linked top/bottom-N membership (count accepts '[Parameters].[Parameter N]'), author-calc for calcs, author-action for click-to-param wiring, format-labels for labels. Build the charts around them with bind-template asks naming the authored captions.",
+      'use author-* verbs. Author parameters FIRST via author-parameter; on { reopened: true } continue immediately. Then author-set for top/bottom-N, author-calc for calcs, author-action for click-param, format-labels for labels. Build with bind-template and authored captions.',
     toolSequence: [
       'author-parameter',
       'author-set',
@@ -100,32 +98,32 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'ask-user-ambiguity',
-    text: 'If ambiguity changes workbook content, call ask-user with urgency=blocking; stop for answer.',
+    text: 'If ambiguity changes workbook content, call ask-user with urgency=blocking; stop.',
   },
   {
     kind: 'route',
     id: 'edit-in-place',
-    trigger: 'current/this/that/existing sheet, chart, view, or dashboard',
+    trigger: 'current/existing sheet/chart/view/dashboard',
     action:
-      'edit in place: resolve the target (exact name, else list-worksheets or list-dashboards; ask via ask-user if ambiguous), then refine-worksheet for top-N/sort edits or the relevant author-* tool. Never create a new sheet unless explicitly asked.',
+      'edit in place: resolve target (exact name, else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort or author-* tool. Never create new sheets unless asked.',
     toolSequence: ['list-worksheets', 'list-dashboards', 'ask-user', 'refine-worksheet'],
-    stopConditions: ['Never create a new sheet unless explicitly asked'],
+    stopConditions: ['Never create new sheets unless asked'],
     requiredEvidence: ['resolved worksheet/dashboard target before applying'],
   },
   {
     kind: 'prose',
     id: 'command-census',
-    text: 'Command census: tabdoc:goto-sheet switches sheets; author-calc, author-set, author-parameter, author-action, format-labels author semantic objects; refine-worksheet handles top-N and sort edits on an existing sheet. Use search-commands ONLY for commands not listed here.',
+    text: 'Command census: tabdoc:goto-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort. Use search-commands ONLY for commands not listed here.',
   },
   {
     kind: 'prose',
     id: SESSION_RESOLUTION_ID,
-    text: 'Omit session when exactly one Desktop instance runs; use list-instances when multiple are open.',
+    text: 'Omit session when one Desktop runs; use list-instances when multiple are open.',
   },
   {
     kind: 'prose',
     id: 'preflight-rejection',
-    text: 'If an apply is rejected by preflight validation, fix the workbook content per the FIX lines in the error and re-apply. Prefer file mode for large workbooks.',
+    text: 'If preflight rejects an apply, fix per FIX lines. Prefer file mode for large workbooks.',
   },
 ];
 

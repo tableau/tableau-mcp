@@ -10,12 +10,19 @@ import {
   GetEventsArgs,
   ToolExecutor,
 } from '../toolExecutor/toolExecutor.js';
-import { ExternalApiClient, ExternalApiClientOptions } from './externalApiClient.js';
+import {
+  ExternalApiClient,
+  ExternalApiClientOptions,
+  WorksheetSummaryDataQuery,
+} from './externalApiClient.js';
 import {
   ExternalApiError,
   ExternalApiInstance,
   OperationEnvelope,
   OperationError,
+  SiteDatasourceList,
+  SummaryData,
+  WorksheetList,
 } from './types.js';
 
 /** The single "get whole workbook document" command, routed to GET /v0/workbook/document. */
@@ -177,6 +184,26 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     return Ok({ ...commandResult, parsedResult: safeParsedResult.data });
   }
 
+  async listWorksheets(signal: AbortSignal): Promise<Result<WorksheetList, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.listWorksheets(signal));
+  }
+
+  async getWorksheetSummaryData(
+    worksheetId: string,
+    query: WorksheetSummaryDataQuery,
+    signal: AbortSignal,
+  ): Promise<Result<SummaryData, ExecuteCommandError>> {
+    return this.readExternalApi((client) =>
+      client.getWorksheetSummaryData(worksheetId, query, signal),
+    );
+  }
+
+  async listSiteDatasources(
+    signal: AbortSignal,
+  ): Promise<Result<SiteDatasourceList, ExecuteCommandError>> {
+    return this.readExternalApi((client) => client.listSiteDatasources(signal));
+  }
+
   async getEvents({ signal: _signal }: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>> {
     // The External Client API contract (this PR revision) exposes no events endpoint.
     // See residual risk in the deliverable report.
@@ -224,6 +251,42 @@ export class ExternalApiToolExecutor extends ToolExecutor {
   private async withRescan(
     op: (client: ExternalApiClient) => Promise<Result<RawOutcome, ExternalApiError>>,
   ): Promise<Result<RawOutcome, ExternalApiError | NoInstance>> {
+    const first = await this.ensureClient();
+    if (first.isErr()) {
+      return Err(first.error);
+    }
+
+    let result = await op(first.value);
+    if (result.isErr() && result.error.type === 'unauthorized') {
+      log({
+        message: 'External Client API returned 401 — rescanning discovery once',
+        level: 'warning',
+        logger: LOGGER,
+      });
+      this.client = undefined;
+      const rescanned = await this.resolveClient();
+      if (rescanned.isErr()) {
+        return Err(rescanned.error);
+      }
+      result = await op(rescanned.value);
+    }
+
+    return result;
+  }
+
+  private async readExternalApi<T>(
+    op: (client: ExternalApiClient) => Promise<Result<T, ExternalApiError>>,
+  ): Promise<Result<T, ExecuteCommandError>> {
+    const result = await this.withClientRescan(op);
+    if (result.isErr()) {
+      return Err(mapClientError(result.error));
+    }
+    return Ok(result.value);
+  }
+
+  private async withClientRescan<T>(
+    op: (client: ExternalApiClient) => Promise<Result<T, ExternalApiError>>,
+  ): Promise<Result<T, ExternalApiError | NoInstance>> {
     const first = await this.ensureClient();
     if (first.isErr()) {
       return Err(first.error);

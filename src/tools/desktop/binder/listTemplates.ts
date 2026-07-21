@@ -106,9 +106,8 @@ export const getListTemplatesTool = (
     name: 'list-templates',
     title,
     description: [
-      'List bundled chart templates with family, slots, and fast-path eligibility.',
-      'Use before bind-template to discover candidates; fast_path_eligible is authoritative and blockers explain ineligible templates.',
-      'Details: expertise://tableau/tactics/workflow/templates.',
+      'List bundled chart templates: family, slots, fast-path eligibility (authoritative; blockers explain ineligible).',
+      'Use before bind-template. Details: expertise://tableau/tactics/workflow/templates.',
     ].join(' '),
     paramsSchema,
     annotations: {

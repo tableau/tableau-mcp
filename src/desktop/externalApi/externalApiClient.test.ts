@@ -126,6 +126,74 @@ describe('ExternalApiClient', () => {
     expect(result.unwrap()).toMatchObject({ openapi: '3.1.0' });
   });
 
+  it('lists worksheets from GET /v0/workbook/worksheets', async () => {
+    const result = await client.listWorksheets();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().worksheets).toEqual([
+      expect.objectContaining({ id: 'sheet-sales', name: 'Sales by Region', hidden: false }),
+      expect.objectContaining({ id: 'sheet-profit', name: 'Profit by Category', hidden: false }),
+    ]);
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/worksheets');
+  });
+
+  it('gets worksheet summary data with query parameters', async () => {
+    const result = await client.getWorksheetSummaryData(
+      'sheet-sales',
+      {
+        maxRows: 25,
+        ignoreAliases: true,
+        ignoreSelection: true,
+        columnsToIncludeByFieldName: 'Sales,Profit',
+      },
+      new AbortController().signal,
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toEqual({
+      columns: [
+        { name: 'Region', dataType: 'string' },
+        { name: 'Sales', dataType: 'real' },
+        { name: 'Profit', dataType: 'real' },
+      ],
+      rows: [
+        ['West', 1200, 240],
+        ['East', 900, 120],
+      ],
+    });
+
+    const last = server.requests.at(-1) as any;
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/workbook/worksheets/sheet-sales/summaryData');
+    expect(last?.searchParams).toEqual({
+      maxRows: '25',
+      ignoreAliases: 'true',
+      ignoreSelection: 'true',
+      columnsToIncludeByFieldName: 'Sales,Profit',
+    });
+  });
+
+  it('lists published site datasources from GET /v0/site/datasources', async () => {
+    const result = await client.listSiteDatasources();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().datasources).toEqual([
+      expect.objectContaining({
+        id: 'ds-superstore',
+        luid: 'luid-superstore',
+        name: 'Sample - Superstore',
+      }),
+      expect.objectContaining({ id: 'ds-quota', luid: 'luid-quota', name: 'Quota Targets' }),
+    ]);
+
+    const last = server.requests.at(-1);
+    expect(last?.method).toBe('GET');
+    expect(last?.path).toBe('/v0/site/datasources');
+  });
+
   it('surfaces a 401 as an unauthorized error when the token is stale', async () => {
     const staleClient = new ExternalApiClient(makeInstance(server.baseUrl, 'stale-token'));
     const result = await staleClient.getWorkbookDocument();

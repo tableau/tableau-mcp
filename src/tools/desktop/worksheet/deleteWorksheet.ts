@@ -180,9 +180,8 @@ export const getDeleteWorksheetTool = (
     name: 'delete-worksheet',
     title,
     description: [
-      'Delete a worksheet from the live workbook (mutating) via the validated apply path.',
-      'SAFE BY DEFAULT: refuses when any dashboard zone references the sheet; no cascade delete.',
-      'Also refused: deleting the last remaining worksheet, and a mid-flight user edit (re-run for a fresh read).',
+      'Delete a worksheet (mutating) via the validated apply path.',
+      'SAFE BY DEFAULT: refuses dashboard-referenced sheets (no cascade), the last worksheet, and mid-flight user edits (re-run for a fresh read).',
     ].join(' '),
     paramsSchema,
     annotations: {

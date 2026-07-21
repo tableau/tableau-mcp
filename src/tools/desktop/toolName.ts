@@ -41,6 +41,8 @@ export const desktopToolNames = [
   'author-action',
   'format-labels',
   'author-parameter',
+  'get-summary-data',
+  'list-site-datasources',
   'validate-worksheet-xml',
   'validate-workbook-xml',
   'read-cached-xml',

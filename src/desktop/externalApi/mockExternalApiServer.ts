@@ -16,6 +16,7 @@ import {
 export type RecordedRequest = {
   method: string;
   path: string;
+  searchParams: Record<string, string>;
   authorization: string | undefined;
   contentType: string | undefined;
   body: string;
@@ -40,6 +41,53 @@ export type MockExternalApiServer = {
 
 const DEFAULT_TOKEN = 'valid-token';
 const DEFAULT_WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets /></workbook>';
+const DEFAULT_WORKSHEETS = [
+  {
+    id: 'sheet-sales',
+    name: 'Sales by Region',
+    type: 'WORKSHEET',
+    hidden: false,
+    index: 0,
+    datasources: ['Sample - Superstore'],
+  },
+  {
+    id: 'sheet-profit',
+    name: 'Profit by Category',
+    type: 'WORKSHEET',
+    hidden: false,
+    index: 1,
+    datasources: ['Sample - Superstore'],
+  },
+];
+const DEFAULT_SUMMARY_DATA = {
+  columns: [
+    { name: 'Region', dataType: 'string' },
+    { name: 'Sales', dataType: 'real' },
+    { name: 'Profit', dataType: 'real' },
+  ],
+  rows: [
+    ['West', 1200, 240],
+    ['East', 900, 120],
+  ],
+};
+const DEFAULT_SITE_DATASOURCES = [
+  {
+    id: 'ds-superstore',
+    luid: 'luid-superstore',
+    name: 'Sample - Superstore',
+    caption: 'Sample - Superstore',
+    project: 'Samples',
+    contentUrl: 'sample-superstore',
+  },
+  {
+    id: 'ds-quota',
+    luid: 'luid-quota',
+    name: 'Quota Targets',
+    caption: 'Quota Targets',
+    project: 'Sales',
+    contentUrl: 'quota-targets',
+  },
+];
 
 const readBody = (req: IncomingMessage): Promise<string> =>
   new Promise((resolve) => {
@@ -75,11 +123,13 @@ export async function startMockExternalApiServer(
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const method = req.method ?? 'GET';
-    const path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
+    const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+    const path = url.pathname;
+    const searchParams = Object.fromEntries(url.searchParams.entries());
     const authorization = req.headers['authorization'];
     const contentType = req.headers['content-type'];
     const body = await readBody(req);
-    requests.push({ method, path, authorization, contentType, body });
+    requests.push({ method, path, searchParams, authorization, contentType, body });
 
     // Bearer auth: a mismatched/absent token models a stale discovery file → 401.
     if (authorization !== `Bearer ${token}`) {
@@ -114,6 +164,27 @@ export async function startMockExternalApiServer(
         [HEADER_XSD_PAYLOAD_VERSION]: '2026.1.0',
       });
       res.end(workbookXml);
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.workbookWorksheets) {
+      sendJson(res, 200, { worksheets: DEFAULT_WORKSHEETS });
+      return;
+    }
+
+    const summaryDataMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)\/summaryData$/);
+    if (method === 'GET' && summaryDataMatch) {
+      const worksheetId = decodeURIComponent(summaryDataMatch[1]);
+      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      sendJson(res, 200, DEFAULT_SUMMARY_DATA);
+      return;
+    }
+
+    if (method === 'GET' && path === EXTERNAL_API_ROUTES.siteDatasources) {
+      sendJson(res, 200, { datasources: DEFAULT_SITE_DATASOURCES });
       return;
     }
 
