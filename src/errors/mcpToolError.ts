@@ -264,12 +264,30 @@ export class AdminInsightsUnavailableError extends McpToolError {
 
 export class DesktopCommandExecutionError extends McpToolError {
   constructor(error: ExecuteCommandError, fix?: string) {
+    const message = formatDesktopCommandExecutionError(error);
     super({
       type: 'desktop-command-execution-error',
-      message: fix ? `${JSON.stringify(error)}\n${fix}` : JSON.stringify(error),
+      message: fix ? `${message}\n${fix}` : message,
       statusCode: 500,
     });
   }
+}
+
+function formatDesktopCommandExecutionError(error: ExecuteCommandError): string {
+  if (error.type !== 'command-failed') {
+    return JSON.stringify(error);
+  }
+
+  const commandError = error.error;
+  const message = commandError?.message;
+  if (!message) {
+    return JSON.stringify(error);
+  }
+
+  const tableauErrorCode = commandError['tableau-error-code'];
+  return typeof tableauErrorCode === 'string' && tableauErrorCode.length > 0
+    ? `${message}\ntableau-error-code: ${tableauErrorCode}`
+    : message;
 }
 
 export class WorkbookXmlLoadFailedError extends McpToolError {

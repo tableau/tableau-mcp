@@ -34,10 +34,12 @@ export type ExecuteCommandError =
   | { type: 'invalid-response'; error: unknown }
   | { type: 'unknown'; error: unknown };
 
+export type ExecuteCommandWarning = { code: string; message: string };
+
 export type ExecuteCommandResult<Z extends z.ZodTypeAny | undefined = undefined> =
   Z extends z.ZodTypeAny
-    ? GetCommandStatusResponse & { parsedResult: z.infer<Z> }
-    : GetCommandStatusResponse;
+    ? GetCommandStatusResponse & { parsedResult: z.infer<Z>; warnings?: ExecuteCommandWarning[] }
+    : GetCommandStatusResponse & { warnings?: ExecuteCommandWarning[] };
 
 export abstract class ToolExecutor {
   abstract start(): Promise<void>;

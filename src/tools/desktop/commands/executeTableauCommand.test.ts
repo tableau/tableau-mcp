@@ -188,11 +188,61 @@ describe('executeTableauCommandTool', () => {
 
     expect(result.isError).toBeFalsy();
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Command executed successfully');
-    expect(result.content[0].text).toContain('some_value');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toContain('Command executed successfully');
+    expect(payload.result).toEqual(commandResult);
   });
 
-  it('should return success with fallback message when result is null', async () => {
+  it('truncates oversized command result payloads with an honest byte-count note', async () => {
+    const largeValue = 'x'.repeat(20 * 1024);
+    const executeCommand = vi
+      .fn()
+      .mockResolvedValue(new Ok({ command_id: 'c1', result: { largeValue } }));
+    const extra = makeExtra(executeCommand);
+
+    const result = await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toContain('result truncated:');
+    expect(payload.message).toContain('re-run with a narrower command if you need the rest');
+    expect(payload.result).not.toContain(largeValue);
+    expect(Buffer.byteLength(result.content[0].text, 'utf-8')).toBeLessThan(18 * 1024);
+  });
+
+  it('renders envelope warnings as visible warning lines on success', async () => {
+    const executeCommand = vi.fn().mockResolvedValue(
+      new Ok({
+        command_id: 'c1',
+        result: { ok: true },
+        warnings: [
+          {
+            code: 'output-serialization-failed',
+            message: 'Command output could not be serialized.',
+          },
+        ],
+      }),
+    );
+    const extra = makeExtra(executeCommand);
+
+    const result = await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toContain(
+      'WARNING: output-serialization-failed - Command output could not be serialized.',
+    );
+    expect(payload.warnings).toEqual([
+      {
+        code: 'output-serialization-failed',
+        message: 'Command output could not be serialized.',
+      },
+    ]);
+  });
+
+  it('is silent about missing output when a command succeeds without result data', async () => {
     const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
     const extra = makeExtra(executeCommand);
 
@@ -200,13 +250,21 @@ describe('executeTableauCommandTool', () => {
 
     expect(result.isError).toBeFalsy();
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('no result data');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toBe('Command executed successfully.');
+    expect(payload.result).toBeUndefined();
+    expect(payload.message).not.toContain('no result data');
   });
 
-  it('keeps unmapped executeCommand failure text unchanged', async () => {
+  it('surfaces command failure message and tableau-error-code extension', async () => {
     const commandError = {
       type: 'command-failed' as const,
-      error: { code: 'ERR', message: 'fail', recoverable: false },
+      error: {
+        code: 'ERR',
+        message: 'Desktop reported the real failure',
+        recoverable: false,
+        'tableau-error-code': '0x1234',
+      },
     };
     const executeCommand = vi.fn().mockResolvedValue({ isErr: () => true, error: commandError });
     const extra = makeExtra(executeCommand);
@@ -220,7 +278,10 @@ describe('executeTableauCommandTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe(new DesktopCommandExecutionError(commandError).message);
+    expect(result.content[0].text).toBe(
+      'Desktop reported the real failure\ntableau-error-code: 0x1234',
+    );
+    expect(result.content[0].text).not.toContain('Command execution failed');
   });
 
   it('appends the known-live failure fix when mapped command execution fails', async () => {
@@ -517,9 +578,7 @@ describe('executeTableauCommandTool', () => {
 
       expect(result.isError).toBeFalsy();
       invariant(result.content[0].type === 'text');
-      expect(JSON.parse(result.content[0].text).message).toBe(
-        'Command executed successfully:\n\nCommand completed successfully (no result data)',
-      );
+      expect(JSON.parse(result.content[0].text).message).toBe('Command executed successfully.');
     });
 
     it('leaves an arbitrary valid command call untouched', async () => {

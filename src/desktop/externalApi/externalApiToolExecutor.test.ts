@@ -10,12 +10,13 @@ vi.mock('../../logging/logger.js');
 const instanceFor = (
   server: MockExternalApiServer,
   token = 'valid-token',
+  apiVersion = '0.1.1',
 ): ExternalApiInstance => ({
   baseUrl: server.baseUrl,
   token,
   pid: 999,
   instanceId: 'inst-exec',
-  apiVersion: '1.0',
+  apiVersion,
 });
 
 describe('ExternalApiToolExecutor', () => {
@@ -164,6 +165,100 @@ describe('ExternalApiToolExecutor', () => {
       if (error.type === 'command-failed') {
         expect(error.error?.code).toBe('operation-failed');
       }
+    });
+
+    it('carries Operation warnings from a succeeded invokeCommand envelope', async () => {
+      server.setOverride('POST /v0/app:invokeCommand', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-warn-1',
+          kind: 'command.invoke',
+          state: 'SUCCEEDED',
+          result: { ok: true },
+          warnings: [
+            {
+              code: 'output-serialization-failed',
+              message: 'Command output could not be serialized.',
+            },
+          ],
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'undo',
+        signal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().warnings).toEqual([
+        {
+          code: 'output-serialization-failed',
+          message: 'Command output could not be serialized.',
+        },
+      ]);
+    });
+
+    it('preserves failed Operation message and tableau-error-code extension', async () => {
+      server.setOverride('POST /v0/app:invokeCommand', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-fail-1',
+          kind: 'command.invoke',
+          state: 'FAILED',
+          error: {
+            code: 'operation-failed',
+            message: 'Desktop reported the real failure',
+            'tableau-error-code': '0x1234',
+          },
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'undo',
+        signal,
+      });
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.message).toBe('Desktop reported the real failure');
+        expect((error.error as Record<string, unknown>)['tableau-error-code']).toBe('0x1234');
+      }
+    });
+
+    it('treats missing result on a 0.1.0 succeeded invokeCommand as silent success', async () => {
+      server.setOverride('POST /v0/app:invokeCommand', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-010-1',
+          kind: 'command.invoke',
+          state: 'SUCCEEDED',
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server, 'valid-token', '0.1.0')],
+      });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'undo',
+        signal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().result).toBeUndefined();
+      expect(result.unwrap().warnings).toBeUndefined();
     });
 
     it('maps a command-not-found problem to a command-failed error', async () => {

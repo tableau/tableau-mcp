@@ -76,11 +76,12 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(missing).toEqual([]);
     });
 
-    it('only carries `result` beyond the spec (kept until Ask-1(b) output-param behavior is confirmed)', () => {
+    it('documents `result` as expected from apiVersion 0.1.1 even if the captured 0.1.0 spec omits it', () => {
       const extras = declaredKeys(operationEnvelopeSchema).filter(
         (key) => !(key in (operation.properties ?? {})),
       );
-      expect(extras).toEqual(['result']);
+      const expectedExtras = operation.properties?.result ? [] : ['result'];
+      expect(extras).toEqual(expectedExtras);
     });
 
     it('matches the spec required set exactly', () => {
@@ -203,6 +204,23 @@ describe('external client API contract (captured openapi fixture)', () => {
         completedAt: '2026-07-20T10:00:01Z',
         error: { code: 'operation-failed', message: 'nope' },
         warnings: [{ code: 'partial', message: 'one sheet skipped' }],
+      });
+      expect(parsed.success).toBe(true);
+    });
+
+    it('parses a 0.1.1 SUCCEEDED Operation result object and serialize-degradation warning', () => {
+      const parsed = operationEnvelopeSchema.safeParse({
+        id: 'op-1',
+        kind: 'command.invoke',
+        state: 'SUCCEEDED',
+        result: { outputParam: 'value' },
+        warnings: [
+          {
+            code: 'output-serialization-failed',
+            message: 'Command output could not be serialized.',
+            target: 'result',
+          },
+        ],
       });
       expect(parsed.success).toBe(true);
     });

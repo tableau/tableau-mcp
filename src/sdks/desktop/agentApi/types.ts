@@ -24,7 +24,10 @@ export const executeCommandResponseSchema = z.object({
   status: z.enum(['queued', 'running', 'completed', 'failed']),
   submitted_at: z.string(),
   status_url: z.string(),
-  error: z.object({ code: z.string(), message: z.string(), recoverable: z.boolean() }).optional(),
+  error: z
+    .object({ code: z.string(), message: z.string(), recoverable: z.boolean() })
+    .passthrough()
+    .optional(),
 });
 export type ExecuteCommandResponse = z.infer<typeof executeCommandResponseSchema>;
 export type ExecuteCommandResponseError = ExecuteCommandResponse['error'];

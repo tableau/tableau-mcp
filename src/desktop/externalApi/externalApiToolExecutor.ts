@@ -26,6 +26,7 @@ import {
   ExternalApiInstance,
   OperationEnvelope,
   OperationError,
+  OperationWarning,
   Site,
   SiteDatasourceList,
   SiteWorkbookList,
@@ -66,9 +67,11 @@ type RawOutcome = {
   result: Record<string, unknown> | undefined;
   state: string | undefined;
   envelopeError: OperationError | undefined;
+  warnings: OperationWarning[] | undefined;
   createdAt: string | undefined;
   completedAt: string | undefined;
   operationId: string | undefined;
+  apiVersion: string | undefined;
 };
 
 /**
@@ -435,9 +438,11 @@ export class ExternalApiToolExecutor extends ToolExecutor {
         result: { text: result.value.xml },
         state: 'succeeded',
         envelopeError: undefined,
+        warnings: undefined,
         createdAt: undefined,
         completedAt: undefined,
         operationId: undefined,
+        apiVersion: client.apiVersion,
       });
     }
 
@@ -450,25 +455,27 @@ export class ExternalApiToolExecutor extends ToolExecutor {
       if (result.isErr()) {
         return Err(result.error);
       }
-      return Ok(normalizeEnvelope(result.value));
+      return Ok(normalizeEnvelope(result.value, client.apiVersion));
     }
 
     const result = await client.invokeCommand(namespace, command, args, signal);
     if (result.isErr()) {
       return Err(result.error);
     }
-    return Ok(normalizeEnvelope(result.value));
+    return Ok(normalizeEnvelope(result.value, client.apiVersion));
   }
 }
 
-function normalizeEnvelope(envelope: OperationEnvelope): RawOutcome {
+function normalizeEnvelope(envelope: OperationEnvelope, apiVersion?: string): RawOutcome {
   return {
     result: isRecord(envelope.result) ? envelope.result : undefined,
     state: envelope.state,
     envelopeError: envelope.error,
+    warnings: envelope.warnings,
     createdAt: envelope.createdAt,
     completedAt: envelope.completedAt,
     operationId: envelope.id,
+    apiVersion,
   };
 }
 
@@ -480,25 +487,45 @@ function buildCommandStatus(
   const failed = state === 'failed' || state === 'error' || outcome.envelopeError !== undefined;
 
   if (failed) {
+    const tableauErrorCode = getTableauErrorCode(outcome.envelopeError);
     return Err({
       type: 'command-failed',
       error: {
         code: outcome.envelopeError?.code ?? 'operation-failed',
         message: outcome.envelopeError?.message ?? `Command ${namespace}:${command} failed`,
         recoverable: false,
+        ...(tableauErrorCode ? { 'tableau-error-code': tableauErrorCode } : {}),
       },
     });
   }
 
   const now = new Date().toISOString();
+  const resultPayload =
+    outcome.result !== undefined || supportsOperationResult(outcome.apiVersion)
+      ? { result: outcome.result }
+      : {};
   return Ok({
     command_id: outcome.operationId ?? `ext_${namespace}:${command}_${Date.now()}`,
     status: 'completed',
     submitted_at: outcome.createdAt ?? now,
     started_at: outcome.createdAt ?? now,
     completed_at: outcome.completedAt ?? now,
-    result: outcome.result,
+    ...resultPayload,
+    ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
   });
+}
+
+function getTableauErrorCode(error: OperationError | undefined): string | undefined {
+  const value = error?.['tableau-error-code'];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function supportsOperationResult(apiVersion: string | undefined): boolean {
+  const [major = 0, minor = 0, patch = 0] = (apiVersion ?? '')
+    .split('.')
+    .map((part) => Number.parseInt(part, 10))
+    .map((part) => (Number.isFinite(part) ? part : 0));
+  return major > 0 || (major === 0 && (minor > 1 || (minor === 1 && patch >= 1)));
 }
 
 function mapClientError(error: ExternalApiError | NoInstance): ExecuteCommandError {
