@@ -30,7 +30,6 @@ export const getApiRootTool = (server: DesktopMcpServer): DesktopTool<typeof par
         args: { session },
         callback: async () => {
           const result = await runExternalApiReadTool({
-            toolName: getApiRoot.name,
             session,
             extra,
             callback: async (_executor, _signal, read) =>

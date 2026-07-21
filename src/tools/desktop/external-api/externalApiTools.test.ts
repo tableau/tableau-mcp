@@ -33,7 +33,6 @@ describe('External API coverage tools', () => {
 
   it.each([
     {
-      toolName: 'get-health',
       makeTool: getHealthTool,
       args: {},
       expectedPath: '/v0/health',
@@ -42,7 +41,6 @@ describe('External API coverage tools', () => {
       },
     },
     {
-      toolName: 'get-api-root',
       makeTool: getApiRootTool,
       args: {},
       expectedPath: '/v0/',
@@ -59,7 +57,6 @@ describe('External API coverage tools', () => {
       },
     },
     {
-      toolName: 'get-site-info',
       makeTool: getSiteInfoTool,
       args: {},
       expectedPath: '/v0/site',
@@ -73,7 +70,6 @@ describe('External API coverage tools', () => {
       },
     },
     {
-      toolName: 'list-storyboards',
       makeTool: getListStoryboardsTool,
       args: {},
       expectedPath: '/v0/workbook/storyboards',
@@ -263,42 +259,36 @@ describe('External API coverage tools', () => {
 
   it.each([
     {
-      toolName: 'get-api-root',
       makeTool: getApiRootTool,
       args: {},
       overrideKey: 'GET /v0/',
       expectedMessage: 'does not serve the API root endpoint',
     },
     {
-      toolName: 'get-site-info',
       makeTool: getSiteInfoTool,
       args: {},
       overrideKey: 'GET /v0/site',
       expectedMessage: 'does not serve the site endpoint',
     },
     {
-      toolName: 'list-storyboards',
       makeTool: getListStoryboardsTool,
       args: {},
       overrideKey: 'GET /v0/workbook/storyboards',
       expectedMessage: 'does not serve the storyboard list endpoint',
     },
     {
-      toolName: 'get-dashboard-info',
       makeTool: getDashboardInfoTool,
       args: { dashboard: 'dash-exec' },
       overrideKey: 'GET /v0/workbook/dashboards/dash-exec',
       expectedMessage: 'does not serve the dashboard metadata endpoint',
     },
     {
-      toolName: 'get-storyboard-info',
       makeTool: getStoryboardInfoTool,
       args: { storyboard: 'story-qbr' },
       overrideKey: 'GET /v0/workbook/storyboards/story-qbr',
       expectedMessage: 'does not serve the storyboard metadata endpoint',
     },
     {
-      toolName: 'get-storyboard-xml',
       makeTool: getStoryboardXmlTool,
       args: { storyboard: 'story-qbr' },
       overrideKey: 'GET /v0/workbook/storyboards/story-qbr/document',

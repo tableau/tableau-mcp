@@ -22,7 +22,6 @@ describe('runExternalApiReadTool', () => {
     };
 
     const result = await runExternalApiReadTool({
-      toolName: 'get-health',
       session: 'desktop-2',
       extra,
       callback: async (typedExecutor, signal, read) =>
@@ -56,7 +55,6 @@ describe('runExternalApiReadTool', () => {
     };
 
     const result = await runExternalApiReadTool({
-      toolName: 'list-widgets',
       session: undefined,
       extra,
       callback: async (_executor, _signal, read) =>
@@ -84,7 +82,6 @@ describe('runExternalApiReadTool', () => {
     };
 
     const result = await runExternalApiReadTool({
-      toolName: 'get-health',
       session: undefined,
       extra,
       callback: async (_executor, _signal, read) =>

@@ -30,7 +30,6 @@ export const getHealthTool = (server: DesktopMcpServer): DesktopTool<typeof para
         args: { session },
         callback: async () => {
           return await runExternalApiReadTool({
-            toolName: getHealth.name,
             session,
             extra,
             callback: async (_executor, _signal, read) =>

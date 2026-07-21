@@ -33,7 +33,6 @@ export const getListStoryboardsTool = (
         args: { session },
         callback: async () => {
           const result = await runExternalApiReadTool({
-            toolName: listStoryboards.name,
             session,
             extra,
             callback: async (_executor, _signal, read) =>

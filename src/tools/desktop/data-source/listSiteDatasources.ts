@@ -35,7 +35,6 @@ export const getListSiteDatasourcesTool = (
         args: { session },
         callback: async () => {
           const result = await runExternalApiReadTool({
-            toolName: listSiteDatasources.name,
             session,
             extra,
             callback: async (_executor, _signal, read) =>

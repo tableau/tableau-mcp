@@ -34,7 +34,6 @@ export const getWorkbookInventoryTool = (
         args: { session },
         callback: async () => {
           const result = await runExternalApiReadTool({
-            toolName: getWorkbookInventory.name,
             session,
             extra,
             callback: async (_executor, _signal, read) =>

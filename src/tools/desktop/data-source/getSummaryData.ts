@@ -44,7 +44,6 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
         args: { session, worksheet, maxRows, columns },
         callback: async () => {
           return await runExternalApiReadTool({
-            toolName: getSummaryData.name,
             session,
             extra,
             callback: async (_executor, _signal, read) => {

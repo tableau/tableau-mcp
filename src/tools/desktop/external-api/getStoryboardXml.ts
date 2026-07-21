@@ -35,7 +35,6 @@ export const getStoryboardXmlTool = (
         args: { session, storyboard },
         callback: async () => {
           const result = await runExternalApiReadTool({
-            toolName: getStoryboardXml.name,
             session,
             extra,
             callback: async (_executor, _signal, read) => {

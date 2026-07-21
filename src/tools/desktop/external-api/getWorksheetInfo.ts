@@ -34,7 +34,6 @@ export const getWorksheetInfoTool = (
         args: { session, worksheet },
         callback: async () => {
           return await runExternalApiReadTool({
-            toolName: getWorksheetInfo.name,
             session,
             extra,
             callback: async (_executor, _signal, read) => {

@@ -30,7 +30,6 @@ export const getSiteInfoTool = (server: DesktopMcpServer): DesktopTool<typeof pa
         args: { session },
         callback: async () => {
           return await runExternalApiReadTool({
-            toolName: getSiteInfo.name,
             session,
             extra,
             callback: async (_executor, _signal, read) =>

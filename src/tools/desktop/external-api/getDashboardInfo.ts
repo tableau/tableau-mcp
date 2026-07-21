@@ -34,7 +34,6 @@ export const getDashboardInfoTool = (
         args: { session, dashboard },
         callback: async () => {
           const listResult = await runExternalApiReadTool({
-            toolName: getDashboardInfo.name,
             session,
             extra,
             callback: async (_executor, _signal, read) => {

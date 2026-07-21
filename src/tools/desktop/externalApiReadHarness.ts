@@ -21,7 +21,6 @@ export async function runExternalApiReadTool<T>({
   extra,
   callback,
 }: {
-  toolName: string;
   session: string | undefined;
   extra: TableauDesktopRequestHandlerExtra;
   callback: (

@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
+import { getDesktopConfig } from '../../../config.desktop.js';
 import { discoverInstances } from '../../../desktop/externalApi/discovery.js';
 import { NoDesktopInstancesFoundError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -39,7 +40,9 @@ export const getListInstancesTool = (
         extra,
         args: {},
         callback: async () => {
-          const external = discoverInstances();
+          const external = discoverInstances({
+            discoveryDir: getDesktopConfig().externalApiDiscoveryDir,
+          });
           if (external.length === 0) {
             return new NoDesktopInstancesFoundError().toErr();
           }

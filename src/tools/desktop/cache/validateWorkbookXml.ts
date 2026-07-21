@@ -54,8 +54,7 @@ export const getValidateWorkbookXmlTool = (
             return new Ok({ type: 'local', issues: localIssues });
           }
 
-          return await runExternalApiReadTool<WorkbookValidationResult>({
-            toolName: tool.name,
+          const serverValidation = await runExternalApiReadTool<WorkbookValidationResult>({
             session,
             extra,
             callback: async (_executor, _signal, read) => {
@@ -70,6 +69,15 @@ export const getValidateWorkbookXmlTool = (
               return new Ok({ type: 'server', result: result.value });
             },
           });
+          // Offline honesty: with no reachable Desktop the local well-formed
+          // check is still a real answer — degrade to it instead of erroring.
+          if (
+            serverValidation.isErr() &&
+            serverValidation.error.type === 'no-desktop-instances-found'
+          ) {
+            return new Ok({ type: 'local', issues: [] });
+          }
+          return serverValidation;
         },
         getSuccessResult: (validation) => {
           if (validation.type === 'server') {
