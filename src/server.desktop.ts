@@ -59,9 +59,10 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
  * for calcs, both dispatched through execute-tableau-command on the /v0 External
  * API — is sufficient on its own, with NO XML tools, NO templates, NO bind-template.
  * Everything a chart/calc/dashboard ask needs routes through execute-tableau-command;
- * the rest is discovery + readback (the /v0 generic route is write-blind, so the
- * list-* tools are how the model observes state). Proven by hand 2026-07-19: a full
- * analytics workbook (calcs + charts + dashboard) authored live in seconds, zero XML.
+ * the rest is discovery + readback (on apiVersion <=0.1.0 the /v0 generic route was
+ * write-blind, so the list-* tools were how the model observed state). Proven by hand
+ * 2026-07-19: a full analytics workbook (calcs + charts + dashboard) authored live in
+ * seconds, zero XML.
  * The known-command guard (from #542) makes the single execute-tableau-command tool
  * safe against hallucinated verbs.
  */

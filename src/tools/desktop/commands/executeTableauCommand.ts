@@ -28,7 +28,10 @@ import type {
 import { validateNotionalSpecArgs } from '../../../desktop/notionalSpecGuard.js';
 import { validateCommandParams } from '../../../desktop/paramContractGuard.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
-import type { ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
+import type {
+  ExecuteCommandWarning,
+  ToolExecutor,
+} from '../../../desktop/toolExecutor/toolExecutor.js';
 import { validateUnderlyingMetadataLoad } from '../../../desktop/underlyingMetadataGuard.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -37,6 +40,7 @@ import { DesktopTool } from '../tool.js';
 const LOAD_UNDERLYING_METADATA_COMMAND = 'tabui:load-underlying-metadata';
 const GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND = 'tabdoc:generate-viz-from-notional-spec';
 const CONTEXT_FILLED_PARAM_TYPES = new Set(['UPI_Workspace', 'UPI_IWorkspace']);
+const MAX_RESULT_BYTES = 16 * 1024;
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
@@ -174,20 +178,20 @@ export const getExecuteTableauCommandTool = (
             ).toErr();
           }
 
-          const resultText = result.value.result
-            ? JSON.stringify(result.value.result, null, 2)
-            : 'Command completed successfully (no result data)';
-          let message = `Command executed successfully:\n\n${resultText}`;
+          const payload = buildSuccessPayload({
+            result: result.value.result,
+            envelopeWarnings: result.value.warnings ?? [],
+            registryWarnings: externalApiRegistryWarnings,
+          });
           if (command === GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND) {
-            message = await appendGenerateVizReadback({ message, executor, signal: extra.signal });
-          }
-          if (externalApiRegistryWarnings.length > 0) {
-            message = `${message}\n\n${externalApiRegistryWarnings.join('\n')}`;
+            payload.message = await appendGenerateVizReadback({
+              message: payload.message,
+              executor,
+              signal: extra.signal,
+            });
           }
 
-          return new Ok({
-            message,
-          });
+          return new Ok(payload);
         },
       });
     },
@@ -203,6 +207,54 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 type ExternalApiGuardResult =
   | { ok: true; args: Record<string, unknown>; warnings: string[] }
   | { ok: false; message: string };
+
+type ExecuteTableauCommandSuccess = {
+  message: string;
+  result?: Record<string, unknown> | string;
+  warnings?: ExecuteCommandWarning[];
+};
+
+function buildSuccessPayload({
+  result,
+  envelopeWarnings,
+  registryWarnings,
+}: {
+  result: Record<string, unknown> | null | undefined;
+  envelopeWarnings: ExecuteCommandWarning[];
+  registryWarnings: string[];
+}): ExecuteTableauCommandSuccess {
+  const payload: ExecuteTableauCommandSuccess = {
+    message: 'Command executed successfully.',
+  };
+
+  if (result !== undefined && result !== null) {
+    const serialized = JSON.stringify(result, null, 2);
+    const totalBytes = Buffer.byteLength(serialized, 'utf-8');
+    if (totalBytes > MAX_RESULT_BYTES) {
+      const preview = Buffer.from(serialized, 'utf-8').subarray(0, MAX_RESULT_BYTES).toString();
+      const previewBytes = Buffer.byteLength(preview, 'utf-8');
+      payload.result = `${preview}\n...`;
+      payload.message =
+        `Command executed successfully. result truncated: ${previewBytes} of ${totalBytes} bytes - ` +
+        're-run with a narrower command if you need the rest.';
+    } else {
+      payload.result = result;
+    }
+  }
+
+  const warningLines = [
+    ...envelopeWarnings.map((warning) => `WARNING: ${warning.code} - ${warning.message}`),
+    ...registryWarnings,
+  ];
+  if (warningLines.length > 0) {
+    payload.message = `${payload.message}\n\n${warningLines.join('\n')}`;
+  }
+  if (envelopeWarnings.length > 0) {
+    payload.warnings = envelopeWarnings;
+  }
+
+  return payload;
+}
 
 function validateExternalApiCommandRegistry({
   command,
@@ -238,6 +290,8 @@ function validateExternalApiCommandRegistry({
     const param = findExternalApiParam(registry, key);
     if (!param) {
       rewrittenArgs[key] = value;
+      // Non-goal for monolith #60596: unknown params can still surface as bare 500s;
+      // the command-registry guard remains the client-side defense.
       warnings.push(
         `WARNING: key "${key}" is not in the command registry - a wrong name surfaces as a bare 500.`,
       );

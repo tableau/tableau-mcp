@@ -94,6 +94,10 @@ export class ExternalApiClient {
     return this.instance.instanceId;
   }
 
+  get apiVersion(): string | undefined {
+    return this.instance.apiVersion;
+  }
+
   async health(signal?: AbortSignal): Promise<Result<{ healthy: boolean }, ExternalApiError>> {
     const response = await this.request('GET', EXTERNAL_API_ROUTES.health, { signal });
     if (response.isErr()) {

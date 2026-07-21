@@ -23508,7 +23508,7 @@
       "source_file": "AnalyticsAssistantDesktopPaneCommand",
       "editor_type": "D",
       "server_permission": "UNRESTRICTED",
-      "description": "Generate a NotionalSpec from the current viz — BUT the /v0 External Client API does NOT return this command's output (write-blind envelope: state SUCCEEDED, no result). Do not rely on it to read the current spec. To inspect current state, use tabui:save-underlying-metadata (whole-document readback) or the list tools, then author a fresh v0.2 spec for tabdoc:generate-viz-from-notional-spec.",
+      "description": "Generate a NotionalSpec from the current viz — BUT on External Client API apiVersion <=0.1.0 the /v0 External Client API did not return this command's output (write-blind envelope: state SUCCEEDED, no result). On apiVersion >=0.1.1, SUCCEEDED invokeCommand envelopes may carry serialized command output in result. Do not rely on <=0.1.0 to read the current spec. To inspect current state, use tabui:save-underlying-metadata (whole-document readback) or the list tools, then author a fresh v0.2 spec for tabdoc:generate-viz-from-notional-spec.",
       "classification": "user_initiated",
       "usage_count": 0,
       "is_user_initiated": true,

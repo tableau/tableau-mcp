@@ -168,16 +168,16 @@ export type OperationWarning = z.infer<typeof operationWarningSchema>;
 /**
  * Operation envelope returned by `POST /v0/workbook/document` and
  * `POST /v0/app:invokeCommand`. `id`/`kind`/`state` are required per the spec.
- * `result` is ABSENT from the spec's Operation schema but kept optional here until
- * output-param behavior is confirmed with the API owner (Ask 1(b)) — do not tighten
- * it out, and do not rely on it being populated.
+ * `result` is present only on SUCCEEDED envelopes with non-null command output as of
+ * External Client API apiVersion 0.1.1 (monolith #60596); 0.1.0 instances legitimately
+ * omit it on success.
  */
 export const operationEnvelopeSchema = z
   .object({
     id: z.string(),
     kind: z.string(),
     state: z.string(),
-    result: z.unknown().optional(),
+    result: z.record(z.string(), z.unknown()).optional(),
     error: operationErrorSchema.optional(),
     warnings: z.array(operationWarningSchema).optional(),
     createdAt: z.string().optional(),
