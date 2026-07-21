@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 
 import { _resetExternalApiCommandRegistryForTest } from '../../../desktop/externalApi/commandRegistry.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
@@ -19,25 +19,6 @@ const LIVE_UNDERLYING_METADATA_XML = `<workbook>
 const STALE_UNDERLYING_METADATA_XML = `<workbook>
   <datasources><datasource name='ds' /></datasources>
   <worksheets><worksheet name='A' /></worksheets>
-</workbook>`;
-const GENERATED_VIZ_READBACK_XML = `<workbook>
-  <worksheets>
-    <worksheet name="Revenue by Region">
-      <table>
-        <panes>
-          <pane>
-            <mark class="Bar"/>
-          </pane>
-        </panes>
-        <rows>[Region]</rows>
-        <cols>SUM([Revenue])</cols>
-        <sort class="computed" column="[Region]" direction="desc" using="SUM([Revenue])"/>
-      </table>
-    </worksheet>
-  </worksheets>
-  <windows>
-    <window class="worksheet" name="Revenue by Region" active="true"/>
-  </windows>
 </workbook>`;
 const SORT_NESTED_LIVE_500_FIX =
   'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the bind-template sort proposal (preferred for template-bound sheets) or the document round-trip (tabui:save-underlying-metadata → edit the computed-sort → tabui:load-underlying-metadata).';
@@ -515,52 +496,10 @@ describe('executeTableauCommandTool', () => {
       );
     });
 
-    it('appends compact readback after generate-viz-from-notional-spec succeeds', async () => {
-      const executeCommand = vi.fn(async (params: any) => {
-        if (params.command === 'save-underlying-metadata') {
-          return new Ok({
-            command_id: 'save-1',
-            parsedResult: { text: GENERATED_VIZ_READBACK_XML },
-          });
-        }
-        return new Ok({ command_id: 'generate-1', result: null });
-      });
-      const extra = makeExtra(executeCommand);
-
-      const result = await getResult(
-        {
-          session: SESSION,
-          command: 'tabdoc:generate-viz-from-notional-spec',
-          args: {
-            NotionalSpecJson:
-              '{"version":"0.2.0","chart":"bar","fields":[{"caption":"Region","data":"string","type":"discrete","role":"dimension","encoding":"x"},{"caption":"Revenue","data":"number","type":"continuous","role":"measure","aggregation":"sum","encoding":"y"}]}',
-            ClearSheet: true,
-          },
-        },
-        extra,
-      );
-
-      expect(result.isError).toBeFalsy();
-      invariant(result.content[0].type === 'text');
-      expect(JSON.parse(result.content[0].text).message).toContain(
-        'readback: sheet "Revenue by Region" - Rows: [Region]; Cols: SUM([Revenue]); mark: Bar; sort: [Region] desc by SUM([Revenue]).',
-      );
-      expect(executeCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          namespace: 'tabui',
-          command: 'save-underlying-metadata',
-          args: { 'is-json': false },
-        }),
-      );
-    });
-
-    it('keeps generate-viz-from-notional-spec success unchanged when readback fails', async () => {
-      const executeCommand = vi.fn(async (params: any) => {
-        if (params.command === 'save-underlying-metadata') {
-          return Err({ type: 'command-timed-out' as const, error: 'Timeout' });
-        }
-        return new Ok({ command_id: 'generate-1', result: null });
-      });
+    it('does not append a readback after generate-viz-from-notional-spec succeeds', async () => {
+      const executeCommand = vi
+        .fn()
+        .mockResolvedValue(new Ok({ command_id: 'generate-1', result: null }));
       const extra = makeExtra(executeCommand);
 
       const result = await getResult(
@@ -579,6 +518,13 @@ describe('executeTableauCommandTool', () => {
       expect(result.isError).toBeFalsy();
       invariant(result.content[0].type === 'text');
       expect(JSON.parse(result.content[0].text).message).toBe('Command executed successfully.');
+      expect(executeCommand).toHaveBeenCalledTimes(1);
+      expect(executeCommand).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          namespace: 'tabui',
+          command: 'save-underlying-metadata',
+        }),
+      );
     });
 
     it('leaves an arbitrary valid command call untouched', async () => {

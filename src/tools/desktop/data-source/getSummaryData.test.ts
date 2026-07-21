@@ -258,7 +258,7 @@ function parseResult(result: CallToolResult): z.infer<typeof resultSchema> {
 }
 
 describe('isRouteMissing', () => {
-  it('detects the pre-#60211 Desktop route miss', () => {
+  it('detects the Desktop route miss before summary data support is available', () => {
     expect(
       isRouteMissing({
         type: 'command-failed',
