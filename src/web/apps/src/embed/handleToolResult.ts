@@ -2,11 +2,11 @@ import type { App } from '@modelcontextprotocol/ext-apps';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
+import { showError } from '../shared/showError.js';
 import { embedTableauViz } from './embedTableauViz.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
-import { showError } from './showError.js';
 
 const urlSchema = z.object({
   url: z.string().url(),
