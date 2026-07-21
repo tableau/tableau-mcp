@@ -1,6 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
 import { Err, Ok } from 'ts-results-es';
 
+import { _resetExternalApiCommandRegistryForTest } from '../../../desktop/externalApi/commandRegistry.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -38,6 +41,7 @@ const GENERATED_VIZ_READBACK_XML = `<workbook>
 </workbook>`;
 const SORT_NESTED_LIVE_500_FIX =
   'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the bind-template sort proposal (preferred for template-bound sheets) or the document round-trip (tabui:save-underlying-metadata → edit the computed-sort → tabui:load-underlying-metadata).';
+const TEST_REGISTRY_DIRS: string[] = [];
 
 function makeExtra(
   executeCommandImpl: (...args: any[]) => any,
@@ -49,7 +53,45 @@ function makeExtra(
   return extra;
 }
 
+function writeExternalApiRegistry({
+  commands,
+  typeOfParam = {},
+  enumVals = {},
+}: {
+  commands: Record<string, unknown>;
+  typeOfParam?: Record<string, unknown>;
+  enumVals?: Record<string, string[]>;
+}): string {
+  const dir = mkdtempSync(join(process.cwd(), 'external-api-registry-test-'));
+  TEST_REGISTRY_DIRS.push(dir);
+  writeFileSync(join(dir, 'command_param_registry.json'), JSON.stringify(commands), 'utf-8');
+  writeFileSync(
+    join(dir, 'codegen_registry.json'),
+    JSON.stringify({ param_name: {}, type_of_param: typeOfParam, enum_vals: enumVals }),
+    'utf-8',
+  );
+  return dir;
+}
+
+function enableExternalApiRegistry(commands: Record<string, unknown>): void {
+  const dir = writeExternalApiRegistry({
+    commands,
+    typeOfParam: { DPI_ShowMeCommandType: { enum_name: 'ShowMeCommandType' } },
+    enumVals: { ShowMeCommandType: ['bars', 'lines'] },
+  });
+  vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+  _resetExternalApiCommandRegistryForTest();
+}
+
 describe('executeTableauCommandTool', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    _resetExternalApiCommandRegistryForTest();
+    for (const dir of TEST_REGISTRY_DIRS.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('should create a tool instance with correct properties', () => {
     const tool = getExecuteTableauCommandTool(new DesktopMcpServer());
     expect(tool.name).toBe('execute-tableau-command');
@@ -353,7 +395,7 @@ describe('executeTableauCommandTool', () => {
         'tabdoc:sort drives a UI dialog and blocks the screen',
       );
       expect(result.content[0].text).toContain('refine-worksheet with operation sort_by_field');
-      expect(result.content[0].text).toContain('tabdoc:sort-nested');
+      expect(result.content[0].text).toContain('bind-template sort proposal/document round-trip');
       expect(extra.getExecutor).not.toHaveBeenCalled();
     });
 
@@ -497,6 +539,240 @@ describe('executeTableauCommandTool', () => {
           args: { Sheet: 'Sheet1' },
         }),
       );
+    });
+  });
+
+  describe('external API command registry guard', () => {
+    const SHOW_ME_REGISTRY_ENTRY = {
+      agent_can_invoke: true,
+      opens_blocking_dialog: false,
+      modifies_state: 'false',
+      in_params: [
+        {
+          local: 'WorksheetName',
+          type: 'DPI_Worksheet',
+          required: true,
+          wire: 'worksheet',
+        },
+        {
+          local: 'ShowMeType',
+          type: 'DPI_ShowMeCommandType',
+          required: true,
+          wire: 'show-me-command-type',
+        },
+      ],
+    };
+
+    it('keeps existing behavior when EXTERNAL_API_REGISTRY_DIR is unset', async () => {
+      const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:show-me',
+          args: { WorksheetName: 'Sheet 1', ShowMeType: 'bars' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: { WorksheetName: 'Sheet 1', ShowMeType: 'bars' },
+        }),
+      );
+    });
+
+    it('refuses commands marked not invocable before resolving an executor', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:show-me': {
+          ...SHOW_ME_REGISTRY_ENTRY,
+          agent_can_invoke: false,
+        },
+      });
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:show-me',
+          args: { WorksheetName: 'Sheet 1', ShowMeType: 'bars' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('agent_can_invoke=false');
+      expect(result.content[0].text).toContain('human-blocking dialog');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('refuses live-observed dialog commands before resolving an executor', async () => {
+      enableExternalApiRegistry({
+        'tabui:workgroup-change-site': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'false',
+          in_params: [],
+        },
+      });
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabui:workgroup-change-site', args: {} },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('human-blocking dialog');
+      expect(result.content[0].text).toContain('switch sites in Desktop');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('refuses live-observed dialog commands whenever a valid registry is enabled', async () => {
+      enableExternalApiRegistry({ 'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY });
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabui:workgroup-change-site', args: {} },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('human-blocking dialog');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('rewrites local parameter names to their registry wire names before dispatch', async () => {
+      enableExternalApiRegistry({ 'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY });
+      const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:show-me',
+          args: { WorksheetName: 'Sheet 1', ShowMeType: 'bars' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: { worksheet: 'Sheet 1', 'show-me-command-type': 'bars' },
+        }),
+      );
+    });
+
+    it('rejects enum values that are not legal serialized values', async () => {
+      enableExternalApiRegistry({ 'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY });
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:show-me',
+          args: { WorksheetName: 'Sheet 1', ShowMeType: 'pie' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Invalid value for Tableau command "tabdoc:show-me" parameter "show-me-command-type"',
+      );
+      expect(result.content[0].text).toContain('Legal values: bars, lines');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('refuses missing registry-required parameters by wire name', async () => {
+      enableExternalApiRegistry({ 'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY });
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:show-me',
+          args: { WorksheetName: 'Sheet 1' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Missing required parameter(s) for Tableau command "tabdoc:show-me": show-me-command-type',
+      );
+      expect(result.content[0].text).toContain('context-filled');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('does not require registry-required workspace params that Desktop fills from context', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:show-metrics-indicator': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'false',
+          in_params: [
+            {
+              local: 'Workspace',
+              type: 'UPI_Workspace',
+              required: true,
+              wire: 'workspace',
+            },
+          ],
+        },
+      });
+      const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabdoc:show-metrics-indicator', args: {} },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ namespace: 'tabdoc', command: 'show-metrics-indicator' }),
+      );
+    });
+
+    it('passes through unknown registry keys and warns about the bare-500 failure mode', async () => {
+      enableExternalApiRegistry({ 'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY });
+      const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabdoc:show-me',
+          args: { WorksheetName: 'Sheet 1', ShowMeType: 'bars', TypoParam: 'oops' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(executeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: { worksheet: 'Sheet 1', 'show-me-command-type': 'bars', TypoParam: 'oops' },
+        }),
+      );
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text).message).toContain(
+        'key "TypoParam" is not in the command registry',
+      );
+      expect(JSON.parse(result.content[0].text).message).toContain('bare 500');
     });
   });
 

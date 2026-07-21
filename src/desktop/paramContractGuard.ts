@@ -25,6 +25,7 @@
 // validates that command's actual shape.
 
 import { readDataAsset } from './assets.js';
+import { checkCommandPolicy, liveDialogPolicyFor, liveParamOverrideFor } from './commandPolicy.js';
 import type { CommandValidationResult } from './commandRegistry.js';
 
 const COMMANDS_REFERENCE_ASSET = 'tableau-desktop-commands-reference.json';
@@ -111,105 +112,24 @@ function blockingDialogNote(entry: CommandReferenceEntry): string {
     : '';
 }
 
-/**
- * Validates a known command's `args` against its bundled parameter contract.
- * Call AFTER validateKnownCommand() confirms the verb is real. Fails open
- * (returns ok: true) when the reference can't be loaded, the command has no
- * entry in it, or its contract declares zero "in" params (nothing to check
- * unknown keys against — see the module doc for generate-viz-from-notional-spec).
- */
-/**
- * Live-verified runtime contracts that OVERRIDE the commands-reference where the
- * reference's declared params are wrong at the /v0 runtime. Evidence anchors are
- * mandatory per entry. First occupant (2026-07-19, three live receipts each way):
- * tabdoc:goto-sheet — the reference declares WindowLocator (required:true) as the
- * only "in" param, but at the /v0 External API runtime {"WindowLocator": name}
- * fails 500 AND pops a blocking modal (Error 47BF7751) on the user's screen,
- * while {"Sheet": name} — absent from the reference — SUCCEEDS and activates the
- * sheet. Until the reference generator learns the /v0 dialect, this table is
- * where live-verified corrections accumulate.
- */
-const LIVE_PARAM_OVERRIDES: Map<string, { allowed: Set<string>; required: Set<string> }> = new Map([
-  ['tabdoc:goto-sheet', { allowed: new Set(['Sheet']), required: new Set(['Sheet']) }],
-  [
-    'tabdoc:sort-nested',
-    {
-      allowed: new Set([
-        'DimensionToSort',
-        'Worksheet',
-        'MeasureName',
-        'ShelfType',
-        'Direction',
-        'ClearSort',
-        'Dashboard',
-        'LevelNames',
-        'MemberValues',
-        'KeepFieldFilters',
-      ]),
-      required: new Set(['DimensionToSort', 'Worksheet', 'MeasureName', 'ShelfType']),
-    },
-  ],
-]);
-
-/**
- * Commands live-proven to open a blocking dialog (or modal error) headlessly, which the
- * reference misclassifies as safely invocable — the `*DialogCommand`-sourced entries
- * from the dialog-command-misclassification knowledge doc, plus revert-workbook-ui
- * (probed modal 2026-07-19; it fired Error 47BF7751 on a live user's screen TWICE in one
- * session before this blocklist existed) and tabdoc:sort (dialog-notification-based sort UI).
- * Refused outright with a redirect to the
- * sanctioned alternative: the modal never reaches a human again.
- */
-const LIVE_DIALOG_BLOCKLIST: Map<string, string> = new Map(
-  (
-    [
-      ['tabdoc:launch-map-service-edit-dialog', 'no headless alternative'],
-      ['tabdoc:show-goto-sheet-dialog', 'use tabdoc:goto-sheet with {"Sheet": name}'],
-      ['tabui:show-feature-flag-dialog', 'no headless alternative'],
-      [
-        'tabdoc:edit-filter-dialog',
-        'express filters in the NotionalSpec (categoricalFilters/rangeFilters/...)',
-      ],
-      ['tabdoc:launch-shared-filter-dialog', 'express filters in the NotionalSpec'],
-      ['tabdoc:launch-map-services-dialog', 'no headless alternative'],
-      ['tabdoc:get-button-config-dialog', 'no headless alternative'],
-      ['tabui:launch-accelerator-data-mapper-dialog', 'no headless alternative'],
-      ['tabdoc:launch-custom-sql-dialog', 'no headless alternative'],
-      ['tabdoc:launch-web-url-dialog', 'no headless alternative'],
-      ['tabdoc:show-action-list-dialog-for-dashboard', 'use author-action'],
-      ['tabdoc:show-action-list-dialog-for-worksheet', 'use author-action'],
-      ['tabdoc:show-sort-dialog', "express sort in the NotionalSpec's sort key"],
-      [
-        'tabdoc:sort',
-        'tabdoc:sort drives a UI dialog and blocks the screen. Use refine-worksheet with operation sort_by_field (sort a dimension by a field/measure), or tabdoc:sort-nested',
-      ],
-      ['tabdoc:create-new-parameter', 'use author-parameter'],
-      ['tabdoc:edit-existing-parameter', 'use author-parameter for new parameters'],
-      [
-        'tabdoc:revert-workbook-ui',
-        'there is no headless revert — author forward instead (a wrong node is corrected by a follow-up author-* call or document round-trip)',
-      ],
-    ] as const
-  ).map(([name, fix]) => [name, fix]),
-);
-
 export function validateCommandParams(
   command: string,
   args: Record<string, unknown> | undefined,
 ): CommandValidationResult {
-  const dialogFix = LIVE_DIALOG_BLOCKLIST.get(command);
-  if (dialogFix !== undefined) {
+  const dialogPolicy = liveDialogPolicyFor(command);
+  if (dialogPolicy?.fix !== undefined) {
     return {
       ok: false,
       message:
         `Tableau command "${command}" opens a BLOCKING dialog/modal on the user's screen when called ` +
         'headlessly (live-proven; the reference misclassifies it as safe). NOT sent. ' +
-        `FIX: ${dialogFix}.`,
+        `FIX: ${dialogPolicy.fix}.`,
     };
   }
 
-  const override = LIVE_PARAM_OVERRIDES.get(command);
+  const override = liveParamOverrideFor(command);
   if (override) {
+    const policy = checkCommandPolicy(command);
     const providedArgs = args && typeof args === 'object' ? args : {};
     const providedKeys = Object.keys(providedArgs);
     const unknownKeys = providedKeys.filter((key) => !override.allowed.has(key));
@@ -219,8 +139,7 @@ export function validateCommandParams(
         message:
           `Unknown parameter(s) for Tableau command "${command}": ${unknownKeys.join(', ')}. NOT sent — ` +
           "a wrong parameter for this command pops a blocking error dialog on the user's screen " +
-          `(live-verified 2026-07-19). FIX: use exactly ${[...override.allowed].map((k) => `"${k}"`).join(', ')} ` +
-          "(the live-verified /v0 contract; the bundled reference's declared params are wrong for this command).",
+          `(live-verified 2026-07-19).${formatUnknownOverrideFix(policy, override)}`,
       };
     }
     const missing = [...override.required].filter((key) => !(key in providedArgs));
@@ -229,7 +148,7 @@ export function validateCommandParams(
         ok: false,
         message:
           `Missing required parameter(s) for Tableau command "${command}": ${missing.join(', ')}. ` +
-          `FIX: provide ${missing.map((k) => `"${k}"`).join(', ')} (live-verified /v0 contract).`,
+          formatMissingOverrideFix(policy, missing),
       };
     }
     return { ok: true };
@@ -285,4 +204,32 @@ export function validateCommandParams(
   }
 
   return { ok: true };
+}
+
+function formatUnknownOverrideFix(
+  policy: ReturnType<typeof checkCommandPolicy>,
+  override: { allowed: Set<string> },
+): string {
+  const allowed = [...override.allowed].map((key) => `"${key}"`).join(', ');
+  if (policy?.action === 'hint' && policy.fix) {
+    return (
+      ` Live-verified /v0 contract allows exactly ${allowed}; ` +
+      `the bundled reference's declared params are wrong for this command. ${policy.fix}`
+    );
+  }
+  return (
+    ` FIX: use exactly ${allowed} ` +
+    "(the live-verified /v0 contract; the bundled reference's declared params are wrong for this command)."
+  );
+}
+
+function formatMissingOverrideFix(
+  policy: ReturnType<typeof checkCommandPolicy>,
+  missing: string[],
+): string {
+  const missingParams = missing.map((key) => `"${key}"`).join(', ');
+  if (policy?.action === 'hint' && policy.fix) {
+    return `Live-verified /v0 contract requires ${missingParams}. ${policy.fix}`;
+  }
+  return `FIX: provide ${missingParams} (live-verified /v0 contract).`;
 }
