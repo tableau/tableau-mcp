@@ -51,6 +51,29 @@ export type { BindingProposal, Blocker, EscalateReason, SchemaField, SchemaSumma
 type ProposeField = CoreLlmProposeInput['fields'][number] & { semanticRole?: string };
 type FieldIdentity = Pick<ProposeField, 'name' | 'role' | 'type' | 'datatype'>;
 
+// A waterfall's running total is order-dependent, and its intended P&L order almost always
+// lives in a non-displayed sequence column (display_order / sort_order / …). Left to the
+// template default (DESC by the bound measure) the bridge is wrong; and asking the model to
+// ADD the sort in a later step is fragile (live m1 receipts: it lands the sort only ~1/3 of
+// runs, otherwise settling for magnitude order). So the confident bind DEFAULTS the sort to
+// that column ascending when one exists and no sort was proposed — one coherent bind, no
+// fragile follow-up. Kept in sync with WATERFALL_ORDER_FIELD_RE in bindTemplate.ts (the hint
+// side); this is the deterministic apply side.
+const WATERFALL_TEMPLATE_NAME = 'part-to-whole-waterfall';
+// EXPORTED — one definition shared with bindTemplate.ts's discovery hint (the apply side is
+// here, the hint side imports this) so the two can never drift.
+export const WATERFALL_ORDER_FIELD_RE =
+  /(display|sort|step|row|item|line)[_\s-]?(order|no|num|number|index|rank|seq)|^(order|sequence|seq|ordinal|rank|step[_\s-]?order)$/i;
+// A P&L/bridge waterfall's running total double-counts subtotal/total rows unless they're
+// excluded via the anchor_category filter. Live m1 receipts: the singer lands the anchor only
+// ~half the runs (hedges or skips it), so — exactly like the sort default above — the confident
+// bind DEFAULTS anchor_category to a category/row-type dimension when one exists and none was
+// bound. slot_id is a real optional manifest slot; injecting the binding pre-validation routes
+// it through the normal resolve/escape path into field_mapping['Anchor Category'], which drives
+// spliceWaterfallAnchorFilter. Same field-name heuristic as bindTemplate.ts's discovery hint.
+export const WATERFALL_ANCHOR_SLOT_ID = 'anchor_category';
+export const WATERFALL_ANCHOR_FIELD_RE = /categor|type|kind|class|flag|marker/i;
+
 export type LlmProposeInput = Omit<CoreLlmProposeInput, 'fields'> & {
   fields: ProposeField[];
 };
@@ -298,13 +321,69 @@ function validateAndBuild(
     return { status: 'escalate', reason: 'not-fast-path', blockers, proposal };
   }
 
-  const v = validateBinding(m, proposal, summary, ask);
+  // Waterfall anchor default (deterministic subtotal/total exclusion). If the schema has a
+  // category/row-type dimension and no anchor_category was bound, inject the binding BEFORE
+  // validation so it resolves through the normal path into field_mapping['Anchor Category']
+  // (→ spliceWaterfallAnchorFilter). Pick a category field NOT already bound to another slot
+  // (don't steal sub_category's dimension). Copy the proposal — never mutate the caller's.
+  let effectiveProposal = proposal;
+  let defaultedAnchorField: string | undefined;
+  if (m.template === WATERFALL_TEMPLATE_NAME) {
+    const anchorAlreadyBound = proposal.bindings.some(
+      (b) => b.slot_id === WATERFALL_ANCHOR_SLOT_ID,
+    );
+    if (!anchorAlreadyBound) {
+      const usedFields = new Set(proposal.bindings.map((b) => b.field));
+      const candidate = summary.fields.find(
+        (f) =>
+          f.role === 'dimension' &&
+          (f.datatype === 'string' || f.type === 'nominal') &&
+          WATERFALL_ANCHOR_FIELD_RE.test(f.name) &&
+          !usedFields.has(f.name),
+      );
+      if (candidate) {
+        effectiveProposal = {
+          ...proposal,
+          bindings: [
+            ...proposal.bindings,
+            { slot_id: WATERFALL_ANCHOR_SLOT_ID, field: candidate.name },
+          ],
+        };
+        defaultedAnchorField = candidate.name;
+      }
+    }
+  }
+
+  let v = validateBinding(m, effectiveProposal, summary, ask);
+  // The default must never turn a good bind into an escalation: if adding the anchor broke
+  // validation, drop it and validate the caller's original proposal.
+  let anchorDefaultFailed = false;
+  if (!v.ok && defaultedAnchorField !== undefined) {
+    const vBase = validateBinding(m, proposal, summary, ask);
+    if (vBase.ok) {
+      v = vBase;
+      effectiveProposal = proposal;
+      anchorDefaultFailed = true;
+      defaultedAnchorField = undefined;
+    }
+  }
   if (!v.ok) {
     const reason = (v.blockers[0]?.code as EscalateReason) ?? 'missing-required-slot';
     return { status: 'escalate', reason, blockers: v.blockers, proposal };
   }
 
   const warnings = [...(v.warnings ?? [])];
+  if (anchorDefaultFailed) {
+    warnings.push(
+      'waterfall anchor default did not validate; kept it unbound — subtotal/total rows may double-count, bind anchor_category explicitly if the data has them',
+    );
+  } else if (defaultedAnchorField !== undefined) {
+    // The splice excludes only members literally named "subtotal"/"total"; on a plain category
+    // with no such members it is inert, so describe what was ADDED, not an exclusion that happened.
+    warnings.push(
+      `waterfall auto-bound anchor_category="${defaultedAnchorField}" (auto-detected row-type column) to exclude any "subtotal"/"total" rows so the running total does not double-count. Bind anchor_category explicitly or omit to override.`,
+    );
+  }
   let sort = proposal.sort;
   if (proposal.sort) {
     const sortField = resolveInSummary(summary, proposal.sort.by);
@@ -318,6 +397,23 @@ function validateAndBuild(
         `no sort.by field named "${proposal.sort.by}" in datasource(s); ignoring optional sort and keeping the template's default sort`,
       );
       sort = undefined;
+    }
+  }
+
+  // Waterfall step-order default: if no usable sort was proposed and the schema carries a
+  // sequence/order column, sort the bridge by it ascending in THIS bind — see the note on
+  // WATERFALL_ORDER_FIELD_RE. Only when the column resolves unambiguously; otherwise leave the
+  // template default (never guess). This is the deterministic fix for m1's sort-lands-~1/3 miss.
+  if (!sort && m.template === WATERFALL_TEMPLATE_NAME) {
+    const orderField = summary.fields.find((f) => WATERFALL_ORDER_FIELD_RE.test(f.name));
+    if (orderField) {
+      const resolved = resolveInSummary(summary, orderField.name);
+      if ((resolved.kind === 'exact' || resolved.kind === 'rewritten') && resolved.field) {
+        sort = { by: orderField.name, direction: 'asc' };
+        warnings.push(
+          `waterfall step order defaulted to "${orderField.name}" ascending (running total is order-dependent); pass proposal.sort to override`,
+        );
+      }
     }
   }
 
