@@ -2,13 +2,14 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import { _resetKnowledgeSearchCache, searchKnowledge } from './knowledge/index.js';
 
-describe('knowledge/search', () => {
-  // Build the fuse.js index over the whole knowledge corpus ONCE, not per-test:
-  // every case here is a read-only search over the same static corpus (nothing
-  // mutates it), so a per-test reset just re-reads+re-indexes all ~108 docs on
-  // every `it` (~4.6s each → ~18s total). Under CI parallelism that stalled the
-  // worker past vitest's 60s onTaskUpdate reporter-RPC deadline (flaky #564 red).
-  // beforeAll indexes once and every test reuses the cached index.
+// Each fuse.js search scans the full document `body` of the ~108-doc corpus with
+// ignoreLocation:true (~450ms/query — real work, not a leak). A multi-case block
+// runs several such searches, so on a slow/contended CI worker it legitimately
+// exceeds vitest's 5s default testTimeout → "Test timed out in 5000ms", which also
+// starves the pool onTaskUpdate reporter RPC (the deterministic #564 CI red; local
+// runs are just fast enough to squeak under 5s). Raise the per-suite timeout to 30s
+// so the honestly-slow relevance blocks have headroom on CI.
+describe('knowledge/search', { timeout: 30_000 }, () => {
   beforeAll(() => _resetKnowledgeSearchCache());
 
   it('returns ranked hits with expertise URIs for a relevant query', () => {
