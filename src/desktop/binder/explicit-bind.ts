@@ -463,7 +463,7 @@ function fixForBlocker(b: Blocker): string {
     case 'calc-dependency-unmet':
       return 'Bind every manifest slot required by the template-owned calculation.';
     default:
-      return 'Fall back to plan-dashboard-creation and the general worksheet build tools.';
+      return 'Fall back to plan-dashboard-creation, placing fields per sheet with add-field.';
   }
 }
 

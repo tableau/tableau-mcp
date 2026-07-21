@@ -51,7 +51,7 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
     server,
     name: 'add-field',
     title,
-    description: 'Add a field.',
+    description: 'Place a field on a shelf (rows/cols/encoding) — the manual build path when no template binds.',
     paramsSchema,
     annotations: {
       title,
