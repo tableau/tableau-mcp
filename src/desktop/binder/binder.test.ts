@@ -552,6 +552,58 @@ describe('binder/bindTemplate — Call 2 (agent proposal)', () => {
       expect(res.args.sort).toEqual({ by: 'amount', direction: 'desc' });
     }
   });
+
+  it('waterfall DEFAULTS anchor_category to a row-type column when none is bound', async () => {
+    // m1 fix: subtotal/total rows double-count the running total unless anchor_category
+    // excludes them; the singer lands the anchor only ~half the runs. A bare confident bind
+    // must exclude them deterministically. PL_ORDER has a `category` dimension.
+    const proposal: BindingProposal = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'amount' },
+        { slot_id: 'sub_category', field: 'line_item' },
+      ],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'P&L waterfall revenue to net income',
+      workbookXml: PL_ORDER_WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      // Anchor Category auto-bound to the category dim → spliceWaterfallAnchorFilter fires.
+      expect(res.args.field_mapping['Anchor Category']).toContain('category');
+      expect(res.warnings?.join(' ')).toContain('subtotal/total');
+    }
+  });
+
+  it('does NOT default anchor_category when no row-type column exists', async () => {
+    // A waterfall schema with only the axis + measure + a sequence col — no category/type
+    // dimension — must NOT invent an anchor (nothing to exclude).
+    const noCatXml = PL_ORDER_WORKBOOK_XML.replace(/\n\s*<column name='\[category\]'[^>]*\/>/, '');
+    const proposal: BindingProposal = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'amount' },
+        { slot_id: 'sub_category', field: 'line_item' },
+      ],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'P&L waterfall',
+      workbookXml: noCatXml,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect('Anchor Category' in res.args.field_mapping).toBe(false);
+    }
+  });
 });
 
 // Betting-shaped workbook whose measure name ('O/U Line') contains the token
