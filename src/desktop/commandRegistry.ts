@@ -1,14 +1,10 @@
 import levenshtein from 'fast-levenshtein';
 
 import { readDataAsset } from './assets.js';
+import { crashPronePolicyFor } from './commandPolicy.js';
 
 const COMMANDS_REFERENCE_ASSET = 'tableau-desktop-commands-reference.json';
 const MAX_SUGGESTIONS = 3;
-
-export const CRASH_PRONE_COMMANDS = new Set([
-  'tabdoc:show-parameter-controls',
-  'tabdoc:show-parameter-controls-range',
-]);
 
 type CommandReferenceEntry = {
   fully_qualified_serialized_name?: unknown;
@@ -53,7 +49,7 @@ export function knownCommands(): Set<string> | null {
 }
 
 export function validateKnownCommand(command: string): CommandValidationResult {
-  if (CRASH_PRONE_COMMANDS.has(command)) {
+  if (crashPronePolicyFor(command)) {
     return {
       ok: false,
       message: `Refusing to execute crash-prone Tableau command "${command}".`,
