@@ -469,6 +469,89 @@ describe('binder/bindTemplate — Call 2 (agent proposal)', () => {
       expect(res.proposal).toBeDefined();
     }
   });
+
+  // A P&L workbook whose intended bridge order lives in a non-displayed sequence column.
+  const PL_ORDER_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='PL'>
+      <column name='[line_item]' role='dimension' type='nominal' datatype='string' />
+      <column name='[amount]' role='measure' type='quantitative' datatype='real' />
+      <column name='[category]' role='dimension' type='nominal' datatype='string' />
+      <column name='[display_order]' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+  it('waterfall DEFAULTS the step order to a sequence column when no sort is proposed', async () => {
+    // m1 fix: the running total is order-dependent; without this the confident bind keeps the
+    // template DESC-by-measure default and the singer's later sort attempt lands only ~1/3 of runs.
+    const proposal: BindingProposal = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'amount' },
+        { slot_id: 'sub_category', field: 'line_item' },
+      ],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'P&L waterfall from revenue to net income',
+      workbookXml: PL_ORDER_WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.sort).toEqual({ by: 'display_order', direction: 'asc' });
+    }
+  });
+
+  it('waterfall does NOT default a sort when the schema has no sequence column', async () => {
+    // WORKBOOK_XML has no order column (Order Date does not count) — keep the template default.
+    const proposal: BindingProposal = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'Profit' },
+        { slot_id: 'sub_category', field: 'Sub-Category' },
+      ],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'P&L waterfall',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.sort).toBeUndefined();
+    }
+  });
+
+  it('an explicit proposal.sort overrides the waterfall order default', async () => {
+    const proposal: BindingProposal = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'amount' },
+        { slot_id: 'sub_category', field: 'line_item' },
+      ],
+      sort: { by: 'amount', direction: 'desc' },
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'P&L waterfall sorted by amount',
+      workbookXml: PL_ORDER_WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.sort).toEqual({ by: 'amount', direction: 'desc' });
+    }
+  });
 });
 
 // Betting-shaped workbook whose measure name ('O/U Line') contains the token

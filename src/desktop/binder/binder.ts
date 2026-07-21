@@ -50,6 +50,18 @@ export type { BindingProposal, Blocker, EscalateReason, SchemaField, SchemaSumma
 type ProposeField = CoreLlmProposeInput['fields'][number] & { semanticRole?: string };
 type FieldIdentity = Pick<ProposeField, 'name' | 'role' | 'type' | 'datatype'>;
 
+// A waterfall's running total is order-dependent, and its intended P&L order almost always
+// lives in a non-displayed sequence column (display_order / sort_order / …). Left to the
+// template default (DESC by the bound measure) the bridge is wrong; and asking the model to
+// ADD the sort in a later step is fragile (live m1 receipts: it lands the sort only ~1/3 of
+// runs, otherwise settling for magnitude order). So the confident bind DEFAULTS the sort to
+// that column ascending when one exists and no sort was proposed — one coherent bind, no
+// fragile follow-up. Kept in sync with WATERFALL_ORDER_FIELD_RE in bindTemplate.ts (the hint
+// side); this is the deterministic apply side.
+const WATERFALL_TEMPLATE_NAME = 'part-to-whole-waterfall';
+const WATERFALL_ORDER_FIELD_RE =
+  /(display|sort|step|row|item|line)[_\s-]?(order|no|num|number|index|rank|seq)|^(order|sequence|seq|ordinal|rank|step[_\s-]?order)$/i;
+
 export type LlmProposeInput = Omit<CoreLlmProposeInput, 'fields'> & {
   fields: ProposeField[];
 };
@@ -314,6 +326,23 @@ function validateAndBuild(
         `no sort.by field named "${proposal.sort.by}" in datasource(s); ignoring optional sort and keeping the template's default sort`,
       );
       sort = undefined;
+    }
+  }
+
+  // Waterfall step-order default: if no usable sort was proposed and the schema carries a
+  // sequence/order column, sort the bridge by it ascending in THIS bind — see the note on
+  // WATERFALL_ORDER_FIELD_RE. Only when the column resolves unambiguously; otherwise leave the
+  // template default (never guess). This is the deterministic fix for m1's sort-lands-~1/3 miss.
+  if (!sort && m.template === WATERFALL_TEMPLATE_NAME) {
+    const orderField = summary.fields.find((f) => WATERFALL_ORDER_FIELD_RE.test(f.name));
+    if (orderField) {
+      const resolved = resolveInSummary(summary, orderField.name);
+      if ((resolved.kind === 'exact' || resolved.kind === 'rewritten') && resolved.field) {
+        sort = { by: orderField.name, direction: 'asc' };
+        warnings.push(
+          `waterfall step order defaulted to "${orderField.name}" ascending (running total is order-dependent); pass proposal.sort to override`,
+        );
+      }
     }
   }
 
