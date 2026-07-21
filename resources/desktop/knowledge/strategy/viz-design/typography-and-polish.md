@@ -351,7 +351,7 @@ The professional version is almost always achieved by **removing defaults** rath
 
 ### Workflow for Polishing a Dashboard
 
-1. **Start with `tableau-list-worksheets`** to understand the current structure.
+1. **Start with worksheet-list readback** to understand the current structure.
 2. **Use `tableau-get-workbook`** to get the cached workbook XML file path (e.g. `cache/workbook-XXXX.xml`).
 3. **Modify the XML** using Python scripts (`xml.etree.ElementTree`) to apply formatting changes in bulk:
    - Add/modify `<style-rule>` elements in each worksheet's `<style>` section

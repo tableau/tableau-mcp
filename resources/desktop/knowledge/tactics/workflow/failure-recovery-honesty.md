@@ -31,7 +31,7 @@ HOST VERIFICATION — <status>: <checks> . <claim guard>
 
 - `status` is one of **`verified`**, **`unverified`**, **`failed`**. **`verified` is the only status that backs a "done" claim.**
 - Worksheet applies get a real structural readback, so they can reach `verified`. **Whole-workbook and dashboard applies are `unverified` by construction** — there is no structural readback for them yet, so the receipt says so plainly.
-- If the receipt says `unverified` or `failed` for something you claimed — a sort, a filter, an encoding, or the change as a whole — **re-read the artifact and correct your answer before reporting completion**: `get-worksheet-xml` for a sheet, `get-dashboard-xml` for a dashboard, `get-workbook-xml` for the whole workbook (or `list-worksheets` / `check-for-user-changes` to confirm survival).
+- If the receipt says `unverified` or `failed` for something you claimed — a sort, a filter, an encoding, or the change as a whole — **re-read the artifact and correct your answer before reporting completion**: `get-worksheet-xml` for a sheet, `get-dashboard-xml` for a dashboard, `get-workbook-xml` for the whole workbook (or worksheet-list readback / `check-for-user-changes` to confirm survival).
 - Never report success that contradicts the receipt. Report only the evidence the host gives you.
 
 ## Common Mistakes
@@ -89,7 +89,7 @@ HOST VERIFICATION — unverified: preflight clean · apply completed · full wor
 Treat sheet-level state as unconfirmed until read back; do not report problems without host evidence.
 ```
 
-Read the affected sheets back (`get-worksheet-xml` / `list-worksheets`) before claiming the intent landed; report the apply as completed-but-unverified until you have that evidence.
+Read the affected sheets back (`get-worksheet-xml` / worksheet-list readback) before claiming the intent landed; report the apply as completed-but-unverified until you have that evidence.
 
 ## Source and Confidence
 

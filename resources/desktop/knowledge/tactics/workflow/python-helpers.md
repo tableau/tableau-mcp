@@ -201,7 +201,7 @@ print(f'Saved to {OUTPUT_FILE}')
 
 ## Add a new worksheet
 
-Every new worksheet requires **two additions**: a `<worksheet>` in `<worksheets>` AND a matching `<window>` in `<windows>`. Missing the window entry causes `load-underlying-metadata` to silently fail.
+Every new worksheet requires **two additions**: a `<worksheet>` in `<worksheets>` AND a matching `<window>` in `<windows>`. Missing the window entry causes workbook document apply to silently fail.
 
 ```python
 import xml.etree.ElementTree as ET
@@ -448,7 +448,7 @@ For column-instances, filters, and encodings, see `workbook-worksheets.md`, `wor
 - **Always call `tableau-get-workbook` immediately before any modification**: The cached file path changes after each `tableau-apply-workbook` call. Using a stale path will silently overwrite all intermediate changes.
 - **Always register the `user:` namespace prefix** before writing XML: `ET.register_namespace('user', USER_NS)`. Without it, `user:ui-marker` attrs are written in Clark notation and Tableau rejects the file.
 - **Save to `/tmp/modified_workbook.xml`** and submit via `tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`. Never submit the cache file directly.
-- **Submit incrementally**: Add one worksheet at a time and verify with `tableau-list-worksheets` before adding the next. Submitting many changes at once makes it difficult to isolate failures.
+- **Submit incrementally**: Add one worksheet at a time and verify with worksheet-list readback before adding the next. Submitting many changes at once makes it difficult to isolate failures.
 - **Use `copy.deepcopy` when cloning worksheets**: Shallow copies share child element references — mutations affect both the original and the clone.
 
 ---
@@ -473,7 +473,7 @@ The standard Python workflow for any workbook modification:
 4. Apply the modification (add column, create worksheet, inject filter, etc.).
 5. Write the modified tree: `tree.write('/tmp/modified_workbook.xml', encoding='utf-8', xml_declaration=True)`.
 6. Submit: `tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`.
-7. Verify with `tableau-list-worksheets` or `tableau-get-workbook`.
+7. Verify with worksheet-list readback or `tableau-get-workbook`.
 
 See the complete templates in the sections above for each specific operation.
 

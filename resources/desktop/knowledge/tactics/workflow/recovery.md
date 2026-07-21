@@ -12,7 +12,7 @@
 
 ## When to Use
 
-After a `tableau-apply-workbook` or `tableau-apply-worksheet` call fails, silently drops changes, or leaves Tableau Desktop in an error state. Note: the `load-underlying-metadata` command's `filepath` parameter only accepts JSON format — if XML is passed via filepath, Tableau shows "This file is not in a recognizable format." The MCP server handles this automatically by converting XML→JSON before file-based loading.
+After a `tableau-apply-workbook` or `tableau-apply-worksheet` call fails, silently drops changes, or leaves Tableau Desktop in an error state. For file-based workbook document applies, the MCP server handles the required XML→JSON conversion automatically.
 
 ## Best Practices
 
@@ -36,7 +36,7 @@ For reversing the **most recent** apply, use `tabdoc:undo` instead — it is fas
 
 The Agent API may report `status: "completed"` even when Tableau shows a GUI error dialog. Use this escalation ladder:
 
-1. **Verify via MCP tools first.** After every apply, call `tableau-list-worksheets` or `tabdoc:goto-sheet` to confirm the expected sheets exist. If a sheet you just added is missing, the apply was silently rejected.
+1. **Verify via MCP tools first.** After every apply, use worksheet-list readback or `tabdoc:goto-sheet` to confirm the expected sheets exist. If a sheet you just added is missing, the apply was silently rejected.
 
 2. **Check MCP server logs.** Look for `exec_command_failed`, `fetch failed`, or `Command timed out` entries. These indicate the apply never reached Tableau or was rejected at the API level.
 
@@ -92,7 +92,7 @@ Switching to any worksheet triggers a full view-context evaluation that complete
 **Rollback to a prior known-good state (for multi-step rollback):**
 1. Find the most recent snapshot in `/tmp/tableau-mcp-rollback/<session-id>/` — these contain previously-applied XML, not the state before the current apply
 2. Apply the chosen snapshot via `tableau-apply-workbook` with `mode=file` and `workbook_file` pointing to the snapshot
-3. Verify recovery with `tableau-list-worksheets`
+3. Verify recovery with worksheet-list readback
 
 **Nuclear option — open a fresh instance:**
 If Tableau Desktop is stuck (commands time out, dialogs can't be dismissed, or the workbook is corrupted):

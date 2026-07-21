@@ -6,7 +6,7 @@ Enforcement: judgment-only
 
 ## ⚠ Sets Do NOT Survive MCP metadata-apply — Agent-Authored Sets Are Lost
 
-**Evidence (2026-07-06):** Both `load-underlying-metadata-as-workbook` modes silently drop `<groups>` (set definitions) from the workbook XML on apply. A set authored via XML (`<group>…<groupfilter>…`) appears to apply successfully (no error), but the round-tripped workbook contains no set — the `<groups>` section is stripped. Any calc referencing the set (`[Top Set]`, `[Bottom Set]`) then fails to resolve, producing a blank viz.
+**Evidence (2026-07-06):** Workbook document apply silently drops `<groups>` (set definitions) from the workbook XML. A set authored via XML (`<group>…<groupfilter>…`) appears to apply successfully (no error), but the round-tripped workbook contains no set — the `<groups>` section is stripped. Any calc referencing the set (`[Top Set]`, `[Bottom Set]`) then fails to resolve, producing a blank viz.
 
 **This means agents authoring workbooks via the MCP apply pipeline CANNOT use sets for membership labeling.** The documented top/bottom-N standout pattern below remains correct for **human-driven Desktop use** (creating sets via the UI persists them normally), but an agent attempting the same pattern via `tableau-apply-workbook` will lose the sets on round-trip.
 

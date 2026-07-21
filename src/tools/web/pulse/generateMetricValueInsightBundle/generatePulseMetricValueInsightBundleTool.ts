@@ -16,14 +16,14 @@ import { slimBundle } from './slimBundle.js';
 const paramsSchema = {
   bundleRequest: pulseBundleRequestSchema,
   bundleType: z.optional(z.enum(pulseInsightBundleTypeEnum)),
-  slim: z
-    .optional(z.boolean())
+  verbosity: z
+    .enum(['full', 'slim'])
+    .optional()
     .describe(
-      'When true, strips the large viz (Vega chart-spec) blobs from every insight and summary ' +
-        'result, returning only the facts/markup fields a text/card UI renders — use this to ' +
-        'reduce payload size when the caller does not need chart specs. Defaults to false, which ' +
-        'returns the response verbatim, including viz.',
+      'full (default): returns the response verbatim, including viz. slim: strips the large viz ' +
+        '(Vega chart-spec) blobs from every insight and summary result.',
     ),
+  slim: z.optional(z.boolean()).describe('Deprecated: use verbosity=slim.'),
 };
 
 export const getGeneratePulseMetricValueInsightBundleTool = (
@@ -49,7 +49,8 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
   - 'springboard' - Return a springboard insight bundle with the current value, period over period change, and the highest ranked insight for the metric.
   - 'basic' - Similar to a springboard insight, but data is focused on the dimensions of a metric that are low bandwidth because they have small value sets. It shows the current value, period over period change, and the highest ranked insight for the metric for that data.
   - 'detail' - Shows insights on performance over time of the metric, a summary visualization of metric highs and lows and trends, breakdowns of top contributors for each filterable dimension of the metric, and followup insights based on the top ranked insights not already presented.
-- \`slim\` (optional): When true, strips the large \`viz\` (Vega chart-spec) blobs from every insight and summary result, returning only the \`facts\`/\`markup\` fields a text/card UI renders. Use this to reduce payload size when chart specs are not needed. Defaults to false, which returns the response verbatim, including \`viz\`.
+- \`verbosity\` (optional): 'full' returns the response verbatim, including \`viz\`. 'slim' strips the large \`viz\` (Vega chart-spec) blobs from every insight and summary result. Defaults to 'full'.
+- \`slim\` (optional): Deprecated: use \`verbosity=slim\`.
 
 **Example Usage:**
 - Generate the default insight bundle for the Pulse metric:
@@ -152,10 +153,14 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ bundleRequest, bundleType, slim }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { bundleRequest, bundleType, verbosity, slim },
+      extra,
+    ): Promise<CallToolResult> => {
+      const useSlim = verbosity ? verbosity === 'slim' : Boolean(slim);
       return await generatePulseMetricValueInsightBundleTool.logAndExecute<PulseBundleResponse>({
         extra,
-        args: { bundleRequest, bundleType, slim },
+        args: { bundleRequest, bundleType, verbosity, slim },
         callback: async () => {
           const validationError = validateBundleRequest(bundleRequest);
           if (validationError) {
@@ -191,7 +196,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
         constrainSuccessResult: (insightBundle) => {
           return {
             type: 'success',
-            result: slim ? slimBundle(insightBundle) : insightBundle,
+            result: useSlim ? slimBundle(insightBundle) : insightBundle,
           };
         },
       });

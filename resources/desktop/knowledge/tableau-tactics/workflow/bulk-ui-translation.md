@@ -91,7 +91,7 @@ Translate matched runs/captions with **exact-tag replacement** (not loose text s
 1. get-worksheet-xml or get-dashboard-xml -> read this object's XML
 2. replace matched <run>/<customized-*> text (exact literal, umlauts, loanwords kept)
 3. apply-worksheet or apply-dashboard -> apply THIS object only
-4. list-worksheets or list-dashboards -> confirm the sheet/dashboard set is intact
+4. worksheet/dashboard list readback -> confirm the sheet/dashboard set is intact
 5. check-for-user-changes -> confirm nothing else moved/broke
 6. only then advance to the next worksheet/dashboard
 ```

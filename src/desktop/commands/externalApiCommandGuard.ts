@@ -120,7 +120,7 @@ function validateExternalApiCommandRegistry({
     const param = findExternalApiParam(registry, key);
     if (!param) {
       rewrittenArgs[key] = value;
-      // Non-goal for monolith #60596: unknown params can still surface as bare 500s;
+      // The External Client API still surfaces some unknown command params as bare 500s;
       // the command-registry guard remains the client-side defense.
       warnings.push(
         `WARNING: key "${key}" is not in the command registry - a wrong name surfaces as a bare 500.`,

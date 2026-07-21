@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 
 import { _resetExternalApiCommandRegistryForTest } from '../../../desktop/externalApi/commandRegistry.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
@@ -12,39 +12,17 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getExecuteTableauCommandTool } from './executeTableauCommand.js';
 
 const SESSION = 'session-1';
-const GENERATED_VIZ_READBACK_XML = `<workbook>
-  <worksheets>
-    <worksheet name="Revenue by Region">
-      <table>
-        <panes>
-          <pane>
-            <mark class="Bar"/>
-          </pane>
-        </panes>
-        <rows>[Region]</rows>
-        <cols>SUM([Revenue])</cols>
-        <sort class="computed" column="[Region]" direction="desc" using="SUM([Revenue])"/>
-      </table>
-    </worksheet>
-  </worksheets>
-  <windows>
-    <window class="worksheet" name="Revenue by Region" active="true"/>
-  </windows>
-</workbook>`;
 const SORT_NESTED_LIVE_500_FIX =
   'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the bind-template sort proposal (preferred for template-bound sheets) or the workbook document round-trip (get-workbook-xml → edit the computed-sort → apply-workbook).';
 const TEST_REGISTRY_DIRS: string[] = [];
 
 function makeExtra(
   executeCommandImpl: (...args: any[]) => any,
-  getWorkbookDocumentImpl: (...args: any[]) => any = vi
-    .fn()
-    .mockResolvedValue(Err({ type: 'command-timed-out' as const, error: 'Timeout' })),
 ): ReturnType<typeof getMockRequestHandlerExtra> {
   const extra = getMockRequestHandlerExtra();
   extra.getExecutor = vi.fn().mockResolvedValue({
     executeCommand: vi.fn().mockImplementation(executeCommandImpl),
-    getWorkbookDocument: vi.fn().mockImplementation(getWorkbookDocumentImpl),
+    getWorkbookDocument: vi.fn(),
   });
   return extra;
 }
@@ -511,41 +489,7 @@ describe('executeTableauCommandTool', () => {
       );
     });
 
-    it('appends compact readback after generate-viz-from-notional-spec succeeds', async () => {
-      const executeCommand = vi
-        .fn()
-        .mockResolvedValue(new Ok({ command_id: 'generate-1', result: null }));
-      const getWorkbookDocument = vi.fn().mockResolvedValue(
-        new Ok({
-          xml: GENERATED_VIZ_READBACK_XML,
-          applicationVersion: undefined,
-          xsdPayloadVersion: undefined,
-        }),
-      );
-      const extra = makeExtra(executeCommand, getWorkbookDocument);
-
-      const result = await getResult(
-        {
-          session: SESSION,
-          command: 'tabdoc:generate-viz-from-notional-spec',
-          args: {
-            NotionalSpecJson:
-              '{"version":"0.2.0","chart":"bar","fields":[{"caption":"Region","data":"string","type":"discrete","role":"dimension","encoding":"x"},{"caption":"Revenue","data":"number","type":"continuous","role":"measure","aggregation":"sum","encoding":"y"}]}',
-            ClearSheet: true,
-          },
-        },
-        extra,
-      );
-
-      expect(result.isError).toBeFalsy();
-      invariant(result.content[0].type === 'text');
-      expect(JSON.parse(result.content[0].text).message).toContain(
-        'readback: sheet "Revenue by Region" - Rows: [Region]; Cols: SUM([Revenue]); mark: Bar; sort: [Region] desc by SUM([Revenue]).',
-      );
-      expect(getWorkbookDocument).toHaveBeenCalledWith(extra.signal);
-    });
-
-    it('keeps generate-viz-from-notional-spec success unchanged when readback fails', async () => {
+    it('does not inspect the workbook after generate-viz-from-notional-spec succeeds', async () => {
       const executeCommand = vi
         .fn()
         .mockResolvedValue(new Ok({ command_id: 'generate-1', result: null }));
@@ -567,6 +511,7 @@ describe('executeTableauCommandTool', () => {
       expect(result.isError).toBeFalsy();
       invariant(result.content[0].type === 'text');
       expect(JSON.parse(result.content[0].text).message).toBe('Command executed successfully.');
+      expect(executeCommand).toHaveBeenCalledTimes(1);
     });
 
     it('leaves an arbitrary valid command call untouched', async () => {
@@ -820,6 +765,54 @@ describe('executeTableauCommandTool', () => {
         'key "TypoParam" is not in the command registry',
       );
       expect(JSON.parse(result.content[0].text).message).toContain('bare 500');
+    });
+  });
+
+  describe('deleted command refusal', () => {
+    it('rejects the deleted document load command before dispatching it', async () => {
+      const executeCommand = vi
+        .fn()
+        .mockResolvedValue(new Ok({ command_id: 'load-1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabui:load-underlying-metadata',
+          args: { text: '<workbook />' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Unknown Tableau command "tabui:load-underlying-metadata"',
+      );
+      expect(executeCommand).not.toHaveBeenCalled();
+    });
+
+    it('still refuses the deleted document load command when the payload matches the current document', async () => {
+      const executeCommand = vi
+        .fn()
+        .mockResolvedValue(new Ok({ command_id: 'load-1', result: null }));
+      const extra = makeExtra(executeCommand);
+
+      const result = await getResult(
+        {
+          session: SESSION,
+          command: 'tabui:load-underlying-metadata',
+          args: { text: '<workbook><worksheets><worksheet name="A" /></worksheets></workbook>' },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Unknown Tableau command "tabui:load-underlying-metadata"',
+      );
+      expect(executeCommand).not.toHaveBeenCalled();
     });
   });
 });

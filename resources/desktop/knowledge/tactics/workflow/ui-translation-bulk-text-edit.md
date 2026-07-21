@@ -94,7 +94,7 @@ Translate matched runs/captions with **exact-tag replacement** (not loose text s
 1. tableau-get-worksheet         → read this worksheet's XML
 2. replace matched <run>/<customized-*> text (exact literal, umlauts, loanwords kept)
 3. tableau-apply-worksheet       → apply THIS worksheet only
-4. tableau-list-worksheets       → confirm the sheet set is intact
+4. worksheet-list readback    → confirm the sheet set is intact
 5. tableau-check-user-changes    → confirm nothing else moved/broke
 6. only then advance to the next worksheet/dashboard
 ```
