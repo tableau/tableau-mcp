@@ -15,6 +15,7 @@
 import { normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
 import { ParsedWindow, ParsedWorkbook, ParsedWorksheet } from '../metadata/types.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
+import { type DateparseAxisSpec, spliceDateparseTemporalAxis } from './dateparseTemporalAxis.js';
 import { spliceBoundFacet } from './facetSplice.js';
 import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
 import { injectTemplate, InsertPosition, SheetType } from './injectTemplate.js';
@@ -65,6 +66,12 @@ export interface InjectTemplateCoreParams {
    * per-apply identity (workbook file + timestamp, or session + timestamp).
    */
   applyNonce: string;
+  /**
+   * temporal_axis_from_string: when the binder bound a date-like STRING to a temporal
+   * slot, this spec turns the template's temporal base column into a DATEPARSE calc
+   * (see dateparseTemporalAxis.ts). Undefined for every normal apply → no-op.
+   */
+  dateparseAxis?: DateparseAxisSpec;
 }
 
 /**
@@ -156,6 +163,7 @@ export function buildInjectedWorkbookXml({
   insertPosition,
   relativeSheetName,
   applyNonce,
+  dateparseAxis,
 }: InjectTemplateCoreParams): InjectTemplateCoreResult {
   // W60 demo-idempotence: a worksheet inject with a colliding title replaces the
   // existing sheet rather than accumulating "Name (1)" copies.
@@ -176,6 +184,11 @@ export function buildInjectedWorkbookXml({
     // core rewrite (identity no-op when no facet is bound). The core then maps
     // [Facet] → the bound field.
     processed = ensureUserNamespace(processed);
+    // temporal_axis_from_string: convert the temporal base column into a DATEPARSE calc
+    // BEFORE the core rewrite (identity no-op when no dateparse axis). The binder skipped
+    // this slot's field_mapping key, so the rewrite leaves the (now-calc) column and its
+    // Month-Trunc CI alone — the axis truncates a parsed date instead of a raw string.
+    processed = spliceDateparseTemporalAxis(processed, dateparseAxis ?? null);
     processed = spliceBoundFacet(processed, fieldMapping ?? {});
     processed = rewriteFieldReferences(
       processed,

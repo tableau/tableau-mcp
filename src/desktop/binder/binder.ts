@@ -18,6 +18,7 @@
 // in-process, so the eval harness can exercise the with-LLM path deterministically
 // without the two-call round trip. The MCP tool never passes `llmPropose`.
 
+import type { DateparseAxisSpec } from '../templates/dateparseTemporalAxis.js';
 import {
   buildLlmInput as buildCoreLlmInput,
   classifyNoLlm,
@@ -107,6 +108,9 @@ export interface InjectTemplateArgs {
   field_mapping: Record<string, string>;
   sort?: { by: string; direction: 'asc' | 'desc' };
   top_n?: number;
+  /** temporal_axis_from_string: when a temporal slot bound a date-like STRING, the
+   * apply path injects a DATEPARSE calc for that slot (see dateparseTemporalAxis.ts). */
+  dateparse_axis?: DateparseAxisSpec;
 }
 
 export type LlmProposeFn = (input: LlmProposeInput) => Promise<BindingProposal>;
@@ -352,6 +356,7 @@ function validateAndBuild(
     field_mapping: v.field_mapping,
     ...(sort ? { sort } : {}),
     ...(proposal.top_n !== undefined ? { top_n: proposal.top_n } : {}),
+    ...(v.dateparse_axis ? { dateparse_axis: v.dateparse_axis } : {}),
   };
   return {
     status: 'bound',

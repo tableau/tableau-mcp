@@ -5,6 +5,9 @@
 // P2-7 attribute-order) plus a reserialization round-trip. The strip is now
 // STRUCTURAL (parse → filter → serialize), so these pin behavior — quote style,
 // attribute order, multi-duplicate convergence (P2-8) — not string mechanics.
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
 import { buildInjectedWorkbookXml, removeSameNamedWorksheet } from './injectTemplateCore.js';
 
 // Pre-existing pile-up fixture (P2-8): two stale "Sales" copies in MIXED quote
@@ -205,5 +208,86 @@ describe('buildInjectedWorkbookXml — reserialization round-trip (adversary P0-
     expect(windowCount).toBe(1);
     // The unrelated sheet is preserved across both cycles.
     expect(cycle2.xml).toContain('name="Keep"');
+  });
+});
+
+describe('buildInjectedWorkbookXml — temporal_axis_from_string end-to-end (real trend-line template)', () => {
+  // The REAL shipped template — the one the binder injects for a time-series ask.
+  const TREND_TEMPLATE = readFileSync(
+    join(__dirname, '../data/templates/trend-line-chart.xml'),
+    'utf-8',
+  );
+  // An empty workbook to inject into (bind-template's auto_apply passes the live one).
+  const EMPTY_WORKBOOK = "<?xml version='1.0'?><workbook><worksheets/><windows/></workbook>";
+
+  it('injects a DATEPARSE month axis when the temporal slot bound a string month (e4 shape)', () => {
+    const result = buildInjectedWorkbookXml({
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml: TREND_TEMPLATE,
+      title: 'MAU over time',
+      sheetType: 'worksheet',
+      // The binder rewrote [Order Date] → [tmn:Order Date:qk] is left ALONE (no mapping key);
+      // only the measure slot maps to the real field. This mirrors what validate.ts emits
+      // when order_date accepts a string via temporal_from_string.
+      templateParameters: { DATASOURCE: 'federated.mau' },
+      fieldMapping: { Sales: '[federated.mau].[sum:mau:qk]' },
+      applyNonce: 'e4-nonce',
+      dateparseAxis: { templateField: 'Order Date', sourceField: 'month', format: 'yyyy-MM' },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const xml = result.xml;
+
+    // The core rewrite namespaces calc columns with the apply nonce, so [Order Date]
+    // becomes [Order Date_tpl_<nonce-suffix>] consistently across the calc, its CI, and
+    // the axis pill. Capture the namespaced calc name and assert the whole axis is coherent.
+    const calcName = xml.match(/name="(\[Order Date[^"]*\])"[^>]*>\s*<calculation/)?.[1];
+    expect(calcName).toBeTruthy();
+
+    // 1) The temporal base column is now a DATEPARSE calc over the string month (the
+    //    serializer keeps the formula's quotes XML-encoded as &apos;).
+    expect(xml).toMatch(
+      /<column[^>]*datatype="date"[^>]*>\s*<calculation[^>]*formula="DATEPARSE\(&apos;yyyy-MM&apos;, \[month\]\)"/,
+    );
+    // 2) The string SOURCE column is declared so the formula resolves.
+    expect(xml).toMatch(/<column[^>]*datatype="string"[^>]*\bname="\[month\]"/);
+    // 3) The continuous Month-Trunc CI points at the SAME calc column (coherent axis).
+    expect(xml).toContain(
+      `<column-instance column="${calcName}" derivation="Month-Trunc" name="[tmn:${calcName!.slice(1, -1)}:qk]"`,
+    );
+    // 4) The measure slot still bound normally through the core rewrite.
+    expect(xml).toContain('sum:mau:qk');
+    // 5) NO raw [month] string leaked onto a truncated axis (the bug this fixes): the
+    //    axis truncates the parsed-date calc, never the string month directly.
+    expect(xml).not.toContain('[tmn:month:qk]');
+    // (Well-formed: buildInjectedWorkbookXml only returns ok when the XML parses.)
+  });
+
+  it('is byte-identical to a normal inject when no dateparseAxis is passed (real-date path unchanged)', () => {
+    const common = {
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml: TREND_TEMPLATE,
+      title: 'Sales over time',
+      sheetType: 'worksheet' as const,
+      templateParameters: { DATASOURCE: 'federated.sales' },
+      fieldMapping: {
+        'Order Date': '[federated.sales].[tmn:order_date:qk]',
+        Sales: '[federated.sales].[sum:sales:qk]',
+      },
+      applyNonce: 'normal-nonce',
+    };
+    const withUndef = buildInjectedWorkbookXml({ ...common, dateparseAxis: undefined });
+    const without = buildInjectedWorkbookXml(common);
+    expect(withUndef.ok).toBe(true);
+    expect(without.ok).toBe(true);
+    if (!withUndef.ok || !without.ok) return;
+    // No DATEPARSE calc leaked into the normal real-date path.
+    expect(withUndef.xml).not.toContain('DATEPARSE');
+    // injectTemplate mints a random <simple-id uuid> per call, so the only difference
+    // between the two runs is that nonce — normalize it out to prove the real-date path
+    // is otherwise byte-identical whether dateparseAxis is undefined or absent.
+    const normUuid = (s: string): string => s.replace(/uuid="\{[^}]*\}"/g, 'uuid="{X}"');
+    expect(normUuid(withUndef.xml)).toBe(normUuid(without.xml));
   });
 });

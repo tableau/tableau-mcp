@@ -28,7 +28,8 @@
   "slots": [
     { "slot_id": "order_date", "template_field": "Order Date", "derivation": "tmn",
       "role": ["cols"], "kind": "temporal", "bindable": true, "required": true,
-      "notes": "XML instance is [tmn:Order Date:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim (no normalization). templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'." },
+      "temporal_from_string": true,
+      "notes": "XML instance is [tmn:Order Date:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim (no normalization). templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'. temporal_from_string:true — a date-like STRING (e.g. a 'YYYY-MM' month) is accepted here; the apply path injects a DATEPARSE calc and truncates it to a continuous month axis (dateparseTemporalAxis.ts)." },
     { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
       "role": ["rows"], "kind": "quantitative", "bindable": true, "required": true },
     { "slot_id": "facet_col", "template_field": "Facet", "derivation": "none",

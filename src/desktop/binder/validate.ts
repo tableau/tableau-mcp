@@ -32,6 +32,7 @@
 import Fuse from 'fuse.js';
 
 import { COLUMN_REF_REGEX } from '../metadata/field-resolver.js';
+import type { DateparseAxisSpec } from '../templates/dateparseTemporalAxis.js';
 import { matchAvoidWhen } from './classify.js';
 import { escapeXml } from './escape.js';
 import type {
@@ -42,6 +43,7 @@ import type {
   TemplateManifest,
 } from './manifest-types.js';
 import { bareName, type SchemaField, type SchemaSummary } from './schema-summary.js';
+import { inferStringTemporal } from './stringTemporal.js';
 
 /**
  * A proposed template + slot→field mapping (the small-LLM / no-LLM output).
@@ -89,7 +91,15 @@ export interface Blocker {
 }
 
 export type ValidateResult =
-  | { ok: true; datasource: string; field_mapping: Record<string, string>; warnings?: string[] }
+  | {
+      ok: true;
+      datasource: string;
+      field_mapping: Record<string, string>;
+      warnings?: string[];
+      /** temporal_axis_from_string: the apply-side DATEPARSE splice spec, when a temporal
+       * slot accepted a date-like string source (undefined for every normal bind). */
+      dateparse_axis?: DateparseAxisSpec;
+    }
   | { ok: false; blockers: Blocker[] };
 
 // Derivation short-forms that are only legal over date/datetime fields.
@@ -351,6 +361,11 @@ export function validateBinding(
   // ── Gates 2–4 per bound, bindable slot ───────────────────────────
   // Track the resolved base column per binding for gates 5 and 7.
   const resolved = new Map<string, { slot: SlotSpec; field: SchemaField }>();
+  // temporal_axis_from_string: set when a temporal slot accepts a date-like string
+  // via DATEPARSE. The apply-side splice owns that slot's XML, so gate 7 skips its
+  // field_mapping key and the result carries the axis spec to injectTemplateCore.
+  let dateparseAxis: DateparseAxisSpec | undefined;
+  let dateparseAxisSlotId: string | undefined;
   for (const [slotId, fieldQuery] of boundBySlot) {
     const slot = slotById.get(slotId);
     if (!slot || !slot.bindable) continue; // gate 1 already recorded these
@@ -379,6 +394,24 @@ export function validateBinding(
 
     // Gate 3: kind/role compatibility.
     if (!kindCompatible(slot.kind, f)) {
+      // temporal_axis_from_string: a temporal slot that opted in accepts a date-like
+      // STRING field, which the apply-side DATEPARSE splice turns into a real date
+      // (see dateparseTemporalAxis.ts). Only when the slot opts in AND the string
+      // field's name is date-like (inferStringTemporal, fail-closed) — otherwise the
+      // kind-mismatch stands unchanged.
+      if (slot.kind === 'temporal' && slot.temporal_from_string) {
+        const inf = inferStringTemporal(f);
+        if (inf) {
+          dateparseAxis = {
+            templateField: slot.template_field,
+            sourceField: bareName(f.columnName),
+            format: inf.format,
+          };
+          dateparseAxisSlotId = slotId;
+          resolved.set(slotId, { slot, field: f });
+          continue; // accepted via dateparse — skip the kind-mismatch blocker
+        }
+      }
       blockers.push({
         code: 'kind-mismatch',
         slot_id: slotId,
@@ -532,6 +565,10 @@ export function validateBinding(
   let first = true;
   for (const slot of m.slots) {
     if (!slot.bindable) continue;
+    // The dateparse-axis slot is resolved entirely by the apply-side splice (it
+    // rewrites the template's temporal base column into a DATEPARSE calc), so it must
+    // NOT emit a field_mapping key — the core rewrite must leave [templateField] alone.
+    if (slot.slot_id === dateparseAxisSlotId) continue;
     const entry = resolved.get(slot.slot_id);
     if (!entry) continue; // optional unbound slot
     const f = entry.field;
@@ -571,7 +608,11 @@ export function validateBinding(
   // attribute), so escape it here at production alongside the field_mapping values —
   // escaped exactly once (validateAndBuild consumes this value as-is, no re-escape).
   const escapedDatasource = escapeXml(datasource);
-  return warnings.length > 0
-    ? { ok: true, datasource: escapedDatasource, field_mapping, warnings }
-    : { ok: true, datasource: escapedDatasource, field_mapping };
+  // The dateparse splice injects raw sourceField/format into template XML; escaping is
+  // done inside the splice (escapeXmlAttr), so pass the values RAW here. datasource is
+  // not used by the splice (it edits base columns, not qualified refs) but carried for
+  // completeness/debuggability.
+  const base = { ok: true as const, datasource: escapedDatasource, field_mapping };
+  const withAxis = dateparseAxis ? { ...base, dateparse_axis: dateparseAxis } : base;
+  return warnings.length > 0 ? { ...withAxis, warnings } : withAxis;
 }

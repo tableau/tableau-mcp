@@ -136,6 +136,14 @@ export interface SlotSpec {
   required: boolean;
   /** true when template_field is reused at >1 derivation ⇒ binder MUST emit `template_field@derivation`. */
   qualified_key_required?: boolean;
+  /**
+   * Opt-in (temporal slots only): when set, a date-like STRING field is an acceptable
+   * source for this temporal slot. The binder injects a DATEPARSE calc that parses the
+   * string into a real date and points the slot's Month-Trunc axis at the calc, instead
+   * of rejecting the string with a kind-mismatch. Off by default — only templates whose
+   * temporal axis can render off a parsed string month opt in (trend-line-chart).
+   */
+  temporal_from_string?: boolean;
   notes?: string;
 }
 
