@@ -20,7 +20,7 @@
   },
   "datasource_placeholder": true,
   "placeholders": ["TITLE", "DATASOURCE"],
-  "intent_keywords": ["trend", "over-time", "line", "time-series", "timeline", "by-month", "sales-over-time", "year-over-year", "yoy", "prior-year", "current-year", "rolling", "moving-average", "moving-sum", "running-total", "month-over-month", "period-over-period", "forecast", "change-over-time", "calendar-year", "across-the-calendar"],
+  "intent_keywords": ["trend", "over-time", "line", "line-chart", "time-series", "timeline", "by-month", "monthly", "weekly", "daily", "per-month", "over-the-last", "last-12-months", "over-months", "active-users", "mau", "dau", "sales-over-time", "year-over-year", "yoy", "prior-year", "current-year", "rolling", "moving-average", "moving-sum", "running-total", "month-over-month", "period-over-period", "forecast", "change-over-time", "calendar-year", "across-the-calendar"],
   "description": "A line of an aggregated measure over a truncated date on the x-axis; shows trend across time.",
   "avoid_when": [
     "The x-axis is a set of DISCRETE, non-temporal CATEGORIES (categorical members such as products or segments) instead of a continuous time axis. A line CONNECTS adjacent points and so IMPLIES CONTINUITY between them, drawing a misleading slope across unrelated categorical members; a cross-category breakdown with no time axis belongs on a bar chart. Keep this line template for a continuous time x-axis only \u2014 do not bind a discrete category to the x."
