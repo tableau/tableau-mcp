@@ -607,6 +607,7 @@ async function performAutoApply({
       templateParameters: args.template_parameters,
       fieldMapping: args.field_mapping,
       applyNonce,
+      dateparseAxis: args.dateparse_axis,
     });
   } catch (err) {
     return applyFallback(base, `inject failed: ${getExceptionMessage(err)}`);
