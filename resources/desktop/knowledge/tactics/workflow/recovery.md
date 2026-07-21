@@ -50,6 +50,15 @@ The Agent API may report `status: "completed"` even when Tableau shows a GUI err
 
 5. **Ask the user.** If you can't determine the error programmatically, ask the user to dismiss any modal dialogs and describe what they see. This is always valid and often fastest.
 
+### Diagnose external-API write failures by error class before retrying
+
+Calibrated live via `execute-tableau-command` (2026-07-19): different failure shapes mean different things, so classify before retrying blindly.
+
+- **HTTP 404 `command-not-found`** — the command name is wrong. Fix the name (see `expertise://tableau/tactics/workflow/execute-command-crash-risk` — never guess a command name); do not retry the same call.
+- **HTTP 400 `invalid-request-body`** — the request envelope shape is wrong, not the underlying intent. Check the parameter contract before changing approach.
+- **HTTP 500 on a write whose payload has a documented contract** (a fabricated or forbidden field/parameter) — the payload violates that contract. Re-read the relevant authoring module and rebuild the payload; one corrected retry is cheaper than abandoning the approach on the first 500.
+- **`{"type":"unknown","error":{}}` on writes while reads still succeed** — the app is dying or modally blocked, not your command. Stop retrying. Check once whether reads still answer; if reads fail too, the Desktop process is gone — tell the user the connection is down rather than pretending to build.
+
 ### Distinguish a real failure from a Data-pane warning lag
 
 Not every "invalid" warning visible to the user means the apply actually failed. Tableau's Data pane is backed by a metadata-resolution service that runs asynchronously from the apply call. A short "invalid datasources" flash can appear in the Data pane after an apply that:

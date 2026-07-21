@@ -75,6 +75,7 @@ Entries show the tactics slug and, where one exists, its strategy companion.
 - Zones, layout, actions, navigation (XML) → `tactics/dashboard/zones`
 - Parameter actions (click a mark to set a parameter) → `tactics/dashboard/parameter-actions`
 - Parameter-driven views (a parameter that reshapes what the viz shows) → `tactics/dashboard/parameter-driven-views`
+- Dynamic dashboards on a live session (author-parameter/author-set/author-action/format-labels verb routing, OPEN-vs-MERGE law) → `tactics/data/dynamic-dashboard-authoring`
 - Sizing modes / container tree (XML) → `tactics/dashboard/dashboard-layout-structure`
 - Layout patterns, content placement, archetypes (strategy) → `strategy/dashboard-design/*`
 - Layout & actions decisions (strategy) → `strategy/dashboard-design/dashboard-layout-and-actions`

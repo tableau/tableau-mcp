@@ -40,8 +40,16 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('Command census:');
     expect(rendered).not.toContain('tabdoc:generate-viz-from-notional-spec');
     expect(rendered).toContain('tabdoc:goto-sheet');
-    expect(rendered).toContain('tabui:save-underlying-metadata');
     expect(rendered).toContain('Use search-commands ONLY for commands not listed here.');
+  });
+
+  it('routes calc-derived-field asks through the dynamic-authoring verbs', () => {
+    const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
+    expect(rendered).toContain(
+      'or a calc/derived field the data lacks (ratio, running total, LOD)',
+    );
+    expect(rendered).toContain('author-calc for calcs');
+    expect(rendered).not.toContain('tabui:save-underlying-metadata');
   });
 
   it('directs the agent to load the authoring skill before building', () => {

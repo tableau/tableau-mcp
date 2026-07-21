@@ -41,7 +41,7 @@ function ensureCommandsSearchIndex(): any {
   const blockingNames = new Set<string>(ref.command_names_opening_blocking_dialog || []);
   const recommendation: string =
     ref.recommendation_when_no_invocable_match ||
-    'No simple MCP-invocable command found. For chart/viz asks use the NotionalSpec loop (tabdoc:generate-viz-from-notional-spec); for calcs use the workbook-document round-trip; fall back to workbook JSON editing only when neither covers the ask.';
+    'No simple MCP-invocable command found. For chart/viz asks use bind-template (or refine-worksheet to edit in place); for calcs/parameters/sets/actions use the author-* verbs; fall back to the workbook-document round-trip, then workbook XML editing, only when neither covers the ask.';
 
   const invocable = allCommands.filter((cmd: any) => {
     if (!cmd || typeof cmd !== 'object') return false;
