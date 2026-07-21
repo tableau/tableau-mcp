@@ -130,8 +130,15 @@ const WATERFALL_TEMPLATE = 'part-to-whole-waterfall';
 const WATERFALL_ANCHOR_MAPPING_KEY = 'Anchor Category';
 const WATERFALL_ANCHOR_SLOT_ID = 'anchor_category';
 const WATERFALL_ANCHOR_FIELD_RE = /categor|type|kind|class|flag|marker/i;
+// An explicit sequence/order column (display_order, sort_order, seq, step, rank, line_no…).
+// A P&L/bridge running total is order-dependent and its intended order is usually a
+// non-displayed sequence field — the exact seam that made m1 give up on refine (which cannot
+// sort by a field not on the view) or fall to XML surgery. Naming the field in the hint is
+// what routes the singer to carry it in the ORIGINAL bind (proposal.sort) instead.
+const WATERFALL_ORDER_FIELD_RE =
+  /(display|sort|step|row|item|line)[_\s-]?(order|no|num|number|index|rank|seq)|^(order|sequence|seq|ordinal|rank|step[_\s-]?order)$/i;
 const WATERFALL_SORT_HINT =
-  'Waterfall default sort is DESC by the bound measure; override with proposal.sort:{by:<field>,direction:"asc"|"desc"}.';
+  'Waterfall default sort is DESC by the bound measure; override with proposal.sort:{by:<field>,direction:"asc"|"desc"} IN THE BIND — refine-worksheet cannot sort by a field that is not on the view.';
 
 function nextActionForEscalation(reason: EscalateReason): NextAction {
   if (reason === 'ambiguous-field' || reason === 'field-not-found') {
@@ -227,6 +234,17 @@ function waterfallAnchorCandidates(schemaSummary?: SchemaSummary): string[] {
   return [...new Set(candidates)];
 }
 
+/** Explicit sequence/order columns (display_order, sort_order, …) usable as the step order. */
+function waterfallOrderCandidates(schemaSummary?: SchemaSummary): string[] {
+  if (!schemaSummary) {
+    return [];
+  }
+  const candidates = schemaSummary.fields
+    .filter((field) => WATERFALL_ORDER_FIELD_RE.test(field.name))
+    .map((field) => field.name);
+  return [...new Set(candidates)];
+}
+
 function buildWaterfallDiscoveryGuidance(
   res: BinderResult,
   schemaSummary?: SchemaSummary,
@@ -248,7 +266,20 @@ function buildWaterfallDiscoveryGuidance(
     }
   }
   if (!hasSortOverride(res, proposal)) {
-    sentences.push(WATERFALL_SORT_HINT);
+    const orderCandidates = waterfallOrderCandidates(schemaSummary);
+    if (orderCandidates.length > 0) {
+      // Name the sequence column so the singer carries it in the bind instead of failing on
+      // refine (which cannot sort by an off-view field) — the m1 give-up/XML-surgery seam.
+      sentences.push(
+        `Waterfall step order: schema has ${orderCandidates.join(', ')}; the running total is ` +
+          `order-dependent, so re-call bind-template with proposal.sort:{by:${JSON.stringify(
+            orderCandidates[0],
+          )},direction:"asc"} to set the sequence in ONE bind. Do NOT use refine-worksheet — it ` +
+          'cannot sort by a field that is not on the view.',
+      );
+    } else {
+      sentences.push(WATERFALL_SORT_HINT);
+    }
   }
   return sentences;
 }
