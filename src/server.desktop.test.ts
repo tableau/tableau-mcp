@@ -27,7 +27,9 @@ describe('DesktopMcpServer', () => {
 
     const allTools = desktopToolFactories.map((toolFactory) => toolFactory(server));
     const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
-    const tools = allTools.filter((_, i) => !disabledFlags[i]);
+    const tools = allTools.filter(
+      (tool, i) => !disabledFlags[i] && tool.name !== 'check-for-user-changes',
+    );
     expect(server.mcpServer.registerTool).toHaveBeenCalledTimes(tools.length);
     for (const tool of tools) {
       expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
@@ -44,23 +46,14 @@ describe('DesktopMcpServer', () => {
   });
 
   it('does not register check-for-user-changes on the External Client API transport', async () => {
-    const base = configModule.getDesktopConfig();
-    const spy = vi
-      .spyOn(configModule, 'getDesktopConfig')
-      .mockReturnValue({ ...base, externalApiEnabled: true });
+    const server = getServer();
+    await server.registerTools();
 
-    try {
-      const server = getServer();
-      await server.registerTools();
-
-      const registeredNames = (
-        vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
-      ).map(([name]) => name);
-      expect(registeredNames).not.toContain('check-for-user-changes');
-      expect(registeredNames).toContain('list-worksheets');
-    } finally {
-      spy.mockRestore();
-    }
+    const registeredNames = (
+      vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
+    ).map(([name]) => name);
+    expect(registeredNames).not.toContain('check-for-user-changes');
+    expect(registeredNames).toContain('list-worksheets');
   });
 
   it('does not register list-instances when a Desktop session is pinned', async () => {
@@ -474,7 +467,8 @@ describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
     const registeredNames = vi
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0]);
-    expect(registeredNames.length).toBe(desktopToolFactories.length);
+    expect(registeredNames.length).toBe(desktopToolFactories.length - 1);
+    expect(registeredNames).not.toContain('check-for-user-changes');
   });
 });
 

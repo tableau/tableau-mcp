@@ -3,7 +3,6 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Ok } from 'ts-results-es';
 
-import { ExecuteCommandArgs } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -32,7 +31,7 @@ describe('authorCalcTool', () => {
 
   it('splices an escaped calculation into the target datasource and verifies readback', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         caption: 'Profit & "Growth"',
         formula: 'IF [Sales] < 10 AND [Region] = \'West\' THEN "A & B" END',
@@ -52,11 +51,7 @@ describe('authorCalcTool', () => {
       hint: 'reference it by caption in a bind-template ask (name the caption plus a chart shape), auto_apply: true',
     });
 
-    const loadCall = commandCalls(executeCommand).find(
-      (call) => call.command === 'load-underlying-metadata',
-    );
-    expect(loadCall).toBeDefined();
-    expect(loadCall?.args?.text).toContain(
+    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(
       "<column caption='Profit &amp; &quot;Growth&quot;' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='IF [Sales] &lt; 10 AND [Region] = &apos;West&apos; THEN &quot;A &amp; B&quot; END' /></column>",
     );
   });
@@ -67,7 +62,7 @@ describe('authorCalcTool', () => {
       "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />",
     );
 
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: { caption: 'Profit', formula: '[Sales] * 0.2' },
       initialXml: xml,
     });
@@ -77,9 +72,7 @@ describe('authorCalcTool', () => {
     expect(result.content[0].text).toContain(
       'caption collision — pick a new caption or use the existing field',
     );
-    expect(
-      commandCalls(executeCommand).some((call) => call.command === 'load-underlying-metadata'),
-    ).toBe(false);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('splices legally into a REAL Desktop document (regression: relation columns + clones + build comment)', async () => {
@@ -100,7 +93,7 @@ describe('authorCalcTool', () => {
     );
     const calcXml =
       "<column caption='Replay Tier' datatype='string' name='[Calculation_1700000000000]' role='dimension' type='nominal'><calculation class='tableau' formula='IF SUM([Profit]) &gt; 0 THEN &apos;Top&apos; ELSE &apos;Bottom&apos; END' /></column>";
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         caption: 'Replay Tier',
         formula: "IF SUM([Profit]) > 0 THEN 'Top' ELSE 'Bottom' END",
@@ -112,11 +105,7 @@ describe('authorCalcTool', () => {
     });
 
     expect(result.isError).toBe(false);
-    const loadCall = commandCalls(executeCommand).find(
-      (call) => call.command === 'load-underlying-metadata',
-    );
-    invariant(loadCall?.args && typeof loadCall.args.text === 'string');
-    const loaded = loadCall.args.text;
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
     const at = loaded.indexOf("caption='Replay Tier'");
     expect(at).toBeGreaterThan(-1);
     // legal position: NOT inside <relation>…</relation>, and inside the first datasource
@@ -133,7 +122,7 @@ describe('authorCalcTool', () => {
       "<column caption='Member Profit' datatype='real' name='[Calculation_900]' role='measure' type='quantitative'><calculation class='tableau' formula='{ FIXED [Sub-Category] : SUM([Profit]) }' /></column>";
     const xml = BASE_XML.replace('</datasource>', `${priorCalc}</datasource>`);
 
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         caption: 'Top Threshold',
         formula: '{ FIXED : PERCENTILE([Member Profit], 0.80) }',
@@ -146,14 +135,11 @@ describe('authorCalcTool', () => {
     });
 
     expect(result.isError).toBe(false);
-    const loadCall = commandCalls(executeCommand).find(
-      (call) => call.command === 'load-underlying-metadata',
-    );
-    invariant(loadCall?.args && typeof loadCall.args.text === 'string');
-    expect(loadCall.args.text).toContain('PERCENTILE([Calculation_900], 0.80)');
-    expect(loadCall.args.text).not.toContain('PERCENTILE([Member Profit]');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain('PERCENTILE([Calculation_900], 0.80)');
+    expect(loaded).not.toContain('PERCENTILE([Member Profit]');
     // base-field references (caption == name) stay untouched
-    expect(loadCall.args.text).toContain('{ FIXED [Sub-Category] : SUM([Profit]) }');
+    expect(loaded).toContain('{ FIXED [Sub-Category] : SUM([Profit]) }');
   });
 
   it('ignores worksheet-dependencies datasource clones (live 2026-07-19: splicing a clone is silently discarded)', async () => {
@@ -163,7 +149,7 @@ describe('authorCalcTool', () => {
       "<worksheets><worksheet name='Sheet 1'><table><view><datasources><datasource name='Superstore' /></datasources><datasource-dependencies datasource='Superstore'><column caption='Sales' datatype='real' name='[Sales]' role='measure' type='quantitative' /></datasource-dependencies></view></table></worksheet></worksheets>",
     );
 
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: { caption: 'Margin', formula: '[Sales] * 0.2' },
       initialXml: xml,
       readbackXml: withColumn(
@@ -173,12 +159,8 @@ describe('authorCalcTool', () => {
     });
 
     expect(result.isError).toBe(false);
-    const loadCall = commandCalls(executeCommand).find(
-      (call) => call.command === 'load-underlying-metadata',
-    );
-    invariant(loadCall?.args && typeof loadCall.args.text === 'string');
     // the splice must land INSIDE the top-level <datasources> block, before its close
-    const loaded = loadCall.args.text;
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
     expect(loaded.indexOf("caption='Margin'")).toBeLessThan(loaded.indexOf('</datasources>'));
   });
 
@@ -188,7 +170,7 @@ describe('authorCalcTool', () => {
       "<datasource name='Inventory'></datasource><datasource name='Parameters'></datasource></datasources>",
     );
 
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: { caption: 'Margin', formula: '[Sales] * 0.2' },
       initialXml: xml,
     });
@@ -198,9 +180,7 @@ describe('authorCalcTool', () => {
     expect(result.content[0].text).toContain('Multiple datasources found');
     expect(result.content[0].text).toContain('Superstore');
     expect(result.content[0].text).toContain('Inventory');
-    expect(
-      commandCalls(executeCommand).some((call) => call.command === 'load-underlying-metadata'),
-    ).toBe(false);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('errors when readback does not include the new column and caption', async () => {
@@ -221,7 +201,7 @@ describe('authorCalcTool', () => {
       '',
     );
 
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: { caption: 'Margin', formula: '[Sales] * 0.2' },
       initialXml: xmlWithoutWorksheet,
     });
@@ -229,9 +209,7 @@ describe('authorCalcTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('whole-document or nothing');
-    expect(
-      commandCalls(executeCommand).some((call) => call.command === 'load-underlying-metadata'),
-    ).toBe(false);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('avoids colliding with existing Calculation ids', async () => {
@@ -245,17 +223,16 @@ describe('authorCalcTool', () => {
       "<column caption='Margin' datatype='real' name='[Calculation_1700000000001]' role='measure' type='quantitative'><calculation class='tableau' formula='[Sales] * 0.2' /></column>",
     );
 
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: { caption: 'Margin', formula: '[Sales] * 0.2' },
       initialXml: xml,
       readbackXml,
     });
 
     expect(result.isError).toBe(false);
-    const loadCall = commandCalls(executeCommand).find(
-      (call) => call.command === 'load-underlying-metadata',
+    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(
+      "name='[Calculation_1700000000001]'",
     );
-    expect(loadCall?.args?.text).toContain("name='[Calculation_1700000000001]'");
   });
 });
 
@@ -278,19 +255,22 @@ async function getToolResult({
   readbackXml?: string;
 }): Promise<{
   result: CallToolResult;
-  executeCommand: ReturnType<typeof vi.fn>;
+  applyWorkbookDocument: ReturnType<typeof vi.fn>;
 }> {
   const documents = [initialXml, readbackXml ?? withColumn(initialXml, '')];
-  let saveCount = 0;
-  const executeCommand = vi.fn(async (params: ExecuteCommandArgs<undefined>) => {
-    if (params.command === 'save-underlying-metadata') {
-      return new Ok({
-        command_id: `save-${saveCount}`,
-        status: 'completed',
-        parsedResult: { text: documents[Math.min(saveCount++, documents.length - 1)] },
-      });
-    }
-    return new Ok({ command_id: 'load-1', status: 'completed', result: null });
+  let readCount = 0;
+  const executeCommand = vi
+    .fn()
+    .mockResolvedValue(new Ok({ command_id: 'command-1', status: 'completed', result: null }));
+  const getWorkbookDocument = vi.fn(async () => {
+    return new Ok({
+      xml: documents[Math.min(readCount++, documents.length - 1)],
+      applicationVersion: undefined,
+      xsdPayloadVersion: undefined,
+    });
+  });
+  const applyWorkbookDocument = vi.fn(async () => {
+    return new Ok({ command_id: 'apply-1', status: 'completed', result: null });
   });
   describe('parameter caption resolution (verse-3 empty-sheet fix)', () => {
     it('resolves parameter captions to qualified [Parameters].[Parameter N] references', async () => {
@@ -319,7 +299,11 @@ async function getToolResult({
 
   const extra = {
     ...getMockRequestHandlerExtra(),
-    getExecutor: vi.fn().mockResolvedValue({ executeCommand }),
+    getExecutor: vi.fn().mockResolvedValue({
+      executeCommand,
+      getWorkbookDocument,
+      applyWorkbookDocument,
+    }),
   };
   const tool = getAuthorCalcTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -335,15 +319,15 @@ async function getToolResult({
     extra,
   );
 
-  return { result, executeCommand };
+  return { result, applyWorkbookDocument };
 }
 
 function withColumn(xml: string, column: string): string {
   return xml.replace('</datasource>', `${column}</datasource>`);
 }
 
-function commandCalls(
-  executeCommand: ReturnType<typeof vi.fn>,
-): Array<ExecuteCommandArgs<undefined>> {
-  return executeCommand.mock.calls.map(([call]) => call);
+function appliedDocumentXml(applyWorkbookDocument: ReturnType<typeof vi.fn>): string {
+  const [xml] = applyWorkbookDocument.mock.calls[0] ?? [];
+  invariant(typeof xml === 'string');
+  return xml;
 }

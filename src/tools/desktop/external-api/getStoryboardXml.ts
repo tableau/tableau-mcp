@@ -2,17 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
-import { resolveSession } from '../../../desktop/sessionResolution.js';
-import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { runExternalApiReadTool } from '../externalApiReadHarness.js';
 import { DesktopTool } from '../tool.js';
-import {
-  endpointNotInThisBuild,
-  ExternalApiRequiredError,
-  isRouteMissing,
-  resolveItemByNameOrId,
-} from './externalApiToolUtils.js';
+import { resolveItemByNameOrId } from './externalApiToolUtils.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
@@ -41,42 +34,36 @@ export const getStoryboardXmlTool = (
         extra,
         args: { session, storyboard },
         callback: async () => {
-          const sessionResult = resolveSession(session);
-          if (sessionResult.isErr()) {
-            return sessionResult.error.toErr();
-          }
+          const result = await runExternalApiReadTool({
+            session,
+            extra,
+            callback: async (_executor, _signal, read) => {
+              const listResult = await read(
+                'storyboard list',
+                async (executor, signal) => await executor.listStoryboards(signal),
+              );
+              if (listResult.isErr()) {
+                return listResult;
+              }
 
-          const executor = await extra.getExecutor(sessionResult.value);
-          if (!(executor instanceof ExternalApiToolExecutor)) {
-            return new ExternalApiRequiredError(getStoryboardXml.name).toErr();
-          }
+              const storyboardResult = resolveItemByNameOrId(
+                'Storyboard',
+                storyboard,
+                listResult.value.storyboards ?? [],
+              );
+              if (storyboardResult.isErr()) {
+                return storyboardResult.error.toErr();
+              }
 
-          const listResult = await executor.listStoryboards(extra.signal);
-          if (listResult.isErr()) {
-            if (isRouteMissing(listResult.error)) {
-              return endpointNotInThisBuild('storyboard list').toErr();
-            }
-            return new DesktopCommandExecutionError(listResult.error).toErr();
-          }
-
-          const storyboardResult = resolveItemByNameOrId(
-            'Storyboard',
-            storyboard,
-            listResult.value.storyboards ?? [],
-          );
-          if (storyboardResult.isErr()) {
-            return storyboardResult.error.toErr();
-          }
-
-          const result = await executor.getStoryboardDocument(
-            storyboardResult.value.id,
-            extra.signal,
-          );
+              return await read(
+                'storyboard document',
+                async (executor, signal) =>
+                  await executor.getStoryboardDocument(storyboardResult.value.id, signal),
+              );
+            },
+          });
           if (result.isErr()) {
-            if (isRouteMissing(result.error)) {
-              return endpointNotInThisBuild('storyboard document').toErr();
-            }
-            return new DesktopCommandExecutionError(result.error).toErr();
+            return result;
           }
 
           return new Ok({

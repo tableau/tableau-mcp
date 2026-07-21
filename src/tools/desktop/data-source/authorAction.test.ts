@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
-import { ExecuteCommandArgs } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -33,7 +32,7 @@ describe('authorActionTool', () => {
       BASE_XML,
       "<edit-parameter-action caption='Set Period' name='[Action1]'><activation type='on-select' /><source type='sheet' worksheet='Profit' /><agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' /><params><param name='source-field' value='[Sample - Superstore].[:Measure Names]' /><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action>",
     );
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         caption: 'Set Period',
         sourceWorksheet: 'Profit',
@@ -51,11 +50,7 @@ describe('authorActionTool', () => {
     expect(parsed.caption).toBe('Set Period');
     expect(parsed.targetParameter).toBe('[Parameters].[Parameter 1]');
 
-    const loadCall = commandCalls(executeCommand).find(
-      (call) => call.command === 'load-underlying-metadata',
-    );
-    invariant(loadCall?.args && typeof loadCall.args.text === 'string');
-    const loaded = loadCall.args.text;
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
     // <actions> block created between </datasources> and <worksheets>.
     const dsClose = loaded.indexOf('</datasources>');
     const actionsAt = loaded.indexOf('<actions>');
@@ -77,7 +72,7 @@ describe('authorActionTool', () => {
       '</actions>',
       "<edit-parameter-action caption='Second' name='[Action2]'></edit-parameter-action></actions>",
     );
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         caption: 'Second',
         sourceWorksheet: 'Profit',
@@ -91,12 +86,9 @@ describe('authorActionTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text).actionName).toBe('[Action2]');
-    const loadCall = commandCalls(executeCommand).find(
-      (call) => call.command === 'load-underlying-metadata',
-    );
-    invariant(loadCall?.args && typeof loadCall.args.text === 'string');
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
     // Only one <actions> block — appended, not duplicated.
-    expect(loadCall.args.text.match(/<actions>/g)?.length).toBe(1);
+    expect(loaded.match(/<actions>/g)?.length).toBe(1);
   });
 
   it('rejects a caption collision before loading metadata', async () => {
@@ -104,7 +96,7 @@ describe('authorActionTool', () => {
       BASE_XML,
       "<edit-parameter-action caption='Dup' name='[Action1]'></edit-parameter-action>",
     );
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         caption: 'Dup',
         sourceWorksheet: 'Profit',
@@ -116,9 +108,7 @@ describe('authorActionTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('caption collision');
-    expect(
-      commandCalls(executeCommand).some((call) => call.command === 'load-underlying-metadata'),
-    ).toBe(false);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('rejects empty required primitives', async () => {
@@ -160,23 +150,30 @@ async function getToolResult({
   readbackXml?: string;
 }): Promise<{
   result: CallToolResult;
-  executeCommand: ReturnType<typeof vi.fn>;
+  applyWorkbookDocument: ReturnType<typeof vi.fn>;
 }> {
   const documents = [initialXml, readbackXml ?? initialXml];
-  let saveCount = 0;
-  const executeCommand = vi.fn(async (params: ExecuteCommandArgs<undefined>) => {
-    if (params.command === 'save-underlying-metadata') {
-      return new Ok({
-        command_id: `save-${saveCount}`,
-        status: 'completed',
-        parsedResult: { text: documents[Math.min(saveCount++, documents.length - 1)] },
-      });
-    }
-    return new Ok({ command_id: 'load-1', status: 'completed', result: null });
+  let readCount = 0;
+  const executeCommand = vi
+    .fn()
+    .mockResolvedValue(new Ok({ command_id: 'command-1', status: 'completed', result: null }));
+  const getWorkbookDocument = vi.fn(async () => {
+    return new Ok({
+      xml: documents[Math.min(readCount++, documents.length - 1)],
+      applicationVersion: undefined,
+      xsdPayloadVersion: undefined,
+    });
+  });
+  const applyWorkbookDocument = vi.fn(async () => {
+    return new Ok({ command_id: 'apply-1', status: 'completed', result: null });
   });
   const extra = {
     ...getMockRequestHandlerExtra(),
-    getExecutor: vi.fn().mockResolvedValue({ executeCommand }),
+    getExecutor: vi.fn().mockResolvedValue({
+      executeCommand,
+      getWorkbookDocument,
+      applyWorkbookDocument,
+    }),
   };
   const tool = getAuthorActionTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -190,11 +187,11 @@ async function getToolResult({
     extra,
   );
 
-  return { result, executeCommand };
+  return { result, applyWorkbookDocument };
 }
 
-function commandCalls(
-  executeCommand: ReturnType<typeof vi.fn>,
-): Array<ExecuteCommandArgs<undefined>> {
-  return executeCommand.mock.calls.map(([call]) => call);
+function appliedDocumentXml(applyWorkbookDocument: ReturnType<typeof vi.fn>): string {
+  const [xml] = applyWorkbookDocument.mock.calls[0] ?? [];
+  invariant(typeof xml === 'string');
+  return xml;
 }

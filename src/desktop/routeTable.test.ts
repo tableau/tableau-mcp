@@ -49,7 +49,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       'or a calc/derived field the data lacks (ratio, running total, LOD)',
     );
     expect(rendered).toContain('author-calc for calcs');
-    expect(rendered).not.toContain('tabui:save-underlying-metadata');
+    expect(rendered).not.toMatch(/tabui:.*document/i);
   });
 
   it('directs the agent to load the authoring skill before building', () => {

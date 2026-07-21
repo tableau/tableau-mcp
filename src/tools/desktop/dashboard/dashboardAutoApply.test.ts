@@ -7,7 +7,7 @@ import * as binderModule from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as injectViewpointsModule from '../../../desktop/commands/workbook/injectViewpoints.js';
-import { DesktopDiscoverer } from '../../../desktop/desktopDiscoverer.js';
+import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
 import * as injectTemplateModule from '../../../desktop/templates/injectTemplate.js';
@@ -37,7 +37,7 @@ vi.mock('../../../desktop/templates/injectTemplateCore.js', async (importOrigina
     await importOriginal<typeof import('../../../desktop/templates/injectTemplateCore.js')>();
   return { ...actual, buildInjectedWorkbookXml: vi.fn() };
 });
-vi.mock('../../../desktop/desktopDiscoverer.js');
+vi.mock('../../../desktop/externalApi/discovery.js');
 vi.mock('../../../desktop/libraries/workbook-serialization-converter/index.js');
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('../../../desktop/validation/registry.js');
@@ -168,6 +168,7 @@ function setupMocks({
   existingDashboards?: string[];
 } = {}): {
   executeCommand: ReturnType<typeof vi.fn>;
+  applyWorkbookDocument: ReturnType<typeof vi.fn>;
   getEvents: ReturnType<typeof vi.fn>;
   getExecutor: ReturnType<typeof vi.fn>;
   bindSpy: ReturnType<typeof vi.fn>;
@@ -208,6 +209,7 @@ function setupMocks({
   );
 
   const executeCommand = vi.fn().mockResolvedValue(dispatch);
+  const applyWorkbookDocument = vi.fn().mockResolvedValue(dispatch);
   const getEvents =
     userEventsDuringBatch === 'unsupported'
       ? vi.fn().mockResolvedValue(Err('events unsupported on this transport'))
@@ -223,8 +225,12 @@ function setupMocks({
               count: userEventsDuringBatch,
             }),
           );
-  const getExecutor = vi.fn().mockResolvedValue({ executeCommand, getEvents });
-  return { executeCommand, getEvents, getExecutor, bindSpy };
+  const getExecutor = vi.fn().mockResolvedValue({
+    executeCommand,
+    applyWorkbookDocument,
+    getEvents,
+  });
+  return { executeCommand, applyWorkbookDocument, getEvents, getExecutor, bindSpy };
 }
 
 async function getToolResult({
@@ -254,7 +260,7 @@ describe('dashboardAutoApplyTool happy path', () => {
   });
 
   it('applies exactly once (one read, one dispatch) and returns the trimmed success shape', async () => {
-    const { executeCommand, getExecutor } = setupMocks();
+    const { applyWorkbookDocument, getExecutor } = setupMocks();
 
     const result = await getToolResult({
       session: '1',
@@ -284,7 +290,7 @@ describe('dashboardAutoApplyTool happy path', () => {
     ]);
 
     expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(1);
-    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
   it('injects the dashboard wrapper with zones referencing every resolved title', async () => {
@@ -347,7 +353,7 @@ describe('dashboardAutoApplyTool happy path', () => {
   });
 
   it('runs preflight validation BEFORE dispatching the apply', async () => {
-    const { executeCommand, getExecutor } = setupMocks();
+    const { applyWorkbookDocument, getExecutor } = setupMocks();
 
     await getToolResult({
       session: '1',
@@ -356,9 +362,9 @@ describe('dashboardAutoApplyTool happy path', () => {
     });
 
     expect(validationRegistry.runValidation).toHaveBeenCalledTimes(1);
-    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     const validationOrder = vi.mocked(validationRegistry.runValidation).mock.invocationCallOrder[0];
-    const dispatchOrder = executeCommand.mock.invocationCallOrder[0];
+    const dispatchOrder = applyWorkbookDocument.mock.invocationCallOrder[0];
     expect(validationOrder).toBeLessThan(dispatchOrder);
   });
 
@@ -384,7 +390,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
   });
 
   it('any ask "propose" refuses the whole batch — zero dispatches, every outcome intact', async () => {
-    const { executeCommand, getExecutor } = setupMocks({ binds: [boundA, proposeResult] });
+    const { applyWorkbookDocument, getExecutor } = setupMocks({ binds: [boundA, proposeResult] });
 
     const result = await getToolResult({
       session: '1',
@@ -399,11 +405,11 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(body.results).toHaveLength(2);
     expect(body.results[0].result.status).toBe('bound');
     expect(body.results[1].result.status).toBe('propose');
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('any ask "escalate" refuses the whole batch — zero dispatches', async () => {
-    const { executeCommand, getExecutor } = setupMocks({ binds: [boundA, escalateResult] });
+    const { applyWorkbookDocument, getExecutor } = setupMocks({ binds: [boundA, escalateResult] });
 
     const result = await getToolResult({
       session: '1',
@@ -432,7 +438,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
     expect(body.results[1].result.reason).toBe('field-not-found');
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('mutation-proof: a bound-but-used_llm:true result (impossible via Call-1, simulated via mock) refuses the batch', async () => {
@@ -440,7 +446,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       ...(boundA as Extract<BinderResult, { status: 'bound' }>),
       used_llm: true,
     };
-    const { executeCommand, getExecutor } = setupMocks({ binds: [usedLlmBound, boundB] });
+    const { applyWorkbookDocument, getExecutor } = setupMocks({ binds: [usedLlmBound, boundB] });
 
     const result = await getToolResult({
       session: '1',
@@ -451,11 +457,11 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('mutation-proof: a bound result whose manifest is not fast_path_eligible refuses the batch', async () => {
-    const { executeCommand, getExecutor } = setupMocks({ fastPathEligible: false });
+    const { applyWorkbookDocument, getExecutor } = setupMocks({ fastPathEligible: false });
 
     const result = await getToolResult({
       session: '1',
@@ -466,11 +472,11 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('events-dirty pre-dispatch refuses the whole batch with P1-5 guidance, zero dispatches', async () => {
-    const { executeCommand, getExecutor } = setupMocks({ userEventsDuringBatch: 3 });
+    const { applyWorkbookDocument, getExecutor } = setupMocks({ userEventsDuringBatch: 3 });
 
     const result = await getToolResult({
       session: '1',
@@ -486,11 +492,13 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(result.structuredContent).toEqual({
       nextAction: { label: 'Re-run dashboard-auto-apply', kind: 'prefill' },
     });
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('gate is best-effort: an executor without event support still applies', async () => {
-    const { executeCommand, getExecutor } = setupMocks({ userEventsDuringBatch: 'unsupported' });
+    const { applyWorkbookDocument, getExecutor } = setupMocks({
+      userEventsDuringBatch: 'unsupported',
+    });
 
     const result = await getToolResult({
       session: '1',
@@ -501,11 +509,11 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(true);
-    expect(executeCommand).toHaveBeenCalled();
+    expect(applyWorkbookDocument).toHaveBeenCalled();
   });
 
   it('inject failure on ask 2 of 2 refuses the whole batch — zero dispatches, diagnostics intact', async () => {
-    const { executeCommand, getExecutor } = setupMocks({
+    const { applyWorkbookDocument, getExecutor } = setupMocks({
       inject: { ok: false, issues: ['not well-formed'] },
     });
 
@@ -521,11 +529,11 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(String(body.apply_error)).toContain('inject failed');
     expect(body.results).toHaveLength(2);
     expect(body.results[0].result.status).toBe('bound');
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('preflight validation failure aborts the apply — zero dispatches', async () => {
-    const { executeCommand, getExecutor } = setupMocks({ validationValid: false });
+    const { applyWorkbookDocument, getExecutor } = setupMocks({ validationValid: false });
 
     const result = await getToolResult({
       session: '1',
@@ -537,13 +545,13 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
     expect(String(body.apply_error)).toContain('preflight validation failed');
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('duplicate resolved titles within the batch refuse — zero dispatches, indices named', async () => {
     const dup = boundResultFor('bar-basic', 'Same Title');
     const dup2 = boundResultFor('line-basic', 'Same Title');
-    const { executeCommand, getExecutor } = setupMocks({ binds: [dup, dup2] });
+    const { applyWorkbookDocument, getExecutor } = setupMocks({ binds: [dup, dup2] });
 
     const result = await getToolResult({
       session: '1',
@@ -556,11 +564,11 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(body.applied).toBe(false);
     expect(String(body.guidance)).toMatch(/Duplicate resolved title/);
     expect(String(body.guidance)).toMatch(/\[0, 1\]/);
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('a title referenced by an existing dashboard zone refuses — zero dispatches', async () => {
-    const { executeCommand, getExecutor } = setupMocks();
+    const { applyWorkbookDocument, getExecutor } = setupMocks();
     // A DIFFERENT existing dashboard's zone already references "Sales by Region".
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(
       Ok(
@@ -578,13 +586,15 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
     expect(String(body.apply_error)).toMatch(/referenced by existing dashboard zone/);
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('replacing the SAME-named dashboard does not self-collide with the zone-reference guard', async () => {
     // The dashboard we are about to replace references "Sales by Region" itself — that
     // must NOT trip the "referenced by an existing dashboard" refusal (Q1).
-    const { executeCommand, getExecutor } = setupMocks({ existingDashboards: ['Sales Dashboard'] });
+    const { applyWorkbookDocument, getExecutor } = setupMocks({
+      existingDashboards: ['Sales Dashboard'],
+    });
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(
       Ok(
         '<?xml version="1.0"?><workbook><dashboards><dashboard name="Sales Dashboard"><zones><zone name="Sales by Region"/></zones></dashboard></dashboards><windows></windows></workbook>',
@@ -600,7 +610,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(true);
-    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
   it('a resolved title matching an already-existing worksheet is reported as replaced', async () => {
@@ -630,9 +640,10 @@ describe('dashboardAutoApplyTool session-default-when-unique', () => {
   });
 
   function mockInstances(pids: number[]): void {
-    const map = new Map(pids.map((pid) => [pid, { pid }]));
-    vi.mocked(DesktopDiscoverer).mockImplementation(
-      () => ({ getInstances: () => map }) as unknown as DesktopDiscoverer,
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue(
+      pids.map(
+        (pid) => ({ pid }) as ReturnType<typeof externalDiscovery.discoverInstances>[number],
+      ),
     );
   }
 
@@ -693,6 +704,6 @@ describe('dashboardAutoApplyTool session-default-when-unique', () => {
 
     expect(result.isError).toBe(false);
     expect(getExecutor).toHaveBeenCalledWith('7');
-    expect(DesktopDiscoverer).not.toHaveBeenCalled();
+    expect(externalDiscovery.discoverInstances).not.toHaveBeenCalled();
   });
 });

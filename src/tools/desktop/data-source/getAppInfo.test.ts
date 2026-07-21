@@ -59,6 +59,10 @@ describe('getAppInfoTool', () => {
       const result = await callback({ session: undefined }, extra);
 
       expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe(
+        '{"applicationVersion":"2026.1","build":"20261.26.0701.1234","edition":"Professional","os":"macOS"}',
+      );
       expect(parseResult(result)).toEqual({
         applicationVersion: '2026.1',
         build: '20261.26.0701.1234',

@@ -9,13 +9,12 @@ import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js
 import * as routeSpecModule from '../../../desktop/binder/route-spec.js';
 import { normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
-import { DesktopDiscoverer } from '../../../desktop/desktopDiscoverer.js';
+import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
 import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
-import type { ExecuteCommandArgs } from '../../../desktop/toolExecutor/toolExecutor.js';
 import * as validationRegistry from '../../../desktop/validation/registry.js';
 import {
   DesktopCommandExecutionError,
@@ -43,10 +42,10 @@ vi.mock('../../../desktop/binder/binder.js', async (importOriginal) => {
 // ── Auto-apply / session-default seams (W60) ──────────────────────────────────
 // The auto-apply leg runs the REAL validated apply path (loadWorkbookXml → real
 // runValidation → executor dispatch) so a bind can never silently skip preflight;
-// only the boundaries are mocked. DesktopDiscoverer is mocked for session-default
+// only the boundaries are mocked. External API discovery is mocked for session-default
 // resolution. The shared inject core is stubbed (its transform is proven by
 // injectTemplate's own suite) so these tests own only the bind-template wiring.
-vi.mock('../../../desktop/desktopDiscoverer.js');
+vi.mock('../../../desktop/externalApi/discovery.js');
 vi.mock('../../../desktop/libraries/workbook-serialization-converter/index.js');
 vi.mock('../../../desktop/templates/injectTemplateCore.js', () => ({
   buildInjectedWorkbookXml: vi.fn(),
@@ -522,7 +521,7 @@ async function getToolResult({
 
 /**
  * Wire the auto-apply seams for one bind-template call. Returns the executor's
- * `executeCommand` spy (the apply dispatch) and the `getExecutor` factory to hand
+ * command/document spies and the `getExecutor` factory to hand
  * to {@link getToolResult}. Defaults reproduce a happy Call-1 bind of a fast-path
  * template whose inject succeeds and whose validated apply dispatches Ok.
  */
@@ -547,6 +546,7 @@ function setupAutoApplyMocks({
   userEventsDuringBind?: number | 'unsupported';
 } = {}): {
   executeCommand: ReturnType<typeof vi.fn>;
+  applyWorkbookDocument: ReturnType<typeof vi.fn>;
   getEvents: ReturnType<typeof vi.fn>;
   getExecutor: ReturnType<typeof vi.fn>;
 } {
@@ -576,6 +576,7 @@ function setupAutoApplyMocks({
   );
 
   const executeCommand = vi.fn().mockResolvedValue(dispatch);
+  const applyWorkbookDocument = vi.fn().mockResolvedValue(dispatch);
   const getEvents =
     userEventsDuringBind === 'unsupported'
       ? vi.fn().mockResolvedValue(Err('events unsupported on this transport'))
@@ -590,8 +591,12 @@ function setupAutoApplyMocks({
               count: userEventsDuringBind,
             }),
           );
-  const getExecutor = vi.fn().mockResolvedValue({ executeCommand, getEvents });
-  return { executeCommand, getEvents, getExecutor };
+  const getExecutor = vi.fn().mockResolvedValue({
+    executeCommand,
+    applyWorkbookDocument,
+    getEvents,
+  });
+  return { executeCommand, applyWorkbookDocument, getEvents, getExecutor };
 }
 
 describe('bindTemplateTool auto_apply gate', () => {
@@ -621,7 +626,7 @@ describe('bindTemplateTool auto_apply gate', () => {
   });
 
   it('auto_apply=true on a Call-1 bind applies server-side exactly once', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks();
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks();
 
     const result = await getToolResult({
       session: '1',
@@ -654,7 +659,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       }),
     );
     // Exactly one apply dispatch (the collapsed 4-call chain becomes one tool call).
-    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
   it('applied:true returns ONLY the trimmed fast-path shape (W60 P4 response-shape trim)', async () => {
@@ -688,7 +693,7 @@ describe('bindTemplateTool auto_apply gate', () => {
   });
 
   it('auto_apply=true applies a validated Call-2 proposal bind with the events anchor', async () => {
-    const { executeCommand, getEvents, getExecutor } = setupAutoApplyMocks({
+    const { applyWorkbookDocument, getEvents, getExecutor } = setupAutoApplyMocks({
       bind: boundViaProposalResult,
     });
 
@@ -706,7 +711,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.applied).toBe(true);
     expect(body.used_llm).toBeUndefined();
     expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(1);
-    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     expect(getEvents).toHaveBeenCalledTimes(2);
     expect(getEvents).toHaveBeenNthCalledWith(2, {
       signal: expect.any(AbortSignal),
@@ -741,7 +746,7 @@ describe('bindTemplateTool auto_apply gate', () => {
   });
 
   it('auto_apply=true splices proposal sort into the applied workbook XML', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: boundWithSortResult,
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
     });
@@ -755,13 +760,13 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(appliedXml(executeCommand)).toContain(
+    expect(appliedXml(applyWorkbookDocument)).toContain(
       "<computed-sort column='[Superstore].[none:Region:nk]' direction='DESC' using='[Superstore].[sum:Sales:qk]' />",
     );
   });
 
   it('auto_apply=true keeps the waterfall built-in sort when no sort proposal is present', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: boundWaterfallResult,
       inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
       workbookReads: [P_AND_L_WORKBOOK_XML],
@@ -775,10 +780,10 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(appliedXml(executeCommand)).toContain(
+    expect(appliedXml(applyWorkbookDocument)).toContain(
       "<computed-sort column='[PL].[none:line_item:nk]' direction='DESC' using='[PL].[sum:amount:qk]' />",
     );
-    expect(appliedXml(executeCommand)).not.toContain('display_order');
+    expect(appliedXml(applyWorkbookDocument)).not.toContain('display_order');
   });
 
   it('adds waterfall anchor guidance when a category-like string dimension is unbound', async () => {
@@ -945,7 +950,7 @@ describe('bindTemplateTool auto_apply gate', () => {
   });
 
   it('auto_apply=true replaces the waterfall built-in sort with a resolvable sort proposal', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: boundWaterfallWithSortResult,
       inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
       workbookReads: [P_AND_L_WORKBOOK_XML],
@@ -962,7 +967,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       getExecutor,
     });
 
-    const xml = appliedXml(executeCommand);
+    const xml = appliedXml(applyWorkbookDocument);
     expect(result.isError).toBe(false);
     expect(xml).toContain(
       "<column datatype='integer' name='[display_order]' role='measure' type='quantitative' />",
@@ -977,7 +982,7 @@ describe('bindTemplateTool auto_apply gate', () => {
   });
 
   it('auto_apply=true replaces the real injected waterfall computed-sort pair with a resolvable sort proposal', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: boundWaterfallWithSortResult,
       inject: { ok: true, xml: REAL_INJECTED_WATERFALL_SORT_SHAPE_XML },
       workbookReads: [P_AND_L_WORKBOOK_XML],
@@ -996,7 +1001,7 @@ describe('bindTemplateTool auto_apply gate', () => {
 
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    const xml = appliedXml(executeCommand);
+    const xml = appliedXml(applyWorkbookDocument);
     expect(result.isError).toBe(false);
     expect(body.warnings).toBeUndefined();
     expect(xml).toContain(
@@ -1006,7 +1011,7 @@ describe('bindTemplateTool auto_apply gate', () => {
   });
 
   it('auto_apply=true keeps the waterfall built-in sort and warns when sort field is unresolvable', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: boundWaterfallWithSortResult,
       inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
       workbookReads: [P_AND_L_WORKBOOK_XML_WITHOUT_DISPLAY_ORDER],
@@ -1023,13 +1028,13 @@ describe('bindTemplateTool auto_apply gate', () => {
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.warnings?.join(' ')).toContain('sort splice skipped');
-    expect(appliedXml(executeCommand)).toContain(
+    expect(appliedXml(applyWorkbookDocument)).toContain(
       "<computed-sort column='[PL].[none:line_item:nk]' direction='DESC' using='[PL].[sum:amount:qk]' />",
     );
   });
 
   it('auto_apply=true splices proposal top_n into the applied workbook XML', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: boundWithTopNResult,
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
     });
@@ -1043,14 +1048,14 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(appliedXml(executeCommand)).toMatch(/function='end'\s+end='top'\s+count='10'/);
-    expect(appliedXml(executeCommand)).toContain(
+    expect(appliedXml(applyWorkbookDocument)).toMatch(/function='end'\s+end='top'\s+count='10'/);
+    expect(appliedXml(applyWorkbookDocument)).toContain(
       '<slices><column>[Superstore].[none:Region:nk]</column></slices>',
     );
   });
 
   it('auto_apply=true splices proposal sort and top_n together in one apply', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: boundWithSortAndTopNResult,
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
     });
@@ -1064,8 +1069,8 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(executeCommand).toHaveBeenCalledTimes(1);
-    const xml = appliedXml(executeCommand);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    const xml = appliedXml(applyWorkbookDocument);
     expect(xml).toContain(
       "<computed-sort column='[Superstore].[none:Region:nk]' direction='DESC' using='[Superstore].[sum:Sales:qk]' />",
     );
@@ -1099,7 +1104,7 @@ describe('bindTemplateTool auto_apply gate', () => {
 
   it('authors inline calcs before binding and auto-applies against the readback workbook', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
-    const { executeCommand, getEvents, getExecutor } = setupAutoApplyMocks({
+    const { applyWorkbookDocument, getEvents, getExecutor } = setupAutoApplyMocks({
       workbookReads: [CALC_BASE_XML, CALC_READBACK_XML],
     });
 
@@ -1123,9 +1128,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(buildInjectedWorkbookXml).toHaveBeenCalledWith(
       expect.objectContaining({ workbookXml: CALC_READBACK_XML }),
     );
-    expect(
-      commandCalls(executeCommand).filter((call) => call.command === 'load-underlying-metadata'),
-    ).toHaveLength(2);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
     expect(getEvents).toHaveBeenCalledTimes(2);
     expect(getEvents).toHaveBeenNthCalledWith(2, {
       signal: expect.any(AbortSignal),
@@ -1134,7 +1137,7 @@ describe('bindTemplateTool auto_apply gate', () => {
   });
 
   it('rejects invalid inline calcs before any document load or bind', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       workbookReads: [CALC_BASE_XML],
     });
 
@@ -1149,9 +1152,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('calc "Margin": formula empty');
-    expect(
-      commandCalls(executeCommand).some((call) => call.command === 'load-underlying-metadata'),
-    ).toBe(false);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
     expect(binderModule.bindTemplate).not.toHaveBeenCalled();
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
   });
@@ -1176,7 +1177,7 @@ describe('bindTemplateTool auto_apply gate', () => {
 
   it('reports authored calcs when the subsequent bind proposes', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: proposeResult,
       workbookReads: [CALC_BASE_XML, CALC_READBACK_XML],
     });
@@ -1195,9 +1196,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.status).toBe('propose');
     expect(body.authored_calcs).toEqual(['Margin']);
     expect(body.guidance).toContain('Calcs authored: Margin. Bind outcome: propose.');
-    expect(
-      commandCalls(executeCommand).filter((call) => call.command === 'load-underlying-metadata'),
-    ).toHaveLength(1);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
   });
 
@@ -1239,7 +1238,7 @@ describe('bindTemplateTool auto_apply gate', () => {
   });
 
   it('runs preflight validation BEFORE dispatching the apply (validated path)', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks();
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks();
 
     await getToolResult({
       session: '1',
@@ -1250,9 +1249,9 @@ describe('bindTemplateTool auto_apply gate', () => {
 
     expect(validationRegistry.runValidation).toHaveBeenCalledTimes(1);
     expect(validationRegistry.runValidation).toHaveBeenCalledWith('<workbook/>', 'workbook');
-    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     const validationOrder = vi.mocked(validationRegistry.runValidation).mock.invocationCallOrder[0];
-    const dispatchOrder = executeCommand.mock.invocationCallOrder[0];
+    const dispatchOrder = applyWorkbookDocument.mock.invocationCallOrder[0];
     expect(validationOrder).toBeLessThan(dispatchOrder);
   });
 });
@@ -1336,9 +1335,10 @@ describe('bindTemplateTool session-default-when-unique', () => {
   });
 
   function mockInstances(pids: number[]): void {
-    const map = new Map(pids.map((pid) => [pid, { pid }]));
-    vi.mocked(DesktopDiscoverer).mockImplementation(
-      () => ({ getInstances: () => map }) as unknown as DesktopDiscoverer,
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue(
+      pids.map(
+        (pid) => ({ pid }) as ReturnType<typeof externalDiscovery.discoverInstances>[number],
+      ),
     );
   }
 
@@ -1400,7 +1400,7 @@ describe('bindTemplateTool session-default-when-unique', () => {
 
     expect(result.isError).toBe(false);
     expect(getExecutor).toHaveBeenCalledWith('7');
-    expect(DesktopDiscoverer).not.toHaveBeenCalled();
+    expect(externalDiscovery.discoverInstances).not.toHaveBeenCalled();
   });
 });
 
@@ -1467,7 +1467,7 @@ describe('bindTemplateTool auto_apply — events-clean gate (W60 blind-spot #1)'
   });
 
   it('applies when the workbook is events-clean (0 user events since the read)', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({ userEventsDuringBind: 0 });
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({ userEventsDuringBind: 0 });
     const result = await getToolResult({
       session: '1',
       ask: 'bar chart of Sales by Region',
@@ -1477,11 +1477,11 @@ describe('bindTemplateTool auto_apply — events-clean gate (W60 blind-spot #1)'
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
     expect(body.applied).toBe(true);
-    expect(executeCommand).toHaveBeenCalled();
+    expect(applyWorkbookDocument).toHaveBeenCalled();
   });
 
   it('gate is best-effort: an executor without event support still auto-applies (Athena residual)', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       userEventsDuringBind: 'unsupported',
     });
     const result = await getToolResult({
@@ -1493,7 +1493,7 @@ describe('bindTemplateTool auto_apply — events-clean gate (W60 blind-spot #1)'
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
     expect(body.applied).toBe(true);
-    expect(executeCommand).toHaveBeenCalled();
+    expect(applyWorkbookDocument).toHaveBeenCalled();
   });
 });
 
@@ -1598,15 +1598,8 @@ describe('bindTemplateTool route-state recording', () => {
   });
 });
 
-function commandCalls(
-  executeCommand: ReturnType<typeof vi.fn>,
-): Array<ExecuteCommandArgs<undefined>> {
-  return executeCommand.mock.calls.map(([call]) => call);
-}
-
-function appliedXml(executeCommand: ReturnType<typeof vi.fn>): string {
-  const call = commandCalls(executeCommand).find(
-    (candidate) => candidate.command === 'load-underlying-metadata',
-  );
-  return String((call?.args as { text?: string } | undefined)?.text ?? '');
+function appliedXml(applyWorkbookDocument: ReturnType<typeof vi.fn>): string {
+  const [xml] = applyWorkbookDocument.mock.calls[0] ?? [];
+  invariant(typeof xml === 'string');
+  return xml;
 }

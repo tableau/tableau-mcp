@@ -1,4 +1,4 @@
-import { validateUnderlyingMetadataLoad } from './underlyingMetadataGuard.js';
+import { validateWorkbookDocumentApply } from './workbookDocumentGuard.js';
 
 const LIVE_WORKBOOK_XML = `<workbook>
   <datasources>
@@ -22,29 +22,28 @@ const SPLICED_WORKBOOK_XML = LIVE_WORKBOOK_XML.replace(
 );
 
 // Verbatim head shape of a real Desktop document (build main.26.0715.2311):
-// prolog, then a COMMENT, then the root. The guard must accept this — the
-// 2026-07-19 live false-positive rejected every legitimate whole document.
+// prolog, then a COMMENT, then the root. The guard must accept this.
 const REAL_HEAD_WORKBOOK_XML =
   "<?xml version='1.0' encoding='utf-8' ?>\n\n<!-- build main.26.0715.2311                                -->\n" +
   LIVE_WORKBOOK_XML;
 
-describe('validateUnderlyingMetadataLoad', () => {
+describe('validateWorkbookDocumentApply', () => {
   it('accepts a real document head (prolog + build comment before the root)', () => {
-    expect(validateUnderlyingMetadataLoad(REAL_HEAD_WORKBOOK_XML, null).ok).toBe(true);
+    expect(validateWorkbookDocumentApply(REAL_HEAD_WORKBOOK_XML, null).ok).toBe(true);
   });
 
-  it('rejects the reviewed fragment receipt', () => {
-    const result = validateUnderlyingMetadataLoad('<workbook><applied /></workbook>', null);
+  it('rejects a workbook document that is only an apply receipt', () => {
+    const result = validateWorkbookDocumentApply('<workbook><applied /></workbook>', null);
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
     expect(result.message).toContain('whole-document or nothing');
     expect(result.message).toContain('FIX:');
-    expect(result.message).toContain('tabui:save-underlying-metadata');
+    expect(result.message).toContain('get-workbook-xml');
   });
 
   it('rejects a workbook document with zero worksheets', () => {
-    const result = validateUnderlyingMetadataLoad(
+    const result = validateWorkbookDocumentApply(
       "<workbook><datasources><datasource name='ds' /></datasources></workbook>",
       null,
     );
@@ -56,13 +55,13 @@ describe('validateUnderlyingMetadataLoad', () => {
     expect(result.message).toContain('FIX:');
   });
 
-  it('rejects a load missing a worksheet from the live document', () => {
+  it('rejects an apply missing a worksheet from the live document', () => {
     const submitted = LIVE_WORKBOOK_XML.replace(
       "    <worksheet name='B'>\n      <table><view /></table>\n    </worksheet>\n",
       '',
     );
 
-    const result = validateUnderlyingMetadataLoad(submitted, LIVE_WORKBOOK_XML);
+    const result = validateWorkbookDocumentApply(submitted, LIVE_WORKBOOK_XML);
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
@@ -83,7 +82,7 @@ describe('validateUnderlyingMetadataLoad', () => {
       '',
     );
 
-    const result = validateUnderlyingMetadataLoad(submitted, live);
+    const result = validateWorkbookDocumentApply(submitted, live);
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
@@ -91,13 +90,13 @@ describe('validateUnderlyingMetadataLoad', () => {
   });
 
   it('accepts a spliced whole workbook document that preserves live worksheets', () => {
-    expect(validateUnderlyingMetadataLoad(SPLICED_WORKBOOK_XML, LIVE_WORKBOOK_XML)).toEqual({
+    expect(validateWorkbookDocumentApply(SPLICED_WORKBOOK_XML, LIVE_WORKBOOK_XML)).toEqual({
       ok: true,
     });
   });
 
   it('accepts a static-valid document when the live document is unavailable', () => {
-    expect(validateUnderlyingMetadataLoad(SPLICED_WORKBOOK_XML, null)).toEqual({ ok: true });
+    expect(validateWorkbookDocumentApply(SPLICED_WORKBOOK_XML, null)).toEqual({ ok: true });
   });
 
   it('rejects a gross shrink against the live document', () => {
@@ -107,7 +106,7 @@ describe('validateUnderlyingMetadataLoad', () => {
   <worksheets><worksheet name='A' /><worksheet name='B' /></worksheets>
 </workbook>`;
 
-    const result = validateUnderlyingMetadataLoad(submitted, live);
+    const result = validateWorkbookDocumentApply(submitted, live);
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
@@ -117,7 +116,7 @@ describe('validateUnderlyingMetadataLoad', () => {
 
   it('accepts an XML prolog before the workbook root', () => {
     expect(
-      validateUnderlyingMetadataLoad(`<?xml version="1.0"?>\n${SPLICED_WORKBOOK_XML}`, null),
+      validateWorkbookDocumentApply(`<?xml version="1.0"?>\n${SPLICED_WORKBOOK_XML}`, null),
     ).toEqual({ ok: true });
   });
 
@@ -127,6 +126,6 @@ describe('validateUnderlyingMetadataLoad', () => {
   <worksheets><worksheet name='A &amp; &apos;Q&apos; &quot;Sales&quot;' /></worksheets>
 </workbook>`;
 
-    expect(validateUnderlyingMetadataLoad(workbookXml, workbookXml)).toEqual({ ok: true });
+    expect(validateWorkbookDocumentApply(workbookXml, workbookXml)).toEqual({ ok: true });
   });
 });

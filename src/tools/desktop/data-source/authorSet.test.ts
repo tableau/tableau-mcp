@@ -3,7 +3,6 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Ok } from 'ts-results-es';
 
-import { ExecuteCommandArgs } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -35,7 +34,7 @@ describe('authorSetTool', () => {
       BASE_XML,
       "<group caption='Top N Sub-Category Set' name='[Top N Sub-Category Set]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter count='[Parameters].[Parameter 3]' end='top' function='end' units='records' user:ui-marker='end' user:ui-top-by-field='true'><groupfilter direction='DESC' expression='SUM([Profit])' function='order' user:ui-marker='order'><groupfilter function='level-members' level='[Sub-Category]' user:ui-enumeration='all' user:ui-marker='enumerate' /></groupfilter></groupfilter></group>",
     );
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         caption: 'Top N Sub-Category Set',
         dimension: 'Sub-Category',
@@ -55,16 +54,13 @@ describe('authorSetTool', () => {
       hint: 'reference it by caption in a bind-template ask, or as a filter/color field',
     });
 
-    const loadCall = commandCalls(executeCommand).find(
-      (call) => call.command === 'load-underlying-metadata',
-    );
-    expect(loadCall).toBeDefined();
+    const appliedXml = appliedDocumentXml(applyWorkbookDocument);
     // The set lands in Superstore (NOT Parameters ds), param-link preserved verbatim.
-    expect(String(loadCall?.args?.text)).toContain(
+    expect(appliedXml).toContain(
       "<group caption='Top N Sub-Category Set' name='[Top N Sub-Category Set]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter count='[Parameters].[Parameter 3]' end='top'",
     );
-    expect(String(loadCall?.args?.text)).toContain("expression='SUM([Profit])'");
-    expect(String(loadCall?.args?.text)).toContain("level='[Sub-Category]'");
+    expect(appliedXml).toContain("expression='SUM([Profit])'");
+    expect(appliedXml).toContain("level='[Sub-Category]'");
   });
 
   it('rejects a caption collision before loading metadata', async () => {
@@ -72,7 +68,7 @@ describe('authorSetTool', () => {
       BASE_XML,
       "<group caption='Existing Set' name='[Existing Set]' name-style='unqualified'><groupfilter function='level-members' level='[Sub-Category]' /></group>",
     );
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         caption: 'Existing Set',
         dimension: 'Sub-Category',
@@ -85,9 +81,7 @@ describe('authorSetTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('caption collision');
-    expect(
-      commandCalls(executeCommand).some((call) => call.command === 'load-underlying-metadata'),
-    ).toBe(false);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('accepts a bare integer count (fixed-N set, no param link)', async () => {
@@ -95,7 +89,7 @@ describe('authorSetTool', () => {
       BASE_XML,
       "<group caption='Bottom 3' name='[Bottom 3]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter count='3' end='bottom' function='end' units='records' user:ui-marker='end' user:ui-top-by-field='true'><groupfilter direction='DESC' expression='SUM([Profit])' function='order' user:ui-marker='order'><groupfilter function='level-members' level='[Sub-Category]' user:ui-enumeration='all' user:ui-marker='enumerate' /></groupfilter></groupfilter></group>",
     );
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         caption: 'Bottom 3',
         dimension: 'Sub-Category',
@@ -107,10 +101,9 @@ describe('authorSetTool', () => {
     });
 
     expect(result.isError).toBe(false);
-    const loadCall = commandCalls(executeCommand).find(
-      (call) => call.command === 'load-underlying-metadata',
+    expect(appliedDocumentXml(applyWorkbookDocument)).toContain(
+      "<groupfilter count='3' end='bottom'",
     );
-    expect(String(loadCall?.args?.text)).toContain("<groupfilter count='3' end='bottom'");
   });
 
   it('rejects empty required primitives', async () => {
@@ -137,7 +130,7 @@ describe('authorSetTool', () => {
     );
     const groupXml =
       "<group caption='Replay Top N' name='[Replay Top N]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter count='5' end='top' function='end' units='records' user:ui-marker='end' user:ui-top-by-field='true'><groupfilter direction='DESC' expression='SUM([Profit])' function='order' user:ui-marker='order'><groupfilter function='level-members' level='[Sub-Category]' user:ui-enumeration='all' user:ui-marker='enumerate' /></groupfilter></groupfilter></group>";
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: {
         caption: 'Replay Top N',
         dimension: 'Sub-Category',
@@ -150,11 +143,7 @@ describe('authorSetTool', () => {
     });
 
     expect(result.isError).toBe(false);
-    const loadCall = commandCalls(executeCommand).find(
-      (call) => call.command === 'load-underlying-metadata',
-    );
-    invariant(loadCall?.args && typeof loadCall.args.text === 'string');
-    const loaded = loadCall.args.text;
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
     const at = loaded.indexOf("caption='Replay Top N'");
     expect(at).toBeGreaterThan(-1);
     // Legal position: NOT inside a <relation>…</relation> block (the silent-discard trap).
@@ -193,23 +182,30 @@ async function getToolResult({
   readbackXml?: string;
 }): Promise<{
   result: CallToolResult;
-  executeCommand: ReturnType<typeof vi.fn>;
+  applyWorkbookDocument: ReturnType<typeof vi.fn>;
 }> {
   const documents = [initialXml, readbackXml ?? initialXml];
-  let saveCount = 0;
-  const executeCommand = vi.fn(async (params: ExecuteCommandArgs<undefined>) => {
-    if (params.command === 'save-underlying-metadata') {
-      return new Ok({
-        command_id: `save-${saveCount}`,
-        status: 'completed',
-        parsedResult: { text: documents[Math.min(saveCount++, documents.length - 1)] },
-      });
-    }
-    return new Ok({ command_id: 'load-1', status: 'completed', result: null });
+  let readCount = 0;
+  const executeCommand = vi
+    .fn()
+    .mockResolvedValue(new Ok({ command_id: 'command-1', status: 'completed', result: null }));
+  const getWorkbookDocument = vi.fn(async () => {
+    return new Ok({
+      xml: documents[Math.min(readCount++, documents.length - 1)],
+      applicationVersion: undefined,
+      xsdPayloadVersion: undefined,
+    });
+  });
+  const applyWorkbookDocument = vi.fn(async () => {
+    return new Ok({ command_id: 'apply-1', status: 'completed', result: null });
   });
   const extra = {
     ...getMockRequestHandlerExtra(),
-    getExecutor: vi.fn().mockResolvedValue({ executeCommand }),
+    getExecutor: vi.fn().mockResolvedValue({
+      executeCommand,
+      getWorkbookDocument,
+      applyWorkbookDocument,
+    }),
   };
   const tool = getAuthorSetTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -224,11 +220,11 @@ async function getToolResult({
     extra,
   );
 
-  return { result, executeCommand };
+  return { result, applyWorkbookDocument };
 }
 
-function commandCalls(
-  executeCommand: ReturnType<typeof vi.fn>,
-): Array<ExecuteCommandArgs<undefined>> {
-  return executeCommand.mock.calls.map(([call]) => call);
+function appliedDocumentXml(applyWorkbookDocument: ReturnType<typeof vi.fn>): string {
+  const [xml] = applyWorkbookDocument.mock.calls[0] ?? [];
+  invariant(typeof xml === 'string');
+  return xml;
 }

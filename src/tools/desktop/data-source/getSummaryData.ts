@@ -2,20 +2,11 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
-import {
-  endpointNotInThisBuild,
-  isRouteMissing,
-  resolveItemByNameOrId,
-} from '../../../desktop/externalApi/toolUtils.js';
+import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { WorksheetItem } from '../../../desktop/externalApi/types.js';
-import { resolveSession } from '../../../desktop/sessionResolution.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  McpToolError,
-} from '../../../errors/mcpToolError.js';
+import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { runExternalApiReadTool } from '../externalApiReadHarness.js';
 import { DesktopTool } from '../tool.js';
 
 const DEFAULT_MAX_ROWS = 200;
@@ -27,16 +18,6 @@ const paramsSchema = {
   maxRows: z.number().int().positive().optional().describe('Default 200; max 1000.'),
   columns: z.array(z.string()).optional().describe('Fields.'),
 };
-
-class ExternalApiRequiredError extends McpToolError {
-  constructor(toolName: string) {
-    super({
-      type: 'external-api-required',
-      message: `${toolName} requires the Tableau Desktop External Client API transport.`,
-      statusCode: 400,
-    });
-  }
-}
 
 const title = 'Get Summary Data';
 export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
@@ -62,57 +43,54 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
         extra,
         args: { session, worksheet, maxRows, columns },
         callback: async () => {
-          const sessionResult = resolveSession(session);
-          if (sessionResult.isErr()) {
-            return sessionResult.error.toErr();
-          }
+          return await runExternalApiReadTool({
+            session,
+            extra,
+            callback: async (_executor, _signal, read) => {
+              const worksheetsResult = await read(
+                'worksheet list',
+                async (executor, signal) => await executor.listWorksheets(signal),
+              );
+              if (worksheetsResult.isErr()) {
+                return worksheetsResult;
+              }
 
-          const executor = await extra.getExecutor(sessionResult.value);
-          if (!(executor instanceof ExternalApiToolExecutor)) {
-            return new ExternalApiRequiredError(getSummaryData.name).toErr();
-          }
+              const worksheetResult = resolveWorksheet(
+                worksheet,
+                worksheetsResult.value.worksheets ?? [],
+              );
+              if (worksheetResult.isErr()) {
+                return worksheetResult.error.toErr();
+              }
 
-          const worksheetsResult = await executor.listWorksheets(extra.signal);
-          if (worksheetsResult.isErr()) {
-            if (isRouteMissing(worksheetsResult.error)) {
-              return endpointNotInThisBuild('worksheet list').toErr();
-            }
-            return new DesktopCommandExecutionError(worksheetsResult.error).toErr();
-          }
+              const resolvedMaxRows = clampMaxRows(maxRows);
+              const summaryResult = await read(
+                'summary-data',
+                async (executor, signal) =>
+                  await executor.getWorksheetSummaryData(
+                    worksheetResult.value.id,
+                    {
+                      maxRows: resolvedMaxRows,
+                      ...(columns && columns.length > 0
+                        ? { columnsToIncludeByFieldName: columns.join(',') }
+                        : {}),
+                    },
+                    signal,
+                  ),
+              );
+              if (summaryResult.isErr()) {
+                return summaryResult;
+              }
 
-          const worksheetResult = resolveWorksheet(
-            worksheet,
-            worksheetsResult.value.worksheets ?? [],
-          );
-          if (worksheetResult.isErr()) {
-            return worksheetResult.error.toErr();
-          }
-
-          const resolvedMaxRows = clampMaxRows(maxRows);
-          const summaryResult = await executor.getWorksheetSummaryData(
-            worksheetResult.value.id,
-            {
-              maxRows: resolvedMaxRows,
-              ...(columns && columns.length > 0
-                ? { columnsToIncludeByFieldName: columns.join(',') }
-                : {}),
+              const dataColumns = summaryResult.value.columns ?? [];
+              const dataRows = summaryResult.value.rows ?? [];
+              return new Ok({
+                worksheet: { id: worksheetResult.value.id, name: worksheetResult.value.name },
+                maxRows: resolvedMaxRows,
+                shape: `${dataRows.length} rows x ${dataColumns.length} columns`,
+                summaryData: { columns: dataColumns, rows: dataRows },
+              });
             },
-            extra.signal,
-          );
-          if (summaryResult.isErr()) {
-            if (isRouteMissing(summaryResult.error)) {
-              return endpointNotInThisBuild('summary-data').toErr();
-            }
-            return new DesktopCommandExecutionError(summaryResult.error).toErr();
-          }
-
-          const dataColumns = summaryResult.value.columns ?? [];
-          const dataRows = summaryResult.value.rows ?? [];
-          return new Ok({
-            worksheet: { id: worksheetResult.value.id, name: worksheetResult.value.name },
-            maxRows: resolvedMaxRows,
-            shape: `${dataRows.length} rows x ${dataColumns.length} columns`,
-            summaryData: { columns: dataColumns, rows: dataRows },
           });
         },
       });

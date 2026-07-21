@@ -4,14 +4,14 @@
  * These tests deliberately DO NOT mock the validation registry (unlike the sibling
  * loadWorkbookXml/loadWorksheetXml unit tests) so the real, registered rule set —
  * including invalid-derivation-string — runs. They prove the reject happens BEFORE
- * any Tableau call: the mock executor's executeCommand is a spy asserted to be
+ * any Tableau call: the mock executor's applyWorkbookDocument is a spy asserted to be
  * unused when an invalid derivation is present.
  */
 import { Ok } from 'ts-results-es';
 
 import invariant from '../../../utils/invariant.js';
 import * as xmlToJsonModule from '../../libraries/workbook-serialization-converter/index.js';
-import { LocalExecutor } from '../../toolExecutor/localToolExecutor.js';
+import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import { loadWorkbookXml } from './loadWorkbookXml.js';
 import { loadWorksheetXml } from './loadWorksheetXml.js';
 
@@ -57,8 +57,8 @@ describe('derivation preflight — apply-workbook path', () => {
   });
 
   it('rejects an invalid derivation before sending to Tableau', async () => {
-    const executeCommand = vi.fn();
-    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+    const applyWorkbookDocument = vi.fn();
+    const mockExecutor = { applyWorkbookDocument } as unknown as ToolExecutor;
 
     const result = await loadWorkbookXml({
       xml: workbookWithDerivation('TruncMonth'),
@@ -76,17 +76,17 @@ describe('derivation preflight — apply-workbook path', () => {
     expect(issue!.severity).toBe('error');
     expect(issue!.suggestion).toContain('Month-Trunc');
 
-    // The reject is client-side: no command was ever dispatched to Tableau.
-    expect(executeCommand).not.toHaveBeenCalled();
+    // The reject is client-side: no document apply was ever sent to Tableau.
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('sends a canonical derivation through to Tableau (positive control)', async () => {
     vi.spyOn(xmlToJsonModule, 'xmlToJson').mockReturnValue('{"workbook": {}}');
 
-    const executeCommand = vi
+    const applyWorkbookDocument = vi
       .fn()
       .mockResolvedValue(Ok({ command_id: 'cmd-1', status: 'completed', submitted_at: '' }));
-    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+    const mockExecutor = { applyWorkbookDocument } as unknown as ToolExecutor;
 
     const result = await loadWorkbookXml({
       xml: workbookWithDerivation('Month-Trunc'),
@@ -95,7 +95,7 @@ describe('derivation preflight — apply-workbook path', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(executeCommand).toHaveBeenCalled();
+    expect(applyWorkbookDocument).toHaveBeenCalled();
   });
 });
 
@@ -105,8 +105,8 @@ describe('derivation preflight — apply-worksheet path', () => {
   });
 
   it('rejects an invalid derivation before sending to Tableau', async () => {
-    const executeCommand = vi.fn();
-    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+    const applyWorkbookDocument = vi.fn();
+    const mockExecutor = { applyWorkbookDocument } as unknown as ToolExecutor;
 
     const result = await loadWorksheetXml({
       worksheetName: 'Sheet 1',
@@ -125,14 +125,38 @@ describe('derivation preflight — apply-worksheet path', () => {
     expect(issue!.severity).toBe('error');
     expect(issue!.suggestion).toContain('Month-Trunc');
 
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('sends a canonical derivation through to Tableau (positive control)', async () => {
-    const executeCommand = vi
+    const applyWorkbookDocument = vi
       .fn()
-      .mockResolvedValue(Ok({ command_id: 'cmd-1', status: 'completed', submitted_at: '' }));
-    const mockExecutor = { executeCommand } as unknown as LocalExecutor;
+      .mockResolvedValue(Ok({ command_id: 'cmd-2', status: 'completed', submitted_at: '' }));
+    const mockExecutor = {
+      executeCommand: vi.fn().mockResolvedValue(
+        Ok({
+          command_id: 'cmd-1',
+          status: 'completed',
+          submitted_at: '',
+        }),
+      ),
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: workbookWithDerivation('Month-Trunc'),
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      ),
+      applyWorkbookDocument,
+      listWorksheets: vi.fn().mockResolvedValue(
+        Ok({
+          worksheets: [{ id: 'sheet-1', name: 'Sheet 1' }],
+        }),
+      ),
+      getWorksheetDocument: vi
+        .fn()
+        .mockResolvedValue(Ok({ xml: worksheetWithDerivation('Month-Trunc') })),
+    } as unknown as ToolExecutor;
 
     const result = await loadWorksheetXml({
       worksheetName: 'Sheet 1',
@@ -142,6 +166,6 @@ describe('derivation preflight — apply-worksheet path', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(executeCommand).toHaveBeenCalled();
+    expect(applyWorkbookDocument).toHaveBeenCalled();
   });
 });

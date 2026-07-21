@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { DesktopInstance } from '../../../desktop/desktopInstance.js';
 import { NoDesktopInstancesFoundError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -10,13 +9,11 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getListInstancesTool } from './listInstances.js';
 
 const mocks = vi.hoisted(() => ({
-  mockGetInstances: vi.fn(),
+  discoverInstances: vi.fn(),
 }));
 
-vi.mock('../../../desktop/desktopDiscoverer.js', () => ({
-  DesktopDiscoverer: vi.fn().mockImplementation(() => ({
-    getInstances: mocks.mockGetInstances,
-  })),
+vi.mock('../../../desktop/externalApi/discovery.js', () => ({
+  discoverInstances: mocks.discoverInstances,
 }));
 
 describe('listInstancesTool', () => {
@@ -26,9 +23,9 @@ describe('listInstancesTool', () => {
       z.object({
         sessionId: z.string(),
         pid: z.number(),
-        port: z.number(),
-        startTime: z.string(),
-        hasSecret: z.boolean(),
+        baseUrl: z.string(),
+        apiVersion: z.string().optional(),
+        hasToken: z.boolean(),
       }),
     ),
     instructions: z.string(),
@@ -46,7 +43,7 @@ describe('listInstancesTool', () => {
   });
 
   it('should return an error when no instances are found', async () => {
-    mocks.mockGetInstances.mockReturnValue(new Map());
+    mocks.discoverInstances.mockReturnValue([]);
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -54,43 +51,41 @@ describe('listInstancesTool', () => {
   });
 
   it('should successfully list instances', async () => {
-    const start_time = new Date().toISOString();
-    const start_time2 = new Date().toISOString();
-    mocks.mockGetInstances.mockReturnValue(
-      new Map([
-        [77700, new DesktopInstance({ pid: 77700, port: 8765, start_time, secret: '1234567890' })],
-        [
-          26928,
-          new DesktopInstance({
-            pid: 26928,
-            port: 8766,
-            start_time: start_time2,
-            secret: '1223334444',
-          }),
-        ],
-      ]),
-    );
+    mocks.discoverInstances.mockReturnValue([
+      {
+        pid: 77700,
+        baseUrl: 'http://127.0.0.1:8765',
+        token: '1234567890',
+        instanceId: 'a',
+        apiVersion: '1.0',
+      },
+      {
+        pid: 26928,
+        baseUrl: 'http://127.0.0.1:8766',
+        token: '1223334444',
+        instanceId: 'b',
+      },
+    ]);
     const result = await getToolResult();
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
 
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(resultObj).toMatchObject({
-      message: 'Found 2 running Tableau Desktop instances.',
+      message: 'Found 2 running Tableau Desktop instances (External Client API).',
       instances: [
         {
           sessionId: '77700',
           pid: 77700,
-          port: 8765,
-          startTime: start_time,
-          hasSecret: true,
+          baseUrl: 'http://127.0.0.1:8765',
+          apiVersion: '1.0',
+          hasToken: true,
         },
         {
           sessionId: '26928',
           pid: 26928,
-          port: 8766,
-          startTime: start_time2,
-          hasSecret: true,
+          baseUrl: 'http://127.0.0.1:8766',
+          hasToken: true,
         },
       ],
       instructions:
@@ -98,24 +93,27 @@ describe('listInstancesTool', () => {
     });
   });
 
-  it('should not return a secret preview when secret is not set', async () => {
-    const start_time = new Date().toISOString();
-    mocks.mockGetInstances.mockReturnValue(
-      new Map([[77700, new DesktopInstance({ pid: 77700, port: 8765, start_time, secret: '' })]]),
-    );
+  it('should report token presence without exposing the token', async () => {
+    mocks.discoverInstances.mockReturnValue([
+      {
+        pid: 77700,
+        baseUrl: 'http://127.0.0.1:8765',
+        token: '',
+        instanceId: 'a',
+      },
+    ]);
     const result = await getToolResult();
     invariant(result.content[0].type === 'text');
 
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(resultObj).toMatchObject({
-      message: 'Found 1 running Tableau Desktop instance.',
+      message: 'Found 1 running Tableau Desktop instance (External Client API).',
       instances: [
         {
           sessionId: '77700',
           pid: 77700,
-          port: 8765,
-          startTime: start_time,
-          hasSecret: false,
+          baseUrl: 'http://127.0.0.1:8765',
+          hasToken: false,
         },
       ],
       instructions:

@@ -2,14 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
-import { isRouteMissing } from '../../../desktop/externalApi/toolUtils.js';
 import { ValidationResult } from '../../../desktop/externalApi/types.js';
-import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
 import { ValidationIssue } from '../../../desktop/validation/types.js';
-import { DesktopCommandExecutionError, McpToolError } from '../../../errors/mcpToolError.js';
+import { McpToolError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { runExternalApiReadTool } from '../externalApiReadHarness.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
@@ -52,35 +50,34 @@ export const getValidateWorkbookXmlTool = (
         args: { session, xml },
         callback: async () => {
           const localIssues = wellFormedXmlRule.validate(xml);
-          if (localIssues.length > 0 || !extra.config.externalApiEnabled) {
+          if (localIssues.length > 0) {
             return new Ok({ type: 'local', issues: localIssues });
           }
 
-          const sessionResult = resolveSession(session);
-          if (sessionResult.isErr()) {
-            return sessionResult.error.toErr();
+          const serverValidation = await runExternalApiReadTool<WorkbookValidationResult>({
+            session,
+            extra,
+            callback: async (_executor, _signal, read) => {
+              const result = await read(
+                'workbook validation',
+                async (executor, signal) => await executor.validateWorkbookDocument(xml, signal),
+                { routeMissingError: workbookValidationEndpointMissing },
+              );
+              if (result.isErr()) {
+                return result;
+              }
+              return new Ok({ type: 'server', result: result.value });
+            },
+          });
+          // Offline honesty: with no reachable Desktop the local well-formed
+          // check is still a real answer — degrade to it instead of erroring.
+          if (
+            serverValidation.isErr() &&
+            serverValidation.error.type === 'no-desktop-instances-found'
+          ) {
+            return new Ok({ type: 'local', issues: [] });
           }
-
-          const executor = await extra.getExecutor(sessionResult.value);
-          if (!(executor instanceof ExternalApiToolExecutor)) {
-            return new Ok({ type: 'local', issues: localIssues });
-          }
-
-          const result = await executor.validateWorkbookDocument(xml, extra.signal);
-          if (result.isErr()) {
-            if (isRouteMissing(result.error)) {
-              return new McpToolError({
-                type: 'endpoint-not-in-this-build',
-                message:
-                  'This Tableau Desktop build does not serve the workbook validation endpoint yet. ' +
-                  'Use get-app-info to identify the build; this validation lights up on a newer Desktop update. Do not retry.',
-                statusCode: 404,
-              }).toErr();
-            }
-            return new DesktopCommandExecutionError(result.error).toErr();
-          }
-
-          return new Ok({ type: 'server', result: result.value });
+          return serverValidation;
         },
         getSuccessResult: (validation) => {
           if (validation.type === 'server') {
@@ -110,3 +107,13 @@ export const getValidateWorkbookXmlTool = (
   });
   return tool;
 };
+
+function workbookValidationEndpointMissing(): McpToolError {
+  return new McpToolError({
+    type: 'endpoint-not-in-this-build',
+    message:
+      'This Tableau Desktop build does not serve the workbook validation endpoint yet. ' +
+      'Use get-app-info to identify the build; this validation lights up on a newer Desktop update. Do not retry.',
+    statusCode: 404,
+  });
+}

@@ -721,9 +721,8 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           // window checkable; worst case is now an over-cautious refusal (safe fallback),
           // never a silent overwrite.
           //
-          // Caveat verified (offline, no live Desktop): the read issues only
-          // `save-underlying-metadata` via getWorkbookXml — a metadata serialization/read
-          // that emits no counted document event. Counted events are user `doc:*`
+          // Caveat verified (offline, no live Desktop): getWorkbookXml is a document
+          // serialization/read that emits no counted document event. Counted events are user `doc:*`
           // mutations (see checkForUserChanges tests), so a pre-read anchor does not
           // false-trip the gate. Best-effort: an executor without event support proceeds
           // rather than disabling auto_apply (Athena residual).
