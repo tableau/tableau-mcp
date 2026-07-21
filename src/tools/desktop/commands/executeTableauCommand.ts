@@ -2,17 +2,9 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import {
-  externalApiDialogPolicyFor,
-  knownLiveFailureFixFor,
-} from '../../../desktop/commandPolicy.js';
-import { validateKnownCommand } from '../../../desktop/commandRegistry.js';
+import { knownLiveFailureFixFor } from '../../../desktop/commandPolicy.js';
+import { guardCommand } from '../../../desktop/commands/externalApiCommandGuard.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
-import {
-  ExternalApiCommandRegistryEntry,
-  ExternalApiRegistryParam,
-  lookupExternalApiCommandRegistry,
-} from '../../../desktop/externalApi/commandRegistry.js';
 import {
   findAllWorksheets,
   findWorksheet,
@@ -25,8 +17,6 @@ import type {
   ParsedWorkbook,
   ParsedWorksheet,
 } from '../../../desktop/metadata/types.js';
-import { validateNotionalSpecArgs } from '../../../desktop/notionalSpecGuard.js';
-import { validateCommandParams } from '../../../desktop/paramContractGuard.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import type {
   ExecuteCommandWarning,
@@ -39,7 +29,6 @@ import { DesktopTool } from '../tool.js';
 
 const LOAD_UNDERLYING_METADATA_COMMAND = 'tabui:load-underlying-metadata';
 const GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND = 'tabdoc:generate-viz-from-notional-spec';
-const CONTEXT_FILLED_PARAM_TYPES = new Set(['UPI_Workspace', 'UPI_IWorkspace']);
 const MAX_RESULT_BYTES = 16 * 1024;
 
 const paramsSchema = {
@@ -91,52 +80,11 @@ export const getExecuteTableauCommandTool = (
             ).toErr();
           }
 
-          const commandValidation = validateKnownCommand(command);
-          if (!commandValidation.ok) {
-            return new ArgsValidationError(commandValidation.message).toErr();
+          const commandGuard = guardCommand({ namespace, cmd, command, args });
+          if ('refused' in commandGuard) {
+            return new ArgsValidationError(commandGuard.message).toErr();
           }
-
-          // Unconditional: these hang the UI thread headlessly on EVERY deployment
-          // (live-observed dialog-poppers that pass the static safety flags), so the
-          // refusal cannot depend on the optional registry being installed.
-          const externalApiDialogPolicy = externalApiDialogPolicyFor(command);
-          if (externalApiDialogPolicy) {
-            return new ArgsValidationError(
-              formatExternalApiRefusalMessage({
-                command,
-                reasons: ['live-observed dialog-popper'],
-                fix: externalApiDialogPolicy.fix,
-              }),
-            ).toErr();
-          }
-
-          let dispatchArgs = args ?? {};
-          let externalApiRegistryWarnings: string[] = [];
-          const externalApiCommandRegistry = lookupExternalApiCommandRegistry(namespace, cmd);
-          if (externalApiCommandRegistry) {
-            const externalApiGuard = validateExternalApiCommandRegistry({
-              command,
-              args: dispatchArgs,
-              registry: externalApiCommandRegistry,
-            });
-            if (!externalApiGuard.ok) {
-              return new ArgsValidationError(externalApiGuard.message).toErr();
-            }
-            dispatchArgs = externalApiGuard.args;
-            externalApiRegistryWarnings = externalApiGuard.warnings;
-          } else {
-            // No External-API registry loaded/entry found: preserve today's bundled guard behavior.
-            const paramValidation = validateCommandParams(command, args);
-            if (!paramValidation.ok) {
-              return new ArgsValidationError(paramValidation.message).toErr();
-            }
-          }
-
-          // The deeper NotionalSpec payload guard still runs after param normalization.
-          const notionalSpecValidation = validateNotionalSpecArgs(command, dispatchArgs);
-          if (!notionalSpecValidation.ok) {
-            return new ArgsValidationError(notionalSpecValidation.message).toErr();
-          }
+          const { dispatchArgs, warnings: commandGuardWarnings } = commandGuard;
 
           const executor = await extra.getExecutor(resolvedSession);
           if (command === LOAD_UNDERLYING_METADATA_COMMAND) {
@@ -156,7 +104,7 @@ export const getExecuteTableauCommandTool = (
             }
 
             const loadValidation = validateUnderlyingMetadataLoad(
-              typeof args?.text === 'string' ? args.text : '',
+              typeof dispatchArgs.text === 'string' ? dispatchArgs.text : '',
               liveDocumentXml,
             );
             if (!loadValidation.ok) {
@@ -178,10 +126,10 @@ export const getExecuteTableauCommandTool = (
             ).toErr();
           }
 
-          const payload = buildSuccessPayload({
+          const payload = shapeCommandResult({
             result: result.value.result,
             envelopeWarnings: result.value.warnings ?? [],
-            registryWarnings: externalApiRegistryWarnings,
+            guardWarnings: commandGuardWarnings,
           });
           if (command === GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND) {
             payload.message = await appendGenerateVizReadback({
@@ -204,24 +152,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-type ExternalApiGuardResult =
-  | { ok: true; args: Record<string, unknown>; warnings: string[] }
-  | { ok: false; message: string };
-
 type ExecuteTableauCommandSuccess = {
   message: string;
   result?: Record<string, unknown> | string;
   warnings?: ExecuteCommandWarning[];
 };
 
-function buildSuccessPayload({
+function shapeCommandResult({
   result,
   envelopeWarnings,
-  registryWarnings,
+  guardWarnings,
 }: {
   result: Record<string, unknown> | null | undefined;
   envelopeWarnings: ExecuteCommandWarning[];
-  registryWarnings: string[];
+  guardWarnings: string[];
 }): ExecuteTableauCommandSuccess {
   const payload: ExecuteTableauCommandSuccess = {
     message: 'Command executed successfully.',
@@ -244,7 +188,7 @@ function buildSuccessPayload({
 
   const warningLines = [
     ...envelopeWarnings.map((warning) => `WARNING: ${warning.code} - ${warning.message}`),
-    ...registryWarnings,
+    ...guardWarnings,
   ];
   if (warningLines.length > 0) {
     payload.message = `${payload.message}\n\n${warningLines.join('\n')}`;
@@ -254,126 +198,6 @@ function buildSuccessPayload({
   }
 
   return payload;
-}
-
-function validateExternalApiCommandRegistry({
-  command,
-  args,
-  registry,
-}: {
-  command: string;
-  args: Record<string, unknown>;
-  registry: ExternalApiCommandRegistryEntry;
-}): ExternalApiGuardResult {
-  const externalApiDialogPolicy = externalApiDialogPolicyFor(command);
-  if (externalApiDialogPolicy || !registry.invocable || registry.blockingDialog) {
-    const reasons = [
-      externalApiDialogPolicy ? 'live-observed dialog-popper' : undefined,
-      !registry.invocable ? 'agent_can_invoke=false' : undefined,
-      registry.blockingDialog ? 'opens_blocking_dialog=true' : undefined,
-    ].filter((reason): reason is string => reason !== undefined);
-    return {
-      ok: false,
-      message: formatExternalApiRefusalMessage({
-        command,
-        reasons,
-        fix: externalApiDialogPolicy?.fix,
-      }),
-    };
-  }
-
-  const providedArgs = isRecord(args) ? args : {};
-  const rewrittenArgs: Record<string, unknown> = {};
-  const warnings: string[] = [];
-
-  for (const [key, value] of Object.entries(providedArgs)) {
-    const param = findExternalApiParam(registry, key);
-    if (!param) {
-      rewrittenArgs[key] = value;
-      // Non-goal for monolith #60596: unknown params can still surface as bare 500s;
-      // the command-registry guard remains the client-side defense.
-      warnings.push(
-        `WARNING: key "${key}" is not in the command registry - a wrong name surfaces as a bare 500.`,
-      );
-      continue;
-    }
-
-    const enumValues = registry.enumValuesForParamType.get(param.type);
-    if (enumValues && !enumValues.includes(String(value))) {
-      return {
-        ok: false,
-        message:
-          `Invalid value for Tableau command "${command}" parameter "${param.wire}": ` +
-          `${JSON.stringify(value)}. Legal values: ${formatLegalValues(enumValues)}.`,
-      };
-    }
-
-    rewrittenArgs[param.wire] = value;
-  }
-
-  const missingRequired = registry.requiredParams.filter(
-    (param) => !isContextFilledParam(param) && !hasExternalApiParam(providedArgs, param),
-  );
-  if (missingRequired.length > 0) {
-    return {
-      ok: false,
-      message:
-        `Missing required parameter(s) for Tableau command "${command}": ` +
-        `${missingRequired.map((param) => param.wire).join(', ')}. NOT sent. ` +
-        'Registry-required UPI_Workspace/UPI_IWorkspace params are context-filled by the active sheet/workspace and are skipped.',
-    };
-  }
-
-  return { ok: true, args: rewrittenArgs, warnings };
-}
-
-function findExternalApiParam(
-  registry: ExternalApiCommandRegistryEntry,
-  key: string,
-): ExternalApiRegistryParam | null {
-  return (
-    registry.params.find(
-      (param) => key === param.local || key === param.camelToDashed || key === param.wire,
-    ) ?? null
-  );
-}
-
-function hasExternalApiParam(
-  args: Record<string, unknown>,
-  param: ExternalApiRegistryParam,
-): boolean {
-  return (
-    Object.prototype.hasOwnProperty.call(args, param.local) ||
-    Object.prototype.hasOwnProperty.call(args, param.camelToDashed) ||
-    Object.prototype.hasOwnProperty.call(args, param.wire)
-  );
-}
-
-function isContextFilledParam(param: ExternalApiRegistryParam): boolean {
-  return CONTEXT_FILLED_PARAM_TYPES.has(param.type);
-}
-
-function formatExternalApiRefusalMessage({
-  command,
-  reasons,
-  fix,
-}: {
-  command: string;
-  reasons: string[];
-  fix?: string;
-}): string {
-  return (
-    `Refusing Tableau command "${command}" because it would open a human-blocking dialog ` +
-    `in Tableau Desktop (${reasons.join(', ')}). NOT sent. FIX: ` +
-    `${fix ?? 'use a supported headless authoring alternative or ask a human to drive the dialog.'}`
-  );
-}
-
-function formatLegalValues(values: string[]): string {
-  const displayed = values.slice(0, 15);
-  const suffix =
-    values.length > displayed.length ? `, ... (+${values.length - displayed.length} more)` : '';
-  return `${displayed.join(', ')}${suffix}`;
 }
 
 function extractDocumentText(value: unknown): string | null {
