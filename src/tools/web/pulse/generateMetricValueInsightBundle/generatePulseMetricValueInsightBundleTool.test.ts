@@ -363,17 +363,15 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(result.content[0].text);
 
-    // Curated flat fields.
+    // Curated flat fields only.
     expect(parsed.metric_context.name).toBe('Pulse Metric');
     expect(parsed.metric_context.measure).toBe('Sales');
     expect(parsed.metric_context.time_dimension).toBe('Order Date');
     expect(parsed.metric_context.breakdown_dimensions).toEqual([]);
-    // The full request input is echoed verbatim as an escape hatch — e.g. the
-    // comparison kind lives under it.
-    expect(parsed.metric_context.input).toEqual(bundleRequest.bundle_request.input);
-    expect(parsed.metric_context.input.metric.metric_specification.comparison.comparison).toBe(
-      'TIME_COMPARISON_PREVIOUS_PERIOD',
-    );
+    // The request input is intentionally NOT echoed back — the caller already
+    // holds the request it sent (carried on the tool_use block), so metric_context
+    // stays lean and carries only curated fields.
+    expect(parsed.metric_context).not.toHaveProperty('input');
     // viz is still stripped alongside the new metric_context.
     const group = parsed.bundle_response.result.insight_groups[0];
     expect(group.insights[0].result).not.toHaveProperty('viz');
