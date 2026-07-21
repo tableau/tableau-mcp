@@ -257,10 +257,10 @@ export class AdminInsightsUnavailableError extends McpToolError {
 }
 
 export class DesktopCommandExecutionError extends McpToolError {
-  constructor(error: ExecuteCommandError) {
+  constructor(error: ExecuteCommandError, fix?: string) {
     super({
       type: 'desktop-command-execution-error',
-      message: JSON.stringify(error),
+      message: fix ? `${JSON.stringify(error)}\n${fix}` : JSON.stringify(error),
       statusCode: 500,
     });
   }

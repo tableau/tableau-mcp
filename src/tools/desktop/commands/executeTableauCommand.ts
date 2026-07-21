@@ -27,6 +27,12 @@ import { DesktopTool } from '../tool.js';
 
 const LOAD_UNDERLYING_METADATA_COMMAND = 'tabui:load-underlying-metadata';
 const GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND = 'tabdoc:generate-viz-from-notional-spec';
+const KNOWN_LIVE_FAILURE_FIXES = new Map<string, string>([
+  [
+    'tabdoc:sort-nested',
+    'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the bind-template sort proposal (preferred for template-bound sheets) or the document round-trip (tabui:save-underlying-metadata → edit the computed-sort → tabui:load-underlying-metadata).',
+  ],
+]);
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
@@ -133,7 +139,10 @@ export const getExecuteTableauCommandTool = (
           });
 
           if (result.isErr()) {
-            return new DesktopCommandExecutionError(result.error).toErr();
+            return new DesktopCommandExecutionError(
+              result.error,
+              KNOWN_LIVE_FAILURE_FIXES.get(command),
+            ).toErr();
           }
 
           const resultText = result.value.result
