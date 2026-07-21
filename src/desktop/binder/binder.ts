@@ -70,8 +70,8 @@ export const WATERFALL_ORDER_FIELD_RE =
 // bound. slot_id is a real optional manifest slot; injecting the binding pre-validation routes
 // it through the normal resolve/escape path into field_mapping['Anchor Category'], which drives
 // spliceWaterfallAnchorFilter. Same field-name heuristic as bindTemplate.ts's discovery hint.
-const WATERFALL_ANCHOR_SLOT_ID = 'anchor_category';
-const WATERFALL_ANCHOR_FIELD_RE = /categor|type|kind|class|flag|marker/i;
+export const WATERFALL_ANCHOR_SLOT_ID = 'anchor_category';
+export const WATERFALL_ANCHOR_FIELD_RE = /categor|type|kind|class|flag|marker/i;
 
 export type LlmProposeInput = Omit<CoreLlmProposeInput, 'fields'> & {
   fields: ProposeField[];
@@ -353,12 +353,14 @@ function validateAndBuild(
   let v = validateBinding(m, effectiveProposal, summary, ask);
   // The default must never turn a good bind into an escalation: if adding the anchor broke
   // validation, drop it and validate the caller's original proposal.
+  let anchorDefaultFailed = false;
   if (!v.ok && defaultedAnchorField !== undefined) {
     const vBase = validateBinding(m, proposal, summary, ask);
     if (vBase.ok) {
       v = vBase;
       effectiveProposal = proposal;
-      defaultedAnchorField = 'FAILED'; // sentinel: emit a "kept unbound" warning below
+      anchorDefaultFailed = true;
+      defaultedAnchorField = undefined;
     }
   }
   if (!v.ok) {
@@ -367,13 +369,15 @@ function validateAndBuild(
   }
 
   const warnings = [...(v.warnings ?? [])];
-  if (defaultedAnchorField === 'FAILED') {
+  if (anchorDefaultFailed) {
     warnings.push(
       'waterfall anchor default did not validate; kept it unbound — subtotal/total rows may double-count, bind anchor_category explicitly if the data has them',
     );
   } else if (defaultedAnchorField !== undefined) {
+    // The splice excludes only members literally named "subtotal"/"total"; on a plain category
+    // with no such members it is inert, so describe what was ADDED, not an exclusion that happened.
     warnings.push(
-      `waterfall excluded subtotal/total rows via anchor_category="${defaultedAnchorField}" (auto-detected row-type column; running total would double-count otherwise). Bind anchor_category explicitly or omit to override.`,
+      `waterfall auto-bound anchor_category="${defaultedAnchorField}" (auto-detected row-type column) to exclude any "subtotal"/"total" rows so the running total does not double-count. Bind anchor_category explicitly or omit to override.`,
     );
   }
   let sort = proposal.sort;

@@ -576,7 +576,11 @@ describe('binder/bindTemplate — Call 2 (agent proposal)', () => {
     if (res.status === 'bound') {
       // Anchor Category auto-bound to the category dim → spliceWaterfallAnchorFilter fires.
       expect(res.args.field_mapping['Anchor Category']).toContain('category');
-      expect(res.warnings?.join(' ')).toContain('subtotal/total');
+      // Warning describes what was ADDED (an exclusion of subtotal/total members), not an
+      // assertion that rows were excluded — the splice is inert when no such members exist.
+      const warn = res.warnings?.join(' ') ?? '';
+      expect(warn).toContain('auto-bound anchor_category');
+      expect(warn).toMatch(/subtotal.*total/);
     }
   });
 

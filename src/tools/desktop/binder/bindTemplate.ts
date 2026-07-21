@@ -14,6 +14,8 @@ import {
   resolveInSummary,
   type SchemaSummary,
   summarizeSchema,
+  WATERFALL_ANCHOR_FIELD_RE,
+  WATERFALL_ANCHOR_SLOT_ID,
   WATERFALL_ORDER_FIELD_RE,
 } from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
@@ -129,11 +131,9 @@ const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
 ]);
 const WATERFALL_TEMPLATE = 'part-to-whole-waterfall';
 const WATERFALL_ANCHOR_MAPPING_KEY = 'Anchor Category';
-const WATERFALL_ANCHOR_SLOT_ID = 'anchor_category';
-const WATERFALL_ANCHOR_FIELD_RE = /categor|type|kind|class|flag|marker/i;
-// WATERFALL_ORDER_FIELD_RE (the sequence/order-column matcher) is imported from binder.ts —
-// ONE definition shared with the binder's deterministic sort-default so the hint side and the
-// apply side can never drift. A P&L/bridge running total is order-dependent and its intended
+// WATERFALL_ANCHOR_SLOT_ID / WATERFALL_ANCHOR_FIELD_RE and WATERFALL_ORDER_FIELD_RE are all
+// imported from binder.ts — ONE definition each, shared with the binder's deterministic
+// anchor- and sort-defaults so the hint side and the apply side can never drift. A P&L/bridge running total is order-dependent and its intended
 // order is usually a non-displayed sequence field; the hint names it so the singer carries it
 // in the ORIGINAL bind (proposal.sort) instead of giving up on refine or falling to XML surgery.
 const WATERFALL_SORT_HINT =
