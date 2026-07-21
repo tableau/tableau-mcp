@@ -2,6 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import {
+  externalApiDialogPolicyFor,
+  knownLiveFailureFixFor,
+} from '../../../desktop/commandPolicy.js';
 import { validateKnownCommand } from '../../../desktop/commandRegistry.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import {
@@ -33,25 +37,6 @@ import { DesktopTool } from '../tool.js';
 const LOAD_UNDERLYING_METADATA_COMMAND = 'tabui:load-underlying-metadata';
 const GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND = 'tabdoc:generate-viz-from-notional-spec';
 const CONTEXT_FILLED_PARAM_TYPES = new Set(['UPI_Workspace', 'UPI_IWorkspace']);
-const KNOWN_LIVE_FAILURE_FIXES = new Map<string, string>([
-  [
-    'tabdoc:sort-nested',
-    'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the bind-template sort proposal (preferred for template-bound sheets) or the document round-trip (tabui:save-underlying-metadata → edit the computed-sort → tabui:load-underlying-metadata).',
-  ],
-]);
-// Live-swept dialog poppers misclassified as callable: never let the External API open these headlessly.
-const LIVE_EXTERNAL_API_DIALOG_BLOCKLIST = new Map<string, string>([
-  [
-    'tabui:workgroup-change-site',
-    'changing sites is fine, but this command opens a dialog - ask the user to switch sites in Desktop instead',
-  ],
-  ['tabdoc:toggle-ind-join-semantics', 'no headless relationship-semantics alternative'],
-  ['tabdoc:toggle-referential-integrity', 'no headless referential-integrity alternative'],
-  ['tabdoc:table-calc-add', 'author table calculations through supported calculation tools'],
-  ['tabdoc:table-calc-edit', 'author table calculations through supported calculation tools'],
-  ['tabdoc:change-page', 'use a page navigation call with exactly one of page-number or page-name'],
-  ['tabdoc:hide-unused-fields', 'no headless hide-unused-fields alternative'],
-]);
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
@@ -114,12 +99,13 @@ export const getExecuteTableauCommandTool = (
           // Unconditional: these hang the UI thread headlessly on EVERY deployment
           // (live-observed dialog-poppers that pass the static safety flags), so the
           // refusal cannot depend on the optional registry being installed.
-          if (LIVE_EXTERNAL_API_DIALOG_BLOCKLIST.has(command)) {
+          const externalApiDialogPolicy = externalApiDialogPolicyFor(command);
+          if (externalApiDialogPolicy) {
             return new ArgsValidationError(
               formatExternalApiRefusalMessage({
                 command,
                 reasons: ['live-observed dialog-popper'],
-                fix: LIVE_EXTERNAL_API_DIALOG_BLOCKLIST.get(command),
+                fix: externalApiDialogPolicy.fix,
               }),
             ).toErr();
           }
@@ -188,7 +174,7 @@ export const getExecuteTableauCommandTool = (
           if (result.isErr()) {
             return new DesktopCommandExecutionError(
               result.error,
-              KNOWN_LIVE_FAILURE_FIXES.get(command),
+              knownLiveFailureFixFor(command),
             ).toErr();
           }
 
@@ -231,16 +217,20 @@ function validateExternalApiCommandRegistry({
   args: Record<string, unknown>;
   registry: ExternalApiCommandRegistryEntry;
 }): ExternalApiGuardResult {
-  const blocklistFix = LIVE_EXTERNAL_API_DIALOG_BLOCKLIST.get(command);
-  if (blocklistFix !== undefined || !registry.invocable || registry.blockingDialog) {
+  const externalApiDialogPolicy = externalApiDialogPolicyFor(command);
+  if (externalApiDialogPolicy || !registry.invocable || registry.blockingDialog) {
     const reasons = [
-      blocklistFix !== undefined ? 'live-observed dialog-popper' : undefined,
+      externalApiDialogPolicy ? 'live-observed dialog-popper' : undefined,
       !registry.invocable ? 'agent_can_invoke=false' : undefined,
       registry.blockingDialog ? 'opens_blocking_dialog=true' : undefined,
     ].filter((reason): reason is string => reason !== undefined);
     return {
       ok: false,
-      message: formatExternalApiRefusalMessage({ command, reasons, fix: blocklistFix }),
+      message: formatExternalApiRefusalMessage({
+        command,
+        reasons,
+        fix: externalApiDialogPolicy?.fix,
+      }),
     };
   }
 

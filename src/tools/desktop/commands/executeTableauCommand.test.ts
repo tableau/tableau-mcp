@@ -395,7 +395,7 @@ describe('executeTableauCommandTool', () => {
         'tabdoc:sort drives a UI dialog and blocks the screen',
       );
       expect(result.content[0].text).toContain('refine-worksheet with operation sort_by_field');
-      expect(result.content[0].text).toContain('tabdoc:sort-nested');
+      expect(result.content[0].text).toContain('bind-template sort proposal/document round-trip');
       expect(extra.getExecutor).not.toHaveBeenCalled();
     });
 
