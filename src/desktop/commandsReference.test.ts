@@ -52,7 +52,7 @@ function paramsByLocalName(entry: ReferenceCommand): Map<string, ReferenceParame
 
 describe('tableau desktop command reference sort entries', () => {
   it('pins the generated command count', () => {
-    expect(loadReference().total_commands).toBe(335);
+    expect(loadReference().total_commands).toBe(333);
   });
 
   it('marks tabdoc:sort as dialog-driving and points agents at headless sort alternatives', () => {

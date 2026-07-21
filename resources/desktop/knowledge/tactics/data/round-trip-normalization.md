@@ -111,7 +111,7 @@ When an apply introduces a multi-level calc chain (e.g. 4-deep: `RFM Tier` → `
 
 ## 6. Removing a `<column>` via a document round-trip load is silently ignored
 
-Live-proven (2026-07-19, Desktop main.26.0715): deleting a `<column>` node from a datasource and posting the edited document back (via `load-underlying-metadata` / `apply-workbook`) reports `completed`, but the column survives — it is NOT removed. Column ADDS and worksheet-content rewrites apply normally; column DELETES no-op silently. Do not attempt to "clean up" calc fields by round-tripping a document with the column removed — a readback (`save-underlying-metadata` / `get-workbook-xml`) will show the column still present. There is currently no confirmed document-round-trip path to delete a calc column; treat the channel as append-only for columns until a removal path is verified.
+Live-proven (2026-07-19, Desktop main.26.0715): deleting a `<column>` node from a datasource and posting the edited document back with workbook document apply reports `completed`, but the column survives — it is NOT removed. Column ADDS and worksheet-content rewrites apply normally; column DELETES no-op silently. Do not attempt to "clean up" calc fields by round-tripping a document with the column removed — `get-workbook-xml` readback will show the column still present. There is currently no confirmed document-round-trip path to delete a calc column; treat the channel as append-only for columns until a removal path is verified.
 
 ## When to Use
 

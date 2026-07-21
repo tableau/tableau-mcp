@@ -50,7 +50,7 @@ If you must hand-craft anyway, these are the three assertions that actually fire
    </window>
    ```
 
-3. **Silent zone flattening** — nested `<zone type-v2='layout-flow'>` rows whose children are sheet zones (with `name='...'`) can get silently dropped at apply. `tableau-list-dashboards` still reports success, so the failure is invisible to the agent. Always verify post-apply by re-fetching with `tableau-get-dashboard` and counting zones: if the zone count went down, your layout structure was rejected and you need to restructure (use a flat `layout-basic` parent with absolute coords, OR mimic the reference workbook's `<zone param='horz' type-v2='layout-flow'>` row pattern with explicit per-child coords in 100000-based percentages).
+3. **Silent zone flattening** — nested `<zone type-v2='layout-flow'>` rows whose children are sheet zones (with `name='...'`) can get silently dropped at apply. Dashboard-list readback can still report success, so the failure is invisible to the agent. Always verify post-apply by re-fetching with `tableau-get-dashboard` and counting zones: if the zone count went down, your layout structure was rejected and you need to restructure (use a flat `layout-basic` parent with absolute coords, OR mimic the reference workbook's `<zone param='horz' type-v2='layout-flow'>` row pattern with explicit per-child coords in 100000-based percentages).
 
 ---
 
@@ -480,7 +480,7 @@ To hide column/row field labels (the field name header above the values):
 
 ## Dashboard XML via API — hard crash warning
 
-Submitting a dashboard element via `tableau-apply-workbook` can cause a **hard crash** in Tableau's `load-underlying-metadata`. When this happens, the workbook is left completely empty (all worksheets wiped). The apply history snapshots cannot protect against this — the crash prevents a post-apply snapshot from being saved. Use `tabdoc:undo` immediately if this occurs.
+Submitting a dashboard element via `tableau-apply-workbook` can cause a **hard crash** in Tableau's workbook document apply path. When this happens, the workbook is left completely empty (all worksheets wiped). The apply history snapshots cannot protect against this — the crash prevents a post-apply snapshot from being saved. Use `tabdoc:undo` immediately if this occurs.
 
 **This is not a soft error.** There is no recovery once it occurs.
 
@@ -518,7 +518,7 @@ Use this module when you need to:
 - **Target zones by name, not by ID**: IDs are shared across dashboards — patching by ID modifies zones in other dashboards. Always scope modifications to a specific dashboard name.
 - **Add actions to the top-level `actions` node**: Dashboard actions are siblings of `worksheets`/`dashboards` at the workbook root — not inside the dashboard node itself.
 - **Use `type-v2` not `type` for layout zone types**: Tableau normalizes on load and expects `type-v2`.
-- **Test after dashboard API submission**: Dashboard creation can cause hard crashes in Tableau's metadata loader. Always verify with `tableau-list-worksheets` immediately after submission.
+- **Test after dashboard API submission**: Dashboard creation can cause hard crashes in Tableau's metadata loader. Always verify with worksheet-list readback immediately after submission.
 
 ---
 
@@ -537,7 +537,7 @@ Use this module when you need to:
 
 The recommended workflow for creating a dashboard via API:
 
-1. **Build and verify all worksheets first**: Use `tableau-apply-workbook` + `tableau-list-worksheets` to confirm all source worksheets load correctly before attempting dashboard creation.
+1. **Build and verify all worksheets first**: Use `tableau-apply-workbook` plus worksheet-list readback to confirm all source worksheets load correctly before attempting dashboard creation.
 2. **Have the user create the dashboard manually if possible**: Drag sheets into a dashboard in Tableau's UI, then call `tableau-get-workbook` to capture the exact native XML. Use that as a template — it is guaranteed to be valid.
 3. **If building the dashboard XML manually**:
    - Assign fresh unique zone IDs (higher than any existing IDs in the workbook)
@@ -545,7 +545,7 @@ The recommended workflow for creating a dashboard via API:
    - Generate a new UUID for `simple-id`
    - Use the 0–100000 coordinate scale for zone positions
 4. **Submit with `tableau-apply-workbook`** and verify. If a hard crash occurs (workbook wiped), use `tabdoc:undo` immediately — the apply history snapshots cannot help here because the crash prevents the snapshot from being saved.
-5. **Verify**: Call `tableau-list-worksheets` to confirm the dashboard appears. If it timed out, check first before retrying — the dashboard may have been applied successfully.
+5. **Verify**: Use workbook structure readback to confirm the dashboard appears. If it timed out, check first before retrying — the dashboard may have been applied successfully.
 
 ### Preferred: Two-step dashboard creation (confirmed safe)
 

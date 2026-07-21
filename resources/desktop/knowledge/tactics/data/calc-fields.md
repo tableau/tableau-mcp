@@ -2,7 +2,7 @@
 
 Confirmed patterns for calculated fields, parameters, parameter controls, count of records, Percent-of-Total table calcs, and tooltips — all validated via `tableau-get-workbook`.
 
-**⇒ Wrong-fork check (live Desktop):** CREATING a calculated field on a running Tableau Desktop? Do NOT hand-edit workbook XML with these patterns — author it with the author-calc verb (author-parameter / author-set first when the calc depends on them), then chart the authored caption. Last resort, only when no authoring verb or template can express the structure: round-trip the REAL document (get-workbook-xml → edit → apply-workbook when those tools are registered, else the save/load-underlying-metadata commands via execute-tableau-command) and let Tableau's parser validate the reload — never fabricate XML fragments from memory. This module's XML patterns are for file-mode workbook authoring and for READING what a calc looks like.
+**⇒ Wrong-fork check (live Desktop):** CREATING a calculated field on a running Tableau Desktop? Do NOT hand-edit workbook XML with these patterns — author it with the author-calc verb (author-parameter / author-set first when the calc depends on them), then chart the authored caption. Last resort, only when no authoring verb or template can express the structure: round-trip the REAL document with the workbook document read/apply tools and let Tableau's parser validate the reload — never fabricate XML fragments from memory. This module's XML patterns are for file-mode workbook authoring and for READING what a calc looks like.
 
 **⇒ Wrong-fork check:** assigning GROUP MEMBERSHIP (tag rows Top/Bottom/Everyone-Else to color or drive a click action)? Don't hand-roll `IF RANK(...) <= [param] THEN "Top"...` — swapping RANK for `INDEX()`/`FIRST()`/`LAST()` is the SAME wrong turn. That's a **SET**, not a calc (sets ARE parameter-driven in XML — `count='[Parameters].[N]'` re-ranks live). See [Membership vs. Value](data/knowledge/strategy/analytics/calc-fields-strategy.md#membership-vs-value).
 
@@ -547,7 +547,7 @@ The general workflow for adding a calculated field and using it on a worksheet:
 2. **Add column def + column-instance to datasource-dependencies** — every worksheet that uses the field needs both nodes in its `datasource-dependencies`.
 3. **Reference the CI on shelves/encodings** — use the full `[DS].[ci:field:type]` format in `rows`, `cols`, or encoding `column` attrs.
 4. **For table calcs**: Add a `table-calc` child to the column-instance in `datasource-dependencies`. Configure `ordering-type` and `ordering-field` or `level-address` as needed.
-5. **Submit and verify**: Use `tableau-apply-workbook`, then `tableau-list-worksheets` to confirm the sheet loaded. Use `tableau-get-workbook` to inspect the round-tripped result and check whether all nodes survived.
+5. **Submit and verify**: Use `tableau-apply-workbook`, then worksheet-list readback to confirm the sheet loaded. Use `tableau-get-workbook` to inspect the round-tripped result and check whether all nodes survived.
 
 ---
 
@@ -574,7 +574,7 @@ The pattern generalizes: `pcto:{base-agg}:` where `base-agg` matches the underly
 
 Two command-specific traps when authoring calcs on a running Tableau Desktop via the document round-trip (see the Wrong-fork check above):
 
-- **`apply-calculation-for-create-or-update` and its Analytics-Assistant-gated siblings require a signed-in Cloud+AI session** — observed failing 400/500 without one. The document round-trip (splice the `<column><calculation>` node into the workbook document, then post it back via `apply-workbook` when registered, else `save-underlying-metadata`/`load-underlying-metadata` via `execute-tableau-command`) needs no sign-in and opens no dialog. Prefer it.
+- **`apply-calculation-for-create-or-update` and its Analytics-Assistant-gated siblings require a signed-in Cloud+AI session** — observed failing 400/500 without one. The workbook document round-trip (splice the `<column><calculation>` node into the workbook document, then post it back with the document apply tool) needs no sign-in and opens no dialog. Prefer it.
 - **`tabdoc:open-calc-editor-with-custom-calc` is NOT a headless calc door.** It returns `completed` but does not commit the calc — it opens the calculation editor with the formula pre-filled, and the open editor holds the UI thread so subsequent commands fail until a human closes it (live-proven 2026-07-19, twice). Human-in-the-loop only; never call it in an unattended run.
 
 

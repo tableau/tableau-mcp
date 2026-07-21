@@ -62,7 +62,7 @@ A minimal but complete worksheet Tableau accepts:
 
 **Window entry is REQUIRED**: Submitting a worksheet without a matching `window` entry causes it to be silently dropped by Tableau — the sheet will not appear at all. Always submit worksheet + window together in the same `tableau-apply-workbook` call.
 
-**Add sheets incrementally**: When adding multiple new worksheets, submit and verify each sheet one at a time rather than all at once. After each `tableau-apply-workbook` (even if it times out), call `tableau-list-worksheets` to confirm the sheet loaded before proceeding to the next.
+**Add sheets incrementally**: When adding multiple new worksheets, submit and verify each sheet one at a time rather than all at once. After each `tableau-apply-workbook` (even if it times out), use worksheet-list readback to confirm the sheet loaded before proceeding to the next.
 
 **Always use the latest workbook file**: Call `tableau-get-workbook` immediately before any modification to get the current cached XML file path. Never re-use a path from earlier in the session — prior `tableau-apply-workbook` calls update the in-memory workbook state, and using a stale file will silently discard all intermediate changes (e.g. losing filters added in a previous step).
 
@@ -140,7 +140,7 @@ Tableau merges new content with existing internal state. Any sheet already in Ta
 `tableau-delete-worksheet` calls Tableau's native `tabdoc:delete-sheet` command. If it fails, do not try to delete by submitting workbook XML without the worksheet; use Tableau Undo (`Cmd+Z`), File → Revert to Saved, or manually editing the saved `.twb` XML file.
 
 **Prevention:**
-- Dashboard creation can take >30 seconds and trigger a timeout error. Check `tableau-list-worksheets` after a timeout — the dashboard may have been applied successfully despite the error
+- Dashboard creation can take >30 seconds and trigger a timeout error. Check workbook structure after a timeout — the dashboard may have been applied successfully despite the error
 - If `tableau-apply-workbook` times out on dashboard creation, do NOT retry immediately. Check sheet list first
 
 ---
@@ -361,7 +361,7 @@ Use this module when you need to:
 ## Best Practices
 
 - **Always submit worksheet + window together**: Submitting a `<worksheet>` without a matching `<window>` causes the sheet to be silently dropped by Tableau.
-- **Add sheets incrementally**: Submit and verify each sheet with `tableau-list-worksheets` before adding the next. After a `tableau-apply-workbook` timeout, check first — the sheet may have loaded despite the error.
+- **Add sheets incrementally**: Submit and verify each sheet with worksheet-list readback before adding the next. After a `tableau-apply-workbook` timeout, check first — the sheet may have loaded despite the error.
 - **Always call `tableau-get-workbook` immediately before modifying**: Never reuse a cached file path from earlier in the session. Prior `tableau-apply-workbook` calls update the in-memory workbook state.
 - **Put column defs and column-instances in `datasource-dependencies`**, not inside the `datasources/datasource` node inside `view`. Putting them in the wrong place causes them to be silently stripped.
 - **Both `datasources` AND `datasource-dependencies` are required in `view`**: Omitting `datasources` causes all field references to be stripped — the sheet loads blank.
@@ -390,7 +390,7 @@ To create a complete new worksheet:
 4. **Build the `<window>` element**: Use the same `name` as the worksheet. Include `simple-id` with a freshly generated UUID.
 5. **Append both nodes**: add worksheet to `<worksheets>` and window to `<windows>`.
 6. **Submit**: Write to `/tmp/modified_workbook.xml` and call `tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`.
-7. **Verify**: Call `tableau-list-worksheets` — the new sheet should appear in the tab list.
+7. **Verify**: Use worksheet-list readback — the new sheet should appear in the tab list.
 
 For table calculations: after the sheet loads, manually configure Compute Using in Tableau's UI, then call `tableau-get-workbook` to capture the exact CI name with the correct `:N` suffix. Use that as the authoritative template for subsequent API calls.
 
