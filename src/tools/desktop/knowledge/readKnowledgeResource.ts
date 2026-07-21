@@ -8,11 +8,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  uri: z
-    .string()
-    .describe(
-      "Resource URI, e.g. 'expertise://tableau/strategy/viz-design/chart-selection'. Use list-knowledge-resources to see available URIs.",
-    ),
+  uri: z.string().describe("URI (expertise://tableau/{slug})"),
 };
 
 const toolTitle = 'Read Knowledge Resource';
@@ -23,8 +19,7 @@ export const getReadKnowledgeResourceTool = (
     server,
     name: 'read-knowledge-resource',
     title: toolTitle,
-    description:
-      'Read an expertise module by URI for verified rules before an unfamiliar build. Use list-knowledge-resources to find URIs.',
+    description: 'Read expertise by URI. Use search-knowledge to find URIs.',
     paramsSchema,
     annotations: {
       title: toolTitle,

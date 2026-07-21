@@ -32,6 +32,7 @@ import { getAskUserTool } from './interaction/askUser.js';
 import { getBeginEpisodeTool, getEndEpisodeTool } from './interaction/episodeTools.js';
 import { getListKnowledgeResourcesTool } from './knowledge/listKnowledgeResources.js';
 import { getReadKnowledgeResourceTool } from './knowledge/readKnowledgeResource.js';
+import { getSearchKnowledgeTool } from './knowledge/searchKnowledge.js';
 import { getLookupWorkbookSchemaTool } from './search/lookupWorkbookSchema.js';
 import { getSearchCommandsTool } from './search/searchCommands.js';
 import { getSearchExamplesTool } from './search/searchExamples.js';
@@ -97,6 +98,7 @@ export const desktopToolFactories = [
   getGetDashboardGuideTool,
   getListKnowledgeResourcesTool,
   getReadKnowledgeResourceTool,
+  getSearchKnowledgeTool,
 ];
 
 export const episodeToolFactories = [getBeginEpisodeTool, getEndEpisodeTool];
