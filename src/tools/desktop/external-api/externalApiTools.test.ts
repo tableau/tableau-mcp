@@ -73,18 +73,6 @@ describe('External API coverage tools', () => {
       },
     },
     {
-      toolName: 'get-worksheet-info',
-      makeTool: getWorksheetInfoTool,
-      args: { worksheetId: 'sheet-sales' },
-      expectedPath: '/v0/workbook/worksheets/sheet-sales',
-      expectBody: (body: unknown) => {
-        expect(z.object({ id: z.string(), name: z.string() }).parse(body)).toMatchObject({
-          id: 'sheet-sales',
-          name: 'Sales by Region',
-        });
-      },
-    },
-    {
       toolName: 'list-storyboards',
       makeTool: getListStoryboardsTool,
       args: {},
@@ -109,6 +97,67 @@ describe('External API coverage tools', () => {
       }
     },
   );
+
+  it('gets worksheet metadata by id after resolving it through the worksheet list', async () => {
+    const harness = await startHarness(getWorksheetInfoTool);
+    try {
+      const result = await harness.callTool({ worksheet: 'sheet-sales' });
+
+      expect(result.isError).toBe(false);
+      expect(
+        z.object({ id: z.string(), name: z.string() }).parse(parseResult(result)),
+      ).toMatchObject({
+        id: 'sheet-sales',
+        name: 'Sales by Region',
+      });
+      expect(harness.server.requests.map((request) => request.path)).toEqual([
+        '/v0/workbook/worksheets',
+        '/v0/workbook/worksheets/sheet-sales',
+      ]);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('gets worksheet metadata by name after resolving it to an id', async () => {
+    const harness = await startHarness(getWorksheetInfoTool);
+    try {
+      const result = await harness.callTool({ worksheet: 'Sales by Region' });
+
+      expect(result.isError).toBe(false);
+      expect(
+        z.object({ id: z.string(), name: z.string() }).parse(parseResult(result)),
+      ).toMatchObject({
+        id: 'sheet-sales',
+        name: 'Sales by Region',
+      });
+      expect(harness.server.requests.map((request) => request.path)).toEqual([
+        '/v0/workbook/worksheets',
+        '/v0/workbook/worksheets/sheet-sales',
+      ]);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('reports available worksheets when the worksheet selector does not resolve', async () => {
+    const harness = await startHarness(getWorksheetInfoTool);
+    try {
+      const result = await harness.callTool({ worksheet: 'Missing Sheet' });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Worksheet "Missing Sheet" was not found.');
+      expect(result.content[0].text).toContain(
+        'Available worksheets: Sales by Region (sheet-sales), Profit by Category (sheet-profit)',
+      );
+      expect(harness.server.requests.map((request) => request.path)).toEqual([
+        '/v0/workbook/worksheets',
+      ]);
+    } finally {
+      await harness.close();
+    }
+  });
 
   it('gets dashboard metadata by name after resolving it to an id', async () => {
     const harness = await startHarness(getDashboardInfoTool);
