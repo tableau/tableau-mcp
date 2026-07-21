@@ -545,7 +545,7 @@ The recommended workflow for creating a dashboard via API:
    - Generate a new UUID for `simple-id`
    - Use the 0–100000 coordinate scale for zone positions
 4. **Submit with `tableau-apply-workbook`** and verify. If a hard crash occurs (workbook wiped), use `tabdoc:undo` immediately — the apply history snapshots cannot help here because the crash prevents the snapshot from being saved.
-5. **Verify**: Use workbook structure readback to confirm the dashboard appears. If it timed out, check first before retrying — the dashboard may have been applied successfully.
+5. **Verify**: List the workbook dashboards to confirm the new dashboard appears. If it timed out, check first before retrying — the dashboard may have been applied successfully.
 
 ### Preferred: Two-step dashboard creation (confirmed safe)
 
