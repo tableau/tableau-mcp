@@ -30,6 +30,10 @@ export interface FieldInfo {
 
 export interface FieldReference {
   datasource: string;
+  // Published datasource's contentUrl (from the workbook's repository-location);
+  // the input `resolve-datasource-luid` needs to get the server LUID. Undefined
+  // for embedded/local datasources, which have no server copy.
+  contentUrl?: string;
   columnName: string;
   columnInstanceName: string;
   derivation: AggregationType;
