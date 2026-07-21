@@ -147,9 +147,13 @@ function nextActionForEscalation(reason: EscalateReason): NextAction {
     return prefillNextAction('Pick a higher-confidence proposal');
   }
   if (TIER2_REASONS.has(reason)) {
-    return prefillNextAction('Use the general worksheet build tools');
+    return prefillNextAction(
+      'Build manually: place fields with add-field (rows/cols/encodings), then refine-worksheet',
+    );
   }
-  return prefillNextAction('Build the worksheet manually');
+  return prefillNextAction(
+    'Build manually: place fields with add-field (rows/cols/encodings), then refine-worksheet',
+  );
 }
 
 function renderBlockers(blockers: Blocker[]): string {

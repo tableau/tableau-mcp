@@ -103,6 +103,12 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
   new Set<DesktopToolName>([
     'bind-template',
     'refine-worksheet',
+    'add-field',
+    'remove-field',
+    'dashboard-auto-apply',
+    'plan-dashboard-creation',
+    'batch-create-and-cache-sheets',
+    'build-and-apply-dashboard',
     'execute-tableau-command',
     'search-commands',
     'ask-user',
