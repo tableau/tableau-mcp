@@ -12,6 +12,7 @@ import {
   DERIVATION_OVERRIDE_INSTRUCTION,
   type EscalateReason,
   resolveInSummary,
+  type SchemaSummary,
   summarizeSchema,
 } from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
@@ -83,6 +84,7 @@ const paramsSchema = {
 type BindTemplateToolResultBase = BinderResult & {
   guidance: string;
   authored_calcs?: string[];
+  warnings?: string[];
   applied?: boolean;
   sheet_name?: string;
   phase_ms?: { bind: number; inject: number; apply: number };
@@ -124,6 +126,12 @@ const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
   // route to the general authoring flow.
   'schema-too-large',
 ]);
+const WATERFALL_TEMPLATE = 'part-to-whole-waterfall';
+const WATERFALL_ANCHOR_MAPPING_KEY = 'Anchor Category';
+const WATERFALL_ANCHOR_SLOT_ID = 'anchor_category';
+const WATERFALL_ANCHOR_FIELD_RE = /categor|type|kind|class|flag|marker/i;
+const WATERFALL_SORT_HINT =
+  'Waterfall default sort is DESC by the bound measure; override with proposal.sort:{by:<field>,direction:"asc"|"desc"}.';
 
 function nextActionForEscalation(reason: EscalateReason): NextAction {
   if (reason === 'ambiguous-field' || reason === 'field-not-found') {
@@ -173,12 +181,100 @@ function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): 
   )}. Next: ${next}`;
 }
 
-function buildGuidance(res: BinderResult): string {
+function isWaterfallResult(res: BinderResult): boolean {
+  if (res.status === 'bound') {
+    return res.args.template_name === WATERFALL_TEMPLATE;
+  }
+  if (res.status === 'propose') {
+    return res.llm_input.candidate_templates.some(
+      (candidate) => candidate.template === WATERFALL_TEMPLATE,
+    );
+  }
+  return false;
+}
+
+function hasAnchorCategoryBinding(res: BinderResult, proposal?: BindingProposal): boolean {
+  if (res.status === 'bound') {
+    return Object.prototype.hasOwnProperty.call(
+      res.args.field_mapping,
+      WATERFALL_ANCHOR_MAPPING_KEY,
+    );
+  }
+  return (
+    proposal?.bindings.some((binding) => binding.slot_id === WATERFALL_ANCHOR_SLOT_ID) ?? false
+  );
+}
+
+function hasSortOverride(res: BinderResult, proposal?: BindingProposal): boolean {
+  if (res.status === 'bound') {
+    return res.args.sort !== undefined;
+  }
+  return proposal?.sort !== undefined;
+}
+
+function waterfallAnchorCandidates(schemaSummary?: SchemaSummary): string[] {
+  if (!schemaSummary) {
+    return [];
+  }
+  const candidates = schemaSummary.fields
+    .filter(
+      (field) =>
+        field.role === 'dimension' &&
+        (field.datatype === 'string' || field.type === 'nominal') &&
+        WATERFALL_ANCHOR_FIELD_RE.test(field.name),
+    )
+    .map((field) => field.name);
+  return [...new Set(candidates)];
+}
+
+function buildWaterfallDiscoveryGuidance(
+  res: BinderResult,
+  schemaSummary?: SchemaSummary,
+  proposal?: BindingProposal,
+): string[] {
+  if (!isWaterfallResult(res)) {
+    return [];
+  }
+  const sentences: string[] = [];
+  if (!hasAnchorCategoryBinding(res, proposal)) {
+    const candidates = waterfallAnchorCandidates(schemaSummary);
+    if (candidates.length > 0) {
+      sentences.push(
+        `Waterfall: schema has ${candidates.join(', ')}; re-call bind-template with ` +
+          `proposal.bindings += {slot_id:"${WATERFALL_ANCHOR_SLOT_ID}",field:${JSON.stringify(
+            candidates[0],
+          )}}; totals double-count.`,
+      );
+    }
+  }
+  if (!hasSortOverride(res, proposal)) {
+    sentences.push(WATERFALL_SORT_HINT);
+  }
+  return sentences;
+}
+
+function appendWaterfallDiscoveryGuidance(
+  guidance: string,
+  res: BinderResult,
+  schemaSummary?: SchemaSummary,
+  proposal?: BindingProposal,
+): string {
+  const additions = buildWaterfallDiscoveryGuidance(res, schemaSummary, proposal);
+  return additions.length > 0 ? `${guidance} ${additions.join(' ')}` : guidance;
+}
+
+function buildGuidance(
+  res: BinderResult,
+  schemaSummary?: SchemaSummary,
+  proposal?: BindingProposal,
+): string {
+  let guidance: string;
   switch (res.status) {
     case 'bound':
-      return res.apply_instruction || APPLY_INSTRUCTION;
+      guidance = res.apply_instruction || APPLY_INSTRUCTION;
+      break;
     case 'propose':
-      return (
+      guidance =
         'No deterministic (no-LLM) match. Choose exactly one template from llm_input.candidate_templates, ' +
         'bind every bindable slot to a field from llm_input.fields (match role/kind; use the exact field name), ' +
         'then call bind-template again with { session, ask, proposal } matching output_schema. ' +
@@ -190,11 +286,13 @@ function buildGuidance(res: BinderResult): string {
         'if they explicitly want the exact shape anyway, use the manual chain — get workbook structure in file mode -> ' +
         "inject-template with template_name 'part-to-whole-pie-chart' (field_mapping: Region -> the " +
         'category dimension, Sales -> the measure) -> apply-workbook. ' +
-        `${DERIVATION_OVERRIDE_INSTRUCTION}.`
-      );
+        `${DERIVATION_OVERRIDE_INSTRUCTION}.`;
+      break;
     case 'escalate':
-      return renderEscalationGuidance(res.reason, res.blockers);
+      guidance = renderEscalationGuidance(res.reason, res.blockers);
+      break;
   }
+  return appendWaterfallDiscoveryGuidance(guidance, res, schemaSummary, proposal);
 }
 
 /** Human-readable detail for a loadWorkbookXml failure, used in the apply-error text. */
@@ -319,16 +417,16 @@ function ensureSortByColumnDependency(
 function applyProposalSplices({
   xml,
   args,
-  workbookXml,
+  schemaSummary,
 }: {
   xml: string;
   args: BoundResult['args'];
-  workbookXml: string;
+  schemaSummary: SchemaSummary;
 }): { ok: true; xml: string; warnings: string[] } | { ok: false; reason: string } {
   let out = xml;
   const warnings: string[] = [];
   if (args.sort) {
-    const sortField = resolveInSummary(summarizeSchema(workbookXml), args.sort.by);
+    const sortField = resolveInSummary(schemaSummary, args.sort.by);
     if (sortField.kind !== 'exact' && sortField.kind !== 'rewritten') {
       const sorted = planSortByFieldOnCategoricalAxis(out, {
         sortByField: args.sort.by,
@@ -411,6 +509,7 @@ async function performAutoApply({
   signal,
   bindMs,
   eventsAnchor,
+  schemaSummary,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -420,6 +519,7 @@ async function performAutoApply({
   signal: AbortSignal;
   bindMs: number;
   eventsAnchor?: number;
+  schemaSummary: SchemaSummary;
 }): Promise<BindTemplateToolResult> {
   const { args } = res;
 
@@ -440,10 +540,14 @@ async function performAutoApply({
         // Events-dirty guidance DROPS the manual-apply alternative (P1-5): the bound args
         // were computed against the pre-edit workbook, so re-applying them would revert
         // the user's changes — the only safe recovery is a fresh read via bind-template.
-        'Server-side auto-apply was refused: the user changed the workbook after it was read ' +
-          `(${events.value.count} event(s) since read). Re-run bind-template so it reads the ` +
-          'current workbook — do NOT re-apply the returned args, they were computed against ' +
-          'the pre-edit workbook and would revert their changes.',
+        appendWaterfallDiscoveryGuidance(
+          'Server-side auto-apply was refused: the user changed the workbook after it was read ' +
+            `(${events.value.count} event(s) since read). Re-run bind-template so it reads the ` +
+            'current workbook — do NOT re-apply the returned args, they were computed against ' +
+            'the pre-edit workbook and would revert their changes.',
+          res,
+          schemaSummary,
+        ),
       );
     }
   }
@@ -475,7 +579,7 @@ async function performAutoApply({
   if (!injected.ok) {
     return applyFallback(base, `inject failed: ${injected.issues.join('; ')}`);
   }
-  const spliced = applyProposalSplices({ xml: injected.xml, args, workbookXml });
+  const spliced = applyProposalSplices({ xml: injected.xml, args, schemaSummary });
   if (!spliced.ok) {
     return applyFallback(base, spliced.reason);
   }
@@ -497,11 +601,16 @@ async function performAutoApply({
   // enable a manual second call that never happens once the apply succeeds.
   const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, res.status);
   const literalTitle = decodeXmlEntities(args.title);
+  const guidance = appendWaterfallDiscoveryGuidance(
+    `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
+    res,
+    schemaSummary,
+  );
   return {
     status: res.status,
     ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
     ...(base.warnings && base.warnings.length > 0 ? { warnings: base.warnings } : {}),
-    guidance: `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
+    guidance,
     applied: true,
     sheet_name: literalTitle,
     phase_ms: { bind: bindMs, inject: injectMs, apply: applyMs },
@@ -670,14 +779,15 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             /* fail-open */
           }
           const bindMs = Date.now() - bindStart;
+          const schemaSummary = summarizeSchema(workbookXml);
 
           const base: StructuredBindTemplateToolResult = annotateAuthoredCalcs(
             res.status === 'escalate'
               ? withNextAction(
-                  { ...res, guidance: buildGuidance(res) },
+                  { ...res, guidance: buildGuidance(res, schemaSummary, proposal) },
                   nextActionForEscalation(res.reason),
                 )
-              : { ...res, guidance: buildGuidance(res) },
+              : { ...res, guidance: buildGuidance(res, schemaSummary, proposal) },
             authoredCalcCaptions,
           );
 
@@ -708,6 +818,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               signal: extra.signal,
               bindMs,
               eventsAnchor,
+              schemaSummary,
             }),
           );
         },
