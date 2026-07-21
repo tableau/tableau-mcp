@@ -286,7 +286,7 @@ describe('validateNotionalSpecArgs', () => {
     expect(result.message).toContain('Unknown top-level key "mark"');
     expect(result.message).toContain('FIX:');
     expect(result.message).toContain('"version": "0.2.0"');
-    expect(result.message).toContain('expertise://tableau/tactics/data/notional-spec-authoring');
+    expect(result.message).toContain('expertise://tableau/tactics/data/dynamic-dashboard-authoring');
   });
 
   it('rejects a worksheetName parameter', () => {

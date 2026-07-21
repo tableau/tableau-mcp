@@ -9,15 +9,16 @@
  * FIX message that carries the correct minimal example and points at the knowledge
  * module that documents the contract.
  *
- * Contract source of truth: resources/desktop/knowledge/tactics/data/notional-spec-authoring.md
- * (expertise://tableau/tactics/data/notional-spec-authoring). Keep this guard in sync
+ * The NotionalSpec dialect is retired; this guard exists to block/contain the retired
+ * command. Its FIX message steers to the current dialect's knowledge home
+ * (expertise://tableau/tactics/data/dynamic-dashboard-authoring). Keep this guard in sync
  * with that doc if the v0.2 schema changes.
  */
 import type { CommandValidationResult } from './commandRegistry.js';
 
 export const GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND = 'tabdoc:generate-viz-from-notional-spec';
 
-const KNOWLEDGE_URI = 'expertise://tableau/tactics/data/notional-spec-authoring';
+const KNOWLEDGE_URI = 'expertise://tableau/tactics/data/dynamic-dashboard-authoring';
 
 const ALLOWED_ARG_KEYS = new Set(['NotionalSpecJson', 'ClearSheet']);
 

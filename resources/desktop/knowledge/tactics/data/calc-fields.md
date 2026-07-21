@@ -2,7 +2,7 @@
 
 Confirmed patterns for calculated fields, parameters, parameter controls, count of records, Percent-of-Total table calcs, and tooltips — all validated via `tableau-get-workbook`.
 
-**⇒ Wrong-fork check (live Desktop):** CREATING a calculated field on a running Tableau Desktop via the External API? Do NOT hand-edit workbook XML with these patterns — use the whole-document round-trip in [NotionalSpec Calc Authoring](notional-spec-calc-authoring.md) (save/load-underlying-metadata → GET/POST /v0/workbook/document), then chart the calc by caption with a spec. This module's XML patterns are for file-mode workbook authoring and for READING what a calc looks like.
+**⇒ Wrong-fork check (live Desktop):** CREATING a calculated field on a running Tableau Desktop? Do NOT hand-edit workbook XML with these patterns — author it with the author-calc verb (author-parameter / author-set first when the calc depends on them), then chart the authored caption. Last resort, only when no authoring verb or template can express the structure: round-trip the REAL document (get-workbook-xml → edit → apply-workbook when those tools are registered, else the save/load-underlying-metadata commands via execute-tableau-command) and let Tableau's parser validate the reload — never fabricate XML fragments from memory. This module's XML patterns are for file-mode workbook authoring and for READING what a calc looks like.
 
 **⇒ Wrong-fork check:** assigning GROUP MEMBERSHIP (tag rows Top/Bottom/Everyone-Else to color or drive a click action)? Don't hand-roll `IF RANK(...) <= [param] THEN "Top"...` — swapping RANK for `INDEX()`/`FIRST()`/`LAST()` is the SAME wrong turn. That's a **SET**, not a calc (sets ARE parameter-driven in XML — `count='[Parameters].[N]'` re-ranks live). See [Membership vs. Value](data/knowledge/strategy/analytics/calc-fields-strategy.md#membership-vs-value).
 
@@ -567,5 +567,14 @@ When applying Percent of Total to a **CountDistinct** measure, the column-instan
 ```
 
 The pattern generalizes: `pcto:{base-agg}:` where `base-agg` matches the underlying aggregation type — `sum`, `ctd` (CountDistinct), `avg`, etc.
+
+---
+
+## Calc-authoring command pitfalls on a live session
+
+Two command-specific traps when authoring calcs on a running Tableau Desktop via the document round-trip (see the Wrong-fork check above):
+
+- **`apply-calculation-for-create-or-update` and its Analytics-Assistant-gated siblings require a signed-in Cloud+AI session** — observed failing 400/500 without one. The document round-trip (splice the `<column><calculation>` node into the workbook document, then post it back via `apply-workbook` when registered, else `save-underlying-metadata`/`load-underlying-metadata` via `execute-tableau-command`) needs no sign-in and opens no dialog. Prefer it.
+- **`tabdoc:open-calc-editor-with-custom-calc` is NOT a headless calc door.** It returns `completed` but does not commit the calc — it opens the calculation editor with the formula pre-filled, and the open editor holds the UI thread so subsequent commands fail until a human closes it (live-proven 2026-07-19, twice). Human-in-the-loop only; never call it in an unattended run.
 
 
