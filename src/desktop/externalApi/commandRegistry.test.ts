@@ -83,6 +83,7 @@ describe('externalApi commandRegistry', () => {
       },
       typeOfParam: {
         DPI_ShowMeCommandType: { enum_name: 'ShowMeCommandType' },
+        DPI_TupleEnumType: ['TupleEnum', 'enum'],
       },
       enumVals: {
         ShowMeCommandType: ['bars', 'lines'],
@@ -103,6 +104,33 @@ describe('externalApi commandRegistry', () => {
     expect(entry?.paramWireByLocal.get('ShowMeType')).toBe('show-me-command-type');
     expect(entry?.paramWireByCamelToDashed.get('show-me-type')).toBe('show-me-command-type');
     expect(entry?.enumValuesForParamType.get('DPI_ShowMeCommandType')).toEqual(['bars', 'lines']);
+  });
+
+  it('resolves enum names from tuple-shaped type_of_param entries (the shipped registry shape)', async () => {
+    const dir = writeRegistry({
+      commands: {
+        'tabdoc:show-me': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          in_params: [
+            {
+              local: 'ShowMeType',
+              type: 'DPI_TupleEnumType',
+              required: true,
+              wire: 'show-me-command-type',
+            },
+          ],
+        },
+      },
+      typeOfParam: { DPI_TupleEnumType: ['TupleEnum', 'enum'] },
+      enumVals: { TupleEnum: ['bar-horiz', 'text'] },
+    });
+    vi.stubEnv('EXTERNAL_API_REGISTRY_DIR', dir);
+
+    const { lookupExternalApiCommandRegistry } = await import('./commandRegistry.js');
+    const entry = lookupExternalApiCommandRegistry('tabdoc', 'show-me');
+
+    expect(entry?.enumValuesForParamType.get('DPI_TupleEnumType')).toEqual(['bar-horiz', 'text']);
   });
 
   it('parses the files once for a stable env dir', async () => {

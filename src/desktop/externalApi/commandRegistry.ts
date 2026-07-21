@@ -206,6 +206,12 @@ function enumNameFrom(value: unknown): string | null {
   if (typeof value === 'string' && value.length > 0) {
     return value;
   }
+  // The codegen registry's type_of_param values are tuples like
+  // ["ShowMeCommandType", "enum"] — the first element is the enum name.
+  if (Array.isArray(value)) {
+    const [first] = value;
+    return typeof first === 'string' && first.length > 0 ? first : null;
+  }
   if (!isRecord(value)) {
     return null;
   }
