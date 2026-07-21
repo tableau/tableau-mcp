@@ -143,7 +143,12 @@ function ensureKnowledgeFuse(): Fuse<KnowledgeDoc> {
       { name: 'title', weight: 0.2 },
       { name: 'whenToUse', weight: 0.18 },
       { name: 'slug', weight: 0.06 },
-      { name: 'body', weight: 0.04 },
+      // NB: the full document `body` is deliberately NOT a fuse search key. With
+      // ignoreLocation:true fuse fuzzy-scans every char of all ~108 doc bodies per
+      // query (~450ms each) — the dominant cost, and it CPU-starved CI workers past
+      // the pool's 60s onTaskUpdate RPC deadline. Ranking is driven by the curated
+      // metadata (searchTerms/tags/title/whenToUse/slug); body added negligible signal
+      // at weight 0.04. `body` is still kept on the doc for the result snippet.
     ],
     threshold: 0.4,
     ignoreLocation: true,

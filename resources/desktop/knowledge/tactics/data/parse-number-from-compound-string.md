@@ -9,7 +9,7 @@ A field like `"PHI 40-22"` or `"SEA -4.5"` is a STRING holding numbers mixed wit
 - In-scope reason: Casting a compound/embedded-number string with INT()/FLOAT() yields NULL/0; the number must be SPLIT/REGEXP-extracted first. A calc that quietly computes to 0 makes bars flat, totals wrong, sizes invisible — with no error. Root-caused live (WOW2026 W23 gantt, 2026-07-03).
 - Out-of-scope risk: none
 - Tags: string-parsing, split, regexp-extract, compound-field, embedded-number, int-of-string, float-of-string, cast-string-to-number, null-calc, zero-calc, flat-bars, gantt-tick, score-string, extract-number, tokenize-field
-- Relevant user prompts/search terms: "my bars are flat / just ticks", "gantt bar has no length", "calc computes to zero", "INT of a string returns null", "extract the number from a text field", "parse the score out of a string like PHI 40-22", "field is 'TEAM 40-22', I need the total points", "split a field on a space or dash", "cast a string with text in it to a number", "my measure is 0 for every row", "why is my calculated field null", "get the digits out of a mixed text field"
+- Relevant user prompts/search terms: "my bars are flat / just ticks", "gantt bar has no length", "gantt bars are flat ticks with no length", "calc computes to zero", "INT of a string returns null", "extract the number from a text field", "parse the score out of a string like PHI 40-22", "field is 'TEAM 40-22', I need the total points", "split a field on a space or dash", "cast a string with text in it to a number", "my measure is 0 for every row", "why is my calculated field null", "get the digits out of a mixed text field"
 
 ## When to Use
 
