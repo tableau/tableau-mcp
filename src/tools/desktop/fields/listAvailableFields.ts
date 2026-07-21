@@ -25,8 +25,7 @@ const paramsSchema = {
     .enum(['slim', 'full'])
     .optional()
     .describe(
-      "'full' (default): table + full metadata incl. column_ref. " +
-        "'slim': caption/role/datatype grouped by datasource, no table — much smaller for a wide datasource; get column_ref via resolve-field.",
+      "'full' (default): table + column_ref. 'slim': compact fields by datasource, no column_ref (use resolve-field).",
     ),
 };
 
