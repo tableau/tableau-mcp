@@ -3,9 +3,9 @@ import { z } from 'zod';
 /**
  * Types and schemas for the Tableau Desktop "External Client API" (Athena V0).
  *
- * Contract originally derived from monolith PRs #57536 → #59383, then tightened
- * against the live `/openapi.json` (OpenAPI 3.1, `info.version` 0.1.0, captured
- * 2026-07-20) plus live probes against the running 0.1.0 build. Envelope fields the
+ * Contract derived from the External Client API rollout, then tightened against the
+ * live `/openapi.json` (OpenAPI 3.1, `info.version` 0.1.0, captured 2026-07-20)
+ * plus live probes against the running 0.1.0 build. Envelope fields the
  * spec marks required are required here; everything else stays permissive
  * (`.passthrough()` / optional) because the spec is read-complete but write-thin.
  */
@@ -169,7 +169,7 @@ export type OperationWarning = z.infer<typeof operationWarningSchema>;
  * Operation envelope returned by `POST /v0/workbook/document` and
  * `POST /v0/app:invokeCommand`. `id`/`kind`/`state` are required per the spec.
  * `result` is present only on SUCCEEDED envelopes with non-null command output as of
- * External Client API apiVersion 0.1.1 (monolith #60596); 0.1.0 instances legitimately
+ * External Client API apiVersion 0.1.1; 0.1.0 instances legitimately
  * omit it on success.
  */
 export const operationEnvelopeSchema = z

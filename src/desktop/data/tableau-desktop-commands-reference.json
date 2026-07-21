@@ -23508,7 +23508,7 @@
       "source_file": "AnalyticsAssistantDesktopPaneCommand",
       "editor_type": "D",
       "server_permission": "UNRESTRICTED",
-      "description": "Generate a NotionalSpec from the current viz — BUT on External Client API apiVersion <=0.1.0 the /v0 External Client API did not return this command's output (write-blind envelope: state SUCCEEDED, no result). On apiVersion >=0.1.1, SUCCEEDED invokeCommand envelopes may carry serialized command output in result. Do not rely on <=0.1.0 to read the current spec. To inspect current state, use tabui:save-underlying-metadata (whole-document readback) or the list tools, then author a fresh v0.2 spec for tabdoc:generate-viz-from-notional-spec.",
+      "description": "Generate a NotionalSpec from the current viz. On External Client API apiVersion <=0.1.0, the /v0 External Client API does not return this command's output (write-blind envelope: state SUCCEEDED, no result). On apiVersion >=0.1.1, SUCCEEDED invokeCommand envelopes may carry serialized command output in result. The output is constrained to the serialized command result when Desktop supplies it.",
       "classification": "user_initiated",
       "usage_count": 0,
       "is_user_initiated": true,
@@ -23544,7 +23544,7 @@
       "source_file": "AnalyticsAssistantDesktopPaneCommand",
       "editor_type": "D",
       "server_permission": "UNRESTRICTED",
-      "description": "Generate a viz from a NotionalSpec v0.2 JSON. Args: NotionalSpecJson (REQUIRED, a JSON STRING), ClearSheet (optional boolean; true=fresh build, false=refinement). NO WorksheetId — target the sheet with tabdoc:goto-sheet first. Spec shape: {version:'0.2.0', chart?: one of text|heatmap|bar|stackedbar|line|area|gantt|scatterplot|histogram|symbolmap|filledmap|treemap|pie|dualline|boxplot|bullet|bubble, fields:[{caption, data: number|string|date|boolean|geographic|set, type: discrete|continuous, role: dimension|measure, aggregation: default|count|countd|sum|avg|max|min|median|year|qtr|month|week|day|hour|minute|second, encoding: x|y|color|size|text|shape}], categoricalFilters?:[{type:'categorical',field,values?,exclude?,limit?,condition?}], rangeFilters?:[{field,start?,end?,includeNull?}] (start/end, NOT min/max), relativeDateFilters?:[{type:'relative-date',field,amount,period: days|weeks|months|quarters|years (PLURAL),direction: next|previous}], sort?:{field, by, aggregation?, direction: asc|desc}}. CALCULATED FIELDS: create with author-calc FIRST, then reference by caption with aggregation 'default' (never 'none' — not v0.2 vocabulary). STRING DATES ('YYYY-MM' columns): author-calc a DATE() conversion (e.g. DATE([month] + \"-01\")) before a line chart — a line over a discrete string is a false trend. WRITE-BLIND: the /v0 API returns NO VizGenerationStatusList/VizCoherenceResult — a success envelope can hide an empty sheet. ALWAYS verify after apply: read the sheet back (tabui:save-underlying-metadata) and confirm rows/cols landed.",
+      "description": "Generate a viz from a NotionalSpec v0.2 JSON. Args: NotionalSpecJson (required JSON string), ClearSheet (optional boolean; true=fresh build, false=refinement). The route is constrained to the current worksheet; WorksheetId is not accepted. The output is constrained to the invokeCommand envelope and does not include a post-apply workbook readback.",
       "classification": "user_initiated",
       "usage_count": 0,
       "is_user_initiated": true,
@@ -23573,7 +23573,7 @@
           "local_name": "VizGenerationStatusList",
           "type_id": "",
           "required": false,
-          "comment": "NOT returned by the /v0 External Client API, but execute-tableau-command appends a compact post-apply readback to successful tabdoc:generate-viz-from-notional-spec results. Trust that line; use tabui:save-underlying-metadata only for deeper inspection.",
+          "comment": "The /v0 External Client API does not return a post-apply workbook readback for this command. The invokeCommand envelope may include serialized command output only when Desktop supplies it.",
           "cannot_provide_from_mcp": false
         }
       ],

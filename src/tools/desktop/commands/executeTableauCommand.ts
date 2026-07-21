@@ -7,38 +7,21 @@ import {
   knownLiveFailureFixFor,
 } from '../../../desktop/commandPolicy.js';
 import { validateKnownCommand } from '../../../desktop/commandRegistry.js';
-import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import {
   ExternalApiCommandRegistryEntry,
   ExternalApiRegistryParam,
   lookupExternalApiCommandRegistry,
 } from '../../../desktop/externalApi/commandRegistry.js';
-import {
-  findAllWorksheets,
-  findWorksheet,
-  normalizeArray,
-  parseXML,
-} from '../../../desktop/metadata/parser.js';
-import type {
-  ParsedPane,
-  ParsedWindow,
-  ParsedWorkbook,
-  ParsedWorksheet,
-} from '../../../desktop/metadata/types.js';
 import { validateNotionalSpecArgs } from '../../../desktop/notionalSpecGuard.js';
 import { validateCommandParams } from '../../../desktop/paramContractGuard.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
-import type {
-  ExecuteCommandWarning,
-  ToolExecutor,
-} from '../../../desktop/toolExecutor/toolExecutor.js';
+import type { ExecuteCommandWarning } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { validateUnderlyingMetadataLoad } from '../../../desktop/underlyingMetadataGuard.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const LOAD_UNDERLYING_METADATA_COMMAND = 'tabui:load-underlying-metadata';
-const GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND = 'tabdoc:generate-viz-from-notional-spec';
 const CONTEXT_FILLED_PARAM_TYPES = new Set(['UPI_Workspace', 'UPI_IWorkspace']);
 const MAX_RESULT_BYTES = 16 * 1024;
 
@@ -183,13 +166,6 @@ export const getExecuteTableauCommandTool = (
             envelopeWarnings: result.value.warnings ?? [],
             registryWarnings: externalApiRegistryWarnings,
           });
-          if (command === GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND) {
-            payload.message = await appendGenerateVizReadback({
-              message: payload.message,
-              executor,
-              signal: extra.signal,
-            });
-          }
 
           return new Ok(payload);
         },
@@ -290,7 +266,7 @@ function validateExternalApiCommandRegistry({
     const param = findExternalApiParam(registry, key);
     if (!param) {
       rewrittenArgs[key] = value;
-      // Non-goal for monolith #60596: unknown params can still surface as bare 500s;
+      // The External Client API still surfaces some unknown command params as bare 500s;
       // the command-registry guard remains the client-side defense.
       warnings.push(
         `WARNING: key "${key}" is not in the command registry - a wrong name surfaces as a bare 500.`,
@@ -392,145 +368,4 @@ function extractDocumentText(value: unknown): string | null {
   }
 
   return typeof result === 'string' ? result : null;
-}
-
-async function appendGenerateVizReadback({
-  message,
-  executor,
-  signal,
-}: {
-  message: string;
-  executor: ToolExecutor;
-  signal: AbortSignal;
-}): Promise<string> {
-  try {
-    const workbookXml = await getWorkbookXml({ executor, signal });
-    if (workbookXml.isErr()) {
-      return message;
-    }
-    const readback = formatCurrentWorksheetReadback(workbookXml.value);
-    return readback ? `${message}\n\n${readback}` : message;
-  } catch {
-    return message;
-  }
-}
-
-function formatCurrentWorksheetReadback(workbookXml: string): string | null {
-  const workbook = parseXML(workbookXml);
-  const worksheet = pickCurrentWorksheet(workbook);
-  if (!worksheet) {
-    return null;
-  }
-
-  const rows = formatShelf(worksheet.table?.rows);
-  const cols = formatShelf(worksheet.table?.cols);
-  const markClass = getMarkClass(worksheet);
-  const sort = getSortSummary(worksheet);
-  const pieces = [
-    `readback: sheet "${worksheet['@_name']}" - Rows: ${rows}; Cols: ${cols}`,
-    markClass ? `mark: ${markClass}` : undefined,
-    sort ? `sort: ${sort}` : undefined,
-  ].filter(Boolean);
-
-  return `${pieces.join('; ')}.`;
-}
-
-function pickCurrentWorksheet(workbook: ParsedWorkbook): ParsedWorksheet | null {
-  const worksheets = findAllWorksheets(workbook);
-  if (worksheets.length === 0) {
-    return null;
-  }
-
-  const worksheetWindows = normalizeArray<ParsedWindow>(workbook.workbook?.windows?.window).filter(
-    (window) => (window['@_class'] ?? 'worksheet') === 'worksheet',
-  );
-  const activeWindow = worksheetWindows.find((window) =>
-    ['true', '1'].includes(String(window['@_active'] ?? '').toLowerCase()),
-  );
-  if (activeWindow?.['@_name']) {
-    return findWorksheet(workbook, activeWindow['@_name']);
-  }
-
-  const maximizedWindow = worksheetWindows.find((window) =>
-    ['true', '1'].includes(String(window['@_maximized'] ?? '').toLowerCase()),
-  );
-  if (maximizedWindow?.['@_name']) {
-    return findWorksheet(workbook, maximizedWindow['@_name']);
-  }
-
-  if (worksheets.length === 1) {
-    return worksheets[0];
-  }
-  if (worksheetWindows.length === 1 && worksheetWindows[0]['@_name']) {
-    return findWorksheet(workbook, worksheetWindows[0]['@_name']);
-  }
-
-  return null;
-}
-
-function formatShelf(value: unknown): string {
-  const parts = normalizeArray(value)
-    .map((entry) => textValue(entry))
-    .filter((entry): entry is string => Boolean(entry));
-  return parts.length > 0 ? parts.join(', ') : '[]';
-}
-
-function getMarkClass(worksheet: ParsedWorksheet): string | null {
-  const panes = normalizeArray<ParsedPane>(worksheet.table?.panes?.pane);
-  const paneWithMark = panes.find((pane) => typeof pane.mark?.['@_class'] === 'string');
-  return paneWithMark?.mark?.['@_class'] ?? null;
-}
-
-function getSortSummary(worksheet: ParsedWorksheet): string | null {
-  const sort = findFirstSort(worksheet.table);
-  if (!isRecord(sort)) {
-    return null;
-  }
-
-  const column = stringAttr(sort, '@_column');
-  const direction = stringAttr(sort, '@_direction')?.toLowerCase();
-  const using = stringAttr(sort, '@_using');
-  if (!column && !direction && !using) {
-    return null;
-  }
-
-  return [column, direction, using ? `by ${using}` : undefined].filter(Boolean).join(' ');
-}
-
-function findFirstSort(value: unknown): unknown {
-  if (!isRecord(value)) {
-    return null;
-  }
-  for (const [key, child] of Object.entries(value)) {
-    if (key.toLowerCase().endsWith('sort')) {
-      return Array.isArray(child) ? child[0] : child;
-    }
-  }
-  for (const child of Object.values(value)) {
-    if (Array.isArray(child)) {
-      for (const item of child) {
-        const sort = findFirstSort(item);
-        if (sort) return sort;
-      }
-      continue;
-    }
-    const sort = findFirstSort(child);
-    if (sort) return sort;
-  }
-  return null;
-}
-
-function textValue(value: unknown): string | null {
-  if (typeof value === 'string') {
-    return value;
-  }
-  if (isRecord(value) && typeof value['#text'] === 'string') {
-    return value['#text'];
-  }
-  return null;
-}
-
-function stringAttr(value: Record<string, unknown>, key: string): string | null {
-  const attr = value[key];
-  return typeof attr === 'string' && attr.length > 0 ? attr : null;
 }
