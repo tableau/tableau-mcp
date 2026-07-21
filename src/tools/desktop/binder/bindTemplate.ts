@@ -152,8 +152,8 @@ function nextActionForEscalation(reason: EscalateReason): NextAction {
     );
   }
   return prefillNextAction(
-      'Build manually: place fields with add-field (rows/cols/encodings), then refine-worksheet',
-    );
+    'Build manually: place fields with add-field (rows/cols/encodings), then refine-worksheet',
+  );
 }
 
 function renderBlockers(blockers: Blocker[]): string {
