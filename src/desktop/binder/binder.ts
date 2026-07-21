@@ -59,7 +59,14 @@ type FieldIdentity = Pick<ProposeField, 'name' | 'role' | 'type' | 'datatype'>;
 // fragile follow-up. Kept in sync with WATERFALL_ORDER_FIELD_RE in bindTemplate.ts (the hint
 // side); this is the deterministic apply side.
 const WATERFALL_TEMPLATE_NAME = 'part-to-whole-waterfall';
-const WATERFALL_ORDER_FIELD_RE =
+/**
+ * A field name that reads as an explicit sequence/order column (display_order, sort_order,
+ * ordinal, …; matched precisely so `Order Date`, `order_count`, and measures do NOT trigger).
+ * EXPORTED because both sides of the waterfall-order fix must use ONE definition: the binder
+ * (this file) DEFAULTS the sort to such a column, and the bind-template tool's discovery HINT
+ * (bindTemplate.ts) names it — a duplicated pattern would drift.
+ */
+export const WATERFALL_ORDER_FIELD_RE =
   /(display|sort|step|row|item|line)[_\s-]?(order|no|num|number|index|rank|seq)|^(order|sequence|seq|ordinal|rank|step[_\s-]?order)$/i;
 
 export type LlmProposeInput = Omit<CoreLlmProposeInput, 'fields'> & {
@@ -334,13 +341,18 @@ function validateAndBuild(
   // WATERFALL_ORDER_FIELD_RE. Only when the column resolves unambiguously; otherwise leave the
   // template default (never guess). This is the deterministic fix for m1's sort-lands-~1/3 miss.
   if (!sort && m.template === WATERFALL_TEMPLATE_NAME) {
-    const orderField = summary.fields.find((f) => WATERFALL_ORDER_FIELD_RE.test(f.name));
+    const orderFields = summary.fields.filter((f) => WATERFALL_ORDER_FIELD_RE.test(f.name));
+    const orderField = orderFields[0];
     if (orderField) {
       const resolved = resolveInSummary(summary, orderField.name);
       if ((resolved.kind === 'exact' || resolved.kind === 'rewritten') && resolved.field) {
         sort = { by: orderField.name, direction: 'asc' };
+        // Name the rejected candidates when >1 sequence column exists so the agent/user can
+        // correct if we picked the wrong one (schema order is stable → deterministic pick).
+        const others = orderFields.slice(1).map((f) => f.name);
+        const alsoMatched = others.length > 0 ? ` (also matched: ${others.join(', ')})` : '';
         warnings.push(
-          `waterfall step order defaulted to "${orderField.name}" ascending (running total is order-dependent); pass proposal.sort to override`,
+          `waterfall step order defaulted to "${orderField.name}" ascending${alsoMatched} (running total is order-dependent); pass proposal.sort to override`,
         );
       }
     }

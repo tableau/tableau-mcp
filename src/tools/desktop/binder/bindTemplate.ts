@@ -14,6 +14,7 @@ import {
   resolveInSummary,
   type SchemaSummary,
   summarizeSchema,
+  WATERFALL_ORDER_FIELD_RE,
 } from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
@@ -130,13 +131,11 @@ const WATERFALL_TEMPLATE = 'part-to-whole-waterfall';
 const WATERFALL_ANCHOR_MAPPING_KEY = 'Anchor Category';
 const WATERFALL_ANCHOR_SLOT_ID = 'anchor_category';
 const WATERFALL_ANCHOR_FIELD_RE = /categor|type|kind|class|flag|marker/i;
-// An explicit sequence/order column (display_order, sort_order, seq, step, rank, line_no…).
-// A P&L/bridge running total is order-dependent and its intended order is usually a
-// non-displayed sequence field — the exact seam that made m1 give up on refine (which cannot
-// sort by a field not on the view) or fall to XML surgery. Naming the field in the hint is
-// what routes the singer to carry it in the ORIGINAL bind (proposal.sort) instead.
-const WATERFALL_ORDER_FIELD_RE =
-  /(display|sort|step|row|item|line)[_\s-]?(order|no|num|number|index|rank|seq)|^(order|sequence|seq|ordinal|rank|step[_\s-]?order)$/i;
+// WATERFALL_ORDER_FIELD_RE (the sequence/order-column matcher) is imported from binder.ts —
+// ONE definition shared with the binder's deterministic sort-default so the hint side and the
+// apply side can never drift. A P&L/bridge running total is order-dependent and its intended
+// order is usually a non-displayed sequence field; the hint names it so the singer carries it
+// in the ORIGINAL bind (proposal.sort) instead of giving up on refine or falling to XML surgery.
 const WATERFALL_SORT_HINT =
   'Waterfall default sort is DESC by the bound measure; override with proposal.sort:{by:<field>,direction:"asc"|"desc"} IN THE BIND — refine-worksheet cannot sort by a field that is not on the view.';
 
