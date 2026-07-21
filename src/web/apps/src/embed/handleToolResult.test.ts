@@ -12,13 +12,13 @@ vi.mock('./getEmbedTokenToolClient.js');
 vi.mock('./embedTableauViz.js');
 vi.mock('./loadTableauEmbeddingApi.js');
 vi.mock('./openInTableauLink.js');
-vi.mock('./recordEventClient.js');
+vi.mock('../shared/recordEventClient.js');
 
+import { recordEvent } from '../shared/recordEventClient.js';
 import { embedTableauViz } from './embedTableauViz.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
-import { recordEvent } from './recordEventClient.js';
 
 describe('handleToolResult', () => {
   let mockApp: App;

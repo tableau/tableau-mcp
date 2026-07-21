@@ -539,6 +539,51 @@ Overridable per-site via [Site Settings](site-settings.md) and per-request via
 
 <hr />
 
+## `STALE_CONTENT_MAX_ROWS`
+
+Maximum number of stale-content rows the
+[`query-admin-insights`](../../tools/admin-insights/query-admin-insights.md) tool's
+`kind: "stale-content"` backend will return in a single call. This is a server-side safety cap that
+protects the destructive stale-content cleanup flow from acting on an unreviewed mass set.
+
+When the stale-item count exceeds this cap, the tool **withholds the row payload** (`rows: []`) and
+returns a structured `ROW_CAP_EXCEEDED` warning in `mcp.warnings`. The `totalStaleItems` and
+`totalStaleSizeBytes` fields still report the **true** pre-cap totals so callers can see the
+magnitude and narrow scope (e.g. a specific `projectIds` subset or a higher `minAgeDays`) before
+re-running.
+
+- Default: `100`
+- Minimum: `1`
+- Maximum: `10000`
+
+Overridable per-site via [Site Settings](site-settings.md) and per-request via
+[Request Overrides](request-overrides.md#stale_content_max_rows).
+
+<hr />
+
+## `LICENSE_RECLAIM_INACTIVE_DAYS`
+
+Default minimum days of inactivity before a user is considered a license reclamation candidate by
+the [`user-license-reclamation-inform`](../../prompts/user-license-reclamation-inform.md) prompt.
+Callers can pass an explicit `inactiveDays` argument to override per-invocation.
+
+- Default: `90`
+- Minimum: `1`
+- Maximum: `3650` (10 years)
+
+<hr />
+
+## `LICENSE_RECLAIM_ROLES`
+
+Comma-separated list of site roles targeted for license reclamation by the
+[`user-license-reclamation-inform`](../../prompts/user-license-reclamation-inform.md) prompt.
+Callers can pass an explicit `roles` argument to override per-invocation.
+
+- Default: `Creator,Explorer`
+- Values must be valid Tableau site role names (e.g., `Creator`, `Explorer`, `Viewer`).
+
+<hr />
+
 ## `BREAK_GLASS_DISABLE_GLOBALLY`
 
 Can be used to force all MCP tools to return a "service unavailable" error message. Use with

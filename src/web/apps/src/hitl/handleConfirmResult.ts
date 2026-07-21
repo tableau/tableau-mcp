@@ -2,6 +2,7 @@ import type { App } from '@modelcontextprotocol/ext-apps';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { extractToolErrorMessage } from '../../../../utils/extractToolErrorMessage.js';
+import { showError } from '../shared/showError.js';
 import {
   isDeleteDatasourceConfirmResult,
   renderDeleteDatasourceConfirm,
@@ -14,7 +15,6 @@ import {
   isDeleteWorkbookConfirmResult,
   renderDeleteWorkbookConfirm,
 } from './deleteWorkbookConfirmClient.js';
-import { showError } from './showError.js';
 import {
   isUpdateCloudExtractRefreshTaskConfirmResult,
   renderUpdateCloudExtractRefreshTaskConfirm,

@@ -1,6 +1,6 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 
-import { recordEvent } from './recordEventClient.js';
+import { recordEvent } from '../shared/recordEventClient.js';
 
 /**
  * Shows an inline error message when the link fails to open.

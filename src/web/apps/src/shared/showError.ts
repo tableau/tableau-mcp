@@ -1,8 +1,8 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 
-import DISCONNECTED_SVG from '../assets/disconnected.svg?raw';
-import { TABLEAU_VIZ_CONTAINER_ID } from './embedTableauViz.js';
+import DISCONNECTED_SVG from './assets/disconnected.svg?raw';
 import { recordEvent } from './recordEventClient.js';
+import { TABLEAU_VIZ_CONTAINER_ID } from './vizContainer.js';
 
 export type Scenario = 'TOOL_ERROR' | 'PARSE_ERROR' | 'AUTH_ERROR' | 'EMBED_LOAD_ERROR';
 

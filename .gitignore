@@ -20,6 +20,7 @@ tableau-mcp.mcpb
 *.tgz
 *.tar.gz
 *.zip
+.DS_Store
 
 # MCP Apps
 src/web/apps/dist/

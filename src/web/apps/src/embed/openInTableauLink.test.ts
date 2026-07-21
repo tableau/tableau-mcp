@@ -4,10 +4,10 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./recordEventClient.js');
+vi.mock('../shared/recordEventClient.js');
 
+import { recordEvent } from '../shared/recordEventClient.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
-import { recordEvent } from './recordEventClient.js';
 
 describe('setupOpenInTableauLink', () => {
   let mockApp: App;
