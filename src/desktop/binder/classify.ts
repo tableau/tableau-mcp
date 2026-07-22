@@ -20,6 +20,7 @@ import Fuse from 'fuse.js';
 
 import { calcForcedSlotIds } from './calc-derivation.js';
 import type { Derivation, SlotKind, TemplateManifest } from './manifest-types.js';
+import { inferStringTemporal } from './stringTemporal.js';
 
 /**
  * SCHEMA SHAPES + `bareName`, inlined so this file stays import-pure — it severs the
@@ -73,6 +74,10 @@ export interface LlmProposeInput {
       kind: SlotKind;
       required: boolean;
       derivation?: Derivation;
+      // Present + true on a temporal slot that also accepts a date-like STRING field
+      // (DATEPARSE'd to a continuous axis) — tells the proposer a 'YYYY-MM' string month
+      // is a valid source for this temporal slot, not a kind mismatch.
+      temporal_from_string?: boolean;
     }>;
   }>;
   fields: Array<{
@@ -1328,7 +1333,16 @@ function roleGreedyBind(
         chosen = take(isCategorical);
         break;
       case 'temporal':
-        chosen = take(isTemporal);
+        // A real date/datetime field always fits. When the slot opts in via
+        // `temporal_from_string` (e.g. trend-line-chart's order_date), a date-like STRING
+        // dimension ("2024-03" month) is ALSO acceptable — the DATEPARSE apply splice
+        // (validate.ts + dateparseTemporalAxis) turns it into a continuous truncated axis.
+        // Without this the string month never fills the temporal slot, the required-slot
+        // gate fails, and the singer thrashes into a bar-over-strings (e4: 310s, judge 40).
+        chosen = take((f) =>
+          isTemporal(f) ||
+          (slot.temporal_from_string === true && inferStringTemporal(f) !== null),
+        );
         // UNIQUE-DATE TEMPORAL COMPLETION (final bind pass only; mirrors W60 geo): a
         // lone required temporal slot the ask did not name is completed with the
         // schema's single date field, under the strict preconditions in
@@ -1764,6 +1778,7 @@ export function buildLlmInput(
           kind: slot.kind,
           required: slot.required,
           derivation: slot.derivation, // template default; override only if the ask differs
+          ...(slot.temporal_from_string ? { temporal_from_string: true } : {}),
         })),
     })),
     fields: narrowed.map((f) => proposeField(f, exposeFieldIdentity)),

@@ -151,6 +151,50 @@ describe('binder/classifyNoLlm', () => {
   });
 });
 
+// ── e4: string-month temporal slot (temporal_from_string) ─────────────────────
+// trend-line-chart's order_date slot opts in via temporal_from_string:true. A 'YYYY-MM'
+// STRING month must be an acceptable source for it (DATEPARSE'd downstream to a continuous
+// axis) — WITHOUT this the string month never fills the temporal slot, the required-slot
+// gate fails, and the singer thrashes into a bar-over-strings (e4: 310s, judge 40).
+describe('binder/classifyNoLlm — temporal_from_string (e4 string month)', () => {
+  const MAU_STRING_MONTH_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='MAU'>
+      <column name='[month]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Mau]' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+  it('binds trend-line-chart with a STRING month on the temporal slot (order_date)', () => {
+    const s = summarizeSchema(MAU_STRING_MONTH_XML);
+    const cls = classifyNoLlm('line chart of Mau by month', manifests, s);
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('trend-line-chart');
+    const bySlot = Object.fromEntries(cls!.bindings.map((b) => [b.slot_id, b.field]));
+    // The string 'month' fills the temporal order_date slot (was fail-closed before the fix).
+    expect(bySlot['order_date']).toBe('month');
+    expect(bySlot['sales']).toBe('Mau');
+  });
+
+  it('does NOT fill a temporal_from_string slot with a NON-temporal-named string (region)', () => {
+    const nonTemporalXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='S'>
+      <column name='[region]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Mau]' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const s = summarizeSchema(nonTemporalXml);
+    // 'region' fails TEMPORAL_NAME_RE, so inferStringTemporal returns null → the temporal
+    // slot stays unfilled → fail-closed (no wrong DATEPARSE on a non-date string).
+    expect(classifyNoLlm('line chart of Mau by region', manifests, s)).toBeNull();
+  });
+});
+
 // ── Blake wall #2: confident measure-free lat/long symbol map ─────────────────
 // A plain "map of office locations" ask (pm_name, city, latitude, longitude — NO
 // measure) must be able to bind CONFIDENTLY (used_llm=false) to spatial-symbol-map-
