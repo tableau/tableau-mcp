@@ -127,6 +127,25 @@ describe('upsertDashboardIntoWorkbook', () => {
     const edited = "<dashboard name='Wrong'><zones /></dashboard>";
     expect(() => upsertDashboardIntoWorkbook(LIVE_WORKBOOK, 'Dashboard 1', edited)).toThrow();
   });
+
+  it('preserves whitespace-significant run text on an untouched sibling worksheet', () => {
+    // A dashboard apply re-serializes the whole workbook, worksheets included. A worksheet's
+    // formatted <run> text with significant spaces must survive verbatim.
+    const workbook = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <worksheets>
+    <worksheet name='Sheet 1'><table><formatted-text><run>Sales: </run><run>  $1.2M</run></formatted-text></table></worksheet>
+  </worksheets>
+  <dashboards>
+    <dashboard name='Dashboard 1'><zones><old /></zones></dashboard>
+  </dashboards>
+</workbook>`;
+    const edited = "<dashboard name='Dashboard 1'><zones><new /></zones></dashboard>";
+    const doc = upsertDashboardIntoWorkbook(workbook, 'Dashboard 1', edited);
+
+    expect(doc).toContain('<run>Sales: </run>');
+    expect(doc).toContain('<run>  $1.2M</run>');
+  });
 });
 
 describe('listWorkbookDashboards', () => {

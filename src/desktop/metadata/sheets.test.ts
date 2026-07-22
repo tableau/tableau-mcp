@@ -136,6 +136,23 @@ describe('upsertSheetIntoWorkbook', () => {
     const edited = "<worksheet name='Wrong'><table /></worksheet>";
     expect(() => upsertSheetIntoWorkbook(LIVE_WORKBOOK, 'Sheet 1', edited)).toThrow();
   });
+
+  it('preserves whitespace-significant run text on an untouched sibling sheet', () => {
+    // A single-sheet apply re-serializes the whole workbook. A sibling's formatted <run> text with
+    // significant leading/trailing spaces must survive verbatim — trimming corrupts titles/tooltips.
+    const workbook = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <worksheets>
+    <worksheet name='Edited'><table><old /></table></worksheet>
+    <worksheet name='Sibling'><table><formatted-text><run>Sales: </run><run>  $1.2M</run></formatted-text></table></worksheet>
+  </worksheets>
+</workbook>`;
+    const edited = "<worksheet name='Edited'><table><new /></table></worksheet>";
+    const doc = upsertSheetIntoWorkbook(workbook, 'Edited', edited);
+
+    expect(doc).toContain('<run>Sales: </run>');
+    expect(doc).toContain('<run>  $1.2M</run>');
+  });
 });
 
 describe('listSheets', () => {
