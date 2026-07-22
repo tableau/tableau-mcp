@@ -3,6 +3,7 @@ export const desktopToolNames = [
   'check-for-user-changes',
   'get-workbook-xml',
   'apply-workbook',
+  'activate-sheet',
   'list-worksheets',
   'list-dashboards',
   'get-worksheet-xml',

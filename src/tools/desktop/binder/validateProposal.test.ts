@@ -47,6 +47,10 @@ const escalateResult: BinderResult = {
 
 const proposeResult: BinderResult = {
   status: 'propose',
+  decline_reason: {
+    code: 'no_llm_classifier_declined',
+    detail: 'classifyNoLlm returned no deterministic template; routed to proposal candidates',
+  },
   llm_input: {
     ask: 'x',
     candidate_templates: [],
