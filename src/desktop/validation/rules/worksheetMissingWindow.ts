@@ -6,7 +6,7 @@ import type { ValidationIssue, ValidationRule } from '../types.js';
 export const worksheetMissingWindowRule: ValidationRule = {
   id: 'worksheet-missing-window',
   description:
-    'Warns when a worksheet has no matching worksheet-class <window> entry; Tableau silently ' +
+    'Rejects when a worksheet has no matching worksheet-class <window> entry; Tableau silently ' +
     'drops worksheets without a window (the sheet never appears).',
   contexts: ['workbook'],
 
@@ -38,7 +38,7 @@ export const worksheetMissingWindowRule: ValidationRule = {
 
       issues.push({
         ruleId: 'worksheet-missing-window',
-        severity: 'warning',
+        severity: 'error',
         message:
           `Worksheet "${name}" has no matching <window name="${name}"> entry. Tableau silently drops ` +
           'worksheets that lack a window — the sheet will not appear at all. Submit the worksheet and its ' +

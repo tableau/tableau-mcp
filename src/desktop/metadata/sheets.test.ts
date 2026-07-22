@@ -1,3 +1,4 @@
+import { runValidation } from '../validation/registry.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import {
   addSheet,
@@ -67,7 +68,6 @@ describe('extractSheetXml', () => {
     expect(xml).not.toContain('http://www.tableausoftware.com/xml/user');
   });
 });
-
 describe('worksheetDocumentToFragment', () => {
   // The live per-sheet /document route returns a whole <workbook> carrying every sheet, not a bare
   // fragment. The helper must slice out only the requested sheet.
@@ -111,6 +111,10 @@ describe('upsertSheetIntoWorkbook', () => {
   <dashboards>
     <dashboard name='Dashboard 1'><zones /></dashboard>
   </dashboards>
+  <windows>
+    <window class='worksheet' name='Sheet 1'><cards /></window>
+    <window class='worksheet' name='Sheet 2'><cards /></window>
+  </windows>
 </workbook>`;
 
   it('replaces the target sheet while preserving siblings and dashboards', () => {
@@ -130,6 +134,35 @@ describe('upsertSheetIntoWorkbook', () => {
 
     expect(listSheets(doc)).toEqual(['Sheet 1', 'Sheet 2', 'Sheet 3']);
     expect(doc).toContain('name="Dashboard 1"');
+    expect(doc).toContain('<window class="worksheet" name="Sheet 3">');
+    expect(runValidation(doc, 'workbook').issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ruleId: 'worksheet-missing-window',
+        }),
+      ]),
+    );
+  });
+
+  it('adds the worksheet window when replacing a sheet whose window is missing', () => {
+    const workbook = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <worksheets>
+    <worksheet name='Sheet 1'><table><old /></table></worksheet>
+  </worksheets>
+</workbook>`;
+    const edited = "<worksheet name='Sheet 1'><table><new /></table></worksheet>";
+    const doc = upsertSheetIntoWorkbook(workbook, 'Sheet 1', edited);
+
+    expect(doc).toContain('<new');
+    expect(doc).toContain('<window class="worksheet" name="Sheet 1">');
+    expect(runValidation(doc, 'workbook').issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ruleId: 'worksheet-missing-window',
+        }),
+      ]),
+    );
   });
 
   it('throws when the edited XML does not carry a <worksheet> with the given name', () => {

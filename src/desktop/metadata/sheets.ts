@@ -6,7 +6,54 @@ import {
   parseXML,
   serializeXML,
 } from './parser.js';
-import type { ParsedWindow, ParsedWorksheet } from './types.js';
+import type { ParsedWindow, ParsedWorkbook, ParsedWorksheet } from './types.js';
+
+function createWorksheetWindow(sheetName: string): ParsedWindow {
+  return {
+    '@_class': 'worksheet',
+    '@_name': sheetName,
+    cards: {
+      edge: [
+        {
+          '@_name': 'left',
+          strip: {
+            '@_size': '160',
+            card: [{ '@_type': 'pages' }, { '@_type': 'filters' }, { '@_type': 'marks' }],
+          },
+        },
+        {
+          '@_name': 'top',
+          strip: [
+            { '@_size': '31', card: { '@_type': 'columns' } },
+            { '@_size': '31', card: { '@_type': 'rows' } },
+            { '@_size': '31', card: { '@_type': 'title' } },
+          ],
+        },
+      ],
+    },
+    'simple-id': { '@_uuid': generateUUID() },
+  };
+}
+
+function isWorksheetWindowForSheet(window: ParsedWindow, sheetName: string): boolean {
+  return (
+    window['@_name'] === sheetName &&
+    (window['@_class'] === undefined ||
+      window['@_class'] === '' ||
+      window['@_class'] === 'worksheet')
+  );
+}
+
+function ensureWorksheetWindow(workbook: ParsedWorkbook, sheetName: string): void {
+  if (!workbook.workbook) workbook.workbook = {};
+  if (!workbook.workbook.windows) workbook.workbook.windows = {};
+
+  const windows = normalizeArray(workbook.workbook.windows.window);
+  if (!windows.some((window) => isWorksheetWindowForSheet(window, sheetName))) {
+    windows.push(createWorksheetWindow(sheetName));
+  }
+  workbook.workbook.windows.window = windows.length === 1 ? windows[0] : windows;
+}
 
 export function addSheet(workbookXml: string, sheetName: string): string {
   const workbook = parseXML(workbookXml);
@@ -44,36 +91,7 @@ export function addSheet(workbookXml: string, sheetName: string): string {
   worksheets.push(newWorksheet);
   workbook.workbook.worksheets.worksheet = worksheets.length === 1 ? worksheets[0] : worksheets;
 
-  if (!workbook.workbook.windows) workbook.workbook.windows = {};
-
-  const windows = normalizeArray(workbook.workbook.windows.window);
-  const newWindow: ParsedWindow = {
-    '@_class': 'worksheet',
-    '@_name': sheetName,
-    cards: {
-      edge: [
-        {
-          '@_name': 'left',
-          strip: {
-            '@_size': '160',
-            card: [{ '@_type': 'pages' }, { '@_type': 'filters' }, { '@_type': 'marks' }],
-          },
-        },
-        {
-          '@_name': 'top',
-          strip: [
-            { '@_size': '31', card: { '@_type': 'columns' } },
-            { '@_size': '31', card: { '@_type': 'rows' } },
-            { '@_size': '31', card: { '@_type': 'title' } },
-          ],
-        },
-      ],
-    },
-    'simple-id': { '@_uuid': generateUUID() },
-  };
-
-  windows.push(newWindow);
-  workbook.workbook.windows.window = windows.length === 1 ? windows[0] : windows;
+  ensureWorksheetWindow(workbook, sheetName);
 
   return serializeXML(workbook);
 }
@@ -146,7 +164,8 @@ export function worksheetDocumentToFragment(documentXml: string, sheetName: stri
 // document, which Desktop treats as authoritative and replaces the open workbook with. So the doc
 // must carry the ENTIRE live workbook with only this sheet swapped in; anything omitted (sibling
 // sheets, dashboards) would be pruned. Upsert by name: replace the matching worksheet, or append
-// it if absent (a new sheet). Windows are left intact so every sheet keeps its own.
+// it if absent (a new sheet). Preserve existing windows and synthesize this sheet's window when
+// missing, because Tableau drops worksheets that lack a matching worksheet window.
 export function upsertSheetIntoWorkbook(
   workbookXml: string,
   sheetName: string,
@@ -170,6 +189,7 @@ export function upsertSheetIntoWorkbook(
     worksheets[index] = editedWorksheet;
   }
   workbook.workbook.worksheets.worksheet = worksheets.length === 1 ? worksheets[0] : worksheets;
+  ensureWorksheetWindow(workbook, sheetName);
 
   return serializeXML(workbook);
 }
