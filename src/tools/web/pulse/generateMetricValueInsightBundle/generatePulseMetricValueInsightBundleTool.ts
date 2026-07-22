@@ -33,7 +33,7 @@ export const getGeneratePulseMetricValueInsightBundleTool = (
     server,
     name: 'generate-pulse-metric-value-insight-bundle',
     description: `
-Generate an insight bundle for the current aggregated value for Pulse Metric using Tableau REST API.  You need the full information of the Pulse Metric and Pulse Metric Definition to use this tool.
+Generate the selected insight bundle for a Pulse metric using the Tableau REST API. Provide the Pulse metric and metric definition details in \`bundleRequest\`.
 
 **Parameters:**
 - \`bundleRequest\` (required): The request to generate a bundle for.  Most of the information comes from data returned from other tools that retrieve Pulse Metric and Pulse Metric Definition information.  When creating the bundleRequest, you will need to set options using the following values:
@@ -49,6 +49,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
   - 'springboard' - Return a springboard insight bundle with the current value, period over period change, and the highest ranked insight for the metric.
   - 'basic' - Similar to a springboard insight, but data is focused on the dimensions of a metric that are low bandwidth because they have small value sets. It shows the current value, period over period change, and the highest ranked insight for the metric for that data.
   - 'detail' - Shows insights on performance over time of the metric, a summary visualization of metric highs and lows and trends, breakdowns of top contributors for each filterable dimension of the metric, and followup insights based on the top ranked insights not already presented.
+  - 'exploration' - Return an exploration insight bundle focused on performance trends, with BAN, anchor, and follow-up insight groups. Available in API 3.26 (Tableau Cloud September 2025) and later. Not available for Tableau Server.
 - \`verbosity\` (optional): 'full' returns the response verbatim, including \`viz\`. 'slim' strips the large \`viz\` (Vega chart-spec) blobs from every insight and summary result. Defaults to 'full'.
 - \`slim\` (optional): Deprecated: use \`verbosity=slim\`.
 
@@ -143,6 +144,9 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
     bundleRequest: (See default example above)
 - Generate the detail insight bundle for the Pulse metric:
     bundleType: 'detail',
+    bundleRequest: (See default example above)
+- Generate the exploration insight bundle for the Pulse metric:
+    bundleType: 'exploration',
     bundleRequest: (See default example above)
 `,
     paramsSchema,

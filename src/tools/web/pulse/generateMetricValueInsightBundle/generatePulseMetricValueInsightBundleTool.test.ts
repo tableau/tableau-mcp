@@ -202,7 +202,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(parsedValue).toEqual(mockBundleRequestResponse);
   });
 
-  it.each(['ban', 'springboard', 'basic', 'detail'] as const)(
+  it.each(['ban', 'springboard', 'basic', 'detail', 'exploration'] as const)(
     'should call generatePulseMetricValueInsightBundle with bundleType "%s" and return Ok result',
     async (bundleType) => {
       mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
@@ -224,9 +224,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
     const paramsSchema = await Provider.from(tool.paramsSchema);
     expect(tool.name).toBe('generate-pulse-metric-value-insight-bundle');
-    expect(tool.description).toContain(
-      'Generate an insight bundle for the current aggregated value',
-    );
+    expect(tool.description).toContain('Generate the selected insight bundle for a Pulse metric');
     expect(paramsSchema).toMatchObject({
       bundleRequest: expect.any(Object),
       slim: expect.any(Object),
