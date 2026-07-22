@@ -321,7 +321,7 @@ describe('bindTemplateTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getBindTemplateTool(new DesktopMcpServer());
     expect(tool.name).toBe('bind-template');
-    expect(tool.description).toBe('Bind/apply template; calcs[] first.');
+    expect(tool.description).toBe('Bind/apply template; calcs first.');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       ask: expect.any(Object),
@@ -331,7 +331,9 @@ describe('bindTemplateTool', () => {
     });
     expect(tool.annotations).toMatchObject({
       title: 'Bind Template',
-      readOnlyHint: true,
+      // NOT read-only / NOT idempotent: auto_apply + calcs[] mutate the live workbook.
+      readOnlyHint: false,
+      idempotentHint: false,
       openWorldHint: false,
     });
   });
