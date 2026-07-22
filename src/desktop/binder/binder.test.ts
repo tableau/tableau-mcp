@@ -370,6 +370,33 @@ describe('binder/classifyNoLlm — measure-free lat/long symbol map (Blake wall 
     expect(detailFields).toEqual(['venue_name']);
   });
 
+  it('UNLISTED coarse token cannot stack ask-overlap to beat the fine label (ask-overlap capped +2/field)', () => {
+    // Sol #598 re-review: a multi-token coarse field like 'tournament_round' ('round' is not
+    // in COARSE_GRAIN_TOKENS) could stack ask-overlap (tournament +2, round +2 = 4) and beat
+    // venue_name (3) → collapse. The per-FIELD +2 cap (not per-token) prevents it: both fields
+    // get at most +2 overlap, so venue_name's +1 'name' label breaks the tie for the fine grain.
+    const roundXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Venues'>
+      <column name='[venue_name]' role='dimension' type='nominal' datatype='string' />
+      <column name='[tournament_round]' role='dimension' type='nominal' datatype='string' />
+      <column name='[host_city]' role='dimension' type='nominal' datatype='string' />
+      <column name='[latitude]' role='measure' type='quantitative' datatype='real' />
+      <column name='[longitude]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const forced = withForcedEligible([LATLON]);
+    const s = summarizeSchema(roundXml);
+    const cls = classifyNoLlm('map tournament round venue locations', forced, s);
+    expect(cls).not.toBeNull();
+    const detailFields = cls!.bindings
+      .filter((b) => b.slot_id.startsWith('detail'))
+      .map((b) => b.field);
+    expect(detailFields).toEqual(['venue_name']);
+  });
+
   it('AMBIGUOUS wide schema (3+ dims, no clear best) still FAILS CLOSED — a wrong grain is worse than a propose', () => {
     // Three generic-noun dims none of which overlaps the ask or is a 'name' label → a genuine
     // scoring tie → pickBestDetailDim returns null → classification fails closed (propose).

@@ -743,16 +743,21 @@ function pickBestDetailDim(
     const toks = new Set([...nameTokens(f.name), ...nameTokens(bareName(f.columnName))]);
     const isCoarse = [...toks].some((t) => COARSE_GRAIN_TOKENS.has(t));
     let score = 0;
+    let askOverlap = false;
     for (const t of toks) {
       if (NON_LABEL_DETAIL_TOKENS.has(t)) score -= 2;
       if (COARSE_GRAIN_TOKENS.has(t)) score -= 3;
       if (t === 'name') score += 1;
-      // token appears in the ask (raw or masked) → names the subject — but a COARSE field
-      // (group/stage/…) is still the wrong GRAIN even when the ask mentions it, so ask-overlap
-      // does NOT rescue a coarse dim (prevents the "map tournament stage venues" collapse).
-      if (isCoarse) continue;
-      if (phraseIndexInAsk(rawAsk, t) >= 0 || phraseIndexInAsk(maskedAsk, t) >= 0) score += 2;
+      // ask-overlap is a per-FIELD signal, capped at +2 TOTAL (not per-token): a multi-token
+      // coarse field ("tournament_round") must NOT stack overlap points (tournament + round)
+      // to outrank a fine label ("venue_name"). And a COARSE field earns NO overlap credit at
+      // all — even when the ask names it — because it's the wrong GRAIN regardless (a coarse
+      // dim on detail centroid-collapses the finer marks). Sol #598 re-review: cap-not-list.
+      if (!isCoarse && (phraseIndexInAsk(rawAsk, t) >= 0 || phraseIndexInAsk(maskedAsk, t) >= 0)) {
+        askOverlap = true;
+      }
     }
+    if (askOverlap) score += 2;
     return score;
   };
   const ranked = categoricals
