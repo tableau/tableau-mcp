@@ -19,10 +19,7 @@ function worksheetXml(name: string): string {
   return `<worksheet name='${name}'><table><view/><style/><panes><pane><view/></pane></panes></table></worksheet>`;
 }
 
-function worksheetWindowXml(
-  name: string,
-  attributes = '',
-): string {
+function worksheetWindowXml(name: string, attributes = ''): string {
   return `<window class='worksheet' name='${name}'${attributes}><cards/></window>`;
 }
 
@@ -76,13 +73,12 @@ describe('activateSheetTool', () => {
 
   it('holds the apply lock across reading, mutating, and applying', async () => {
     const firstLoad = deferred<Awaited<ReturnType<typeof loadWorkbookXmlModule.loadWorkbookXml>>>();
-    const secondLoad = deferred<Awaited<ReturnType<typeof loadWorkbookXmlModule.loadWorkbookXml>>>();
-    const firstApply = deferred<
-      Awaited<ReturnType<typeof loadWorkbookXmlModule.applyWorkbookText>>
-    >();
-    const secondApply = deferred<
-      Awaited<ReturnType<typeof loadWorkbookXmlModule.applyWorkbookText>>
-    >();
+    const secondLoad =
+      deferred<Awaited<ReturnType<typeof loadWorkbookXmlModule.loadWorkbookXml>>>();
+    const firstApply =
+      deferred<Awaited<ReturnType<typeof loadWorkbookXmlModule.applyWorkbookText>>>();
+    const secondApply =
+      deferred<Awaited<ReturnType<typeof loadWorkbookXmlModule.applyWorkbookText>>>();
     const getSpy = vi
       .spyOn(getWorkbookXmlModule, 'getWorkbookXml')
       .mockResolvedValue(Ok(buildWorkbook()));
@@ -112,7 +108,9 @@ describe('activateSheetTool', () => {
   it('applies a workbook with only the active sheet changed and returns no XML', async () => {
     const fixture = buildWorkbook();
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(fixture));
-    const applySpy = vi.spyOn(loadWorkbookXmlModule, 'applyWorkbookText').mockResolvedValue(Ok.EMPTY);
+    const applySpy = vi
+      .spyOn(loadWorkbookXmlModule, 'applyWorkbookText')
+      .mockResolvedValue(Ok.EMPTY);
 
     const result = await getToolResult({ sheetName: 'Beta' });
 

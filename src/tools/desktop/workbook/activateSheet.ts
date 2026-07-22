@@ -134,9 +134,7 @@ export function activateSheetInWorkbook(
   }
 }
 
-function prepareWorkbookXmlForApply(
-  xml: string,
-): { xml: string; error?: LoadWorkbookXmlError } {
+function prepareWorkbookXmlForApply(xml: string): { xml: string; error?: LoadWorkbookXmlError } {
   const trimmedXml = xml.trim();
   if (!trimmedXml || (!trimmedXml.startsWith('<?xml') && !trimmedXml.startsWith('<'))) {
     return { xml: trimmedXml, error: { type: 'invalid-xml' } };
