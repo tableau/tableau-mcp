@@ -23,6 +23,8 @@ vi.mock('fs');
 
 const mockWorkbookXml =
   '<workbook><windows><window class="dashboard" name="Sales Dashboard"/></windows></workbook>';
+const mockWorkbookXmlWithViewpoints =
+  '<workbook><windows><window class="dashboard" name="Sales Dashboard"><viewpoints><viewpoint name="Chart 1"/></viewpoints></window></windows></workbook>';
 
 const defaultLayoutSpec = {
   kpis: ['KPI 1', 'KPI 2'],
@@ -42,7 +44,9 @@ describe('buildAndApplyDashboardTool', () => {
     vi.clearAllMocks();
     vi.mocked(existsSync).mockReturnValue(true);
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(mockWorkbookXml));
-    vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(mockWorkbookXml);
+    vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(
+      mockWorkbookXmlWithViewpoints,
+    );
     vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
       Ok({ validationWarnings: [] }),
     );
@@ -110,6 +114,43 @@ describe('buildAndApplyDashboardTool', () => {
         xml: expect.stringContaining('type-v2="text"'),
       }),
     );
+  });
+
+  it('applies the dashboard before injecting viewpoints into the fresh workbook', async () => {
+    await getToolResult({ layoutSpec: defaultLayoutSpec, worksheetNames: ['Chart 1'] });
+
+    const dashboardApplyOrder = vi.mocked(loadDashboardXmlModule.loadDashboardXml).mock
+      .invocationCallOrder[0];
+    const workbookReadOrder = vi.mocked(getWorkbookXmlModule.getWorkbookXml).mock
+      .invocationCallOrder[0];
+    const viewpointInjectOrder = vi.mocked(injectViewpointsModule.injectViewpoints).mock
+      .invocationCallOrder[0];
+    const workbookApplyOrder = vi.mocked(loadWorkbookXmlModule.loadWorkbookXml).mock
+      .invocationCallOrder[0];
+
+    expect(dashboardApplyOrder).toBeLessThan(workbookReadOrder);
+    expect(workbookReadOrder).toBeLessThan(viewpointInjectOrder);
+    expect(viewpointInjectOrder).toBeLessThan(workbookApplyOrder);
+  });
+
+  it('returns an error with zero viewpoints when injection is a no-op', async () => {
+    vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(mockWorkbookXml);
+
+    const result = await getToolResult({
+      layoutSpec: defaultLayoutSpec,
+      worksheetNames: ['KPI 1', 'Chart 1'],
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      dashboardName: 'Sales Dashboard',
+      dashboardApplied: true,
+      viewpointCount: 0,
+      requestedViewpointCount: 2,
+      failedViewpoints: ['KPI 1', 'Chart 1'],
+    });
+    expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
   });
 
   it('should return error when workbook file does not exist', async () => {

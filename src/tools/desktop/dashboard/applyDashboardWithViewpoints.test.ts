@@ -26,13 +26,17 @@ describe('applyDashboardWithViewpointsTool', () => {
   const mockDashboardXml = '<dashboard name="Sales Dashboard"><zones></zones></dashboard>';
   const mockWorkbookXml =
     '<workbook><windows><window class="dashboard" name="Sales Dashboard"/></windows></workbook>';
+  const mockWorkbookXmlWithViewpoints =
+    '<workbook><windows><window class="dashboard" name="Sales Dashboard"><viewpoints><viewpoint name="Sheet 1"/></viewpoints></window></windows></workbook>';
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockDashboardXml);
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(mockWorkbookXml));
-    vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(mockWorkbookXml);
+    vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(
+      mockWorkbookXmlWithViewpoints,
+    );
     vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
       Ok({ validationWarnings: [] }),
     );
@@ -69,7 +73,7 @@ describe('applyDashboardWithViewpointsTool', () => {
   it('should inject viewpoints with the correct dashboard and worksheet names', async () => {
     const mockInject = vi
       .spyOn(injectViewpointsModule, 'injectViewpoints')
-      .mockReturnValue(mockWorkbookXml);
+      .mockReturnValue(mockWorkbookXmlWithViewpoints);
 
     await getToolResult({
       dashboardFile: '/path/to/dashboard.xml',
@@ -80,6 +84,46 @@ describe('applyDashboardWithViewpointsTool', () => {
       'Sheet 1',
       'Sheet 2',
     ]);
+  });
+
+  it('applies the dashboard before injecting viewpoints into the fresh workbook', async () => {
+    await getToolResult({
+      dashboardFile: '/path/to/dashboard.xml',
+      worksheetNames: ['Sheet 1'],
+    });
+
+    const dashboardApplyOrder = vi.mocked(loadDashboardXmlModule.loadDashboardXml).mock
+      .invocationCallOrder[0];
+    const workbookReadOrder = vi.mocked(getWorkbookXmlModule.getWorkbookXml).mock
+      .invocationCallOrder[0];
+    const viewpointInjectOrder = vi.mocked(injectViewpointsModule.injectViewpoints).mock
+      .invocationCallOrder[0];
+    const workbookApplyOrder = vi.mocked(loadWorkbookXmlModule.loadWorkbookXml).mock
+      .invocationCallOrder[0];
+
+    expect(dashboardApplyOrder).toBeLessThan(workbookReadOrder);
+    expect(workbookReadOrder).toBeLessThan(viewpointInjectOrder);
+    expect(viewpointInjectOrder).toBeLessThan(workbookApplyOrder);
+  });
+
+  it('returns an error with zero viewpoints when injection is a no-op', async () => {
+    vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(mockWorkbookXml);
+
+    const result = await getToolResult({
+      dashboardFile: '/path/to/dashboard.xml',
+      worksheetNames: ['Sheet 1', 'Sheet 2'],
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      dashboardName: 'Sales Dashboard',
+      dashboardApplied: true,
+      viewpointCount: 0,
+      requestedViewpointCount: 2,
+      failedViewpoints: ['Sheet 1', 'Sheet 2'],
+    });
+    expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
   });
 
   it('should return error when dashboard file does not exist', async () => {
