@@ -10,8 +10,10 @@ import {
   getViewLineageQuery,
   mergeViewLineage,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { View } from '../../../sdks/tableau/types/view.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { isAxiosError } from '../../../utils/axios.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { paginate } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
@@ -88,26 +90,37 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
               jwtScopes: listViewsTool.requiredApiScopes,
               callback: async (restApi) => {
                 const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
-                const views = await paginate({
-                  pageConfig: {
-                    pageSize,
-                    limit: maxResultLimit
-                      ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
-                      : limit,
-                  },
-                  getDataFn: async (pageConfig) => {
-                    const { pagination, views: data } =
-                      await restApi.viewsMethods.queryViewsForSite({
-                        siteId: restApi.siteId,
-                        filter: validatedFilter ?? '',
-                        includeUsageStatistics: true,
-                        pageSize: pageConfig.pageSize,
-                        pageNumber: pageConfig.pageNumber,
-                      });
+                const effectiveLimit = maxResultLimit
+                  ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                  : limit;
 
-                    return { pagination, data };
-                  },
-                });
+                // Fast path: when results are scoped to a specific set of view IDs and the user
+                // hasn't supplied a filter, fetch those views directly instead of paging the whole
+                // site. Query Views for Site has no view-ID filter, so the slow path would fetch
+                // every view only to discard all but the allowed ones. A user filter forces the
+                // slow path since Get View can't apply server-side filtering.
+                const viewIds = configWithOverrides.boundedContext.viewIds;
+                const views =
+                  viewIds !== null && !filter
+                    ? await fetchAllowedViewsById({ restApi, viewIds, limit: effectiveLimit })
+                    : await paginate({
+                        pageConfig: {
+                          pageSize,
+                          limit: effectiveLimit,
+                        },
+                        getDataFn: async (pageConfig) => {
+                          const { pagination, views: data } =
+                            await restApi.viewsMethods.queryViewsForSite({
+                              siteId: restApi.siteId,
+                              filter: validatedFilter ?? '',
+                              includeUsageStatistics: true,
+                              pageSize: pageConfig.pageSize,
+                              pageNumber: pageConfig.pageNumber,
+                            });
+
+                          return { pagination, data };
+                        },
+                      });
 
                 if (configWithOverrides.disableMetadataApiRequests || views.length === 0) {
                   return flattenViewUsage(views);
@@ -191,6 +204,60 @@ export function constrainViews({
     type: 'success',
     result: views,
   };
+}
+
+/**
+ * Fetches the allowed views directly via Get View, one request per ID. Used when the results are
+ * scoped by `INCLUDE_VIEW_IDS` and no user filter is present.
+ *
+ * Views that return 403 (no permission) or 404 (deleted / not found) are silently omitted so the
+ * result matches the slow path, where such views simply never appear in Query Views for Site. Any
+ * other failure (5xx, network, etc.) propagates so genuine errors aren't hidden.
+ *
+ * All views are fetched before slicing to `limit` so that omitted (403/404) views are backfilled by
+ * other allowed views rather than leaving the result short.
+ */
+async function fetchAllowedViewsById({
+  restApi,
+  viewIds,
+  limit,
+}: {
+  restApi: RestApi;
+  viewIds: Set<string>;
+  limit: number | undefined;
+}): Promise<Array<View>> {
+  const ids = [...viewIds];
+  const results = await Promise.allSettled(
+    ids.map((viewId) =>
+      restApi.viewsMethods.getView({
+        siteId: restApi.siteId,
+        viewId,
+        includeUsageStatistics: true,
+      }),
+    ),
+  );
+
+  const views: Array<View> = [];
+  results.forEach((result, i) => {
+    if (result.status === 'fulfilled') {
+      views.push(result.value);
+      return;
+    }
+
+    const status = isAxiosError(result.reason) ? result.reason.response?.status : undefined;
+    if (status === 403 || status === 404) {
+      log({
+        message: `Skipping view ${ids[i]} from INCLUDE_VIEW_IDS: not accessible (HTTP ${status})`,
+        level: 'warning',
+        logger: 'list-views',
+      });
+      return;
+    }
+
+    throw result.reason;
+  });
+
+  return limit !== undefined ? views.slice(0, limit) : views;
 }
 
 function flattenViewUsage(views: Array<View>): Array<View> {
