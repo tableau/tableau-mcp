@@ -5,10 +5,10 @@ Start here. This map routes an authoring task to the right expertise module. It 
 read the specific module before authoring.
 
 How agents reach this knowledge:
-- **`search_knowledge`** — fuzzy ranking by concept/keyword. Best when you don't know
+- **`search-knowledge`** — fuzzy ranking by concept/keyword. Best when you don't know
   the slug. Returns `expertise://tableau/<slug>` hits; read the top one.
 - **This map** — when you want the deliberate general → specific path.
-- **`read_knowledge_resource`** (or MCP `resources/read`) — read a known slug.
+- **`read-knowledge-resource`** (or MCP `resources/read`) — read a known slug.
 
 Slug = path under `data/knowledge/` with `.md` stripped. URI =
 `expertise://tableau/<slug>`.
@@ -25,7 +25,7 @@ The routing test (one question): *Would this statement still be true for another
 tool?* Yes → `strategy/` or `personalization/`; if it names a Tableau XML
 node/attribute or a Tableau-specific mechanic → `tactics/`.
 
-Folders are a human/slug aid — agents navigate by `search_knowledge` + this map. Many
+Folders are a human/slug aid — agents navigate by `search-knowledge` + this map. Many
 topics have a **tactics file (the XML/how) and a strategy companion (the when/why)**
 that cross-link bidirectionally: land on either, hop to the other via its
 `**Tactics companion:**` / related-knowledge line.
