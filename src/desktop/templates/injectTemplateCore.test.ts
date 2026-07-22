@@ -8,6 +8,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
+import { injectTemplate } from './injectTemplate.js';
 import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
@@ -162,6 +163,29 @@ describe('buildInjectedWorkbookXml — pre-existing duplicates converge in ONE a
     expect((result.xml.match(/<window class="worksheet" name="Sales">/g) ?? []).length).toBe(1);
     expect(result.xml).toMatch(/<worksheet name="Keep">/);
     expect(result.xml).toMatch(/<window class="dashboard" name="Sales">/);
+  });
+});
+
+describe('injectTemplate — appended window focus flags', () => {
+  it('strips active/maximized from the appended template window while preserving existing window flags', () => {
+    const workbookXml = [
+      "<?xml version='1.0'?><workbook>",
+      "<worksheets><worksheet name='Keep'><table/></worksheet></worksheets>",
+      "<windows><window active='true' class='worksheet' maximized='true' name='Keep'/></windows>",
+      '</workbook>',
+    ].join('');
+    const templateXml = [
+      "<?xml version='1.0'?><workbook>",
+      "<worksheets><worksheet name='Injected'><table/></worksheet></worksheets>",
+      "<windows><window active='true' class='worksheet' maximized='true' name='Injected'/></windows>",
+      '</workbook>',
+    ].join('');
+
+    const result = injectTemplate(workbookXml, templateXml, 'worksheet');
+
+    expect(result).toMatch(/<window active="true" class="worksheet" maximized="true" name="Keep">/);
+    expect(result).toMatch(/<window class="worksheet" name="Injected">/);
+    expect(result).not.toMatch(/<window[^>]*name="Injected"[^>]*(active|maximized)=/);
   });
 });
 

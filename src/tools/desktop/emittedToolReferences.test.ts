@@ -24,6 +24,7 @@ const NON_TOOL_VOCABULARY = [
   'base-column-conflict',
   'bind-template-shaped',
   'calc-dependency-unmet',
+  'endpoint-not-in-this-build',
   'column-instance',
   'cross-datasource-binding',
   'data-source',

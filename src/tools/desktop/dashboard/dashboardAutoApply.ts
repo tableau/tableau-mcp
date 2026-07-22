@@ -1,11 +1,11 @@
 // W60 single-pass dashboard-auto-apply: collapses the proven 5-call / 6-Desktop-apply
 // dashboard composition (bind-template x N + batch-create-and-cache-sheets +
-// build-and-apply-dashboard) into ONE MCP call with exactly one Desktop apply dispatch
-// on the primary path. See ~/.claude/state/w60-dashboard-singlepass-spec.md for the full
+// build-and-apply-dashboard) into ONE MCP call with one content-creation apply plus
+// one cheap follow-up activation apply on success. See the W60 dashboard single-pass
 // design (§2 architecture, §4 the five design questions, §7 test plan).
 //
 // Every mutation stays IN-MEMORY over one pristine workbook read until the single
-// loadWorkbookXml dispatch (§4-Q3): a bind failure, inject failure, batch-preflight
+// creating loadWorkbookXml dispatch (§4-Q3): a bind failure, inject failure, batch-preflight
 // refusal, events-dirty re-check, or preflight validation failure all short-circuit
 // BEFORE Desktop is touched. Nothing here is partially applied on the primary path.
 
@@ -16,6 +16,7 @@ import { z } from 'zod';
 
 import { type BinderResult, bindTemplate } from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
+import { activateSheetBestEffort } from '../../../desktop/commands/workbook/activateSheet.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { injectViewpoints } from '../../../desktop/commands/workbook/injectViewpoints.js';
 import { loadDashboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
@@ -54,8 +55,8 @@ import { buildDashboardXml, computeZones, type Zone } from './dashboardZones.js'
  * 18055): a 2-worksheet auto-grid dashboard was injected into one workbook-level apply
  * and `tableau-get-dashboard` readback showed the exact zone tree (worksheet refs,
  * w/h/x/y tiling) intact — NOT stripped to a basic empty layout. PASS → primary mode.
- * One `if` at the dispatch step flips this to fallback mode (a second `loadDashboardXml`
- * dispatch, §2 "Probe fails") without touching the rest of the flow — never a
+ * One `if` at the content dispatch step flips this to fallback mode (a second
+ * `loadDashboardXml` content dispatch, §2 "Probe fails") without touching the rest — never a
  * user-facing flag.
  */
 export const DASHBOARD_ZONES_VIA_WORKBOOK = true;
@@ -439,8 +440,8 @@ export const getDashboardAutoApplyTool = (
             }
           }
 
-          // ── ONE dispatch (primary mode) — the ONLY doc that ever reaches Desktop,
-          // the same runValidation workbook preflight guarantee every apply path has.
+          // ── ONE content-creation dispatch (primary mode), with the same
+          // runValidation workbook preflight guarantee every apply path has.
           const applyStart = Date.now();
           const applyResult = await loadWorkbookXml({
             xml: currentXml,
@@ -457,8 +458,6 @@ export const getDashboardAutoApplyTool = (
               prefillNextAction('Fall back to per-viz auto-apply'),
             );
           }
-          const applyMs = Date.now() - applyStart;
-
           if (!zonesViaWorkbook) {
             // Fallback mode (§2 "Probe fails"): the workbook (worksheets + minimal empty
             // dashboard) is already live; a second dispatch lays in the real zones. A
@@ -511,6 +510,15 @@ export const getDashboardAutoApplyTool = (
               ).toErr();
             }
           }
+
+          // Composition policy: all worksheet injects above are focus-neutral. Only the
+          // terminal dashboard artifact navigates, once, after its creating apply succeeds.
+          await activateSheetBestEffort({
+            sheetName: dashboardName,
+            executor,
+            signal: extra.signal,
+          });
+          const applyMs = Date.now() - applyStart;
 
           return new Ok({
             applied: true,

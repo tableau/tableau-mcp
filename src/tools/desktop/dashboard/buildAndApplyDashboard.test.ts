@@ -3,6 +3,7 @@ import { existsSync } from 'fs';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as activateSheetModule from '../../../desktop/commands/workbook/activateSheet.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as injectViewpointsModule from '../../../desktop/commands/workbook/injectViewpoints.js';
 import * as loadDashboardXmlModule from '../../../desktop/commands/workbook/loadDashboardXml.js';
@@ -16,6 +17,7 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getBuildAndApplyDashboardTool } from './buildAndApplyDashboard.js';
 
 vi.mock('../../../desktop/commands/workbook/getWorkbookXml.js');
+vi.mock('../../../desktop/commands/workbook/activateSheet.js');
 vi.mock('../../../desktop/commands/workbook/loadWorkbookXml.js');
 vi.mock('../../../desktop/commands/workbook/loadDashboardXml.js');
 vi.mock('../../../desktop/commands/workbook/injectViewpoints.js');
@@ -49,6 +51,7 @@ describe('buildAndApplyDashboardTool', () => {
     vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(
       mockWorkbookXmlWithViewpoints,
     );
+    vi.mocked(activateSheetModule.activateSheetBestEffort).mockResolvedValue(undefined);
     vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
       Ok({ validationWarnings: [] }),
     );
@@ -85,7 +88,7 @@ describe('buildAndApplyDashboardTool', () => {
     expect(resultObj.viewpointCount).toBe(4);
   });
 
-  it('should call loadDashboardXml with built XML containing zone elements', async () => {
+  it('should apply the dashboard focus-neutral before activating it once at the end', async () => {
     const mockLoad = vi
       .spyOn(loadDashboardXmlModule, 'loadDashboardXml')
       .mockResolvedValue(Ok({ validationWarnings: [] }));
@@ -97,6 +100,10 @@ describe('buildAndApplyDashboardTool', () => {
         dashboardName: 'Sales Dashboard',
         xml: expect.stringContaining('<zone'),
       }),
+    );
+    expect(mockLoad.mock.calls[0]?.[0]).not.toHaveProperty('activateSheetName');
+    expect(activateSheetModule.activateSheetBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({ sheetName: 'Sales Dashboard' }),
     );
   });
 

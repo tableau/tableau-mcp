@@ -11,6 +11,8 @@ import * as loadDashboardXmlModule from '../../../desktop/commands/workbook/load
 import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
+import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
+import type { ParsedWindow } from '../../../desktop/metadata/types.js';
 import * as injectTemplateModule from '../../../desktop/templates/injectTemplate.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
@@ -114,7 +116,7 @@ describe('dashboardAutoApplyTool', () => {
     expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
   });
 
-  it('the live probe verdict is PASS — primary single-dispatch mode is the shipped default', () => {
+  it('the live probe verdict is PASS — one content-creation dispatch is the shipped default', () => {
     // W60 zones-live-probe (2026-07-08, session 18055): a fully zone-populated
     // dashboard node survived a single workbook-level apply on readback. Pin the
     // verdict so a future edit cannot silently flip back to fallback mode.
@@ -185,7 +187,8 @@ function setupMocks({
     .join('');
   const workbookXml = `<?xml version="1.0"?><workbook><dashboards>${dashboardsXml}</dashboards><windows></windows></workbook>`;
 
-  vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(workbookXml));
+  let liveXml = workbookXml;
+  vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockImplementation(async () => Ok(liveXml));
   const bindSpy = vi.mocked(binderModule.bindTemplate);
   let call = 0;
   bindSpy.mockImplementation(async () => binds[call++ % binds.length]);
@@ -219,7 +222,12 @@ function setupMocks({
   );
 
   const executeCommand = vi.fn().mockResolvedValue(dispatch);
-  const applyWorkbookDocument = vi.fn().mockResolvedValue(dispatch);
+  const applyWorkbookDocument = vi.fn(async (xml: string) => {
+    if (dispatch.isOk()) {
+      liveXml = xml;
+    }
+    return dispatch;
+  });
   const getEvents =
     userEventsDuringBatch === 'unsupported'
       ? vi.fn().mockResolvedValue(Err('events unsupported on this transport'))
@@ -272,7 +280,7 @@ describe('dashboardAutoApplyTool happy path', () => {
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
-  it('applies exactly once (one read, one dispatch) and returns the trimmed success shape', async () => {
+  it('keeps the internal sheet build focus-neutral and returns the trimmed success shape', async () => {
     const { applyWorkbookDocument, getExecutor } = setupMocks();
 
     const result = await getToolResult({
@@ -302,8 +310,59 @@ describe('dashboardAutoApplyTool happy path', () => {
       'sheets',
     ]);
 
-    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(1);
+    // The public dashboard boundary performs the one primary read plus a fresh
+    // best-effort activation read; internal worksheets never activate independently.
+    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(2);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('activates the composed dashboard once through validated goto-sheet', async () => {
+    const injectedWorkbook = `<?xml version="1.0"?><workbook>
+      <worksheets><worksheet name="Old Sheet"><table /></worksheet></worksheets>
+      <dashboards></dashboards>
+      <windows><window class="worksheet" name="Old Sheet" active="true" maximized="true" /></windows>
+    </workbook>`;
+    const { executeCommand, applyWorkbookDocument, getExecutor } = setupMocks({
+      inject: { ok: true, xml: injectedWorkbook },
+    });
+    vi.mocked(injectTemplateModule.injectTemplate).mockImplementation((workbookXml: string) => {
+      return workbookXml
+        .replace(
+          '</dashboards>',
+          '<dashboard name="Sales Dashboard"><zones/></dashboard></dashboards>',
+        )
+        .replace('</windows>', '<window class="dashboard" name="Sales Dashboard" /></windows>');
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const [primaryXml] = applyWorkbookDocument.mock.calls[0] ?? [];
+    const primaryWindows = normalizeArray<ParsedWindow>(
+      parseXML(String(primaryXml)).workbook?.windows?.window,
+    );
+    expect(primaryWindows.find((window) => window['@_name'] === 'Old Sheet')).toMatchObject({
+      '@_active': 'true',
+      '@_maximized': 'true',
+    });
+    expect(
+      primaryWindows.find((window) => window['@_name'] === 'Sales Dashboard'),
+    ).not.toMatchObject({
+      '@_active': 'true',
+      '@_maximized': 'true',
+    });
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        namespace: 'tabdoc',
+        command: 'goto-sheet',
+        args: { Sheet: 'Sales Dashboard' },
+      }),
+    );
   });
 
   it('injects the dashboard wrapper with zones referencing every resolved title', async () => {
