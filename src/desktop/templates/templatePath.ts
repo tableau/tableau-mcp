@@ -45,7 +45,6 @@ export function listTemplateNames(): string[] {
     return readdirSync(dir)
       .filter((f) => f.endsWith('.xml'))
       .map((f) => f.replace(/\.xml$/, ''))
-      .filter((name) => manifestBackedNames.has(name))
       .sort();
   }
   return listDataAssetNames('templates')

@@ -8,6 +8,12 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getBuildAndApplyWorksheetTool } from './buildAndApplyWorksheet.js';
 
 vi.mock('../../../desktop/commands/workbook/loadWorksheetXml.js');
+vi.mock('../../../desktop/binder/explicit-bind.js', async () => {
+  const actual = await vi.importActual<typeof import('../../../desktop/binder/explicit-bind.js')>(
+    '../../../desktop/binder/explicit-bind.js',
+  );
+  return { ...actual, bindExplicitTemplate: vi.fn(actual.bindExplicitTemplate) };
+});
 vi.mock('../../../desktop/metadata/index.js');
 vi.mock('../../../desktop/templates/fieldReferenceRewriter.js');
 vi.mock('../../../desktop/templates/templateColumnRequirements.js');
@@ -16,6 +22,7 @@ vi.mock('fs');
 
 import { existsSync, readFileSync } from 'fs';
 
+import { bindExplicitTemplate } from '../../../desktop/binder/explicit-bind.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import { deflectionText } from '../../../desktop/route/route-gate.js';
@@ -231,7 +238,6 @@ describe('buildAndApplyWorksheetTool', () => {
         readbackVerification: { ok: true, status: 'passed' },
       }),
     );
-
     const result = await getResult(
       {
         session: SESSION,
@@ -254,6 +260,192 @@ describe('buildAndApplyWorksheetTool', () => {
     expect(payload.message).not.toContain('Built and applied');
     expect(payload.fieldCount).toBe(2);
     expect(payload.requestedFieldCount).toBe(3);
+  });
+
+  it('reports correlation scatter coverage from manifest-consumed fields, not XML columns', async () => {
+    const extra = makeExtra();
+    vi.mocked(listAvailableFields).mockReturnValue([
+      {
+        column_ref: '[DS].[none:Customer Name:nk]',
+        role: 'dimension',
+        datasource: 'DS',
+        columnName: '[Customer Name]',
+        columnInstanceName: '[none:Customer Name:nk]',
+        derivation: 'None' as any,
+        type: 'nominal',
+        datatype: 'string',
+      },
+      {
+        column_ref: '[DS].[none:Region:nk]',
+        role: 'dimension',
+        datasource: 'DS',
+        columnName: '[Region]',
+        columnInstanceName: '[none:Region:nk]',
+        derivation: 'None' as any,
+        type: 'nominal',
+        datatype: 'string',
+      },
+      {
+        column_ref: '[DS].[sum:Sales:qk]',
+        role: 'measure',
+        datasource: 'DS',
+        columnName: '[Sales]',
+        columnInstanceName: '[sum:Sales:qk]',
+        derivation: 'Sum' as any,
+        type: 'quantitative',
+        datatype: 'real',
+      },
+      {
+        column_ref: '[DS].[sum:Profit:qk]',
+        role: 'measure',
+        datasource: 'DS',
+        columnName: '[Profit]',
+        columnInstanceName: '[sum:Profit:qk]',
+        derivation: 'Sum' as any,
+        type: 'quantitative',
+        datatype: 'real',
+      },
+      {
+        column_ref: '[DS].[sum:Quantity:qk]',
+        role: 'measure',
+        datasource: 'DS',
+        columnName: '[Quantity]',
+        columnInstanceName: '[sum:Quantity:qk]',
+        derivation: 'Sum' as any,
+        type: 'quantitative',
+        datatype: 'integer',
+      },
+    ]);
+    // The XML has three measure-looking columns because one is a template-owned calc,
+    // but the manifest exposes only two bindable measure slots.
+    vi.mocked(getTemplateColumnRequirements).mockReturnValue([
+      { name: 'Customer Name', role: 'dimension', datatype: 'string', type: 'nominal' },
+      { name: 'Region', role: 'dimension', datatype: 'string', type: 'nominal' },
+      { name: 'Sales', role: 'measure', datatype: 'real', type: 'quantitative' },
+      { name: 'Profit', role: 'measure', datatype: 'real', type: 'quantitative' },
+      {
+        name: 'Calculation_1368249927221915648',
+        role: 'measure',
+        datatype: 'real',
+        type: 'quantitative',
+      },
+    ]);
+    vi.mocked(loadWorksheetXml).mockResolvedValue(
+      new Ok({
+        readbackWarnings: [],
+        readbackVerification: { ok: true, status: 'passed' },
+      }),
+    );
+    vi.mocked(bindExplicitTemplate).mockReturnValueOnce({
+      ok: true,
+      template: 'correlation-scatter-plot-chart',
+      datasource: 'DS',
+      fieldMapping: {
+        Sales: '[DS].[sum:Sales:qk]',
+        Profit: '[DS].[sum:Profit:qk]',
+        'Customer Name': '[DS].[none:Customer Name:nk]',
+        Region: '[DS].[none:Region:nk]',
+      },
+      fieldMetadata: {
+        Sales: { datatype: 'real', type: 'quantitative' },
+        Profit: { datatype: 'real', type: 'quantitative' },
+        'Customer Name': { datatype: 'string', type: 'nominal' },
+        Region: { datatype: 'string', type: 'nominal' },
+      },
+      consumedFieldRefs: [
+        '[DS].[sum:Sales:qk]',
+        '[DS].[sum:Profit:qk]',
+        '[DS].[none:Customer Name:nk]',
+        '[DS].[none:Region:nk]',
+      ],
+      templateSlots: [
+        {
+          slot_id: 'sales',
+          template_field: 'Sales',
+          derivation: 'sum',
+          role: ['cols'],
+          kind: 'quantitative',
+          bindable: true,
+          required: true,
+        },
+        {
+          slot_id: 'profit',
+          template_field: 'Profit',
+          derivation: 'sum',
+          role: ['rows'],
+          kind: 'quantitative',
+          bindable: true,
+          required: true,
+        },
+        {
+          slot_id: 'customer_name',
+          template_field: 'Customer Name',
+          derivation: 'none',
+          role: ['detail'],
+          kind: 'categorical',
+          bindable: true,
+          required: true,
+        },
+        {
+          slot_id: 'region',
+          template_field: 'Region',
+          derivation: 'none',
+          role: ['detail'],
+          kind: 'categorical',
+          bindable: true,
+          required: true,
+        },
+      ],
+      optionalFieldPrunes: [],
+      warnings: [],
+      passthrough: false,
+    });
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        taskSpec: {
+          ...TASK_SPEC_BASE,
+          template: 'correlation-scatter-plot-chart',
+          fields: [
+            '[DS].[none:Customer Name:nk]',
+            '[DS].[none:Region:nk]',
+            '[DS].[sum:Sales:qk]',
+            '[DS].[sum:Profit:qk]',
+            '[DS].[sum:Quantity:qk]',
+          ],
+        },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(bindExplicitTemplate).toHaveBeenCalledWith(
+      'correlation-scatter-plot-chart',
+      [
+        '[DS].[none:Customer Name:nk]',
+        '[DS].[none:Region:nk]',
+        '[DS].[sum:Sales:qk]',
+        '[DS].[sum:Profit:qk]',
+        '[DS].[sum:Quantity:qk]',
+      ],
+      expect.any(Object),
+      expect.any(Object),
+    );
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toMatch(/^WARNING — dropped requested field/);
+    expect(payload.message).toContain('"[DS].[sum:Quantity:qk]"');
+    expect(payload.message).toContain('applied only with 4 of 5 requested fields');
+    expect(payload.fieldCount).toBe(4);
+    expect(payload.requestedFieldCount).toBe(5);
+    expect(payload.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(
+          'Measure field "[DS].[sum:Quantity:qk]" was dropped: template "correlation-scatter-plot-chart" exposes only 2 measure slot(s).',
+        ),
+      ]),
+    );
   });
 
   it('rejects a qualified ref whose base field exists but exact column_ref is missing', async () => {

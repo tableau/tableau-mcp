@@ -9,6 +9,7 @@ import {
   formatExplicitBindErrors,
   schemaSummaryFromAvailableFields,
 } from '../../../desktop/binder/explicit-bind.js';
+import type { SlotSpec } from '../../../desktop/binder/manifest-types.js';
 import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
@@ -184,6 +185,14 @@ function formatDroppedFieldsReceipt(droppedFields: string[], requestedCount: num
     `(${droppedFields.length}/${requestedCount} dropped: ${quotedFields(droppedFields)}). ` +
     'Readback cannot verify omitted fields; do not report full worksheet success.'
   );
+}
+
+function manifestRoleSlotCount(slots: readonly SlotSpec[], role: 'dimension' | 'measure'): number {
+  return slots.filter((slot) => {
+    if (!slot.bindable) return false;
+    if (role === 'measure') return slot.kind === 'quantitative';
+    return slot.kind === 'categorical' || slot.kind === 'temporal' || slot.kind === 'geo';
+  }).length;
 }
 
 function inferSingleDatasourceFromColumnRefs(
@@ -363,31 +372,12 @@ export const getBuildAndApplyWorksheetTool = (
             }
           }
 
-          // Role-matched fields that overflowed the template's slot count are
-          // dropped by the index-bounded loops above; name each one.
-          for (const dropped of dimensionFields.slice(templateDimensions.length)) {
-            droppedRequestedFields.push(dropped.requested);
-            warnings.push(
-              `Dimension field "${dropped.requested}" was dropped: template "${template}" exposes only ${templateDimensions.length} dimension slot(s).`,
-            );
-          }
-          for (const dropped of measureFields.slice(templateMeasures.length)) {
-            droppedRequestedFields.push(dropped.requested);
-            warnings.push(
-              `Measure field "${dropped.requested}" was dropped: template "${template}" exposes only ${templateMeasures.length} measure slot(s).`,
-            );
-          }
+          const supportedResolvedFields = resolvedFields.filter(
+            (resolution) => !unsupportedRoleFields.includes(resolution),
+          );
+          let appliedResolvedFields = supportedResolvedFields;
 
-          const droppedResolutions = new Set([
-            ...unsupportedRoleFields,
-            ...dimensionFields.slice(templateDimensions.length),
-            ...measureFields.slice(templateMeasures.length),
-          ]);
-          const bindFields = resolvedFields
-            .filter((resolution) => !droppedResolutions.has(resolution))
-            .map((resolution) => resolution.columnRef);
-
-          if (fields.length > 0 && bindFields.length === 0) {
+          if (fields.length > 0 && supportedResolvedFields.length === 0) {
             return new ArgsValidationError(
               `All requested fields were dropped: ${quotedFields(fields)}. No worksheet was applied.\n\n` +
                 'FIX: Use list-available-fields or resolve-field, then retry with exact column_ref values for fields that fit the template roles.',
@@ -397,11 +387,16 @@ export const getBuildAndApplyWorksheetTool = (
           // Manifest enforcement (P0 W-23447710): slot derivations/keys come from the
           // manifest, never the caller's positional refs. Blockers stop the apply —
           // stricter than the old behavior, which left sample fields in unmapped slots.
-          const explicitBind = bindExplicitTemplate(template, bindFields, schemaSummary, {
-            title: worksheetName,
-            datasource: schemaSummary.datasource,
-            passthroughFieldMapping,
-          });
+          const explicitBind = bindExplicitTemplate(
+            template,
+            supportedResolvedFields.map((resolution) => resolution.columnRef),
+            schemaSummary,
+            {
+              title: worksheetName,
+              datasource: schemaSummary.datasource,
+              passthroughFieldMapping,
+            },
+          );
 
           if (!explicitBind.ok) {
             return new ArgsValidationError(
@@ -410,6 +405,65 @@ export const getBuildAndApplyWorksheetTool = (
           }
 
           warnings.push(...explicitBind.warnings);
+
+          if (explicitBind.passthrough) {
+            const overflowDimensionFields = dimensionFields.slice(templateDimensions.length);
+            const overflowMeasureFields = measureFields.slice(templateMeasures.length);
+            for (const dropped of overflowDimensionFields) {
+              droppedRequestedFields.push(dropped.requested);
+              warnings.push(
+                `Dimension field "${dropped.requested}" was dropped: template "${template}" exposes only ${templateDimensions.length} dimension slot(s).`,
+              );
+            }
+            for (const dropped of overflowMeasureFields) {
+              droppedRequestedFields.push(dropped.requested);
+              warnings.push(
+                `Measure field "${dropped.requested}" was dropped: template "${template}" exposes only ${templateMeasures.length} measure slot(s).`,
+              );
+            }
+            const legacyDroppedResolutions = new Set([
+              ...overflowDimensionFields,
+              ...overflowMeasureFields,
+            ]);
+            appliedResolvedFields = supportedResolvedFields.filter(
+              (resolution) => !legacyDroppedResolutions.has(resolution),
+            );
+          } else {
+            const consumedFieldRefs = new Set(explicitBind.consumedFieldRefs);
+            const manifestDimensionSlots = manifestRoleSlotCount(
+              explicitBind.templateSlots,
+              'dimension',
+            );
+            const manifestMeasureSlots = manifestRoleSlotCount(
+              explicitBind.templateSlots,
+              'measure',
+            );
+            appliedResolvedFields = supportedResolvedFields.filter((resolution) =>
+              consumedFieldRefs.has(resolution.columnRef),
+            );
+            for (const dropped of supportedResolvedFields) {
+              if (consumedFieldRefs.has(dropped.columnRef)) continue;
+              droppedRequestedFields.push(dropped.requested);
+              if (dropped.field.role === 'dimension') {
+                warnings.push(
+                  `Dimension field "${dropped.requested}" was dropped: template "${template}" exposes only ${manifestDimensionSlots} dimension slot(s).`,
+                );
+              } else {
+                warnings.push(
+                  `Measure field "${dropped.requested}" was dropped: template "${template}" exposes only ${manifestMeasureSlots} measure slot(s).`,
+                );
+              }
+            }
+          }
+
+          const bindFields = appliedResolvedFields.map((resolution) => resolution.columnRef);
+          if (fields.length > 0 && bindFields.length === 0) {
+            return new ArgsValidationError(
+              `All requested fields were dropped: ${quotedFields(fields)}. No worksheet was applied.\n\n` +
+                'FIX: Use list-available-fields or resolve-field, then retry with exact column_ref values for fields that fit the template roles.',
+            ).toErr();
+          }
+
           const fieldMapping = explicitBind.fieldMapping;
           let rewriteDatasource = explicitBind.datasource;
           if (explicitBind.passthrough) {
