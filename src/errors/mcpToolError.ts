@@ -227,8 +227,8 @@ export class NoDesktopInstancesFoundError extends McpToolError {
         'No running Tableau Desktop instances found.',
         'Make sure:',
         '  1. Tableau Desktop is running',
-        '  2. Agent API is enabled',
-        '  3. The manifest file exists in the expected location',
+        '  2. The External Client API is available in this Desktop build',
+        '  3. The External Client API discovery file exists in the expected location',
       ].join('\n'),
       statusCode: 404,
     });
@@ -243,7 +243,7 @@ export class GetEventsFailedError extends McpToolError {
         `Failed to get events: ${getExceptionMessage(error)}.`,
         'Make sure:',
         '  1. Tableau Desktop is running',
-        '  2. Agent API is enabled',
+        '  2. The Desktop events endpoint is available',
       ].join('\n'),
       statusCode: 500,
     });

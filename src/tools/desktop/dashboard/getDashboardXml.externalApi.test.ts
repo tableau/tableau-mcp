@@ -22,7 +22,10 @@ describe('getDashboardXmlTool with External Client API transport', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    server = await startMockExternalApiServer();
+    server = await startMockExternalApiServer({
+      workbookXml:
+        '<?xml version="1.0"?><workbook><dashboards><dashboard name="Executive Dashboard"><zones /></dashboard></dashboards></workbook>',
+    });
   });
 
   afterEach(async () => {
@@ -52,7 +55,7 @@ describe('getDashboardXmlTool with External Client API transport', () => {
     expect(server.requests.map((request) => request.path)).not.toContain('/v0/workbook/document');
   });
 
-  it('reports a clear old-build error when the dashboard document route is missing', async () => {
+  it('falls back to the whole workbook document when the dashboard document route is missing', async () => {
     server.setOverride('GET /v0/workbook/dashboards/dash-exec/document', {
       status: 404,
       body: JSON.stringify({
@@ -73,9 +76,16 @@ describe('getDashboardXmlTool with External Client API transport', () => {
       { ...getMockRequestHandlerExtra(), getExecutor: vi.fn().mockResolvedValue(executor) },
     );
 
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('does not serve the dashboard document endpoint');
+    expect(inlineResultSchema.parse(JSON.parse(result.content[0].text)).dashboardXml).toContain(
+      '<dashboard name="Executive Dashboard"',
+    );
+    expect(server.requests.map((request) => request.path)).toEqual([
+      '/v0/workbook/dashboards',
+      '/v0/workbook/dashboards/dash-exec/document',
+      '/v0/workbook/document',
+    ]);
   });
 });
 

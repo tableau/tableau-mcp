@@ -14,7 +14,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { Err, Ok } from 'ts-results-es';
 
-import { ExecuteCommandArgs, ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
+import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -144,7 +144,7 @@ describe('authorParameterTool', () => {
       new Ok({ newPid: '67890', baseUrl: 'http://127.0.0.1:67890' }),
     );
 
-    const { result, readbackExecuteCommand, getExecutor } = await getToolResult({
+    const { result, readbackGetWorkbookDocument, getExecutor } = await getToolResult({
       args: { caption: 'p.Period', datatype: 'string', value: 'Month', stagePath },
       readbackXml: xmlWithParameterCaption('p.Period'),
     });
@@ -169,7 +169,7 @@ describe('authorParameterTool', () => {
     });
     expect(getExecutor).toHaveBeenCalledWith('67890');
     expect(kill).toHaveBeenCalledWith(12345, 'SIGTERM');
-    expect(readbackExecuteCommand.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(readbackGetWorkbookDocument.mock.invocationCallOrder[0]).toBeLessThan(
       kill.mock.invocationCallOrder[0],
     );
   });
@@ -289,32 +289,32 @@ async function getToolResult({
 }): Promise<{
   result: CallToolResult;
   executeCommand: ReturnType<typeof vi.fn>;
-  readbackExecuteCommand: ReturnType<typeof vi.fn>;
+  readbackGetWorkbookDocument: ReturnType<typeof vi.fn>;
   getExecutor: ReturnType<typeof vi.fn>;
 }> {
   process.env.TABLEAU_EXTERNAL_API_DISCOVERY_DIR = join(tmp, 'discovery');
-  const executeCommand = vi.fn(async (params: ExecuteCommandArgs<undefined>) => {
-    if (params.command === 'save-underlying-metadata') {
-      return new Ok({
-        command_id: 'save-0',
-        status: 'completed',
-        parsedResult: { text: initialXml },
-      });
-    }
-    return new Ok({ command_id: 'load-1', status: 'completed', result: null });
+  const executeCommand = vi
+    .fn()
+    .mockResolvedValue(new Ok({ command_id: 'command-1', status: 'completed', result: null }));
+  const getWorkbookDocument = vi.fn(async () => {
+    return new Ok({
+      xml: initialXml,
+      applicationVersion: undefined,
+      xsdPayloadVersion: undefined,
+    });
   });
-  const readbackExecuteCommand = vi.fn(async (params: ExecuteCommandArgs<undefined>) => {
-    if (params.command === 'save-underlying-metadata') {
-      return new Ok({
-        command_id: 'save-1',
-        status: 'completed',
-        parsedResult: { text: readbackXml },
-      });
-    }
-    return new Ok({ command_id: 'load-2', status: 'completed', result: null });
+  const readbackExecuteCommand = vi
+    .fn()
+    .mockResolvedValue(new Ok({ command_id: 'command-2', status: 'completed', result: null }));
+  const readbackGetWorkbookDocument = vi.fn(async () => {
+    return new Ok({
+      xml: readbackXml,
+      applicationVersion: undefined,
+      xsdPayloadVersion: undefined,
+    });
   });
-  const oldExecutor = mockExecutor(executeCommand);
-  const readbackExecutor = mockExecutor(readbackExecuteCommand);
+  const oldExecutor = mockExecutor(executeCommand, getWorkbookDocument);
+  const readbackExecutor = mockExecutor(readbackExecuteCommand, readbackGetWorkbookDocument);
   const getExecutor = vi.fn(async (sessionId: string) =>
     sessionId === '67890' ? readbackExecutor : oldExecutor,
   );
@@ -336,7 +336,7 @@ async function getToolResult({
     extra,
   );
 
-  return { result, executeCommand, readbackExecuteCommand, getExecutor };
+  return { result, executeCommand, readbackGetWorkbookDocument, getExecutor };
 }
 
 function xmlWithParameterCaption(caption: string): string {
@@ -354,12 +354,17 @@ function restoreEnv(name: string, value: string | undefined): void {
   process.env[name] = value;
 }
 
-function mockExecutor(executeCommand: ReturnType<typeof vi.fn>): ToolExecutor {
+function mockExecutor(
+  executeCommand: ReturnType<typeof vi.fn>,
+  getWorkbookDocument: ReturnType<typeof vi.fn>,
+): ExternalApiToolExecutor {
   return {
     start: vi.fn(async () => undefined),
     stop: vi.fn(),
     isAvailable: vi.fn(() => true),
     executeCommand,
+    getWorkbookDocument,
+    applyWorkbookDocument: vi.fn(),
     getEvents: vi.fn(),
-  } as unknown as ToolExecutor;
+  } as unknown as ExternalApiToolExecutor;
 }

@@ -1,6 +1,5 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
-import { getDesktopConfig } from '../../../config.desktop.js';
 import { log } from '../../../logging/logger.js';
 import { sanitizeValue } from '../../../logging/sanitize.js';
 import { buildMinimalDashboardDoc } from '../../metadata/dashboards.js';
@@ -13,12 +12,10 @@ import {
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { xmlNamesEqual } from '../../xmlElement.js';
-import { formatApplyFailureForAgent } from './applyFailureClassifier.js';
 import { withApplyLock } from './applyMutex.js';
 import { focusAppliedSheetBestEffort } from './focusAppliedSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
-import { applyWorkbookText, interpretLoadOutcome } from './loadWorkbookXml.js';
-import { nameMayNeedRawCommandResolution, resolveDashboardCommandName } from './nameResolution.js';
+import { applyWorkbookText } from './loadWorkbookXml.js';
 
 export type LoadDashboardXmlError =
   | { type: 'invalid-xml' }
@@ -168,90 +165,21 @@ export async function loadDashboardXml({
   }
   const canonicalName = canonicalNameResult.value;
 
-  // External Client API ("Athena V0") exposes no per-sheet route — tabui:load-dashboard is not in
-  // its command registry, so applying a single dashboard re-posts a minimal whole-workbook document.
+  // External Client API ("Athena V0") exposes no per-dashboard apply route, so applying a single
+  // dashboard re-posts a minimal whole-workbook document.
   // The POST upserts by name: it overwrites the colliding dashboard in place and leaves the rest live.
-  const result = await (getDesktopConfig().externalApiEnabled
-    ? loadDashboardXmlViaExternalApi({ dashboardName: canonicalName, xml, executor, signal })
-    : loadDashboardXmlViaAgentApi({ dashboardName: canonicalName, xml, executor, signal }));
+  const result = await loadDashboardXmlViaExternalApi({
+    dashboardName: canonicalName,
+    xml,
+    executor,
+    signal,
+  });
   if (result.isErr()) {
     return result;
   }
   // Preflight warnings ride along so apply responses can compute the host
   // verification receipt (W-23447506) without re-running validation.
   return Ok({ validationWarnings: validation.issues });
-}
-
-async function loadDashboardXmlViaAgentApi({
-  dashboardName,
-  xml,
-  executor,
-  signal,
-}: {
-  dashboardName: string;
-  xml: string;
-} & WithExecutorAndAbortSignal): Promise<LoadDashboardHelperResult> {
-  const commandDashboardName = nameMayNeedRawCommandResolution(dashboardName)
-    ? ((await resolveDashboardCommandName(dashboardName, { executor, signal })) ?? dashboardName)
-    : dashboardName;
-  const result = await executor.executeCommand({
-    namespace: 'tabui',
-    command: 'load-dashboard',
-    signal,
-    args: {
-      dashboardName: commandDashboardName,
-      dashboardXml: xml,
-    },
-  });
-
-  if (result.isErr()) {
-    return Err({ type: 'execute-command-error', error: result.error });
-  }
-
-  // Command completed — but "completed" means the command ran, not that Tableau
-  // accepted the document load. A content rejection is surfaced in the payload,
-  // so verify the actual load outcome before claiming success (mirrors the
-  // workbook path). Otherwise a rejected load would be relayed as success.
-  const outcome = interpretLoadOutcome(result.value);
-  if (!outcome.ok) {
-    log({
-      level: 'error',
-      message: 'load-dashboard completed but Tableau rejected the load',
-      logger: 'dashboardCommands',
-      data: { dashboardName, message: outcome.message },
-    });
-
-    return Err({
-      type: 'load-dashboard-xml-error',
-      error: {
-        type: 'load-rejected',
-        message: formatApplyFailureForAgent({
-          context: 'dashboard',
-          serverError: outcome.message,
-          xmlSnippet: xml,
-        }),
-      },
-    });
-  }
-
-  log({
-    level: 'info',
-    message: 'load-dashboard completed',
-    logger: 'dashboardCommands',
-    data: {
-      dashboardName,
-      commandId: result.value.command_id,
-    },
-  });
-
-  await focusAppliedSheetBestEffort({
-    sheetName: dashboardName,
-    appliedVia: 'load-dashboard',
-    executor,
-    signal,
-  });
-
-  return Ok.EMPTY;
 }
 
 async function loadDashboardXmlViaExternalApi({

@@ -2,7 +2,7 @@
  * Pure worksheet-XML planners for the `refine-worksheet` desktop tool (refine fast lane).
  *
  * These functions are the ONLY place the tool decides WHAT to change. They take a single
- * fetched worksheet fragment (as `tabui:save-worksheet` / the External Client API sheet
+ * fetched worksheet fragment (as returned by the External Client API sheet document
  * slice returns it), plan a MINIMAL patch, and either return the patched XML or a precise
  * refusal. They do NO I/O — the tool wraps them with fetch -> preflight -> apply-once ->
  * readback.

@@ -1,7 +1,5 @@
 import { z } from 'zod';
 
-import { getAgentApiClient } from './getAgentApiClient.js';
-
 export const desktopInstanceMetadataSchema = z.object({
   pid: z.number(),
   port: z.number(),
@@ -22,17 +20,5 @@ export class DesktopInstance {
     this.port = port;
     this.secret = secret;
     this.start_time = start_time;
-  }
-
-  async isAlive(signal: AbortSignal): Promise<boolean> {
-    const client = await getAgentApiClient({
-      signal,
-      config: {
-        agentApiBase: `http://127.0.0.1:${this.port}/api/v1`,
-        authToken: this.secret,
-      },
-    });
-
-    return await client.getHealth();
   }
 }

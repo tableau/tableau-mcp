@@ -15,7 +15,7 @@ const FILTER_FIX = 'express filters in the NotionalSpec (categoricalFilters/rang
 const SORT_FIX =
   'tabdoc:sort drives a UI dialog and blocks the screen. Use refine-worksheet with operation sort_by_field (sort a dimension by a field/measure), or the bind-template sort proposal/document round-trip for nested sorts';
 const SORT_NESTED_FIX =
-  'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the bind-template sort proposal (preferred for template-bound sheets) or the document round-trip (tabui:save-underlying-metadata → edit the computed-sort → tabui:load-underlying-metadata).';
+  'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the bind-template sort proposal (preferred for template-bound sheets) or the workbook document round-trip (get-workbook-xml → edit the computed-sort → apply-workbook).';
 const SORT_NESTED_ALLOWED =
   'DimensionToSort Worksheet MeasureName ShelfType Direction ClearSort Dashboard LevelNames MemberValues KeepFieldFilters';
 const SORT_NESTED_REQUIRED = 'DimensionToSort Worksheet MeasureName ShelfType';

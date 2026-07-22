@@ -2,7 +2,7 @@
 
 > **Trimmed entry.** The old `inject_template_visualization` tool no longer exists, and the JSON files in `data/data-visualization-templates/` are the pre-XML node format — **not loadable** by any tool (structural reference only). Per the knowledge-layer review, this entry is reduced to the current-tools pointer; the stale JSON-walkthrough and removed-tool detail have been dropped.
 
-- Relevant user prompts/search terms: "inject a template visualization", "chart type template", "JSON templates not loadable", "tableau-bind-template", "tableau-search-examples", "duplicate and modify instead of building from scratch"
+- Relevant user prompts/search terms: "inject a template visualization", "chart type template", "JSON templates not loadable", "tableau-bind-template", "tableau-search-examples", "duplicate and modify instead of building from scratch", "bind-template", "symbol map country only"
 
 ## When to Use
 

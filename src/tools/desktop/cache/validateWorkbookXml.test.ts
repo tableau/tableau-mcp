@@ -29,14 +29,6 @@ describe('validateWorkbookXmlTool', () => {
     });
   });
 
-  it('should return success for well-formed workbook content', async () => {
-    const result = await getResult('<?xml version="1.0"?><workbook><worksheets/></workbook>');
-
-    expect(result.isError).toBeFalsy();
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('well-formed');
-  });
-
   it('should return error for malformed workbook content', async () => {
     const result = await getResult('<workbook><worksheets></workbook>');
 
@@ -170,7 +162,6 @@ function getResult(
         ...getMockRequestHandlerExtra(),
         ...(options?.getExecutor
           ? {
-              config: { ...getMockRequestHandlerExtra().config, externalApiEnabled: true },
               getExecutor: options.getExecutor,
             }
           : {}),

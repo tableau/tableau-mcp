@@ -48,7 +48,7 @@ import { buildDashboardXml, computeZones } from './dashboardZones.js';
 
 /**
  * Whether a fully zone-populated `<dashboard>` node injected as part of a single
- * workbook-level `load-underlying-metadata` apply renders correctly on readback (the
+ * workbook-level document apply renders correctly on readback (the
  * spec's "one live unknown", §2). Set from the W60 live probe (2026-07-08, session
  * 18055): a 2-worksheet auto-grid dashboard was injected into one workbook-level apply
  * and `tableau-get-dashboard` readback showed the exact zone tree (worksheet refs,

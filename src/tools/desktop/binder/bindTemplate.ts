@@ -147,9 +147,13 @@ function nextActionForEscalation(reason: EscalateReason): NextAction {
     return prefillNextAction('Pick a higher-confidence proposal');
   }
   if (TIER2_REASONS.has(reason)) {
-    return prefillNextAction('Use the general worksheet build tools');
+    return prefillNextAction(
+      'Build manually: place fields with add-field (rows/cols/encodings), then refine-worksheet',
+    );
   }
-  return prefillNextAction('Build the worksheet manually');
+  return prefillNextAction(
+    'Build manually: place fields with add-field (rows/cols/encodings), then refine-worksheet',
+  );
 }
 
 function renderBlockers(blockers: Blocker[]): string {
@@ -725,9 +729,8 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           // window checkable; worst case is now an over-cautious refusal (safe fallback),
           // never a silent overwrite.
           //
-          // Caveat verified (offline, no live Desktop): the read issues only
-          // `save-underlying-metadata` via getWorkbookXml — a metadata serialization/read
-          // that emits no counted document event. Counted events are user `doc:*`
+          // Caveat verified (offline, no live Desktop): getWorkbookXml is a document
+          // serialization/read that emits no counted document event. Counted events are user `doc:*`
           // mutations (see checkForUserChanges tests), so a pre-read anchor does not
           // false-trip the gate. Best-effort: an executor without event support proceeds
           // rather than disabling auto_apply (Athena residual).

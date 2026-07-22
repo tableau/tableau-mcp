@@ -12,16 +12,8 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getExecuteTableauCommandTool } from './executeTableauCommand.js';
 
 const SESSION = 'session-1';
-const LIVE_UNDERLYING_METADATA_XML = `<workbook>
-  <datasources><datasource name='ds' /></datasources>
-  <worksheets><worksheet name='A' /><worksheet name='B' /></worksheets>
-</workbook>`;
-const STALE_UNDERLYING_METADATA_XML = `<workbook>
-  <datasources><datasource name='ds' /></datasources>
-  <worksheets><worksheet name='A' /></worksheets>
-</workbook>`;
 const SORT_NESTED_LIVE_500_FIX =
-  'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the bind-template sort proposal (preferred for template-bound sheets) or the document round-trip (tabui:save-underlying-metadata → edit the computed-sort → tabui:load-underlying-metadata).';
+  'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the bind-template sort proposal (preferred for template-bound sheets) or the workbook document round-trip (get-workbook-xml → edit the computed-sort → apply-workbook).';
 const TEST_REGISTRY_DIRS: string[] = [];
 
 function makeExtra(
@@ -30,6 +22,7 @@ function makeExtra(
   const extra = getMockRequestHandlerExtra();
   extra.getExecutor = vi.fn().mockResolvedValue({
     executeCommand: vi.fn().mockImplementation(executeCommandImpl),
+    getWorkbookDocument: vi.fn(),
   });
   return extra;
 }
@@ -496,7 +489,7 @@ describe('executeTableauCommandTool', () => {
       );
     });
 
-    it('does not append a readback after generate-viz-from-notional-spec succeeds', async () => {
+    it('does not inspect the workbook after generate-viz-from-notional-spec succeeds', async () => {
       const executeCommand = vi
         .fn()
         .mockResolvedValue(new Ok({ command_id: 'generate-1', result: null }));
@@ -519,12 +512,6 @@ describe('executeTableauCommandTool', () => {
       invariant(result.content[0].type === 'text');
       expect(JSON.parse(result.content[0].text).message).toBe('Command executed successfully.');
       expect(executeCommand).toHaveBeenCalledTimes(1);
-      expect(executeCommand).not.toHaveBeenCalledWith(
-        expect.objectContaining({
-          namespace: 'tabui',
-          command: 'save-underlying-metadata',
-        }),
-      );
     });
 
     it('leaves an arbitrary valid command call untouched', async () => {
@@ -781,30 +768,22 @@ describe('executeTableauCommandTool', () => {
     });
   });
 
-  describe('underlying metadata guard', () => {
-    it('rejects a stale whole-document load before dispatching it', async () => {
-      const executeCommand = vi.fn(async (params: any) => {
-        if (params.command === 'save-underlying-metadata') {
-          return new Ok({
-            command_id: 'save-1',
-            parsedResult: { text: LIVE_UNDERLYING_METADATA_XML },
-          });
-        }
-        return new Ok({ command_id: 'load-1', result: null });
-      });
+  describe('deleted command refusal', () => {
+    it('rejects the deleted document load command before dispatching it', async () => {
+      const executeCommand = vi
+        .fn()
+        .mockResolvedValue(new Ok({ command_id: 'load-1', result: null }));
       const extra = makeExtra(executeCommand);
 
       const result = await getResult(
         {
           session: SESSION,
           command: 'tabui:load-underlying-metadata',
-          args: { text: STALE_UNDERLYING_METADATA_XML },
+          args: { text: '<workbook />' },
         },
         extra,
       );
 
-      // The hack-build load command no longer exists in the reference: it is
-      // refused as unknown before any guard or dispatch can run.
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain(
@@ -813,23 +792,17 @@ describe('executeTableauCommandTool', () => {
       expect(executeCommand).not.toHaveBeenCalled();
     });
 
-    it('fails open and dispatches when the live document fetch fails', async () => {
-      const executeCommand = vi.fn(async (params: any) => {
-        if (params.command === 'save-underlying-metadata') {
-          return {
-            isErr: (): boolean => true,
-            error: { type: 'command-timed-out' as const, error: 'Timeout' },
-          };
-        }
-        return new Ok({ command_id: 'load-1', result: null });
-      });
+    it('still refuses the deleted document load command when the payload matches the current document', async () => {
+      const executeCommand = vi
+        .fn()
+        .mockResolvedValue(new Ok({ command_id: 'load-1', result: null }));
       const extra = makeExtra(executeCommand);
 
       const result = await getResult(
         {
           session: SESSION,
           command: 'tabui:load-underlying-metadata',
-          args: { text: LIVE_UNDERLYING_METADATA_XML },
+          args: { text: '<workbook><worksheets><worksheet name="A" /></worksheets></workbook>' },
         },
         extra,
       );
@@ -843,7 +816,6 @@ describe('executeTableauCommandTool', () => {
     });
   });
 });
-
 async function getResult(
   { session, command, args }: { session: string; command: string; args?: Record<string, unknown> },
   extra: ReturnType<typeof getMockRequestHandlerExtra>,

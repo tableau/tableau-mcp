@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
-import { ExecuteCommandArgs } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -41,7 +40,7 @@ describe('formatLabelsTool', () => {
   });
 
   it('turns mark labels ON by inserting a pane style rule and verifies readback', async () => {
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: { worksheet: 'Profit', showLabels: true },
       readbackXml: labelsShown(BASE_XML, 'true'),
     });
@@ -51,43 +50,35 @@ describe('formatLabelsTool', () => {
     expect(JSON.parse(result.content[0].text).worksheet).toBe('Profit');
     expect(JSON.parse(result.content[0].text).showLabels).toBe(true);
 
-    const loadCall = commandCalls(executeCommand).find(
-      (call) => call.command === 'load-underlying-metadata',
-    );
-    invariant(loadCall?.args && typeof loadCall.args.text === 'string');
-    expect(loadCall.args.text).toContain("<format attr='mark-labels-show' value='true' />");
+    const appliedXml = appliedDocumentXml(applyWorkbookDocument);
+    expect(appliedXml).toContain("<format attr='mark-labels-show' value='true' />");
     // Exactly one rule — no duplicate style blocks.
-    expect(loadCall.args.text.match(/mark-labels-show/g)?.length).toBe(1);
+    expect(appliedXml.match(/mark-labels-show/g)?.length).toBe(1);
   });
 
   it('rewrites an existing mark-labels rule (idempotent toggle to OFF)', async () => {
     const withOn = labelsShown(BASE_XML, 'true');
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: { worksheet: 'Profit', showLabels: false },
       initialXml: withOn,
       readbackXml: labelsShown(BASE_XML, 'false'),
     });
 
     expect(result.isError).toBe(false);
-    const loadCall = commandCalls(executeCommand).find(
-      (call) => call.command === 'load-underlying-metadata',
-    );
-    invariant(loadCall?.args && typeof loadCall.args.text === 'string');
-    expect(loadCall.args.text).toContain("value='false'");
+    const appliedXml = appliedDocumentXml(applyWorkbookDocument);
+    expect(appliedXml).toContain("value='false'");
     // Still exactly one rule — rewritten, not appended.
-    expect(loadCall.args.text.match(/mark-labels-show/g)?.length).toBe(1);
+    expect(appliedXml.match(/mark-labels-show/g)?.length).toBe(1);
   });
 
   it('rejects an unknown worksheet before loading metadata', async () => {
-    const { result, executeCommand } = await getToolResult({
+    const { result, applyWorkbookDocument } = await getToolResult({
       args: { worksheet: 'Nope', showLabels: true },
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('was not found');
-    expect(
-      commandCalls(executeCommand).some((call) => call.command === 'load-underlying-metadata'),
-    ).toBe(false);
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('rejects empty worksheet', async () => {
@@ -110,23 +101,30 @@ async function getToolResult({
   readbackXml?: string;
 }): Promise<{
   result: CallToolResult;
-  executeCommand: ReturnType<typeof vi.fn>;
+  applyWorkbookDocument: ReturnType<typeof vi.fn>;
 }> {
   const documents = [initialXml, readbackXml ?? initialXml];
-  let saveCount = 0;
-  const executeCommand = vi.fn(async (params: ExecuteCommandArgs<undefined>) => {
-    if (params.command === 'save-underlying-metadata') {
-      return new Ok({
-        command_id: `save-${saveCount}`,
-        status: 'completed',
-        parsedResult: { text: documents[Math.min(saveCount++, documents.length - 1)] },
-      });
-    }
-    return new Ok({ command_id: 'load-1', status: 'completed', result: null });
+  let readCount = 0;
+  const executeCommand = vi
+    .fn()
+    .mockResolvedValue(new Ok({ command_id: 'command-1', status: 'completed', result: null }));
+  const getWorkbookDocument = vi.fn(async () => {
+    return new Ok({
+      xml: documents[Math.min(readCount++, documents.length - 1)],
+      applicationVersion: undefined,
+      xsdPayloadVersion: undefined,
+    });
+  });
+  const applyWorkbookDocument = vi.fn(async () => {
+    return new Ok({ command_id: 'apply-1', status: 'completed', result: null });
   });
   const extra = {
     ...getMockRequestHandlerExtra(),
-    getExecutor: vi.fn().mockResolvedValue({ executeCommand }),
+    getExecutor: vi.fn().mockResolvedValue({
+      executeCommand,
+      getWorkbookDocument,
+      applyWorkbookDocument,
+    }),
   };
   const tool = getFormatLabelsTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
@@ -136,11 +134,11 @@ async function getToolResult({
     extra,
   );
 
-  return { result, executeCommand };
+  return { result, applyWorkbookDocument };
 }
 
-function commandCalls(
-  executeCommand: ReturnType<typeof vi.fn>,
-): Array<ExecuteCommandArgs<undefined>> {
-  return executeCommand.mock.calls.map(([call]) => call);
+function appliedDocumentXml(applyWorkbookDocument: ReturnType<typeof vi.fn>): string {
+  const [xml] = applyWorkbookDocument.mock.calls[0] ?? [];
+  invariant(typeof xml === 'string');
+  return xml;
 }

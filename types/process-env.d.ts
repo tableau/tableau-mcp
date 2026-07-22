@@ -87,9 +87,6 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
 }
 
 export interface ProcessEnvDesktop extends ProcessEnvBase {
-  AGENT_API_BASE: string | undefined;
-  AGENT_API_AUTH_TOKEN: string | undefined;
-  AGENT_API_POLL_INTERVAL_MS: string | undefined;
   TABLEAU_DESKTOP_SESSION_ID: string | undefined;
   AGENT_TYPES: string | undefined;
   SYSTEM_PROMPT_VERSION: string | undefined;

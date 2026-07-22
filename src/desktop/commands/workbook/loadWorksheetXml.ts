@@ -1,6 +1,5 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
-import { getDesktopConfig } from '../../../config.desktop.js';
 import { log } from '../../../logging/logger.js';
 import { sanitizeValue } from '../../../logging/sanitize.js';
 import { normalizeArray, parseXML } from '../../metadata/parser.js';
@@ -19,13 +18,11 @@ import {
 import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { xmlNamesEqual } from '../../xmlElement.js';
-import { formatApplyFailureForAgent } from './applyFailureClassifier.js';
 import { withApplyLock } from './applyMutex.js';
 import { focusAppliedSheetBestEffort } from './focusAppliedSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { getWorksheetXml } from './getWorksheetXml.js';
-import { applyWorkbookText, interpretLoadOutcome } from './loadWorkbookXml.js';
-import { nameMayNeedRawCommandResolution, resolveWorksheetCommandName } from './nameResolution.js';
+import { applyWorkbookText } from './loadWorkbookXml.js';
 
 export type LoadWorksheetXmlError =
   | { type: 'invalid-xml' }
@@ -268,121 +265,23 @@ export async function loadWorksheetXml({
   }
   const canonicalName = canonicalNameResult.value;
 
-  // External Client API ("Athena V0") exposes no per-sheet route — tabui:load-worksheet is not in
-  // its command registry, so applying a single sheet re-posts a minimal whole-workbook document.
+  // External Client API ("Athena V0") exposes no per-sheet apply route, so applying a single
+  // sheet re-posts a minimal whole-workbook document.
   // The POST upserts by name: it overwrites the colliding sheet in place and leaves the rest live.
-  const result = await (getDesktopConfig().externalApiEnabled
-    ? loadWorksheetXmlViaExternalApi({
-        worksheetName: canonicalName,
-        xml,
-        executor,
-        signal,
-        readbackVerificationOut,
-        suppressFocus,
-      })
-    : loadWorksheetXmlViaAgentApi({
-        worksheetName: canonicalName,
-        xml,
-        executor,
-        signal,
-        readbackVerificationOut,
-        suppressFocus,
-      }));
+  const result = await loadWorksheetXmlViaExternalApi({
+    worksheetName: canonicalName,
+    xml,
+    executor,
+    signal,
+    readbackVerificationOut,
+    suppressFocus,
+  });
   if (result.isErr()) {
     return result;
   }
   // Preflight warnings ride along so apply responses can compute the host
   // verification receipt (W-23447506) without re-running validation.
   return Ok({ ...result.value, validationWarnings: validation.issues });
-}
-
-async function loadWorksheetXmlViaAgentApi({
-  worksheetName,
-  xml,
-  executor,
-  signal,
-  readbackVerificationOut,
-  suppressFocus = false,
-}: {
-  worksheetName: string;
-  xml: string;
-  readbackVerificationOut?: ReadbackVerificationResult[];
-  suppressFocus?: boolean;
-} & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
-  const commandWorksheetName = nameMayNeedRawCommandResolution(worksheetName)
-    ? ((await resolveWorksheetCommandName(worksheetName, { executor, signal })) ?? worksheetName)
-    : worksheetName;
-  const result = await executor.executeCommand({
-    namespace: 'tabui',
-    command: 'load-worksheet',
-    signal,
-    args: {
-      worksheetName: commandWorksheetName,
-      worksheetXml: xml,
-    },
-  });
-
-  if (result.isErr()) {
-    return Err({ type: 'execute-command-error', error: result.error });
-  }
-
-  // Command completed — but "completed" means the command ran, not that Tableau
-  // accepted the document load. A content rejection is surfaced in the payload,
-  // so verify the actual load outcome before claiming success (mirrors the
-  // workbook path). Otherwise a rejected load would be relayed as success.
-  const outcome = interpretLoadOutcome(result.value);
-  if (!outcome.ok) {
-    log({
-      level: 'error',
-      message: 'load-worksheet completed but Tableau rejected the load',
-      logger: 'worksheetCommands',
-      data: { worksheetName, message: outcome.message },
-    });
-
-    return Err({
-      type: 'load-worksheet-xml-error',
-      error: {
-        type: 'load-rejected',
-        message: formatApplyFailureForAgent({
-          context: 'worksheet',
-          serverError: outcome.message,
-          xmlSnippet: xml,
-        }),
-      },
-    });
-  }
-
-  log({
-    level: 'info',
-    message: 'load-worksheet completed',
-    logger: 'worksheetCommands',
-    data: {
-      worksheetName,
-      commandId: result.value.command_id,
-    },
-  });
-
-  // Verify the apply landed durably BEFORE focusing — an ERROR-severity readback means
-  // Tableau silently dropped intent-bearing nodes, so we reject and never navigate to the
-  // broken sheet (W4). WARNING-severity findings ride along on the successful Ok.
-  const verification = await verifyPostApplyWorksheetReadback(worksheetName, xml, executor, signal);
-  readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
-  const outcomeResult = readbackOutcome(verification);
-  if (outcomeResult.isErr()) return outcomeResult;
-
-  // Focus the applied sheet UNLESS this apply belongs to a multi-task plan (compose-focus
-  // seam): there the final dashboard apply owns focus, so parallel worksheet applies must
-  // not race to steal it.
-  if (!suppressFocus) {
-    await focusAppliedSheetBestEffort({
-      sheetName: worksheetName,
-      appliedVia: 'load-worksheet',
-      executor,
-      signal,
-    });
-  }
-
-  return outcomeResult;
 }
 
 async function loadWorksheetXmlViaExternalApi({

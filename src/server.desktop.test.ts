@@ -27,7 +27,9 @@ describe('DesktopMcpServer', () => {
 
     const allTools = desktopToolFactories.map((toolFactory) => toolFactory(server));
     const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
-    const tools = allTools.filter((_, i) => !disabledFlags[i]);
+    const tools = allTools.filter(
+      (tool, i) => !disabledFlags[i] && tool.name !== 'check-for-user-changes',
+    );
     expect(server.mcpServer.registerTool).toHaveBeenCalledTimes(tools.length);
     for (const tool of tools) {
       expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
@@ -44,23 +46,14 @@ describe('DesktopMcpServer', () => {
   });
 
   it('does not register check-for-user-changes on the External Client API transport', async () => {
-    const base = configModule.getDesktopConfig();
-    const spy = vi
-      .spyOn(configModule, 'getDesktopConfig')
-      .mockReturnValue({ ...base, externalApiEnabled: true });
+    const server = getServer();
+    await server.registerTools();
 
-    try {
-      const server = getServer();
-      await server.registerTools();
-
-      const registeredNames = (
-        vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
-      ).map(([name]) => name);
-      expect(registeredNames).not.toContain('check-for-user-changes');
-      expect(registeredNames).toContain('list-worksheets');
-    } finally {
-      spy.mockRestore();
-    }
+    const registeredNames = (
+      vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
+    ).map(([name]) => name);
+    expect(registeredNames).not.toContain('check-for-user-changes');
+    expect(registeredNames).toContain('list-worksheets');
   });
 
   it('does not register list-instances when a Desktop session is pinned', async () => {
@@ -346,10 +339,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 21-tool data-first singable surface — existing native authoring plus first-class workbook reads, no XML/cache tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 27-tool data-first singable surface — existing native authoring plus first-class workbook reads, no XML/cache tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(21);
+    expect(selected).toHaveLength(27);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the three
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -363,6 +356,12 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'search-commands',
       'bind-template',
       'refine-worksheet',
+      'add-field',
+      'remove-field',
+      'dashboard-auto-apply',
+      'plan-dashboard-creation',
+      'batch-create-and-cache-sheets',
+      'build-and-apply-dashboard',
       'list-knowledge-resources',
       'read-knowledge-resource',
       'search-knowledge',
@@ -474,7 +473,8 @@ describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
     const registeredNames = vi
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0]);
-    expect(registeredNames.length).toBe(desktopToolFactories.length);
+    expect(registeredNames.length).toBe(desktopToolFactories.length - 1);
+    expect(registeredNames).not.toContain('check-for-user-changes');
   });
 });
 

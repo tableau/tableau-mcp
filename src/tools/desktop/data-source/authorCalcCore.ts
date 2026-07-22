@@ -2,8 +2,9 @@ import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
+import { applyWorkbookText } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { WithExecutorAndAbortSignal } from '../../../desktop/toolExecutor/toolExecutor.js';
-import { validateUnderlyingMetadataLoad } from '../../../desktop/underlyingMetadataGuard.js';
+import { validateWorkbookDocumentApply } from '../../../desktop/workbookDocumentGuard.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
@@ -64,12 +65,7 @@ export async function authorCalculationsInWorkbook({
     return prepared;
   }
 
-  const loadResult = await executor.executeCommand({
-    namespace: 'tabui',
-    command: 'load-underlying-metadata',
-    args: { text: prepared.value.editedXml },
-    signal,
-  });
+  const loadResult = await applyWorkbookText({ xml: prepared.value.editedXml, executor, signal });
   if (loadResult.isErr()) {
     return new DesktopCommandExecutionError(loadResult.error).toErr();
   }
@@ -148,7 +144,7 @@ function prepareCalculationBatch({
     authoredCalcs.push({ calcName, caption, datasource: target.name });
   }
 
-  const validation = validateUnderlyingMetadataLoad(editedXml, workbookXml);
+  const validation = validateWorkbookDocumentApply(editedXml, workbookXml);
   if (!validation.ok) {
     return new ArgsValidationError(validation.message).toErr();
   }

@@ -103,6 +103,12 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
   new Set<DesktopToolName>([
     'bind-template',
     'refine-worksheet',
+    'add-field',
+    'remove-field',
+    'dashboard-auto-apply',
+    'plan-dashboard-creation',
+    'batch-create-and-cache-sheets',
+    'build-and-apply-dashboard',
     'execute-tableau-command',
     'search-commands',
     'ask-user',
@@ -191,12 +197,9 @@ export class DesktopMcpServer extends Server {
     const config = getDesktopConfig();
 
     log({
-      message: config.externalApiEnabled
-        ? 'Desktop transport ACTIVE: External Client API (Athena V0) — TABLEAU_EXTERNAL_API enabled'
-        : 'Desktop transport ACTIVE: Agent API (default)',
+      message: 'Desktop transport ACTIVE: External Client API (Athena V0)',
       level: 'info',
       logger: 'DesktopMcpServer',
-      data: { externalApiEnabled: config.externalApiEnabled },
     });
 
     for (const {
@@ -241,11 +244,9 @@ export class DesktopMcpServer extends Server {
     const config = getDesktopConfig();
     const excluded = new Set<(server: DesktopMcpServer) => DesktopTool<any>>();
 
-    // check-for-user-changes needs the events endpoint, which the External Client API does not
-    // expose; don't advertise a tool that can only return an error on that transport.
-    if (config.externalApiEnabled) {
-      excluded.add(getCheckForUserChangesTool);
-    }
+    // check-for-user-changes needs the legacy events endpoint, which the External Client API does
+    // not expose; don't advertise a tool that can only return an error.
+    excluded.add(getCheckForUserChangesTool);
 
     // When the launching Desktop pinned a session, every tool defaults to it, so
     // list-instances has nothing to add — dropping it keeps the agent from ever

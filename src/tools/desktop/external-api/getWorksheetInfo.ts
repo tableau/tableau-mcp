@@ -1,21 +1,14 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
-import { resolveSession } from '../../../desktop/sessionResolution.js';
-import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { runExternalApiReadTool } from '../externalApiReadHarness.js';
 import { DesktopTool } from '../tool.js';
-import {
-  endpointNotInThisBuild,
-  ExternalApiRequiredError,
-  isRouteMissing,
-} from './externalApiToolUtils.js';
+import { resolveItemByNameOrId } from './externalApiToolUtils.js';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  worksheetId: z.string().describe('Worksheet id.'),
+  worksheet: z.string().describe('Worksheet name/id.'),
 };
 const title = 'Get Worksheet Info';
 
@@ -26,7 +19,7 @@ export const getWorksheetInfoTool = (
     server,
     name: 'get-worksheet-info',
     title,
-    description: 'Read one worksheet by id.',
+    description: 'Read one worksheet by name or id.',
     paramsSchema,
     annotations: {
       title,
@@ -35,30 +28,39 @@ export const getWorksheetInfoTool = (
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ session, worksheetId }, extra): Promise<CallToolResult> => {
+    callback: async ({ session, worksheet }, extra): Promise<CallToolResult> => {
       return await getWorksheetInfo.logAndExecute({
         extra,
-        args: { session, worksheetId },
+        args: { session, worksheet },
         callback: async () => {
-          const sessionResult = resolveSession(session);
-          if (sessionResult.isErr()) {
-            return sessionResult.error.toErr();
-          }
+          return await runExternalApiReadTool({
+            session,
+            extra,
+            callback: async (_executor, _signal, read) => {
+              const listResult = await read(
+                'worksheet list',
+                async (executor, signal) => await executor.listWorksheets(signal),
+              );
+              if (listResult.isErr()) {
+                return listResult;
+              }
 
-          const executor = await extra.getExecutor(sessionResult.value);
-          if (!(executor instanceof ExternalApiToolExecutor)) {
-            return new ExternalApiRequiredError(getWorksheetInfo.name).toErr();
-          }
+              const worksheetResult = resolveItemByNameOrId(
+                'Worksheet',
+                worksheet,
+                listResult.value.worksheets ?? [],
+              );
+              if (worksheetResult.isErr()) {
+                return worksheetResult.error.toErr();
+              }
 
-          const result = await executor.getWorksheet(worksheetId, extra.signal);
-          if (result.isErr()) {
-            if (isRouteMissing(result.error)) {
-              return endpointNotInThisBuild('worksheet metadata').toErr();
-            }
-            return new DesktopCommandExecutionError(result.error).toErr();
-          }
-
-          return new Ok(result.value);
+              return await read(
+                'worksheet metadata',
+                async (executor, signal) =>
+                  await executor.getWorksheet(worksheetResult.value.id, signal),
+              );
+            },
+          });
         },
       });
     },

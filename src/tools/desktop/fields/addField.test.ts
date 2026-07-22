@@ -52,7 +52,9 @@ describe('addFieldTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getAddFieldTool(new DesktopMcpServer());
     expect(tool.name).toBe('add-field');
-    expect(tool.description).toBe('Add a field.');
+    expect(tool.description).toBe(
+      'Place a field on a shelf (rows/cols/encoding) — the manual build path when no template binds.',
+    );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetFile: expect.any(Object),

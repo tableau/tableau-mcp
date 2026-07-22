@@ -8,14 +8,14 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { Config } from '../../config.desktop.js';
-import { ToolExecutor } from '../../desktop/toolExecutor/toolExecutor.js';
+import { ExternalApiToolExecutor } from '../../desktop/externalApi/externalApiToolExecutor.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
 import { TableauToolContext } from '../toolContext.js';
 
 // Additional context available to all desktop tool callbacks
 export type TableauDesktopToolContext = TableauToolContext<DesktopMcpServer> & {
   config: Config;
-  getExecutor: (sessionId: string) => Promise<ToolExecutor>;
+  getExecutor: (sessionId: string) => Promise<ExternalApiToolExecutor>;
 };
 
 // An extension of the RequestHandlerExtra type that includes the TableauDesktopToolContext
