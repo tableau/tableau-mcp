@@ -307,26 +307,114 @@ describe('binder/classifyNoLlm — measure-free lat/long symbol map (Blake wall 
     expect(classifyNoLlm('Build me a Tableau map of the office locations', forced, s)).toBeNull();
   });
 
-  it('BACK-DOOR CLOSED: with 3+ dimensions the resolver declines AND the generic keyword loop must NOT bind latlon (no axis-swap/dropped-dim escape hatch)', () => {
-    // latlon carries generic map keywords ('map'/'symbol-map'/'spatial'); if it were left
-    // in the generic scoring loop, a resolver-declined ask could still win latlon by keyword
-    // and role-greedy-bind it — swapping axes or dropping a detail dim. The resolver fails
-    // closed on 3+ non-coordinate dims; classification as a whole MUST also fail closed here.
-    const threeDimCoordXml = `<?xml version='1.0' encoding='utf-8'?>
+  it('WIDE REAL SCHEMA: 3+ dims → binds coords + the single BEST detail dim (Blake World Cup), not fail-closed', () => {
+    // Blake's real teams.csv is WIDE (team_id/team_api_id/group_name/country_code/team_name +
+    // coords + flag/color/source) — 5 categoricals. The mark identity is ONE label (team_name),
+    // not every attribute. pickBestDetailDim scores team_name up (+ 'team' overlaps the ask,
+    // '+name'), and penalizes id/code/source, so it wins uniquely → confident single bind with
+    // team_name on detail, coords on axes. (Before: 3+ → fail closed → thrash on real map data.)
+    const wideXml = `<?xml version='1.0' encoding='utf-8'?>
 <workbook>
   <datasources>
-    <datasource name='Offices'>
-      <column name='[pm_name]' role='dimension' type='nominal' datatype='string' />
-      <column name='[city]' role='dimension' type='nominal' datatype='string' />
-      <column name='[region]' role='dimension' type='nominal' datatype='string' />
+    <datasource name='Teams'>
+      <column name='[team_id]' role='dimension' type='nominal' datatype='string' />
+      <column name='[team_api_id]' role='dimension' type='nominal' datatype='string' />
+      <column name='[group_name]' role='dimension' type='nominal' datatype='string' />
+      <column name='[country_code]' role='dimension' type='nominal' datatype='string' />
+      <column name='[team_name]' role='dimension' type='nominal' datatype='string' />
       <column name='[latitude]' role='measure' type='quantitative' datatype='real' />
       <column name='[longitude]' role='measure' type='quantitative' datatype='real' />
     </datasource>
   </datasources>
 </workbook>`;
     const forced = withForcedEligible([LATLON]);
-    const s = summarizeSchema(threeDimCoordXml);
-    expect(classifyNoLlm('Build me a Tableau map of the office locations', forced, s)).toBeNull();
+    const s = summarizeSchema(wideXml);
+    const cls = classifyNoLlm('Build me a map of the World Cup team locations', forced, s);
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe(LATLON);
+    const bySlot = Object.fromEntries(cls!.bindings.map((b) => [b.slot_id, b.field]));
+    expect(bySlot['longitude']).toBe('longitude');
+    expect(bySlot['latitude']).toBe('latitude');
+    const detailFields = cls!.bindings
+      .filter((b) => b.slot_id.startsWith('detail'))
+      .map((b) => b.field);
+    // exactly ONE detail dim, and it is the label (team_name) — not id/code/group noise.
+    expect(detailFields).toEqual(['team_name']);
+  });
+
+  it('COARSE dim named in the ask does NOT win detail over the fine label (no centroid collapse)', () => {
+    // Sol counterexample: ask "map tournament stage venue locations" mentions BOTH 'stage'
+    // (coarse — many venues share a stage) and 'venue'. A naive ask-overlap scorer would put
+    // tournament_stage on detail → venues collapse to per-stage AVG centroids. The coarse
+    // penalty must keep venue_name (fine label) as the detail grain.
+    const venueXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Venues'>
+      <column name='[venue_id]' role='dimension' type='nominal' datatype='string' />
+      <column name='[venue_name]' role='dimension' type='nominal' datatype='string' />
+      <column name='[tournament_stage]' role='dimension' type='nominal' datatype='string' />
+      <column name='[latitude]' role='measure' type='quantitative' datatype='real' />
+      <column name='[longitude]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const forced = withForcedEligible([LATLON]);
+    const s = summarizeSchema(venueXml);
+    const cls = classifyNoLlm('map tournament stage venue locations', forced, s);
+    expect(cls).not.toBeNull();
+    const detailFields = cls!.bindings
+      .filter((b) => b.slot_id.startsWith('detail'))
+      .map((b) => b.field);
+    // venue_name (fine) wins over tournament_stage (coarse) despite 'stage' being in the ask.
+    expect(detailFields).toEqual(['venue_name']);
+  });
+
+  it('UNLISTED coarse token cannot stack ask-overlap to beat the fine label (ask-overlap capped +2/field)', () => {
+    // Sol #598 re-review: a multi-token coarse field like 'tournament_round' ('round' is not
+    // in COARSE_GRAIN_TOKENS) could stack ask-overlap (tournament +2, round +2 = 4) and beat
+    // venue_name (3) → collapse. The per-FIELD +2 cap (not per-token) prevents it: both fields
+    // get at most +2 overlap, so venue_name's +1 'name' label breaks the tie for the fine grain.
+    const roundXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Venues'>
+      <column name='[venue_name]' role='dimension' type='nominal' datatype='string' />
+      <column name='[tournament_round]' role='dimension' type='nominal' datatype='string' />
+      <column name='[host_city]' role='dimension' type='nominal' datatype='string' />
+      <column name='[latitude]' role='measure' type='quantitative' datatype='real' />
+      <column name='[longitude]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const forced = withForcedEligible([LATLON]);
+    const s = summarizeSchema(roundXml);
+    const cls = classifyNoLlm('map tournament round venue locations', forced, s);
+    expect(cls).not.toBeNull();
+    const detailFields = cls!.bindings
+      .filter((b) => b.slot_id.startsWith('detail'))
+      .map((b) => b.field);
+    expect(detailFields).toEqual(['venue_name']);
+  });
+
+  it('AMBIGUOUS wide schema (3+ dims, no clear best) still FAILS CLOSED — a wrong grain is worse than a propose', () => {
+    // Three generic-noun dims none of which overlaps the ask or is a 'name' label → a genuine
+    // scoring tie → pickBestDetailDim returns null → classification fails closed (propose).
+    const tieXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Sites'>
+      <column name='[alpha]' role='dimension' type='nominal' datatype='string' />
+      <column name='[beta]' role='dimension' type='nominal' datatype='string' />
+      <column name='[gamma]' role='dimension' type='nominal' datatype='string' />
+      <column name='[latitude]' role='measure' type='quantitative' datatype='real' />
+      <column name='[longitude]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const forced = withForcedEligible([LATLON]);
+    const s = summarizeSchema(tieXml);
+    expect(classifyNoLlm('Build me a map of the site locations', forced, s)).toBeNull();
   });
 
   it('is LIVE in production: the committed manifest is render-stamped eligible and binds the office-map ask', () => {
