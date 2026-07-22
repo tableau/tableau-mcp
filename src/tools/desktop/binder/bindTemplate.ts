@@ -33,7 +33,10 @@ import {
 } from '../../../desktop/refine/refineWorksheet.js';
 import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
-import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
+import {
+  buildInjectedWorkbookXml,
+  classifyWorksheetReplaceTarget,
+} from '../../../desktop/templates/injectTemplateCore.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { ExecuteCommandError, ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { decodeXmlEntities } from '../../../desktop/xmlElement.js';
@@ -65,6 +68,12 @@ const paramsSchema = {
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
   auto_apply: z.boolean().optional().describe('Apply on bound; default false.'),
+  target_worksheet: z
+    .string()
+    .optional()
+    .describe(
+      'Replace this EXISTING sheet in place (edit-the-open-sheet asks); omit to create a new sheet.',
+    ),
   calcs: z
     .array(
       z.object({
@@ -549,6 +558,7 @@ async function performAutoApply({
   bindMs,
   eventsAnchor,
   schemaSummary,
+  targetWorksheet,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -559,8 +569,31 @@ async function performAutoApply({
   bindMs: number;
   eventsAnchor?: number;
   schemaSummary: SchemaSummary;
+  targetWorksheet?: string;
 }): Promise<BindTemplateToolResult> {
   const { args } = res;
+
+  // ── Target-worksheet gate (e1 stray-sheet class) ─────────────────
+  // An explicit target must be provably replaceable BEFORE any apply: a missing
+  // name or a dashboard-member sheet would make removeSameNamedWorksheet defer
+  // and Desktop dedup the inject into a stray "Name (1)" copy — the exact
+  // failure this parameter exists to prevent. Fail closed with the bind intact.
+  const applyTitle = targetWorksheet ?? args.title;
+  if (targetWorksheet !== undefined) {
+    const target = classifyWorksheetReplaceTarget(workbookXml, targetWorksheet);
+    if (target === 'not-found') {
+      return applyFallback(
+        base,
+        `target_worksheet "${targetWorksheet}" not found in the workbook — check list-worksheets and re-bind, or omit target_worksheet to create a new sheet`,
+      );
+    }
+    if (target === 'in-dashboard') {
+      return applyFallback(
+        base,
+        `target_worksheet "${targetWorksheet}" is a dashboard member sheet — replacing it in place could corrupt the dashboard; omit target_worksheet to create a new sheet`,
+      );
+    }
+  }
 
   // ── Events-clean gate (W60 blind-spot #1) ────────────────────────
   // Refuse to auto-apply over a workbook the USER touched after our read: the
@@ -606,7 +639,7 @@ async function performAutoApply({
     injected = buildInjectedWorkbookXml({
       workbookXml,
       templateXml,
-      title: args.title,
+      title: applyTitle,
       sheetType: args.sheet_type,
       templateParameters: args.template_parameters,
       fieldMapping: args.field_mapping,
@@ -641,7 +674,7 @@ async function performAutoApply({
   // drop the args echo, apply_instruction, apply_hint, and used_llm from `base`. Those
   // enable a manual second call that never happens once the apply succeeds.
   const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, res.status);
-  const literalTitle = decodeXmlEntities(args.title);
+  const literalTitle = decodeXmlEntities(applyTitle);
   const guidance = appendWaterfallDiscoveryGuidance(
     `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
     res,
@@ -698,12 +731,12 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
       idempotentHint: true,
     },
     callback: async (
-      { session, ask, proposal, minConfidence, auto_apply, calcs },
+      { session, ask, proposal, minConfidence, auto_apply, target_worksheet, calcs },
       extra,
     ): Promise<CallToolResult> => {
       return await bindTemplateTool.logAndExecute<BindTemplateToolResult>({
         extra,
-        args: { session, ask, proposal, minConfidence, auto_apply, calcs },
+        args: { session, ask, proposal, minConfidence, auto_apply, target_worksheet, calcs },
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -859,6 +892,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               bindMs,
               eventsAnchor,
               schemaSummary,
+              targetWorksheet: target_worksheet,
             }),
           );
         },

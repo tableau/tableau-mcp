@@ -111,8 +111,7 @@ export const getBuildAndApplyWorksheetTool = (
     server,
     name: 'build-and-apply-worksheet',
     title: toolTitle,
-    description:
-      'Build a worksheet from a spec and apply it in one validated call — the one-shot manual path when no template binds.',
+    description: 'Build a worksheet from a spec and apply it in one validated call.',
     paramsSchema,
     annotations: {
       title: toolTitle,

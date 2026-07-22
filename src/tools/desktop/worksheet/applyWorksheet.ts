@@ -45,7 +45,7 @@ export const getApplyWorksheetTool = (
     name: 'apply-worksheet',
     title,
     description:
-      'Apply a modified cached worksheet file to Desktop — the apply leg of the manual build path (add-field/remove-field edit the file; this lands it).',
+      'Apply a modified cached worksheet file to Desktop — the apply leg of the manual build path.',
     paramsSchema,
     annotations: {
       title,

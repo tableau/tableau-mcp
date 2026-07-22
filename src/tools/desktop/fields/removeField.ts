@@ -50,7 +50,7 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
     name: 'remove-field',
     title,
     description:
-      'Remove a field from a shelf (rows/cols/encoding) — the manual build path counterpart to add-field.',
+      'Remove a field from a shelf (rows/cols/encoding); counterpart to add-field.',
     paramsSchema,
     annotations: {
       title,

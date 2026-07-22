@@ -8,7 +8,11 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { buildInjectedWorkbookXml, removeSameNamedWorksheet } from './injectTemplateCore.js';
+import {
+  buildInjectedWorkbookXml,
+  classifyWorksheetReplaceTarget,
+  removeSameNamedWorksheet,
+} from './injectTemplateCore.js';
 
 // Pre-existing pile-up fixture (P2-8): two stale "Sales" copies in MIXED quote
 // styles + attribute orders (what Desktop dedup left behind before the strip was
@@ -376,5 +380,36 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
     expect(result.xml).toContain('[Football].[none:Country:nk]');
     expect(result.xml).toContain('[Football].[none:State:nk]');
     expect(result.xml).toContain('[Football].[none:City:nk]');
+  });
+});
+
+describe('classifyWorksheetReplaceTarget', () => {
+  const WB = `<?xml version='1.0'?>
+<workbook>
+  <worksheets>
+    <worksheet name='Loose Sheet'/>
+    <worksheet name='Dash Member'/>
+  </worksheets>
+  <dashboards>
+    <dashboard name='Board'>
+      <zones><zone name='Dash Member'/></zones>
+    </dashboard>
+  </dashboards>
+</workbook>`;
+
+  it('reports a plain existing sheet as replaceable', () => {
+    expect(classifyWorksheetReplaceTarget(WB, 'Loose Sheet')).toBe('replaceable');
+  });
+
+  it('reports a dashboard-member sheet as in-dashboard (replace would corrupt the dashboard)', () => {
+    expect(classifyWorksheetReplaceTarget(WB, 'Dash Member')).toBe('in-dashboard');
+  });
+
+  it('reports a missing name as not-found', () => {
+    expect(classifyWorksheetReplaceTarget(WB, 'Nope')).toBe('not-found');
+  });
+
+  it('reports not-found on unparseable XML (downstream parse surfaces the real error)', () => {
+    expect(classifyWorksheetReplaceTarget('<workbook', 'Loose Sheet')).toBe('not-found');
   });
 });
