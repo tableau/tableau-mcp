@@ -4,7 +4,7 @@ const MAX_NEXT_ACTION_LABEL_LENGTH = 60;
 
 declare const nextActionLabelBrand: unique symbol;
 
-export type NextActionKind = 'execute' | 'prefill';
+export type NextActionKind = 'execute' | 'prefill' | 'done';
 
 export type NextActionLabel = string & { readonly [nextActionLabelBrand]: true };
 
@@ -25,6 +25,10 @@ export type StructuredResult<T extends object> = T & StructuredContentCarrier;
 
 export function prefillNextAction(label: string): NextAction {
   return { label: nextActionLabel(label), kind: 'prefill' };
+}
+
+export function doneNextAction(): NextAction {
+  return { label: nextActionLabel('Chart complete — no further calls needed'), kind: 'done' };
 }
 
 function nextActionLabel(label: string): NextActionLabel {
