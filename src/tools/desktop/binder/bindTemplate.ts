@@ -147,13 +147,9 @@ function nextActionForEscalation(reason: EscalateReason): NextAction {
     return prefillNextAction('Pick a higher-confidence proposal');
   }
   if (TIER2_REASONS.has(reason)) {
-    return prefillNextAction(
-      'Build manually: place fields with add-field (rows/cols/encodings), then refine-worksheet',
-    );
+    return prefillNextAction('Build via build-and-apply-worksheet');
   }
-  return prefillNextAction(
-    'Build manually: place fields with add-field (rows/cols/encodings), then refine-worksheet',
-  );
+  return prefillNextAction('Build manually with worksheet tools');
 }
 
 function renderBlockers(blockers: Blocker[]): string {
@@ -180,8 +176,8 @@ function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): 
       'Confidence was below the floor. Re-examine the candidate template(s), pick the best fit, and re-propose with higher confidence.';
   } else if (TIER2_REASONS.has(reason)) {
     next =
-      'This ask is not a fast-path template bind. Author the worksheet with the general field/worksheet build tools instead. ' +
-      'If a blocker names a real but not-fast-path-eligible template, that template can still be applied via the manual chain: ' +
+      'This ask is not a fast-path template bind. Author it with build-and-apply-worksheet (one validated build+apply), or place fields stepwise with add-field then apply-worksheet. ' +
+      'If the inject-template/apply-workbook tools are available and a blocker names a real template, that template can still be applied via: ' +
       'get workbook structure in file mode -> inject-template (that template_name + an explicit field_mapping) -> apply-workbook.';
   } else {
     next = 'Author the worksheet with the general build tools instead.';
@@ -322,9 +318,9 @@ function buildGuidance(
         'If the asked viz shape is not among the candidates (e.g. pie/donut — no pie template is ' +
         'fast-path eligible), do not force a mismatched proposal: bind the nearest candidate and tell the ' +
         'user in one sentence why (for a pie ask, a sorted bar or treemap compares shares more precisely); ' +
-        'if they explicitly want the exact shape anyway, use the manual chain — get workbook structure in file mode -> ' +
-        "inject-template with template_name 'part-to-whole-pie-chart' (field_mapping: Region -> the " +
-        'category dimension, Sales -> the measure) -> apply-workbook. ' +
+        'if they explicitly want the exact shape anyway, build it with build-and-apply-worksheet; or, if the ' +
+        "inject-template/apply-workbook tools are available, inject-template with template_name 'part-to-whole-pie-chart' " +
+        '(field_mapping: Region -> the category dimension, Sales -> the measure) -> apply-workbook. ' +
         `${DERIVATION_OVERRIDE_INSTRUCTION}.`;
       break;
     case 'escalate':
@@ -526,7 +522,7 @@ function applyFallback(
     ...base,
     guidance:
       guidance ??
-      `${calcPrefix}Server-side auto-apply did not complete (${apply_error}). The bound args are intact — fall back to the manual chain: get workbook structure in file mode → inject-template → apply-workbook using the returned args.`,
+      `${calcPrefix}Server-side auto-apply did not complete (${apply_error}). The bound args are intact — fall back to build-and-apply-worksheet using the returned args; or, if the inject-template/apply-workbook tools are available, the template chain: get workbook structure in file mode → inject-template → apply-workbook.`,
     applied: false,
     apply_error,
   };

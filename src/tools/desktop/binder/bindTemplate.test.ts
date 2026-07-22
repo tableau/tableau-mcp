@@ -217,6 +217,17 @@ const escalateResult: BinderResult = {
   blockers: [{ code: 'field-not-found', slot_id: 'val', detail: 'No field named "Revenue".' }],
 };
 
+const tier2EscalateResult: BinderResult = {
+  status: 'escalate',
+  reason: 'not-fast-path',
+  blockers: [
+    {
+      code: 'not-fast-path',
+      detail: "template 'ww-ou-diff' is not fast-path eligible (readiness=experimental)",
+    },
+  ],
+};
+
 const sampleProposal: BindingProposal & { confidence: number } = {
   template: 'bar-basic',
   title: 'Sales by Region',
@@ -347,6 +358,9 @@ describe('bindTemplateTool', () => {
     expect(body.status).toBe('propose');
     expect(body.output_schema).toEqual({ type: 'object' });
     expect(body.guidance).toContain('output_schema');
+    expect(body.guidance).toContain('build it with build-and-apply-worksheet');
+    expect(body.guidance).toContain('if the inject-template/apply-workbook tools are available');
+    expect(body.guidance).not.toContain('use the manual chain');
   });
 
   it('returns status "escalate" as a normal outcome (isError false) with routed guidance (Call 2)', async () => {
@@ -380,6 +394,28 @@ describe('bindTemplateTool', () => {
     expect(body.reason).toBe('field-not-found');
     expect(body.guidance).toContain('field-not-found');
     expect(body.guidance).toContain('resolve-field');
+  });
+
+  it('routes non-fast-path escalation through dynamic-profile-visible worksheet builders first', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(tier2EscalateResult);
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'author a custom shape',
+      proposal: sampleProposal,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.status).toBe('escalate');
+    expect(body.guidance).toContain(
+      'Author it with build-and-apply-worksheet (one validated build+apply)',
+    );
+    expect(body.guidance).toContain('place fields stepwise with add-field then apply-worksheet');
+    expect(body.guidance).toContain('If the inject-template/apply-workbook tools are available');
+    expect(body.guidance).not.toContain('manual chain');
   });
 
   it('passes proposal and minConfidence through to the binder (Call 2)', async () => {
@@ -1279,12 +1315,16 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
     expect(body.applied).toBe(false);
     expect(body.apply_error).toContain('inject failed');
     expect(body.apply_error).toContain('not well-formed');
-    // The bind is never lost — args are intact for the manual fallback chain.
+    // The bind is never lost — args are intact for the visible build-and-apply fallback
+    // and, where available, the template chain.
     expect(body.args).toEqual(boundResult.status === 'bound' ? boundResult.args : undefined);
     // P1-5 contrast: inject/validation/apply failures did NOT stem from a stale
-    // workbook, so the "fall back to the manual chain using the returned args" guidance
+    // workbook, so the "fall back using the returned args" guidance
     // is correct here and must be retained (only the events-dirty branch drops it).
-    expect(String(body.guidance)).toMatch(/manual chain/i);
+    expect(String(body.guidance)).toContain(
+      'fall back to build-and-apply-worksheet using the returned args',
+    );
+    expect(String(body.guidance)).toContain('the template chain');
     // Apply is not attempted once inject fails.
     expect(executeCommand).not.toHaveBeenCalled();
   });
