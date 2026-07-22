@@ -246,7 +246,7 @@ function expectSpecFailure(spec: object, expectedText: string): void {
 describe('validateNotionalSpecArgs', () => {
   it('passes through other commands unchanged, even with arbitrary args', () => {
     expect(
-      validateNotionalSpecArgs('tabdoc:goto-sheet', { WorksheetId: 'anything', mark: 'bar' }),
+      validateNotionalSpecArgs('tabdoc:save', { WorksheetId: 'anything', mark: 'bar' }),
     ).toEqual({ ok: true });
   });
 
@@ -311,7 +311,7 @@ describe('validateNotionalSpecArgs', () => {
     if (result.ok) throw new Error('expected failure');
     expect(result.message).toContain('Unknown parameter "WorksheetId"');
     expect(result.message).toContain('500');
-    expect(result.message).toContain('goto-sheet');
+    expect(result.message).toContain('activate-sheet');
   });
 
   it('rejects a chart value outside the v0.2 enum', () => {

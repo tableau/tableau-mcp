@@ -80,6 +80,21 @@ describe('desktop vendored assets', () => {
     expect(undeclaredXml).toEqual([]);
   });
 
+  it('ships template XML windows without focus-restoring active/maximized flags', () => {
+    const flaggedWindows = readdirSync(templateXmlDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.xml'))
+      .flatMap((entry) => {
+        const xml = readFileSync(join(templateXmlDir, entry.name), 'utf-8');
+        return Array.from(xml.matchAll(/<windows\b[\s\S]*?<\/windows>/g)).flatMap((section) =>
+          Array.from(section[0].matchAll(/<window\b[^>]*(?:\bactive=|\bmaximized=)[^>]*>/g)).map(
+            (match) => `${entry.name}: ${match[0]}`,
+          ),
+        );
+      });
+
+    expect(flaggedWindows).toEqual([]);
+  });
+
   it('vendors a non-trivial knowledge corpus', () => {
     // The pre-sync snapshot was 16 stale files; the canonical corpus is ~90.
     // A floor of 80 catches a regression to a partial copy without pinning

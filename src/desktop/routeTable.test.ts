@@ -41,7 +41,8 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
     expect(rendered).toContain('Command census:');
     expect(rendered).not.toContain('tabdoc:generate-viz-from-notional-spec');
-    expect(rendered).toContain('tabdoc:goto-sheet');
+    expect(rendered).not.toContain('tabdoc:goto-sheet');
+    expect(rendered).toContain('activate-sheet');
     expect(rendered).toContain('Use search-commands ONLY for unlisted commands.');
   });
 
