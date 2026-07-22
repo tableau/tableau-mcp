@@ -48,7 +48,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
    - \`insights_options.settings\` with all insight types and their enabled/disabled state
    - Incomplete data will cause API errors even if it passes schema validation
 
-3. **Multi-Turn Conversations**: you can optionally include previous conversation context in the \`messages\` array. This can help the API to generate more accurate and relevant responses.
+3. **Multi-Turn Conversations**: you can optionally provide a concise summary of the directly relevant conversation history in the \`messages\` array. This can help the API to generate more accurate and relevant responses. Do not include full conversation history or arrays of prior conversation context.
    history in the \`messages\` array:
    - Add the initial user question with \`role: 'ROLE_USER'\`
    - Add the assistant's response with \`role: 'ROLE_ASSISTANT'\` and \`content\` containing the previous response text
