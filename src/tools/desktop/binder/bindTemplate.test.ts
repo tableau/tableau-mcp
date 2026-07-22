@@ -12,7 +12,7 @@ import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWor
 import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
-import { sessionRouteState } from '../../../desktop/route/route-state.js';
+import { serializeRouteReceipt, sessionRouteState } from '../../../desktop/route/route-state.js';
 import {
   buildInjectedWorkbookXml,
   classifyWorksheetReplaceTarget,
@@ -29,6 +29,7 @@ import { Provider } from '../../../utils/provider.js';
 import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getBindTemplateTool } from './bindTemplate.js';
+import { proposalSignature } from './proposalSignature.js';
 
 // Auto-mock the live-read command. Partial-mock the binder core so the pure
 // DERIVATION_* exports used to build the zod schema stay intact while only
@@ -241,6 +242,22 @@ const sampleProposal: BindingProposal & { confidence: number } = {
   ],
   confidence: 0.9,
 };
+const sampleProposalTitleOnlyChange: BindingProposal & { confidence: number } = {
+  ...sampleProposal,
+  title: 'Sales by Region v2',
+  confidence: 0.99,
+};
+const changedProposal: BindingProposal & { confidence: number } = {
+  ...sampleProposal,
+  bindings: [
+    { slot_id: 'cat', field: 'Region' },
+    { slot_id: 'val', field: 'Profit' },
+  ],
+};
+const changedProposalAgain: BindingProposal & { confidence: number } = {
+  ...changedProposal,
+  sort: { by: 'Profit', direction: 'desc' },
+};
 
 // A Call-2 proposal that validated into a bound result is marked used_llm:true.
 // The auto-apply gate should preserve that field on non-applied results, but it no
@@ -312,6 +329,13 @@ const badSortFieldEscalateResult: BinderResult = {
     sort: { by: 'Definitely Not A Field', direction: 'desc' },
   },
 };
+
+beforeEach(() => {
+  sessionRouteState.clear();
+  vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockReset();
+  vi.mocked(binderModule.bindTemplate).mockReset();
+  vi.mocked(classifyWorksheetReplaceTarget).mockReset();
+});
 
 describe('bindTemplateTool', () => {
   beforeEach(() => {
@@ -518,6 +542,365 @@ describe('bindTemplateTool', () => {
         manifests: new Map([['seam-probe', fakeManifest]]),
       }),
     );
+  });
+});
+
+describe('bindTemplateTool bind recovery gate', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('allows the designed Call 1 propose to Call 2 proposal transition without consuming retry budget', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(escalateResult);
+
+    const call1 = await getToolResult({ session: '1', ask: 'bar chart of Revenue by Region' });
+    const call2 = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Revenue by Region',
+      proposal: sampleProposal,
+    });
+
+    expect(call1.isError).toBe(false);
+    expect(call2.isError).toBe(false);
+    invariant(call2.content[0].type === 'text');
+    expect(JSON.parse(call2.content[0].text).status).toBe('escalate');
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+    const record = sessionRouteState.getBindRecovery(
+      '1',
+      normalizeAskForMatch('bar chart of Revenue by Region'),
+    );
+    expect(record?.phase).toBe('proposal-attempted');
+    expect(record?.attempts.map((attempt) => attempt.outcome)).toEqual(['propose', 'escalate']);
+    expect(record?.attempts.map((attempt) => attempt.consumesRetryBudget)).toEqual([false, false]);
+  });
+
+  it('blocks a repeat proposal-absent call while awaiting the designed Call 2 proposal', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(proposeResult);
+
+    await getToolResult({ session: '1', ask: 'something weird' });
+    const blocked = await getToolResult({ session: '1', ask: 'something weird' });
+
+    expect(blocked.isError).toBe(false);
+    invariant(blocked.content[0].type === 'text');
+    const body = JSON.parse(blocked.content[0].text);
+    expect(body.status).toBe('blocked');
+    expect(body.reason).toBe('awaiting_proposal');
+    expect(body.guidance).toContain('previous llm_input');
+    expect(blocked.structuredContent).toEqual({
+      nextAction: { label: 'Pick a proposal or ask user', kind: 'prefill' },
+    });
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks a same-signature retry, including title-only and confidence-only changes', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(escalateResult);
+
+    await getToolResult({ session: '1', ask: 'bar chart of Revenue by Region' });
+    await getToolResult({
+      session: '1',
+      ask: 'bar chart of Revenue by Region',
+      proposal: sampleProposal,
+    });
+    const blocked = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Revenue by Region',
+      proposal: sampleProposalTitleOnlyChange,
+    });
+
+    expect(blocked.isError).toBe(false);
+    invariant(blocked.content[0].type === 'text');
+    const body = JSON.parse(blocked.content[0].text);
+    expect(body.status).toBe('blocked');
+    expect(body.reason).toBe('unchanged_proposal');
+    expect(body.guidance).toContain('Title/confidence only changes do not count');
+    expect(blocked.structuredContent).toEqual({
+      nextAction: { label: 'Change proposal or ask user', kind: 'prefill' },
+    });
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+  });
+
+  it('blocks an identical Call 2 retry when the admitted Call 2 fails before binding', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(proposeResult);
+    const getExecutor = vi
+      .fn()
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new Error('desktop unavailable'))
+      .mockResolvedValue({});
+
+    await getToolResult({
+      session: '1',
+      ask: 'bar chart of Revenue by Region',
+      getExecutor,
+    });
+    const failed = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Revenue by Region',
+      proposal: sampleProposal,
+      getExecutor,
+    });
+    const blocked = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Revenue by Region',
+      proposal: sampleProposalTitleOnlyChange,
+      getExecutor,
+    });
+
+    expect(failed.isError).toBe(true);
+    expect(blocked.isError).toBe(false);
+    invariant(blocked.content[0].type === 'text');
+    const body = JSON.parse(blocked.content[0].text);
+    expect(body.status).toBe('blocked');
+    expect(body.reason).toBe('unchanged_proposal');
+    expect(getExecutor).toHaveBeenCalledTimes(2);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks a same-signature Call 2 while the first admitted Call 2 is still in flight', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(escalateResult);
+    let resolveExecutor!: (executor: object) => void;
+    const pendingExecutor = new Promise<object>((resolve) => {
+      resolveExecutor = resolve;
+    });
+    const getExecutor = vi
+      .fn()
+      .mockResolvedValueOnce({})
+      .mockReturnValueOnce(pendingExecutor)
+      .mockResolvedValue({});
+
+    await getToolResult({
+      session: '1',
+      ask: 'bar chart of Revenue by Region',
+      getExecutor,
+    });
+    const inFlight = getToolResult({
+      session: '1',
+      ask: 'bar chart of Revenue by Region',
+      proposal: sampleProposal,
+      getExecutor,
+    });
+    await vi.waitFor(() => expect(getExecutor).toHaveBeenCalledTimes(2));
+
+    const blocked = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Revenue by Region',
+      proposal: sampleProposalTitleOnlyChange,
+      getExecutor,
+    });
+
+    invariant(blocked.content[0].type === 'text');
+    const blockedBody = JSON.parse(blocked.content[0].text);
+    expect(blockedBody.status).toBe('blocked');
+    expect(blockedBody.reason).toBe('unchanged_proposal');
+    expect(getExecutor).toHaveBeenCalledTimes(2);
+
+    resolveExecutor({});
+    const completed = await inFlight;
+    invariant(completed.content[0].type === 'text');
+    expect(JSON.parse(completed.content[0].text).status).toBe('escalate');
+  });
+
+  it('correlates concurrent different-signature Call 2 outcomes to their own reservations', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    let resolveFirstCall2!: (result: BinderResult) => void;
+    let resolveSecondCall2!: (result: BinderResult) => void;
+    const firstCall2Bind = new Promise<BinderResult>((resolve) => {
+      resolveFirstCall2 = resolve;
+    });
+    const secondCall2Bind = new Promise<BinderResult>((resolve) => {
+      resolveSecondCall2 = resolve;
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockImplementationOnce(() => firstCall2Bind)
+      .mockImplementationOnce(() => secondCall2Bind);
+    const getExecutor = vi.fn().mockResolvedValue({});
+    const ask = 'bar chart of Revenue by Region';
+    const askKey = normalizeAskForMatch(ask);
+
+    await getToolResult({ session: '1', ask, getExecutor });
+    const firstCall2 = getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposal,
+      getExecutor,
+    });
+    await vi.waitFor(() => expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2));
+    const secondCall2 = getToolResult({
+      session: '1',
+      ask,
+      proposal: changedProposal,
+      getExecutor,
+    });
+    await vi.waitFor(() => expect(binderModule.bindTemplate).toHaveBeenCalledTimes(3));
+
+    resolveSecondCall2(escalateResult);
+    const secondCompleted = await secondCall2;
+    resolveFirstCall2(escalateResult);
+    const firstCompleted = await firstCall2;
+
+    invariant(firstCompleted.content[0].type === 'text');
+    invariant(secondCompleted.content[0].type === 'text');
+    expect(JSON.parse(firstCompleted.content[0].text).status).toBe('escalate');
+    expect(JSON.parse(secondCompleted.content[0].text).status).toBe('escalate');
+    const record = sessionRouteState.getBindRecovery('1', askKey)!;
+    expect(record.phase).toBe('retry-used');
+    expect(record.lastProposalSignature).toBe(proposalSignature(changedProposal));
+    expect(record.attempts).toMatchObject([
+      { outcome: 'propose', consumesRetryBudget: false },
+      { outcome: 'escalate', consumesRetryBudget: false },
+      { outcome: 'escalate', consumesRetryBudget: true },
+    ]);
+    expect(record.attempts.some((attempt) => attempt.outcome === undefined)).toBe(false);
+    expect(record.attempts.map((attempt) => attempt.outcome)).toEqual([
+      'propose',
+      'escalate',
+      'escalate',
+    ]);
+    expect(serializeRouteReceipt(sessionRouteState.get('1'))?.bind_attempts).toEqual({
+      count: 3,
+      outcomes: ['propose', 'escalate', 'escalate'],
+      phase: 'retry-used',
+      retry_budget_consumed: 1,
+    });
+  });
+
+  it('allows one semantically changed retry and then blocks further proposal-bearing calls', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(escalateResult)
+      .mockResolvedValueOnce(escalateResult);
+
+    await getToolResult({ session: '1', ask: 'bar chart of Revenue by Region' });
+    await getToolResult({
+      session: '1',
+      ask: 'bar chart of Revenue by Region',
+      proposal: sampleProposal,
+    });
+    const changedRetry = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Revenue by Region',
+      proposal: changedProposal,
+    });
+    const exhausted = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Revenue by Region',
+      proposal: changedProposalAgain,
+    });
+
+    expect(changedRetry.isError).toBe(false);
+    invariant(changedRetry.content[0].type === 'text');
+    expect(JSON.parse(changedRetry.content[0].text).status).toBe('escalate');
+    invariant(exhausted.content[0].type === 'text');
+    const body = JSON.parse(exhausted.content[0].text);
+    expect(body.status).toBe('blocked');
+    expect(body.reason).toBe('retry_budget_exhausted');
+    expect(body.guidance).toContain('single changed proposal retry');
+    expect(exhausted.structuredContent).toEqual({
+      nextAction: { label: 'Use fallback path or ask user', kind: 'prefill' },
+    });
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(3);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(3);
+    const record = sessionRouteState.getBindRecovery(
+      '1',
+      normalizeAskForMatch('bar chart of Revenue by Region'),
+    );
+    expect(record?.phase).toBe('retry-used');
+    expect(record?.attempts.map((attempt) => attempt.consumesRetryBudget)).toEqual([
+      false,
+      false,
+      true,
+    ]);
+  });
+
+  it('routes Tier-2 escalation straight to fallback and closes the retry path', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(tier2EscalateResult);
+
+    await getToolResult({ session: '1', ask: 'unsupported chart' });
+    const tier2 = await getToolResult({
+      session: '1',
+      ask: 'unsupported chart',
+      proposal: sampleProposal,
+    });
+    const blocked = await getToolResult({
+      session: '1',
+      ask: 'unsupported chart',
+      proposal: changedProposal,
+    });
+
+    invariant(tier2.content[0].type === 'text');
+    const tier2Body = JSON.parse(tier2.content[0].text);
+    expect(tier2Body.status).toBe('escalate');
+    expect(tier2Body.guidance).toContain('No fast-path template fits this ask/data');
+    expect(tier2Body.guidance).toContain('build-and-apply-worksheet');
+    expect(tier2Body.guidance).not.toContain('corrected proposal');
+    invariant(blocked.content[0].type === 'text');
+    const blockedBody = JSON.parse(blocked.content[0].text);
+    expect(blockedBody.status).toBe('blocked');
+    expect(blockedBody.reason).toBe('fallback_required');
+    expect(blockedBody.guidance).toContain('not recoverable in the fast path');
+    expect(blocked.structuredContent).toEqual({
+      nextAction: { label: 'Use fallback authoring path', kind: 'prefill' },
+    });
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears the recovery record after a terminal bound result', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(boundResult);
+    const ask = 'bar chart of Sales by Region';
+
+    await getToolResult({ session: '1', ask });
+    expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))?.phase).toBe(
+      'awaiting-proposal',
+    );
+
+    const bound = await getToolResult({ session: '1', ask, proposal: sampleProposal });
+
+    expect(bound.isError).toBe(false);
+    invariant(bound.content[0].type === 'text');
+    expect(JSON.parse(bound.content[0].text).status).toBe('bound');
+    expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toBeUndefined();
+  });
+
+  it('does not label proposal-absent non-Tier-2 escalation as awaiting a proposal', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(escalateResult);
+    const ask = 'bar chart of Revenue by Region';
+
+    const first = await getToolResult({ session: '1', ask });
+    const second = await getToolResult({ session: '1', ask });
+
+    invariant(first.content[0].type === 'text');
+    invariant(second.content[0].type === 'text');
+    expect(JSON.parse(first.content[0].text).status).toBe('escalate');
+    const secondBody = JSON.parse(second.content[0].text);
+    expect(secondBody.status).toBe('escalate');
+    expect(secondBody.status).not.toBe('blocked');
+    expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toBeUndefined();
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
   });
 });
 

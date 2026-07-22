@@ -6,7 +6,12 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { type RouteDeflection, sessionRouteState, SessionRouteStateStore } from './route-state.js';
+import {
+  type RouteDeflection,
+  serializeRouteReceipt,
+  sessionRouteState,
+  SessionRouteStateStore,
+} from './route-state.js';
 
 function mkDeflection(over: Partial<RouteDeflection> = {}): RouteDeflection {
   return {
@@ -258,6 +263,332 @@ describe('SessionRouteStateStore', () => {
       expect(store.clearCurrentAsk('S1')).toBe(false);
       expect(store.clearCurrentAsk('NOPE')).toBe(false);
       expect(store.clearCurrentAsk(undefined)).toBe(false);
+    });
+  });
+
+  describe('bind recovery state', () => {
+    it('records Call 1 propose then first proposal Call 2 without consuming retry budget', () => {
+      const store = new SessionRouteStateStore();
+
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'escalate',
+        proposalSignature: 'signature-1',
+      });
+
+      const record = store.getBindRecovery('S1', 'ask A')!;
+      expect(record.phase).toBe('proposal-attempted');
+      expect(record.lastProposalSignature).toBe('signature-1');
+      expect(record.attempts).toHaveLength(2);
+      expect(record.attempts.map((a) => a.outcome)).toEqual(['propose', 'escalate']);
+      expect(record.attempts.map((a) => a.consumesRetryBudget)).toEqual([false, false]);
+      expect(typeof record.attempts[0].ts).toBe('string');
+    });
+
+    it('marks a semantically changed proposal after Call 2 as the single consumed retry', () => {
+      const store = new SessionRouteStateStore();
+
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'escalate',
+        proposalSignature: 'signature-1',
+      });
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'escalate',
+        proposalSignature: 'signature-2',
+      });
+
+      const record = store.getBindRecovery('S1', 'ask A')!;
+      expect(record.phase).toBe('retry-used');
+      expect(record.lastProposalSignature).toBe('signature-2');
+      expect(record.attempts.map((a) => a.consumesRetryBudget)).toEqual([false, false, true]);
+    });
+
+    it('clears a recovery entry when the bind reaches terminal done', () => {
+      const store = new SessionRouteStateStore();
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'bound', terminal: true });
+
+      expect(store.getBindRecovery('S1', 'ask A')).toBeUndefined();
+    });
+
+    it('keeps bind recovery separate from current_ask scratch-gate state', () => {
+      const store = new SessionRouteStateStore();
+      store.recordAskClassification('S1', {
+        ask: 'ask A',
+        route: 'bind-first',
+        shape: 'bind-first-template',
+        template: 'ranking-ordered-bar',
+      });
+
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+
+      expect(store.get('S1')!.current_ask).toMatchObject({
+        ask: 'ask A',
+        last_outcome: null,
+      });
+      expect(store.getBindRecovery('S1', 'ask A')?.phase).toBe('awaiting-proposal');
+    });
+
+    it('evicts terminal recovery records before active records', () => {
+      const store = new SessionRouteStateStore();
+      const cap = SessionRouteStateStore.MAX_BIND_RECOVERY_ASKS;
+
+      for (let i = 0; i < cap; i++) {
+        store.recordBindRecoveryAttempt('S1', `ask-${i}`, { outcome: 'propose' });
+      }
+      store.recordBindRecoveryTerminal('S1', 'ask-1', {
+        outcome: 'escalate',
+        proposalSignature: 'signature-1',
+      });
+      store.recordBindRecoveryAttempt('S1', `ask-${cap}`, { outcome: 'propose' });
+
+      const state = store.get('S1')!;
+      expect(state.bindRecoveryByAsk.size).toBe(cap);
+      expect(store.getBindRecovery('S1', 'ask-0')).toBeDefined();
+      expect(store.getBindRecovery('S1', 'ask-1')).toBeUndefined();
+      expect(store.getBindRecovery('S1', `ask-${cap}`)).toBeDefined();
+    });
+
+    it('refreshes bind recovery recency on read', () => {
+      const store = new SessionRouteStateStore();
+      const cap = SessionRouteStateStore.MAX_BIND_RECOVERY_ASKS;
+
+      for (let i = 0; i < cap; i++) {
+        store.recordBindRecoveryTerminal('S1', `ask-${i}`, {
+          outcome: 'escalate',
+          proposalSignature: `signature-${i}`,
+        });
+      }
+
+      expect(store.getBindRecovery('S1', 'ask-0')).toBeDefined();
+      store.recordBindRecoveryAttempt('S1', `ask-${cap}`, { outcome: 'propose' });
+
+      expect(store.getBindRecovery('S1', 'ask-0')).toBeDefined();
+      expect(store.getBindRecovery('S1', 'ask-1')).toBeUndefined();
+      expect(store.getBindRecovery('S1', `ask-${cap}`)).toBeDefined();
+    });
+
+    it('refuses to create a ninth active recovery record instead of evicting an active ask', () => {
+      const store = new SessionRouteStateStore();
+      const cap = SessionRouteStateStore.MAX_BIND_RECOVERY_ASKS;
+
+      for (let i = 0; i < cap; i++) {
+        store.recordBindRecoveryAttempt('S1', `ask-${i}`, { outcome: 'propose' });
+      }
+      store.recordBindRecoveryAttempt('S1', `ask-${cap}`, { outcome: 'propose' });
+
+      expect(store.get('S1')!.bindRecoveryByAsk.size).toBe(cap);
+      for (let i = 0; i < cap; i++) {
+        expect(store.getBindRecovery('S1', `ask-${i}`)).toBeDefined();
+      }
+      expect(store.getBindRecovery('S1', `ask-${cap}`)).toBeUndefined();
+    });
+
+    it('reserves an admitted in-flight bind and upgrades it when the outcome arrives', () => {
+      const store = new SessionRouteStateStore();
+
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+      const reservationId = store.reserveBindRecoveryAdmission('S1', 'ask A', {
+        proposalSignature: 'signature-1',
+      });
+
+      expect(typeof reservationId).toBe('number');
+      expect(store.getBindRecovery('S1', 'ask A')).toMatchObject({
+        phase: 'proposal-attempted',
+        lastProposalSignature: 'signature-1',
+        attempts: [
+          { outcome: 'propose', consumesRetryBudget: false },
+          { proposalSignature: 'signature-1', consumesRetryBudget: false },
+        ],
+      });
+
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'escalate',
+        proposalSignature: 'signature-1',
+        reservationId,
+      });
+
+      expect(store.getBindRecovery('S1', 'ask A')?.attempts).toMatchObject([
+        { outcome: 'propose', consumesRetryBudget: false },
+        { outcome: 'escalate', proposalSignature: 'signature-1', consumesRetryBudget: false },
+      ]);
+    });
+
+    it('upgrades concurrent different-signature reservations by reservation id without phantom pending attempts', () => {
+      const store = new SessionRouteStateStore();
+      store.recordAskClassification('S1', {
+        ask: 'ask A',
+        route: 'bind-first',
+        shape: 'bind-first-template',
+        template: 'ranking-ordered-bar',
+      });
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+
+      const firstReservationId = store.reserveBindRecoveryAdmission('S1', 'ask A', {
+        proposalSignature: 'signature-1',
+      });
+      const secondReservationId = store.reserveBindRecoveryAdmission('S1', 'ask A', {
+        proposalSignature: 'signature-2',
+      });
+
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'escalate',
+        proposalSignature: 'signature-2',
+        reservationId: secondReservationId,
+      });
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'escalate',
+        proposalSignature: 'signature-1',
+        reservationId: firstReservationId,
+      });
+
+      const record = store.getBindRecovery('S1', 'ask A')!;
+      expect(record.phase).toBe('retry-used');
+      expect(record.lastProposalSignature).toBe('signature-2');
+      expect(record.attempts).toMatchObject([
+        { outcome: 'propose', consumesRetryBudget: false },
+        { outcome: 'escalate', proposalSignature: 'signature-1', consumesRetryBudget: false },
+        { outcome: 'escalate', proposalSignature: 'signature-2', consumesRetryBudget: true },
+      ]);
+      expect(record.attempts.map((attempt) => attempt.outcome)).toEqual([
+        'propose',
+        'escalate',
+        'escalate',
+      ]);
+      expect(record.attempts.some((attempt) => attempt.outcome === undefined)).toBe(false);
+      expect(serializeRouteReceipt(store.get('S1'))?.bind_attempts).toEqual({
+        count: 3,
+        outcomes: ['propose', 'escalate', 'escalate'],
+        phase: 'retry-used',
+        retry_budget_consumed: 1,
+      });
+    });
+
+    it('flags uncorrelated reservation outcomes without duplicating an already-upgraded attempt', () => {
+      const store = new SessionRouteStateStore();
+      store.recordAskClassification('S1', {
+        ask: 'ask A',
+        route: 'bind-first',
+        shape: 'bind-first-template',
+        template: 'ranking-ordered-bar',
+      });
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+      const reservationId = store.reserveBindRecoveryAdmission('S1', 'ask A', {
+        proposalSignature: 'signature-1',
+      });
+
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'escalate',
+        proposalSignature: 'signature-1',
+        reservationId,
+      });
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'escalate',
+        proposalSignature: 'signature-1',
+        reservationId,
+      });
+
+      expect(store.getBindRecovery('S1', 'ask A')?.attempts).toMatchObject([
+        { outcome: 'propose' },
+        { outcome: 'escalate', proposalSignature: 'signature-1' },
+      ]);
+      expect(serializeRouteReceipt(store.get('S1'))?.bind_attempts).toEqual({
+        count: 2,
+        outcomes: ['propose', 'escalate'],
+        phase: 'proposal-attempted',
+        retry_budget_consumed: 0,
+        uncorrelated_outcomes: 1,
+      });
+    });
+
+    it('treats a late outcome for an evicted reservation as uncorrelated after recreation', () => {
+      const store = new SessionRouteStateStore();
+      store.recordAskClassification('S1', {
+        ask: 'ask A',
+        route: 'bind-first',
+        shape: 'bind-first-template',
+        template: 'ranking-ordered-bar',
+      });
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+      const staleReservationId = store.reserveBindRecoveryAdmission('S1', 'ask A', {
+        proposalSignature: 'stale-signature',
+      });
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'bound', terminal: true });
+
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+      const freshReservationId = store.reserveBindRecoveryAdmission('S1', 'ask A', {
+        proposalSignature: 'fresh-signature',
+      });
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'escalate',
+        proposalSignature: 'stale-signature',
+        reservationId: staleReservationId,
+      });
+
+      expect(freshReservationId).not.toBe(staleReservationId);
+      const record = store.getBindRecovery('S1', 'ask A')!;
+      expect(record.attempts).toMatchObject([
+        { outcome: 'propose' },
+        { proposalSignature: 'fresh-signature' },
+      ]);
+      expect(record.attempts[1].outcome).toBeUndefined();
+      expect(serializeRouteReceipt(store.get('S1'))?.bind_attempts).toEqual({
+        count: 2,
+        outcomes: ['propose'],
+        phase: 'proposal-attempted',
+        retry_budget_consumed: 0,
+        uncorrelated_outcomes: 1,
+      });
+    });
+
+    it('reports retry budget consumed when a changed retry ends in terminal fallback', () => {
+      const store = new SessionRouteStateStore();
+      store.recordAskClassification('S1', {
+        ask: 'ask A',
+        route: 'bind-first',
+        shape: 'bind-first-template',
+        template: 'ranking-ordered-bar',
+      });
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'escalate',
+        proposalSignature: 'signature-1',
+      });
+      store.recordBindRecoveryTerminal('S1', 'ask A', {
+        outcome: 'escalate',
+        proposalSignature: 'signature-2',
+      });
+
+      expect(serializeRouteReceipt(store.get('S1'))?.bind_attempts).toEqual({
+        count: 3,
+        outcomes: ['propose', 'escalate', 'escalate'],
+        phase: 'terminal',
+        retry_budget_consumed: 1,
+      });
+    });
+
+    it('serializes recovery attempts for the current ask instead of hard-coding one outcome', () => {
+      const store = new SessionRouteStateStore();
+      store.recordAskClassification('S1', {
+        ask: 'ask A',
+        route: 'bind-first',
+        shape: 'bind-first-template',
+        template: 'ranking-ordered-bar',
+      });
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'escalate',
+        proposalSignature: 'signature-1',
+      });
+
+      expect(serializeRouteReceipt(store.get('S1'))?.bind_attempts).toEqual({
+        count: 2,
+        outcomes: ['propose', 'escalate'],
+        phase: 'proposal-attempted',
+        retry_budget_consumed: 0,
+      });
     });
   });
 });
