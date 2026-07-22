@@ -38,7 +38,7 @@ Before exporting, say something like:
 
 - **Using this command for worksheets.** Use `tabdoc:export-worksheet-image` (with `get-export-image-layout-options` prefetch) for individual worksheet views.
 - **Assuming the file path is fixed.** Always pass an explicit absolute path as `file-name`. On macOS, `/private/tmp/` is confirmed. Other OS paths have not been verified.
-- **Exporting without navigating first.** If Tableau Desktop is not currently showing the dashboard, `tabdoc:export-dashboard-image` returns an empty `{}` but the output file is blank (white canvas). Always call `tabdoc:goto-sheet` to navigate to the dashboard before exporting.
+- **Exporting without navigating first.** If Tableau Desktop is not currently showing the dashboard, `tabdoc:export-dashboard-image` returns an empty `{}` but the output file is blank (white canvas). Always call `activate-sheet` to navigate to the dashboard before exporting; raw `tabdoc:goto-sheet` is refused at the execute boundary.
 
 ## Implementation
 
@@ -46,8 +46,8 @@ Two-step — navigate first, then export:
 
 **Step 1: Navigate to the dashboard**
 ```
-tabdoc:goto-sheet
-  sheet: "Dashboard 1"   ← plain dashboard name string
+activate-sheet
+  sheetName: "Dashboard 1"   ← plain dashboard name string
 ```
 
 **Step 2: Export the image**

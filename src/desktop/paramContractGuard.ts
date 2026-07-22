@@ -25,7 +25,13 @@
 // validates that command's actual shape.
 
 import { readDataAsset } from './assets.js';
-import { checkCommandPolicy, liveDialogPolicyFor, liveParamOverrideFor } from './commandPolicy.js';
+import {
+  checkCommandPolicy,
+  formatUnvalidatedTargetRefusal,
+  liveDialogPolicyFor,
+  liveParamOverrideFor,
+  unvalidatedTargetPolicyFor,
+} from './commandPolicy.js';
 import type { CommandValidationResult } from './commandRegistry.js';
 
 const COMMANDS_REFERENCE_ASSET = 'tableau-desktop-commands-reference.json';
@@ -116,6 +122,14 @@ export function validateCommandParams(
   command: string,
   args: Record<string, unknown> | undefined,
 ): CommandValidationResult {
+  const unvalidatedTargetPolicy = unvalidatedTargetPolicyFor(command);
+  if (unvalidatedTargetPolicy) {
+    return {
+      ok: false,
+      message: formatUnvalidatedTargetRefusal(command, unvalidatedTargetPolicy),
+    };
+  }
+
   const dialogPolicy = liveDialogPolicyFor(command);
   if (dialogPolicy?.fix !== undefined) {
     return {

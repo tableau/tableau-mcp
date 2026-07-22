@@ -2,6 +2,8 @@ import { Err, Ok } from 'ts-results-es';
 
 import * as loggerModule from '../../../logging/logger.js';
 import invariant from '../../../utils/invariant.js';
+import { normalizeArray, parseXML } from '../../metadata/parser.js';
+import type { ParsedWindow } from '../../metadata/types.js';
 import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import * as validationRegistry from '../../validation/registry.js';
 import { loadWorksheetXml } from './loadWorksheetXml.js';
@@ -129,8 +131,18 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(applyCall?.xml).toContain('name="Dashboard 1"');
   });
 
-  it('focuses the worksheet after a successful apply', async () => {
-    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Sheet 1', 'Other']));
+  it('preserves the live active window and does not navigate after apply', async () => {
+    const workbookXml = `<?xml version='1.0'?><workbook>
+      <worksheets>
+        <worksheet name='Sheet 1'><table /></worksheet>
+        <worksheet name='Sheet 2'><table /></worksheet>
+      </worksheets>
+      <windows>
+        <window class='worksheet' name='Sheet 1' />
+        <window class='worksheet' name='Sheet 2' active='true' maximized='true' />
+      </windows>
+    </workbook>`;
+    const { executor, calls } = dispatchingExecutor(workbookXml);
 
     const result = await loadWorksheetXml({
       worksheetName,
@@ -140,9 +152,14 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(calls.some((c) => c.command === 'goto-sheet' && c.args?.sheet === worksheetName)).toBe(
-      true,
-    );
+    const appliedXml = calls.find((call) => call.kind === 'apply')?.xml;
+    expect(appliedXml).toBeDefined();
+    const windows = normalizeArray<ParsedWindow>(parseXML(appliedXml!).workbook?.windows?.window);
+    expect(windows.map((window) => window['@_name'])).toEqual(['Sheet 1', 'Sheet 2']);
+    expect(windows[0]).not.toHaveProperty('@_active');
+    expect(windows[0]).not.toHaveProperty('@_maximized');
+    expect(windows[1]).toMatchObject({ '@_active': 'true', '@_maximized': 'true' });
+    expect(calls.some((call) => call.command === 'goto-sheet')).toBe(false);
   });
 
   it('appends a brand-new sheet while preserving the existing one', async () => {

@@ -465,6 +465,53 @@ describe('planSortByField', () => {
     expect(r.reason).toMatch(/target field/i);
     expect(r.reason).toMatch(/Missing Field/);
   });
+
+  it('auto-detects the single categorical axis when targetField is omitted (never throws)', () => {
+    // The observed crash: only the sort-by measure is named, no targetField. It must route
+    // to the single shelf axis (line_item) and succeed, not throw on undefined.trim().
+    const r = planSortByField(WATERFALL, {
+      sortByField: 'display_order',
+      direction: 'DESC',
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.column).toBe('[Superstore].[none:line_item:nk]');
+    expect(r.using).toBe('[Superstore].[sum:display_order:qk]');
+    expect(r.xml).toContain(
+      "<computed-sort column='[Superstore].[none:line_item:nk]' direction='DESC' using='[Superstore].[sum:display_order:qk]' />",
+    );
+  });
+
+  it('treats an empty-string targetField the same as omitted (auto-detects the axis)', () => {
+    const r = planSortByField(WATERFALL, {
+      targetField: '   ',
+      sortByField: 'display_order',
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.column).toBe('[Superstore].[none:line_item:nk]');
+  });
+
+  it('refuses (never throws) when targetField is omitted and no axis can be identified', () => {
+    // Two categorical axes on shelves → the auto-detect is ambiguous; refuse cleanly.
+    const twoAxis = withDeps(
+      REGION_COL +
+        "<column datatype='string' name='[Category]' role='dimension' type='nominal' />" +
+        SALES_COL +
+        REGION_CI +
+        "<column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />" +
+        SALES_CI,
+    )
+      .replace(/<computed-sort[^>]*\/>/, '')
+      .replace(
+        '<cols>[Superstore].[sum:Sales:qk]</cols>',
+        '<cols>[Superstore].[none:Category:nk]</cols>',
+      );
+    const r = planSortByField(twoAxis, { sortByField: 'Sales' });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/more than one categorical axis/i);
+  });
 });
 
 describe('planSortDirection — INSERT a sort on an unsorted simple bar', () => {

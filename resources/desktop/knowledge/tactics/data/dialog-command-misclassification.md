@@ -37,7 +37,7 @@ The 15 misclassified commands (source is a `*DialogCommand`, reference marks `op
 
 ```
 tabdoc:launch-map-service-edit-dialog        (MapServiceEditDialogCommand)
-tabdoc:show-goto-sheet-dialog                (GotoSheetDialogCommand)
+tabdoc:show-goto-sheet-dialog                (GotoSheetDialogCommand; for current navigation, raw tabdoc:goto-sheet is refused at the execute boundary — use activate-sheet)
 tabui:show-feature-flag-dialog               (ShowFeatureFlagDialogCommand)
 tabdoc:edit-filter-dialog                    (FilterDialogCommand)
 tabdoc:launch-shared-filter-dialog           (FilterDialogCommand)

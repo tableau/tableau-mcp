@@ -16,6 +16,11 @@ describe('loadWorkbookXml (External Client API transport)', () => {
     '<?xml version="1.0"?><workbook>' +
     '<worksheets><worksheet name="Sheet 1"><table /></worksheet></worksheets>' +
     '</workbook>';
+  const validXmlWithWindows =
+    '<?xml version="1.0"?><workbook>' +
+    '<worksheets><worksheet name="Sheet 1"><table /></worksheet><worksheet name="Sheet 2"><table /></worksheet></worksheets>' +
+    '<windows><window class="worksheet" name="Sheet 1" active="true" maximized="true"/>' +
+    '<window class="worksheet" name="Sheet 2"/></windows></workbook>';
 
   // Executor that records workbook document applies so the External API path is assertable.
   function dispatchingExecutor(): {
@@ -23,11 +28,19 @@ describe('loadWorkbookXml (External Client API transport)', () => {
     appliedXml: string[];
   } {
     const appliedXml: string[] = [];
+    let liveXml = validXml;
     const applyWorkbookDocument = vi.fn(async (xml: string) => {
       appliedXml.push(xml);
+      liveXml = xml;
       return Ok({ command_id: 'cmd', status: 'completed', submitted_at: '' });
     });
-    return { executor: { applyWorkbookDocument } as unknown as ToolExecutor, appliedXml };
+    const getWorkbookDocument = vi.fn(async () =>
+      Ok({ xml: liveXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+    );
+    return {
+      executor: { applyWorkbookDocument, getWorkbookDocument } as unknown as ToolExecutor,
+      appliedXml,
+    };
   }
 
   beforeEach(() => {
@@ -231,5 +244,18 @@ describe('loadWorkbookXml (External Client API transport)', () => {
         }),
       ]);
     }
+  });
+
+  it('keeps the primary workbook apply focus-neutral when activation is not requested', async () => {
+    const { executor, appliedXml } = dispatchingExecutor();
+
+    const result = await loadWorkbookXml({
+      xml: validXmlWithWindows,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(appliedXml).toEqual([validXmlWithWindows]);
   });
 });

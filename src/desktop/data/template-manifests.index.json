@@ -40,7 +40,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-06",
-        "xml_sha256": "88884a946deae4555f31ab65c4063f1105e2a100a534cf494b3f55f10b1ad797",
+        "xml_sha256": "d27aecad3f8d202a605d7c6f0bc9b217ba2d388703c2899d2da3e8775e691043",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-06",
@@ -478,7 +478,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-13",
-        "xml_sha256": "a1af2dbcb0101f71e0837623d04ab346f5ef121fd2ba3d740fed209329fc72be",
+        "xml_sha256": "4f99ccd78d40b4f8e82647fd7dda9e6414c6feae5476fa1268435023a6636c1c",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-13",
@@ -626,7 +626,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-11",
-        "xml_sha256": "130bce6e869a4f662fbeb061487cfb8a5296c51254fa9767cd47600fcf671510",
+        "xml_sha256": "22247527486b0769d1557b65c0546440822168d530268fa63816e5176aef35d8",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-11",
@@ -749,7 +749,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-11",
-        "xml_sha256": "b246e150b97c2a897bb5434abf7c1957e7f0f92b1ac5ce8e26d8b6c219ca061c",
+        "xml_sha256": "c2e7e90ac4285b9f39b9e7febd7e6e50f1fc554be8488a932601a84f30e8f86f",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-11",
@@ -1097,7 +1097,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-06",
-        "xml_sha256": "f50364bb90648c7ead3f6b7b247c4d6fa2082b7460e06a34b916ca4287ec3958",
+        "xml_sha256": "d60b981a7eaccd144a5b5aa904e1d5a0d201464956c5270b789c80092545eb7b",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-06",
@@ -1776,7 +1776,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-05",
-        "xml_sha256": "cb23201e338af6c48b1bd63d35b136e96cbe77ccd2d89efcd9ae2de228cbb752",
+        "xml_sha256": "9a7a21845b9b8cc1a4bef961421f1416aedf48f94922df0ef3c7e57aef29e74c",
         "render_evidence": {
           "basis": "hand-stamp: live tier1-smoke render + non-blank pixel-floor probe + human review (coverage-envelope extension from 4 to up to 7 families); no numeric structural-parity score was measured",
           "lane": "tier1-smoke live-verify 2026-07-05 (Tableau Desktop pid 36540, open 'Super Bowl by the Numbers' datasource; no-LLM binder: O/U Line(avg)->cols, Super Bowl->rows, Teams/Conference->detail)",
@@ -1988,7 +1988,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-06",
-        "xml_sha256": "09dd141149ed8ddc2c6161776f71efcb28a427582483a140fdc47cf74e0433d7",
+        "xml_sha256": "fc0b930126e4b67fcc51a51edb1bd8af57337bb803526924f2c2a4d5a9c189f7",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-06",
@@ -2295,7 +2295,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-06",
-        "xml_sha256": "88a67da2a8703811cc32990bb04247cdd879bb5f0b3f10f6ae124f747c938dba",
+        "xml_sha256": "2cfca7c71758b667f2acefd64da37b48438da0a8d8b1f31e07f89150c30635ee",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-06",
@@ -2515,7 +2515,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-04",
-        "xml_sha256": "c949d0041cb100b30ab2845e53f3c4326c12bc018700869a9b10f4ddca881516",
+        "xml_sha256": "dfec79f576248d675a04245679eaf98c4d6e67f2aa4d753e35433c0cb59ffc6a",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
           "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
@@ -2742,7 +2742,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-11",
-        "xml_sha256": "86822337c84088ead4638cbdcb7259a90225acfd9ff8ee6578ee3f4209a773c9",
+        "xml_sha256": "ef0503faa2dd6320f902335dcd721909f4cb161d315a7746f296dc2967c60a4c",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-11",
@@ -2911,7 +2911,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-11",
-        "xml_sha256": "c4db7330b9cb223795d1dbf230a15f4b482b540fa792f57c7599e0dc75dcff11",
+        "xml_sha256": "b462aeaa446aba15dcf3ef2723fe66b79b4c08ec72b295bcfff5c80879bbec11",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-11",
@@ -3126,7 +3126,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-05",
-        "xml_sha256": "e137d910087d740f25fad4b6d6b485139e72b256e5c6e5fab26a488a7bed0f77",
+        "xml_sha256": "1717888d4afbc30824620861253936350866c62d0724cacbd6c993700f0adb0d",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review",
           "lane": "W2-R008 live-verify 2026-07-05",
@@ -3217,7 +3217,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-04",
-        "xml_sha256": "1dbfa890b4e36aff212910b8c2f0a22d6c7746856c8db0d26c39e5eae8b5bb73",
+        "xml_sha256": "55f32fb929b7b5dde59d8ccc7343dec3c4b7fa4bfc17df220eda8bf178b01bc3",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
           "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
@@ -3298,7 +3298,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-06",
-        "xml_sha256": "215d8fbe9970b79ecd46242799d600fd4775056d887571b5242b7b2726d00681",
+        "xml_sha256": "a11963e06787ea973007a20d882712c3c8719efd43efd0a1ae03387ef79d984e",
         "render_evidence": {
           "method": "gate-composite",
           "basis": "golden-parity gate run 2026-07-06 (source-anchor replay): structural 0.97297 (5/5 critical), pixel 1.0 (4 ROIs: whole-chart ink-colors + hue, left/right staircase clusters; same-geometry back-to-back captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 17=17 (Superstore Sub-Category) on source and applied renders; running total verified live (status bar Running Sum of SUM(Profit) 4,117,943) | style-delta re-verify 2026-07-07: CookBook dark theme removed (black table background; choropleth also re-enabled base map layers). STRUCTURE unchanged. Live re-verified: bind(no-LLM)->inject->apply->render on Sample - Superstore, marks correct, light theme + map layers visually confirmed (W60). Pixel parity vs the dark source golden intentionally diverges on background/base-layer attrs.",
@@ -3443,7 +3443,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-06",
-        "xml_sha256": "6a0dfe73ca8d106a296fff0d22a06870c893124adf2a7079f33663e2ac92a614",
+        "xml_sha256": "ee991997e0a16671a7a7d406060705334478fea2e9efa3c32546d127e69f6d33",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-06",
@@ -3647,7 +3647,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-13",
-        "xml_sha256": "36aa23b7779995125c486c84ac2fe73d0515adab106d97747e76c6c7d3f2c2b6",
+        "xml_sha256": "9262a1b2e2d94ba73c8f4c9e361bf144631945b4d803ed9f64786e3ec7024408",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-13",
@@ -3735,7 +3735,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-04",
-        "xml_sha256": "720fd6bd684e39c8adc235cf04ee1ae697b2b3a34040654ddc5871f45f487c0d",
+        "xml_sha256": "1492b037d695ccfa5de7e41881c5b273dfcb0ef598beffd88810955d4df021f4",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review; the placeholder-only source migration preserves byte-identical post-bind XML versus the stamped literal-token form, proven by templatePlaceholderPilots.test.ts",
           "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
@@ -3841,7 +3841,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-05",
-        "xml_sha256": "96154a728ec065eeadd08af44836dd633b74dd6aa16b6547f99d537a78add8a3",
+        "xml_sha256": "a0a23ffcf5fb34263b4e1a46a107590200a03d3f02fdc5efcf8622cc9e4a9235",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review",
           "lane": "W2-R008 live-verify 2026-07-05",
@@ -3912,7 +3912,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-13",
-        "xml_sha256": "01819256a825acdd3ad9b9478d2af036141d6f687831776fbed4b24e8b5b3a7e",
+        "xml_sha256": "d333ebf0e73e9ef6a8dbce1a70c8e1bd3db099fd87a62e79b3438da62259ce15",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-13",
@@ -4010,7 +4010,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-06",
-        "xml_sha256": "b75f203fdb787be456d1d37e74d3d292de8850ab3f304016e3ff5401dfc175ea",
+        "xml_sha256": "0fc23160012b8f3c50d8a17027b304a3995b765873798b0f464e337105256632",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-06",
@@ -4205,7 +4205,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-11",
-        "xml_sha256": "0e10814f07d32b7c4c1a9113f0b6d2db9e62119316d39630db43a3415fd424d0",
+        "xml_sha256": "62243687240b11563ac5cea5a6ef31a6faf6a2320068999abe4dd31481fff3da",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-11",
@@ -4316,7 +4316,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-04",
-        "xml_sha256": "4af8518ebbc66454ae6c4bf0e3fe6318f0ed0938120666bb1e0d64221361dc94",
+        "xml_sha256": "cf42a82bd95b0a37d8768b2aa3a11a2a703fc7a03a6822f3e15a9fb196d3cb0b",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review; the normal real-date placeholder migration preserves byte-identical post-bind XML versus the stamped literal-token form, proven by templatePlaceholderPilots.test.ts",
           "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
@@ -4666,7 +4666,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-10",
-        "xml_sha256": "5db1a3b2cfec461045137ab393da8ae58fc972eddb54f4d1722d8082e260ec8f"
+        "xml_sha256": "c4d9b24c7d8c622fc4a163f554c34460ab25f4eb3daee06fd38377d5c08d9f23"
       },
       "datasource_placeholder": true,
       "placeholders": [

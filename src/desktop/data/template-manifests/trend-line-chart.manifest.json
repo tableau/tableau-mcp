@@ -7,7 +7,7 @@
   "portability_evidence": {
     "fixture_bind": true,
     "render_verified": "live-2026-07-04",
-    "xml_sha256": "4af8518ebbc66454ae6c4bf0e3fe6318f0ed0938120666bb1e0d64221361dc94",
+    "xml_sha256": "cf42a82bd95b0a37d8768b2aa3a11a2a703fc7a03a6822f3e15a9fb196d3cb0b",
     "render_evidence": {
       "basis": "hand-stamp: live render + structural parity + human review; the normal real-date placeholder migration preserves byte-identical post-bind XML versus the stamped literal-token form, proven by templatePlaceholderPilots.test.ts",
       "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",

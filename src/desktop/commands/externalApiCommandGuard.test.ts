@@ -113,6 +113,35 @@ describe('guardCommand', () => {
     expect(result.message).not.toContain('opens_blocking_dialog=true');
   });
 
+  it('refuses raw goto-sheet even when a safe External API registry entry exists', () => {
+    enableExternalApiRegistry({
+      'tabdoc:goto-sheet': {
+        agent_can_invoke: true,
+        opens_blocking_dialog: false,
+        modifies_state: 'false',
+        in_params: [{ local: 'Sheet', type: 'DPI_Worksheet', required: true, wire: 'sheet' }],
+      },
+    });
+
+    const result = guardCommand({
+      namespace: 'tabdoc',
+      cmd: 'goto-sheet',
+      command: 'tabdoc:goto-sheet',
+      args: { Sheet: 'Missing Sheet' },
+    });
+
+    expect('refused' in result).toBe(true);
+    if (!('refused' in result)) return;
+    expect(result.message).toContain('activate-sheet');
+    expect(result.message).toContain('"sheetName"');
+    expect(result.message).toContain('cannot pre-validate');
+    expect(result.message).toContain(
+      'An invalid sheet value can open a blocking Tableau Desktop dialog',
+    );
+    expect(result.message).toContain('47BF7751');
+    expect(result.message).not.toContain('because it would open');
+  });
+
   it('rewrites registry local parameter names to wire names and returns registry warnings', () => {
     enableExternalApiRegistry({ 'tabdoc:show-me': SHOW_ME_REGISTRY_ENTRY });
 

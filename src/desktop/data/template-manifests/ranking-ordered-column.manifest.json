@@ -7,7 +7,7 @@
   "portability_evidence": {
     "fixture_bind": true,
     "render_verified": "live-2026-07-05",
-    "xml_sha256": "96154a728ec065eeadd08af44836dd633b74dd6aa16b6547f99d537a78add8a3",
+    "xml_sha256": "a0a23ffcf5fb34263b4e1a46a107590200a03d3f02fdc5efcf8622cc9e4a9235",
     "render_evidence": {
       "basis": "hand-stamp: live render + structural parity + human review",
       "lane": "W2-R008 live-verify 2026-07-05",
