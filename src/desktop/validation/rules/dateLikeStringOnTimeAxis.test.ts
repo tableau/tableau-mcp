@@ -56,6 +56,9 @@ function anchoredWorksheet({
       </table>
     </worksheet>
   </worksheets>
+  <windows>
+    <window class="worksheet" name="MAU"><cards /></window>
+  </windows>
 </workbook>`;
 }
 

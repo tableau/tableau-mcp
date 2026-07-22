@@ -35,6 +35,9 @@ function workbookWithDerivation(derivation: string): string {
       </table>
     </worksheet>
   </worksheets>
+  <windows>
+    <window class="worksheet" name="Sheet 1"><cards /></window>
+  </windows>
 </workbook>`;
 }
 

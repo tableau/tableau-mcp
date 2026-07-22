@@ -310,6 +310,26 @@ async function loadWorksheetXmlViaExternalApi({
       return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
     }
 
+    const minimalDocValidation = runValidation(minimalDoc, 'workbook');
+    if (!minimalDocValidation.valid) {
+      log({
+        level: 'error',
+        message:
+          'Constructed worksheet apply document failed workbook validation — XML not sent to Tableau',
+        logger: 'worksheetCommands',
+        data: {
+          worksheetName,
+          issues: minimalDocValidation.issues,
+          xmlPreview: sanitize(minimalDoc),
+        },
+      });
+
+      return Err({
+        type: 'load-worksheet-xml-error',
+        error: { type: 'validation-failed', issues: minimalDocValidation.issues },
+      });
+    }
+
     const applyResult = await applyWorkbookText({ xml: minimalDoc, executor, signal });
     if (applyResult.isErr()) {
       return Err({ type: 'execute-command-error', error: applyResult.error });

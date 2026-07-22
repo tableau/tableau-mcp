@@ -1,5 +1,12 @@
+import { runValidation } from '../validation/registry.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
-import { addSheet, deleteSheet, extractSheetXml, listSheets } from './sheets.js';
+import {
+  addSheet,
+  buildMinimalSheetDoc,
+  deleteSheet,
+  extractSheetXml,
+  listSheets,
+} from './sheets.js';
 
 // Real-world shape: the <workbook> root declares xmlns:user, and a worksheet's level-members
 // filter carries a user:-prefixed attribute (confirmed pattern, see refineWorksheet.test.ts).
@@ -73,5 +80,36 @@ describe('addSheet / deleteSheet', () => {
     expect(listSheets(added)).toContain('New Sheet');
     const deleted = deleteSheet(added, 'New Sheet');
     expect(listSheets(deleted)).not.toContain('New Sheet');
+  });
+});
+
+describe('buildMinimalSheetDoc', () => {
+  it('creates the worksheet and its window entry together for a brand-new sheet', () => {
+    const liveWorkbook = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <worksheets>
+    <worksheet name='Existing Sheet'><table /></worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' name='Existing Sheet'><cards /></window>
+  </windows>
+</workbook>`;
+
+    const minimalDoc = buildMinimalSheetDoc(
+      liveWorkbook,
+      'Team Map',
+      "<worksheet name='Team Map'><table /></worksheet>",
+    );
+
+    expect(minimalDoc).toContain('<worksheet name="Team Map">');
+    expect(minimalDoc).toContain('<window class="worksheet" name="Team Map">');
+    expect(minimalDoc).not.toContain('Existing Sheet');
+    expect(runValidation(minimalDoc, 'workbook').issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ruleId: 'worksheet-missing-window',
+        }),
+      ]),
+    );
   });
 });

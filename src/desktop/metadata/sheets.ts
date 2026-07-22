@@ -8,6 +8,33 @@ import {
 } from './parser.js';
 import type { ParsedWindow, ParsedWorksheet } from './types.js';
 
+function createWorksheetWindow(sheetName: string): ParsedWindow {
+  return {
+    '@_class': 'worksheet',
+    '@_name': sheetName,
+    cards: {
+      edge: [
+        {
+          '@_name': 'left',
+          strip: {
+            '@_size': '160',
+            card: [{ '@_type': 'pages' }, { '@_type': 'filters' }, { '@_type': 'marks' }],
+          },
+        },
+        {
+          '@_name': 'top',
+          strip: [
+            { '@_size': '31', card: { '@_type': 'columns' } },
+            { '@_size': '31', card: { '@_type': 'rows' } },
+            { '@_size': '31', card: { '@_type': 'title' } },
+          ],
+        },
+      ],
+    },
+    'simple-id': { '@_uuid': generateUUID() },
+  };
+}
+
 export function addSheet(workbookXml: string, sheetName: string): string {
   const workbook = parseXML(workbookXml);
 
@@ -47,32 +74,7 @@ export function addSheet(workbookXml: string, sheetName: string): string {
   if (!workbook.workbook.windows) workbook.workbook.windows = {};
 
   const windows = normalizeArray(workbook.workbook.windows.window);
-  const newWindow: ParsedWindow = {
-    '@_class': 'worksheet',
-    '@_name': sheetName,
-    cards: {
-      edge: [
-        {
-          '@_name': 'left',
-          strip: {
-            '@_size': '160',
-            card: [{ '@_type': 'pages' }, { '@_type': 'filters' }, { '@_type': 'marks' }],
-          },
-        },
-        {
-          '@_name': 'top',
-          strip: [
-            { '@_size': '31', card: { '@_type': 'columns' } },
-            { '@_size': '31', card: { '@_type': 'rows' } },
-            { '@_size': '31', card: { '@_type': 'title' } },
-          ],
-        },
-      ],
-    },
-    'simple-id': { '@_uuid': generateUUID() },
-  };
-
-  windows.push(newWindow);
+  windows.push(createWorksheetWindow(sheetName));
   workbook.workbook.windows.window = windows.length === 1 ? windows[0] : windows;
 
   return serializeXML(workbook);
@@ -146,21 +148,16 @@ export function buildMinimalSheetDoc(
     throw new Error(`Edited XML does not contain a <worksheet name="${sheetName}">`);
   }
 
-  if (workbook.workbook?.worksheets) {
-    workbook.workbook.worksheets.worksheet = editedWorksheet;
-  }
+  if (!workbook.workbook) workbook.workbook = {};
+  if (!workbook.workbook.worksheets) workbook.workbook.worksheets = {};
+  workbook.workbook.worksheets.worksheet = editedWorksheet;
 
-  if (workbook.workbook?.windows) {
-    const windows = normalizeArray(workbook.workbook.windows.window);
-    const targetWindow = windows.find(
-      (win) => win['@_class'] === 'worksheet' && win['@_name'] === sheetName,
-    );
-    if (targetWindow) {
-      workbook.workbook.windows.window = targetWindow;
-    } else {
-      delete workbook.workbook.windows.window;
-    }
-  }
+  if (!workbook.workbook.windows) workbook.workbook.windows = {};
+  const windows = normalizeArray(workbook.workbook.windows.window);
+  const targetWindow = windows.find(
+    (win) => win['@_class'] === 'worksheet' && win['@_name'] === sheetName,
+  );
+  workbook.workbook.windows.window = targetWindow ?? createWorksheetWindow(sheetName);
 
   delete workbook.workbook?.dashboards;
 
