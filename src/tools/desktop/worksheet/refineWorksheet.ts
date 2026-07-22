@@ -76,25 +76,50 @@ function formatValidationErrors(issues: ValidationIssue[]): string {
 }
 
 const paramsSchema = {
-  session: z.string().optional().describe(''),
-  worksheetName: z.string().min(1).describe(''),
-  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field']).describe(''),
+  session: z
+    .string()
+    .optional()
+    .describe('Desktop session id; omit when a single Desktop is open.'),
+  worksheetName: z.string().min(1).describe('Display name of the worksheet to refine.'),
+  operation: z
+    .enum(['top_n', 'sort_direction', 'sort_by_field'])
+    .describe(
+      'Which refinement to apply. "top_n" requires topN; "sort_direction" requires sortDirection; ' +
+        '"sort_by_field" requires sortByField (and optionally targetField + direction).',
+    ),
   topN: z
     .object({
-      n: z.number().int().min(1).max(50).describe(''),
-      end: z.enum(['top', 'bottom']).optional().describe(''),
+      n: z.number().int().min(1).max(50).describe('How many members to keep (1-50).'),
+      end: z
+        .enum(['top', 'bottom'])
+        .optional()
+        .describe('Keep the top or bottom members; defaults to "top".'),
     })
     .optional()
-    .describe(''),
+    .describe('Required when operation="top_n": the Top-N/Bottom-N filter to apply.'),
   sortDirection: z
     .object({
-      direction: z.enum(['ASC', 'DESC']).describe(''),
+      direction: z.enum(['ASC', 'DESC']).describe('New direction for the existing sort.'),
     })
     .optional()
-    .describe(''),
-  targetField: z.string().min(1).optional().describe(''),
-  sortByField: z.string().min(1).optional().describe(''),
-  direction: z.enum(['asc', 'desc']).optional().describe(''),
+    .describe('Required when operation="sort_direction": flip the existing sort direction.'),
+  targetField: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Only for operation="sort_by_field": display name of the dimension whose axis gets ' +
+        'sorted. Optional — omit to auto-detect the single categorical axis on the sheet.',
+    ),
+  sortByField: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Required for operation="sort_by_field": display name of the measure to sort by.'),
+  direction: z
+    .enum(['asc', 'desc'])
+    .optional()
+    .describe('Only for operation="sort_by_field": sort direction; defaults to "asc".'),
 };
 
 const title = 'Refine Worksheet';
@@ -145,6 +170,22 @@ export const getRefineWorksheetTool = (
         callback: async () => {
           if (!worksheetName || !worksheetName.trim()) {
             return new ArgsValidationError('worksheetName is required.').toErr();
+          }
+
+          // Per-operation required params — enforced here (not in the JSON Schema) so the
+          // schema stays flat and host-portable, matching add-field's encodingType guard.
+          if (operation === 'top_n' && topN === undefined) {
+            return new ArgsValidationError('topN is required when operation=top_n.').toErr();
+          }
+          if (operation === 'sort_direction' && sortDirection === undefined) {
+            return new ArgsValidationError(
+              'sortDirection is required when operation=sort_direction.',
+            ).toErr();
+          }
+          if (operation === 'sort_by_field' && (!sortByField || !sortByField.trim())) {
+            return new ArgsValidationError(
+              'sortByField is required when operation=sort_by_field.',
+            ).toErr();
           }
 
           const sessionResult = resolveSession(session);
@@ -210,7 +251,7 @@ export const getRefineWorksheetTool = (
             const sortByDirection =
               direction === 'desc' ? 'DESC' : direction === 'asc' ? 'ASC' : undefined;
             const plan = planSortByField(sourceXml, {
-              targetField: targetField as string,
+              targetField,
               sortByField: sortByField as string,
               direction: sortByDirection,
             });
