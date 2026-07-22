@@ -15,7 +15,7 @@ The single most load-bearing reference for hand-authoring workbook XML.
 
 ## When to Use
 
-Use this when hand-authoring or heavily editing workbook XML and you need it to open cleanly — choosing `version=`/manifest form, wiring a datasource, or debugging a "won't open" / silent-field-strip / cryptic-internal-error failure after a `tableau-apply-workbook`. For the on-disk tree shape see [Tableau Workbook File Structure](data/knowledge/strategy/data-modeling/workbook-anatomy.md); for the column-instance `[deriv:field:resulttype]` casing and nk/ok/qk enums see `expertise://tableau/tactics/tree/enums`; for calc-field authoring see [Calculated Fields, Parameters & Table Calculations](data/knowledge/strategy/analytics/calc-fields-strategy.md); for dashboard zones see `expertise://tableau/tactics/dashboard/zones`.
+Use this when hand-authoring or heavily editing workbook XML and you need it to open cleanly — choosing `version=`/manifest form, wiring a datasource, or debugging a "won't open" / silent-field-strip / cryptic-internal-error failure after a `apply-workbook`. For the on-disk tree shape see [Tableau Workbook File Structure](data/knowledge/strategy/data-modeling/workbook-anatomy.md); for the column-instance `[deriv:field:resulttype]` casing and nk/ok/qk enums see `expertise://tableau/tactics/tree/enums`; for calc-field authoring see [Calculated Fields, Parameters & Table Calculations](data/knowledge/strategy/analytics/calc-fields-strategy.md); for dashboard zones see `expertise://tableau/tactics/dashboard/zones`.
 
 ## Best Practices
 
@@ -71,9 +71,9 @@ Top-level child **order is enforced** by the XSD sequence: `document-format-chan
 
 ### Validate, diff, open — the gate
 
-1. **Well-formedness check (NOT structural):** the MCP `tableau-validate-workbook-xml` / `tableau-validate-worksheet-xml` tools check only that the XML is **well-formed (parseable)** — typos, unclosed tags, bad nesting. Their own description says "This does NOT validate against XSD schema." So a PASS means "parses," **not** "structurally valid" and **not** "Tableau will open it." Catching child-order/required-attr/enum mistakes is the job of the **diff-against-a-known-good real file** (step 2), and the final proof is opening it (step 3). *(Separately, the plugin's dev script `twb-validate.py` does run real XSD validation against the bundled schema — but that XSD is itself over-strict (rejects Tableau's own `minimal.twb`) and under-strict (blind to the load-time manifest/capabilities gate and `processContents="skip"` islands), so even it is a lint, not a gate.)*
+1. **Well-formedness check (NOT structural):** the MCP `validate-workbook-xml` / `validate-worksheet-xml` tools check only that the XML is **well-formed (parseable)** — typos, unclosed tags, bad nesting. Their own description says "This does NOT validate against XSD schema." So a PASS means "parses," **not** "structurally valid" and **not** "Tableau will open it." Catching child-order/required-attr/enum mistakes is the job of the **diff-against-a-known-good real file** (step 2), and the final proof is opening it (step 3). *(Separately, the plugin's dev script `twb-validate.py` does run real XSD validation against the bundled schema — but that XSD is itself over-strict (rejects Tableau's own `minimal.twb`) and under-strict (blind to the load-time manifest/capabilities gate and `processContents="skip"` islands), so even it is a lint, not a gate.)*
 2. **Diff against a known-good same-version real `.twb`** to surface any tag/attribute/enum/order yours uses that a file that *opens* never does — stronger than the lint for catching "won't open" bugs.
-3. **The only proof is opening the workbook in Tableau** with all sheets/fields intact (apply via `tableau-apply-workbook(mode=file)`). Where the XSD and a real same-version file disagree, trust the real file.
+3. **The only proof is opening the workbook in Tableau** with all sheets/fields intact (apply via `apply-workbook(mode=file)`). Where the XSD and a real same-version file disagree, trust the real file.
 
 **Bisect a line-less Internal Error.** A `2805CF18`/generic error with no line number can't be localized by reading XML. Start from a minimal file that opens (1 connection + 1 bar) and add one construct per probe — color map → dashboard → calc → filter — re-applying at each step. The step that breaks is the cause.
 
@@ -104,7 +104,7 @@ Top-level child **order is enforced** by the XSD sequence: `document-format-chan
 
 ## Implementation
 
-For fresh authoring, start from a known-good same-version `.twb`, not from memory. Emit the modern form (`version='26.1'` + `<ManifestByVersion/>`, or version-attribute-only), plain undecorated element names, correct child order. Wire the five datasource pieces with matching IDs; declare every pill (including filters) as `<column>` + `<column-instance>`; add `<simple-id>` UUIDs (and `<repository-location>` only if publishing to Cloud/Server). Then run the MCP validate tools to catch **well-formedness** errors only (typos/unclosed tags — they do NOT check structure), diff against a known-good real file for the structural drift (child-order/required-attr/enum) that actually causes "won't open," and apply via `tableau-apply-workbook(mode=file)` and open to confirm all sheets/fields survive. When a load fails with a line-less error, bisect rather than reading XML.
+For fresh authoring, start from a known-good same-version `.twb`, not from memory. Emit the modern form (`version='26.1'` + `<ManifestByVersion/>`, or version-attribute-only), plain undecorated element names, correct child order. Wire the five datasource pieces with matching IDs; declare every pill (including filters) as `<column>` + `<column-instance>`; add `<simple-id>` UUIDs (and `<repository-location>` only if publishing to Cloud/Server). Then run the MCP validate tools to catch **well-formedness** errors only (typos/unclosed tags — they do NOT check structure), diff against a known-good real file for the structural drift (child-order/required-attr/enum) that actually causes "won't open," and apply via `apply-workbook(mode=file)` and open to confirm all sheets/fields survive. When a load fails with a line-less error, bisect rather than reading XML.
 
 ## Related Knowledge
 
@@ -126,7 +126,7 @@ For fresh authoring, start from a known-good same-version `.twb`, not from memor
 - Runtime visibility: server-side-only
 - Version binding: Desktop/Studio version (26.1 / 26.2 format era)
 - Customer customization allowed: no
-- Tool/API dependency: `tableau-validate-workbook-xml`, `tableau-validate-worksheet-xml`, `tableau-apply-workbook`
+- Tool/API dependency: `validate-workbook-xml`, `validate-worksheet-xml`, `apply-workbook`
 - Eval candidate: yes
 - Eval coverage: none
 - Promotion target: system-instructions

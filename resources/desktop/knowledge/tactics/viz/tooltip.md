@@ -47,7 +47,7 @@ Related: `tactics/viz/marks-and-encodings.md` (general encoding XML, multiple en
 </encodings></pane></panes>
 ```
 
-- Retrying the same XML because `tableau-apply-workbook` reported success — apply success does NOT mean the sheet rendered; this shape is the canonical false-PASS.
+- Retrying the same XML because `apply-workbook` reported success — apply success does NOT mean the sheet rendered; this shape is the canonical false-PASS.
 - Confusing tooltip with text/label: dimensions on Text/Label JOIN the view grain (like Detail), so `none:` is legitimate there. Do not "fix" text encodings to `attr:` by analogy.
 - Using `derivation="Attr"` instead of `Attribute`.
 

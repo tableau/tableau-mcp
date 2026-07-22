@@ -71,7 +71,7 @@ These need densification (a size-1 **bin** Tableau interpolates across) or resha
 
 ## Implementation
 
-Build the chart with the recipe above, then set the table-calc **Compute Using** explicitly (this is where most advanced charts fail), apply via `tableau-apply-worksheet` / `tableau-apply-workbook(mode=file)`, and open in Tableau to confirm the geometry/addressing rendered as intended. For reshape/densification charts (sankey, radial, network), keep the scaffold as the source of truth and verify the curve interpolation didn't break. Defer chart *choice* to chart-selection and the perceptual *why* (bars over pies, shared over dual axis, color for secondary encoding) to the design-principles guidance.
+Build the chart with the recipe above, then set the table-calc **Compute Using** explicitly (this is where most advanced charts fail), apply via `apply-worksheet` / `apply-workbook(mode=file)`, and open in Tableau to confirm the geometry/addressing rendered as intended. For reshape/densification charts (sankey, radial, network), keep the scaffold as the source of truth and verify the curve interpolation didn't break. Defer chart *choice* to chart-selection and the perceptual *why* (bars over pies, shared over dual axis, color for secondary encoding) to the design-principles guidance.
 
 ## Related Knowledge
 
@@ -84,7 +84,7 @@ Build the chart with the recipe above, then set the table-calc **Compute Using**
 ## Source and Confidence
 
 - Source/evidence type: external reference (adapted with permission)
-- Source: adapted from `plugin-tableau-master` (`references/advanced-visualizations.md`) by Jon Plax, used with the author's permission; build recipes trace to help.tableau.com plus community sources (Flerlage Twins, The Data School, Playfair Data) and dissection of real `.twb` files (radial-bar recipe verified against real workbooks). Condensed from the 500-line source to the load-bearing mechanic + failure mode per chart. For the densification-heavy charts (sankey, network, radial), this entry deliberately points to the *simpler native alternatives* (Equal-Width Sankey, `MAKELINE` O-D maps) rather than reproducing the full scaffold — when a user needs the full step-by-step for a complex hacked chart, build from a known-good reference workbook (`tableau-get-workbook` on a real example) plus the community recipes cited above, not from this condensed entry alone.
+- Source: adapted from `plugin-tableau-master` (`references/advanced-visualizations.md`) by Jon Plax, used with the author's permission; build recipes trace to help.tableau.com plus community sources (Flerlage Twins, The Data School, Playfair Data) and dissection of real `.twb` files (radial-bar recipe verified against real workbooks). Condensed from the 500-line source to the load-bearing mechanic + failure mode per chart. For the densification-heavy charts (sankey, network, radial), this entry deliberately points to the *simpler native alternatives* (Equal-Width Sankey, `MAKELINE` O-D maps) rather than reproducing the full scaffold — when a user needs the full step-by-step for a complex hacked chart, build from a known-good reference workbook (`get-workbook-xml` on a real example) plus the community recipes cited above, not from this condensed entry alone.
 - Customer-identifying details removed: n/a
 - Confidence: draft
 - Last reviewed: 2026-06-19
@@ -95,7 +95,7 @@ Build the chart with the recipe above, then set the table-calc **Compute Using**
 - Runtime visibility: server-side-only
 - Version binding: none
 - Customer customization allowed: no
-- Tool/API dependency: `tableau-apply-worksheet`, `tableau-apply-workbook`
+- Tool/API dependency: `apply-worksheet`, `apply-workbook`
 - Eval candidate: yes
 - Eval coverage: none
 - Promotion target: authoring-expertise

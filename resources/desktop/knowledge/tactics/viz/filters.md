@@ -339,12 +339,12 @@ For table calculation filters (filtering based on a table calc like INDEX() <= 1
 
 To add a categorical filter to a worksheet:
 
-1. **Get the datasource ID** from `tableau-list-available-fields` (e.g. `federated.0abc123`).
+1. **Get the datasource ID** from `list-available-fields` (e.g. `federated.0abc123`).
 2. **Add the column def + CI to `datasource-dependencies`** for the filtered field (if not already present).
 3. **Construct the filter node** using **CI format** for the `column` attr (`[DS].[none:Field:nk]`) and `[none:Field:nk]` for the `groupfilter level` attr; set enumeration to match intent (`inclusive` for include, `exclusive` for `except`).
 4. **Add or update the `slices` node** in `view` to reference the CI.
 5. **Order** sorts and filters before `<slices>`/`<aggregation>` (sorts may sit after or among filters).
-6. **Submit via `tableau-apply-workbook`** and inspect with `tableau-get-workbook` to confirm the filter survived.
+6. **Submit via `apply-workbook`** and inspect with `get-workbook-xml` to confirm the filter survived.
 
 For cross-sheet filters: repeat steps 1–5 for every worksheet that should respond, using the same `filter-group` integer. For context filters: add `context="true"` to the filter node.
 
@@ -352,7 +352,7 @@ For cross-sheet filters: repeat steps 1–5 for every worksheet that should resp
 
 ## Unverified — needs live probe
 
-The following are behavioral/causal claims not observable in serialized XML alone. Treat as unconfirmed until settled by a live probe (author XML → `tableau-apply-workbook` → `tableau-get-workbook` readback → diff; Superstore, one worksheet):
+The following are behavioral/causal claims not observable in serialized XML alone. Treat as unconfirmed until settled by a live probe (author XML → `apply-workbook` → `get-workbook-xml` readback → diff; Superstore, one worksheet):
 
 - **P1** — Does a categorical filter with **no** `<slices>` get stripped on round-trip? (The `categorical-filter-slices` rule only warns.)
 - **P2** — Does a sort placed **after** `<slices>` load/round-trip or error? (No golden violates the slices boundary.)

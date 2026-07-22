@@ -31,7 +31,7 @@ Order is a `<xs:sequence>` — out-of-order children fail with "element X is not
 - **`<workbook>`:** `document-format-change-manifest? → repository-location? → preferences? → style? → actions? → datasources → worksheets? → dashboards? → windows? → thumbnails?` Required attr: `version`. `<worksheets>`/`<dashboards>` enforce unique `name`.
 - **`<table>` (in a worksheet):** `view → style? → panes → mark-layout? → rows → cols → pages? → subtotals? → table-calculations? → show-full-range? → percentages? → mark-labels? → forecast?` — **rows/cols come AFTER `<panes>`; `<pages>` after `<cols>`.**
 - **table-level `<view>`:** `datasources → mapsources? → datasource-dependencies → filters (each `<filter>` or `<hide-filter>`, optionally followed by its `<sort>`) → shelf-sorts? → slices? → aggregation`. `<aggregation value='true'/>` is effectively required.
-- **`<pane>`:** the XSD master declares `view(<breakdown value=…/>) → mark → mark-sizing? → encodings? → label-data* → dropline? → trendline? → reference-line* → customized-tooltip? → customized-label? → style?`. **But pane children are NOT as strictly enforced at load as the rest** — a real `tableau-get-workbook` dump in `expertise://tableau/tactics/tree/workbook-structure` shows `<encodings>` *before* `<mark>`, the reverse of the XSD sequence, and it loads. Safe rule: keep `<style>` **last** and `<reference-line>` after `<encodings>`; treat the mark↔encodings order as flexible (match a real same-version file if unsure). *Verify by opening which order your target Desktop build writes.*
+- **`<pane>`:** the XSD master declares `view(<breakdown value=…/>) → mark → mark-sizing? → encodings? → label-data* → dropline? → trendline? → reference-line* → customized-tooltip? → customized-label? → style?`. **But pane children are NOT as strictly enforced at load as the rest** — a real `get-workbook-xml` dump in `expertise://tableau/tactics/tree/workbook-structure` shows `<encodings>` *before* `<mark>`, the reverse of the XSD sequence, and it loads. Safe rule: keep `<style>` **last** and `<reference-line>` after `<encodings>`; treat the mark↔encodings order as flexible (match a real same-version file if unsure). *Verify by opening which order your target Desktop build writes.*
 - **`<column>` (datasource):** `localized-server-captions? → calculation? → aliases? → semantic-role? → user-description? → (members | range)?`.
 - **`<column-instance>`:** `table-calc* → utility-members? → aliases?`.
 - **`<dashboard>`:** `(repository-location | vizlayoutoptions){0,2} → style? → size? → datasources&deps → zones → devicelayouts? → simple-id`.
@@ -78,7 +78,7 @@ The pill algebra is a string: `[ds].[sum:Sales:qk]`. Field separators (`/`, `*`,
 
 ## Implementation
 
-When a `tableau-apply-workbook` fails on structure ("element not expected", "missing required attribute", silent drop), look up the offending element here for its exact child-order position and required attrs, then fix the sequence/attributes. Note the MCP `tableau-validate-*-xml` tools check **well-formedness only** (parseable XML) — they do NOT catch the child-order/required-attr/enum mistakes this entry is about; that's what **diffing against a known-good same-version real `.twb`** surfaces, and opening in Tableau is the final proof. For value enums, defer to the tactics `enums` reference rather than restating them here.
+When a `apply-workbook` fails on structure ("element not expected", "missing required attribute", silent drop), look up the offending element here for its exact child-order position and required attrs, then fix the sequence/attributes. Note the MCP `validate-workbook-xml` and `validate-worksheet-xml` tools check **well-formedness only** (parseable XML) — they do NOT catch the child-order/required-attr/enum mistakes this entry is about; that's what **diffing against a known-good same-version real `.twb`** surfaces, and opening in Tableau is the final proof. For value enums, defer to the tactics `enums` reference rather than restating them here.
 
 ## Related Knowledge
 
@@ -89,7 +89,7 @@ When a `tableau-apply-workbook` fails on structure ("element not expected", "mis
 ## Source and Confidence
 
 - Source/evidence type: external reference (adapted with permission)
-- Source: adapted from `plugin-tableau-master` (`references/twb-xml-grammar.md`) by Jon Plax, used with the author's permission. Underlying grammar traces to the Tableau product XSD set (`sf-analyticscloud/monolith` `modules/XSD/`) and real-corpus dissection. The structural-diff capability the plugin's `twb-diff.py` provides is a tooling gap here (our MCP `tableau-validate-*-xml` tools do well-formedness only — see `docs/tooling-gaps.md`); until it exists, diff manually against a real `.twb` dump from `tableau-get-workbook`. Rows marked confirmed-by-open in the source were verified against Tableau Desktop 2026.2; treat unverified grammar specifics as strong leads until opened.
+- Source: adapted from `plugin-tableau-master` (`references/twb-xml-grammar.md`) by Jon Plax, used with the author's permission. Underlying grammar traces to the Tableau product XSD set (`sf-analyticscloud/monolith` `modules/XSD/`) and real-corpus dissection. The structural-diff capability the plugin's `twb-diff.py` provides is a tooling gap here (our MCP `validate-workbook-xml` / `validate-worksheet-xml` tools do well-formedness only — see `docs/tooling-gaps.md`); until it exists, diff manually against a real `.twb` dump from `get-workbook-xml`. Rows marked confirmed-by-open in the source were verified against Tableau Desktop 2026.2; treat unverified grammar specifics as strong leads until opened.
 - Customer-identifying details removed: n/a
 - Confidence: draft
 - Last reviewed: 2026-06-19
@@ -100,7 +100,7 @@ When a `tableau-apply-workbook` fails on structure ("element not expected", "mis
 - Runtime visibility: server-side-only
 - Version binding: Desktop/Studio version (26.1 / 26.2 format era)
 - Customer customization allowed: no
-- Tool/API dependency: `tableau-validate-workbook-xml`, `tableau-validate-worksheet-xml`, `tableau-apply-workbook`
+- Tool/API dependency: `validate-workbook-xml`, `validate-worksheet-xml`, `apply-workbook`
 - Eval candidate: yes
 - Eval coverage: none
 - Promotion target: system-instructions

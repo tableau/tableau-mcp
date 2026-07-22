@@ -2,7 +2,7 @@
 
 Enforced-by: computed-sort-crash, redundant-color-encoding, tooltip-dimension-requires-attr
 
-Expert reference for all Tableau marks card encodings, mark types, label styling, color palettes, and chart-type-specific patterns (Gantt, map, aggregation, sorting). All patterns confirmed via `tableau-get-workbook` observation after manual authoring.
+Expert reference for all Tableau marks card encodings, mark types, label styling, color palettes, and chart-type-specific patterns (Gantt, map, aggregation, sorting). All patterns confirmed via `get-workbook-xml` observation after manual authoring.
 
 ---
 
@@ -32,7 +32,7 @@ All marks card encodings go inside an `<encodings>` element that is a **direct c
 
 The field must also have a `column` def and `column-instance` declared in `datasource-dependencies`.
 
-**LOD co-dependency:** LOD encodings and their column-instances are co-dependent — Tableau strips both if either is missing. Always submit LOD encodings and their column-instances together in the same `tableau-apply-workbook` call.
+**LOD co-dependency:** LOD encodings and their column-instances are co-dependent — Tableau strips both if either is missing. Always submit LOD encodings and their column-instances together in the same `apply-workbook` call.
 
 ---
 
@@ -81,7 +81,7 @@ Key facts:
 
 **Does NOT work:** coloring by the raw measure (`[sum:Profit:qk]`) for a group encoding — that is a continuous gradient, not discrete groups; a `<color-palette type="ordered-categorical">` in `<preferences>` (silently ignored — the assignment must be in the datasource `<style>`).
 
-**Correction — this DOES survive `tableau-apply-workbook` (proven live 2026-07-08).** The earlier "always stripped, even at the schema-correct position" note was a misdiagnosis: the datasource `<style>` map round-trips when the map's field is co-declared as a **datasource-scope `<column-instance>`**, and is stripped only when that CI is missing (a worksheet-qualified instance — the form the report used, wrongly blamed on position). "Step 2" is agent-authorable; full recipe + probe receipt under "Per-member (categorical) color assignment" below.
+**Correction — this DOES survive `apply-workbook` (proven live 2026-07-08).** The earlier "always stripped, even at the schema-correct position" note was a misdiagnosis: the datasource `<style>` map round-trips when the map's field is co-declared as a **datasource-scope `<column-instance>`**, and is stripped only when that CI is missing (a worksheet-qualified instance — the form the report used, wrongly blamed on position). "Step 2" is agent-authorable; full recipe + probe receipt under "Per-member (categorical) color assignment" below.
 
 ---
 
@@ -327,9 +327,9 @@ Key facts:
 - `<color-palette type="ordered-categorical">` with `<color-entry>` in `<preferences>` + `palette=` attr on worksheet color encoding
 - `<color-palette type="regular">` in `<preferences>` alone
 
-**Survives `tableau-apply-workbook` — requires a datasource-scope `<column-instance>` (proven live 2026-07-08, Desktop pid 18055).** The block round-trips through MCP apply ONLY when the map's field is co-declared as a `<column-instance>` in the same `<datasource>` container — e.g. `<column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />` before `<layout>`, with `<style>` before `<semantic-values>`. Two-form live probe: FORM A (ds-scope CI co-declared) survived, 3/3 hexes in readback; FORM B (style only; field instance solely in the worksheet's `datasource-dependencies`) stripped, 0/3 — the "always stripped, even at the schema-correct position" report used FORM B and blamed sequence position. Productized as `spliceDatasourceStyle` in `evals/lib/datasource-style-splice.mjs`.
+**Survives `apply-workbook` — requires a datasource-scope `<column-instance>` (proven live 2026-07-08, Desktop pid 18055).** The block round-trips through MCP apply ONLY when the map's field is co-declared as a `<column-instance>` in the same `<datasource>` container — e.g. `<column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />` before `<layout>`, with `<style>` before `<semantic-values>`. Two-form live probe: FORM A (ds-scope CI co-declared) survived, 3/3 hexes in readback; FORM B (style only; field instance solely in the worksheet's `datasource-dependencies`) stripped, 0/3 — the "always stripped, even at the schema-correct position" report used FORM B and blamed sequence position. Productized as `spliceDatasourceStyle` in `evals/lib/datasource-style-splice.mjs`.
 
-Discovery method: assign one color manually via the Edit Colors dialog → call `tableau-get-workbook` → inspect the datasource node for the `<style>` block (and the co-located ds-scope `<column-instance>`).
+Discovery method: assign one color manually via the Edit Colors dialog → call `get-workbook-xml` → inspect the datasource node for the `<style>` block (and the co-located ds-scope `<column-instance>`).
 
 ---
 
@@ -561,7 +561,7 @@ For color palettes: set them in the table-level `style` node (sibling of `panes`
 
 ## Discovery method
 
-When you need to learn an unknown encoding format: ask the user to apply it manually in Tableau, then call `tableau-get-workbook` and inspect the cached XML file. Open the XML and look inside the `<pane>` → `<encodings>` element. This is faster and more reliable than guessing.
+When you need to learn an unknown encoding format: ask the user to apply it manually in Tableau, then call `get-workbook-xml` and inspect the cached XML file. Open the XML and look inside the `<pane>` → `<encodings>` element. This is faster and more reliable than guessing.
 
 ---
 
@@ -656,7 +656,7 @@ Use this module when you need to:
 - Build a **Gantt chart**, **filled map**, or **dual-axis** chart
 - Control **aggregation** (aggregate vs. one mark per row)
 - Add a **natural sort** for stacking order on area or stacked bar charts
-- Learn what to do when an encoding pattern is unknown (ask user to apply manually, then inspect with `tableau-get-workbook`)
+- Learn what to do when an encoding pattern is unknown (ask user to apply manually, then inspect with `get-workbook-xml`)
 
 ---
 
@@ -664,10 +664,10 @@ Use this module when you need to:
 
 - **Encodings go inside `pane > encodings`, never inside `pane > view`**: Encodings placed inside `view` are stripped on round-trip.
 - **Always declare column defs + column-instances in `datasource-dependencies`**: Every field referenced in an encoding must have both a `column` def and a `column-instance` in the worksheet's `datasource-dependencies`.
-- **LOD encodings and their column-instances are co-dependent**: Submit them together in the same `tableau-apply-workbook` call — Tableau strips both if either is missing.
+- **LOD encodings and their column-instances are co-dependent**: Submit them together in the same `apply-workbook` call — Tableau strips both if either is missing.
 - **Custom color palettes go in the table-level `style`**, not in pane encodings.
 - **Use `:qk` (continuous) for time-series axes**: Continuous date column-instances produce a true time axis. Discrete (`:ok`) creates category ticks.
-- **Ask the user to apply unknown encodings manually**, then inspect with `tableau-get-workbook` — this is faster than guessing.
+- **Ask the user to apply unknown encodings manually**, then inspect with `get-workbook-xml` — this is faster than guessing.
 - **Prefer `mark-labels-mode="range"` over `"most-recent"` for scatter/circle marks**: `"most-recent"` only works reliably on Line marks.
 
 ---
@@ -687,13 +687,13 @@ Use this module when you need to:
 
 To add a color encoding to an existing worksheet:
 
-1. Call `tableau-get-workbook` to get the current cached XML file path.
+1. Call `get-workbook-xml` to get the current cached XML file path.
 2. Parse the XML with `xml.etree.ElementTree`.
 3. Find the target worksheet and navigate to its `<pane>` element inside `<table> > <panes>`.
 4. Add the column def and column-instance for the color field to the worksheet's `datasource-dependencies` (inside `view`).
 5. Find or create the `<encodings>` element inside `<pane>` and append: `<color column="[DS].[none:Category:nk]"/>`.
-6. Write to `/tmp/modified_workbook.xml` and submit via `tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`.
-7. Call `tableau-get-workbook` and inspect the result to confirm the encoding survived the round-trip.
+6. Write to `/tmp/modified_workbook.xml` and submit via `apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`.
+7. Call `get-workbook-xml` and inspect the result to confirm the encoding survived the round-trip.
 
 ## Source and Confidence
 
