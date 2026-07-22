@@ -25,6 +25,8 @@ vi.mock('fs');
 
 const mockWorkbookXml =
   '<workbook><windows><window class="dashboard" name="Sales Dashboard"/></windows></workbook>';
+const mockWorkbookXmlWithExistingViewpoint =
+  '<workbook><windows><window class="dashboard" name="Sales Dashboard"><viewpoints><viewpoint name="KPI 1"><zoom type="entire-view"/></viewpoint></viewpoints></window></windows></workbook>';
 const mockWorkbookXmlWithViewpoints =
   '<workbook><windows><window class="dashboard" name="Sales Dashboard"><viewpoints><viewpoint name="KPI 1"/><viewpoint name="KPI 2"/><viewpoint name="Chart 1"/><viewpoint name="Chart 2"/></viewpoints></window></windows></workbook>';
 const mockWorkbookXmlWithAllViewpoints =
@@ -270,6 +272,39 @@ describe('buildAndApplyDashboardTool', () => {
         attempted: ['Chart 1'],
       },
       apply_error: new DesktopCommandExecutionError(error.error).message,
+    });
+  });
+
+  it('does not report pre-existing viewpoints as failed when the viewpoint workbook apply is rejected', async () => {
+    const error = {
+      type: 'load-workbook-xml-error' as const,
+      error: { type: 'load-rejected' as const, message: 'Rejected by Desktop' },
+    };
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(
+      Ok(mockWorkbookXmlWithExistingViewpoint),
+    );
+    vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(
+      mockWorkbookXmlWithAllViewpoints,
+    );
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Err(error));
+
+    const result = await getToolResult({
+      layoutSpec: defaultLayoutSpec,
+      worksheetNames: ['KPI 1', 'Chart 1'],
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      dashboardName: 'Sales Dashboard',
+      dashboardApplied: true,
+      stage: 'viewpoint-workbook-apply',
+      viewpoints: {
+        state: 'failed',
+        requested: ['KPI 1', 'Chart 1'],
+        landed: ['KPI 1'],
+        failed: ['Chart 1'],
+      },
     });
   });
 

@@ -162,6 +162,12 @@ export const getBuildAndApplyDashboardTool = (
             dashboardName,
             requested: worksheetNames,
           });
+          const preApplyViewpointAccounting = accountDashboardViewpoints({
+            beforeXml: workbookResult.value,
+            afterXml: workbookResult.value,
+            dashboardName,
+            requested: worksheetNames,
+          });
 
           if (viewpointAccounting.state === 'failed') {
             return new IncompleteOperationError({
@@ -192,6 +198,7 @@ export const getBuildAndApplyDashboardTool = (
                     dashboardName,
                     worksheetNames,
                     viewpointAccounting,
+                    preApplyViewpointAccounting,
                     state: 'unknown',
                     errorMessage: new DesktopCommandExecutionError(error).message,
                   });
@@ -200,6 +207,7 @@ export const getBuildAndApplyDashboardTool = (
                     dashboardName,
                     worksheetNames,
                     viewpointAccounting,
+                    preApplyViewpointAccounting,
                     state: 'failed',
                     errorMessage: new WorkbookXmlLoadFailedError(error).message,
                   });
@@ -238,15 +246,19 @@ function viewpointApplyIncomplete({
   dashboardName,
   worksheetNames,
   viewpointAccounting,
+  preApplyViewpointAccounting,
   state,
   errorMessage,
 }: {
   dashboardName: string;
   worksheetNames: string[];
   viewpointAccounting: ViewpointAccounting;
+  preApplyViewpointAccounting: ViewpointAccounting;
   state: 'failed' | 'unknown';
   errorMessage: string;
 }): ReturnType<IncompleteOperationError<object>['toErr']> {
+  const preExisting = preApplyViewpointAccounting.landed;
+  const newlyAttempted = viewpointAccounting.landed.filter((name) => !preExisting.includes(name));
   return new IncompleteOperationError({
     dashboardName,
     dashboardApplied: true,
@@ -256,13 +268,13 @@ function viewpointApplyIncomplete({
         ? {
             state,
             requested: worksheetNames,
-            attempted: viewpointAccounting.landed,
+            attempted: newlyAttempted,
           }
         : {
             state,
             requested: worksheetNames,
-            landed: [],
-            failed: worksheetNames,
+            landed: preExisting,
+            failed: newlyAttempted,
           },
     apply_error: errorMessage,
     guidance:
