@@ -242,6 +242,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
     ['bind-template', 2030], // raised for target_worksheet (e1/s7 stray-sheet fix); funded by describe trims, total stays under the 46k cliff
+    ['refine-worksheet', 1583], // raised for omitted-targetField axis detection; funded by a ~500-byte same-tool describe trim
     ['plan-dashboard-creation', 1509], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1558], // ratcheted down in the CODA funding trim; do not grow
     ['validate-proposal', 1533], // raised for the same shared sort/top_n proposal schema; 46k stays green
