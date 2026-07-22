@@ -1124,6 +1124,8 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           });
           return new Ok(appliedResult);
         },
+        // Keep the standard MCP content-block envelope while lifting nextAction metadata
+        // out of the JSON body so the bind/propose/bound body contract stays unchanged.
         getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });
     },
