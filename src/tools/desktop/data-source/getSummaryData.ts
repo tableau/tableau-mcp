@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { WorksheetItem } from '../../../desktop/externalApi/types.js';
-import { sessionRouteState } from '../../../desktop/route/route-state.js';
+import { sessionRouteState, SessionRouteStateStore } from '../../../desktop/route/route-state.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { ArgsValidationError, McpToolError, UnknownError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -13,6 +13,7 @@ import { runExternalApiReadTool } from '../externalApiReadHarness.js';
 import {
   doneNextAction,
   jsonToolResult,
+  prefillNextAction,
   StructuredContent,
   StructuredResult,
   withNextAction,
@@ -25,12 +26,14 @@ const EMPTY_SHEET_GUIDANCE =
   'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — bind a chart first (bind-template) or name a populated sheet.';
 const NO_ROWS_GUIDANCE =
   "The summary query returned no rows. Do NOT call get-summary-data again for this ask — the answer is 'no data'; say so.";
-const REPEATED_REQUEST_GUIDANCE =
-  'You already asked for this summary data with the same arguments. Do NOT call get-summary-data again for this ask; use the prior result or report that no data was available.';
-const INVALID_WORKSHEET_GUIDANCE =
-  'The requested worksheet is not a valid retrieval source. Do NOT call get-summary-data again for this ask; name a populated sheet or bind a chart first.';
-const REQUEST_FAILED_GUIDANCE =
-  'get-summary-data could not retrieve rows. Do NOT call get-summary-data again for this ask; report the failure and use a populated worksheet only if the user requests another attempt.';
+const REPLAY_WINDOW_SECONDS = SessionRouteStateStore.SUMMARY_DATA_REPEAT_WINDOW_MS / 1_000;
+const REPLAY_GUIDANCE = `identical request within ${REPLAY_WINDOW_SECONDS}s — this is the same result; if the workbook changed, re-ask after modifying the view.`;
+const WORKSHEET_AMBIGUOUS_GUIDANCE =
+  'Choose one worksheet by exact id or name, then call get-summary-data again.';
+const WORKSHEET_NOT_FOUND_GUIDANCE =
+  'The requested worksheet was not found. Name a populated worksheet or bind a chart first.';
+const TRANSIENT_FAILURE_GUIDANCE =
+  'The request may be transient — retry once is reasonable. If it fails again, report the failure.';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
@@ -39,7 +42,22 @@ const paramsSchema = {
   columns: z.array(z.string()).optional().describe('Fields.'),
 };
 
-type SummaryDataToolResult = StructuredResult<object>;
+type SummaryDataValue = {
+  worksheet: { id: string; name: string };
+  maxRows: number;
+  shape: string;
+  summaryData: { columns: unknown[]; rows: unknown[] };
+};
+
+type SummaryDataCompletedBody =
+  | ({ status: 'success' } & SummaryDataValue)
+  | ({
+      status: 'terminal';
+      reason: 'empty-sheet' | 'no-rows';
+      guidance: string;
+    } & SummaryDataValue);
+
+type SummaryDataCompletedResult = StructuredResult<SummaryDataCompletedBody>;
 
 const title = 'Get Summary Data';
 export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
@@ -48,7 +66,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
     name: 'get-summary-data',
     title,
     description:
-      'Read summary rows from a populated worksheet with fields on the view. Empty, no-row, failed, or repeated requests are terminal and must not be polled.',
+      'Read summary rows from a populated worksheet with fields on the view. Completed results may replay for 15 seconds; transient failures may be retried once.',
     paramsSchema,
     annotations: {
       title,
@@ -61,11 +79,15 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
       return await getSummaryData.logAndExecute({
         extra,
         args: { session, worksheet, maxRows, columns },
-        callback: async (): Promise<Result<SummaryDataToolResult, McpToolError>> => {
+        callback: async (): Promise<Result<SummaryDataCompletedResult, McpToolError>> => {
           try {
             const sessionResult = resolveSession(session);
             if (sessionResult.isErr()) {
-              return terminalError(sessionResult.error, 'request-failed').toErr();
+              return summaryDataError(
+                sessionResult.error,
+                'retryable',
+                'session-resolution-failed',
+              ).toErr();
             }
 
             const resolvedMaxRows = clampMaxRows(maxRows);
@@ -74,20 +96,15 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
               maxRows: resolvedMaxRows,
               columns,
             });
-            if (sessionRouteState.isSummaryDataRepeat(sessionResult.value, signature)) {
-              return new Ok(
-                withNextAction(
-                  {
-                    status: 'terminal' as const,
-                    reason: 'repeated-request' as const,
-                    guidance: REPEATED_REQUEST_GUIDANCE,
-                  },
-                  doneNextAction('Stop — use the prior summary-data result'),
-                ),
-              );
+            const replay = sessionRouteState.getSummaryDataReplay<SummaryDataCompletedResult>(
+              sessionResult.value,
+              signature,
+            );
+            if (replay) {
+              return new Ok(withReplayGuidance(replay));
             }
 
-            const result = await runExternalApiReadTool<SummaryDataToolResult>({
+            const result = await runExternalApiReadTool<SummaryDataCompletedResult>({
               session: sessionResult.value,
               extra,
               callback: async (_executor, _signal, read) => {
@@ -96,7 +113,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
                   async (executor, signal) => await executor.listWorksheets(signal),
                 );
                 if (worksheetsResult.isErr()) {
-                  return terminalError(worksheetsResult.error, 'request-failed').toErr();
+                  return requestError(worksheetsResult.error).toErr();
                 }
 
                 const worksheetResult = resolveWorksheet(
@@ -104,7 +121,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
                   worksheetsResult.value.worksheets ?? [],
                 );
                 if (worksheetResult.isErr()) {
-                  return terminalError(worksheetResult.error, 'invalid-worksheet').toErr();
+                  return worksheetError(worksheetResult.error).toErr();
                 }
 
                 const resolvedWorksheet = worksheetResult.value;
@@ -127,7 +144,7 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
                     ),
                 );
                 if (summaryResult.isErr()) {
-                  return terminalError(summaryResult.error, 'request-failed').toErr();
+                  return requestError(summaryResult.error).toErr();
                 }
 
                 const dataColumns = summaryResult.value.columns ?? [];
@@ -150,12 +167,13 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
                         summaryData: { columns: dataColumns, rows: dataRows },
                         guidance: NO_ROWS_GUIDANCE,
                       },
-                      doneNextAction('Stop — report that the query returned no data'),
+                      doneNextAction(),
                     ),
                   );
                 }
 
                 return new Ok({
+                  status: 'success' as const,
                   worksheet: { id: resolvedWorksheet.id, name: resolvedWorksheet.name },
                   maxRows: resolvedMaxRows,
                   shape: `${dataRows.length} rows x ${dataColumns.length} columns`,
@@ -163,12 +181,17 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
                 });
               },
             });
-            return result.isErr() ? terminalError(result.error, 'request-failed').toErr() : result;
+            if (result.isErr()) {
+              return requestError(result.error).toErr();
+            }
+            sessionRouteState.recordSummaryDataCompletion(
+              sessionResult.value,
+              signature,
+              result.value,
+            );
+            return result;
           } catch (error) {
-            return terminalError(
-              new UnknownError(getExceptionMessage(error)),
-              'request-failed',
-            ).toErr();
+            return requestError(new UnknownError(getExceptionMessage(error))).toErr();
           }
         },
         getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
@@ -179,22 +202,28 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
   return getSummaryData;
 };
 
-type SummaryDataTerminalReason = 'invalid-worksheet' | 'request-failed';
+type SummaryDataErrorStatus = 'terminal' | 'retryable' | 'action-required';
+type SummaryDataErrorReason =
+  | 'worksheet-not-found'
+  | 'worksheet-ambiguous'
+  | 'session-resolution-failed'
+  | 'request-failed'
+  | 'endpoint-unavailable';
 
-class SummaryDataTerminalError extends McpToolError {
+class SummaryDataResponseError extends McpToolError {
   readonly structuredContent: StructuredContent;
   private readonly body: {
-    status: 'terminal';
-    reason: SummaryDataTerminalReason;
+    status: SummaryDataErrorStatus;
+    reason: SummaryDataErrorReason;
     guidance: string;
     error: { type: string; message: string };
   };
 
   constructor(
     error: McpToolError,
-    reason: SummaryDataTerminalReason,
+    status: SummaryDataErrorStatus,
+    reason: SummaryDataErrorReason,
     guidance: string,
-    nextActionLabel: string,
   ) {
     super({
       type: error.type,
@@ -205,12 +234,21 @@ class SummaryDataTerminalError extends McpToolError {
       internalErrorDetails: error.internalErrorDetails,
     });
     this.body = {
-      status: 'terminal',
+      status,
       reason,
       guidance,
       error: { type: error.type, message: error.getErrorText() },
     };
-    this.structuredContent = { nextAction: doneNextAction(nextActionLabel) };
+    this.structuredContent = {
+      nextAction:
+        status === 'terminal'
+          ? doneNextAction()
+          : prefillNextAction(
+              status === 'retryable'
+                ? 'Retry get-summary-data once'
+                : 'Choose a worksheet and retry',
+            ),
+    };
   }
 
   override getErrorText(): string {
@@ -218,40 +256,44 @@ class SummaryDataTerminalError extends McpToolError {
   }
 }
 
-function terminalError(
+function summaryDataError(
   error: McpToolError,
-  reason: SummaryDataTerminalReason,
-): SummaryDataTerminalError {
-  if (error instanceof SummaryDataTerminalError) {
+  status: SummaryDataErrorStatus,
+  reason: SummaryDataErrorReason,
+  guidance = TRANSIENT_FAILURE_GUIDANCE,
+): SummaryDataResponseError {
+  if (error instanceof SummaryDataResponseError) {
     return error;
   }
-  return reason === 'invalid-worksheet'
-    ? new SummaryDataTerminalError(
+  return new SummaryDataResponseError(error, status, reason, guidance);
+}
+
+function requestError(error: McpToolError): SummaryDataResponseError {
+  if (error instanceof SummaryDataResponseError) {
+    return error;
+  }
+  return error.statusCode >= 500
+    ? summaryDataError(error, 'retryable', 'request-failed')
+    : summaryDataError(
         error,
-        reason,
-        INVALID_WORKSHEET_GUIDANCE,
-        'Stop — choose a populated worksheet or bind a chart',
-      )
-    : new SummaryDataTerminalError(
-        error,
-        reason,
-        REQUEST_FAILED_GUIDANCE,
-        'Stop — report the summary-data retrieval failure',
+        'action-required',
+        'endpoint-unavailable',
+        `${error.getErrorText()} Correct the request or Desktop version before retrying.`,
       );
 }
 
-function emptySheetResult(
-  worksheet: WorksheetItem,
-  maxRows: number,
-): StructuredResult<{
-  status: 'terminal';
-  reason: 'empty-sheet';
-  worksheet: { id: string; name: string };
-  maxRows: number;
-  shape: string;
-  summaryData: { columns: unknown[]; rows: unknown[] };
-  guidance: string;
-}> {
+function worksheetError(error: ArgsValidationError): SummaryDataResponseError {
+  return error.message.includes('was not found')
+    ? summaryDataError(error, 'terminal', 'worksheet-not-found', WORKSHEET_NOT_FOUND_GUIDANCE)
+    : summaryDataError(
+        error,
+        'action-required',
+        'worksheet-ambiguous',
+        WORKSHEET_AMBIGUOUS_GUIDANCE,
+      );
+}
+
+function emptySheetResult(worksheet: WorksheetItem, maxRows: number): SummaryDataCompletedResult {
   return withNextAction(
     {
       status: 'terminal' as const,
@@ -262,7 +304,18 @@ function emptySheetResult(
       summaryData: { columns: [], rows: [] },
       guidance: EMPTY_SHEET_GUIDANCE,
     },
-    doneNextAction('Stop polling; bind a chart or choose a populated sheet'),
+    doneNextAction(),
+  );
+}
+
+function withReplayGuidance(result: SummaryDataCompletedResult): SummaryDataCompletedResult {
+  const priorGuidance = 'guidance' in result ? result.guidance : undefined;
+  return withNextAction(
+    {
+      ...result,
+      guidance: priorGuidance ? `${priorGuidance} ${REPLAY_GUIDANCE}` : REPLAY_GUIDANCE,
+    },
+    doneNextAction(),
   );
 }
 

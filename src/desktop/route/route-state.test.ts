@@ -128,41 +128,65 @@ describe('SessionRouteStateStore', () => {
   });
 
   describe('summary-data repeat state', () => {
-    it('blocks the second and third identical signature inside the repeat window', () => {
+    it('replays only after a completed result is recorded', () => {
       const store = new SessionRouteStateStore();
+      const result = { status: 'success', summaryData: { columns: [], rows: [[1]] } };
 
-      expect(store.isSummaryDataRepeat('S1', 'signature-a', 1_000)).toBe(false);
-      expect(store.isSummaryDataRepeat('S1', 'signature-a', 2_000)).toBe(true);
-      expect(store.isSummaryDataRepeat('S1', 'signature-a', 3_000)).toBe(true);
+      expect(store.getSummaryDataReplay('S1', 'signature-a', 1_000)).toBeUndefined();
+      store.recordSummaryDataCompletion('S1', 'signature-a', result, 2_000);
+      expect(store.getSummaryDataReplay('S1', 'signature-a', 3_000)).toBe(result);
     });
 
-    it('allows the same signature after the repeat window expires', () => {
+    it('measures expiry from the original completion without refreshing on replay', () => {
       const store = new SessionRouteStateStore();
+      const result = { status: 'success' };
+      const completedAt = 1_000;
 
-      expect(store.isSummaryDataRepeat('S1', 'signature-a', 1_000)).toBe(false);
+      store.recordSummaryDataCompletion('S1', 'signature-a', result, completedAt);
       expect(
-        store.isSummaryDataRepeat(
+        store.getSummaryDataReplay(
           'S1',
           'signature-a',
-          1_000 + SessionRouteStateStore.SUMMARY_DATA_REPEAT_WINDOW_MS + 1,
+          completedAt + SessionRouteStateStore.SUMMARY_DATA_REPEAT_WINDOW_MS - 1,
         ),
-      ).toBe(false);
+      ).toBe(result);
+      expect(
+        store.getSummaryDataReplay(
+          'S1',
+          'signature-a',
+          completedAt + SessionRouteStateStore.SUMMARY_DATA_REPEAT_WINDOW_MS + 1,
+        ),
+      ).toBeUndefined();
+    });
+
+    it('keeps the original completion when parallel first calls finish inside the window', () => {
+      const store = new SessionRouteStateStore();
+      const first = { status: 'success', value: 'first' };
+      const parallel = { status: 'success', value: 'parallel' };
+
+      store.recordSummaryDataCompletion('S1', 'signature-a', first, 1_000);
+      store.recordSummaryDataCompletion('S1', 'signature-a', parallel, 2_000);
+
+      expect(store.getSummaryDataReplay('S1', 'signature-a', 3_000)).toBe(first);
     });
 
     it('keeps signatures session-scoped and LRU-bounded', () => {
       const store = new SessionRouteStateStore();
       const cap = SessionRouteStateStore.MAX_SUMMARY_DATA_SIGNATURES;
+      const result = { status: 'success' };
 
-      expect(store.isSummaryDataRepeat(undefined, 'signature-a', 1_000)).toBe(false);
-      expect(store.isSummaryDataRepeat('S1', 'shared', 1_000)).toBe(false);
-      expect(store.isSummaryDataRepeat('S2', 'shared', 1_000)).toBe(false);
+      store.recordSummaryDataCompletion(undefined, 'signature-a', result, 1_000);
+      store.recordSummaryDataCompletion('S1', 'shared', result, 1_000);
+      expect(store.getSummaryDataReplay(undefined, 'signature-a', 1_000)).toBeUndefined();
+      expect(store.getSummaryDataReplay('S1', 'shared', 1_000)).toBe(result);
+      expect(store.getSummaryDataReplay('S2', 'shared', 1_000)).toBeUndefined();
 
       for (let i = 0; i < cap + 1; i++) {
-        expect(store.isSummaryDataRepeat('S1', `signature-${i}`, 2_000 + i)).toBe(false);
+        store.recordSummaryDataCompletion('S1', `signature-${i}`, result, 2_000 + i);
       }
 
       expect(store.get('S1')?.summaryDataRequests.size).toBe(cap);
-      expect(store.isSummaryDataRepeat('S1', 'signature-0', 3_000)).toBe(false);
+      expect(store.getSummaryDataReplay('S1', 'signature-0', 3_000)).toBeUndefined();
     });
   });
 

@@ -103,7 +103,8 @@ export interface UnprotectedPassthroughs {
 }
 
 export interface SummaryDataRequestRecord {
-  lastSeenAt: number;
+  completedAt: number;
+  result: object;
 }
 
 /**
@@ -131,7 +132,10 @@ export interface SessionRouteState {
   route_overrides: RouteOverride[];
   /** Bounded per-ask bind recovery records, keyed by the same normalized ask as current_ask. */
   bindRecoveryByAsk: Map<string, BindRecoveryRecord>;
-  /** Recent get-summary-data signatures used to terminally block same-argument polling. */
+  /**
+   * Completed get-summary-data payloads keyed by argument signature. This is scoped to the
+   * Desktop session, not a chat; cross-chat replay is safe because it returns the real result.
+   */
   summaryDataRequests: Map<string, SummaryDataRequestRecord>;
   /** Capacity-rejected bind admissions that intentionally proceeded unprotected. */
   unprotected_passthroughs: UnprotectedPassthroughs;
@@ -246,9 +250,9 @@ export class SessionRouteStateStore {
   /** Per-session LRU cap for bind recovery records. */
   static readonly MAX_BIND_RECOVERY_ASKS = 8;
 
-  /** Per-session LRU cap and repeat horizon for get-summary-data argument signatures. */
+  /** Per-session LRU cap and original-completion replay horizon for get-summary-data results. */
   static readonly MAX_SUMMARY_DATA_SIGNATURES = 8;
-  static readonly SUMMARY_DATA_REPEAT_WINDOW_MS = 30_000;
+  static readonly SUMMARY_DATA_REPEAT_WINDOW_MS = 15_000;
 
   /** Receipt cap for capacity-rejected asks. */
   static readonly MAX_UNPROTECTED_PASSTHROUGH_ASKS = 4;
@@ -325,27 +329,54 @@ export class SessionRouteStateStore {
   }
 
   /**
-   * Atomically records a get-summary-data argument signature and reports whether it was seen
-   * recently in the same Desktop session. Repeats refresh recency so a polling spiral remains
-   * terminal; expired signatures are admitted as a new ask.
+   * Records a completed payload. In-flight and failed calls never reach this method. If parallel
+   * first calls complete inside one window, preserve the original completion and its expiry.
    */
-  isSummaryDataRepeat(sessionId: string | undefined, signature: string, now = Date.now()): boolean {
-    if (!sessionId) return false;
+  recordSummaryDataCompletion<T extends object>(
+    sessionId: string | undefined,
+    signature: string,
+    result: T,
+    completedAt = Date.now(),
+  ): void {
+    if (!sessionId) return;
     const state = this.ensure(sessionId);
     const previous = state.summaryDataRequests.get(signature);
-    const isRepeat =
+    if (
       previous !== undefined &&
-      now - previous.lastSeenAt <= SessionRouteStateStore.SUMMARY_DATA_REPEAT_WINDOW_MS;
+      completedAt - previous.completedAt <= SessionRouteStateStore.SUMMARY_DATA_REPEAT_WINDOW_MS
+    ) {
+      return;
+    }
 
     state.summaryDataRequests.delete(signature);
-    state.summaryDataRequests.set(signature, { lastSeenAt: now });
+    state.summaryDataRequests.set(signature, { completedAt, result });
     while (state.summaryDataRequests.size > SessionRouteStateStore.MAX_SUMMARY_DATA_SIGNATURES) {
       const oldest = state.summaryDataRequests.keys().next().value;
       if (oldest === undefined) break;
       state.summaryDataRequests.delete(oldest);
     }
+  }
 
-    return isRepeat;
+  /**
+   * Returns a completed payload while its original-completion window is open. A replay may update
+   * LRU order, but never its completion timestamp, so polling cannot extend the replay horizon.
+   */
+  getSummaryDataReplay<T extends object>(
+    sessionId: string | undefined,
+    signature: string,
+    now = Date.now(),
+  ): T | undefined {
+    const state = this.get(sessionId);
+    const previous = state?.summaryDataRequests.get(signature);
+    if (!state || !previous) return undefined;
+    if (now - previous.completedAt > SessionRouteStateStore.SUMMARY_DATA_REPEAT_WINDOW_MS) {
+      state.summaryDataRequests.delete(signature);
+      return undefined;
+    }
+
+    state.summaryDataRequests.delete(signature);
+    state.summaryDataRequests.set(signature, previous);
+    return previous.result as T;
   }
 
   /**

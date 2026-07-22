@@ -73,14 +73,14 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(plainChart?.action).toContain('proposals may carry sort and top_n.');
   });
 
-  it('requires a populated worksheet and makes no-data summary outcomes terminal', () => {
+  it('stops on terminal summary outcomes but permits one transient retry', () => {
     const dataValueQuestion = routes.find((route) => route.id === 'data-value-question');
 
     expect(dataValueQuestion).toMatchObject({
       action:
-        'on a populated worksheet, call get-summary-data once; answer only from returned rows. Any terminal/no-data result means stop; say so and offer to build a viz.',
-      stopConditions: ['Any terminal/no-data result means stop'],
-      requiredEvidence: ['get-summary-data returned rows or a terminal reason'],
+        'on a populated worksheet, call get-summary-data; answer only from returned rows. A terminal/no-data result means stop; a transient failure may be retried once.',
+      stopConditions: ['A terminal/no-data result means stop'],
+      requiredEvidence: ['get-summary-data returned rows or a discriminated status'],
     });
   });
 

@@ -103,7 +103,7 @@ For a plain viz ask (bar/line/map/KPI/etc.), FIRST bind-template(auto_apply:true
 
 For a dashboard ask with 2-6 vizzes, build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; search-commands only for commands the census does not list.
 
-For a data-value question, on a populated worksheet, call get-summary-data once; answer only from returned rows. Any terminal/no-data result means stop; say so and offer to build a viz.
+For a data-value question, on a populated worksheet, call get-summary-data; answer only from returned rows. A terminal/no-data result means stop; a transient failure may be retried once.
 
 For a dynamic ask or a calc/derived field the data lacks (ratio, running total, LOD), use author-* verbs: author-parameter FIRST (on { reopened: true } continue immediately), then author-set, author-calc, author-action, format-labels. Build with bind-template and authored captions.
 
