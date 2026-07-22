@@ -79,7 +79,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
     vi.restoreAllMocks();
   });
 
-  it('should apply a minimal document that upserts the dashboard and omits worksheets', async () => {
+  it('upserts the dashboard into the whole live workbook, preserving siblings and worksheets', async () => {
     const { executor, calls } = dispatchingExecutor(
       liveWorkbook(['Sales Dashboard', 'Other DB'], ['Sheet 1']),
     );
@@ -97,11 +97,13 @@ describe('loadDashboardXml (External Client API transport)', () => {
     const applyCall = calls.find((c) => c.kind === 'apply');
     const applied = applyCall?.xml as string;
     expect(applied).toContain('name="Sales Dashboard"');
-    expect(applied).not.toContain('Other DB');
-    expect(applied).not.toContain('<worksheet');
+    // The POST replaces the open workbook wholesale, so the sibling dashboard and the live
+    // worksheet MUST survive in the posted doc — omitting them would prune them from Desktop.
+    expect(applied).toContain('name="Other DB"');
+    expect(applied).toContain('name="Sheet 1"');
   });
 
-  it('focuses the dashboard after a successful minimal-doc apply', async () => {
+  it('focuses the dashboard after a successful apply', async () => {
     const { executor, calls } = dispatchingExecutor(
       liveWorkbook(['Sales Dashboard', 'Other DB'], ['Sheet 1']),
     );
@@ -119,7 +121,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
     );
   });
 
-  it('does not reject a per-dashboard apply whose minimal document omits live worksheets referenced by zones', async () => {
+  it('keeps live worksheets referenced by the dashboard zones in the posted document', async () => {
     const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
     const { executor, calls } = dispatchingExecutor(
       liveWorkbook(['Sales Dashboard', 'Other DB'], ['Sheet 1']),
@@ -134,11 +136,11 @@ describe('loadDashboardXml (External Client API transport)', () => {
 
     expect(result.isOk()).toBe(true);
     const applyCall = calls.find((c) => c.kind === 'apply');
+    expect(applyCall?.xml).toContain('<worksheet');
     expect(applyCall?.xml).toContain('name="Sheet 1"');
-    expect(applyCall?.xml).not.toContain('<worksheet');
   });
 
-  it('should apply a minimal document for a brand-new dashboard', async () => {
+  it('appends a brand-new dashboard while preserving the existing one', async () => {
     const { executor, calls } = dispatchingExecutor(liveWorkbook(['Some Other DB']));
 
     const result = await loadDashboardXml({
@@ -150,7 +152,9 @@ describe('loadDashboardXml (External Client API transport)', () => {
 
     expect(result.isOk()).toBe(true);
     expect(calls.find((c) => c.command === 'delete-sheet')).toBeUndefined();
-    expect(calls.find((c) => c.kind === 'apply')).toBeDefined();
+    const applyCall = calls.find((c) => c.kind === 'apply');
+    expect(applyCall?.xml).toContain('name="Sales Dashboard"');
+    expect(applyCall?.xml).toContain('name="Some Other DB"');
   });
 
   it('should return invalid-xml error when xml is empty', async () => {

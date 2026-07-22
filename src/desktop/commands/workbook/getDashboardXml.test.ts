@@ -2,7 +2,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { ExternalApiToolExecutor } from '../../externalApi/externalApiToolExecutor.js';
 import { ExecuteCommandError } from '../../toolExecutor/toolExecutor.js';
-import { getDashboardXml } from './getDashboardXml.js';
+import { getDashboardFragment, getDashboardXml } from './getDashboardXml.js';
 
 describe('getDashboardXml', () => {
   it('resolves dashboard name to id and fetches the per-item document', async () => {
@@ -118,5 +118,63 @@ describe('getDashboardXml', () => {
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toContain('<dashboard name="Sales">');
     expect(executor.getWorkbookDocument).toHaveBeenCalledWith(signal);
+  });
+});
+
+describe('getDashboardFragment', () => {
+  it('slices the requested dashboard out of a whole-workbook /document response', async () => {
+    const signal = new AbortController().signal;
+    const executor = {
+      listDashboards: vi.fn().mockResolvedValue(
+        Ok({
+          dashboards: [
+            { id: 'dashboard-1', name: 'Executive Overview' },
+            { id: 'dashboard-2', name: 'Sales' },
+          ],
+        }),
+      ),
+      getDashboardDocument: vi.fn().mockResolvedValue(
+        Ok({
+          xml: `<workbook><dashboards>
+            <dashboard name="Executive Overview"><zone /></dashboard>
+            <dashboard name="Sales"><zone /></dashboard>
+          </dashboards></workbook>`,
+        }),
+      ),
+    } as unknown as ExternalApiToolExecutor;
+
+    const result = await getDashboardFragment({
+      executor,
+      signal,
+      dashboardName: 'Sales',
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value).toContain('<dashboard name="Sales"');
+      expect(result.value).not.toContain('<workbook');
+      expect(result.value).not.toContain('Executive Overview');
+    }
+  });
+
+  it('returns a bare dashboard fragment unchanged', async () => {
+    const signal = new AbortController().signal;
+    const executor = {
+      listDashboards: vi.fn().mockResolvedValue(
+        Ok({
+          dashboards: [{ id: 'dashboard-1', name: 'Sales' }],
+        }),
+      ),
+      getDashboardDocument: vi.fn().mockResolvedValue(Ok({ xml: '<dashboard name="Sales" />' })),
+    } as unknown as ExternalApiToolExecutor;
+
+    const result = await getDashboardFragment({
+      executor,
+      signal,
+      dashboardName: 'Sales',
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toBe('<dashboard name="Sales" />');
   });
 });
