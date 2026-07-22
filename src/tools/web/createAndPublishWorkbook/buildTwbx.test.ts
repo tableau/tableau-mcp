@@ -39,14 +39,23 @@ describe('buildTwbx', () => {
     expect(files['Packages/com.example.myviz/manifest.json']).toBeDefined();
   });
 
-  it('emits a well-formed .trex whose extension id is <id>.toolbar with a bare-relative source-location', () => {
+  it('emits a well-formed .trex whose extension id is <id>.toolbar with a <url>-wrapped relative source-location', () => {
     const trex = entries(buildTwbx(base).bytes)[
       'Packages/com.example.myviz/extensions/toolbar.trex'
     ];
     expect(trex).toContain('<?xml version="1.0" encoding="utf-8"?>');
     expect(trex).toContain('id="com.example.myviz.toolbar"');
-    expect(trex).toContain('<source-location>index.html</source-location>');
+    // The server parser reads the URL ONLY from the <url> CHILD element. A bare-text
+    // <source-location>index.html</source-location> parses to an empty url and is rejected
+    // ("This extension manifest URL () is invalid"), so the path MUST be wrapped in <url>.
+    expect(trex).toContain('<url>index.html</url>');
+    expect(trex).not.toContain('<source-location>index.html</source-location>');
     expect(trex).toContain('<target>toolbar</target>');
+    // extension-version MUST be present and non-empty on the workspace-extension. It is OPTIONAL in
+    // the XSD, so a versionless .trex passes publish-time schema validation — but the native VizQL
+    // worker then builds an ExtensionKey(id, version, url) and asserts all three are non-empty. An
+    // empty version trips a native LogicException that surfaces as an opaque HTTP 403 on publish.
+    expect(trex).toMatch(/<workspace-extension\b[^>]*\bextension-version="[^"]+"/);
   });
 
   it('resolves the .trex source-location to a bundled content file', () => {

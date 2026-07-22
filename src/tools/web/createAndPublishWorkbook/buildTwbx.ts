@@ -42,7 +42,7 @@ export function buildTwbx(input: BuildTwbxInput): BuildTwbxResult {
     [`${fileBase}.twb`]: strToU8(renderTwb(input)),
     // 2) manifest.json — its "id" MUST equal the Packages/<id>/ folder name
     [`Packages/${id}/manifest.json`]: strToU8(renderManifest(input)),
-    // 3) the .trex — bare-relative <source-location>index.html</source-location>
+    // 3) the .trex — <source-location><url>index.html</url></source-location>
     [`Packages/${id}/extensions/toolbar.trex`]: strToU8(renderTrex(input)),
     // 4) content/*
     ...Object.fromEntries(
@@ -112,13 +112,27 @@ function renderManifest(i: BuildTwbxInput): string {
 function renderTrex(i: BuildTwbxInput): string {
   const label = esc(i.toolbar?.label ?? i.workbookName);
   const icon = i.toolbar?.iconPngBase64 ?? DEFAULT_ICON_PNG_B64;
-  // <source-location> is a BARE RELATIVE path; the platform rewrites it to
-  // tableaulocalext:///<id>/content/index.html at load time. Extension id = "<id>.toolbar".
+  // <source-location> MUST wrap the relative path in a <url> child. The server parser
+  // (ExtensionXmlParser::ParseSourceLocation) reads the URL ONLY from the <url> child element
+  // (GetChildText("url")); a bare-text <source-location>index.html</source-location> validates
+  // against the mixed-content XSD but parses to an EMPTY url, and the package reader then rejects
+  // the .trex with "This extension manifest URL () is invalid" and SKIPS the extension (the viz
+  // never renders). The path stays RELATIVE ("index.html", not content/index.html): for a package
+  // .trex the reader rewrites it to tableaulocalext:///<id>/content/index.html — BuildUrl already
+  // inserts the content/ segment. Extension id = "<id>.toolbar".
+  //
+  // extension-version MUST be present and non-empty. The XSD marks it optional, but at publish time
+  // the native VizQL worker registers each bundled package extension via an ExtensionKey(id, version,
+  // url) and asserts ExtensionKey::IsValid() — which requires ALL THREE non-empty
+  // (ExtensionRegistry::FindRegistration -> LogicAssertCustom). Omit extension-version and the parsed
+  // manifest version is empty -> the assert throws a native LogicException that surfaces as an opaque
+  // HTTP 403 / code 500000 ("Forbidden") on publish. Keep it aligned with the "1.0.0" the .twb render
+  // chain and manifest.json already use.
   return `<?xml version="1.0" encoding="utf-8"?>
 <manifest manifest-version="1.0" xmlns="http://www.tableau.com/xml/extension_manifest">
-  <workspace-extension id="${esc(i.packageId)}.toolbar">
+  <workspace-extension id="${esc(i.packageId)}.toolbar" extension-version="1.0.0">
     <target>toolbar</target>
-    <source-location>index.html</source-location>
+    <source-location><url>index.html</url></source-location>
     <toolbar-button id="x">
       <label>${label}</label>
       <icon>
@@ -299,11 +313,11 @@ function validateBundle(files: Record<string, Uint8Array>): void {
   for (const rel of Object.keys(files)) {
     assertContentPathSafe(rel); // (d) hard
   }
-  // (c) self-consistency — hard. The .trex's bare-relative <source-location> MUST point at a file we
-  //     actually bundled. Pure internal coherence, so it can't drift.
+  // (c) self-consistency — hard. The .trex's <source-location><url> relative path MUST point at a
+  //     file we actually bundled. Pure internal coherence, so it can't drift.
   if (!files['index.html']) {
     throw new BuildTwbxError(
-      '<source-location>index.html</source-location> has no matching content/index.html',
+      '<source-location><url>index.html</url></source-location> has no matching content/index.html',
     );
   }
 }
