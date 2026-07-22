@@ -12,12 +12,12 @@
       <datasource-dependencies datasource='{{DATASOURCE}}'>
         <column datatype='real' name='[Latitude]' role='measure' type='quantitative' />
         <column datatype='real' name='[Longitude]' role='measure' type='quantitative' />
-        <column datatype='string' name='[Detail]' role='dimension' type='nominal' />
-        <column datatype='real' name='[Measure]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Detail1]' role='dimension' type='nominal' />
+        <column datatype='string' name='[Detail2]' role='dimension' type='nominal' />
         <column-instance column='[Latitude]' derivation='Avg' name='[avg:Latitude:qk]' pivot='key' type='quantitative' />
         <column-instance column='[Longitude]' derivation='Avg' name='[avg:Longitude:qk]' pivot='key' type='quantitative' />
-        <column-instance column='[Detail]' derivation='None' name='[none:Detail:nk]' pivot='key' type='nominal' />
-        <column-instance column='[Measure]' derivation='Sum' name='[sum:Measure:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Detail1]' derivation='None' name='[none:Detail1:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Detail2]' derivation='None' name='[none:Detail2:nk]' pivot='key' type='nominal' />
       </datasource-dependencies>
       <aggregation value='true' />
     </view>
@@ -25,9 +25,6 @@
       <style-rule element='map'>
         <format attr='washout' value='0.0' />
         <format attr='map-snap-zoom' value='true' />
-      </style-rule>
-      <style-rule element='mark'>
-        <encoding attr='color' field='[{{DATASOURCE}}].[sum:Measure:qk]' symmetric='false' type='interpolated' />
       </style-rule>
     </style>
     <panes>
@@ -38,15 +35,15 @@
         <mark class='Circle' />
         <mark-sizing mark-sizing-setting='marks-scaling-off' />
         <encodings>
-          <size column='[{{DATASOURCE}}].[sum:Measure:qk]' />
-          <color column='[{{DATASOURCE}}].[sum:Measure:qk]' />
-          <lod column='[{{DATASOURCE}}].[none:Detail:nk]' />
+          <lod column='[{{DATASOURCE}}].[none:Detail1:nk]' />
+          <lod column='[{{DATASOURCE}}].[none:Detail2:nk]' />
         </encodings>
         <style>
           <style-rule element='mark'>
             <format attr='mark-transparency' value='170' />
             <format attr='has-stroke' value='true' />
             <format attr='stroke-color' value='#b4b4b4' />
+            <format attr='mark-color' value='#4e79a7' />
             <format attr='size' value='1.5932043790817261' />
           </style-rule>
         </style>

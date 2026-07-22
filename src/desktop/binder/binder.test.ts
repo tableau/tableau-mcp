@@ -151,6 +151,171 @@ describe('binder/classifyNoLlm', () => {
   });
 });
 
+// ── Blake wall #2: confident measure-free lat/long symbol map ─────────────────
+// A plain "map of office locations" ask (pm_name, city, latitude, longitude — NO
+// measure) must be able to bind CONFIDENTLY (used_llm=false) to spatial-symbol-map-
+// latlon by COORDINATE-NAME AFFINITY: longitude→cols, latitude→rows (NEVER swapped),
+// a categorical→detail, NO size/color measure. The template ships gated OFF
+// (fast_path_eligible=false, render_verified='none') until the orchestrator live-
+// render-stamps it, so these exercise the resolver via `withForcedEligible` — exactly
+// the blessed pattern for a stamped-pending code path (same as the scatter/pie forcings
+// above). The axis-swap regression is the #1 risk: the reversed-order case proves the
+// coordinate→axis assignment is name-driven, not schema-order-driven.
+describe('binder/classifyNoLlm — measure-free lat/long symbol map (Blake wall #2)', () => {
+  // pm_name + city are dimensions; latitude + longitude are the coordinate measures.
+  // NO other measure — a size/color measure would be needed by the old required slot.
+  const LATLON_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Offices'>
+      <column name='[pm_name]' role='dimension' type='nominal' datatype='string' />
+      <column name='[city]' role='dimension' type='nominal' datatype='string' />
+      <column name='[latitude]' role='measure' type='quantitative' datatype='real' />
+      <column name='[longitude]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+  // SAME fields, coordinate columns in REVERSED order (longitude BEFORE latitude) — the
+  // axis-swap regression lock: a schema-order binder would put longitude on rows here.
+  const LATLON_REVERSED_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Offices'>
+      <column name='[pm_name]' role='dimension' type='nominal' datatype='string' />
+      <column name='[city]' role='dimension' type='nominal' datatype='string' />
+      <column name='[longitude]' role='measure' type='quantitative' datatype='real' />
+      <column name='[latitude]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+  // Coordinate/point-location INTENT is present, but the two measures are unlabeled
+  // coordinate-ish fields — neither uniquely resolves to latitude or longitude. The
+  // resolver must fail closed (null → propose), never a blind role-greedy bind.
+  const AMBIGUOUS_COORD_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Sites'>
+      <column name='[office]' role='dimension' type='nominal' datatype='string' />
+      <column name='[X Coordinate]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Y Coordinate]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+  const LATLON = 'spatial-symbol-map-latlon';
+
+  it('binds spatial-symbol-map-latlon by coordinate affinity: longitude→cols, latitude→rows, ALL dims→detail, NO measure', () => {
+    const forced = withForcedEligible([LATLON]);
+    const s = summarizeSchema(LATLON_WORKBOOK_XML);
+    const cls = classifyNoLlm('Build me a Tableau map of the office locations', forced, s);
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe(LATLON);
+
+    const bySlot = Object.fromEntries(cls!.bindings.map((b) => [b.slot_id, b.field]));
+    expect(bySlot['longitude']).toBe('longitude');
+    expect(bySlot['latitude']).toBe('latitude');
+    // GRAIN: EVERY non-coordinate dimension lands on a detail slot so no marks collapse to
+    // an AVG-centroid — pm_name AND city, not city alone (26 offices stay 26 marks).
+    const detailFields = cls!.bindings
+      .filter((b) => b.slot_id.startsWith('detail'))
+      .map((b) => b.field)
+      .sort();
+    expect(detailFields).toEqual(['city', 'pm_name']);
+    // NO size/color measure is bound — the map is a static symbol map now.
+    expect(cls!.bindings.some((b) => b.slot_id === 'size_color_measure')).toBe(false);
+    // lon + lat + two detail dims = 4 bindings.
+    expect(cls!.bindings).toHaveLength(4);
+
+    // The axis roles are fixed by the manifest slot definitions: the longitude slot is
+    // on cols and the latitude slot is on rows. Binding the longitude field to the
+    // longitude slot therefore puts longitude on cols and latitude on rows.
+    const m = forced.get(LATLON)!;
+    expect(m.slots.find((sl) => sl.slot_id === 'longitude')!.role).toContain('cols');
+    expect(m.slots.find((sl) => sl.slot_id === 'latitude')!.role).toContain('rows');
+    // The removed measure slot must be gone from the manifest entirely.
+    expect(m.slots.some((sl) => sl.slot_id === 'size_color_measure')).toBe(false);
+  });
+
+  it('AXIS-SWAP PROOF: reversed coordinate-column order still binds longitude→cols, latitude→rows', () => {
+    const forced = withForcedEligible([LATLON]);
+    const s = summarizeSchema(LATLON_REVERSED_WORKBOOK_XML);
+    const cls = classifyNoLlm('Build me a Tableau map of the office locations', forced, s);
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe(LATLON);
+
+    const bySlot = Object.fromEntries(cls!.bindings.map((b) => [b.slot_id, b.field]));
+    // Regardless of the schema field order, the coordinate NAMES drive the axes.
+    expect(bySlot['longitude']).toBe('longitude');
+    expect(bySlot['latitude']).toBe('latitude');
+    const detailFields = cls!.bindings
+      .filter((b) => b.slot_id.startsWith('detail'))
+      .map((b) => b.field)
+      .sort();
+    expect(detailFields).toEqual(['city', 'pm_name']);
+    expect(cls!.bindings.some((b) => b.slot_id === 'size_color_measure')).toBe(false);
+  });
+
+  it('fails closed (null → propose) on an ambiguous geo ask with two unlabeled coordinate-ish measures', () => {
+    const forced = withForcedEligible([LATLON]);
+    const s = summarizeSchema(AMBIGUOUS_COORD_WORKBOOK_XML);
+    expect(classifyNoLlm('Build me a Tableau map of the office locations', forced, s)).toBeNull();
+  });
+
+  it('BACK-DOOR CLOSED: with 3+ dimensions the resolver declines AND the generic keyword loop must NOT bind latlon (no axis-swap/dropped-dim escape hatch)', () => {
+    // latlon carries generic map keywords ('map'/'symbol-map'/'spatial'); if it were left
+    // in the generic scoring loop, a resolver-declined ask could still win latlon by keyword
+    // and role-greedy-bind it — swapping axes or dropping a detail dim. The resolver fails
+    // closed on 3+ non-coordinate dims; classification as a whole MUST also fail closed here.
+    const threeDimCoordXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Offices'>
+      <column name='[pm_name]' role='dimension' type='nominal' datatype='string' />
+      <column name='[city]' role='dimension' type='nominal' datatype='string' />
+      <column name='[region]' role='dimension' type='nominal' datatype='string' />
+      <column name='[latitude]' role='measure' type='quantitative' datatype='real' />
+      <column name='[longitude]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const forced = withForcedEligible([LATLON]);
+    const s = summarizeSchema(threeDimCoordXml);
+    expect(classifyNoLlm('Build me a Tableau map of the office locations', forced, s)).toBeNull();
+  });
+
+  it('is LIVE in production: the committed manifest is render-stamped eligible and binds the office-map ask', () => {
+    // Render-stamped 2026-07-22 (live sing of the office-location ask, N=3: 16.3s/8.5s/14.7s,
+    // all confident single-BIND, judge 86). The committed manifest carries fast_path_eligible
+    // true + render_verified live-2026-07-22, so the resolver fires against the UN-forced
+    // manifest set — no test-only forcing needed anymore.
+    expect(manifests.get(LATLON)!.fast_path_eligible).toBe(true);
+    expect(manifests.get(LATLON)!.portability_evidence.render_verified).toBe('live-2026-07-22');
+    const s = summarizeSchema(LATLON_WORKBOOK_XML);
+    const cls = classifyNoLlm('Build me a Tableau map of the office locations', manifests, s);
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe(LATLON);
+    const detailFields = cls!.bindings
+      .filter((b) => b.slot_id.startsWith('detail'))
+      .map((b) => b.field)
+      .sort();
+    expect(detailFields).toEqual(['city', 'pm_name']);
+  });
+
+  it('does NOT hijack a plain geocoded map ask (no coordinate/point-location intent → generic path)', () => {
+    // "choropleth of Sales by Region" has no coordinate keyword and no point-location
+    // cue, so even with latlon forced eligible the resolver must not fire; the generic
+    // spatial path handles it (and here fails closed on non-geo Superstore-shaped dims,
+    // proving the resolver did not step in).
+    const forced = withForcedEligible([LATLON]);
+    const s = summarizeSchema(LATLON_WORKBOOK_XML);
+    // A non-coordinate map ask over a lat/lon schema must not bind latlon.
+    const cls = classifyNoLlm('choropleth of Sales by Region', forced, s);
+    expect(cls?.template).not.toBe(LATLON);
+  });
+});
+
 describe('binder/classifyNoLlm — binds calc-forced optional inputs (H3)', () => {
   // A single eligible template whose REQUIRED calc depends on an OPTIONAL slot m2.
   // The no-LLM role-greedy binder must still fill m2 (a required calc forces it),

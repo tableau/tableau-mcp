@@ -393,7 +393,7 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
     }
   });
 
-  it('the fast-path eligible set is exactly the twenty-three live-proven templates', () => {
+  it('the fast-path eligible set is exactly the twenty-four live-proven templates', () => {
     // W59 template-sync: the seven missing fast-path XMLs were ported from the factory
     // (a2td) with their manifests. fast_path_eligible / render_verified TRAVEL UNCHANGED
     // from the factory (no stamps minted in transit): the factory's 2026-07-06 stamp wave
@@ -411,6 +411,12 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
     // XML hashes — 20 → 23. connected-scatterplot dropped its bare 'scatter' keyword and
     // ranking-dot-strip-plot dropped bare 'strip-plot' on becoming eligible, so the
     // canonical scatter/strip-plot nouns keep a single carrier (see carrier-uniqueness).
+    // Blake wall #2 render-stamp: spatial-symbol-map-latlon (the measure-free real-
+    // coordinate symbol map) crossed with live 2026-07-22 evidence — 23 → 24. Proven by a
+    // live sing of the office-location ask N=3 (16.3s/8.5s/14.7s, all confident single-BIND,
+    // judge 86; before the fix: 420s timeout, BIND->XMLAPPLY->BIND x5). It binds via the
+    // dedicated resolveLatLonSymbolMap coordinate-affinity path only (resolver-only; excluded
+    // from generic keyword scoring), so it carries generic map keywords without wrong-binding.
     // Other templates either ship propose-only (render_verified none) or retain a
     // separate blocker despite render evidence (for example histogram bin-width tuning).
     const eligible = [...manifests.values()]
@@ -440,6 +446,7 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
         'slope-chart',
         'spatial-choropleth-map',
         'spatial-symbol-map',
+        'spatial-symbol-map-latlon',
         'trend-line-chart',
         'ww-ou-arrow',
       ].sort(),
