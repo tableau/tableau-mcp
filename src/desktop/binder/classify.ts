@@ -672,11 +672,64 @@ function uniqueCoordinateField(
  *   - the ask carries coordinate/point-location intent (askHasCoordinateOrPointIntent);
  *   - EXACTLY ONE latitude-affine quantitative field AND EXACTLY ONE longitude-affine one,
  *     and they are DISTINCT (a field named "lat_long" that matched both → ambiguous → null);
- *   - EXACTLY ONE categorical dimension for the detail slot (0 → nothing to grain by;
- *     2+ → ambiguous which detail, fail closed).
+ *   - AT LEAST ONE categorical for detail (0 → nothing to grain by → fail closed). 1–2
+ *     categoricals bind all (clean schema, no collapse). 3+ (a real WIDE schema) → narrow to
+ *     the single best label dim via pickBestDetailDim; a scoring tie → fail closed.
  * The axis assignment is by NAME (longitude→cols, latitude→rows), never schema order, so a
  * reversed-order schema binds identically — the axis-swap regression is impossible here.
  */
+
+/** Technical/attribute tokens that mark a field as NOT the map's identifying label. */
+const NON_LABEL_DETAIL_TOKENS: ReadonlySet<string> = new Set([
+  'id',
+  'code',
+  'hex',
+  'url',
+  'uri',
+  'emoji',
+  'source',
+  'key',
+  'guid',
+  'uuid',
+  'api',
+]);
+
+/**
+ * Pick the single best DETAIL (mark-identity) dimension from a WIDE schema's categoricals
+ * (3+), so a real-world map (team_id, team_api_id, group_name, country_code, team_name, …)
+ * binds a confident single map gained by ONE label rather than failing closed. The mark
+ * identity is one label dimension, not every descriptive attribute. Scoring (Sol-specced):
+ *   +2  a token overlaps the ask (e.g. "team" in "World Cup team locations" ↔ team_name)
+ *   +1  a label-like `name` token
+ *   −2  per technical token (id/code/hex/url/emoji/source/…) — these are not the grain
+ * Returns the unique top scorer; null on a TIE (ambiguous grain → caller fails closed —
+ * a wrong grain is worse than an honest propose). Never returns a coordinate field (the
+ * caller passes categoricals only, and coords are measures).
+ */
+function pickBestDetailDim(
+  categoricals: SchemaField[],
+  rawAsk: string,
+  maskedAsk: string,
+): SchemaField | null {
+  const scoreOf = (f: SchemaField): number => {
+    const toks = new Set([...nameTokens(f.name), ...nameTokens(bareName(f.columnName))]);
+    let score = 0;
+    for (const t of toks) {
+      if (NON_LABEL_DETAIL_TOKENS.has(t)) score -= 2;
+      if (t === 'name') score += 1;
+      // token appears in the ask (raw or masked) → strong signal it names the intended grain
+      if (phraseIndexInAsk(rawAsk, t) >= 0 || phraseIndexInAsk(maskedAsk, t) >= 0) score += 2;
+    }
+    return score;
+  };
+  const ranked = categoricals
+    .map((f) => ({ f, score: scoreOf(f) }))
+    .sort((a, b) => b.score - a.score);
+  if (ranked.length < 2) return ranked[0]?.f ?? null;
+  if (ranked[0].score === ranked[1].score) return null; // tie → ambiguous → fail closed
+  return ranked[0].f;
+}
+
 function resolveLatLonSymbolMap(
   m: TemplateManifest,
   rawAsk: string,
@@ -689,15 +742,24 @@ function resolveLatLonSymbolMap(
   const lon = uniqueCoordinateField(summary.fields, LONGITUDE_TOKENS);
   if (!lat || !lon || lat === lon) return null; // 0/2+/collision → fail closed
 
-  // GRAIN: bind EVERY non-coordinate dimension to a detail slot, in deterministic schema
-  // order. The template AVG-aggregates the coordinates, so a mark collapses to a per-member
-  // centroid for any dimension NOT on detail — binding one of two dimensions (e.g. city but
-  // not pm_name) would blob every office in a city onto one AVG point (the blank-centroid
-  // wrong-bind). One dimension → detail1 only (detail2 pruned). Two → both. Zero → nothing
-  // to grain by. THREE+ exceeds this template's two-slot capacity, and dropping any dim
-  // re-introduces the collapse, so fail closed to propose rather than silently under-grain.
-  const detailDims = summary.fields.filter(isCategorical);
-  if (detailDims.length < 1 || detailDims.length > 2) return null; // 0 or 3+ → fail closed
+  // GRAIN: bind the identifying non-coordinate dimension(s) to detail. The template
+  // AVG-aggregates the coordinates, so a mark collapses to a per-member centroid for any
+  // grain dimension NOT on detail. Zero categoricals → nothing to grain by → fail closed.
+  const categoricals = summary.fields.filter(isCategorical);
+  if (categoricals.length < 1) return null;
+  // 1–2 categoricals: bind them all (a clean map schema — pm_name+city — must keep both so
+  // no mark collapses). 3+ (a REAL wide schema — team_id/team_api_id/group_name/country_code/
+  // team_name): the mark identity is ONE label dimension, not every descriptive attribute;
+  // narrow to the single best detail dim rather than fail closed (real map data is always
+  // wide). Ties (no clear winner) still fail closed — a wrong grain is worse than a propose.
+  let detailDims: SchemaField[];
+  if (categoricals.length <= 2) {
+    detailDims = categoricals;
+  } else {
+    const best = pickBestDetailDim(categoricals, rawAsk, maskedAsk);
+    if (!best) return null; // ambiguous grain (tie) → fail closed
+    detailDims = [best];
+  }
 
   // Map by SLOT ROLE/ID, not slot order: longitude→the cols slot, latitude→the rows slot,
   // and the non-coordinate dims → the detail slots in order. Guards against a manifest
