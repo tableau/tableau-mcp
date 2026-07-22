@@ -1,26 +1,27 @@
 import { z } from 'zod';
 
-import { ExtractRefreshTask } from '../../../sdks/tableau/types/extractRefreshTask.js';
+import { FlowRunTask } from '../../../../sdks/tableau/types/flowRunTask.js';
 import {
   applyClientSideFilters,
   matchesClientSideFilter,
-} from '../../../utils/clientSideFilter.js';
+} from '../../../../utils/clientSideFilter.js';
 import {
   FilterOperator,
   FilterOperatorSchema,
   parseAndValidateFilterString,
-} from '../../../utils/parseAndValidateFilterString.js';
+} from '../../../../utils/parseAndValidateFilterString.js';
 
-// === Field and Operator Definitions ===
-// Client-side filtering for extract refresh tasks (API doesn't support server-side filtering)
+// Client-side filtering for flow run tasks. The Tableau "Get Flow Run Tasks"
+// endpoint (GET /sites/:siteId/tasks/runFlow) does not support server-side
+// filtering or pagination, so all tasks are fetched and filtered here.
 
 const FilterFieldSchema = z.enum([
   'id',
   'type',
   'priority',
   'consecutiveFailedCount',
-  'datasource.id',
-  'workbook.id',
+  'flow.id',
+  'flow.name',
   'schedule.id',
   'schedule.name',
   'schedule.state',
@@ -37,8 +38,8 @@ const allowedOperatorsByField: Record<FilterField, FilterOperator[]> = {
   type: ['eq', 'in'],
   priority: ['eq', 'gt', 'gte', 'lt', 'lte'],
   consecutiveFailedCount: ['eq', 'gt', 'gte', 'lt', 'lte'],
-  'datasource.id': ['eq', 'in'],
-  'workbook.id': ['eq', 'in'],
+  'flow.id': ['eq', 'in'],
+  'flow.name': ['eq', 'in'],
   'schedule.id': ['eq', 'in'],
   'schedule.name': ['eq', 'in'],
   'schedule.state': ['eq', 'in'],
@@ -56,7 +57,7 @@ const _FilterExpressionSchema = z.object({
 
 type FilterExpression = z.infer<typeof _FilterExpressionSchema>;
 
-export function parseAndValidateExtractRefreshTasksFilterString(filterString: string): string {
+export function parseAndValidateFlowTasksFilterString(filterString: string): string {
   return parseAndValidateFilterString<FilterField, FilterExpression>({
     filterString,
     allowedOperatorsByField,
@@ -65,22 +66,25 @@ export function parseAndValidateExtractRefreshTasksFilterString(filterString: st
 }
 
 /**
- * Apply client-side filtering to extract refresh tasks based on filter expressions.
- * Supports field:operator:value syntax (e.g., "schedule.frequency:eq:Daily")
+ * Apply client-side filtering to flow run tasks based on filter expressions.
+ * Supports field:operator:value syntax (e.g., "schedule.frequency:eq:Daily").
+ * The `in` operator accepts the repo-canonical bracket/comma list
+ * (e.g. "schedule.state:in:[Active,Suspended]") as well as the legacy
+ * pipe-delimited form ("schedule.state:in:Active|Suspended").
  */
-export function applyTaskFilters(
-  tasks: ExtractRefreshTask[],
+export function applyFlowTaskFilters(
+  tasks: FlowRunTask[],
   filterString: string | undefined,
-): ExtractRefreshTask[] {
+): FlowRunTask[] {
   return applyClientSideFilters({
     items: tasks,
     filterString,
-    validateFilterString: parseAndValidateExtractRefreshTasksFilterString,
+    validateFilterString: parseAndValidateFlowTasksFilterString,
     getFieldValue,
   });
 }
 
-function getFieldValue(task: ExtractRefreshTask, field: FilterField): string | number | undefined {
+function getFieldValue(task: FlowRunTask, field: FilterField): string | number | undefined {
   switch (field) {
     case 'id':
       return task.id;
@@ -90,10 +94,10 @@ function getFieldValue(task: ExtractRefreshTask, field: FilterField): string | n
       return task.priority;
     case 'consecutiveFailedCount':
       return task.consecutiveFailedCount;
-    case 'datasource.id':
-      return task.datasource?.id;
-    case 'workbook.id':
-      return task.workbook?.id;
+    case 'flow.id':
+      return task.flow?.id;
+    case 'flow.name':
+      return task.flow?.name;
     case 'schedule.id':
       return task.schedule?.id;
     case 'schedule.name':
@@ -115,7 +119,7 @@ function getFieldValue(task: ExtractRefreshTask, field: FilterField): string | n
 
 export const exportedForTesting = {
   FilterFieldSchema,
-  applyTaskFilters,
+  applyFlowTaskFilters,
   getFieldValue,
   matchesFilter: matchesClientSideFilter,
 };
