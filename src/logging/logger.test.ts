@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getFileLogger } from './fileLogger.js';
-import { log, parseLogLevel, shouldLog } from './logger.js';
+import { log, Logger, parseLogLevel, shouldLog } from './logger.js';
 import { parseLoggerTypes } from './loggerType.js';
 
 vi.mock('./fileLogger.js', () => ({
@@ -56,13 +56,14 @@ describe('parseLoggerTypes', () => {
 
 describe('log', () => {
   const entry = { message: 'test message', level: 'info' as const, logger: 'test' };
+  const entryWithLuids = { ...entry, site_luid: '', user_luid: '' };
 
   it('should write JSON to stderr when transport is stdio and appLogger is enabled', () => {
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
     log(entry);
 
-    expect(stderrSpy).toHaveBeenCalledWith(JSON.stringify(entry) + '\n');
+    expect(stderrSpy).toHaveBeenCalledWith(JSON.stringify(entryWithLuids) + '\n');
   });
 
   it('should write JSON to console.log when transport is http and appLogger is enabled', () => {
@@ -73,7 +74,7 @@ describe('log', () => {
 
     log(entry);
 
-    expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(entry));
+    expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(entryWithLuids));
   });
 
   it('should not write to stderr or console when appLogger is not enabled', () => {
@@ -96,7 +97,7 @@ describe('log', () => {
     log(entry);
 
     expect(getFileLogger).toHaveBeenCalled();
-    expect(mockLog).toHaveBeenCalledWith(entry);
+    expect(mockLog).toHaveBeenCalledWith(entryWithLuids);
   });
 
   it('should not route to file logger when fileLogger is not enabled', () => {
@@ -247,5 +248,60 @@ describe('shouldLog', () => {
     expect(shouldLog('debug', 'debug')).toBe(true);
     expect(shouldLog('info', 'debug')).toBe(true);
     expect(shouldLog('error', 'debug')).toBe(true);
+  });
+});
+
+describe('Logger LUID fields', () => {
+  let stdout: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.stubEnv('TRANSPORT', 'http'); // route appLogger to console.log
+    vi.stubEnv('ENABLED_LOGGERS', 'appLogger');
+    vi.stubEnv('LOG_LEVEL', 'debug');
+    stdout = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  const lastLine = (): Record<string, unknown> =>
+    JSON.parse(stdout.mock.calls.at(-1)![0] as string);
+
+  it('free log() always emits empty LUID fields', () => {
+    log({ message: 'hi', level: 'info', logger: 'test' });
+    expect(lastLine()).toMatchObject({ message: 'hi', site_luid: '', user_luid: '' });
+  });
+
+  it('bound child logger emits populated LUID fields', () => {
+    const bound = new Logger().child({
+      getSiteLuid: () => 'site-1',
+      getUserLuid: () => 'user-1',
+    });
+    bound.log({ message: 'hi', level: 'info', logger: 'test' });
+    expect(lastLine()).toMatchObject({ site_luid: 'site-1', user_luid: 'user-1' });
+  });
+
+  it('reflects lazily backfilled LUIDs (getter value changes after construction)', () => {
+    let site = '';
+    const bound = new Logger().child({ getSiteLuid: () => site, getUserLuid: () => '' });
+    bound.log({ message: 'before', level: 'info', logger: 'test' });
+    expect(lastLine()).toMatchObject({ site_luid: '' });
+    site = 'site-late';
+    bound.log({ message: 'after', level: 'info', logger: 'test' });
+    expect(lastLine()).toMatchObject({ site_luid: 'site-late' });
+  });
+
+  it('injected LUID fields override caller-supplied values', () => {
+    const bound = new Logger().child({ getSiteLuid: () => 'real', getUserLuid: () => 'real-u' });
+    bound.log({
+      message: 'x',
+      level: 'info',
+      logger: 'test',
+      // @ts-expect-error caller must not be able to spoof LUIDs
+      site_luid: 'spoofed',
+    });
+    expect(lastLine()).toMatchObject({ site_luid: 'real' });
   });
 });
