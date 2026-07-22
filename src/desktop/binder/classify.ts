@@ -718,6 +718,12 @@ const COARSE_GRAIN_TOKENS: ReadonlySet<string> = new Set([
   'band',
 ]);
 
+const FEDERATED_DATA_FILE_SUFFIX_RE = /\s+\([^)]+\.(?:csv|xlsx|xls|hyper|json|txt|tde)\)$/i;
+
+function federatedDuplicateBaseName(name: string): string {
+  return name.replace(FEDERATED_DATA_FILE_SUFFIX_RE, '');
+}
+
 /**
  * Pick the single best DETAIL (mark-identity) dimension from a WIDE schema's categoricals
  * (3+), so a real-world map (team_id, team_api_id, group_name, country_code, team_name, …)
@@ -766,11 +772,22 @@ function pickBestDetailDim(
   if (ranked.length === 0) return null;
   // The winner must be a POSITIVE, UNIQUE fine label. A non-positive top means no field
   // read as a clean per-mark label (all coarse/technical/neutral) → ambiguous grain → fail
-  // closed. A tie at the top → can't tell which is the mark identity → fail closed. Only a
-  // clear, positive, single winner binds (a wrong grain silently centroid-collapses; propose
-  // is safer).
+  // closed. A tie at the top → can't tell which is the mark identity → fail closed, except
+  // Tableau federated-join duplicates that differ only by a known data-file suffix
+  // (`Team Name`, `Team Name (Players.Csv)`, ...). Those are the same logical field; prefer
+  // the base unsuffixed column. Only a clear, positive, single winner binds (a wrong grain
+  // silently centroid-collapses; propose is safer).
   if (ranked[0].score <= 0) return null;
-  if (ranked.length > 1 && ranked[0].score === ranked[1].score) return null;
+  if (ranked.length > 1 && ranked[0].score === ranked[1].score) {
+    const topScore = ranked[0].score;
+    const tied = ranked.filter((r) => r.score === topScore).map((r) => r.f);
+    const bases = new Set(tied.map((f) => federatedDuplicateBaseName(f.name)));
+    if (bases.size !== 1) return null;
+    const [base] = bases;
+    const unsuffixed = tied.filter((f) => f.name === base);
+    if (unsuffixed.length !== 1) return null;
+    return unsuffixed[0];
+  }
   return ranked[0].f;
 }
 

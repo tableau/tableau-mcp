@@ -248,7 +248,76 @@ describe('binder/classifyNoLlm — measure-free lat/long symbol map (Blake wall 
   </datasources>
 </workbook>`;
 
+  const FEDERATED_WORLDCUP_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='federated.114zfjw1eykx4i1auxu8o1tcqq5m'>
+      <column name='[caps]' caption='Caps' role='measure' type='quantitative' datatype='integer' />
+      <column name='[club]' caption='Club' role='dimension' type='nominal' datatype='string' />
+      <column name='[color_hex]' caption='Color Hex' role='dimension' type='nominal' datatype='string' />
+      <column name='[country_code]' caption='Country Code' role='dimension' type='nominal' datatype='string' semantic-role='[Country].[ISO3166_2]' />
+      <column name='[date_of_birth]' caption='Date Of Birth' role='dimension' type='nominal' datatype='string' />
+      <column name='[drawn]' caption='Drawn' role='measure' type='quantitative' datatype='integer' />
+      <column name='[flag_emoji]' caption='Flag Emoji' role='dimension' type='nominal' datatype='string' />
+      <column name='[flag_url]' caption='Flag Url' role='dimension' type='nominal' datatype='string' />
+      <column name='[form]' caption='Form' role='dimension' type='nominal' datatype='string' />
+      <column name='[goal_difference]' caption='Goal Difference' role='measure' type='quantitative' datatype='integer' />
+      <column name='[goals]' caption='Goals' role='measure' type='quantitative' datatype='integer' />
+      <column name='[goals_against]' caption='Goals Against' role='measure' type='quantitative' datatype='integer' />
+      <column name='[goals_for]' caption='Goals For' role='measure' type='quantitative' datatype='integer' />
+      <column name='[group_name (players.csv)]' caption='Group Name (Players.Csv)' role='dimension' type='nominal' datatype='string' />
+      <column name='[group_name (standings.csv)]' caption='Group Name (Standings.Csv)' role='dimension' type='nominal' datatype='string' />
+      <column name='[group_name]' caption='Group Name' role='dimension' type='nominal' datatype='string' />
+      <column name='[latitude]' caption='Latitude' role='measure' type='quantitative' datatype='real' semantic-role='[Geographical].[Latitude]' />
+      <column name='[longitude]' caption='Longitude' role='measure' type='quantitative' datatype='real' semantic-role='[Geographical].[Longitude]' />
+      <column name='[lost]' caption='Lost' role='measure' type='quantitative' datatype='integer' />
+      <column name='[played]' caption='Played' role='measure' type='quantitative' datatype='integer' />
+      <column name='[player_name]' caption='Player Name' role='dimension' type='nominal' datatype='string' />
+      <column name='[points]' caption='Points' role='measure' type='quantitative' datatype='integer' />
+      <column name='[position]' caption='Position' role='dimension' type='nominal' datatype='string' />
+      <column name='[qualification_status]' caption='Qualification Status' role='dimension' type='nominal' datatype='string' />
+      <column name='[rank]' caption='Rank' role='measure' type='quantitative' datatype='integer' />
+      <column name='[remaining_matches]' caption='Remaining Matches' role='measure' type='quantitative' datatype='integer' />
+      <column name='[shirt_number]' caption='Shirt Number' role='dimension' type='ordinal' datatype='integer' />
+      <column name='[snapshot_time]' caption='Snapshot Time' role='dimension' type='ordinal' datatype='datetime' />
+      <column name='[source (players.csv)]' caption='Source (Players.Csv)' role='dimension' type='nominal' datatype='string' />
+      <column name='[source (standings.csv)]' caption='Source (Standings.Csv)' role='dimension' type='nominal' datatype='string' />
+      <column name='[source]' caption='Source' role='dimension' type='nominal' datatype='string' />
+      <column name='[status]' caption='Status' role='dimension' type='nominal' datatype='string' />
+      <column name='[team_api_id (players.csv)]' caption='Team Api Id (Players.Csv)' role='dimension' type='ordinal' datatype='integer' />
+      <column name='[team_api_id (standings.csv)]' caption='Team Api Id (Standings.Csv)' role='dimension' type='ordinal' datatype='integer' />
+      <column name='[team_api_id]' caption='Team Api Id' role='dimension' type='ordinal' datatype='integer' />
+      <column name='[team_id (players.csv)]' caption='Team Id (Players.Csv)' role='dimension' type='nominal' datatype='string' />
+      <column name='[team_id (standings.csv)]' caption='Team Id (Standings.Csv)' role='dimension' type='nominal' datatype='string' />
+      <column name='[team_id]' caption='Team Id' role='dimension' type='nominal' datatype='string' />
+      <column name='[team_name (players.csv)]' caption='Team Name (Players.Csv)' role='dimension' type='nominal' datatype='string' />
+      <column name='[team_name (standings.csv)]' caption='Team Name (Standings.Csv)' role='dimension' type='nominal' datatype='string' />
+      <column name='[team_name]' caption='Team Name' role='dimension' type='nominal' datatype='string' />
+      <column name='[won]' caption='Won' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
   const LATLON = 'spatial-symbol-map-latlon';
+
+  function latlonWorkbookXmlWithDimensions(dimensions: string[]): string {
+    const dimensionColumns = dimensions
+      .map(
+        (name) =>
+          `      <column name='[${name}]' role='dimension' type='nominal' datatype='string' />`,
+      )
+      .join('\n');
+    return `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Sites'>
+${dimensionColumns}
+      <column name='[latitude]' role='measure' type='quantitative' datatype='real' />
+      <column name='[longitude]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+  }
 
   it('binds spatial-symbol-map-latlon by coordinate affinity: longitude→cols, latitude→rows, ALL dims→detail, NO measure', () => {
     const forced = withForcedEligible([LATLON]);
@@ -340,6 +409,69 @@ describe('binder/classifyNoLlm — measure-free lat/long symbol map (Blake wall 
       .map((b) => b.field);
     // exactly ONE detail dim, and it is the label (team_name) — not id/code/group noise.
     expect(detailFields).toEqual(['team_name']);
+  });
+
+  it('FEDERATED REAL SCHEMA: duplicate suffixed team-name fields bind the base Team Name detail', () => {
+    const s = summarizeSchema(FEDERATED_WORLDCUP_WORKBOOK_XML);
+    expect(s.fields).toHaveLength(42);
+    const cls = classifyNoLlm('Symbol map showing team locations, one mark per team', manifests, s);
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe(LATLON);
+    const bySlot = Object.fromEntries(cls!.bindings.map((b) => [b.slot_id, b.field]));
+    expect(bySlot['longitude']).toBe('Longitude');
+    expect(bySlot['latitude']).toBe('Latitude');
+    const detailFields = cls!.bindings
+      .filter((b) => b.slot_id.startsWith('detail'))
+      .map((b) => b.field);
+    expect(detailFields).toEqual(['Team Name']);
+  });
+
+  it('fails closed on dotted version parentheticals that are not Tableau data-file suffixes', () => {
+    const s = summarizeSchema(
+      latlonWorkbookXmlWithDimensions(['Site', 'Site (CRM.v1)', 'Site (ERP.v2)']),
+    );
+
+    expect(classifyNoLlm('map site locations', manifests, s)).toBeNull();
+  });
+
+  it('fails closed on dotted geography parentheticals that are not Tableau data-file suffixes', () => {
+    const s = summarizeSchema(
+      latlonWorkbookXmlWithDimensions(['Territory', 'Territory (U.S.)', 'Territory (E.U.)']),
+    );
+
+    expect(classifyNoLlm('map territory locations', manifests, s)).toBeNull();
+  });
+
+  it('fails closed on Region plus non-source parentheticals', () => {
+    const s = summarizeSchema(
+      latlonWorkbookXmlWithDimensions(['Region', 'Region (U.S.)', 'Region (World)']),
+    );
+
+    expect(classifyNoLlm('map region locations', manifests, s)).toBeNull();
+  });
+
+  it('fails closed when only part of a tied detail cluster collapses to one base', () => {
+    const s = summarizeSchema(
+      latlonWorkbookXmlWithDimensions([
+        'Team Name',
+        'Team Name (Players.csv)',
+        'Venue Name',
+      ]),
+    );
+
+    expect(classifyNoLlm('map team venue name locations', manifests, s)).toBeNull();
+  });
+
+  it('fails closed on suffixed federated duplicates without an unsuffixed base field', () => {
+    const s = summarizeSchema(
+      latlonWorkbookXmlWithDimensions([
+        'Team Name (Players.csv)',
+        'Team Name (Standings.csv)',
+        'team_id',
+      ]),
+    );
+
+    expect(classifyNoLlm('map team name locations', manifests, s)).toBeNull();
   });
 
   it('COARSE dim named in the ask does NOT win detail over the fine label (no centroid collapse)', () => {
