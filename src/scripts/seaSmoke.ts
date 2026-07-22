@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
 
 import { spawn } from 'child_process';
+import { createInterface } from 'readline';
 
 type JsonObject = Record<string, unknown>;
 
@@ -51,10 +52,7 @@ const resourcesListRequest = {
 export function buildMcpHandshakeInput(
   options: Pick<SmokeOptions, 'minKnowledgeResources' | 'knowledgeSearchQuery'> = {},
 ): string {
-  const messages: JsonObject[] = [initializeRequest, toolsListRequest];
-  if (options.minKnowledgeResources !== undefined || options.knowledgeSearchQuery !== undefined) {
-    messages.splice(1, 0, initializedNotification);
-  }
+  const messages: JsonObject[] = [initializeRequest, initializedNotification, toolsListRequest];
   if (options.minKnowledgeResources !== undefined) {
     messages.push(resourcesListRequest);
   }
@@ -282,37 +280,121 @@ export async function runSeaSmoke({
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
-  let stdout = '';
   let stderr = '';
   let timedOut = false;
 
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (chunk: string) => {
-    stdout += chunk;
-  });
   child.stderr.on('data', (chunk: string) => {
     stderr += chunk;
+  });
+
+  const outputLines: string[] = [];
+  const pending = new Map<
+    number,
+    {
+      resolve: (message: JsonObject) => void;
+      reject: (error: Error) => void;
+    }
+  >();
+
+  const rejectPending = (error: Error): void => {
+    for (const { reject } of pending.values()) reject(error);
+    pending.clear();
+  };
+
+  const stdoutLines = createInterface({ input: child.stdout });
+  stdoutLines.on('line', (line) => {
+    if (!line.trim()) return;
+    outputLines.push(line);
+
+    let message: JsonObject;
+    try {
+      message = parseJsonLine(line);
+    } catch (error) {
+      rejectPending(error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
+
+    if (typeof message.id !== 'number') return;
+    const waiter = pending.get(message.id);
+    if (!waiter) return;
+    pending.delete(message.id);
+    waiter.resolve(message);
   });
 
   const closePromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
     (resolve, reject) => {
       child.once('error', reject);
-      child.once('close', (code, signal) => resolve({ code, signal }));
+      child.once('close', (code, signal) => {
+        const error = new Error(
+          `SEA smoke process closed before all responses arrived (code ${String(code)} signal ${String(signal)})`,
+        );
+        rejectPending(error);
+        resolve({ code, signal });
+      });
     },
   );
+
+  const awaitResponse = async (id: number): Promise<JsonObject> => {
+    return await new Promise<JsonObject>((resolve, reject) => {
+      pending.set(id, { resolve, reject });
+    });
+  };
+
+  const writeMessage = (message: JsonObject): void => {
+    child.stdin.write(`${JSON.stringify(message)}\n`);
+  };
+
+  const writeRequestAndAwait = async (message: JsonObject, id: number): Promise<void> => {
+    const response = awaitResponse(id);
+    writeMessage(message);
+    await response;
+  };
+
+  const exchange = async (): Promise<void> => {
+    await writeRequestAndAwait(initializeRequest, 1);
+    writeMessage(initializedNotification);
+    await writeRequestAndAwait(toolsListRequest, 2);
+    if (minKnowledgeResources !== undefined) {
+      await writeRequestAndAwait(resourcesListRequest, 3);
+    }
+    if (knowledgeSearchQuery !== undefined) {
+      await writeRequestAndAwait(
+        {
+          jsonrpc: '2.0',
+          id: 4,
+          method: 'tools/call',
+          params: {
+            name: 'search-knowledge',
+            arguments: { query: knowledgeSearchQuery, limit: 3 },
+          },
+        },
+        4,
+      );
+    }
+    child.stdin.end();
+  };
 
   const timeout = setTimeout(() => {
     timedOut = true;
     child.kill();
   }, timeoutMs);
 
-  child.stdin.end(buildMcpHandshakeInput({ minKnowledgeResources, knowledgeSearchQuery }));
+  try {
+    await exchange();
+  } catch (error) {
+    child.kill();
+    clearTimeout(timeout);
+    if (timedOut) {
+      throw new Error(`SEA smoke timed out after ${timeoutMs}ms. stderr: ${stderr.trim()}`);
+    }
+    throw error;
+  }
 
   const { code, signal } = await closePromise;
   clearTimeout(timeout);
 
-  const outputLines = stdout.split(/\r?\n/).filter((line) => line.trim());
   if (timedOut) {
     throw new Error(`SEA smoke timed out after ${timeoutMs}ms. stderr: ${stderr.trim()}`);
   }
