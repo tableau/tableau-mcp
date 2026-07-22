@@ -5,7 +5,10 @@ import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import * as validationRegistry from '../../validation/registry.js';
 import { loadWorkbookXml } from './loadWorkbookXml.js';
 
-vi.mock('../../validation/registry.js');
+vi.mock('../../validation/registry.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../validation/registry.js')>();
+  return { ...actual, runValidation: vi.fn() };
+});
 
 describe('loadWorkbookXml (External Client API transport)', () => {
   const mockSignal = new AbortController().signal;
@@ -160,5 +163,73 @@ describe('loadWorkbookXml (External Client API transport)', () => {
 
     expect(result.isOk()).toBe(true);
     expect(appliedXml).toEqual([validXml]);
+  });
+
+  it('Miller World Cup repro: telemetry-only parameter findings never block auto-apply', async () => {
+    const telemetryIssues = [
+      {
+        ruleId: 'calc-field-names',
+        severity: 'warning' as const,
+        message:
+          'Non-standard internal name detected (telemetry only): [Parameter 1]. If this field works correctly in Tableau, this warning can be ignored.',
+      },
+      {
+        ruleId: 'calc-field-names',
+        severity: 'info' as const,
+        message:
+          'Non-standard internal name detected (telemetry only): [Parameter 2]. If this field works correctly in Tableau, this warning can be ignored.',
+      },
+    ];
+    vi.spyOn(validationRegistry, 'runValidation').mockReturnValue({
+      // Reproduce the inconsistent aggregate observed by the live apply boundary:
+      // issue severity remains authoritative for deciding whether apply is safe.
+      valid: false,
+      issues: telemetryIssues,
+    });
+    const { executor, appliedXml } = dispatchingExecutor();
+
+    const result = await loadWorkbookXml({ xml: validXml, executor, signal: mockSignal });
+
+    expect(result.isOk()).toBe(true);
+    expect(appliedXml).toEqual([validXml]);
+    if (result.isOk()) {
+      expect(result.value.validationWarnings).toEqual(telemetryIssues);
+    }
+  });
+
+  it('returns only real blocking errors when warnings accompany a failed preflight', async () => {
+    vi.spyOn(validationRegistry, 'runValidation').mockReturnValue({
+      valid: false,
+      issues: [
+        {
+          ruleId: 'calc-field-names',
+          severity: 'warning',
+          message: 'Non-standard internal name detected (telemetry only): [Parameter 1].',
+        },
+        {
+          ruleId: 'worksheet-missing-window',
+          severity: 'error',
+          message: 'Worksheet "Sheet 1" has no matching window.',
+        },
+      ],
+    });
+
+    const result = await loadWorkbookXml({
+      xml: validXml,
+      executor: {} as unknown as ToolExecutor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-workbook-xml-error');
+      invariant(result.error.error.type === 'validation-failed');
+      expect(result.error.error.issues).toEqual([
+        expect.objectContaining({
+          ruleId: 'worksheet-missing-window',
+          severity: 'error',
+        }),
+      ]);
+    }
   });
 });

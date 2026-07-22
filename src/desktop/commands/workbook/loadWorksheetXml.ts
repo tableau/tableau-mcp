@@ -15,7 +15,7 @@ import {
   type ReadbackVerificationResult,
   verifyWorksheetReadback,
 } from '../../validation/readback-verify.js';
-import { runValidation } from '../../validation/registry.js';
+import { blockingValidationIssues, runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { xmlNamesEqual } from '../../xmlElement.js';
 import { withApplyLock } from './applyMutex.js';
@@ -219,21 +219,22 @@ export async function loadWorksheetXml({
   }
 
   const validation = runValidation(xml, 'worksheet');
-  if (!validation.valid) {
+  const blockingIssues = blockingValidationIssues(validation.issues);
+  if (blockingIssues.length > 0) {
     log({
       level: 'error',
       message: 'Preflight validation failed — worksheet XML not sent to Tableau',
       logger: 'worksheetCommands',
       data: {
         worksheetName,
-        issues: validation.issues,
+        issues: blockingIssues,
         xmlPreview: sanitize(xml),
       },
     });
 
     return Err({
       type: 'load-worksheet-xml-error',
-      error: { type: 'validation-failed', issues: validation.issues },
+      error: { type: 'validation-failed', issues: blockingIssues },
     });
   }
 
@@ -311,7 +312,8 @@ async function loadWorksheetXmlViaExternalApi({
     }
 
     const workbookDocValidation = runValidation(workbookDoc, 'workbook');
-    if (!workbookDocValidation.valid) {
+    const workbookBlockingIssues = blockingValidationIssues(workbookDocValidation.issues);
+    if (workbookBlockingIssues.length > 0) {
       log({
         level: 'error',
         message:
@@ -319,14 +321,14 @@ async function loadWorksheetXmlViaExternalApi({
         logger: 'worksheetCommands',
         data: {
           worksheetName,
-          issues: workbookDocValidation.issues,
+          issues: workbookBlockingIssues,
           xmlPreview: sanitize(workbookDoc),
         },
       });
 
       return Err({
         type: 'load-worksheet-xml-error',
-        error: { type: 'validation-failed', issues: workbookDocValidation.issues },
+        error: { type: 'validation-failed', issues: workbookBlockingIssues },
       });
     }
 

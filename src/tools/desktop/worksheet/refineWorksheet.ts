@@ -29,7 +29,7 @@ import {
 } from '../../../desktop/refine/refineWorksheet.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
-import { runValidation } from '../../../desktop/validation/registry.js';
+import { blockingValidationIssues, runValidation } from '../../../desktop/validation/registry.js';
 import { ValidationIssue } from '../../../desktop/validation/types.js';
 import { parseOuterElement } from '../../../desktop/xmlElement.js';
 import {
@@ -230,11 +230,12 @@ export const getRefineWorksheetTool = (
 
           // 4. Preflight validation — an error-severity issue means we do NOT apply.
           const validation = runValidation(prepared, 'worksheet');
-          if (!validation.valid) {
+          const blockingIssues = blockingValidationIssues(validation.issues);
+          if (blockingIssues.length > 0) {
             return refusal(
               operation,
               canonicalWorksheetName,
-              `preflight validation failed — not applying. ${formatValidationErrors(validation.issues)}`,
+              `preflight validation failed — not applying. ${formatValidationErrors(blockingIssues)}`,
             );
           }
 

@@ -16,7 +16,7 @@ import type {
   ParsedWorksheet,
 } from '../../../desktop/metadata/types.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
-import { runValidation } from '../../../desktop/validation/registry.js';
+import { blockingValidationIssues, runValidation } from '../../../desktop/validation/registry.js';
 import { xmlNamesEqual } from '../../../desktop/xmlElement.js';
 import {
   DesktopCommandExecutionError,
@@ -141,17 +141,18 @@ function prepareWorkbookXmlForApply(xml: string): { xml: string; error?: LoadWor
   }
 
   const validation = runValidation(trimmedXml, 'workbook');
-  if (!validation.valid) {
+  const blockingIssues = blockingValidationIssues(validation.issues);
+  if (blockingIssues.length > 0) {
     log({
       level: 'error',
       message: 'Preflight validation failed - XML not sent to Tableau',
       logger: 'workbookCommands',
-      data: validation.issues,
+      data: blockingIssues,
     });
 
     return {
       xml: trimmedXml,
-      error: { type: 'validation-failed', issues: validation.issues },
+      error: { type: 'validation-failed', issues: blockingIssues },
     };
   }
 

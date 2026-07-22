@@ -9,7 +9,7 @@ import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
-import { runValidation } from '../../validation/registry.js';
+import { blockingValidationIssues, runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { xmlNamesEqual } from '../../xmlElement.js';
 import { withApplyLock } from './applyMutex.js';
@@ -119,21 +119,22 @@ export async function loadDashboardXml({
   }
 
   const validation = runValidation(xml, 'dashboard');
-  if (!validation.valid) {
+  const blockingIssues = blockingValidationIssues(validation.issues);
+  if (blockingIssues.length > 0) {
     log({
       level: 'error',
       message: 'Preflight validation failed — dashboard XML not sent to Tableau',
       logger: 'dashboardCommands',
       data: {
         dashboardName,
-        issues: validation.issues,
+        issues: blockingIssues,
         xmlPreview: sanitize(xml),
       },
     });
 
     return Err({
       type: 'load-dashboard-xml-error',
-      error: { type: 'validation-failed', issues: validation.issues },
+      error: { type: 'validation-failed', issues: blockingIssues },
     });
   }
 
