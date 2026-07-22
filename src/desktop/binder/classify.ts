@@ -1593,9 +1593,17 @@ export function classifyNoLlm(
   }
 
   // Keyword-score the eligible fast-path templates against the masked ask.
+  // spatial-symbol-map-latlon is RESOLVER-ONLY: it carries generic map keywords
+  // ('map'/'symbol-map'/'spatial'), so leaving it in this loop would let it win by
+  // keyword AND bind via the generic role-greedy path — the exact axis-swap / dropped-
+  // detail wrong-bind the dedicated resolver exists to prevent. When the resolver
+  // declined above (ambiguous coordinates, 0 or 3+ dims, or no coordinate intent) the
+  // correct outcome is propose, NOT a generic bind of this template. Exclude it here so
+  // the resolver is the ONLY door to it. (Andy-review P1, GPT-5.6-Sol, 2026-07-22.)
   const scored: Array<{ m: TemplateManifest; score: number }> = [];
   for (const m of manifests.values()) {
     if (!m.fast_path_eligible) continue;
+    if (m.template === LATLON_SYMBOL_MAP_TEMPLATE) continue;
     const score = keywordScore(maskedAsk, m.intent_keywords);
     if (score > 0) scored.push({ m, score });
   }

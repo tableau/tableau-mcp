@@ -263,6 +263,28 @@ describe('binder/classifyNoLlm — measure-free lat/long symbol map (Blake wall 
     expect(classifyNoLlm('Build me a Tableau map of the office locations', forced, s)).toBeNull();
   });
 
+  it('BACK-DOOR CLOSED: with 3+ dimensions the resolver declines AND the generic keyword loop must NOT bind latlon (no axis-swap/dropped-dim escape hatch)', () => {
+    // latlon carries generic map keywords ('map'/'symbol-map'/'spatial'); if it were left
+    // in the generic scoring loop, a resolver-declined ask could still win latlon by keyword
+    // and role-greedy-bind it — swapping axes or dropping a detail dim. The resolver fails
+    // closed on 3+ non-coordinate dims; classification as a whole MUST also fail closed here.
+    const threeDimCoordXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Offices'>
+      <column name='[pm_name]' role='dimension' type='nominal' datatype='string' />
+      <column name='[city]' role='dimension' type='nominal' datatype='string' />
+      <column name='[region]' role='dimension' type='nominal' datatype='string' />
+      <column name='[latitude]' role='measure' type='quantitative' datatype='real' />
+      <column name='[longitude]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const forced = withForcedEligible([LATLON]);
+    const s = summarizeSchema(threeDimCoordXml);
+    expect(classifyNoLlm('Build me a Tableau map of the office locations', forced, s)).toBeNull();
+  });
+
   it('stays gated OFF in production: the committed (un-forced) manifest never binds it', () => {
     // fast_path_eligible is false + render_verified 'none' on the committed manifest, so
     // the resolver is dormant and a lat/lon "map" ask falls through to propose. The
