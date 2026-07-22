@@ -14,56 +14,64 @@ const LIST_INSTANCES_TOOL: DesktopToolName = 'list-instances';
 /**
  * Resolve which Tableau Desktop session (pid) a session-scoped tool should target.
  *
+ * The pin (`config.desktopSessionId`, set when the launching Desktop passes
+ * `TABLEAU_DESKTOP_SESSION_ID`) is a DEFAULT, not an invariant: it is used when no
+ * `session` is given, but the caller may still target another running Desktop by passing
+ * its pid explicitly.
+ *
  * Precedence:
- *   1. `config.desktopSessionId` — when the launching Desktop pinned itself via
- *      `TABLEAU_DESKTOP_SESSION_ID`, the pin is an invariant: it always wins, and an
- *      explicit `session` naming a different Desktop is rejected rather than honored.
- *      (list-instances is hidden when pinned, so any conflicting explicit session can
- *      only be stale model context.)
- *   2. Explicit `session` arg — when unpinned, the caller chooses.
- *   3. Auto-resolve when exactly one Desktop instance is running. 0 or 2+ instances
- *      fail closed with an instance-listing error rather than guessing.
+ *   1. No explicit `session` (or the sentinel "default") — use the pin if set, else
+ *      auto-resolve when exactly one Desktop is running (0 or 2+ fail closed).
+ *   2. Explicit `session` equal to the pin — use the pin (no discovery needed).
+ *   3. Explicit `session` naming another Desktop — honored if that pid is a running
+ *      instance. Rejected only when discovery lists other running instances that exclude
+ *      it; if discovery is empty we cannot confirm, so we proceed and let the executor's
+ *      unreachable handling report a truly dead pid (never block blind — same posture as
+ *      the cache-fingerprint guard).
  *
  * Uses the External Client API discovery files written by Tableau Desktop.
  */
 export function resolveSession(session: string | undefined): Result<string, McpToolError> {
   // Treat empty/whitespace AND the sentinel "default" as ABSENT. Some clients inject
-  // session:"default" as a placeholder; when the agent is pinned to a Desktop pid that
-  // literal is not the pid, so it used to fail closed with a spurious "pinned to pid X but
-  // session 'default' requested" error on every session-scoped call (add-field, apply, …).
-  // "default" means "use whatever session is resolved", i.e. the pin — never a real id.
+  // session:"default" as a placeholder; that literal is never a real pid, so it means
+  // "use whatever session is resolved" (the pin, or the sole running instance).
   const trimmed = session?.trim();
   const requestedSession = trimmed && trimmed.toLowerCase() !== 'default' ? trimmed : undefined;
   const config = getDesktopConfig();
-  if (config.desktopSessionId !== undefined) {
-    if (requestedSession !== undefined && requestedSession !== config.desktopSessionId) {
+
+  if (requestedSession === undefined || requestedSession === config.desktopSessionId) {
+    if (config.desktopSessionId !== undefined) {
+      return Ok(config.desktopSessionId);
+    }
+
+    const pids = discoverInstances({ discoveryDir: config.externalApiDiscoveryDir }).map(
+      (i) => i.pid,
+    );
+
+    if (pids.length === 0) {
+      return Err(new NoDesktopInstancesFoundError());
+    }
+    if (pids.length > 1) {
       return Err(
         new ArgsValidationError(
-          `This agent is pinned to Tableau Desktop (pid ${config.desktopSessionId}), but session '${requestedSession}' was requested. Omit the 'session' parameter — the pinned Desktop is used automatically.`,
+          `Multiple Tableau Desktop instances are running (session IDs: ${pids.join(', ')}). Specify which one to use via the 'session' parameter (see ${LIST_INSTANCES_TOOL} for details).`,
         ),
       );
     }
-    return Ok(config.desktopSessionId);
+
+    return Ok(String(pids[0]));
   }
 
-  if (requestedSession !== undefined) {
-    return Ok(requestedSession);
-  }
-
-  const pids = discoverInstances({ discoveryDir: config.externalApiDiscoveryDir }).map(
-    (i) => i.pid,
+  const runningPids = discoverInstances({ discoveryDir: config.externalApiDiscoveryDir }).map((i) =>
+    String(i.pid),
   );
-
-  if (pids.length === 0) {
-    return Err(new NoDesktopInstancesFoundError());
-  }
-  if (pids.length > 1) {
+  if (runningPids.length > 0 && !runningPids.includes(requestedSession)) {
     return Err(
       new ArgsValidationError(
-        `Multiple Tableau Desktop instances are running (session IDs: ${pids.join(', ')}). Specify which one to use via the 'session' parameter (see ${LIST_INSTANCES_TOOL} for details).`,
+        `Tableau Desktop session '${requestedSession}' is not a running instance (running: ${runningPids.join(', ')}). See ${LIST_INSTANCES_TOOL} for the current instances.`,
       ),
     );
   }
 
-  return Ok(String(pids[0]));
+  return Ok(requestedSession);
 }

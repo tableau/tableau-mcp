@@ -10,13 +10,17 @@ import {
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import { DATA_ROOT, readResourceAsset, RESOURCES_ROOT } from './desktop/assets.js';
-import { listKnowledgeResources, readKnowledgeResource } from './desktop/knowledge/index.js';
+import {
+  getKnowledgeCorpusEntryCount,
+  getKnowledgeDir,
+  listKnowledgeResources,
+  readKnowledgeResource,
+} from './desktop/knowledge/index.js';
 import { buildDesktopInstructions } from './desktop/routeTable.js';
 import { SessionManager } from './desktop/sessionManager.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
 import { getCheckForUserChangesTool } from './tools/desktop/session/checkForUserChanges.js';
-import { getListInstancesTool } from './tools/desktop/session/listInstances.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { DesktopToolName } from './tools/desktop/toolName.js';
@@ -185,6 +189,7 @@ export const DESKTOP_INSTRUCTIONS = buildDesktopInstructions({ sessionPinned: fa
 
 export class DesktopMcpServer extends Server {
   private readonly sessionManager = new SessionManager();
+  private knowledgeCorpusChecked = false;
 
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
     super({
@@ -199,6 +204,16 @@ export class DesktopMcpServer extends Server {
   }
 
   registerResources = async (): Promise<void> => {
+    if (!this.knowledgeCorpusChecked) {
+      this.knowledgeCorpusChecked = true;
+      if (getKnowledgeCorpusEntryCount() === 0) {
+        log({
+          message: `Knowledge corpus is empty; expected assets under ${getKnowledgeDir()}`,
+          level: 'warning',
+          logger: 'DesktopMcpServer',
+        });
+      }
+    }
     await this._registerDashboardXmlGuide();
     this._registerKnowledgeResources();
   };
@@ -257,13 +272,6 @@ export class DesktopMcpServer extends Server {
     // check-for-user-changes needs the legacy events endpoint, which the External Client API does
     // not expose; don't advertise a tool that can only return an error.
     excluded.add(getCheckForUserChangesTool);
-
-    // When the launching Desktop pinned a session, every tool defaults to it, so
-    // list-instances has nothing to add — dropping it keeps the agent from ever
-    // spending a turn discovering which instance to control.
-    if (config.desktopSessionId !== undefined) {
-      excluded.add(getListInstancesTool);
-    }
 
     const factories = [
       ...desktopToolFactories,

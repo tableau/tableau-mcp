@@ -6,6 +6,7 @@ import { z } from 'zod';
 import * as configModule from '../../../config.desktop.js';
 import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import * as getWorksheetXmlModule from '../../../desktop/commands/workbook/getWorksheetXml.js';
+import * as discoveryModule from '../../../desktop/externalApi/discovery.js';
 import * as metadataModule from '../../../desktop/metadata/index.js';
 import {
   ArgsValidationError,
@@ -23,6 +24,7 @@ import { getAddFieldTool } from './addField.js';
 vi.mock('../../../desktop/metadata/index.js');
 vi.mock('../../../desktop/commands/workbook/cacheFingerprint.js');
 vi.mock('../../../desktop/commands/workbook/getWorksheetXml.js');
+vi.mock('../../../desktop/externalApi/discovery.js');
 vi.mock('fs');
 
 type EncodingType = 'color' | 'size' | 'lod' | 'detail' | 'text' | 'tooltip' | 'path' | 'angle';
@@ -51,6 +53,7 @@ describe('addFieldTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPinnedSession(undefined);
+    vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -171,8 +174,11 @@ describe('addFieldTool', () => {
     expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKSHEET_FILE, SESSION);
   });
 
-  it('rejects and writes no sidecar when the requested session conflicts with the pin', async () => {
+  it('rejects and writes no sidecar when the requested session is not a running instance', async () => {
     mockPinnedSession('99999');
+    vi.mocked(discoveryModule.discoverInstances).mockReturnValue([
+      { pid: 99999 } as ReturnType<typeof discoveryModule.discoverInstances>[number],
+    ]);
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
     vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
@@ -187,7 +193,8 @@ describe('addFieldTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('99999');
+    expect(result.content[0].text).toContain(SESSION);
+    expect(result.content[0].text).toContain('list-instances');
     expect(cacheFingerprintModule.writeSidecar).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
   });

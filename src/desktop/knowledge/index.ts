@@ -14,6 +14,14 @@ export function getKnowledgeDir(): string {
   return join(getResourcesRoot(), 'knowledge');
 }
 
+function knowledgeCorpusEmptyError(): Error {
+  return new Error(`Knowledge corpus is empty; expected assets under ${getKnowledgeDir()}`);
+}
+
+export function getKnowledgeCorpusEntryCount(): number {
+  return listKnowledgeSlugs().length;
+}
+
 function extractMeta(content: string, fallbackName: string): { name: string; description: string } {
   const lines = content.split('\n');
   const titleLine = lines.find((l) => l.startsWith('# '));
@@ -33,7 +41,10 @@ let _cache: KnowledgeResource[] | null = null;
 
 export function listKnowledgeResources(): KnowledgeResource[] {
   if (_cache) return _cache;
-  _cache = listKnowledgeSlugs().map((slug) => {
+  const slugs = listKnowledgeSlugs();
+  if (slugs.length === 0) throw knowledgeCorpusEmptyError();
+
+  _cache = slugs.map((slug) => {
     const content = readKnowledgeBySlug(slug);
     const { name, description } =
       content !== null ? extractMeta(content, slug) : { name: slug, description: '' };
@@ -66,12 +77,9 @@ interface KnowledgeDoc {
 }
 
 let _knowledgeDocs: KnowledgeDoc[] | null = null;
-let _knowledgeFuse: Fuse<KnowledgeDoc> | null = null;
 let _knowledgeKeywordFuse: Fuse<KnowledgeDoc> | null = null;
 let _knowledgeFallbackFuse: Fuse<KnowledgeDoc> | null = null;
 let _knowledgeBroadNearestFuse: Fuse<KnowledgeDoc> | null = null;
-
-const MAX_WHOLE_STRING_QUERY_LENGTH = 32;
 
 const knowledgeSearchKeys = [
   { name: 'searchTerms', weight: 0.3 },
@@ -87,7 +95,7 @@ const knowledgeSearchKeys = [
   // at weight 0.04. `body` is still kept on the doc for the result snippet.
 ];
 
-const LONG_QUERY_STOPWORDS = new Set([
+const QUERY_STOPWORDS = new Set([
   'the',
   'and',
   'for',
@@ -117,7 +125,7 @@ const LONG_QUERY_STOPWORDS = new Set([
   'use',
 ]);
 
-const LONG_QUERY_TOOL_JARGON = new Set([
+const QUERY_TOOL_JARGON = new Set([
   'bind-template',
   'tableau-bind-template',
   'validate-proposal',
@@ -188,20 +196,11 @@ function buildKnowledgeIndex(): KnowledgeDoc[] {
     });
   }
 
+  if (docs.length === 0) throw knowledgeCorpusEmptyError();
+
   docs.sort((a, b) => a.slug.localeCompare(b.slug));
   _knowledgeDocs = docs;
   return docs;
-}
-
-function ensureKnowledgeFuse(): Fuse<KnowledgeDoc> {
-  if (_knowledgeFuse) return _knowledgeFuse;
-  _knowledgeFuse = new Fuse(buildKnowledgeIndex(), {
-    keys: knowledgeSearchKeys,
-    threshold: 0.4,
-    ignoreLocation: true,
-    includeScore: true,
-  });
-  return _knowledgeFuse;
 }
 
 function ensureKnowledgeKeywordFuse(): Fuse<KnowledgeDoc> {
@@ -223,6 +222,8 @@ export interface KnowledgeHit {
   score: number;
   snippet: string;
   match: 'whole-string' | 'keyword' | 'nearest';
+  mustReadUri?: string;
+  instruction?: string;
 }
 
 export interface KnowledgeSearchResult {
@@ -232,7 +233,21 @@ export interface KnowledgeSearchResult {
 }
 
 export const ZERO_HIT_NEAREST_MATCHES_NOTE =
-  'zero exact matches — nearest by keyword below; rephrase around the concept (shorter, no tool names) for better results.';
+  'hits is empty; nearestMatches contains the nearest keyword results, not exact hits.';
+
+const MUST_READ_INSTRUCTION = 'snippet is not the module — read this URI before authoring';
+
+function requireTopHitRead(hits: KnowledgeHit[]): KnowledgeHit[] {
+  if (hits.length === 0) return hits;
+  return [
+    {
+      ...hits[0],
+      mustReadUri: hits[0].uri,
+      instruction: MUST_READ_INSTRUCTION,
+    },
+    ...hits.slice(1),
+  ];
+}
 
 function ensureKnowledgeFallbackFuse(): Fuse<KnowledgeDoc> {
   if (_knowledgeFallbackFuse) return _knowledgeFallbackFuse;
@@ -258,18 +273,22 @@ function ensureKnowledgeBroadNearestFuse(): Fuse<KnowledgeDoc> {
 }
 
 function keywordFallbackQuery(query: string): string {
-  return (query.match(/[A-Za-z0-9][A-Za-z0-9_-]*/g) ?? [])
-    .filter((word) => word.length > 2)
-    .join(' | ');
+  const tokens = queryTokens(query);
+  return tokens.length > 0 ? tokens.join(' | ') : query.trim();
 }
 
-function longQueryTokens(query: string): string[] {
+function singularizeToken(word: string): string {
+  if (word.length >= 5 && word.endsWith('s') && !word.endsWith('ss') && !word.endsWith('es')) {
+    return word.slice(0, -1);
+  }
+  return word;
+}
+
+function queryTokens(query: string): string[] {
   const tokens = (query.match(/[A-Za-z0-9][A-Za-z0-9_-]*/g) ?? [])
     .map((word) => word.toLowerCase())
-    .filter(
-      (word) =>
-        word.length > 2 && !LONG_QUERY_STOPWORDS.has(word) && !LONG_QUERY_TOOL_JARGON.has(word),
-    );
+    .filter((word) => word.length > 2 && !QUERY_STOPWORDS.has(word) && !QUERY_TOOL_JARGON.has(word))
+    .map(singularizeToken);
   return [...new Set(tokens)];
 }
 
@@ -295,27 +314,19 @@ function toKnowledgeHit(
   };
 }
 
-function searchKnowledgeWholeString(query: string, limit: number): KnowledgeHit[] {
-  return ensureKnowledgeFuse()
-    .search(query)
-    .slice(0, Math.max(1, limit))
-    .map((r) =>
-      toKnowledgeHit(
-        r.item,
-        typeof r.score === 'number' ? Number((1 - r.score).toFixed(3)) : 0,
-        'whole-string',
-      ),
-    );
-}
-
 function searchKnowledgeByKeywordIntersection(query: string, limit: number): KnowledgeHit[] {
-  const tokens = longQueryTokens(query);
-  if (tokens.length === 0) return [];
+  const tokens = queryTokens(query);
+  if (tokens.length === 0) return searchKnowledgeByWholeString(query, limit);
 
   const fuse = ensureKnowledgeKeywordFuse();
   const ranked = new Map<
     string,
-    { doc: KnowledgeDoc; matchedTokenCount: number; fuseScoreSum: number }
+    {
+      doc: KnowledgeDoc;
+      matchedTokenCount: number;
+      titleTokenCount: number;
+      fuseScoreSum: number;
+    }
   >();
 
   for (const token of tokens) {
@@ -328,6 +339,9 @@ function searchKnowledgeByKeywordIntersection(query: string, limit: number): Kno
         ranked.set(result.item.slug, {
           doc: result.item,
           matchedTokenCount: 1,
+          titleTokenCount: tokens.filter((candidate) =>
+            queryTokens(result.item.title).includes(candidate),
+          ).length,
           fuseScoreSum: result.score ?? 1,
         });
       }
@@ -336,9 +350,15 @@ function searchKnowledgeByKeywordIntersection(query: string, limit: number): Kno
 
   return [...ranked.values()]
     .sort((a, b) => {
-      const tokenCountDelta = b.matchedTokenCount - a.matchedTokenCount;
-      if (tokenCountDelta !== 0) return tokenCountDelta;
-      const scoreDelta = a.fuseScoreSum - b.fuseScoreSum;
+      const aScore =
+        a.matchedTokenCount * 2 +
+        a.titleTokenCount * 0.08 +
+        (1 - a.fuseScoreSum / a.matchedTokenCount);
+      const bScore =
+        b.matchedTokenCount * 2 +
+        b.titleTokenCount * 0.08 +
+        (1 - b.fuseScoreSum / b.matchedTokenCount);
+      const scoreDelta = bScore - aScore;
       if (scoreDelta !== 0) return scoreDelta;
       return a.doc.slug.localeCompare(b.doc.slug);
     })
@@ -346,9 +366,26 @@ function searchKnowledgeByKeywordIntersection(query: string, limit: number): Kno
     .map((rankedDoc) => {
       const avgFuseScore = rankedDoc.fuseScoreSum / rankedDoc.matchedTokenCount;
       const compositeScore =
-        (rankedDoc.matchedTokenCount * 2 + (1 - avgFuseScore)) / (tokens.length * 2 + 1);
+        (rankedDoc.matchedTokenCount * 2 + rankedDoc.titleTokenCount * 0.08 + (1 - avgFuseScore)) /
+        (tokens.length * 2.08 + 1);
       return toKnowledgeHit(rankedDoc.doc, Number(compositeScore.toFixed(3)), 'keyword');
     });
+}
+
+function searchKnowledgeByWholeString(query: string, limit: number): KnowledgeHit[] {
+  const q = query.trim();
+  if (!q) return [];
+
+  return ensureKnowledgeFallbackFuse()
+    .search(q)
+    .slice(0, Math.max(1, limit))
+    .map((r) =>
+      toKnowledgeHit(
+        r.item,
+        typeof r.score === 'number' ? Number((1 - r.score).toFixed(3)) : 0,
+        'whole-string',
+      ),
+    );
 }
 
 function nearestKeywordMatches(query: string, limit: number, broaden = false): KnowledgeHit[] {
@@ -387,8 +424,7 @@ function nearestKeywordMatches(query: string, limit: number, broaden = false): K
 export function searchKnowledge(query: string, limit = 5): KnowledgeHit[] {
   const q = (query ?? '').trim();
   if (!q) return [];
-  if (q.length <= MAX_WHOLE_STRING_QUERY_LENGTH) return searchKnowledgeWholeString(q, limit);
-  return searchKnowledgeByKeywordIntersection(q, limit);
+  return requireTopHitRead(searchKnowledgeByKeywordIntersection(q, limit));
 }
 
 export function searchKnowledgeWithFallback(query: string, limit = 5): KnowledgeSearchResult {
@@ -396,16 +432,19 @@ export function searchKnowledgeWithFallback(query: string, limit = 5): Knowledge
   if (hits.length > 0) return { hits };
 
   const q = (query ?? '').trim();
-  const nearestMatches = nearestKeywordMatches(q, limit, q.length > MAX_WHOLE_STRING_QUERY_LENGTH);
+  const nearestMatches = nearestKeywordMatches(q, limit, true);
 
   if (nearestMatches.length === 0) return { hits };
-  return { hits, nearestMatches, note: ZERO_HIT_NEAREST_MATCHES_NOTE };
+  return {
+    hits,
+    nearestMatches: requireTopHitRead(nearestMatches),
+    note: ZERO_HIT_NEAREST_MATCHES_NOTE,
+  };
 }
 
 /** Reset cached index/fuse (tests). */
 export function _resetKnowledgeSearchCache(): void {
   _knowledgeDocs = null;
-  _knowledgeFuse = null;
   _knowledgeKeywordFuse = null;
   _knowledgeFallbackFuse = null;
   _knowledgeBroadNearestFuse = null;

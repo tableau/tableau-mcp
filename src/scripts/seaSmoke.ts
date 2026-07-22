@@ -1,12 +1,15 @@
 /* eslint-disable no-console */
 
 import { spawn } from 'child_process';
+import { createInterface } from 'readline';
 
 type JsonObject = Record<string, unknown>;
 
 type SmokeOptions = {
   binaryPath: string;
   requiredTool?: string;
+  minKnowledgeResources?: number;
+  knowledgeSearchQuery?: string;
   timeoutMs?: number;
 };
 
@@ -33,8 +36,38 @@ const toolsListRequest = {
   params: {},
 };
 
-export function buildMcpHandshakeInput(): string {
-  return `${JSON.stringify(initializeRequest)}\n${JSON.stringify(toolsListRequest)}\n`;
+const initializedNotification = {
+  jsonrpc: '2.0',
+  method: 'notifications/initialized',
+  params: {},
+};
+
+const resourcesListRequest = {
+  jsonrpc: '2.0',
+  id: 3,
+  method: 'resources/list',
+  params: {},
+};
+
+export function buildMcpHandshakeInput(
+  options: Pick<SmokeOptions, 'minKnowledgeResources' | 'knowledgeSearchQuery'> = {},
+): string {
+  const messages: JsonObject[] = [initializeRequest, initializedNotification, toolsListRequest];
+  if (options.minKnowledgeResources !== undefined) {
+    messages.push(resourcesListRequest);
+  }
+  if (options.knowledgeSearchQuery !== undefined) {
+    messages.push({
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'tools/call',
+      params: {
+        name: 'search-knowledge',
+        arguments: { query: options.knowledgeSearchQuery, limit: 3 },
+      },
+    });
+  }
+  return `${messages.map((message) => JSON.stringify(message)).join('\n')}\n`;
 }
 
 export function parseArgs(argv: string[]): SmokeOptions {
@@ -42,7 +75,7 @@ export function parseArgs(argv: string[]): SmokeOptions {
   const binaryPath = args[0];
   if (!binaryPath || binaryPath.startsWith('--')) {
     throw new Error(
-      'Usage: npx tsx src/scripts/seaSmoke.ts <binary-path> [--require-tool <tool-name>] [--timeout-ms <ms>]',
+      'Usage: npx tsx src/scripts/seaSmoke.ts <binary-path> [--require-tool <tool-name>] [--min-knowledge-resources <count>] [--search-knowledge <query>] [--timeout-ms <ms>]',
     );
   }
 
@@ -55,6 +88,18 @@ export function parseArgs(argv: string[]): SmokeOptions {
         throw new Error('--require-tool requires a tool name');
       }
       options.requiredTool = requiredTool;
+    } else if (arg === '--min-knowledge-resources') {
+      const minKnowledgeResources = Number(args[++i]);
+      if (!Number.isInteger(minKnowledgeResources) || minKnowledgeResources <= 0) {
+        throw new Error('--min-knowledge-resources requires a positive integer');
+      }
+      options.minKnowledgeResources = minKnowledgeResources;
+    } else if (arg === '--search-knowledge') {
+      const knowledgeSearchQuery = args[++i];
+      if (!knowledgeSearchQuery || knowledgeSearchQuery.startsWith('--')) {
+        throw new Error('--search-knowledge requires a query');
+      }
+      options.knowledgeSearchQuery = knowledgeSearchQuery;
     } else if (arg === '--timeout-ms') {
       const timeoutMs = Number(args[++i]);
       if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
@@ -130,7 +175,79 @@ export function requireToolName(outputLines: string[], requiredTool: string): vo
   }
 }
 
-function validateHandshake(outputLines: string[], requiredTool?: string): void {
+export function requireMinimumKnowledgeResources(outputLines: string[], minimum: number): void {
+  const messages = parseJsonLines(outputLines);
+  assertNoJsonRpcErrors(messages);
+  const resourcesResponse = getResponse(messages, 3);
+  const result = resourcesResponse?.result;
+  const resources =
+    result && typeof result === 'object' && 'resources' in result
+      ? (result as { resources?: unknown }).resources
+      : undefined;
+  if (!Array.isArray(resources)) {
+    throw new Error('resources/list did not return a resources array');
+  }
+  const knowledgeCount = resources.filter(
+    (resource) =>
+      resource &&
+      typeof resource === 'object' &&
+      'uri' in resource &&
+      typeof (resource as { uri?: unknown }).uri === 'string' &&
+      (resource as { uri: string }).uri.startsWith('expertise://tableau/'),
+  ).length;
+  if (knowledgeCount < minimum) {
+    throw new Error(`Expected at least ${minimum} knowledge resources, got ${knowledgeCount}`);
+  }
+}
+
+export function requireKnowledgeSearchHit(outputLines: string[]): void {
+  const messages = parseJsonLines(outputLines);
+  assertNoJsonRpcErrors(messages);
+  const searchResponse = getResponse(messages, 4);
+  const result = searchResponse?.result;
+  if (!result || typeof result !== 'object') {
+    throw new Error('search-knowledge did not return a result');
+  }
+  if ((result as { isError?: unknown }).isError === true) {
+    throw new Error(`search-knowledge returned an error: ${JSON.stringify(result)}`);
+  }
+  const content = (result as { content?: unknown }).content;
+  const first = Array.isArray(content) ? content[0] : undefined;
+  if (
+    !first ||
+    typeof first !== 'object' ||
+    !('text' in first) ||
+    typeof (first as { text?: unknown }).text !== 'string'
+  ) {
+    throw new Error('search-knowledge did not return text content');
+  }
+  const payload: unknown = JSON.parse((first as { text: string }).text);
+  const hits =
+    payload && typeof payload === 'object' && 'hits' in payload
+      ? (payload as { hits?: unknown }).hits
+      : undefined;
+  if (!Array.isArray(hits) || hits.length === 0) {
+    throw new Error('search-knowledge returned no hits');
+  }
+  const topHit = hits[0];
+  if (
+    !topHit ||
+    typeof topHit !== 'object' ||
+    !('mustReadUri' in topHit) ||
+    typeof (topHit as { mustReadUri?: unknown }).mustReadUri !== 'string'
+  ) {
+    throw new Error('search-knowledge top hit did not include mustReadUri');
+  }
+}
+
+function validateHandshake(
+  outputLines: string[],
+  {
+    requiredTool,
+    minKnowledgeResources,
+    knowledgeSearchQuery,
+  }: Pick<SmokeOptions, 'requiredTool' | 'minKnowledgeResources' | 'knowledgeSearchQuery'>,
+): void {
   const messages = parseJsonLines(outputLines);
   assertNoJsonRpcErrors(messages);
 
@@ -143,11 +260,19 @@ function validateHandshake(outputLines: string[], requiredTool?: string): void {
   if (requiredTool) {
     requireToolName(outputLines, requiredTool);
   }
+  if (minKnowledgeResources !== undefined) {
+    requireMinimumKnowledgeResources(outputLines, minKnowledgeResources);
+  }
+  if (knowledgeSearchQuery !== undefined) {
+    requireKnowledgeSearchHit(outputLines);
+  }
 }
 
 export async function runSeaSmoke({
   binaryPath,
   requiredTool,
+  minKnowledgeResources,
+  knowledgeSearchQuery,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 }: SmokeOptions): Promise<void> {
   const child = spawn(binaryPath, [], {
@@ -155,37 +280,121 @@ export async function runSeaSmoke({
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
-  let stdout = '';
   let stderr = '';
   let timedOut = false;
 
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (chunk: string) => {
-    stdout += chunk;
-  });
   child.stderr.on('data', (chunk: string) => {
     stderr += chunk;
+  });
+
+  const outputLines: string[] = [];
+  const pending = new Map<
+    number,
+    {
+      resolve: (message: JsonObject) => void;
+      reject: (error: Error) => void;
+    }
+  >();
+
+  const rejectPending = (error: Error): void => {
+    for (const { reject } of pending.values()) reject(error);
+    pending.clear();
+  };
+
+  const stdoutLines = createInterface({ input: child.stdout });
+  stdoutLines.on('line', (line) => {
+    if (!line.trim()) return;
+    outputLines.push(line);
+
+    let message: JsonObject;
+    try {
+      message = parseJsonLine(line);
+    } catch (error) {
+      rejectPending(error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
+
+    if (typeof message.id !== 'number') return;
+    const waiter = pending.get(message.id);
+    if (!waiter) return;
+    pending.delete(message.id);
+    waiter.resolve(message);
   });
 
   const closePromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
     (resolve, reject) => {
       child.once('error', reject);
-      child.once('close', (code, signal) => resolve({ code, signal }));
+      child.once('close', (code, signal) => {
+        const error = new Error(
+          `SEA smoke process closed before all responses arrived (code ${String(code)} signal ${String(signal)})`,
+        );
+        rejectPending(error);
+        resolve({ code, signal });
+      });
     },
   );
+
+  const awaitResponse = async (id: number): Promise<JsonObject> => {
+    return await new Promise<JsonObject>((resolve, reject) => {
+      pending.set(id, { resolve, reject });
+    });
+  };
+
+  const writeMessage = (message: JsonObject): void => {
+    child.stdin.write(`${JSON.stringify(message)}\n`);
+  };
+
+  const writeRequestAndAwait = async (message: JsonObject, id: number): Promise<void> => {
+    const response = awaitResponse(id);
+    writeMessage(message);
+    await response;
+  };
+
+  const exchange = async (): Promise<void> => {
+    await writeRequestAndAwait(initializeRequest, 1);
+    writeMessage(initializedNotification);
+    await writeRequestAndAwait(toolsListRequest, 2);
+    if (minKnowledgeResources !== undefined) {
+      await writeRequestAndAwait(resourcesListRequest, 3);
+    }
+    if (knowledgeSearchQuery !== undefined) {
+      await writeRequestAndAwait(
+        {
+          jsonrpc: '2.0',
+          id: 4,
+          method: 'tools/call',
+          params: {
+            name: 'search-knowledge',
+            arguments: { query: knowledgeSearchQuery, limit: 3 },
+          },
+        },
+        4,
+      );
+    }
+    child.stdin.end();
+  };
 
   const timeout = setTimeout(() => {
     timedOut = true;
     child.kill();
   }, timeoutMs);
 
-  child.stdin.end(buildMcpHandshakeInput());
+  try {
+    await exchange();
+  } catch (error) {
+    child.kill();
+    clearTimeout(timeout);
+    if (timedOut) {
+      throw new Error(`SEA smoke timed out after ${timeoutMs}ms. stderr: ${stderr.trim()}`);
+    }
+    throw error;
+  }
 
   const { code, signal } = await closePromise;
   clearTimeout(timeout);
 
-  const outputLines = stdout.split(/\r?\n/).filter((line) => line.trim());
   if (timedOut) {
     throw new Error(`SEA smoke timed out after ${timeoutMs}ms. stderr: ${stderr.trim()}`);
   }
@@ -195,14 +404,18 @@ export async function runSeaSmoke({
     );
   }
 
-  validateHandshake(outputLines, requiredTool);
+  validateHandshake(outputLines, {
+    requiredTool,
+    minKnowledgeResources,
+    knowledgeSearchQuery,
+  });
 }
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv);
   await runSeaSmoke(options);
   console.log(
-    `SEA smoke passed for ${options.binaryPath}${options.requiredTool ? `; found ${options.requiredTool}` : ''}`,
+    `SEA smoke passed for ${options.binaryPath}${options.requiredTool ? `; found ${options.requiredTool}` : ''}${options.minKnowledgeResources ? `; knowledge resources >= ${options.minKnowledgeResources}` : ''}${options.knowledgeSearchQuery ? '; knowledge search returned a hit' : ''}`,
   );
 }
 

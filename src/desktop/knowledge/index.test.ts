@@ -7,10 +7,12 @@ import { Dirent, existsSync, readdirSync, readFileSync } from 'fs';
 
 import { getDirname } from '../../utils/getDirname.js';
 import {
+  _resetKnowledgeSearchCache,
   clearKnowledgeCache,
   getKnowledgeDir,
   listKnowledgeResources,
   readKnowledgeResource,
+  searchKnowledgeWithFallback,
 } from './index.js';
 
 const MOCK_ROOT = join('/', 'mock');
@@ -55,6 +57,7 @@ describe('knowledge/index', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearKnowledgeCache();
+    _resetKnowledgeSearchCache();
   });
 
   describe('getKnowledgeDir', () => {
@@ -80,6 +83,14 @@ describe('knowledge/index', () => {
         'expertise://tableau/strategy/viz-design/chart-selection',
         'expertise://tableau/tactics/viz/filters',
       ]);
+    });
+
+    it('throws an explicit asset-root error when the corpus is empty', () => {
+      setupFsMock({});
+
+      expect(() => listKnowledgeResources()).toThrow(
+        `Knowledge corpus is empty; expected assets under ${KNOWLEDGE_DIR}`,
+      );
     });
 
     it('extracts name from h1 heading', () => {
@@ -143,6 +154,16 @@ describe('knowledge/index', () => {
     it('returns null for slug with backslash', () => {
       setupFsMock({});
       expect(readKnowledgeResource('expertise://tableau/viz\\chart')).toBeNull();
+    });
+  });
+
+  describe('searchKnowledgeWithFallback', () => {
+    it('throws an explicit asset-root error when the search index is empty', () => {
+      setupFsMock({});
+
+      expect(() => searchKnowledgeWithFallback('chart choice', 3)).toThrow(
+        `Knowledge corpus is empty; expected assets under ${KNOWLEDGE_DIR}`,
+      );
     });
   });
 });
