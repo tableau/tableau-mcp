@@ -157,7 +157,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'no-native-tool-escape',
-    text: 'If NO native tool covers the asked shape, say so plainly — do not hand-edit XML with the tools here. The raw XML surface (get/apply workbook XML) exists behind TOOL_PROFILE=full, an operator opt-in the user can enable.',
+    text: 'If NO native tool covers the asked shape, say so plainly — never invent or hand-author XML. Retrieving worksheet XML to feed the field tools (get-worksheet-xml -> add-field/apply-worksheet) is a sanctioned path, not hand-authoring. Whole-workbook XML surgery (get/apply workbook XML) lives behind TOOL_PROFILE=full, an operator opt-in the user can enable.',
   },
 ];
 
