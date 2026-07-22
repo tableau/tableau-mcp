@@ -273,14 +273,14 @@ function ensureKnowledgeBroadNearestFuse(): Fuse<KnowledgeDoc> {
 }
 
 function keywordFallbackQuery(query: string): string {
-  return queryTokens(query).join(' | ');
+  const tokens = queryTokens(query);
+  return tokens.length > 0 ? tokens.join(' | ') : query.trim();
 }
 
 function singularizeToken(word: string): string {
-  if (word.length <= 3) return word;
-  if (word.endsWith('ies') && word.length > 4) return `${word.slice(0, -3)}y`;
-  if (/(?:ches|shes|sses|xes|zes)$/.test(word)) return word.slice(0, -2);
-  if (word.endsWith('s') && !/(?:ss|us|is)$/.test(word)) return word.slice(0, -1);
+  if (word.length >= 5 && word.endsWith('s') && !word.endsWith('ss') && !word.endsWith('es')) {
+    return word.slice(0, -1);
+  }
   return word;
 }
 
@@ -316,7 +316,7 @@ function toKnowledgeHit(
 
 function searchKnowledgeByKeywordIntersection(query: string, limit: number): KnowledgeHit[] {
   const tokens = queryTokens(query);
-  if (tokens.length === 0) return [];
+  if (tokens.length === 0) return searchKnowledgeByWholeString(query, limit);
 
   const fuse = ensureKnowledgeKeywordFuse();
   const ranked = new Map<
@@ -370,6 +370,22 @@ function searchKnowledgeByKeywordIntersection(query: string, limit: number): Kno
         (tokens.length * 2.08 + 1);
       return toKnowledgeHit(rankedDoc.doc, Number(compositeScore.toFixed(3)), 'keyword');
     });
+}
+
+function searchKnowledgeByWholeString(query: string, limit: number): KnowledgeHit[] {
+  const q = query.trim();
+  if (!q) return [];
+
+  return ensureKnowledgeFallbackFuse()
+    .search(q)
+    .slice(0, Math.max(1, limit))
+    .map((r) =>
+      toKnowledgeHit(
+        r.item,
+        typeof r.score === 'number' ? Number((1 - r.score).toFixed(3)) : 0,
+        'whole-string',
+      ),
+    );
 }
 
 function nearestKeywordMatches(query: string, limit: number, broaden = false): KnowledgeHit[] {

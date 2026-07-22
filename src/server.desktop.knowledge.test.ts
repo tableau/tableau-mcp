@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync } from 'fs';
+import { join } from 'path';
+
 import * as loggerModule from './logging/logger.js';
 
 const knowledgeMocks = vi.hoisted(() => ({
@@ -26,5 +29,28 @@ describe('DesktopMcpServer knowledge startup check', () => {
       level: 'warning',
       logger: 'DesktopMcpServer',
     });
+  });
+
+  it('real knowledge resource listing throws a loud asset-root error for an empty root', async () => {
+    const emptyRoot = mkdtempSync(join(process.cwd(), '.tmp-empty-knowledge-root-'));
+    const resourcesRoot = join(emptyRoot, 'resources', 'desktop');
+    mkdirSync(resourcesRoot, { recursive: true });
+
+    try {
+      vi.resetModules();
+      vi.doMock('./utils/getDirname.js', () => ({ getDirname: () => emptyRoot }));
+      vi.doUnmock('./desktop/knowledge/index.js');
+      const realKnowledge = await import('./desktop/knowledge/index.js');
+      realKnowledge.clearKnowledgeCache();
+      realKnowledge._resetKnowledgeSearchCache();
+
+      expect(() => realKnowledge.listKnowledgeResources()).toThrow(
+        `Knowledge corpus is empty; expected assets under ${join(resourcesRoot, 'knowledge')}`,
+      );
+    } finally {
+      rmSync(emptyRoot, { recursive: true, force: true });
+      vi.doUnmock('./utils/getDirname.js');
+      vi.resetModules();
+    }
   });
 });

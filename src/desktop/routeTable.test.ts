@@ -62,10 +62,16 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(knowledge).toMatchObject({
       trigger:
-        'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) — never a plain chart ask the plain-chart route already handles',
+        'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult',
       toolSequence: ['search-knowledge', 'read-knowledge-resource'],
       stopConditions: ['read the top hit once, then proceed'],
     });
+  });
+
+  it('places the deterministic plain-chart route before knowledge consultation', () => {
+    const routeIds = routes.map((route) => route.id);
+
+    expect(routeIds.indexOf('plain-chart')).toBeLessThan(routeIds.indexOf('knowledge-consult'));
   });
 
   it('teaches plain-chart proposals may carry sort and top_n', () => {
