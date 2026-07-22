@@ -127,66 +127,43 @@ describe('SessionRouteStateStore', () => {
     expect(store.hasDeflection('S1', `ask-${cap + 2}`)).toBe(true);
   });
 
-  describe('summary-data repeat state', () => {
-    it('replays only after a completed result is recorded', () => {
+  describe('summary-data transient failure state', () => {
+    it('counts transient failures by session and signature without storing payloads', () => {
       const store = new SessionRouteStateStore();
-      const result = { status: 'success', summaryData: { columns: [], rows: [[1]] } };
 
-      expect(store.getSummaryDataReplay('S1', 'signature-a', 1_000)).toBeUndefined();
-      store.recordSummaryDataCompletion('S1', 'signature-a', result, 2_000);
-      expect(store.getSummaryDataReplay('S1', 'signature-a', 3_000)).toBe(result);
+      expect(store.recordSummaryDataTransientFailure('S1', 'signature-a')).toBe(1);
+      expect(store.recordSummaryDataTransientFailure('S1', 'signature-a')).toBe(2);
+      expect(store.recordSummaryDataTransientFailure('S1', 'signature-b')).toBe(1);
+      expect(store.recordSummaryDataTransientFailure('S2', 'signature-a')).toBe(1);
+      expect(store.recordSummaryDataTransientFailure(undefined, 'signature-a')).toBe(1);
+
+      expect(store.get('S1')?.summaryDataTransientFailures.get('signature-a')).toBe(2);
+      expect(store.get('S1')?.summaryDataTransientFailures.get('signature-b')).toBe(1);
+      expect(store.get('S2')?.summaryDataTransientFailures.get('signature-a')).toBe(1);
     });
 
-    it('measures expiry from the original completion without refreshing on replay', () => {
+    it('clears a signature after a success or genuine no-data outcome', () => {
       const store = new SessionRouteStateStore();
-      const result = { status: 'success' };
-      const completedAt = 1_000;
 
-      store.recordSummaryDataCompletion('S1', 'signature-a', result, completedAt);
-      expect(
-        store.getSummaryDataReplay(
-          'S1',
-          'signature-a',
-          completedAt + SessionRouteStateStore.SUMMARY_DATA_REPEAT_WINDOW_MS - 1,
-        ),
-      ).toBe(result);
-      expect(
-        store.getSummaryDataReplay(
-          'S1',
-          'signature-a',
-          completedAt + SessionRouteStateStore.SUMMARY_DATA_REPEAT_WINDOW_MS + 1,
-        ),
-      ).toBeUndefined();
+      store.recordSummaryDataTransientFailure('S1', 'signature-a');
+      store.recordSummaryDataTransientFailure('S1', 'signature-a');
+      expect(store.clearSummaryDataTransientFailure('S1', 'signature-a')).toBe(true);
+      expect(store.get('S1')?.summaryDataTransientFailures.has('signature-a')).toBe(false);
+      expect(store.clearSummaryDataTransientFailure('S1', 'signature-a')).toBe(false);
+      expect(store.clearSummaryDataTransientFailure(undefined, 'signature-a')).toBe(false);
     });
 
-    it('keeps the original completion when parallel first calls finish inside the window', () => {
+    it('keeps transient signatures LRU-bounded', () => {
       const store = new SessionRouteStateStore();
-      const first = { status: 'success', value: 'first' };
-      const parallel = { status: 'success', value: 'parallel' };
-
-      store.recordSummaryDataCompletion('S1', 'signature-a', first, 1_000);
-      store.recordSummaryDataCompletion('S1', 'signature-a', parallel, 2_000);
-
-      expect(store.getSummaryDataReplay('S1', 'signature-a', 3_000)).toBe(first);
-    });
-
-    it('keeps signatures session-scoped and LRU-bounded', () => {
-      const store = new SessionRouteStateStore();
-      const cap = SessionRouteStateStore.MAX_SUMMARY_DATA_SIGNATURES;
-      const result = { status: 'success' };
-
-      store.recordSummaryDataCompletion(undefined, 'signature-a', result, 1_000);
-      store.recordSummaryDataCompletion('S1', 'shared', result, 1_000);
-      expect(store.getSummaryDataReplay(undefined, 'signature-a', 1_000)).toBeUndefined();
-      expect(store.getSummaryDataReplay('S1', 'shared', 1_000)).toBe(result);
-      expect(store.getSummaryDataReplay('S2', 'shared', 1_000)).toBeUndefined();
+      const cap = SessionRouteStateStore.MAX_SUMMARY_DATA_FAILURE_SIGNATURES;
 
       for (let i = 0; i < cap + 1; i++) {
-        store.recordSummaryDataCompletion('S1', `signature-${i}`, result, 2_000 + i);
+        store.recordSummaryDataTransientFailure('S1', `signature-${i}`);
       }
 
-      expect(store.get('S1')?.summaryDataRequests.size).toBe(cap);
-      expect(store.getSummaryDataReplay('S1', 'signature-0', 3_000)).toBeUndefined();
+      expect(store.get('S1')?.summaryDataTransientFailures.size).toBe(cap);
+      expect(store.get('S1')?.summaryDataTransientFailures.has('signature-0')).toBe(false);
+      expect(store.get('S1')?.summaryDataTransientFailures.has(`signature-${cap}`)).toBe(true);
     });
   });
 

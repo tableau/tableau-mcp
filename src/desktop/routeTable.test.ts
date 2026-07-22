@@ -84,7 +84,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(dataValueQuestion).toMatchObject({
       action:
-        'on a populated worksheet, call get-summary-data; answer only from returned rows. A terminal/no-data result means stop; a transient failure may be retried once.',
+        'on a populated worksheet, call get-summary-data; answer only from returned rows. A terminal/no-data result means stop; one retry on transient failure is allowed, then report the outcome.',
       stopConditions: ['A terminal/no-data result means stop'],
       requiredEvidence: ['get-summary-data returned rows or a discriminated status'],
     });
