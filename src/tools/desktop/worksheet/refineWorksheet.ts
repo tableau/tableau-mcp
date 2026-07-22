@@ -76,50 +76,29 @@ function formatValidationErrors(issues: ValidationIssue[]): string {
 }
 
 const paramsSchema = {
-  session: z
-    .string()
-    .optional()
-    .describe('Desktop session id; omit when a single Desktop is open.'),
-  worksheetName: z.string().min(1).describe('Display name of the worksheet to refine.'),
-  operation: z
-    .enum(['top_n', 'sort_direction', 'sort_by_field'])
-    .describe(
-      'Which refinement to apply. "top_n" requires topN; "sort_direction" requires sortDirection; ' +
-        '"sort_by_field" requires sortByField (and optionally targetField + direction).',
-    ),
+  session: z.string().optional().describe('Desktop session; omit if one.'),
+  worksheetName: z.string().min(1).describe('Worksheet display name.'),
+  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field']).describe('Refinement type.'),
   topN: z
     .object({
-      n: z.number().int().min(1).max(50).describe('How many members to keep (1-50).'),
-      end: z
-        .enum(['top', 'bottom'])
-        .optional()
-        .describe('Keep the top or bottom members; defaults to "top".'),
+      n: z.number().int().min(1).max(50).describe('Members to keep (1-50).'),
+      end: z.enum(['top', 'bottom']).optional().describe('top/bottom; default top.'),
     })
     .optional()
-    .describe('Required when operation="top_n": the Top-N/Bottom-N filter to apply.'),
+    .describe('For top_n: Top/Bottom-N.'),
   sortDirection: z
     .object({
-      direction: z.enum(['ASC', 'DESC']).describe('New direction for the existing sort.'),
+      direction: z.enum(['ASC', 'DESC']).describe('Existing-sort direction.'),
     })
     .optional()
-    .describe('Required when operation="sort_direction": flip the existing sort direction.'),
+    .describe('For sort_direction.'),
   targetField: z
     .string()
     .min(1)
     .optional()
-    .describe(
-      'Only for operation="sort_by_field": display name of the dimension whose axis gets ' +
-        'sorted. Optional — omit to auto-detect the single categorical axis on the sheet.',
-    ),
-  sortByField: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Required for operation="sort_by_field": display name of the measure to sort by.'),
-  direction: z
-    .enum(['asc', 'desc'])
-    .optional()
-    .describe('Only for operation="sort_by_field": sort direction; defaults to "asc".'),
+    .describe('sort_by_field axis; omit to auto-detect one categorical axis.'),
+  sortByField: z.string().min(1).optional().describe('sort_by_field measure to sort by.'),
+  direction: z.enum(['asc', 'desc']).optional().describe('sort_by_field direction; default asc.'),
 };
 
 const title = 'Refine Worksheet';
