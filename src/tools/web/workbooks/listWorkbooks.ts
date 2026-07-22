@@ -10,8 +10,10 @@ import {
   getWorkbookLineageQuery,
   mergeWorkbookLineage,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { isAxiosError } from '../../../utils/axios.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { paginate } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
@@ -87,26 +89,40 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
                 const maxResultLimit = configWithOverrides.getMaxResultLimit(
                   listWorkbooksTool.name,
                 );
+                const effectiveLimit = maxResultLimit
+                  ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                  : limit;
 
-                const workbooks = await paginate({
-                  pageConfig: {
-                    pageSize,
-                    limit: maxResultLimit
-                      ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
-                      : limit,
-                  },
-                  getDataFn: async (pageConfig) => {
-                    const { pagination, workbooks: data } =
-                      await restApi.workbooksMethods.queryWorkbooksForSite({
-                        siteId: restApi.siteId,
-                        filter: validatedFilter ?? '',
-                        pageSize: pageConfig.pageSize,
-                        pageNumber: pageConfig.pageNumber,
+                // Fast path: when results are scoped to a specific set of workbook IDs and the user
+                // hasn't supplied a filter, fetch those workbooks directly instead of paging the
+                // whole site. Query Workbooks for Site has no workbook-ID filter, so the slow path
+                // would fetch every workbook only to discard all but the allowed ones. A user filter
+                // forces the slow path since Query Workbook can't apply server-side filtering.
+                const workbookIds = configWithOverrides.boundedContext.workbookIds;
+                const workbooks =
+                  workbookIds !== null && !filter
+                    ? await fetchAllowedWorkbooksById({
+                        restApi,
+                        workbookIds,
+                        limit: effectiveLimit,
+                      })
+                    : await paginate({
+                        pageConfig: {
+                          pageSize,
+                          limit: effectiveLimit,
+                        },
+                        getDataFn: async (pageConfig) => {
+                          const { pagination, workbooks: data } =
+                            await restApi.workbooksMethods.queryWorkbooksForSite({
+                              siteId: restApi.siteId,
+                              filter: validatedFilter ?? '',
+                              pageSize: pageConfig.pageSize,
+                              pageNumber: pageConfig.pageNumber,
+                            });
+
+                          return { pagination, data };
+                        },
                       });
-
-                    return { pagination, data };
-                  },
-                });
 
                 if (configWithOverrides.disableMetadataApiRequests || workbooks.length === 0) {
                   return workbooks;
@@ -142,6 +158,59 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
 
   return listWorkbooksTool;
 };
+
+/**
+ * Fetches the allowed workbooks directly via Query Workbook, one request per ID. Used when the
+ * results are scoped by `INCLUDE_WORKBOOK_IDS` and no user filter is present.
+ *
+ * Workbooks that return 403 (no permission) or 404 (deleted / not found) are silently omitted so the
+ * result matches the slow path, where such workbooks simply never appear in Query Workbooks for
+ * Site. Any other failure (5xx, network, etc.) propagates so genuine errors aren't hidden.
+ *
+ * All workbooks are fetched before slicing to `limit` so that omitted (403/404) workbooks are
+ * backfilled by other allowed workbooks rather than leaving the result short.
+ */
+async function fetchAllowedWorkbooksById({
+  restApi,
+  workbookIds,
+  limit,
+}: {
+  restApi: RestApi;
+  workbookIds: Set<string>;
+  limit: number | undefined;
+}): Promise<Array<Workbook>> {
+  const ids = [...workbookIds];
+  const results = await Promise.allSettled(
+    ids.map((workbookId) =>
+      restApi.workbooksMethods.getWorkbook({
+        siteId: restApi.siteId,
+        workbookId,
+      }),
+    ),
+  );
+
+  const workbooks: Array<Workbook> = [];
+  results.forEach((result, i) => {
+    if (result.status === 'fulfilled') {
+      workbooks.push(result.value);
+      return;
+    }
+
+    const status = isAxiosError(result.reason) ? result.reason.response?.status : undefined;
+    if (status === 403 || status === 404) {
+      log({
+        message: `Skipping workbook ${ids[i]} from INCLUDE_WORKBOOK_IDS: not accessible (HTTP ${status})`,
+        level: 'warning',
+        logger: 'list-workbooks',
+      });
+      return;
+    }
+
+    throw result.reason;
+  });
+
+  return limit !== undefined ? workbooks.slice(0, limit) : workbooks;
+}
 
 export function constrainWorkbooks({
   workbooks,
