@@ -5,9 +5,9 @@ import { z } from 'zod';
 
 import { DesktopCache } from '../../../desktop/cache.js';
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
-import { getDashboardXml } from '../../../desktop/commands/workbook/getDashboardXml.js';
+import { getDashboardFragment } from '../../../desktop/commands/workbook/getDashboardXml.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
-import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheetXml.js';
+import { getWorksheetFragment } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
 import { addDashboard, addSheet } from '../../../desktop/metadata/index.js';
@@ -133,7 +133,7 @@ export const getBatchCreateAndCacheSheetsTool = (
           const worksheetFiles: Record<string, string> = {};
           const worksheetWarnings: string[] = [];
           for (const name of worksheetNames) {
-            const wsResult = await getWorksheetXml({ worksheetName: name, executor, signal });
+            const wsResult = await getWorksheetFragment({ worksheetName: name, executor, signal });
             if (wsResult.isErr()) {
               const { type, error } = wsResult.error;
               if (type === 'get-worksheet-xml-error') {
@@ -152,7 +152,7 @@ export const getBatchCreateAndCacheSheetsTool = (
 
           // Fetch and cache the dashboard working copy.
           let dashboardFile: string | null = null;
-          const dashResult = await getDashboardXml({ dashboardName, executor, signal });
+          const dashResult = await getDashboardFragment({ dashboardName, executor, signal });
           if (dashResult.isErr()) {
             const { type, error } = dashResult.error;
             if (type === 'get-dashboard-xml-error') {

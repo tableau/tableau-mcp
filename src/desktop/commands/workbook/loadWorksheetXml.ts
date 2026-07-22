@@ -21,7 +21,7 @@ import { xmlNamesEqual } from '../../xmlElement.js';
 import { withApplyLock } from './applyMutex.js';
 import { focusAppliedSheetBestEffort } from './focusAppliedSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
-import { getWorksheetXml } from './getWorksheetXml.js';
+import { getWorksheetFragment } from './getWorksheetXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
 
 export type LoadWorksheetXmlError =
@@ -79,7 +79,7 @@ async function verifyPostApplyWorksheetReadback(
   signal: WithExecutorAndAbortSignal['signal'],
 ): Promise<PostApplyWorksheetReadbackVerification> {
   try {
-    const reread = await getWorksheetXml({ worksheetName, executor, signal });
+    const reread = await getWorksheetFragment({ worksheetName, executor, signal });
     if (reread.isErr()) {
       const message =
         reread.error.type === 'get-worksheet-xml-error'

@@ -178,6 +178,20 @@ export function extractDashboardXml(workbookXml: string, dashboardName: string):
   return serializeXML({ dashboard });
 }
 
+// The External Client API per-dashboard `/document` route returns a whole `<workbook>` scoped to
+// the requested dashboard, but callers require a single `<dashboard>` fragment. Slice it out. A
+// document that is already a bare `<dashboard>` fragment is returned unchanged; null if absent.
+export function dashboardDocumentToFragment(
+  documentXml: string,
+  dashboardName: string,
+): string | null {
+  const fragment = extractDashboardXml(documentXml, dashboardName);
+  if (fragment !== null) {
+    return fragment;
+  }
+  return parseXML(documentXml).dashboard ? documentXml : null;
+}
+
 // Builds a whole-workbook document carrying only the one edited dashboard (and its window).
 // The workbook POST upserts by name: it overwrites the colliding live dashboard and leaves the
 // rest of the live workbook untouched. Worksheets are stripped from the doc — they stay live and

@@ -1,5 +1,9 @@
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
-import { extractDashboardXml, listWorkbookDashboards } from './dashboards.js';
+import {
+  dashboardDocumentToFragment,
+  extractDashboardXml,
+  listWorkbookDashboards,
+} from './dashboards.js';
 
 // Same shape as the worksheet regression (sheets.test.ts): the <workbook> root declares
 // xmlns:user, and a zone's filter carries a user:-prefixed attribute. The declaration lives on
@@ -53,6 +57,34 @@ describe('extractDashboardXml', () => {
     const xml = extractDashboardXml(workbookWithConflict, 'q');
     expect(xml).toContain('http://example.com/already-declared');
     expect(xml).not.toContain('http://www.tableausoftware.com/xml/user');
+  });
+});
+
+describe('dashboardDocumentToFragment', () => {
+  // The live per-dashboard /document route returns a whole <workbook>, not a bare fragment.
+  const WORKBOOK_WITH_DASHBOARD = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <dashboards>
+    <dashboard name='Executive Dashboard'><zones /></dashboard>
+  </dashboards>
+</workbook>`;
+
+  it('slices the requested dashboard out of a whole-workbook document', () => {
+    const xml = dashboardDocumentToFragment(WORKBOOK_WITH_DASHBOARD, 'Executive Dashboard');
+    expect(xml).not.toBeNull();
+    expect(xml).toContain('name="Executive Dashboard"');
+    expect(xml).not.toContain('<workbook');
+  });
+
+  it('returns a document that is already a bare <dashboard> fragment unchanged', () => {
+    const fragment = '<dashboard name="Solo"><zones /></dashboard>';
+    expect(dashboardDocumentToFragment(fragment, 'Solo')).toBe(fragment);
+  });
+
+  it('returns null when the document contains no dashboard', () => {
+    expect(
+      dashboardDocumentToFragment('<workbook><dashboards /></workbook>', 'Missing'),
+    ).toBeNull();
   });
 });
 

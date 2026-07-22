@@ -15,7 +15,7 @@ import { setTimeout as setTimeoutPromise } from 'timers/promises';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheetXml.js';
+import { getWorksheetFragment } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import {
   confirmSortByFieldApplied,
@@ -155,7 +155,7 @@ export const getRefineWorksheetTool = (
           const executor = await extra.getExecutor(resolvedSession);
 
           // 1. ONE fetch of the target worksheet.
-          const fetched = await getWorksheetXml({
+          const fetched = await getWorksheetFragment({
             worksheetName,
             executor,
             signal: extra.signal,
@@ -264,7 +264,7 @@ export const getRefineWorksheetTool = (
           // after SUCCEEDED, so poll rather than trusting one immediate readback — the
           // first read can race the settle and still show pre-apply XML.
           for (let attempt = 1; attempt <= READBACK_POLL_MAX_ATTEMPTS; attempt++) {
-            const readback = await getWorksheetXml({
+            const readback = await getWorksheetFragment({
               worksheetName: canonicalWorksheetName,
               executor,
               signal: extra.signal,
