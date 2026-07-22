@@ -362,6 +362,24 @@ describe('bindTemplateTool', () => {
     expect(body.guidance).toBe(boundResult.status === 'bound' ? boundResult.apply_instruction : '');
   });
 
+  it('returns the standard MCP content-block envelope, not a bare JSON string', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(boundResult);
+
+    const result = await getToolResult({ session: '1', ask: 'bar chart of Sales by Region' });
+
+    expect(result).toMatchObject({
+      isError: false,
+      content: [{ type: 'text', text: expect.any(String) }],
+    });
+    expect(result.content).toHaveLength(1);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      ...boundResult,
+      guidance: boundResult.status === 'bound' ? boundResult.apply_instruction : '',
+    });
+  });
+
   it('returns status "propose" (not an error) with next-step guidance (Call 1 miss)', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValue(proposeResult);
