@@ -1,4 +1,9 @@
-import { externalApiDialogPolicyFor, liveDialogPolicyFor } from '../commandPolicy.js';
+import {
+  externalApiDialogPolicyFor,
+  formatUnvalidatedTargetRefusal,
+  liveDialogPolicyFor,
+  unvalidatedTargetPolicyFor,
+} from '../commandPolicy.js';
 import { validateKnownCommand } from '../commandRegistry.js';
 import {
   ExternalApiCommandRegistryEntry,
@@ -34,6 +39,14 @@ export function guardCommand({
   const commandValidation = validateKnownCommand(command);
   if (!commandValidation.ok) {
     return { refused: true, message: commandValidation.message };
+  }
+
+  const unvalidatedTargetPolicy = unvalidatedTargetPolicyFor(command);
+  if (unvalidatedTargetPolicy) {
+    return {
+      refused: true,
+      message: formatUnvalidatedTargetRefusal(command, unvalidatedTargetPolicy),
+    };
   }
 
   // Unconditional: these hang the UI thread headlessly on EVERY deployment

@@ -133,9 +133,13 @@ describe('guardCommand', () => {
     expect('refused' in result).toBe(true);
     if (!('refused' in result)) return;
     expect(result.message).toContain('activate-sheet');
+    expect(result.message).toContain('"sheetName"');
     expect(result.message).toContain('cannot pre-validate');
-    expect(result.message).toContain('blocking Tableau Desktop dialog');
+    expect(result.message).toContain(
+      'An invalid sheet value can open a blocking Tableau Desktop dialog',
+    );
     expect(result.message).toContain('47BF7751');
+    expect(result.message).not.toContain('because it would open');
   });
 
   it('rewrites registry local parameter names to wire names and returns registry warnings', () => {

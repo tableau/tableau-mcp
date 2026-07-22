@@ -11,6 +11,7 @@ const CRASH_PRONE_REASON = 'crash-prone';
 const LIVE_DIALOG_REASON = 'live-dialog';
 const EXTERNAL_API_DIALOG_REASON = 'external-api-dialog';
 const KNOWN_LIVE_FAILURE_REASON = 'known-live-failure';
+const UNVALIDATED_TARGET_REASON = 'unvalidated-target';
 const FILTER_FIX = 'express filters in the NotionalSpec (categoricalFilters/rangeFilters/...)';
 const SORT_FIX =
   'tabdoc:sort drives a UI dialog and blocks the screen. Use refine-worksheet with operation sort_by_field (sort a dimension by a field/measure), or the bind-template sort proposal/document round-trip for nested sorts';
@@ -26,7 +27,7 @@ const SITE_FIX =
 const TABLE_CALC_FIX = 'author table calculations through supported calculation tools';
 const PAGE_FIX = 'use a page navigation call with exactly one of page-number or page-name';
 const GOTO_SHEET_FIX =
-  'use the activate-sheet tool instead. Raw tabdoc:goto-sheet cannot pre-validate the sheet value against live workbook windows, and a bad value opens a blocking Tableau Desktop dialog (Error 47BF7751)';
+  'use the activate-sheet tool with {"sheetName":"<existing worksheet, dashboard, or story name>"} instead; it validates the target before applying the navigation';
 
 function refuse(reason: string, fix?: string): CommandPolicy {
   return { action: 'refuse', reason, fix };
@@ -45,7 +46,7 @@ const hintWithParams = (fix: string, allowed: string, required: string): Command
 export const COMMAND_POLICIES: Map<string, CommandPolicy> = new Map([
   ['tabdoc:show-parameter-controls', refuse(CRASH_PRONE_REASON)], // commandRegistry crash guard: crash-prone headlessly.
   ['tabdoc:show-parameter-controls-range', refuse(CRASH_PRONE_REASON)], // commandRegistry crash guard: crash-prone headlessly.
-  ['tabdoc:goto-sheet', liveDialog(GOTO_SHEET_FIX)], // 2026-07-22 live receipt: bad Sheet value opens modal 47BF7751; activate-sheet validates first.
+  ['tabdoc:goto-sheet', refuse(UNVALIDATED_TARGET_REASON, GOTO_SHEET_FIX)], // 2026-07-22 live receipt: bad Sheet value opens modal 47BF7751; activate-sheet validates first.
   [
     'tabdoc:sort-nested',
     hintWithParams(SORT_NESTED_FIX, SORT_NESTED_ALLOWED, SORT_NESTED_REQUIRED),
@@ -101,6 +102,20 @@ export function liveDialogPolicyFor(command: string): CommandPolicy | undefined 
 
 export function externalApiDialogPolicyFor(command: string): CommandPolicy | undefined {
   return policyForReason(command, EXTERNAL_API_DIALOG_REASON);
+}
+
+export function unvalidatedTargetPolicyFor(command: string): CommandPolicy | undefined {
+  return policyForReason(command, UNVALIDATED_TARGET_REASON);
+}
+
+export function formatUnvalidatedTargetRefusal(command: string, policy: CommandPolicy): string {
+  const fix =
+    policy.fix ?? 'use a supported navigation tool that validates the target before dispatch';
+  return (
+    `Refusing Tableau command "${command}" because execute-tableau-command cannot pre-validate ` +
+    'its sheet target against live workbook windows. An invalid sheet value can open a blocking ' +
+    `Tableau Desktop dialog (Error 47BF7751). NOT sent. FIX: ${fix}`
+  );
 }
 
 export function knownLiveFailureFixFor(command: string): string | undefined {
