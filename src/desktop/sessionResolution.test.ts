@@ -27,13 +27,22 @@ describe('resolveSession', () => {
     vi.restoreAllMocks();
   });
 
-  it('rejects an explicit session that conflicts with the pin', () => {
+  it('honors an explicit live session that differs from the pin', () => {
     mockConfig({ desktopSessionId: '4242' });
+    mockExternalApiInstances([4242, 7]);
+    const result = resolveSession('7');
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toBe('7');
+  });
+
+  it('rejects an explicit session that is not a running instance (pinned)', () => {
+    mockConfig({ desktopSessionId: '4242' });
+    mockExternalApiInstances([4242]);
     const result = resolveSession('7');
     expect(result.isErr()).toBe(true);
     const text = result.unwrapErr().getErrorText();
-    expect(text).toContain('4242');
     expect(text).toContain('7');
+    expect(text).toContain('list-instances');
   });
 
   it('honors an explicit session that matches the pin', () => {
@@ -68,11 +77,22 @@ describe('resolveSession', () => {
     }
   });
 
-  it('returns an explicit session id verbatim when nothing is pinned', () => {
+  it('returns an explicit live session id when nothing is pinned', () => {
     mockConfig({ desktopSessionId: undefined });
+    mockExternalApiInstances([7]);
     const result = resolveSession('7');
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toBe('7');
+  });
+
+  it('rejects an explicit session that is not a running instance when unpinned', () => {
+    mockConfig({ desktopSessionId: undefined });
+    mockExternalApiInstances([99]);
+    const result = resolveSession('7');
+    expect(result.isErr()).toBe(true);
+    const text = result.unwrapErr().getErrorText();
+    expect(text).toContain('7');
+    expect(text).toContain('list-instances');
   });
 
   it('auto-resolves the unique External API instance when nothing is pinned', () => {

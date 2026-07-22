@@ -324,6 +324,7 @@ const badSortFieldEscalateResult: BinderResult = {
 describe('bindTemplateTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -660,6 +661,7 @@ function setupAutoApplyMocks({
 describe('bindTemplateTool auto_apply gate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
   it('auto_apply=false leaves today’s read-only bound result byte-compatible (no apply)', async () => {
@@ -1373,6 +1375,7 @@ describe('bindTemplateTool auto_apply gate', () => {
 describe('bindTemplateTool auto_apply graceful fallback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
   it('inject failure returns the bound args intact with applied:false + apply_error', async () => {
@@ -1450,6 +1453,7 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
 describe('bindTemplateTool session-default-when-unique', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
   function mockInstances(pids: number[]): void {
@@ -1503,11 +1507,24 @@ describe('bindTemplateTool session-default-when-unique', () => {
     expect(binderModule.bindTemplate).not.toHaveBeenCalled();
   });
 
-  it('an explicit session always wins (discovery is never consulted)', async () => {
-    // Even with 2+ instances running, an explicit session bypasses discovery.
+  it('targets an explicit session that is one of the running instances', async () => {
     mockInstances([11, 22]);
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValue(boundResult);
+    const getExecutor = vi.fn().mockResolvedValue({});
+
+    const result = await getToolResult({
+      session: '22',
+      ask: 'bar chart of Sales by Region',
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(getExecutor).toHaveBeenCalledWith('22');
+  });
+
+  it('rejects an explicit session that is not a running instance, naming the running pids', async () => {
+    mockInstances([11, 22]);
     const getExecutor = vi.fn().mockResolvedValue({});
 
     const result = await getToolResult({
@@ -1516,15 +1533,19 @@ describe('bindTemplateTool session-default-when-unique', () => {
       getExecutor,
     });
 
-    expect(result.isError).toBe(false);
-    expect(getExecutor).toHaveBeenCalledWith('7');
-    expect(externalDiscovery.discoverInstances).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('7');
+    expect(result.content[0].text).toContain('list-instances');
+    expect(getExecutor).not.toHaveBeenCalled();
+    expect(binderModule.bindTemplate).not.toHaveBeenCalled();
   });
 });
 
 describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
   it('applies onto the named existing sheet: inject titled with the target, sheet_name reports it', async () => {
@@ -1631,6 +1652,7 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
 describe('bindTemplateTool auto_apply — events-clean gate (W60 blind-spot #1)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
   it('refuses to auto-apply over a workbook the user touched mid-bind (falls back, bind intact)', async () => {
@@ -1724,6 +1746,7 @@ describe('bindTemplateTool auto_apply — events-clean gate (W60 blind-spot #1)'
 describe('bindTemplateTool route-state recording', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
     sessionRouteState.clear();
     vi.spyOn(bundledIntelligenceProvider, 'listTemplateManifests').mockReturnValue([
       ...loadManifests().values(),

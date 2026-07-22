@@ -2,6 +2,11 @@ import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-comp
 import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
 
 import * as configModule from './config.desktop.js';
+import {
+  buildDesktopInstructions,
+  SESSION_RESOLUTION_TEXT_PINNED,
+  SESSION_RESOLUTION_TEXT_UNPINNED,
+} from './desktop/routeTable.js';
 import * as loggerModule from './logging/logger.js';
 import {
   DEMO_TOOL_PROFILE,
@@ -56,7 +61,7 @@ describe('DesktopMcpServer', () => {
     expect(registeredNames).toContain('list-worksheets');
   });
 
-  it('does not register list-instances when a Desktop session is pinned', async () => {
+  it('registers list-instances even when a Desktop session is pinned', async () => {
     const base = configModule.getDesktopConfig();
     const spy = vi
       .spyOn(configModule, 'getDesktopConfig')
@@ -69,7 +74,7 @@ describe('DesktopMcpServer', () => {
       const registeredNames = (
         vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
       ).map(([name]) => name);
-      expect(registeredNames).not.toContain('list-instances');
+      expect(registeredNames).toContain('list-instances');
       expect(registeredNames).toContain('list-worksheets');
     } finally {
       spy.mockRestore();
@@ -119,6 +124,13 @@ If preflight rejects apply, fix per FIX lines. Prefer file mode`,
 
   it('tells agents to narrate with Tableau vocabulary', () => {
     expect(DESKTOP_INSTRUCTIONS).toContain('Use Tableau terms: workbook/viz/sheet/field');
+  });
+
+  it('keeps pin-aware session guidance (list-instances, target another) when pinned', () => {
+    const pinned = buildDesktopInstructions({ sessionPinned: true });
+    expect(pinned).toContain(SESSION_RESOLUTION_TEXT_PINNED);
+    expect(pinned).toContain('list-instances');
+    expect(pinned).not.toContain(SESSION_RESOLUTION_TEXT_UNPINNED);
   });
 });
 
