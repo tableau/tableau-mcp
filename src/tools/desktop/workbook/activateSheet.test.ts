@@ -1,68 +1,257 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
-import * as loadWorkbookXmlModule from '../../../desktop/commands/workbook/loadWorkbookXml.js';
-import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
-import type { ParsedWindow } from '../../../desktop/metadata/types.js';
+import {
+  activateSheetBestEffort,
+  activateSheetWithValidatedGoto,
+} from '../../../desktop/commands/workbook/activateSheet.js';
+import type { ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { activateSheetInWorkbook, getActivateSheetTool } from './activateSheet.js';
-
-vi.mock('../../../desktop/commands/workbook/getWorkbookXml.js');
-vi.mock('../../../desktop/commands/workbook/loadWorkbookXml.js');
+import { getActivateSheetTool } from './activateSheet.js';
 
 function worksheetXml(name: string): string {
   return `<worksheet name='${name}'><table><view/><style/><panes><pane><view/></pane></panes></table></worksheet>`;
 }
 
-function worksheetWindowXml(name: string, attributes = ''): string {
-  return `<window class='worksheet' name='${name}'${attributes}><cards/></window>`;
+function dashboardXml(name: string): string {
+  return `<dashboard name='${name}'><style/><zones/></dashboard>`;
 }
 
-function buildWorkbook(sheetNames = ['Alpha', 'Beta']): string {
+function windowXml(name: string, windowClass: 'worksheet' | 'dashboard', attributes = ''): string {
+  return `<window class='${windowClass}' name='${name}'${attributes}><cards/></window>`;
+}
+
+function buildWorkbook({
+  worksheetNames = ['Alpha', 'Beta'],
+  dashboardNames = [],
+  activeSheetName,
+}: {
+  worksheetNames?: string[];
+  dashboardNames?: string[];
+  activeSheetName?: string;
+} = {}): string {
+  const firstSheet = activeSheetName ?? worksheetNames[0] ?? dashboardNames[0];
   return [
     "<?xml version='1.0' encoding='utf-8'?>",
     "<workbook version='18.1'>",
     "<datasources><datasource name='Superstore'/></datasources>",
-    `<worksheets>${sheetNames.map(worksheetXml).join('')}</worksheets>`,
+    `<worksheets>${worksheetNames.map(worksheetXml).join('')}</worksheets>`,
+    `<dashboards>${dashboardNames.map(dashboardXml).join('')}</dashboards>`,
     '<windows>',
-    worksheetWindowXml(sheetNames[0], " active='true' maximized='true'"),
-    ...sheetNames.slice(1).map((name) => worksheetWindowXml(name)),
+    ...worksheetNames.map((name) =>
+      windowXml(name, 'worksheet', name === firstSheet ? " active='true' maximized='true'" : ''),
+    ),
+    ...dashboardNames.map((name) =>
+      windowXml(name, 'dashboard', name === firstSheet ? " active='true' maximized='true'" : ''),
+    ),
     '</windows>',
     '</workbook>',
   ].join('');
-}
-
-function worksheetWindows(xml: string): ParsedWindow[] {
-  return normalizeArray<ParsedWindow>(parseXML(xml).workbook?.windows?.window).filter(
-    (window) => window['@_class'] === 'worksheet',
-  );
 }
 
 const successSchema = z.object({
   activated: z.literal(true),
   sheetName: z.string(),
   message: z.string(),
+  previousSheet: z.string().optional(),
+  availableSheets: z.array(z.string()),
 });
 
-describe('activateSheetInWorkbook', () => {
-  it('moves the active worksheet window marker to the requested sheet', () => {
-    const result = activateSheetInWorkbook(buildWorkbook(), 'Beta');
+describe('activateSheetWithValidatedGoto', () => {
+  const signal = new AbortController().signal;
 
-    invariant(result.status === 'activated');
-    const windows = worksheetWindows(result.xml);
-    expect(windows.find((window) => window['@_name'] === 'Alpha')).not.toMatchObject({
-      '@_active': 'true',
-      '@_maximized': 'true',
+  it('fresh-reads the workbook before issuing goto-sheet with the exact target', async () => {
+    const { executor, getWorkbookDocument, executeCommand } = makeExecutor();
+
+    const result = await activateSheetWithValidatedGoto({
+      sheetName: 'Beta',
+      executor,
+      signal,
     });
-    expect(windows.find((window) => window['@_name'] === 'Beta')).toMatchObject({
-      '@_active': 'true',
-      '@_maximized': 'true',
+
+    expect(result).toEqual({
+      status: 'activated',
+      previousSheet: 'Alpha',
+      availableSheets: ['Alpha', 'Beta'],
     });
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledWith({
+      namespace: 'tabdoc',
+      command: 'goto-sheet',
+      args: { Sheet: 'Beta' },
+      signal,
+    });
+  });
+
+  it('refuses a missing sheet without issuing any command', async () => {
+    const { executor, executeCommand } = makeExecutor();
+
+    const result = await activateSheetWithValidatedGoto({
+      sheetName: 'Missing',
+      executor,
+      signal,
+    });
+
+    expect(result).toEqual({
+      status: 'not-found',
+      availableSheets: ['Alpha', 'Beta'],
+    });
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('uses an exact case-sensitive name check', async () => {
+    const { executor, executeCommand } = makeExecutor();
+
+    const result = await activateSheetWithValidatedGoto({
+      sheetName: 'beta',
+      executor,
+      signal,
+    });
+
+    expect(result).toEqual({
+      status: 'not-found',
+      availableSheets: ['Alpha', 'Beta'],
+    });
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('accepts a dashboard found in the same fresh workbook read', async () => {
+    const { executor, executeCommand } = makeExecutor({
+      xml: buildWorkbook({ dashboardNames: ['Sales Dashboard'] }),
+    });
+
+    const result = await activateSheetWithValidatedGoto({
+      sheetName: 'Sales Dashboard',
+      executor,
+      signal,
+    });
+
+    expect(result.status).toBe('activated');
+    expect(executeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        namespace: 'tabdoc',
+        command: 'goto-sheet',
+        args: { Sheet: 'Sales Dashboard' },
+      }),
+    );
+  });
+});
+
+describe('activateSheetBestEffort', () => {
+  const signal = new AbortController().signal;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('swallows a goto-sheet failure and logs the skipped activation', async () => {
+    const commandError = { type: 'command-timed-out' as const, error: 'activation timeout' };
+    const { executor } = makeExecutor({
+      executeResult: Err(commandError),
+    });
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
+
+    const activation = activateSheetBestEffort({
+      sheetName: 'Beta',
+      executor,
+      signal,
+    });
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    await expect(activation).resolves.toBeUndefined();
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warning',
+        data: expect.objectContaining({ sheetName: 'Beta' }),
+      }),
+    );
+    logSpy.mockRestore();
+  });
+
+  it('does not navigate when validation cannot find the target', async () => {
+    const { executor, executeCommand } = makeExecutor({
+      xml: buildWorkbook({ worksheetNames: ['Alpha'] }),
+    });
+
+    const activation = activateSheetBestEffort({
+      sheetName: 'Beta',
+      executor,
+      signal,
+    });
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    await expect(activation).resolves.toBeUndefined();
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('waits for settle, verifies focus, and reissues goto-sheet once after snap-back', async () => {
+    const { executor, getWorkbookDocument, executeCommand } = makeExecutor({
+      xmlSequence: [
+        buildWorkbook({ activeSheetName: 'Alpha' }),
+        buildWorkbook({ activeSheetName: 'Alpha' }),
+        buildWorkbook({ activeSheetName: 'Alpha' }),
+      ],
+    });
+
+    const activation = activateSheetBestEffort({
+      sheetName: 'Beta',
+      executor,
+      signal,
+    });
+
+    await vi.advanceTimersByTimeAsync(499);
+    expect(executeCommand).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenLastCalledWith(
+      expect.objectContaining({ command: 'goto-sheet', args: { Sheet: 'Beta' } }),
+    );
+
+    await vi.advanceTimersByTimeAsync(699);
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(activation).resolves.toBeUndefined();
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(2);
+    expect(executeCommand).toHaveBeenCalledTimes(2);
+    expect(executeCommand).toHaveBeenLastCalledWith(
+      expect.objectContaining({ command: 'goto-sheet', args: { Sheet: 'Beta' } }),
+    );
+  });
+
+  it('does not reissue goto-sheet when the verification read shows the target is focused', async () => {
+    const { executor, getWorkbookDocument, executeCommand } = makeExecutor({
+      xmlSequence: [
+        buildWorkbook({ activeSheetName: 'Alpha' }),
+        buildWorkbook({ activeSheetName: 'Beta' }),
+      ],
+    });
+
+    const activation = activateSheetBestEffort({
+      sheetName: 'Beta',
+      executor,
+      signal,
+    });
+
+    await vi.advanceTimersByTimeAsync(1200);
+
+    await expect(activation).resolves.toBeUndefined();
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(2);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -71,70 +260,29 @@ describe('activateSheetTool', () => {
     vi.clearAllMocks();
   });
 
-  it('holds the apply lock across reading, mutating, and applying', async () => {
-    const firstLoad = deferred<Awaited<ReturnType<typeof loadWorkbookXmlModule.loadWorkbookXml>>>();
-    const secondLoad =
-      deferred<Awaited<ReturnType<typeof loadWorkbookXmlModule.loadWorkbookXml>>>();
-    const firstApply =
-      deferred<Awaited<ReturnType<typeof loadWorkbookXmlModule.applyWorkbookText>>>();
-    const secondApply =
-      deferred<Awaited<ReturnType<typeof loadWorkbookXmlModule.applyWorkbookText>>>();
-    const getSpy = vi
-      .spyOn(getWorkbookXmlModule, 'getWorkbookXml')
-      .mockResolvedValue(Ok(buildWorkbook()));
-    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml')
-      .mockReturnValueOnce(firstLoad.promise)
-      .mockReturnValueOnce(secondLoad.promise);
-    vi.spyOn(loadWorkbookXmlModule, 'applyWorkbookText')
-      .mockReturnValueOnce(firstApply.promise)
-      .mockReturnValueOnce(secondApply.promise);
+  it('navigates through validated goto-sheet and returns read-derived context', async () => {
+    const { executor, executeCommand } = makeExecutor();
 
-    const firstResult = getToolResult({ sheetName: 'Beta' });
-    const secondResult = getToolResult({ sheetName: 'Beta' });
-
-    try {
-      await flushAsyncWork();
-
-      expect(getSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      firstLoad.resolve(Ok({ validationWarnings: [] }));
-      secondLoad.resolve(Ok({ validationWarnings: [] }));
-      firstApply.resolve(Ok.EMPTY);
-      secondApply.resolve(Ok.EMPTY);
-      await Promise.allSettled([firstResult, secondResult]);
-    }
-  });
-
-  it('applies a workbook with only the active sheet changed and returns no XML', async () => {
-    const fixture = buildWorkbook();
-    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(fixture));
-    const applySpy = vi
-      .spyOn(loadWorkbookXmlModule, 'applyWorkbookText')
-      .mockResolvedValue(Ok.EMPTY);
-
-    const result = await getToolResult({ sheetName: 'Beta' });
+    const result = await getToolResult({ sheetName: 'Beta', executor });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = successSchema.parse(JSON.parse(result.content[0].text));
     expect(parsed.sheetName).toBe('Beta');
     expect(parsed.message).toContain('Activated sheet "Beta"');
-    expect(parsed).not.toHaveProperty('workbookXml');
-    const appliedXml = applySpy.mock.calls[0]?.[0].xml;
-    expect(typeof appliedXml).toBe('string');
-    const betaWindow = worksheetWindows(String(appliedXml)).find(
-      (window) => window['@_name'] === 'Beta',
+    expect(parsed.previousSheet).toBe('Alpha');
+    expect(parsed.availableSheets).toEqual(['Alpha', 'Beta']);
+    expect(executeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({ command: 'goto-sheet', args: { Sheet: 'Beta' } }),
     );
-    expect(betaWindow).toMatchObject({ '@_active': 'true', '@_maximized': 'true' });
   });
 
-  it('errors for an unknown sheet with the available sheets and dispatches nothing', async () => {
-    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(
-      Ok(buildWorkbook(['Revenue "Q1"', 'Profit, YoY'])),
-    );
-    const applySpy = vi.spyOn(loadWorkbookXmlModule, 'applyWorkbookText');
+  it('errors for an unknown sheet with the available sheets and issues no command', async () => {
+    const { executor, executeCommand } = makeExecutor({
+      xml: buildWorkbook({ worksheetNames: ['Revenue "Q1"', 'Profit, YoY'] }),
+    });
 
-    const result = await getToolResult({ sheetName: 'Missing' });
+    const result = await getToolResult({ sheetName: 'Missing', executor });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -142,31 +290,62 @@ describe('activateSheetTool', () => {
     expect(result.structuredContent).toEqual({
       availableSheets: ['Revenue "Q1"', 'Profit, YoY'],
     });
-    expect(applySpy).not.toHaveBeenCalled();
+    expect(executeCommand).not.toHaveBeenCalled();
   });
 });
 
-async function getToolResult({ sheetName }: { sheetName: string }): Promise<CallToolResult> {
+async function getToolResult({
+  sheetName,
+  executor,
+}: {
+  sheetName: string;
+  executor: ToolExecutor;
+}): Promise<CallToolResult> {
   const tool = getActivateSheetTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   const extra = {
     ...getMockRequestHandlerExtra(),
-    getExecutor: vi.fn().mockResolvedValue({}),
+    getExecutor: vi.fn().mockResolvedValue(executor),
   };
 
   return await callback({ session: '12345', sheetName }, extra);
 }
 
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
-  });
-  return { promise, resolve };
-}
-
-async function flushAsyncWork(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+function makeExecutor({
+  xml = buildWorkbook(),
+  xmlSequence,
+  executeResult = Ok({ command_id: 'goto-1' }),
+}: {
+  xml?: string;
+  xmlSequence?: string[];
+  executeResult?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
+} = {}): {
+  executor: ToolExecutor;
+  getWorkbookDocument: ReturnType<typeof vi.fn>;
+  executeCommand: ReturnType<typeof vi.fn>;
+} {
+  const getWorkbookDocument = vi.fn();
+  const xmls = xmlSequence && xmlSequence.length > 0 ? xmlSequence : [xml];
+  for (const entry of xmls) {
+    getWorkbookDocument.mockResolvedValueOnce(
+      Ok({
+        xml: entry,
+        applicationVersion: undefined,
+        xsdPayloadVersion: undefined,
+      }),
+    );
+  }
+  getWorkbookDocument.mockResolvedValue(
+    Ok({
+      xml: xmls[xmls.length - 1],
+      applicationVersion: undefined,
+      xsdPayloadVersion: undefined,
+    }),
+  );
+  const executeCommand = vi.fn().mockResolvedValue(executeResult);
+  return {
+    executor: { getWorkbookDocument, executeCommand } as unknown as ToolExecutor,
+    getWorkbookDocument,
+    executeCommand,
+  };
 }

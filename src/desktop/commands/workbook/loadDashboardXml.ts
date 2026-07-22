@@ -13,7 +13,6 @@ import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { xmlNamesEqual } from '../../xmlElement.js';
 import { withApplyLock } from './applyMutex.js';
-import { focusAppliedSheetBestEffort } from './focusAppliedSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
 
@@ -22,8 +21,8 @@ export type LoadDashboardXmlError =
   | { type: 'validation-failed'; issues: Array<ValidationIssue> }
   // The caller's dashboard_name disagrees with the `<dashboard name>` in the authored XML, or the
   // payload carries no top-level `<dashboard>` fragment to gate on (e.g. a whole `<workbook>`
-  // document). Caught BEFORE apply so the post-apply goto-sheet can never target a stale/default
-  // sheet, and so the agent gets an actionable message instead of a misleading empty-name mismatch.
+  // document). Caught BEFORE apply so the agent gets an actionable message instead of a misleading
+  // empty-name mismatch.
   | { type: 'name-mismatch'; message: string }
   // The load-dashboard command reported command-level completion, but Tableau
   // rejected the actual document load (surfaced in the response payload, not in
@@ -52,8 +51,7 @@ type LoadDashboardHelperResult = Result<
  * Names are compared after trim and Unicode NFC normalization (case-sensitive) so visually
  * identical NFD/NFC spellings do not false-mismatch. Returns the validated canonical name — the
  * name exactly as authored in the XML (trimmed), which is what Tableau stores when it applies the
- * raw XML — for the load and the post-apply goto-sheet, so focus can never target a stale/default
- * sheet (e.g. "Sheet 1"), and so upsertDashboardIntoWorkbook's own name check still matches.
+ * raw XML — for the load, and so upsertDashboardIntoWorkbook's own name check still matches.
  *
  * Only a single top-level `<dashboard>` fragment is a legal payload here (the same fragment
  * get-dashboard-xml returns and upsertDashboardIntoWorkbook requires). A `<workbook>`-wrapped document
@@ -150,9 +148,8 @@ export async function loadDashboardXml({
     });
   }
 
-  // Canonical-name gate (focus hardening): require the caller's dashboard_name to agree with
-  // the XML root name before apply, then thread the validated canonical name through the load
-  // and goto-sheet so navigation can never land on a stale/default sheet.
+  // Require the caller's dashboard_name to agree with the XML root name before apply, then
+  // thread the validated canonical name through the load.
   const canonicalNameResult = resolveCanonicalDashboardName(dashboardName, xml);
   if (canonicalNameResult.isErr()) {
     log({
@@ -214,13 +211,6 @@ async function loadDashboardXmlViaExternalApi({
       message: 'load-dashboard completed',
       logger: 'dashboardCommands',
       data: { dashboardName },
-    });
-
-    await focusAppliedSheetBestEffort({
-      sheetName: dashboardName,
-      appliedVia: 'load-dashboard',
-      executor,
-      signal,
     });
 
     return Ok.EMPTY;

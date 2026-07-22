@@ -188,42 +188,53 @@ describe('paramContractGuard', () => {
   });
 });
 
-describe('live param overrides (runtime truth beats the reference)', () => {
-  it('accepts goto-sheet with "Sheet" — the live-verified /v0 contract', async () => {
+describe('raw goto-sheet refusal', () => {
+  it('refuses goto-sheet even with "Sheet" because bad sheet values open modal 47BF7751', async () => {
     const { validateCommandParams } = await import('./paramContractGuard.js');
-    expect(validateCommandParams('tabdoc:goto-sheet', { Sheet: 'Sheet 1' })).toEqual({ ok: true });
+    const result = validateCommandParams('tabdoc:goto-sheet', { Sheet: 'Sheet 1' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain('activate-sheet');
+      expect(result.message).toContain('"sheetName"');
+      expect(result.message).toContain('cannot pre-validate');
+      expect(result.message).toContain(
+        'An invalid sheet value can open a blocking Tableau Desktop dialog',
+      );
+      expect(result.message).toContain('47BF7751');
+      expect(result.message).not.toContain('opens a BLOCKING dialog/modal');
+    }
   });
 
-  it('rejects goto-sheet with "WindowLocator" — the reference-declared param that pops a modal live', async () => {
+  it('refuses goto-sheet with "WindowLocator" before parameter-shape validation', async () => {
     const { validateCommandParams } = await import('./paramContractGuard.js');
     const result = validateCommandParams('tabdoc:goto-sheet', { WindowLocator: 'Sheet 1' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.message).toContain(
-        'Unknown parameter(s) for Tableau command "tabdoc:goto-sheet": WindowLocator',
-      );
-      expect(result.message).toContain('"Sheet"');
-      expect(result.message).toContain('blocking error dialog');
+      expect(result.message).toContain('activate-sheet');
+      expect(result.message).toContain('cannot pre-validate');
     }
   });
 
-  it('rejects goto-sheet with no args — Sheet is required by the live contract', async () => {
+  it('refuses goto-sheet with no args before parameter-shape validation', async () => {
     const { validateCommandParams } = await import('./paramContractGuard.js');
     const result = validateCommandParams('tabdoc:goto-sheet', undefined);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.message).toContain(
-        'Missing required parameter(s) for Tableau command "tabdoc:goto-sheet": Sheet',
-      );
+      expect(result.message).toContain('activate-sheet');
+      expect(result.message).toContain('cannot pre-validate');
     }
   });
 
-  it('override wins even when the bundled reference is unreadable', async () => {
+  it('refuses goto-sheet even when the bundled reference is unreadable', async () => {
     const { validateCommandParams } = await import('./paramContractGuard.js');
     mocks.readDataAsset.mockImplementation(() => {
       throw new Error('unreadable');
     });
-    expect(validateCommandParams('tabdoc:goto-sheet', { Sheet: 'x' })).toEqual({ ok: true });
+    const result = validateCommandParams('tabdoc:goto-sheet', { Sheet: 'x' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain('activate-sheet');
+    }
   });
 });
 

@@ -22,4 +22,15 @@ describe('commandPolicy', () => {
 
     expect(commandRegistry).not.toHaveProperty('CRASH_PRONE_COMMANDS');
   });
+
+  it('limits the unvalidated-target refusal to the exact raw goto-sheet command', async () => {
+    const { unvalidatedTargetPolicyFor } = await import('./commandPolicy.js');
+
+    expect(unvalidatedTargetPolicyFor('tabdoc:goto-sheet')).toMatchObject({
+      action: 'refuse',
+      reason: 'unvalidated-target',
+    });
+    expect(unvalidatedTargetPolicyFor('tabdoc:basic-goto-sheet')).toBeUndefined();
+    expect(unvalidatedTargetPolicyFor('tabdoc:goto-sheet-like-command')).toBeUndefined();
+  });
 });

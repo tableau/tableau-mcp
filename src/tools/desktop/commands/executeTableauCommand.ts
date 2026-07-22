@@ -50,7 +50,7 @@ export const getExecuteTableauCommandTool = (
           const parts = command.split(':');
           if (parts.length !== 2) {
             return new ArgsValidationError(
-              `Invalid command format. Expected 'namespace:command' (e.g., 'tabdoc:goto-sheet'), got: ${command}`,
+              `Invalid command format. Expected 'namespace:command' (e.g., 'tabdoc:save'), got: ${command}`,
             ).toErr();
           }
 

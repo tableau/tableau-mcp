@@ -25,6 +25,11 @@ function assignFreshUuids(obj: unknown): void {
   }
 }
 
+function stripNavigationFlags(window: Record<string, unknown>): void {
+  delete window['@_active'];
+  delete window['@_maximized'];
+}
+
 export function injectTemplate(
   workbookXml: string,
   templateXml: string,
@@ -60,6 +65,7 @@ export function injectTemplate(
 
   assignFreshUuids(sheetToInject);
   assignFreshUuids(windowToInject);
+  stripNavigationFlags(windowToInject);
 
   const wbRecord = wb as Record<string, unknown>;
   if (!wbRecord[container]) wbRecord[container] = {};
