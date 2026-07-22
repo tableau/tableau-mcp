@@ -305,6 +305,26 @@ describe('refineWorksheetTool — sort_by_field happy path', () => {
     expect(parsed.refined).toBe(true);
     expect(applied()!).toContain("direction='ASC'");
   });
+
+  it('sorts by field with no targetField (the observed crash call) — auto-detects the axis', async () => {
+    // The exact call from the bug report: sortByField + direction, NO targetField. It used
+    // to throw TypeError in normalizeCaption; it must now resolve to a non-error result.
+    const { applied } = setupMocks({ source: SORT_BY_FIELD_SOURCE });
+    const result = await getToolResult({
+      worksheetName: 'Waterfall',
+      operation: 'sort_by_field',
+      sortByField: 'display_order',
+      direction: 'desc',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = successSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.refined).toBe(true);
+    expect(applied()!).toContain(
+      "<computed-sort column='[Superstore].[none:line_item:nk]' direction='DESC' using='[Superstore].[sum:display_order:qk]' />",
+    );
+  });
 });
 
 describe('refineWorksheetTool — readback race (async apply settle)', () => {
@@ -480,6 +500,51 @@ describe('refineWorksheetTool — refusals and errors', () => {
     invariant(result.content[0].type === 'text');
     const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
     expect(parsed.reason).toMatch(/between 1 and 50/);
+    expect(loadMock()).not.toHaveBeenCalled();
+  });
+
+  it('errors when operation=sort_by_field is missing sortByField, before touching Tableau', async () => {
+    setupMocks();
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'sort_by_field',
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      new ArgsValidationError('sortByField is required when operation=sort_by_field.').message,
+    );
+    expect(getMock()).not.toHaveBeenCalled();
+    expect(loadMock()).not.toHaveBeenCalled();
+  });
+
+  it('errors when operation=top_n is missing topN, before touching Tableau', async () => {
+    setupMocks();
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'top_n',
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      new ArgsValidationError('topN is required when operation=top_n.').message,
+    );
+    expect(getMock()).not.toHaveBeenCalled();
+    expect(loadMock()).not.toHaveBeenCalled();
+  });
+
+  it('errors when operation=sort_direction is missing sortDirection, before touching Tableau', async () => {
+    setupMocks();
+    const result = await getToolResult({
+      worksheetName: 'Sales by Region',
+      operation: 'sort_direction',
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      new ArgsValidationError('sortDirection is required when operation=sort_direction.').message,
+    );
+    expect(getMock()).not.toHaveBeenCalled();
     expect(loadMock()).not.toHaveBeenCalled();
   });
 
