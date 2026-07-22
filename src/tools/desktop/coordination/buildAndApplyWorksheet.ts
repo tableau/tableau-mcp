@@ -92,17 +92,15 @@ function inferSingleDatasourceFromColumnRefs(
 }
 
 const paramsSchema = {
-  session: z.string().optional().describe(''),
-  taskSpec: z
-    .object({
-      worksheetName: z.string(),
-      worksheetFile: z.string().describe(''),
-      type: z.enum(['kpi', 'chart']),
-      template: z.string().optional().describe(''),
-      fields: z.array(z.string()).describe(''),
-      workbookFile: z.string().describe(''),
-    })
-    .describe(''),
+  session: z.string().optional(),
+  taskSpec: z.object({
+    worksheetName: z.string(),
+    worksheetFile: z.string(),
+    type: z.enum(['kpi', 'chart']),
+    template: z.string().optional(),
+    fields: z.array(z.string()),
+    workbookFile: z.string(),
+  }),
 };
 
 const toolTitle = 'Build and Apply Worksheet';
@@ -113,7 +111,8 @@ export const getBuildAndApplyWorksheetTool = (
     server,
     name: 'build-and-apply-worksheet',
     title: toolTitle,
-    description: 'Build/apply worksheet.',
+    description:
+      'Build a worksheet from a spec and apply it in one validated call — the one-shot manual path when no template binds.',
     paramsSchema,
     annotations: {
       title: toolTitle,

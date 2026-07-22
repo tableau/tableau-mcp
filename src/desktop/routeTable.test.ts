@@ -40,7 +40,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('Command census:');
     expect(rendered).not.toContain('tabdoc:generate-viz-from-notional-spec');
     expect(rendered).toContain('tabdoc:goto-sheet');
-    expect(rendered).toContain('Use search-commands ONLY for commands not listed here.');
+    expect(rendered).toContain('Use search-commands ONLY for unlisted commands.');
   });
 
   it('routes calc-derived-field asks through the dynamic-authoring verbs', () => {
@@ -48,7 +48,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain(
       'or a calc/derived field the data lacks (ratio, running total, LOD)',
     );
-    expect(rendered).toContain('author-calc for calcs');
+    expect(rendered).toContain('author-calc');
     expect(rendered).not.toMatch(/tabui:.*document/i);
   });
 
@@ -71,6 +71,20 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
     expect(rendered).toContain('MAGNITUDE');
     expect(rendered).toContain('MEMBERSHIP');
+  });
+
+  it('routes dashboard composition through visible dashboard tools before command search', () => {
+    const dashboard = routes.find((route) => route.id === 'dashboard');
+    expect(dashboard?.action).toBe(
+      'build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; search-commands only for commands the census does not list.',
+    );
+    expect(dashboard?.toolSequence).toEqual([
+      'bind-template',
+      'dashboard-auto-apply',
+      'plan-dashboard-creation',
+      'build-and-apply-dashboard',
+      'search-commands',
+    ]);
   });
 
   it.each(routes)('route "$id" declares a tool sequence and stop conditions', (route) => {

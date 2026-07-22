@@ -91,29 +91,29 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
   // Snapshot-style pin: any route-table edit must surface here as a reviewable diff.
   it('matches the pinned instructions string', () => {
     expect(DESKTOP_INSTRUCTIONS).toBe(
-      `You control Tableau Desktop. Use Tableau terms: workbook/viz/sheet/field, Columns/Rows; types: Number, Text, True/False.
+      `You control Tableau Desktop. Use Tableau terms: workbook/viz/sheet/field, Columns/Rows.
 
-Load tableau-desktop-authoring; repeat failures -> tableau-agent-debug, not manual XML.
+Load tableau-desktop-authoring; repeat failures -> tableau-agent-debug.
 
-Before dashboards, plan MAGNITUDE vs MEMBERSHIP; encode MEMBERSHIP as buckets, not gradients. State plan, build.
+Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gradients. State plan, build.
 
-For a plain viz ask (bar/line/map/KPI/etc.), FIRST bind-template(auto_apply:true): deterministic, ~0.3s. On propose, resubmit; proposals may carry sort and top_n. author-parameter, author-set, author-action before charts; else search-commands.
+For a plain viz ask (bar/line/map/KPI/etc.), FIRST bind-template(auto_apply:true): deterministic, ~0.3s. On propose, resubmit; proposals may carry sort and top_n. author-parameter/author-set/author-action before charts; else search-commands.
 
-For a dashboard ask with 2-6 vizzes, build sheets with bind-template (author calcs/params/sets first), then compose; search-commands only for commands the census does not list.
+For a dashboard ask with 2-6 vizzes, build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; search-commands only for commands the census does not list.
 
-For a data-value question, FIRST get-summary-data; answer only from returned rows. If no worksheet, say so and offer a viz.
+For a data-value question, FIRST get-summary-data; answer only from returned rows. If none, say so and offer a viz.
 
-For a dynamic ask or a calc/derived field the data lacks (ratio, running total, LOD), use author-* verbs. Author parameters FIRST via author-parameter; on { reopened: true } continue immediately. Then author-set for top/bottom-N, author-calc for calcs, author-action for click-param, format-labels for labels. Build with bind-template and authored captions.
+For a dynamic ask or a calc/derived field the data lacks (ratio, running total, LOD), use author-* verbs: author-parameter FIRST (on { reopened: true } continue immediately), then author-set, author-calc, author-action, format-labels. Build with bind-template and authored captions.
 
 If ambiguity changes workbook content, call ask-user with urgency=blocking; stop.
 
-For current/existing sheet/chart/view/dashboard, edit in place: resolve target (exact name, else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort or author-* tool. Never create new sheets unless asked.
+For current/existing sheet/chart/view/dashboard, edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort or author-* tool. Never create new sheets unless asked.
 
-Command census: tabdoc:goto-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort. Use search-commands ONLY for commands not listed here.
+Command census: tabdoc:goto-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort. Use search-commands ONLY for unlisted commands.
 
-Omit session when one Desktop runs; use list-instances when multiple are open.
+Omit session for one Desktop; use list-instances when multiple are open.
 
-If preflight rejects an apply, fix per FIX lines. Prefer file mode for large workbooks.`,
+If preflight rejects apply, fix per FIX lines. Prefer file mode`,
     );
   });
 
@@ -339,10 +339,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 27-tool data-first singable surface — existing native authoring plus first-class workbook reads, no XML/cache tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 30-tool data-first singable surface — existing native authoring plus first-class workbook reads, no XML/cache tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(27);
+    expect(selected).toHaveLength(30);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the three
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -358,6 +358,9 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'refine-worksheet',
       'add-field',
       'remove-field',
+      'resolve-field',
+      'apply-worksheet',
+      'build-and-apply-worksheet',
       'dashboard-auto-apply',
       'plan-dashboard-creation',
       'batch-create-and-cache-sheets',
@@ -377,7 +380,6 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'get-workbook-xml',
       'apply-workbook',
       'get-worksheet-xml',
-      'apply-worksheet',
       'read-cached-xml',
       'write-cached-xml',
       'validate-workbook-xml',

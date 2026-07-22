@@ -72,7 +72,9 @@ describe('resolveFieldTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getResolveFieldTool(new DesktopMcpServer());
     expect(tool.name).toBe('resolve-field');
-    expect(tool.description).toBe('Resolve a field reference.');
+    expect(tool.description).toBe(
+      'Disambiguate a field name to its exact column reference — the first play when duplicate or near-duplicate field names (e.g. Country vs Country1) make a bind ambiguous.',
+    );
     expect(tool.paramsSchema).toMatchObject({
       workbookFile: expect.any(Object),
       query: expect.any(Object),
