@@ -672,11 +672,108 @@ function uniqueCoordinateField(
  *   - the ask carries coordinate/point-location intent (askHasCoordinateOrPointIntent);
  *   - EXACTLY ONE latitude-affine quantitative field AND EXACTLY ONE longitude-affine one,
  *     and they are DISTINCT (a field named "lat_long" that matched both → ambiguous → null);
- *   - EXACTLY ONE categorical dimension for the detail slot (0 → nothing to grain by;
- *     2+ → ambiguous which detail, fail closed).
+ *   - AT LEAST ONE categorical for detail (0 → nothing to grain by → fail closed). 1–2
+ *     categoricals bind all (clean schema, no collapse). 3+ (a real WIDE schema) → narrow to
+ *     the single best label dim via pickBestDetailDim; a scoring tie → fail closed.
  * The axis assignment is by NAME (longitude→cols, latitude→rows), never schema order, so a
  * reversed-order schema binds identically — the axis-swap regression is impossible here.
  */
+
+/** Technical/attribute tokens that mark a field as NOT the map's identifying label. */
+const NON_LABEL_DETAIL_TOKENS: ReadonlySet<string> = new Set([
+  'id',
+  'code',
+  'hex',
+  'url',
+  'uri',
+  'emoji',
+  'source',
+  'key',
+  'guid',
+  'uuid',
+  'api',
+]);
+
+/**
+ * COARSE-grain grouping tokens: dimensions that bucket MANY marks together (a group, a
+ * stage, a category…). On a coordinate map these are the WRONG detail grain — putting only
+ * a coarse dim on detail collapses every mark sharing that bucket into one AVG centroid.
+ * A coarse token is penalized so it can never outrank a fine per-mark label, even when the
+ * ASK mentions it (Sol's venue counterexample: "map tournament STAGE venue locations" must
+ * still grain by venue_name, not tournament_stage). Kept small + conservative.
+ */
+const COARSE_GRAIN_TOKENS: ReadonlySet<string> = new Set([
+  'group',
+  'stage',
+  'category',
+  'region',
+  'type',
+  'class',
+  'status',
+  'segment',
+  'tier',
+  'division',
+  'conference',
+  'bucket',
+  'band',
+]);
+
+/**
+ * Pick the single best DETAIL (mark-identity) dimension from a WIDE schema's categoricals
+ * (3+), so a real-world map (team_id, team_api_id, group_name, country_code, team_name, …)
+ * binds a confident single map grained by ONE label rather than failing closed. The mark
+ * identity is one FINE label dimension, not every descriptive attribute and NOT a coarse
+ * bucket. Scoring:
+ *   +2  a token overlaps the ask (names the intended subject — but NOT if the field is coarse)
+ *   +1  a label-like `name` token
+ *   −2  per technical token (id/code/hex/url/emoji/source/…) — not the grain
+ *   −3  per COARSE grouping token (group/stage/category/region/…) — the wrong grain; a
+ *       coarse dim on detail collapses marks (Sol: ask-overlap ≠ finest grain).
+ * Returns the unique top scorer with a POSITIVE score; null on a tie OR when the best is not
+ * positive (no clear fine label → ambiguous grain → caller fails closed; a wrong grain that
+ * silently centroid-collapses is worse than an honest propose). Coords never reach here
+ * (caller passes categoricals only).
+ */
+function pickBestDetailDim(
+  categoricals: SchemaField[],
+  rawAsk: string,
+  maskedAsk: string,
+): SchemaField | null {
+  const scoreOf = (f: SchemaField): number => {
+    const toks = new Set([...nameTokens(f.name), ...nameTokens(bareName(f.columnName))]);
+    const isCoarse = [...toks].some((t) => COARSE_GRAIN_TOKENS.has(t));
+    let score = 0;
+    let askOverlap = false;
+    for (const t of toks) {
+      if (NON_LABEL_DETAIL_TOKENS.has(t)) score -= 2;
+      if (COARSE_GRAIN_TOKENS.has(t)) score -= 3;
+      if (t === 'name') score += 1;
+      // ask-overlap is a per-FIELD signal, capped at +2 TOTAL (not per-token): a multi-token
+      // coarse field ("tournament_round") must NOT stack overlap points (tournament + round)
+      // to outrank a fine label ("venue_name"). And a COARSE field earns NO overlap credit at
+      // all — even when the ask names it — because it's the wrong GRAIN regardless (a coarse
+      // dim on detail centroid-collapses the finer marks). Sol #598 re-review: cap-not-list.
+      if (!isCoarse && (phraseIndexInAsk(rawAsk, t) >= 0 || phraseIndexInAsk(maskedAsk, t) >= 0)) {
+        askOverlap = true;
+      }
+    }
+    if (askOverlap) score += 2;
+    return score;
+  };
+  const ranked = categoricals
+    .map((f) => ({ f, score: scoreOf(f) }))
+    .sort((a, b) => b.score - a.score);
+  if (ranked.length === 0) return null;
+  // The winner must be a POSITIVE, UNIQUE fine label. A non-positive top means no field
+  // read as a clean per-mark label (all coarse/technical/neutral) → ambiguous grain → fail
+  // closed. A tie at the top → can't tell which is the mark identity → fail closed. Only a
+  // clear, positive, single winner binds (a wrong grain silently centroid-collapses; propose
+  // is safer).
+  if (ranked[0].score <= 0) return null;
+  if (ranked.length > 1 && ranked[0].score === ranked[1].score) return null;
+  return ranked[0].f;
+}
+
 function resolveLatLonSymbolMap(
   m: TemplateManifest,
   rawAsk: string,
@@ -689,15 +786,24 @@ function resolveLatLonSymbolMap(
   const lon = uniqueCoordinateField(summary.fields, LONGITUDE_TOKENS);
   if (!lat || !lon || lat === lon) return null; // 0/2+/collision → fail closed
 
-  // GRAIN: bind EVERY non-coordinate dimension to a detail slot, in deterministic schema
-  // order. The template AVG-aggregates the coordinates, so a mark collapses to a per-member
-  // centroid for any dimension NOT on detail — binding one of two dimensions (e.g. city but
-  // not pm_name) would blob every office in a city onto one AVG point (the blank-centroid
-  // wrong-bind). One dimension → detail1 only (detail2 pruned). Two → both. Zero → nothing
-  // to grain by. THREE+ exceeds this template's two-slot capacity, and dropping any dim
-  // re-introduces the collapse, so fail closed to propose rather than silently under-grain.
-  const detailDims = summary.fields.filter(isCategorical);
-  if (detailDims.length < 1 || detailDims.length > 2) return null; // 0 or 3+ → fail closed
+  // GRAIN: bind the identifying non-coordinate dimension(s) to detail. The template
+  // AVG-aggregates the coordinates, so a mark collapses to a per-member centroid for any
+  // grain dimension NOT on detail. Zero categoricals → nothing to grain by → fail closed.
+  const categoricals = summary.fields.filter(isCategorical);
+  if (categoricals.length < 1) return null;
+  // 1–2 categoricals: bind them all (a clean map schema — pm_name+city — must keep both so
+  // no mark collapses). 3+ (a REAL wide schema — team_id/team_api_id/group_name/country_code/
+  // team_name): the mark identity is ONE label dimension, not every descriptive attribute;
+  // narrow to the single best detail dim rather than fail closed (real map data is always
+  // wide). Ties (no clear winner) still fail closed — a wrong grain is worse than a propose.
+  let detailDims: SchemaField[];
+  if (categoricals.length <= 2) {
+    detailDims = categoricals;
+  } else {
+    const best = pickBestDetailDim(categoricals, rawAsk, maskedAsk);
+    if (!best) return null; // ambiguous grain (tie) → fail closed
+    detailDims = [best];
+  }
 
   // Map by SLOT ROLE/ID, not slot order: longitude→the cols slot, latitude→the rows slot,
   // and the non-coordinate dims → the detail slots in order. Guards against a manifest

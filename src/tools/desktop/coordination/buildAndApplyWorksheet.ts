@@ -95,8 +95,12 @@ const paramsSchema = {
   session: z.string().optional(),
   taskSpec: z.object({
     worksheetName: z.string(),
-    worksheetFile: z.string(),
-    type: z.enum(['kpi', 'chart']),
+    // worksheetFile + type are DEAD (never destructured/used at the callback — the impl reads
+    // { worksheetName, workbookFile, template, fields }). They were REQUIRED in the schema, so
+    // an agent that (reasonably) omitted them hit a Zod invalid_type and fell into a retry
+    // spiral. Made optional so a minimal, correct taskSpec validates; kept for back-compat.
+    worksheetFile: z.string().optional(),
+    type: z.enum(['kpi', 'chart']).optional(),
     template: z.string().optional(),
     fields: z.array(z.string()),
     workbookFile: z.string(),
