@@ -342,6 +342,34 @@ describe('binder/classifyNoLlm — measure-free lat/long symbol map (Blake wall 
     expect(detailFields).toEqual(['team_name']);
   });
 
+  it('COARSE dim named in the ask does NOT win detail over the fine label (no centroid collapse)', () => {
+    // Sol counterexample: ask "map tournament stage venue locations" mentions BOTH 'stage'
+    // (coarse — many venues share a stage) and 'venue'. A naive ask-overlap scorer would put
+    // tournament_stage on detail → venues collapse to per-stage AVG centroids. The coarse
+    // penalty must keep venue_name (fine label) as the detail grain.
+    const venueXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Venues'>
+      <column name='[venue_id]' role='dimension' type='nominal' datatype='string' />
+      <column name='[venue_name]' role='dimension' type='nominal' datatype='string' />
+      <column name='[tournament_stage]' role='dimension' type='nominal' datatype='string' />
+      <column name='[latitude]' role='measure' type='quantitative' datatype='real' />
+      <column name='[longitude]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const forced = withForcedEligible([LATLON]);
+    const s = summarizeSchema(venueXml);
+    const cls = classifyNoLlm('map tournament stage venue locations', forced, s);
+    expect(cls).not.toBeNull();
+    const detailFields = cls!.bindings
+      .filter((b) => b.slot_id.startsWith('detail'))
+      .map((b) => b.field);
+    // venue_name (fine) wins over tournament_stage (coarse) despite 'stage' being in the ask.
+    expect(detailFields).toEqual(['venue_name']);
+  });
+
   it('AMBIGUOUS wide schema (3+ dims, no clear best) still FAILS CLOSED — a wrong grain is worse than a propose', () => {
     // Three generic-noun dims none of which overlaps the ask or is a 'name' label → a genuine
     // scoring tie → pickBestDetailDim returns null → classification fails closed (propose).

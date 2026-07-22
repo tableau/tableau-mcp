@@ -695,16 +695,44 @@ const NON_LABEL_DETAIL_TOKENS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * COARSE-grain grouping tokens: dimensions that bucket MANY marks together (a group, a
+ * stage, a category…). On a coordinate map these are the WRONG detail grain — putting only
+ * a coarse dim on detail collapses every mark sharing that bucket into one AVG centroid.
+ * A coarse token is penalized so it can never outrank a fine per-mark label, even when the
+ * ASK mentions it (Sol's venue counterexample: "map tournament STAGE venue locations" must
+ * still grain by venue_name, not tournament_stage). Kept small + conservative.
+ */
+const COARSE_GRAIN_TOKENS: ReadonlySet<string> = new Set([
+  'group',
+  'stage',
+  'category',
+  'region',
+  'type',
+  'class',
+  'status',
+  'segment',
+  'tier',
+  'division',
+  'conference',
+  'bucket',
+  'band',
+]);
+
+/**
  * Pick the single best DETAIL (mark-identity) dimension from a WIDE schema's categoricals
  * (3+), so a real-world map (team_id, team_api_id, group_name, country_code, team_name, …)
- * binds a confident single map gained by ONE label rather than failing closed. The mark
- * identity is one label dimension, not every descriptive attribute. Scoring (Sol-specced):
- *   +2  a token overlaps the ask (e.g. "team" in "World Cup team locations" ↔ team_name)
+ * binds a confident single map grained by ONE label rather than failing closed. The mark
+ * identity is one FINE label dimension, not every descriptive attribute and NOT a coarse
+ * bucket. Scoring:
+ *   +2  a token overlaps the ask (names the intended subject — but NOT if the field is coarse)
  *   +1  a label-like `name` token
- *   −2  per technical token (id/code/hex/url/emoji/source/…) — these are not the grain
- * Returns the unique top scorer; null on a TIE (ambiguous grain → caller fails closed —
- * a wrong grain is worse than an honest propose). Never returns a coordinate field (the
- * caller passes categoricals only, and coords are measures).
+ *   −2  per technical token (id/code/hex/url/emoji/source/…) — not the grain
+ *   −3  per COARSE grouping token (group/stage/category/region/…) — the wrong grain; a
+ *       coarse dim on detail collapses marks (Sol: ask-overlap ≠ finest grain).
+ * Returns the unique top scorer with a POSITIVE score; null on a tie OR when the best is not
+ * positive (no clear fine label → ambiguous grain → caller fails closed; a wrong grain that
+ * silently centroid-collapses is worse than an honest propose). Coords never reach here
+ * (caller passes categoricals only).
  */
 function pickBestDetailDim(
   categoricals: SchemaField[],
@@ -713,11 +741,16 @@ function pickBestDetailDim(
 ): SchemaField | null {
   const scoreOf = (f: SchemaField): number => {
     const toks = new Set([...nameTokens(f.name), ...nameTokens(bareName(f.columnName))]);
+    const isCoarse = [...toks].some((t) => COARSE_GRAIN_TOKENS.has(t));
     let score = 0;
     for (const t of toks) {
       if (NON_LABEL_DETAIL_TOKENS.has(t)) score -= 2;
+      if (COARSE_GRAIN_TOKENS.has(t)) score -= 3;
       if (t === 'name') score += 1;
-      // token appears in the ask (raw or masked) → strong signal it names the intended grain
+      // token appears in the ask (raw or masked) → names the subject — but a COARSE field
+      // (group/stage/…) is still the wrong GRAIN even when the ask mentions it, so ask-overlap
+      // does NOT rescue a coarse dim (prevents the "map tournament stage venues" collapse).
+      if (isCoarse) continue;
       if (phraseIndexInAsk(rawAsk, t) >= 0 || phraseIndexInAsk(maskedAsk, t) >= 0) score += 2;
     }
     return score;
@@ -725,8 +758,14 @@ function pickBestDetailDim(
   const ranked = categoricals
     .map((f) => ({ f, score: scoreOf(f) }))
     .sort((a, b) => b.score - a.score);
-  if (ranked.length < 2) return ranked[0]?.f ?? null;
-  if (ranked[0].score === ranked[1].score) return null; // tie → ambiguous → fail closed
+  if (ranked.length === 0) return null;
+  // The winner must be a POSITIVE, UNIQUE fine label. A non-positive top means no field
+  // read as a clean per-mark label (all coarse/technical/neutral) → ambiguous grain → fail
+  // closed. A tie at the top → can't tell which is the mark identity → fail closed. Only a
+  // clear, positive, single winner binds (a wrong grain silently centroid-collapses; propose
+  // is safer).
+  if (ranked[0].score <= 0) return null;
+  if (ranked.length > 1 && ranked[0].score === ranked[1].score) return null;
   return ranked[0].f;
 }
 
