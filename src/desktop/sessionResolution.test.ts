@@ -95,6 +95,22 @@ describe('resolveSession', () => {
     expect(text).toContain('list-instances');
   });
 
+  it('accepts an explicit session when discovery is empty and nothing is pinned (deliberate fail-open)', () => {
+    mockConfig({ desktopSessionId: undefined });
+    mockExternalApiInstances([]);
+    const result = resolveSession('7');
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toBe('7');
+  });
+
+  it('accepts an explicit session that differs from the pin when discovery is empty', () => {
+    mockConfig({ desktopSessionId: '4242' });
+    mockExternalApiInstances([]);
+    const result = resolveSession('7');
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toBe('7');
+  });
+
   it('auto-resolves the unique External API instance when nothing is pinned', () => {
     mockConfig({ desktopSessionId: undefined });
     mockExternalApiInstances([99]);
