@@ -376,6 +376,23 @@ ${dimensionColumns}
     expect(classifyNoLlm('Build me a Tableau map of the office locations', forced, s)).toBeNull();
   });
 
+  it('does not reopen latlon through generic scoring after the coordinate resolver declines', () => {
+    const s = summarizeSchema(`<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Sites'>
+      <column name='[Detail1]' role='dimension' type='nominal' datatype='string' />
+      <column name='[X Coordinate]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Y Coordinate]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`);
+
+    expect(
+      classifyNoLlm('coordinate map using X Coordinate and Y Coordinate by Detail1', manifests, s),
+    ).toBeNull();
+  });
+
   it('WIDE REAL SCHEMA: 3+ dims → binds coords + the single BEST detail dim (Blake World Cup), not fail-closed', () => {
     // Blake's real teams.csv is WIDE (team_id/team_api_id/group_name/country_code/team_name +
     // coords + flag/color/source) — 5 categoricals. The mark identity is ONE label (team_name),
@@ -411,19 +428,93 @@ ${dimensionColumns}
     expect(detailFields).toEqual(['team_name']);
   });
 
-  it('FEDERATED REAL SCHEMA: duplicate suffixed team-name fields bind the base Team Name detail', () => {
+  it.each([
+    'Symbol map showing each World Cup team by location, using Team Name for detail/label',
+    'Build a symbol map with one mark per team, using Latitude and Longitude for location, Team Name as the mark label/detail',
+    'Symbol map showing team locations, one mark per team',
+  ])(
+    'FEDERATED REAL SCHEMA: duplicate suffixed team-name fields bind the base Team Name detail: %s',
+    (ask) => {
+      const s = summarizeSchema(FEDERATED_WORLDCUP_WORKBOOK_XML);
+      expect(s.fields).toHaveLength(42);
+      const cls = classifyNoLlm(ask, manifests, s);
+      expect(cls).not.toBeNull();
+      expect(cls!.template).toBe(LATLON);
+      const bySlot = Object.fromEntries(cls!.bindings.map((b) => [b.slot_id, b.field]));
+      expect(bySlot['longitude']).toBe('Longitude');
+      expect(bySlot['latitude']).toBe('Latitude');
+      const detailFields = cls!.bindings
+        .filter((b) => b.slot_id.startsWith('detail'))
+        .map((b) => b.field);
+      expect(detailFields).toEqual(['Team Name']);
+    },
+  );
+
+  it('FEDERATED REAL SCHEMA: fails closed when the ask names two full detail field names', () => {
     const s = summarizeSchema(FEDERATED_WORLDCUP_WORKBOOK_XML);
-    expect(s.fields).toHaveLength(42);
-    const cls = classifyNoLlm('Symbol map showing team locations, one mark per team', manifests, s);
+
+    expect(
+      classifyNoLlm(
+        'Symbol map showing team locations, one mark per team, using Team Name and Player Name',
+        manifests,
+        s,
+      ),
+    ).toBeNull();
+  });
+
+  it('LIVE PATH: federated World Cup symbol map ask binds lat/lon through the real spatial candidate set', async () => {
+    const s = summarizeSchema(FEDERATED_WORLDCUP_WORKBOOK_XML);
+    const spatialCandidates = [
+      'spatial-symbol-map',
+      'spatial-symbol-map-latlon',
+      'spatial-choropleth-map',
+    ];
+    expect(
+      spatialCandidates.map((template) => manifests.get(template)?.fast_path_eligible),
+    ).toEqual([true, true, true]);
+    expect(
+      buildLlmInput(
+        'Symbol map showing each World Cup team by location, using Team Name for detail/label',
+        manifests,
+        s,
+      ).candidate_templates.map((candidate) => candidate.template),
+    ).toEqual(spatialCandidates);
+    const cls = classifyNoLlm(
+      'Symbol map showing each World Cup team by location, using Team Name for detail/label',
+      manifests,
+      s,
+    );
     expect(cls).not.toBeNull();
     expect(cls!.template).toBe(LATLON);
-    const bySlot = Object.fromEntries(cls!.bindings.map((b) => [b.slot_id, b.field]));
-    expect(bySlot['longitude']).toBe('Longitude');
-    expect(bySlot['latitude']).toBe('Latitude');
-    const detailFields = cls!.bindings
-      .filter((b) => b.slot_id.startsWith('detail'))
-      .map((b) => b.field);
-    expect(detailFields).toEqual(['Team Name']);
+    expect(
+      Object.fromEntries(cls!.bindings.map((binding) => [binding.slot_id, binding.field])),
+    ).toMatchObject({
+      longitude: 'Longitude',
+      latitude: 'Latitude',
+      detail1: 'Team Name',
+    });
+
+    const res = await bindTemplate({
+      ask: 'Symbol map showing each World Cup team by location, using Team Name for detail/label',
+      workbookXml: FEDERATED_WORLDCUP_WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(res.status).toBe('bound');
+    if (res.status !== 'bound') {
+      throw new Error(`expected bound, got ${res.status}`);
+    }
+    expect(res.args.template_name).toBe(LATLON);
+    expect(res.used_llm).toBe(false);
+    expect(res.args.field_mapping.Longitude).toBe(
+      '[federated.114zfjw1eykx4i1auxu8o1tcqq5m].[avg:longitude:qk]',
+    );
+    expect(res.args.field_mapping.Latitude).toBe(
+      '[federated.114zfjw1eykx4i1auxu8o1tcqq5m].[avg:latitude:qk]',
+    );
+    expect(res.args.field_mapping.Detail1).toBe(
+      '[federated.114zfjw1eykx4i1auxu8o1tcqq5m].[none:team_name:nk]',
+    );
   });
 
   it('fails closed on dotted version parentheticals that are not Tableau data-file suffixes', () => {
@@ -450,12 +541,17 @@ ${dimensionColumns}
     expect(classifyNoLlm('map region locations', manifests, s)).toBeNull();
   });
 
-  it('fails closed when only part of a tied detail cluster collapses to one base', () => {
+  it('full-name phrase beats token-only overlap in a former tied detail cluster', () => {
     const s = summarizeSchema(
       latlonWorkbookXmlWithDimensions(['Team Name', 'Team Name (Players.csv)', 'Venue Name']),
     );
+    const cls = classifyNoLlm('map team venue name locations', manifests, s);
 
-    expect(classifyNoLlm('map team venue name locations', manifests, s)).toBeNull();
+    expect(cls).not.toBeNull();
+    const detailFields = cls!.bindings
+      .filter((b) => b.slot_id.startsWith('detail'))
+      .map((b) => b.field);
+    expect(detailFields).toEqual(['Venue Name']);
   });
 
   it('fails closed on suffixed federated duplicates without an unsuffixed base field', () => {
@@ -496,6 +592,29 @@ ${dimensionColumns}
       .map((b) => b.field);
     // venue_name (fine) wins over tournament_stage (coarse) despite 'stage' being in the ask.
     expect(detailFields).toEqual(['venue_name']);
+  });
+
+  it('COARSE dim named by full caption earns no phrase bonus over a fine label', () => {
+    // "Product Category" is a full caption for a coarse grouping field whose raw field name
+    // also contains "Name"; without the coarse guard, the +3 phrase bonus offsets the -3
+    // category penalty and makes the coarse bucket look like a positive detail label.
+    const productXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Products'>
+      <column name='[Product Category Name]' caption='Product Category' role='dimension' type='nominal' datatype='string' />
+      <column name='[Venue]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Sku Label]' role='dimension' type='nominal' datatype='string' />
+      <column name='[latitude]' role='measure' type='quantitative' datatype='real' />
+      <column name='[longitude]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const forced = withForcedEligible([LATLON]);
+    const s = summarizeSchema(productXml);
+    const cls = classifyNoLlm('map Product Category locations', forced, s);
+
+    expect(cls).toBeNull();
   });
 
   it('UNLISTED coarse token cannot stack ask-overlap to beat the fine label (ask-overlap capped +2/field)', () => {
@@ -699,6 +818,10 @@ describe('binder/bindTemplate — Call 1 miss (propose)', () => {
     });
     expect(res.status).toBe('propose');
     if (res.status === 'propose') {
+      expect(res.decline_reason).toEqual({
+        code: 'no_llm_classifier_declined',
+        detail: 'classifyNoLlm returned no deterministic template; routed to proposal candidates',
+      });
       const scatter = res.llm_input.candidate_templates.find(
         (c) => c.template === 'correlation-scatter-plot-chart',
       );
