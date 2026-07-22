@@ -1481,7 +1481,7 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
     expect(vi.mocked(classifyWorksheetReplaceTarget)).toHaveBeenCalledWith(XML, 'se-eval-scratch');
   });
 
-  it('unknown target fails closed BEFORE inject/apply with the bound args intact', async () => {
+  it('unknown target fails closed BEFORE the bind even runs', async () => {
     const { executeCommand, getExecutor } = setupAutoApplyMocks();
     vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('not-found');
 
@@ -1493,12 +1493,11 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
       getExecutor,
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe(false);
-    expect(body.apply_error).toContain('target_worksheet "No Such Sheet" not found');
-    expect(body.args).toEqual(boundResult.status === 'bound' ? boundResult.args : undefined);
+    expect(result.content[0].text).toContain('target_worksheet "No Such Sheet" not found');
+    expect(result.content[0].text).toContain('list-worksheets');
+    expect(vi.mocked(binderModule.bindTemplate)).not.toHaveBeenCalled();
     expect(vi.mocked(buildInjectedWorkbookXml)).not.toHaveBeenCalled();
     expect(executeCommand).not.toHaveBeenCalled();
   });
@@ -1515,13 +1514,30 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
       getExecutor,
     });
 
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('dashboard member sheet');
+    expect(vi.mocked(binderModule.bindTemplate)).not.toHaveBeenCalled();
+    expect(vi.mocked(buildInjectedWorkbookXml)).not.toHaveBeenCalled();
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('manual mode (no auto_apply): bound args echo carries the target title so the manual chain lands on it', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(boundResult);
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      target_worksheet: 'se-eval-scratch',
+    });
+
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe(false);
-    expect(body.apply_error).toContain('dashboard member sheet');
-    expect(vi.mocked(buildInjectedWorkbookXml)).not.toHaveBeenCalled();
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(body.status).toBe('bound');
+    expect(body.args.title).toBe('se-eval-scratch');
   });
 
   it('no target_worksheet: behavior unchanged, inject titled from the bound args', async () => {

@@ -40,7 +40,7 @@ import {
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { ExecuteCommandError, ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { decodeXmlEntities } from '../../../desktop/xmlElement.js';
-import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
+import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import {
@@ -558,7 +558,6 @@ async function performAutoApply({
   bindMs,
   eventsAnchor,
   schemaSummary,
-  targetWorksheet,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -569,31 +568,8 @@ async function performAutoApply({
   bindMs: number;
   eventsAnchor?: number;
   schemaSummary: SchemaSummary;
-  targetWorksheet?: string;
 }): Promise<BindTemplateToolResult> {
   const { args } = res;
-
-  // ── Target-worksheet gate (e1 stray-sheet class) ─────────────────
-  // An explicit target must be provably replaceable BEFORE any apply: a missing
-  // name or a dashboard-member sheet would make removeSameNamedWorksheet defer
-  // and Desktop dedup the inject into a stray "Name (1)" copy — the exact
-  // failure this parameter exists to prevent. Fail closed with the bind intact.
-  const applyTitle = targetWorksheet ?? args.title;
-  if (targetWorksheet !== undefined) {
-    const target = classifyWorksheetReplaceTarget(workbookXml, targetWorksheet);
-    if (target === 'not-found') {
-      return applyFallback(
-        base,
-        `target_worksheet "${targetWorksheet}" not found in the workbook — check list-worksheets and re-bind, or omit target_worksheet to create a new sheet`,
-      );
-    }
-    if (target === 'in-dashboard') {
-      return applyFallback(
-        base,
-        `target_worksheet "${targetWorksheet}" is a dashboard member sheet — replacing it in place could corrupt the dashboard; omit target_worksheet to create a new sheet`,
-      );
-    }
-  }
 
   // ── Events-clean gate (W60 blind-spot #1) ────────────────────────
   // Refuse to auto-apply over a workbook the USER touched after our read: the
@@ -639,7 +615,7 @@ async function performAutoApply({
     injected = buildInjectedWorkbookXml({
       workbookXml,
       templateXml,
-      title: applyTitle,
+      title: args.title,
       sheetType: args.sheet_type,
       templateParameters: args.template_parameters,
       fieldMapping: args.field_mapping,
@@ -674,7 +650,7 @@ async function performAutoApply({
   // drop the args echo, apply_instruction, apply_hint, and used_llm from `base`. Those
   // enable a manual second call that never happens once the apply succeeds.
   const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, res.status);
-  const literalTitle = decodeXmlEntities(applyTitle);
+  const literalTitle = decodeXmlEntities(args.title);
   const guidance = appendWaterfallDiscoveryGuidance(
     `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
     res,
@@ -826,6 +802,26 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               /* fail-open */
             }
           }
+          // ── Target-worksheet gate (e1/s7 stray-sheet class) ──────────
+          // Validated BEFORE the bind and for BOTH modes (auto-apply and the manual
+          // chain): an explicit target must be provably replaceable — a missing name
+          // or a dashboard-member sheet would make removeSameNamedWorksheet defer and
+          // Desktop dedup the inject into a stray "Name (1)" copy, the exact failure
+          // this parameter exists to prevent.
+          if (target_worksheet !== undefined) {
+            const target = classifyWorksheetReplaceTarget(workbookXml, target_worksheet);
+            if (target === 'not-found') {
+              return new ArgsValidationError(
+                `target_worksheet "${target_worksheet}" not found in the workbook — check list-worksheets, or omit target_worksheet to create a new sheet`,
+              ).toErr();
+            }
+            if (target === 'in-dashboard') {
+              return new ArgsValidationError(
+                `target_worksheet "${target_worksheet}" is a dashboard member sheet — replacing it in place could corrupt the dashboard; omit target_worksheet to create a new sheet`,
+              ).toErr();
+            }
+          }
+
           let res;
           try {
             res = await bindTemplate({
@@ -845,6 +841,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               /* fail-open */
             }
             throw e;
+          }
+          if (target_worksheet !== undefined && res.status === 'bound') {
+            res = { ...res, args: { ...res.args, title: target_worksheet } };
           }
           try {
             sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
@@ -892,7 +891,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               bindMs,
               eventsAnchor,
               schemaSummary,
-              targetWorksheet: target_worksheet,
             }),
           );
         },
