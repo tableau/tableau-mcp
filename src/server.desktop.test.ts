@@ -339,10 +339,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 30-tool data-first singable surface — existing native authoring plus first-class workbook reads, no XML/cache tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 32-tool data-first singable surface — native authoring + workbook reads + the get/apply-workbook structure round-trip (recovery/nav fallback), no cache/validation XML tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(30);
+    expect(selected).toHaveLength(32);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the three
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -372,13 +372,18 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'get-workbook-inventory',
       'list-workbook-datasources',
       'list-site-datasources',
+      // The structure round-trip (recovery/nav fallback — active-sheet pointer is a
+      // workbook-level node): present but scoped to recovery, not authoring.
+      'get-workbook-xml',
+      'apply-workbook',
     ]) {
       expect(selected.map((t) => t.name)).toContain(verb);
     }
-    // Zero agent-visible XML/cache/validation tools.
+    // Zero agent-visible cache/validation XML tools (the full hand-XML-surgery surface stays
+    // OUT — get-workbook-xml + apply-workbook are the ONLY structure round-trip admitted, for
+    // the small-workbook goto-sheet fallback; the cache read/write pair a >16KiB workbook
+    // would need is deliberately excluded so hand-XML never becomes a default authoring path).
     for (const banished of [
-      'get-workbook-xml',
-      'apply-workbook',
       'get-worksheet-xml',
       'read-cached-xml',
       'write-cached-xml',

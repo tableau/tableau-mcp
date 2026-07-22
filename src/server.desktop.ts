@@ -114,6 +114,15 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'build-and-apply-dashboard',
     'execute-tableau-command',
     'search-commands',
+    // Structure round-trip for RECOVERY/navigation only (not authoring): the small-workbook
+    // fallback when goto-sheet can't set the active sheet (the active-window pointer is a
+    // workbook-level node, so apply-worksheet can't reach it). get→edit→apply-workbook.
+    // Authoring stays on bind-template + author-* (semantically named, routed first); these
+    // two are structure tools, descriptions carry no "xml" token, so they don't re-invite
+    // hand-XML as a default path. (Lauren/Kyler ask; >16KiB workbooks would also need the
+    // cache read/write pair — deliberately NOT added, that's the full XML-surgery surface.)
+    'get-workbook-xml',
+    'apply-workbook',
     'ask-user',
     'list-instances',
     'list-available-fields',
