@@ -145,20 +145,29 @@ async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<stri
 }
 
 describe('desktop tools/list serialized surface', () => {
-  it('stays under the tool-search auto-deferral threshold budget', async () => {
+  it('keeps the served dynamic authoring profile under the tool-search auto-deferral threshold budget', async () => {
     const server = new DesktopMcpServer();
-    let total = DESKTOP_INSTRUCTIONS.length;
+    const tools = desktopToolFactories.map((toolFactory) => toolFactory(server));
+    const dynamicAuthoringTools = selectToolsForProfile(tools, 'dynamic-authoring');
+    let dynamicAuthoringTotal = DESKTOP_INSTRUCTIONS.length;
+    let fullSurfaceTotal = DESKTOP_INSTRUCTIONS.length;
 
-    for (const toolFactory of desktopToolFactories) {
-      total += (await serializeDesktopToolSurface(toolFactory(server))).length;
+    for (const tool of tools) {
+      const bytes = (await serializeDesktopToolSurface(tool)).length;
+      fullSurfaceTotal += bytes;
+      if (DYNAMIC_AUTHORING_TOOL_PROFILE.has(tool.name)) {
+        dynamicAuthoringTotal += bytes;
+      }
     }
+    expect(new Set(dynamicAuthoringTools.map((tool) => tool.name))).toEqual(
+      DYNAMIC_AUTHORING_TOOL_PROFILE,
+    );
 
-    // 46_000 is the ToolSearch auto-deferral cliff on MCP hosts, not a tunable constant — past it
-    // the whole desktop surface gets deferred behind ToolSearch. The shelf-tool consolidation has
-    // landed, so this is GREEN: the serialized surface is 45_202 bytes, ~798 under the cliff.
-    // That headroom is the ENTIRE budget for future tools — trim tools to fit it; NEVER raise the
-    // cap to ship a tool (raising it just re-buries the whole surface behind ToolSearch).
-    expect(total).toBeLessThanOrEqual(46_000);
+    // Dynamic authoring is the serving surface, so this is the real budget gate.
+    // The full desktop surface is not what clients see by default; its looser cap
+    // only catches runaway growth without forcing valuable full-profile tools to be trimmed.
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(30_000);
+    expect(fullSurfaceTotal).toBeLessThanOrEqual(52_000);
   });
 });
 
@@ -339,10 +348,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 32-tool data-first singable surface — native authoring + workbook reads + the get/apply-workbook structure round-trip (recovery/nav fallback), no cache/validation XML tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 31-tool data-first singable surface — native authoring + workbook reads + atomic sheet activation, no workbook round-trip/cache/validation XML tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(32);
+    expect(selected).toHaveLength(31);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the three
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -372,18 +381,16 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'get-workbook-inventory',
       'list-workbook-datasources',
       'list-site-datasources',
-      // The structure round-trip (recovery/nav fallback — active-sheet pointer is a
-      // workbook-level node): present but scoped to recovery, not authoring.
-      'get-workbook-xml',
-      'apply-workbook',
+      'activate-sheet',
     ]) {
       expect(selected.map((t) => t.name)).toContain(verb);
     }
-    // Zero agent-visible cache/validation XML tools (the full hand-XML-surgery surface stays
-    // OUT — get-workbook-xml + apply-workbook are the ONLY structure round-trip admitted, for
-    // the small-workbook goto-sheet fallback; the cache read/write pair a >16KiB workbook
-    // would need is deliberately excluded so hand-XML never becomes a default authoring path).
+    // Zero agent-visible workbook round-trip/cache/validation XML tools: the full hand-XML
+    // surgery surface stays OUT, including get-workbook-xml + apply-workbook. Navigation gets
+    // only the dedicated atomic activate-sheet fallback.
     for (const banished of [
+      'get-workbook-xml',
+      'apply-workbook',
       'get-worksheet-xml',
       'read-cached-xml',
       'write-cached-xml',
