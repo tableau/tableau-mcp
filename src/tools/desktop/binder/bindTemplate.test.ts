@@ -13,7 +13,10 @@ import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
 import { sessionRouteState } from '../../../desktop/route/route-state.js';
-import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
+import {
+  buildInjectedWorkbookXml,
+  classifyWorksheetReplaceTarget,
+} from '../../../desktop/templates/injectTemplateCore.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import * as validationRegistry from '../../../desktop/validation/registry.js';
 import {
@@ -49,6 +52,7 @@ vi.mock('../../../desktop/externalApi/discovery.js');
 vi.mock('../../../desktop/libraries/workbook-serialization-converter/index.js');
 vi.mock('../../../desktop/templates/injectTemplateCore.js', () => ({
   buildInjectedWorkbookXml: vi.fn(),
+  classifyWorksheetReplaceTarget: vi.fn(),
 }));
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('../../../desktop/validation/registry.js');
@@ -521,6 +525,7 @@ async function getToolResult({
   proposal,
   minConfidence,
   auto_apply,
+  target_worksheet,
   calcs,
   customSignal,
   getExecutor,
@@ -532,6 +537,7 @@ async function getToolResult({
   proposal?: BindingProposal & { confidence: number };
   minConfidence?: number;
   auto_apply?: boolean;
+  target_worksheet?: string;
   calcs?: Array<{
     caption: string;
     formula: string;
@@ -552,7 +558,10 @@ async function getToolResult({
     ...(customSignal && { signal: customSignal }),
   };
 
-  return await callback({ session, ask, proposal, minConfidence, auto_apply, calcs } as any, extra);
+  return await callback(
+    { session, ask, proposal, minConfidence, auto_apply, target_worksheet, calcs } as any,
+    extra,
+  );
 }
 
 /**
@@ -1441,6 +1450,112 @@ describe('bindTemplateTool session-default-when-unique', () => {
     expect(result.isError).toBe(false);
     expect(getExecutor).toHaveBeenCalledWith('7');
     expect(externalDiscovery.discoverInstances).not.toHaveBeenCalled();
+  });
+});
+
+describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('applies onto the named existing sheet: inject titled with the target, sheet_name reports it', async () => {
+    const { getExecutor } = setupAutoApplyMocks();
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      target_worksheet: 'se-eval-scratch',
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.sheet_name).toBe('se-eval-scratch');
+    expect(vi.mocked(buildInjectedWorkbookXml)).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'se-eval-scratch' }),
+    );
+    expect(vi.mocked(classifyWorksheetReplaceTarget)).toHaveBeenCalledWith(XML, 'se-eval-scratch');
+  });
+
+  it('unknown target fails closed BEFORE the bind even runs', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks();
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('not-found');
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      target_worksheet: 'No Such Sheet',
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('target_worksheet "No Such Sheet" not found');
+    expect(result.content[0].text).toContain('list-worksheets');
+    expect(vi.mocked(binderModule.bindTemplate)).not.toHaveBeenCalled();
+    expect(vi.mocked(buildInjectedWorkbookXml)).not.toHaveBeenCalled();
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('dashboard-member target is refused: in-place replace would corrupt the dashboard', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks();
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('in-dashboard');
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      target_worksheet: 'Dash Member',
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('dashboard member sheet');
+    expect(vi.mocked(binderModule.bindTemplate)).not.toHaveBeenCalled();
+    expect(vi.mocked(buildInjectedWorkbookXml)).not.toHaveBeenCalled();
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('manual mode (no auto_apply): bound args echo carries the target title so the manual chain lands on it', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(boundResult);
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      target_worksheet: 'se-eval-scratch',
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.status).toBe('bound');
+    expect(body.args.title).toBe('se-eval-scratch');
+  });
+
+  it('no target_worksheet: behavior unchanged, inject titled from the bound args', async () => {
+    const { getExecutor } = setupAutoApplyMocks();
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.sheet_name).toBe('Sales by Region');
+    expect(vi.mocked(classifyWorksheetReplaceTarget)).not.toHaveBeenCalled();
   });
 });
 

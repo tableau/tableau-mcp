@@ -13,7 +13,7 @@ Use this when a field's type, role, or default format keeps reverting after work
 
 ## When to Use
 
-Use this entry when a field's apparent type or format is wrong and the first XML fix does not survive a fresh `tableau-get-workbook` readback. The high-risk pattern is an existing file connection (`excel-direct` or `textscan`) whose connection/relation metadata already carries a schema decision, while the agent is only changing worksheet-level `<column>` definitions inside `datasource-dependencies`.
+Use this entry when a field's apparent type or format is wrong and the first XML fix does not survive a fresh `get-workbook-xml` readback. The high-risk pattern is an existing file connection (`excel-direct` or `textscan`) whose connection/relation metadata already carries a schema decision, while the agent is only changing worksheet-level `<column>` definitions inside `datasource-dependencies`.
 
 This is not for normal calculated field authoring. A new Tableau calc declared as a datasource `<column>` can carry its own `datatype` when inserted in the datasource's valid column location. This entry is about pre-existing physical columns whose type or format comes from the connection layer.
 

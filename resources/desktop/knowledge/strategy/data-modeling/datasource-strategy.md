@@ -122,7 +122,7 @@ Use `class='sqlproxy'` with the datasource's `contentUrl` slug (not its LUID) as
 </datasource>
 ```
 
-**Getting the `contentUrl`:** the LUID (the UUID you get from `list-datasources` or the REST API list endpoint) is **not** the same as `contentUrl`. Retrieve it via the REST API:
+**Getting the `contentUrl`:** the LUID (the UUID you get from a datasource list response or the REST API list endpoint) is **not** the same as `contentUrl`. Retrieve it via the REST API:
 
 ```
 GET /api/{version}/sites/{siteId}/datasources/{luid}

@@ -3,9 +3,9 @@
 Ready-to-use Python templates for common workbook modification tasks using `xml.etree.ElementTree` (stdlib, no extra dependencies).
 
 All templates:
-- Read from the file path returned by `tableau-get-workbook`
+- Read from the file path returned by `get-workbook-xml`
 - Preserve `connection`, `named-connections`, `document-format-change-manifest`, and the `Parameters` datasource
-- Save to `/tmp/modified_workbook.xml` for submission via `tableau-apply-workbook`
+- Save to `/tmp/modified_workbook.xml` for submission via `apply-workbook`
 
 ---
 
@@ -27,7 +27,7 @@ import xml.etree.ElementTree as ET
 USER_NS = 'http://www.tableausoftware.com/xml/user'
 ET.register_namespace('user', USER_NS)
 
-WORKBOOK_FILE = 'cache/workbook-XXXX.xml'  # path from tableau-get-workbook
+WORKBOOK_FILE = 'cache/workbook-XXXX.xml'  # path from get-workbook-xml
 OUTPUT_FILE   = '/tmp/modified_workbook.xml'
 
 tree = ET.parse(WORKBOOK_FILE)
@@ -36,7 +36,7 @@ root = tree.getroot()
 
 Submit after any script:
 ```
-tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })
+apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })
 ```
 
 ---
@@ -115,7 +115,7 @@ import xml.etree.ElementTree as ET
 ET.register_namespace('user', 'http://www.tableausoftware.com/xml/user')
 
 WORKBOOK_FILE = 'cache/workbook-XXXX.xml'
-DS_NAME       = 'federated.XXXX'  # from tableau-get-workbook or get_connected_datasources
+DS_NAME       = 'federated.XXXX'  # from get-workbook-xml or list-available-fields
 
 tree = ET.parse(WORKBOOK_FILE)
 root = tree.getroot()
@@ -194,7 +194,7 @@ tier_calc.set('formula', "IF [Profit] > 0 THEN 'Profitable' ELSE 'Unprofitable' 
 
 tree.write(OUTPUT_FILE, encoding='utf-8', xml_declaration=True)
 print(f'Saved to {OUTPUT_FILE}')
-# Then: tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })
+# Then: apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })
 ```
 
 ---
@@ -276,7 +276,7 @@ root.find('windows').append(win_el)
 
 tree.write(OUTPUT_FILE, encoding='utf-8', xml_declaration=True)
 print(f'Saved to {OUTPUT_FILE}')
-# Then: tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })
+# Then: apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })
 ```
 
 ---
@@ -320,7 +320,7 @@ for val in INCLUDE_VALUES:
 
 tree.write(OUTPUT_FILE, encoding='utf-8', xml_declaration=True)
 print(f'Saved to {OUTPUT_FILE}')
-# Then: tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })
+# Then: apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })
 ```
 
 ---
@@ -367,7 +367,7 @@ root.find('windows').append(new_win)
 
 tree.write(OUTPUT_FILE, encoding='utf-8', xml_declaration=True)
 print(f"Created '{NEW_SHEET}' as clone of '{SOURCE_SHEET}' with Line mark type")
-# Then: tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })
+# Then: apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })
 ```
 
 **Typical things to patch between variants:** `<mark class>`, `<rows>`/`<cols>` text content, filter member values, encoding columns. Everything else (datasource-dependencies, column-instances, computed-sort) can stay identical.
@@ -383,7 +383,7 @@ import xml.etree.ElementTree as ET
 
 ET.register_namespace('user', 'http://www.tableausoftware.com/xml/user')
 
-WORKBOOK_FILE = 'cache/workbook-XXXX.xml'  # path from tableau-get-workbook
+WORKBOOK_FILE = 'cache/workbook-XXXX.xml'  # path from get-workbook-xml
 
 tree = ET.parse(WORKBOOK_FILE)
 root = tree.getroot()
@@ -445,9 +445,9 @@ For column-instances, filters, and encodings, see `workbook-worksheets.md`, `wor
 
 ## Best Practices
 
-- **Always call `tableau-get-workbook` immediately before any modification**: The cached file path changes after each `tableau-apply-workbook` call. Using a stale path will silently overwrite all intermediate changes.
+- **Always call `get-workbook-xml` immediately before any modification**: The cached file path changes after each `apply-workbook` call. Using a stale path will silently overwrite all intermediate changes.
 - **Always register the `user:` namespace prefix** before writing XML: `ET.register_namespace('user', USER_NS)`. Without it, `user:ui-marker` attrs are written in Clark notation and Tableau rejects the file.
-- **Save to `/tmp/modified_workbook.xml`** and submit via `tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`. Never submit the cache file directly.
+- **Save to `/tmp/modified_workbook.xml`** and submit via `apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`. Never submit the cache file directly.
 - **Submit incrementally**: Add one worksheet at a time and verify with worksheet-list readback before adding the next. Submitting many changes at once makes it difficult to isolate failures.
 - **Use `copy.deepcopy` when cloning worksheets**: Shallow copies share child element references — mutations affect both the original and the clone.
 
@@ -456,7 +456,7 @@ For column-instances, filters, and encodings, see `workbook-worksheets.md`, `wor
 ## Common Mistakes
 
 1. **Forgetting the `window` entry**: Every new worksheet needs both a `<worksheet>` node in `<worksheets>` AND a `<window>` node in `<windows>`. Omitting the window causes the sheet to be silently dropped.
-2. **Re-using a stale cached file path**: Each `tableau-apply-workbook` updates the workbook state. Always call `tableau-get-workbook` to get the fresh path before the next modification.
+2. **Re-using a stale cached file path**: Each `apply-workbook` updates the workbook state. Always call `get-workbook-xml` to get the fresh path before the next modification.
 3. **Not generating a new UUID for cloned windows**: When cloning a worksheet + window, always generate a new UUID for the window's `simple-id` node. Duplicate UUIDs cause Tableau to silently drop one of the windows.
 4. **Setting `user:` attributes without the namespace registration**: Without `ET.register_namespace('user', USER_NS)`, the attribute is written as `{http://...}ui-marker` in Clark notation, which Tableau does not accept.
 5. **Navigating by index instead of by attribute**: The element order inside `worksheets`, `windows`, and `datasources` is not guaranteed. Always find elements by name attribute, not by positional index.
@@ -467,13 +467,13 @@ For column-instances, filters, and encodings, see `workbook-worksheets.md`, `wor
 
 The standard Python workflow for any workbook modification:
 
-1. Call `tableau-get-workbook` — returns `{ filePath, fileUrl }` pointing to the current cached XML file.
+1. Call `get-workbook-xml` — returns `{ filePath, fileUrl }` pointing to the current cached XML file.
 2. Parse the XML: `tree = ET.parse(WORKBOOK_FILE); root = tree.getroot()`.
 3. Navigate to the target node using the helper functions (`find_datasource`, `find_worksheet`, `find_window`) or XPath.
 4. Apply the modification (add column, create worksheet, inject filter, etc.).
 5. Write the modified tree: `tree.write('/tmp/modified_workbook.xml', encoding='utf-8', xml_declaration=True)`.
-6. Submit: `tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`.
-7. Verify with worksheet-list readback or `tableau-get-workbook`.
+6. Submit: `apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`.
+7. Verify with worksheet-list readback or `get-workbook-xml`.
 
 See the complete templates in the sections above for each specific operation.
 

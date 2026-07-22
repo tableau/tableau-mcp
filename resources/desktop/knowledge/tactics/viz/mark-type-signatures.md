@@ -183,7 +183,7 @@ This file is a technical XML reference, not authoring guidance. Do not apply the
 ## Source and Confidence
 
 - Source/evidence type: field-tested
-- Source: Empirical XML injection + round-trip inspection via `tableau-apply-worksheet` / `tableau-get-worksheet`, Tableau Desktop, Sample - Superstore datasource
+- Source: Empirical XML injection + round-trip inspection via `apply-worksheet` / `get-worksheet-xml`, Tableau Desktop, Sample - Superstore datasource
 - Customer-identifying details removed: yes
 - Confidence: field-tested
 - Last reviewed: 2026-06-25

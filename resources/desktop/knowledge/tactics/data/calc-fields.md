@@ -1,6 +1,6 @@
 # Workbook XML: Calculated Fields, Parameters, and Tooltips
 
-Confirmed patterns for calculated fields, parameters, parameter controls, count of records, Percent-of-Total table calcs, and tooltips — all validated via `tableau-get-workbook`.
+Confirmed patterns for calculated fields, parameters, parameter controls, count of records, Percent-of-Total table calcs, and tooltips — all validated via `get-workbook-xml`.
 
 **⇒ Wrong-fork check (live Desktop):** CREATING a calculated field on a running Tableau Desktop? Do NOT hand-edit workbook XML with these patterns — author it with the author-calc verb (author-parameter / author-set first when the calc depends on them), then chart the authored caption. Last resort, only when no authoring verb or template can express the structure: round-trip the REAL document with the workbook document read/apply tools and let Tableau's parser validate the reload — never fabricate XML fragments from memory. This module's XML patterns are for file-mode workbook authoring and for READING what a calc looks like.
 
@@ -33,7 +33,7 @@ Calculated fields are `column` nodes on the **data datasource** with a `calculat
 ```
 
 **Critical rules:**
-- `name` must use auto-generated format `[Calculation_<digits>]` — literal `Calculation`, **one** underscore, then a single contiguous run of digits, and nothing else. The digits are an opaque unique ID; any unique integer works as long as it's one unbroken run (a timestamp written as contiguous digits `[Calculation_20260407120000]`, a random, or a sequential id are all valid). Custom names like `[Is Selected Genre]` are invalid and will fail outright. **The failure mode is a SECOND underscore, not the use of a timestamp**: `[Calculation_20260407_001]` (any `[Calculation_<digits>_<suffix>]`) — the XML parser accepts it and the field shows in `tableau-list-available-fields`, but Tableau's formula-validation UI layer treats the name as malformed and flags the field "invalid" in the Data pane even when the formula compiled fine. So: one underscore + one digit run = valid (timestamps fine); any second underscore = invalid.
+- `name` must use auto-generated format `[Calculation_<digits>]` — literal `Calculation`, **one** underscore, then a single contiguous run of digits, and nothing else. The digits are an opaque unique ID; any unique integer works as long as it's one unbroken run (a timestamp written as contiguous digits `[Calculation_20260407120000]`, a random, or a sequential id are all valid). Custom names like `[Is Selected Genre]` are invalid and will fail outright. **The failure mode is a SECOND underscore, not the use of a timestamp**: `[Calculation_20260407_001]` (any `[Calculation_<digits>_<suffix>]`) — the XML parser accepts it and the field shows in `list-available-fields`, but Tableau's formula-validation UI layer treats the name as malformed and flags the field "invalid" in the Data pane even when the formula compiled fine. So: one underscore + one digit run = valid (timestamps fine); any second underscore = invalid.
 - Use `[Parameters].[Parameter <id>]` to reference a parameter in a formula — **NOT** the caption name.
 - **Formulas reference fields by their internal `<column>` `name` attribute, never by caption.** Authoring a formula as `SUM([Sales])` against a datasource whose Sales column has `name='[M_Q1_SLS]' caption='Sales'` will fail: `[Sales]` is not a real internal name there. The UI's formula editor *displays* internal `[Calculation_<digits>]` names as their captions for readability, but the stored XML and the query-time resolution both operate on internal names. Author formulas with internal names directly: `SUM([M_Q1_SLS])`.
   - **Why this gets confused**: in Tableau Public's Superstore-style datasets, physical columns have `name='[Sales]' caption='Sales'` — name and caption are literally the same string. Formulas that look like `SUM([Sales])` there aren't resolving a caption; they're referencing the internal name which coincidentally equals it. This apparent "captions work" pattern is a coincidence of Superstore's schema, not a rule.
@@ -198,7 +198,7 @@ In `cols`/`rows` content (includes datasource prefix):
 [Sample - Superstore].[__tableau_internal_object_id__].[cnt:Orders_ECFCA1FB690A41FE803BC071773BA862:qk]
 ```
 
-The internal ID suffix is workbook-specific — inspect your datasource to find the correct value with `tableau-get-workbook`.
+The internal ID suffix is workbook-specific — inspect your datasource to find the correct value with `get-workbook-xml`.
 
 ---
 
@@ -305,7 +305,7 @@ A bump chart shows ranking changes over time. RANK goes on discrete rows, a time
 - The CI uses `type="ordinal"` (discrete) so rank positions are evenly spaced on the axis
 - `derivation="User"` and `usr:` prefix — required for all aggregate/table-calc fields
 - `ordering-field` in the CI's `table-calc` overrides the column-level `ordering-type="Rows"` — this sets "Compute Using: Sub-Category"
-- The `:ok:1` suffix — the `:1` part is assigned by Tableau; don't guess it. Use `tableau-get-worksheet` after initial apply to discover the exact suffix
+- The `:ok:1` suffix — the `:1` part is assigned by Tableau; don't guess it. Use `get-worksheet-xml` after initial apply to discover the exact suffix
 
 ### Shelf config
 
@@ -530,7 +530,7 @@ If you only need to place a field on shelves without any calculation logic, see 
 
 1. **Using the caption name in a formula**: `[Parameters].[Top Level Genre Parameter]` fails — use the internal name `[Parameters].[Parameter 1350661988413441]`.
 2. **Missing column def in datasource-dependencies**: A calc field defined at the datasource level still requires a duplicate `column` node in the worksheet's `datasource-dependencies`. Omitting it causes the field to be stripped.
-3. **Wrong `:N` suffix on table calc CI**: The suffix (`:1`, `:2`, `:4`) varies and cannot be guessed. Inspect a real workbook with `tableau-get-workbook` after manually configuring the table calc in Tableau's UI.
+3. **Wrong `:N` suffix on table calc CI**: The suffix (`:1`, `:2`, `:4`) varies and cannot be guessed. Inspect a real workbook with `get-workbook-xml` after manually configuring the table calc in Tableau's UI.
 4. **Applying percent of total to the wrong base**: `pcto:sum:` for SUM base, `pcto:ctd:` for CountDistinct base, `pcto:cnt:` for Count base. Using the wrong prefix produces an empty column-instance.
 5. **Putting table-calc config in the column def**: The `table-calc` node goes inside the **column-instance** in `datasource-dependencies`, not inside the `calculation` child of the column def.
 6. **Forgetting `slices` for table calc filters**: When a table calc column-instance is used as a filter (quantitative range), a `slices` node must reference its CI — otherwise the filter is stripped on round-trip.
@@ -547,7 +547,7 @@ The general workflow for adding a calculated field and using it on a worksheet:
 2. **Add column def + column-instance to datasource-dependencies** — every worksheet that uses the field needs both nodes in its `datasource-dependencies`.
 3. **Reference the CI on shelves/encodings** — use the full `[DS].[ci:field:type]` format in `rows`, `cols`, or encoding `column` attrs.
 4. **For table calcs**: Add a `table-calc` child to the column-instance in `datasource-dependencies`. Configure `ordering-type` and `ordering-field` or `level-address` as needed.
-5. **Submit and verify**: Use `tableau-apply-workbook`, then worksheet-list readback to confirm the sheet loaded. Use `tableau-get-workbook` to inspect the round-tripped result and check whether all nodes survived.
+5. **Submit and verify**: Use `apply-workbook`, then worksheet-list readback to confirm the sheet loaded. Use `get-workbook-xml` to inspect the round-tripped result and check whether all nodes survived.
 
 ---
 

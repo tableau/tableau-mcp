@@ -108,11 +108,11 @@ If the `<column>` attributes you submit (`datatype`, `type`, `semantic-role`) do
 - `[Postal Code]` submitted as `datatype="integer" type="ordinal"` → corrected to `datatype="string" type="nominal"` with `semantic-role="[ZipCode].[Name]"` injected
 - `[Returned]` submitted as `datatype="boolean"` → corrected to `datatype="string"`
 
-**Implication:** always use the field's actual datasource metadata in column defs. Use `tableau-list-available-fields` to get correct `datatype` and `type` values rather than guessing. Submitting wrong metadata is safe (Tableau corrects it), but the round-tripped XML will differ from what you submitted.
+**Implication:** always use the field's actual datasource metadata in column defs. Use `list-available-fields` to get correct `datatype` and `type` values rather than guessing. Submitting wrong metadata is safe (Tableau corrects it), but the round-tripped XML will differ from what you submitted.
 
 ### Simple-id uuid is always overwritten
 
-Every `tableau-apply-worksheet` call replaces the `<simple-id uuid="..."/>` in the submitted XML with the persistent workbook identity UUID. The value submitted is ignored. Do not generate or rely on custom UUIDs in this node.
+Every `apply-worksheet` call replaces the `<simple-id uuid="..."/>` in the submitted XML with the persistent workbook identity UUID. The value submitted is ignored. Do not generate or rely on custom UUIDs in this node.
 
 ## When to Say No
 
@@ -121,7 +121,7 @@ This file is a technical XML reference, not authoring guidance. Do not apply the
 ## Source and Confidence
 
 - Source/evidence type: field-tested
-- Source: Empirical XML injection + round-trip inspection via `tableau-apply-worksheet` / `tableau-get-worksheet`, Tableau Desktop, Sample - Superstore datasource
+- Source: Empirical XML injection + round-trip inspection via `apply-worksheet` / `get-worksheet-xml`, Tableau Desktop, Sample - Superstore datasource
 - Customer-identifying details removed: yes
 - Confidence: field-tested
 - Last reviewed: 2026-06-25

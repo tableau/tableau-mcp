@@ -1,6 +1,6 @@
 # Round-trip Normalization of Calc-Field XML
 
-What you write with `tableau-apply-workbook` is not bit-exact what `tableau-get-workbook` returns. Tableau's save pass applies several idempotent normalizations to calc-field XML. Knowing them up front avoids wasted time comparing "pre-apply vs post-apply" XML and mistaking cosmetic rewrites for semantic drift.
+What you write with `apply-workbook` is not bit-exact what `get-workbook-xml` returns. Tableau's save pass applies several idempotent normalizations to calc-field XML. Knowing them up front avoids wasted time comparing "pre-apply vs post-apply" XML and mistaking cosmetic rewrites for semantic drift.
 
 ---
 
@@ -18,7 +18,7 @@ What you write with `tableau-apply-workbook` is not bit-exact what `tableau-get-
 
 A formula authored as `{ FIXED [Customer ID] : SUM([Sales]) }` against a datasource where those fields have `name='[R9M_FX_CUST_K]' caption='Customer ID'` and `name='[M_Q1_SLS]' caption='Sales'` is saved as `{ FIXED [R9M_FX_CUST_K] : SUM([M_Q1_SLS]) }`. The rewrite happens on the save/validation pass after the first apply that completes validation. Same for calc-to-calc references: an authored `STR([R Quintile]) + STR([F Quintile])` becomes `STR([Calculation_<id>]) + STR([Calculation_<id>])` in the stored XML.
 
-**Authoring guidance** (from observed UI behavior, not just XML parsing): **author with internal names directly** rather than relying on caption resolution. Caption-authored formulas can produce transient "invalid" Data-pane flags between the first apply and Tableau's full validation cycle (even when `tableau-list-available-fields` shows the calc compiled and typed correctly). Internal-name formulas are immediately canonical; no round-trip needed to stabilize.
+**Authoring guidance** (from observed UI behavior, not just XML parsing): **author with internal names directly** rather than relying on caption resolution. Caption-authored formulas can produce transient "invalid" Data-pane flags between the first apply and Tableau's full validation cycle (even when `list-available-fields` shows the calc compiled and typed correctly). Internal-name formulas are immediately canonical; no round-trip needed to stabilize.
 
 Earlier notes in this file and elsewhere that claimed "captions are preserved verbatim" were observations from an intermediate state where the validation cycle hadn't completed; they did not reflect the eventual saved form and have been corrected.
 
@@ -99,7 +99,7 @@ Comparison operators inside formulas round-trip as entities: `<=` → `&lt;=`, `
 
 If you insert new calc-field `<column>` elements after `</object-graph>` for diff control (or anywhere else in the datasource block), Tableau will move them into alphabetical position among the existing column children. `[Calculation_2026...]` calc-field columns land in the `C…` range. This means:
 - Insertion position within the datasource is advisory only.
-- A diff between "workbook I just applied" and `tableau-get-workbook` after apply will *always* show calc-field columns moving, even when nothing semantically changed. Compare *post-save* to *post-save* for semantic drift checks.
+- A diff between "workbook I just applied" and `get-workbook-xml` after apply will *always* show calc-field columns moving, even when nothing semantically changed. Compare *post-save* to *post-save* for semantic drift checks.
 
 ---
 
@@ -116,7 +116,7 @@ Live-proven (2026-07-19, Desktop main.26.0715): deleting a `<column>` node from 
 ## When to Use
 
 Read this module when you are:
-- Comparing pre-apply XML against `tableau-get-workbook` output and seeing differences you didn't author (column re-ordering, attribute re-quoting, formula caption-to-internal-name rewrites).
+- Comparing pre-apply XML against `get-workbook-xml` output and seeing differences you didn't author (column re-ordering, attribute re-quoting, formula caption-to-internal-name rewrites).
 - Authoring multi-line calc formulas and need them to display as multi-line in Tableau's formula editor.
 - Debugging why a freshly-applied calc shows a red error in the Data pane even though the formula validates.
 - Building diff-based regression checks that need to compare semantically meaningful changes (compare *post-save* to *post-save*, not *pre-apply* to *post-save*).
@@ -137,7 +137,7 @@ For calc-field authoring fundamentals (column structure, parameters, table calcs
 ## Common Mistakes
 
 1. **Pasting a multi-line Python triple-quoted formula directly into `formula="..."`.** XML attribute normalization collapses the literal newlines to single spaces; Tableau receives a single-line formula and the formula editor renders it on one line. Use `&#10;` instead.
-2. **Comparing pre-apply XML to `tableau-get-workbook` output and panicking at the diff.** Tableau will reorder `<column>` children alphabetically, rewrite `formula='...'` attribute quoting, and substitute `&apos;` for inline single quotes. None of those are semantic changes. Compare two consecutive `tableau-get-workbook` outputs instead.
+2. **Comparing pre-apply XML to `get-workbook-xml` output and panicking at the diff.** Tableau will reorder `<column>` children alphabetically, rewrite `formula='...'` attribute quoting, and substitute `&apos;` for inline single quotes. None of those are semantic changes. Compare two consecutive `get-workbook-xml` outputs instead.
 3. **Authoring calc names with custom strings** (`[R Score]`, `[Is Selected Genre]`) instead of `[Calculation_<digits>]`. The XML parser accepts the column but Tableau's formula-validation UI flags the field "invalid" in the Data pane.
 4. **Authoring formulas with caption references and assuming they survive.** They get rewritten to internal names on the next save pass. Author with internal names from the start to avoid the transient "invalid" flag.
 5. **Treating the Data pane's "invalid datasources" warning as fatal.** For multi-level calc chains it's usually a transient lazy-resolution artifact. Force evaluation with `tabdoc:goto-sheet` or wait for the validation cycle (a few seconds) before declaring failure.
@@ -155,7 +155,7 @@ For calc-field authoring fundamentals (column structure, parameters, table calcs
    ```
 2. **Use `[Calculation_<digits>]` internal names** for calc-field column `name` attributes (single underscore, contiguous run of digits). Move human-readable labels to the `caption` attribute.
 3. **Reference fields in formulas by internal name** (the column's `name` attribute, with surrounding brackets), not by caption.
-4. **For diff-based validation pipelines:** snapshot the workbook with `tableau-get-workbook` immediately after every apply, then diff snapshot N against snapshot N+1. Differences that appear only in pre-apply-vs-post-save are normalization artifacts and should be filtered out.
+4. **For diff-based validation pipelines:** snapshot the workbook with `get-workbook-xml` immediately after every apply, then diff snapshot N against snapshot N+1. Differences that appear only in pre-apply-vs-post-save are normalization artifacts and should be filtered out.
 5. **For multi-level calc chains, expect a brief "invalid" Data-pane flash after apply.** Either wait for resolution to complete or force it with a `tabdoc:goto-sheet` round-trip before treating the warning as a real failure.
 
 ## Source and Confidence

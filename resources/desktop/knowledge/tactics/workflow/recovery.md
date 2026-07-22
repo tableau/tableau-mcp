@@ -12,13 +12,13 @@
 
 ## When to Use
 
-After a `tableau-apply-workbook` or `tableau-apply-worksheet` call fails, silently drops changes, or leaves Tableau Desktop in an error state. For file-based workbook document applies, the MCP server handles the required XML→JSON conversion automatically.
+After an `apply-workbook` or `apply-worksheet` call fails, silently drops changes, or leaves Tableau Desktop in an error state. For file-based workbook document applies, the MCP server handles the required XML→JSON conversion automatically.
 
 ## Best Practices
 
 ### Apply history is automatic (not pre-apply protection)
 
-The MCP server automatically saves the XML from every **successful** `tableau-apply-workbook` call. Snapshots are stored at:
+The MCP server automatically saves the XML from every **successful** `apply-workbook` call. Snapshots are stored at:
 
 ```
 /tmp/tableau-mcp-rollback/<session-id>/workbook-<timestamp>.xml
@@ -71,7 +71,7 @@ In every case the Agent API apply call has *already* returned success before the
 
 **Authoritative check (not the Data pane):**
 ```
-tableau-list-available-fields workbook_file=<post-apply snapshot>
+list-available-fields workbook_file=<post-apply snapshot>
 ```
 If the new fields appear in the returned list with correct `type`/`role`, the apply succeeded. The Data pane will catch up on the next view evaluation.
 
@@ -81,7 +81,7 @@ execute_tableau_command command='tabdoc:goto-sheet' args='{"sheet":"<any workshe
 ```
 Switching to any worksheet triggers a full view-context evaluation that completes the metadata resolution. The warning clears.
 
-**Do NOT** reach for `tabdoc:undo` or a snapshot rollback on the strength of a Data-pane warning alone. Verify via `tableau-list-available-fields` first; if the fields are there and typed correctly, the apply is real and the UI just needs a nudge.
+**Do NOT** reach for `tabdoc:undo` or a snapshot rollback on the strength of a Data-pane warning alone. Verify via `list-available-fields` first; if the fields are there and typed correctly, the apply is real and the UI just needs a nudge.
 
 ### Recover from a bad state
 
@@ -91,15 +91,15 @@ Switching to any worksheet triggers a full view-context evaluation that complete
 
 **Rollback to a prior known-good state (for multi-step rollback):**
 1. Find the most recent snapshot in `/tmp/tableau-mcp-rollback/<session-id>/` — these contain previously-applied XML, not the state before the current apply
-2. Apply the chosen snapshot via `tableau-apply-workbook` with `mode=file` and `workbook_file` pointing to the snapshot
+2. Apply the chosen snapshot via `apply-workbook` with `mode=file` and `workbook_file` pointing to the snapshot
 3. Verify recovery with worksheet-list readback
 
 **Nuclear option — open a fresh instance:**
 If Tableau Desktop is stuck (commands time out, dialogs can't be dismissed, or the workbook is corrupted):
 1. Save the most recent working snapshot to a `.twb` file in a known location
 2. Use `execute_tableau_command` with `tabui:open-workbook` on the backup file, OR ask the user to open it manually
-3. If `tableau-list-instances` is absent from the tool list, the session is pinned to the launching Desktop; open the backup in that Desktop, or restart the MCP session against the fresh Desktop
-4. Otherwise, after the new instance is running, call `tableau-list-instances` to discover its session ID
+3. If `list-instances` is absent from the tool list, the session is pinned to the launching Desktop; open the backup in that Desktop, or restart the MCP session against the fresh Desktop
+4. Otherwise, after the new instance is running, call `list-instances` to discover its session ID
 5. Switch to the new session and continue work
 
 ## Common Mistakes
@@ -107,7 +107,7 @@ If Tableau Desktop is stuck (commands time out, dialogs can't be dismissed, or t
 1. **Reaching for rollback snapshots when `tabdoc:undo` is faster.** For same-apply errors, `tabdoc:undo` is immediate and doesn't require a file apply. Reserve snapshots for multi-step rollback to a state from N applies ago.
 2. **Trusting `status: "completed"` from the Agent API.** Always verify with a follow-up tool call. The API reports success even when Tableau's UI shows an error dialog.
 3. **Searching the wrong log file.** Multiple Tableau instances write to separate log files. Match the PID from your session to find the right log.
-4. **Retrying the same malformed XML.** If an apply fails, re-fetching the workbook first (`tableau-get-workbook`) gives you a clean baseline. Never retry with the same modified XML without diagnosing why it failed.
+4. **Retrying the same malformed XML.** If an apply fails, re-fetching the workbook first (`get-workbook-xml`) gives you a clean baseline. Never retry with the same modified XML without diagnosing why it failed.
 5. **Spiraling through alternatives.** Cap recovery attempts at 3. After that, report the error to the user — they can see Tableau and may spot the issue faster.
 
 ## Implementation

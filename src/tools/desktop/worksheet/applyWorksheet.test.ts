@@ -52,7 +52,7 @@ describe('applyWorksheetTool', () => {
     const tool = getApplyWorksheetTool(new DesktopMcpServer());
     expect(tool.name).toBe('apply-worksheet');
     expect(tool.description).toBe(
-      'Apply a modified cached worksheet file to Desktop — the apply leg of the manual build path (add-field/remove-field edit the file; this lands it).',
+      'Apply a modified cached worksheet file to Desktop — the apply leg of the manual build path.',
     );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),

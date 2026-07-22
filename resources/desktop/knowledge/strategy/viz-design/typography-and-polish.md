@@ -352,13 +352,13 @@ The professional version is almost always achieved by **removing defaults** rath
 ### Workflow for Polishing a Dashboard
 
 1. **Start with worksheet-list readback** to understand the current structure.
-2. **Use `tableau-get-workbook`** to get the cached workbook XML file path (e.g. `cache/workbook-XXXX.xml`).
+2. **Use `get-workbook-xml`** to get the cached workbook XML file path (e.g. `cache/workbook-XXXX.xml`).
 3. **Modify the XML** using Python scripts (`xml.etree.ElementTree`) to apply formatting changes in bulk:
    - Add/modify `<style-rule>` elements in each worksheet's `<style>` section
    - Update `<format>` elements for number formatting in datasource columns
    - Adjust `<zone-style>` → `<format>` elements for dashboard padding
    - Set mark encoding attributes for borders and opacity
-4. **Apply with `tableau-apply-workbook`** passing the modified file path.
+4. **Apply with `apply-workbook`** passing the modified file path.
 5. **Verify visually** using screen capture or by asking the user to confirm.
 
 ### Bulk Formatting Script Pattern

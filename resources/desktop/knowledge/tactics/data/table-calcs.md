@@ -1,6 +1,6 @@
 # Table Calculations — XML Patterns
 
-Complete empirically-confirmed reference for all table calculation types in Tableau Desktop: Quick Table Calcs (applied to native measures) and custom `derivation="User"` calculated fields. All patterns captured via `tableau-get-worksheet` after manual authoring (2026-06-25).
+Complete empirically-confirmed reference for all table calculation types in Tableau Desktop: Quick Table Calcs (applied to native measures) and custom `derivation="User"` calculated fields. All patterns captured via `get-worksheet-xml` after manual authoring (2026-06-25).
 
 **⇒ Wrong-fork check (live Desktop):** CREATING a running total / moving average / rank on a running Tableau Desktop via the External API? Do NOT hand-edit worksheet or workbook XML with these patterns — author it with the `author-calc` verb (author-parameter / author-set first when the calc depends on them), then chart the authored caption. Last resort, only when no authoring verb or template can express the structure: round-trip the REAL document with the workbook document read/apply tools — see `calc-fields.md`. These XML patterns are for file-mode authoring and for READING existing table calcs.
 
@@ -290,7 +290,7 @@ This file is a technical XML reference, not authoring guidance. Do not apply the
 ## Source and Confidence
 
 - Source/evidence type: field-tested
-- Source: Empirical XML injection + round-trip inspection via `tableau-apply-worksheet` / `tableau-get-worksheet`, Tableau Desktop, Sample - Superstore datasource
+- Source: Empirical XML injection + round-trip inspection via `apply-worksheet` / `get-worksheet-xml`, Tableau Desktop, Sample - Superstore datasource
 - Customer-identifying details removed: yes
 - Confidence: field-tested
 - Last reviewed: 2026-06-25

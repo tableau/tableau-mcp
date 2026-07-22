@@ -600,13 +600,13 @@ Remaining height check: 455 + 305 = 760, leaving 8px bottom padding. Total = 768
 When applying dashboard changes that require viewpoints, you must follow the correct workflow to avoid overwriting your changes.
 
 **The Problem:**
-- `tableau-apply-workbook` replaces the **ENTIRE** workbook state in Tableau
+- `apply-workbook` replaces the **ENTIRE** workbook state in Tableau
 - If you apply a dashboard, then apply a stale workbook XML, the dashboard changes will be **OVERWRITTEN**
 - This happens because the workbook XML doesn't include the dashboard changes you just made
 
 **The Solution:**
 
-#### Option 1: Use `tableau-apply-dashboard-with-viewpoints` (Recommended)
+#### Option 1: Use `apply-dashboard-with-viewpoints` (Recommended)
 This tool handles both dashboard and viewpoints safely:
 1. Gets a **fresh** workbook from Tableau (includes your dashboard changes)
 2. Adds viewpoints to the dashboard window
@@ -615,7 +615,7 @@ This tool handles both dashboard and viewpoints safely:
 
 ```typescript
 // ✅ CORRECT - Safe workflow
-tableau-apply-dashboard-with-viewpoints({
+apply-dashboard-with-viewpoints({
   dashboard_name: "My Dashboard",
   dashboard_file: "path/to/dashboard.xml",
   worksheet_names: ["Sheet 1", "Sheet 2"]
@@ -627,7 +627,7 @@ If you need to manually edit the workbook XML:
 
 1. **Apply dashboard first:**
    ```typescript
-   tableau-apply-dashboard({
+   apply-dashboard({
      dashboard_name: "My Dashboard",
      dashboard_file: "path/to/dashboard.xml"
    })
@@ -635,7 +635,7 @@ If you need to manually edit the workbook XML:
 
 2. **Get FRESH workbook (includes dashboard changes):**
    ```typescript
-   const { workbook_file } = tableau-get-workbook()
+   const { workbook_file } = get-workbook-xml()
    ```
 
 3. **Edit workbook to add viewpoints:**
@@ -644,22 +644,22 @@ If you need to manually edit the workbook XML:
 
 4. **Apply workbook:**
    ```typescript
-   tableau-apply-workbook({ workbook_file })
+   apply-workbook({ workbook_file })
    ```
 
 #### ❌ WRONG - This Will Overwrite Dashboard:
 ```typescript
 // ❌ WRONG - Stale workbook overwrites dashboard
-tableau-apply-dashboard({ dashboard_name, dashboard_file })
-tableau-apply-workbook({ workbook_file: "old/stale/workbook.xml" }) // Overwrites dashboard!
+apply-dashboard({ dashboard_name, dashboard_file })
+apply-workbook({ workbook_file: "old/stale/workbook.xml" }) // Overwrites dashboard!
 ```
 
 ### Key Rules:
 
 1. **Never apply a workbook XML that was fetched before applying a dashboard** - it will overwrite your dashboard changes
 2. **Always get a fresh workbook after applying a dashboard** if you need to modify viewpoints
-3. **Prefer `tableau-apply-dashboard-with-viewpoints`** - it handles this automatically
-4. **When in doubt, get a fresh workbook** with `tableau-get-workbook()` before applying
+3. **Prefer `apply-dashboard-with-viewpoints`** - it handles this automatically
+4. **When in doubt, get a fresh workbook** with `get-workbook-xml()` before applying
 
 ### Viewpoints Requirement
 

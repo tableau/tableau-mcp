@@ -22,7 +22,7 @@ This applies to:
 ## Best Practices
 
 - Always prefetch the layout options object before calling the export command — it is a required parameter and cannot be constructed by hand.
-- Use this to do a quick sanity check on the rendered output after each `tableau-apply-worksheet` call, especially when building a new viz from scratch.
+- Use this to do a quick sanity check on the rendered output after each `apply-worksheet` call, especially when building a new viz from scratch.
 - Tell the user what you are doing before taking the screenshot — the file is written to a temp location on disk and contains actual rendered data values, not just workbook structure.
 - Delete or disregard the temp file once the verification is done; it is not part of the workbook and is not cleaned up automatically.
 
