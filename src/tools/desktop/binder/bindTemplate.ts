@@ -1095,7 +1095,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new Ok(base);
           }
 
-          if (!canAutoApply) {
+          if (!canAutoApply || manifest === undefined) {
             recordBindRecoveryAttemptFailOpen({
               session: resolvedSession,
               askKey,
@@ -1117,7 +1117,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             bindMs,
             eventsAnchor,
             schemaSummary,
-            manifest: manifest!,
+            manifest,
           });
           recordBoundRecoveryAfterFinalResult({
             session: resolvedSession,
