@@ -21,7 +21,6 @@ import { SessionManager } from './desktop/sessionManager.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
 import { getCheckForUserChangesTool } from './tools/desktop/session/checkForUserChanges.js';
-import { getListInstancesTool } from './tools/desktop/session/listInstances.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { DesktopToolName } from './tools/desktop/toolName.js';
@@ -269,13 +268,6 @@ export class DesktopMcpServer extends Server {
     // check-for-user-changes needs the legacy events endpoint, which the External Client API does
     // not expose; don't advertise a tool that can only return an error.
     excluded.add(getCheckForUserChangesTool);
-
-    // When the launching Desktop pinned a session, every tool defaults to it, so
-    // list-instances has nothing to add — dropping it keeps the agent from ever
-    // spending a turn discovering which instance to control.
-    if (config.desktopSessionId !== undefined) {
-      excluded.add(getListInstancesTool);
-    }
 
     const factories = [
       ...desktopToolFactories,

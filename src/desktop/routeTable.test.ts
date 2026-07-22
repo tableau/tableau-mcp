@@ -6,6 +6,8 @@ import {
   generateDesktopInstructions,
   renderInstructionEntry,
   SESSION_RESOLUTION_ID,
+  SESSION_RESOLUTION_TEXT_PINNED,
+  SESSION_RESOLUTION_TEXT_UNPINNED,
 } from './routeTable.js';
 
 const routes = DESKTOP_ROUTE_TABLE.filter(
@@ -63,10 +65,16 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(knowledge).toMatchObject({
       trigger:
-        'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) — never a plain chart ask the plain-chart route already handles',
+        'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult',
       toolSequence: ['search-knowledge', 'read-knowledge-resource'],
       stopConditions: ['read the top hit once, then proceed'],
     });
+  });
+
+  it('places the deterministic plain-chart route before knowledge consultation', () => {
+    const routeIds = routes.map((route) => route.id);
+
+    expect(routeIds.indexOf('plain-chart')).toBeLessThan(routeIds.indexOf('knowledge-consult'));
   });
 
   it('teaches plain-chart proposals may carry sort and top_n', () => {
@@ -133,24 +141,25 @@ describe('generateDesktopInstructions', () => {
 });
 
 describe('buildDesktopInstructions', () => {
-  const sessionResolutionText = DESKTOP_ROUTE_TABLE.find(
+  const sessionResolutionEntry = DESKTOP_ROUTE_TABLE.find(
     (entry) => entry.id === SESSION_RESOLUTION_ID && entry.kind === 'prose',
   );
 
-  it('keeps the session-resolution guidance when no session is pinned', () => {
+  it('keeps the unpinned session-resolution guidance when no session is pinned', () => {
     const unpinned = buildDesktopInstructions({ sessionPinned: false });
     expect(unpinned).toBe(generateDesktopInstructions(DESKTOP_ROUTE_TABLE));
+    expect(unpinned).toContain(SESSION_RESOLUTION_TEXT_UNPINNED);
     expect(unpinned).toContain('list-instances');
   });
 
-  it('drops the session-resolution guidance when a session is pinned', () => {
+  it('swaps in pin-aware session guidance when a session is pinned', () => {
     const pinned = buildDesktopInstructions({ sessionPinned: true });
-    expect(sessionResolutionText?.kind).toBe('prose');
-    if (sessionResolutionText?.kind === 'prose') {
-      expect(pinned).not.toContain(sessionResolutionText.text);
-    }
-    expect(pinned).not.toContain('list-instances');
-    // The other routes must survive the filter untouched.
+    expect(sessionResolutionEntry?.kind).toBe('prose');
+    expect(pinned).toContain(SESSION_RESOLUTION_TEXT_PINNED);
+    // Still names list-instances — the pin is a default, and the agent may target another Desktop.
+    expect(pinned).toContain('list-instances');
+    expect(pinned).not.toContain(SESSION_RESOLUTION_TEXT_UNPINNED);
+    // The other routes must survive untouched.
     expect(pinned).toContain('You control Tableau Desktop.');
   });
 });

@@ -74,11 +74,34 @@ describe('knowledge/search', { timeout: 30_000 }, () => {
     }
   });
 
-  it('singularizes plural query tokens before ranking', () => {
+  it('singularizes only conservative trailing-s plural query tokens before ranking', () => {
     const slugs = (query: string): string[] => searchKnowledge(query, 5).map((hit) => hit.slug);
 
-    expect(slugs('countries')).toEqual(slugs('country'));
     expect(slugs('charts')).toEqual(slugs('chart'));
+  });
+
+  it('falls back to whole-string fuzzy search when tokenization removes every term', () => {
+    const result = searchKnowledgeWithFallback('AI', 5);
+    const candidates = result.hits.length > 0 ? result.hits : (result.nearestMatches ?? []);
+
+    expect(candidates.length).toBeGreaterThan(0);
+    expect(candidates[0].mustReadUri).toBe(candidates[0].uri);
+    if (result.hits.length > 0) {
+      expect(result.hits.every((hit) => hit.match === 'whole-string')).toBe(true);
+    } else {
+      expect(result.note).toMatch(/nearestMatches/i);
+    }
+  });
+
+  it('keeps axes intact so axis-related modules remain reachable', () => {
+    const hits = searchKnowledge('axes', 5);
+
+    expect(hits.length).toBeGreaterThan(0);
+    expect([
+      'tactics/workflow/export-worksheet-image-full-canvas',
+      'tactics/viz/pane-structure',
+      'tactics/viz/marks-and-encodings',
+    ]).toContain(hits[0].slug);
   });
 
   it('promotes long natural queries to keyword-ranked hits with expected docs in the top 3', () => {

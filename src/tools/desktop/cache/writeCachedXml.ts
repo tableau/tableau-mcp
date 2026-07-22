@@ -18,7 +18,7 @@ import { DesktopTool } from '../tool.js';
 import { getCacheDir, isWithinCacheDir } from './cachePath.js';
 
 const paramsSchema = {
-  session: z.string(),
+  session: z.string().optional(),
   filePath: z.string(),
   xmlContent: z.string(),
   worksheet: z.string().optional(),

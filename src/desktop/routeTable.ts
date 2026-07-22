@@ -21,10 +21,16 @@ export type DesktopInstructionProse = {
 
 export type DesktopInstructionEntry = DesktopInstructionRoute | DesktopInstructionProse;
 
-// The session-resolution prose points the agent at list-instances. When the launching
-// Desktop pins a session, that tool is unregistered, so this entry is dropped from the
-// instructions to avoid naming a tool the client cannot call.
+// The session-resolution prose points the agent at list-instances. The pin is a default,
+// not an invariant, so the pinned variant still names list-instances (the tool stays
+// registered) and tells the agent it may target another open Desktop.
 export const SESSION_RESOLUTION_ID = 'session-resolution';
+
+export const SESSION_RESOLUTION_TEXT_UNPINNED =
+  'Omit session for one Desktop; use list-instances when multiple are open.';
+
+export const SESSION_RESOLUTION_TEXT_PINNED =
+  'Session defaults to the current Tableau Desktop; use list-instances to see all open Desktops and pass session to target another.';
 
 export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
@@ -44,17 +50,6 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'route',
-    id: 'knowledge-consult',
-    trigger:
-      'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) — never a plain chart ask the plain-chart route already handles',
-    action:
-      'FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.',
-    toolSequence: ['search-knowledge', 'read-knowledge-resource'],
-    stopConditions: ['read the top hit once, then proceed'],
-    requiredEvidence: ['one targeted knowledge module or no search hit'],
-  },
-  {
-    kind: 'route',
     id: 'plain-chart',
     trigger: 'a plain viz ask (bar/line/map/KPI/etc.)',
     action:
@@ -68,6 +63,17 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     ],
     stopConditions: ['deterministic, ~0.3s'],
     requiredEvidence: ['bind-template applied result (auto-apply receipt)'],
+  },
+  {
+    kind: 'route',
+    id: 'knowledge-consult',
+    trigger:
+      'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult',
+    action:
+      'FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.',
+    toolSequence: ['search-knowledge', 'read-knowledge-resource'],
+    stopConditions: ['read the top hit once, then proceed'],
+    requiredEvidence: ['one targeted knowledge module or no search hit'],
   },
   {
     kind: 'route',
@@ -141,7 +147,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: SESSION_RESOLUTION_ID,
-    text: 'Omit session for one Desktop; use list-instances when multiple are open.',
+    text: SESSION_RESOLUTION_TEXT_UNPINNED,
   },
   {
     kind: 'prose',
@@ -159,12 +165,17 @@ export function generateDesktopInstructions(table: readonly DesktopInstructionEn
 }
 
 /**
- * Instructions for a given session-pinning state. When a session is pinned the
- * agent never calls list-instances, so the session-resolution guidance is dropped.
+ * Instructions for a given session-pinning state. When pinned, the session-resolution
+ * prose switches to the pinned variant (pin is the default; the agent can still target
+ * another open Desktop via list-instances) rather than being dropped.
  */
 export function buildDesktopInstructions({ sessionPinned }: { sessionPinned: boolean }): string {
   const table = sessionPinned
-    ? DESKTOP_ROUTE_TABLE.filter((entry) => entry.id !== SESSION_RESOLUTION_ID)
+    ? DESKTOP_ROUTE_TABLE.map((entry) =>
+        entry.id === SESSION_RESOLUTION_ID
+          ? { ...entry, text: SESSION_RESOLUTION_TEXT_PINNED }
+          : entry,
+      )
     : DESKTOP_ROUTE_TABLE;
   return generateDesktopInstructions(table);
 }

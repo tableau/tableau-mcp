@@ -2,6 +2,11 @@ import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-comp
 import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
 
 import * as configModule from './config.desktop.js';
+import {
+  buildDesktopInstructions,
+  SESSION_RESOLUTION_TEXT_PINNED,
+  SESSION_RESOLUTION_TEXT_UNPINNED,
+} from './desktop/routeTable.js';
 import * as loggerModule from './logging/logger.js';
 import {
   DEMO_TOOL_PROFILE,
@@ -56,7 +61,7 @@ describe('DesktopMcpServer', () => {
     expect(registeredNames).toContain('list-worksheets');
   });
 
-  it('does not register list-instances when a Desktop session is pinned', async () => {
+  it('registers list-instances even when a Desktop session is pinned', async () => {
     const base = configModule.getDesktopConfig();
     const spy = vi
       .spyOn(configModule, 'getDesktopConfig')
@@ -69,7 +74,7 @@ describe('DesktopMcpServer', () => {
       const registeredNames = (
         vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
       ).map(([name]) => name);
-      expect(registeredNames).not.toContain('list-instances');
+      expect(registeredNames).toContain('list-instances');
       expect(registeredNames).toContain('list-worksheets');
     } finally {
       spy.mockRestore();
@@ -97,9 +102,9 @@ Load tableau-desktop-authoring; repeat failures -> tableau-agent-debug.
 
 Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gradients. State plan, build.
 
-For an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) — never a plain chart ask the plain-chart route already handles, FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.
-
 For a plain viz ask (bar/line/map/KPI/etc.), FIRST bind-template(auto_apply:true): deterministic, ~0.3s. On propose, resubmit; proposals may carry sort and top_n. author-parameter/author-set/author-action before charts; else search-commands.
+
+For an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult, FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.
 
 For a dashboard ask with 2-6 vizzes, build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; search-commands only for commands the census does not list.
 
@@ -121,6 +126,13 @@ If preflight rejects apply, fix per FIX lines. Prefer file mode`,
 
   it('tells agents to narrate with Tableau vocabulary', () => {
     expect(DESKTOP_INSTRUCTIONS).toContain('Use Tableau terms: workbook/viz/sheet/field');
+  });
+
+  it('keeps pin-aware session guidance (list-instances, target another) when pinned', () => {
+    const pinned = buildDesktopInstructions({ sessionPinned: true });
+    expect(pinned).toContain(SESSION_RESOLUTION_TEXT_PINNED);
+    expect(pinned).toContain('list-instances');
+    expect(pinned).not.toContain(SESSION_RESOLUTION_TEXT_UNPINNED);
   });
 });
 
