@@ -1,4 +1,4 @@
-import { externalApiDialogPolicyFor } from '../commandPolicy.js';
+import { externalApiDialogPolicyFor, liveDialogPolicyFor } from '../commandPolicy.js';
 import { validateKnownCommand } from '../commandRegistry.js';
 import {
   ExternalApiCommandRegistryEntry,
@@ -39,14 +39,14 @@ export function guardCommand({
   // Unconditional: these hang the UI thread headlessly on EVERY deployment
   // (live-observed dialog-poppers that pass the static safety flags), so the
   // refusal cannot depend on the optional registry being installed.
-  const externalApiDialogPolicy = externalApiDialogPolicyFor(command);
-  if (externalApiDialogPolicy) {
+  const dialogPolicy = externalApiDialogPolicyFor(command) ?? liveDialogPolicyFor(command);
+  if (dialogPolicy) {
     return {
       refused: true,
       message: formatExternalApiRefusalMessage({
         command,
         reasons: ['live-observed dialog-popper'],
-        fix: externalApiDialogPolicy.fix,
+        fix: dialogPolicy.fix,
       }),
     };
   }

@@ -109,7 +109,7 @@ If ambiguity changes workbook content, call ask-user with urgency=blocking; stop
 
 For current/existing sheet/chart/view/dashboard, edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort or author-* tool; a NEW chart on the current sheet = bind-template with target_worksheet. Never create new sheets unless asked.
 
-Command census: tabdoc:goto-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort. Use search-commands ONLY for unlisted commands.
+Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort. Use search-commands ONLY for unlisted commands.
 
 Omit session for one Desktop; use list-instances when multiple are open.
 

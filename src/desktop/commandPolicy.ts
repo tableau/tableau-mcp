@@ -25,6 +25,8 @@ const SITE_FIX =
   'changing sites is fine, but this command opens a dialog - ask the user to switch sites in Desktop instead';
 const TABLE_CALC_FIX = 'author table calculations through supported calculation tools';
 const PAGE_FIX = 'use a page navigation call with exactly one of page-number or page-name';
+const GOTO_SHEET_FIX =
+  'use the activate-sheet tool instead. Raw tabdoc:goto-sheet cannot pre-validate the sheet value against live workbook windows, and a bad value opens a blocking Tableau Desktop dialog (Error 47BF7751)';
 
 function refuse(reason: string, fix?: string): CommandPolicy {
   return { action: 'refuse', reason, fix };
@@ -33,11 +35,6 @@ function refuse(reason: string, fix?: string): CommandPolicy {
 const keySet = (keys: string): Set<string> => new Set(keys.split(' '));
 const liveDialog = (fix: string): CommandPolicy => refuse(LIVE_DIALOG_REASON, fix);
 const externalDialog = (fix: string): CommandPolicy => refuse(EXTERNAL_API_DIALOG_REASON, fix);
-const paramOverride = (allowed: string, required: string): CommandPolicy => ({
-  action: 'param-override',
-  reason: 'live-param-override',
-  params: { allowed: keySet(allowed), required: keySet(required) },
-});
 const hintWithParams = (fix: string, allowed: string, required: string): CommandPolicy => ({
   action: 'hint',
   reason: KNOWN_LIVE_FAILURE_REASON,
@@ -48,13 +45,13 @@ const hintWithParams = (fix: string, allowed: string, required: string): Command
 export const COMMAND_POLICIES: Map<string, CommandPolicy> = new Map([
   ['tabdoc:show-parameter-controls', refuse(CRASH_PRONE_REASON)], // commandRegistry crash guard: crash-prone headlessly.
   ['tabdoc:show-parameter-controls-range', refuse(CRASH_PRONE_REASON)], // commandRegistry crash guard: crash-prone headlessly.
-  ['tabdoc:goto-sheet', paramOverride('Sheet', 'Sheet')], // 2026-07-19 live /v0 receipts: WindowLocator fails 500 + modal; Sheet succeeds.
+  ['tabdoc:goto-sheet', liveDialog(GOTO_SHEET_FIX)], // 2026-07-22 live receipt: bad Sheet value opens modal 47BF7751; activate-sheet validates first.
   [
     'tabdoc:sort-nested',
     hintWithParams(SORT_NESTED_FIX, SORT_NESTED_ALLOWED, SORT_NESTED_REQUIRED),
   ], // 2026-07-19 live receipts: contract is validation-only; execution still 500s.
   ['tabdoc:launch-map-service-edit-dialog', liveDialog('no headless alternative')], // 2026-07-19 dialog sweep: map service edit dialog.
-  ['tabdoc:show-goto-sheet-dialog', liveDialog('use tabdoc:goto-sheet with {"Sheet": name}')], // 2026-07-19 dialog sweep: goto-sheet dialog.
+  ['tabdoc:show-goto-sheet-dialog', liveDialog('use the activate-sheet tool')], // 2026-07-19 dialog sweep: goto-sheet dialog.
   ['tabui:show-feature-flag-dialog', liveDialog('no headless alternative')], // 2026-07-19 dialog sweep: feature flag dialog.
   ['tabdoc:edit-filter-dialog', liveDialog(FILTER_FIX)], // 2026-07-19 dialog sweep: filter edit dialog.
   ['tabdoc:launch-shared-filter-dialog', liveDialog('express filters in the NotionalSpec')], // 2026-07-19 dialog sweep: shared filter dialog.

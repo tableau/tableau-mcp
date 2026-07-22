@@ -86,7 +86,7 @@ describe('executeTableauCommandTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       new ArgsValidationError(
-        "Invalid command format. Expected 'namespace:command' (e.g., 'tabdoc:goto-sheet'), got: invalidformat",
+        "Invalid command format. Expected 'namespace:command' (e.g., 'tabdoc:save'), got: invalidformat",
       ).message,
     );
   });
@@ -134,19 +134,14 @@ describe('executeTableauCommandTool', () => {
     const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
     const extra = makeExtra(executeCommand);
 
-    // Live-verified /v0 contract (2026-07-19): goto-sheet takes "Sheet"; the bundled
-    // reference's WindowLocator is wrong at runtime (500 + blocking modal).
-    await getResult(
-      { session: SESSION, command: 'tabdoc:goto-sheet', args: { Sheet: 'Sheet1' } },
-      extra,
-    );
+    await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
 
     expect(extra.getExecutor).toHaveBeenCalledWith(SESSION);
     expect(executeCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         namespace: 'tabdoc',
-        command: 'goto-sheet',
-        args: { Sheet: 'Sheet1' },
+        command: 'save',
+        args: {},
       }),
     );
   });
@@ -243,12 +238,7 @@ describe('executeTableauCommandTool', () => {
     const executeCommand = vi.fn().mockResolvedValue({ isErr: () => true, error: commandError });
     const extra = makeExtra(executeCommand);
 
-    // "Sheet" is the live-verified param for goto-sheet; provide it so the param guard
-    // lets this call through to the (mocked) failing executor, per this test's intent.
-    const result = await getResult(
-      { session: SESSION, command: 'tabdoc:goto-sheet', args: { Sheet: 'Sheet1' } },
-      extra,
-    );
+    const result = await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -334,13 +324,30 @@ describe('executeTableauCommandTool', () => {
   });
 
   describe('param-contract guard', () => {
-    it('rejects goto-sheet called with an invalid param key before resolving an executor (the live-incident shape)', async () => {
+    it('refuses raw goto-sheet before resolving an executor even with the formerly live-valid Sheet param', async () => {
       const extra = getMockRequestHandlerExtra();
       extra.getExecutor = vi.fn();
 
-      // THE live-incident shape (2026-07-19, twice): {"WindowLocator": ...} → 500 +
-      // blocking modal 47BF7751. The reference DECLARES WindowLocator required, but the
-      // /v0 runtime accepts "Sheet" — the guard's live-override encodes the runtime truth.
+      // 2026-07-22 live receipt: an unknown Sheet value reaches Desktop and opens modal
+      // 47BF7751, so raw goto-sheet is refused even when the param shape is valid.
+      const result = await getResult(
+        { session: SESSION, command: 'tabdoc:goto-sheet', args: { Sheet: 'Sheet1' } },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('activate-sheet');
+      expect(result.content[0].text).toContain('cannot pre-validate');
+      expect(result.content[0].text).toContain('blocking Tableau Desktop dialog');
+      expect(result.content[0].text).toContain('47BF7751');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('refuses raw goto-sheet before parameter-shape validation', async () => {
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
       const result = await getResult(
         { session: SESSION, command: 'tabdoc:goto-sheet', args: { WindowLocator: 'Sheet1' } },
         extra,
@@ -348,27 +355,12 @@ describe('executeTableauCommandTool', () => {
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain(
-        'Unknown parameter(s) for Tableau command "tabdoc:goto-sheet": WindowLocator',
-      );
-      expect(result.content[0].text).toContain('"Sheet"');
+      expect(result.content[0].text).toContain('activate-sheet');
+      expect(result.content[0].text).toContain('cannot pre-validate');
       expect(extra.getExecutor).not.toHaveBeenCalled();
     });
 
-    it('accepts goto-sheet called with its correct required param', async () => {
-      const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
-      const extra = makeExtra(executeCommand);
-
-      const result = await getResult(
-        { session: SESSION, command: 'tabdoc:goto-sheet', args: { Sheet: 'Sheet1' } },
-        extra,
-      );
-
-      expect(result.isError).toBeFalsy();
-      expect(executeCommand).toHaveBeenCalled();
-    });
-
-    it('rejects a missing required param before resolving an executor', async () => {
+    it('refuses raw goto-sheet with missing args before resolving an executor', async () => {
       const extra = getMockRequestHandlerExtra();
       extra.getExecutor = vi.fn();
 
@@ -379,9 +371,8 @@ describe('executeTableauCommandTool', () => {
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain(
-        'Missing required parameter(s) for Tableau command "tabdoc:goto-sheet": Sheet',
-      );
+      expect(result.content[0].text).toContain('activate-sheet');
+      expect(result.content[0].text).toContain('cannot pre-validate');
       expect(extra.getExecutor).not.toHaveBeenCalled();
     });
 
@@ -639,6 +630,32 @@ describe('executeTableauCommandTool', () => {
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('human-blocking dialog');
+      expect(extra.getExecutor).not.toHaveBeenCalled();
+    });
+
+    it('refuses raw goto-sheet before resolving an executor even with a safe registry entry', async () => {
+      enableExternalApiRegistry({
+        'tabdoc:goto-sheet': {
+          agent_can_invoke: true,
+          opens_blocking_dialog: false,
+          modifies_state: 'false',
+          in_params: [{ local: 'Sheet', type: 'DPI_Worksheet', required: true, wire: 'sheet' }],
+        },
+      });
+      const extra = getMockRequestHandlerExtra();
+      extra.getExecutor = vi.fn();
+
+      const result = await getResult(
+        { session: SESSION, command: 'tabdoc:goto-sheet', args: { Sheet: 'Missing Sheet' } },
+        extra,
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('activate-sheet');
+      expect(result.content[0].text).toContain('cannot pre-validate');
+      expect(result.content[0].text).toContain('blocking Tableau Desktop dialog');
+      expect(result.content[0].text).toContain('47BF7751');
       expect(extra.getExecutor).not.toHaveBeenCalled();
     });
 

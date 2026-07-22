@@ -12,7 +12,7 @@ What you write with `apply-workbook` is not bit-exact what `get-workbook-xml` re
 - In-scope reason: Explains how Tableau rewrites calc-field XML on save so Claude can distinguish cosmetic changes from semantic failures when verifying an apply result.
 - Out-of-scope risk: none
 - Tags: round-trip-normalization, formula-rewrite, caption-to-internal-name, multi-line-formulas, xml-attribute-escaping, column-reordering, dependency-graph-lazy-resolution, data-pane-invalid-flash, character-references
-- Relevant user prompts/search terms: "formula changed after save", "caption reference became internal name", "multi-line formula collapsed to one line", "&#10; newline in formula", "columns alphabetically reordered", "invalid datasources warning after apply", "THEN ELSEIF alignment conventions", "tabdoc:goto-sheet forces evaluation"
+- Relevant user prompts/search terms: "formula changed after save", "caption reference became internal name", "multi-line formula collapsed to one line", "&#10; newline in formula", "columns alphabetically reordered", "invalid datasources warning after apply", "THEN ELSEIF alignment conventions", "activate-sheet forces evaluation"
 
 ## 1. Caption references in formulas get rewritten to internal names on save
 
@@ -105,7 +105,7 @@ If you insert new calc-field `<column>` elements after `</object-graph>` for dif
 
 ## 5. Dependency graph is built lazily; the Data pane briefly flashes "invalid" before resolution completes
 
-When an apply introduces a multi-level calc chain (e.g. 4-deep: `RFM Tier` → `R Quintile` → `Recency (Days)` → `Last Order Date`), the Data pane UI may show an "invalid datasources" warning for a short window after the apply call has already returned success. This is a UI/metadata-service timing artifact, not a real failure. See `expertise://tableau/tactics/workflow/recovery` for how to distinguish this from an actual silent-apply-failure and the corrective action (`tabdoc:goto-sheet` forces a full evaluation cycle).
+When an apply introduces a multi-level calc chain (e.g. 4-deep: `RFM Tier` → `R Quintile` → `Recency (Days)` → `Last Order Date`), the Data pane UI may show an "invalid datasources" warning for a short window after the apply call has already returned success. This is a UI/metadata-service timing artifact, not a real failure. See `expertise://tableau/tactics/workflow/recovery` for how to distinguish this from an actual silent-apply-failure and the corrective action (`activate-sheet` forces a full evaluation cycle; raw `tabdoc:goto-sheet` is refused at the execute boundary).
 
 ---
 
@@ -140,7 +140,7 @@ For calc-field authoring fundamentals (column structure, parameters, table calcs
 2. **Comparing pre-apply XML to `get-workbook-xml` output and panicking at the diff.** Tableau will reorder `<column>` children alphabetically, rewrite `formula='...'` attribute quoting, and substitute `&apos;` for inline single quotes. None of those are semantic changes. Compare two consecutive `get-workbook-xml` outputs instead.
 3. **Authoring calc names with custom strings** (`[R Score]`, `[Is Selected Genre]`) instead of `[Calculation_<digits>]`. The XML parser accepts the column but Tableau's formula-validation UI flags the field "invalid" in the Data pane.
 4. **Authoring formulas with caption references and assuming they survive.** They get rewritten to internal names on the next save pass. Author with internal names from the start to avoid the transient "invalid" flag.
-5. **Treating the Data pane's "invalid datasources" warning as fatal.** For multi-level calc chains it's usually a transient lazy-resolution artifact. Force evaluation with `tabdoc:goto-sheet` or wait for the validation cycle (a few seconds) before declaring failure.
+5. **Treating the Data pane's "invalid datasources" warning as fatal.** For multi-level calc chains it's usually a transient lazy-resolution artifact. Force evaluation with `activate-sheet` or wait for the validation cycle (a few seconds) before declaring failure.
 
 ---
 
@@ -156,7 +156,7 @@ For calc-field authoring fundamentals (column structure, parameters, table calcs
 2. **Use `[Calculation_<digits>]` internal names** for calc-field column `name` attributes (single underscore, contiguous run of digits). Move human-readable labels to the `caption` attribute.
 3. **Reference fields in formulas by internal name** (the column's `name` attribute, with surrounding brackets), not by caption.
 4. **For diff-based validation pipelines:** snapshot the workbook with `get-workbook-xml` immediately after every apply, then diff snapshot N against snapshot N+1. Differences that appear only in pre-apply-vs-post-save are normalization artifacts and should be filtered out.
-5. **For multi-level calc chains, expect a brief "invalid" Data-pane flash after apply.** Either wait for resolution to complete or force it with a `tabdoc:goto-sheet` round-trip before treating the warning as a real failure.
+5. **For multi-level calc chains, expect a brief "invalid" Data-pane flash after apply.** Either wait for resolution to complete or force it with `activate-sheet` before treating the warning as a real failure.
 
 ## Source and Confidence
 
