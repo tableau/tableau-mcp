@@ -49,4 +49,35 @@ describe('SessionManager executor selection', () => {
       'The pinned Tableau Desktop is no longer reachable — it was closed or restarted. Relaunch the agent from Tableau Desktop to reconnect.',
     );
   });
+
+  it('throws a stale-session error when an unpinned session is gone but other instances are running', async () => {
+    mocks.discoverInstances.mockReturnValue([
+      {
+        baseUrl: 'http://127.0.0.1:8765',
+        token: 'token',
+        pid: 999,
+        instanceId: 'inst',
+      },
+    ] as never);
+
+    await expect(new SessionManager().getExecutor('12345')).rejects.toThrow(
+      'The requested Tableau Desktop session is no longer running — it was closed. Call list-instances and retry with a current session.',
+    );
+  });
+
+  it('throws a stale-session error when a pinned config targets a different, still-running Desktop', async () => {
+    vi.stubEnv('TABLEAU_DESKTOP_SESSION_ID', '999');
+    mocks.discoverInstances.mockReturnValue([
+      {
+        baseUrl: 'http://127.0.0.1:8765',
+        token: 'token',
+        pid: 999,
+        instanceId: 'inst',
+      },
+    ] as never);
+
+    await expect(new SessionManager().getExecutor('12345')).rejects.toThrow(
+      'The requested Tableau Desktop session is no longer running — it was closed. Call list-instances and retry with a current session.',
+    );
+  });
 });

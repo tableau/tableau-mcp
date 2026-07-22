@@ -17,14 +17,26 @@ export const EXTERNAL_API_UNAVAILABLE_MESSAGE =
 export const PINNED_DESKTOP_UNREACHABLE_MESSAGE =
   'The pinned Tableau Desktop is no longer reachable — it was closed or restarted. Relaunch the agent from Tableau Desktop to reconnect.';
 
+export const STALE_SESSION_MESSAGE =
+  'The requested Tableau Desktop session is no longer running — it was closed. Call list-instances and retry with a current session.';
+
+export type DesktopUnavailableReason = 'pinned-unreachable' | 'stale-session' | 'no-api';
+
 export class ExternalClientApiUnavailableError extends Error {
-  constructor(sessionId: string | number, { pinned = false }: { pinned?: boolean } = {}) {
-    super(
-      pinned
-        ? `${PINNED_DESKTOP_UNREACHABLE_MESSAGE} Session: ${sessionId}.`
-        : `${EXTERNAL_API_UNAVAILABLE_MESSAGE} Requested session: ${sessionId}.`,
-    );
+  constructor(sessionId: string | number, reason: DesktopUnavailableReason = 'no-api') {
+    super(ExternalClientApiUnavailableError.messageFor(sessionId, reason));
     this.name = 'ExternalClientApiUnavailableError';
+  }
+
+  private static messageFor(sessionId: string | number, reason: DesktopUnavailableReason): string {
+    switch (reason) {
+      case 'pinned-unreachable':
+        return `${PINNED_DESKTOP_UNREACHABLE_MESSAGE} Session: ${sessionId}.`;
+      case 'stale-session':
+        return `${STALE_SESSION_MESSAGE} Session: ${sessionId}.`;
+      case 'no-api':
+        return `${EXTERNAL_API_UNAVAILABLE_MESSAGE} Requested session: ${sessionId}.`;
+    }
   }
 }
 
@@ -42,15 +54,15 @@ export class SessionManager {
 
       const pid = sessionIdResult.value;
       const config = getDesktopConfig();
-      const executor = new ExternalApiToolExecutor({
-        pid,
-        discover: () => discoverInstances({ discoveryDir: config.externalApiDiscoveryDir }),
-      });
+      const discover = (): ReturnType<typeof discoverInstances> =>
+        discoverInstances({ discoveryDir: config.externalApiDiscoveryDir });
+      const executor = new ExternalApiToolExecutor({ pid, discover });
       await executor.start();
       if (!executor.isAvailable()) {
-        throw new ExternalClientApiUnavailableError(sessionId, {
-          pinned: config.desktopSessionId === sessionId,
-        });
+        throw new ExternalClientApiUnavailableError(
+          sessionId,
+          resolveUnavailableReason(sessionId, config.desktopSessionId, discover()),
+        );
       }
 
       session = {
@@ -75,6 +87,18 @@ export class SessionManager {
     session.lastAccess = Date.now();
     return session.executor;
   }
+}
+
+function resolveUnavailableReason(
+  sessionId: string,
+  pinnedSessionId: string | undefined,
+  runningInstances: ReturnType<typeof discoverInstances>,
+): DesktopUnavailableReason {
+  if (pinnedSessionId === sessionId) {
+    return 'pinned-unreachable';
+  }
+  const others = runningInstances.filter((instance) => String(instance.pid) !== sessionId);
+  return others.length > 0 ? 'stale-session' : 'no-api';
 }
 
 function parseSessionId(sessionId: string): Result<number, void> {
