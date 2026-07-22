@@ -32,6 +32,7 @@ jobs:
           trap 'rm -f .env' EXIT
           npx tsx src/scripts/seaSmoke.ts ./tableau-mcp
           npx tsx src/scripts/seaSmoke.ts ./tableau-mcp-desktop --require-tool bind-template
+          npx tsx src/scripts/seaSmoke.ts ./tableau-mcp-desktop --require-tool search-knowledge --min-knowledge-resources 100 --search-knowledge "pie chart of countries"
           tar -czf tableau-mcp.tar.gz tableau-mcp tableau-mcp-desktop
       - name: Upload archive to release
         run: |
@@ -74,6 +75,10 @@ jobs:
             npx tsx src/scripts/seaSmoke.ts .\tableau-mcp-desktop.exe --require-tool bind-template
             if ($LASTEXITCODE -ne 0) {
               throw "tableau-mcp-desktop.exe smoke failed"
+            }
+            npx tsx src/scripts/seaSmoke.ts .\tableau-mcp-desktop.exe --require-tool search-knowledge --min-knowledge-resources 100 --search-knowledge "pie chart of countries"
+            if ($LASTEXITCODE -ne 0) {
+              throw "tableau-mcp-desktop.exe knowledge smoke failed"
             }
           } finally {
             Remove-Item -Path .\.env -Force

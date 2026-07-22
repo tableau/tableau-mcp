@@ -10,7 +10,12 @@ import {
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import { DATA_ROOT, readResourceAsset, RESOURCES_ROOT } from './desktop/assets.js';
-import { listKnowledgeResources, readKnowledgeResource } from './desktop/knowledge/index.js';
+import {
+  getKnowledgeCorpusEntryCount,
+  getKnowledgeDir,
+  listKnowledgeResources,
+  readKnowledgeResource,
+} from './desktop/knowledge/index.js';
 import { buildDesktopInstructions } from './desktop/routeTable.js';
 import { SessionManager } from './desktop/sessionManager.js';
 import { log } from './logging/logger.js';
@@ -181,6 +186,7 @@ export const DESKTOP_INSTRUCTIONS = buildDesktopInstructions({ sessionPinned: fa
 
 export class DesktopMcpServer extends Server {
   private readonly sessionManager = new SessionManager();
+  private knowledgeCorpusChecked = false;
 
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
     super({
@@ -195,6 +201,16 @@ export class DesktopMcpServer extends Server {
   }
 
   registerResources = async (): Promise<void> => {
+    if (!this.knowledgeCorpusChecked) {
+      this.knowledgeCorpusChecked = true;
+      if (getKnowledgeCorpusEntryCount() === 0) {
+        log({
+          message: `Knowledge corpus is empty; expected assets under ${getKnowledgeDir()}`,
+          level: 'warning',
+          logger: 'DesktopMcpServer',
+        });
+      }
+    }
     await this._registerDashboardXmlGuide();
     this._registerKnowledgeResources();
   };

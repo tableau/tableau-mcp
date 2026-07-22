@@ -2,11 +2,11 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.49.0+content.2026-07-22",
+  "content_version": "2.51.0+content.2026-07-22",
   "schema_version": "1",
   "generated": "2026-07-22",
   "engine_compat": {
-    "server_min": "2.49.0",
+    "server_min": "2.51.0",
     "node": ">=22.7.5"
   },
   "resources": [
