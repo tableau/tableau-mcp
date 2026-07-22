@@ -96,6 +96,7 @@ const escalateResult: BinderResult = {
 describe('dashboardAutoApplyTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -261,6 +262,7 @@ async function getToolResult({
 describe('dashboardAutoApplyTool happy path', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
   it('applies exactly once (one read, one dispatch) and returns the trimmed success shape', async () => {
@@ -391,6 +393,7 @@ describe('dashboardAutoApplyTool happy path', () => {
 describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
   it('any ask "propose" refuses the whole batch — zero dispatches, every outcome intact', async () => {
@@ -641,6 +644,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
 describe('dashboardAutoApplyTool session-default-when-unique', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
   function mockInstances(pids: number[]): void {
@@ -696,9 +700,23 @@ describe('dashboardAutoApplyTool session-default-when-unique', () => {
     expect(getExecutor).not.toHaveBeenCalled();
   });
 
-  it('an explicit session always wins (discovery is never consulted)', async () => {
+  it('targets an explicit session that is one of the running instances', async () => {
     mockInstances([11, 22]);
     const { getExecutor } = setupMocks();
+
+    const result = await getToolResult({
+      session: '22',
+      asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(getExecutor).toHaveBeenCalledWith('22');
+  });
+
+  it('rejects an explicit session that is not a running instance, naming the running pids', async () => {
+    mockInstances([11, 22]);
+    const getExecutor = vi.fn().mockResolvedValue({});
 
     const result = await getToolResult({
       session: '7',
@@ -706,8 +724,10 @@ describe('dashboardAutoApplyTool session-default-when-unique', () => {
       getExecutor,
     });
 
-    expect(result.isError).toBe(false);
-    expect(getExecutor).toHaveBeenCalledWith('7');
-    expect(externalDiscovery.discoverInstances).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('7');
+    expect(result.content[0].text).toContain('list-instances');
+    expect(getExecutor).not.toHaveBeenCalled();
   });
 });
