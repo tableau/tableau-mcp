@@ -76,25 +76,29 @@ function formatValidationErrors(issues: ValidationIssue[]): string {
 }
 
 const paramsSchema = {
-  session: z.string().optional().describe(''),
-  worksheetName: z.string().min(1).describe(''),
-  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field']).describe(''),
+  session: z.string().optional().describe('Desktop session; omit if one.'),
+  worksheetName: z.string().min(1).describe('Worksheet display name.'),
+  operation: z.enum(['top_n', 'sort_direction', 'sort_by_field']).describe('Refinement type.'),
   topN: z
     .object({
-      n: z.number().int().min(1).max(50).describe(''),
-      end: z.enum(['top', 'bottom']).optional().describe(''),
+      n: z.number().int().min(1).max(50).describe('Members to keep (1-50).'),
+      end: z.enum(['top', 'bottom']).optional().describe('top/bottom; default top.'),
     })
     .optional()
-    .describe(''),
+    .describe('For top_n: Top/Bottom-N.'),
   sortDirection: z
     .object({
-      direction: z.enum(['ASC', 'DESC']).describe(''),
+      direction: z.enum(['ASC', 'DESC']).describe('Existing-sort direction.'),
     })
     .optional()
-    .describe(''),
-  targetField: z.string().min(1).optional().describe(''),
-  sortByField: z.string().min(1).optional().describe(''),
-  direction: z.enum(['asc', 'desc']).optional().describe(''),
+    .describe('For sort_direction.'),
+  targetField: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('sort_by_field axis; omit to auto-detect one categorical axis.'),
+  sortByField: z.string().min(1).optional().describe('sort_by_field measure to sort by.'),
+  direction: z.enum(['asc', 'desc']).optional().describe('sort_by_field direction; default asc.'),
 };
 
 const title = 'Refine Worksheet';
@@ -145,6 +149,22 @@ export const getRefineWorksheetTool = (
         callback: async () => {
           if (!worksheetName || !worksheetName.trim()) {
             return new ArgsValidationError('worksheetName is required.').toErr();
+          }
+
+          // Per-operation required params — enforced here (not in the JSON Schema) so the
+          // schema stays flat and host-portable, matching add-field's encodingType guard.
+          if (operation === 'top_n' && topN === undefined) {
+            return new ArgsValidationError('topN is required when operation=top_n.').toErr();
+          }
+          if (operation === 'sort_direction' && sortDirection === undefined) {
+            return new ArgsValidationError(
+              'sortDirection is required when operation=sort_direction.',
+            ).toErr();
+          }
+          if (operation === 'sort_by_field' && (!sortByField || !sortByField.trim())) {
+            return new ArgsValidationError(
+              'sortByField is required when operation=sort_by_field.',
+            ).toErr();
           }
 
           const sessionResult = resolveSession(session);
@@ -210,7 +230,7 @@ export const getRefineWorksheetTool = (
             const sortByDirection =
               direction === 'desc' ? 'DESC' : direction === 'asc' ? 'ASC' : undefined;
             const plan = planSortByField(sourceXml, {
-              targetField: targetField as string,
+              targetField,
               sortByField: sortByField as string,
               direction: sortByDirection,
             });
