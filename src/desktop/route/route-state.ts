@@ -97,6 +97,11 @@ export interface BindRecoveryAdmissionInput {
   proposalSignature?: string;
 }
 
+export interface UnprotectedPassthroughs {
+  count: number;
+  last_asks: string[];
+}
+
 /**
  * The MOST RECENT ask bind-template classified for this session (most-recent-ask-wins).
  * `last_outcome` is null between classification and the concluded bind-template outcome.
@@ -122,6 +127,8 @@ export interface SessionRouteState {
   route_overrides: RouteOverride[];
   /** Bounded per-ask bind recovery records, keyed by the same normalized ask as current_ask. */
   bindRecoveryByAsk: Map<string, BindRecoveryRecord>;
+  /** Capacity-rejected bind admissions that intentionally proceeded unprotected. */
+  unprotected_passthroughs: UnprotectedPassthroughs;
   /** Most recent bind-template ask classification for this session, if any. */
   current_ask?: SessionAskClassification;
 }
@@ -150,6 +157,7 @@ export interface RouteReceipt {
     template?: string;
     shape?: AskShape;
   }>;
+  unprotected_passthroughs?: UnprotectedPassthroughs;
 }
 
 export function serializeRouteReceipt(
@@ -200,6 +208,12 @@ export function serializeRouteReceipt(
       shape: override.shape,
     }));
   }
+  if (state.unprotected_passthroughs.count > 0) {
+    receipt.unprotected_passthroughs = {
+      count: state.unprotected_passthroughs.count,
+      last_asks: [...state.unprotected_passthroughs.last_asks],
+    };
+  }
   return Object.keys(receipt).length > 0 ? receipt : undefined;
 }
 
@@ -226,6 +240,9 @@ export class SessionRouteStateStore {
   /** Per-session LRU cap for bind recovery records. */
   static readonly MAX_BIND_RECOVERY_ASKS = 8;
 
+  /** Receipt cap for capacity-rejected asks. */
+  static readonly MAX_UNPROTECTED_PASSTHROUGH_ASKS = 4;
+
   private ensure(sessionId: string): SessionRouteState {
     let state = this.bySession.get(sessionId);
     if (!state) {
@@ -234,6 +251,7 @@ export class SessionRouteStateStore {
         deflections: [],
         route_overrides: [],
         bindRecoveryByAsk: new Map(),
+        unprotected_passthroughs: { count: 0, last_asks: [] },
       };
       this.bySession.set(sessionId, state);
       while (this.bySession.size > SessionRouteStateStore.MAX_STATES) {
@@ -276,6 +294,17 @@ export class SessionRouteStateStore {
       return false;
     }
     return true;
+  }
+
+  private recordUnprotectedPassthrough(state: SessionRouteState, ask: string): void {
+    state.unprotected_passthroughs.count += 1;
+    state.unprotected_passthroughs.last_asks.push(ask);
+    while (
+      state.unprotected_passthroughs.last_asks.length >
+      SessionRouteStateStore.MAX_UNPROTECTED_PASSTHROUGH_ASKS
+    ) {
+      state.unprotected_passthroughs.last_asks.shift();
+    }
   }
 
   /** Route state for a session, if any. Undefined for an unknown/absent id (no-op). */
@@ -437,7 +466,11 @@ export class SessionRouteStateStore {
       ...this.withUncorrelatedOutcomeCount(previous, false),
     };
 
-    return this.touchBindRecovery(state, ask, record) ? reservationId : undefined;
+    if (this.touchBindRecovery(state, ask, record)) {
+      return reservationId;
+    }
+    this.recordUnprotectedPassthrough(state, ask);
+    return undefined;
   }
 
   /**

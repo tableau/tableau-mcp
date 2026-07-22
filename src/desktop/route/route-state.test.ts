@@ -386,6 +386,50 @@ describe('SessionRouteStateStore', () => {
       expect(store.getBindRecovery('S1', `ask-${cap}`)).toBeUndefined();
     });
 
+    it('records capacity-rejected admissions as bounded unprotected pass-through receipts', () => {
+      const store = new SessionRouteStateStore();
+      const cap = SessionRouteStateStore.MAX_BIND_RECOVERY_ASKS;
+
+      for (let i = 0; i < cap; i++) {
+        expect(store.reserveBindRecoveryAdmission('S1', `ask-${i}`, {})).toEqual(
+          expect.any(Number),
+        );
+      }
+      for (let i = cap; i < cap + 5; i++) {
+        expect(store.reserveBindRecoveryAdmission('S1', `ask-${i}`, {})).toBeUndefined();
+      }
+
+      expect(store.get('S1')!.bindRecoveryByAsk.size).toBe(cap);
+      expect(serializeRouteReceipt(store.get('S1'))?.unprotected_passthroughs).toEqual({
+        count: 5,
+        last_asks: [`ask-${cap + 1}`, `ask-${cap + 2}`, `ask-${cap + 3}`, `ask-${cap + 4}`],
+      });
+    });
+
+    it('omits unprotected pass-through receipts when admission is accepted', () => {
+      const store = new SessionRouteStateStore();
+      store.recordAskClassification('S1', {
+        ask: 'ask A',
+        route: 'bind-first',
+        shape: 'bind-first-template',
+        template: 'ranking-ordered-bar',
+      });
+
+      expect(store.reserveBindRecoveryAdmission('S1', 'ask A', {})).toEqual(expect.any(Number));
+
+      expect(serializeRouteReceipt(store.get('S1'))).toEqual({
+        route: 'bind-first',
+        shape: 'bind-first-template',
+        template: 'ranking-ordered-bar',
+        bind_attempts: {
+          count: 1,
+          outcomes: [],
+          phase: 'awaiting-proposal',
+          retry_budget_consumed: 0,
+        },
+      });
+    });
+
     it('reserves an admitted in-flight bind and upgrades it when the outcome arrives', () => {
       const store = new SessionRouteStateStore();
 
