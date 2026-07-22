@@ -109,13 +109,43 @@ describe('loadWorkbookXml validation preflight', () => {
       sheetType: 'worksheet',
       templateParameters: { DATASOURCE: datasource },
       fieldMapping: {
-        Region: `[${datasource}].[none:country:nk]`,
-        Sales: `[${datasource}].[sum:goalDifference:qk]`,
+        Category: `[${datasource}].[none:country:nk]`,
+        Measure: `[${datasource}].[sum:goalDifference:qk]`,
       },
+      templateSlots: [
+        {
+          template_field: 'Category',
+          required: true,
+          bindable: true,
+          kind: 'categorical',
+          role: ['rows', 'sort-dimension'],
+        },
+        {
+          template_field: 'Measure',
+          required: true,
+          bindable: true,
+          kind: 'quantitative',
+          role: ['cols', 'sort-measure'],
+        },
+        {
+          template_field: 'Facet',
+          required: false,
+          bindable: true,
+          kind: 'categorical',
+          role: ['rows'],
+        },
+      ],
       applyNonce: 'miller-world-cup',
     });
     expect(injected.ok).toBe(true);
     invariant(injected.ok);
+    // The bind must actually consume the donor placeholders — a no-op mapping
+    // (the pre-rename donor keys) would leave literal [Category]/[Measure]
+    // columns and make this whole preflight scenario vacuous.
+    expect(injected.xml).toContain('[none:country:nk]');
+    expect(injected.xml).toContain('[sum:goalDifference:qk]');
+    expect(injected.xml).not.toContain("name='[Category]'");
+    expect(injected.xml).not.toContain("name='[Measure]'");
 
     const applyWorkbookDocument = vi
       .fn()

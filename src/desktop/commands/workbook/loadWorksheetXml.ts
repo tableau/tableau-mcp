@@ -332,6 +332,21 @@ async function loadWorksheetXmlViaExternalApi({
       });
     }
 
+    // Non-blocking findings from the CONSTRUCTED workbook (e.g. a parameter that
+    // only exists in workbook context) never appear in the fragment's warning
+    // ride-along — log them so receipts/diagnostics can still find them.
+    const workbookWarningIssues = workbookDocValidation.issues.filter(
+      (issue) => issue.severity !== 'error',
+    );
+    if (workbookWarningIssues.length > 0) {
+      log({
+        level: 'warning',
+        message: 'Constructed worksheet apply document has non-blocking validation findings',
+        logger: 'worksheetCommands',
+        data: { worksheetName, issues: workbookWarningIssues },
+      });
+    }
+
     const applyResult = await applyWorkbookText({ xml: workbookDoc, executor, signal });
     if (applyResult.isErr()) {
       return Err({ type: 'execute-command-error', error: applyResult.error });
