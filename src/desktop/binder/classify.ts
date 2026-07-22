@@ -593,6 +593,127 @@ function askCarriesSpatialIntent(
 }
 
 /**
+ * MEASURE-FREE LAT/LONG SYMBOL MAP — coordinate-affinity resolver (Blake wall #2).
+ *
+ * The `spatial-symbol-map-latlon` template plots real Longitude/Latitude coordinate
+ * columns on Cols/Rows (one fixed-size, single-color Circle per detail member) with NO
+ * size/color measure. It must bind CONFIDENTLY — but binding coordinates by generic
+ * role-greedy quant order silently SWAPS the axes (whichever coordinate the schema lists
+ * first lands on cols). So this template is resolved ONLY here, by field-NAME affinity,
+ * and is EXCLUDED from the generic keyword/role-greedy path (classifyNoLlm) — a resolver
+ * miss means propose, never a swapped bind.
+ *
+ * The name of this template is frozen here because the resolver is bespoke to its exact
+ * slot shape (longitude→cols, latitude→rows, one categorical→detail, no measure).
+ */
+const LATLON_SYMBOL_MAP_TEMPLATE = 'spatial-symbol-map-latlon';
+
+/**
+ * POINT-LOCATION CUES (Blake wall #2). Coordinate/point-location intent a user types when
+ * they want a map of WHERE things are — plotted points, not a filled/geocoded region map.
+ * Matched as WHOLE tokens against the MASKED ask (field names blanked) so a field literally
+ * named "Location"/"Office" can't arm the resolver — intent is a phrasing decision, never a
+ * field-name accident. Paired with the coordinate keywords already recognized by
+ * SPATIAL_INTENT_ALIASES / hasCoordinatePairIntent for the explicit lat/lon case.
+ */
+const POINT_LOCATION_CUES: readonly string[] = [
+  'office location',
+  'office locations',
+  'locations',
+  'location',
+  'sites',
+  'offices',
+  'pins',
+  'points',
+];
+
+/** True when the (masked) ask carries a coordinate keyword OR an explicit point-location cue. */
+function askHasCoordinateOrPointIntent(rawAsk: string, maskedAsk: string): boolean {
+  for (const alias of SPATIAL_INTENT_ALIASES) {
+    if (phraseIndexInAsk(maskedAsk, alias) >= 0) return true;
+  }
+  if (hasCoordinatePairIntent(rawAsk)) return true;
+  return POINT_LOCATION_CUES.some((cue) => phraseIndexInAsk(maskedAsk, cue) >= 0);
+}
+
+/** Whole-token affinity: does any of the field's names carry one of the coordinate tokens? */
+function fieldHasCoordinateToken(f: SchemaField, tokens: ReadonlySet<string>): boolean {
+  for (const n of [f.name, f.caption ?? '', bareName(f.columnName)]) {
+    for (const t of nameTokens(n)) if (tokens.has(t)) return true;
+  }
+  return false;
+}
+
+const LATITUDE_TOKENS: ReadonlySet<string> = new Set(['latitude', 'lat']);
+const LONGITUDE_TOKENS: ReadonlySet<string> = new Set(['longitude', 'lon', 'lng', 'long']);
+
+/**
+ * The UNIQUE quantitative field whose name carries one of `tokens`, else null (0 or 2+
+ * matches → null, fail-closed). "Quantitative" = `isMeasure` (measure role or aggregated),
+ * matching the template's coordinate slot kind.
+ */
+function uniqueCoordinateField(
+  fields: SchemaField[],
+  tokens: ReadonlySet<string>,
+): SchemaField | null {
+  const hits = fields.filter((f) => isMeasure(f) && fieldHasCoordinateToken(f, tokens));
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/**
+ * RESOLVE the measure-free lat/long symbol map by coordinate-name affinity. Returns the
+ * bindings (longitude→cols slot, latitude→rows slot, one categorical→detail) ONLY when
+ * every condition holds, else null (honest propose — never a wrong confident bind):
+ *   - the ask carries coordinate/point-location intent (askHasCoordinateOrPointIntent);
+ *   - EXACTLY ONE latitude-affine quantitative field AND EXACTLY ONE longitude-affine one,
+ *     and they are DISTINCT (a field named "lat_long" that matched both → ambiguous → null);
+ *   - EXACTLY ONE categorical dimension for the detail slot (0 → nothing to grain by;
+ *     2+ → ambiguous which detail, fail closed).
+ * The axis assignment is by NAME (longitude→cols, latitude→rows), never schema order, so a
+ * reversed-order schema binds identically — the axis-swap regression is impossible here.
+ */
+function resolveLatLonSymbolMap(
+  m: TemplateManifest,
+  rawAsk: string,
+  maskedAsk: string,
+  summary: SchemaSummary,
+): Array<{ slot_id: string; field: string }> | null {
+  if (!askHasCoordinateOrPointIntent(rawAsk, maskedAsk)) return null;
+
+  const lat = uniqueCoordinateField(summary.fields, LATITUDE_TOKENS);
+  const lon = uniqueCoordinateField(summary.fields, LONGITUDE_TOKENS);
+  if (!lat || !lon || lat === lon) return null; // 0/2+/collision → fail closed
+
+  // GRAIN: bind EVERY non-coordinate dimension to a detail slot, in deterministic schema
+  // order. The template AVG-aggregates the coordinates, so a mark collapses to a per-member
+  // centroid for any dimension NOT on detail — binding one of two dimensions (e.g. city but
+  // not pm_name) would blob every office in a city onto one AVG point (the blank-centroid
+  // wrong-bind). One dimension → detail1 only (detail2 pruned). Two → both. Zero → nothing
+  // to grain by. THREE+ exceeds this template's two-slot capacity, and dropping any dim
+  // re-introduces the collapse, so fail closed to propose rather than silently under-grain.
+  const detailDims = summary.fields.filter(isCategorical);
+  if (detailDims.length < 1 || detailDims.length > 2) return null; // 0 or 3+ → fail closed
+
+  // Map by SLOT ROLE/ID, not slot order: longitude→the cols slot, latitude→the rows slot,
+  // and the non-coordinate dims → the detail slots in order. Guards against a manifest
+  // slot reorder and makes the coordinate name→axis contract explicit (axis-swap-proof).
+  const lonSlot = m.slots.find((s) => s.slot_id === 'longitude' && s.role.includes('cols'));
+  const latSlot = m.slots.find((s) => s.slot_id === 'latitude' && s.role.includes('rows'));
+  const detailSlots = m.slots
+    .filter((s) => s.slot_id.startsWith('detail') && s.role.includes('lod'))
+    .sort((a, b) => a.slot_id.localeCompare(b.slot_id));
+  if (!lonSlot || !latSlot || detailSlots.length < detailDims.length) return null; // manifest shape changed → fail closed
+
+  return [
+    { slot_id: lonSlot.slot_id, field: lon.name },
+    { slot_id: latSlot.slot_id, field: lat.name },
+    // Bind each dimension to detail1, detail2, … in order; extra (optional) detail slots
+    // are left unbound and pruned by the optional-geo-LOD path.
+    ...detailDims.map((d, i) => ({ slot_id: detailSlots[i].slot_id, field: d.name })),
+  ];
+}
+
+/**
  * Every field name / caption / bare column name in the schema, lowercased. Feeds
  * fieldNameMatchInAsk's EXACT-FIRST tie-break: a field's plural alias is suppressed
  * at any token another field claims by its exact name (so with both "Region" and
@@ -824,10 +945,7 @@ function shouldExposeFieldIdentity(fields: SchemaField[]): boolean {
   return datasources.size > 1;
 }
 
-function proposeField(
-  f: SchemaField,
-  exposeIdentity: boolean,
-): LlmProposeInput['fields'][number] {
+function proposeField(f: SchemaField, exposeIdentity: boolean): LlmProposeInput['fields'][number] {
   return {
     name: f.name,
     role: f.role,
@@ -1181,9 +1299,7 @@ function roleGreedyBind(
   // facetBinding appends at most one spare NAMED categorical after the required
   // slots bind, so an explicit facet ask ("trend of Sales per Region") still
   // completes. Runs only in the final bind pass (temporalCompletion present).
-  const hasUnslottedNonTemporalDimension = (
-    remainingSlots: TemplateManifest['slots'],
-  ): boolean => {
+  const hasUnslottedNonTemporalDimension = (remainingSlots: TemplateManifest['slots']): boolean => {
     const unconsumedNonTemporalDims = matched.filter(
       (f) => !used.has(f) && f.role === 'dimension' && !isTemporal(f),
     );
@@ -1461,6 +1577,20 @@ export function classifyNoLlm(
   // The full dimension pool a required geo slot widens into when the ask names no
   // affine candidate for it (W60 geo-slot completion).
   const schemaDims = summary.fields.filter((f) => f.role === 'dimension');
+
+  // MEASURE-FREE LAT/LONG SYMBOL MAP (Blake wall #2): a specialized coordinate-affinity
+  // resolver runs BEFORE generic keyword scoring, because a pure "map of <locations>" ask
+  // carries no measure and role-greedy binding cannot fill the coordinate axes by name.
+  // It only fires for the eligible spatial-symbol-map-latlon template and is fail-closed
+  // (returns null on any ambiguity), so a non-coordinate ask falls straight through to the
+  // generic path with byte-identical behavior.
+  const latlon = manifests.get(LATLON_SYMBOL_MAP_TEMPLATE);
+  if (latlon && latlon.fast_path_eligible) {
+    const latlonBindings = resolveLatLonSymbolMap(latlon, ask, maskedAsk, summary);
+    if (latlonBindings) {
+      return { template: latlon.template, bindings: latlonBindings };
+    }
+  }
 
   // Keyword-score the eligible fast-path templates against the masked ask.
   const scored: Array<{ m: TemplateManifest; score: number }> = [];

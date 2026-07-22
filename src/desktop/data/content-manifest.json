@@ -2,11 +2,11 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.32.0+content.2026-07-21",
+  "content_version": "2.33.0+content.2026-07-22",
   "schema_version": "1",
-  "generated": "2026-07-21",
+  "generated": "2026-07-22",
   "engine_compat": {
-    "server_min": "2.32.0",
+    "server_min": "2.33.0",
     "node": ">=22.7.5"
   },
   "resources": [
@@ -217,8 +217,8 @@
     },
     {
       "path": "data-visualization-templates-xml/spatial-symbol-map-latlon.xml",
-      "sha256": "954fdf3343d0231c1dd8837a938b2193e123627c01aacbac01b7f26c7427db52",
-      "bytes": 2828
+      "sha256": "a6e620f070d8195ac7c6647c793beb6f387d54334352745ced7309587824258b",
+      "bytes": 2654
     },
     {
       "path": "data-visualization-templates-xml/spatial-symbol-map.xml",
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "69457fb7e921ef51043e2e11b4c27d35eb66b5595ed4e908691b82536ef0fcb7",
-      "bytes": 275697
+      "sha256": "db7f47088a1b1e59d12060778bf52dbef98325f51728aee8adda1115a8d5ae19",
+      "bytes": 276190
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -447,8 +447,8 @@
     },
     {
       "path": "template-manifests/spatial-symbol-map-latlon.manifest.json",
-      "sha256": "8bc4cb6b55dccc4176489fdc14feb11c3bd0e679684c00f4eb1b0e506b8b2850",
-      "bytes": 3567
+      "sha256": "3615073e8a4aa31d9ec62e50dc97147ce7db4330c379cbfa267b9f41f2e6a80c",
+      "bytes": 4064
     },
     {
       "path": "template-manifests/spatial-symbol-map.manifest.json",

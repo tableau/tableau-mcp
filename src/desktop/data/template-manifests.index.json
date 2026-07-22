@@ -4100,7 +4100,7 @@
         "spatial",
         "map"
       ],
-      "description": "A real latitude/longitude point symbol map: Longitude and Latitude measure columns are placed on Cols/Rows as AVG continuous axes, one Circle mark per detail dimension member, sized and colored by a measure. Use for datasets that already carry real coordinate columns rather than Tableau-generated geocoding fields.",
+      "description": "A real latitude/longitude point symbol map: Longitude and Latitude measure columns are placed on Cols/Rows as AVG continuous axes, one fixed-size, single-color Circle mark per detail dimension member. Measure-free (a static symbol map — no size/color encoding). Use for datasets that already carry real coordinate columns rather than Tableau-generated geocoding fields, when you just want to plot WHERE things are (e.g. office locations) without encoding a magnitude.",
       "slots": [
         {
           "slot_id": "longitude",
@@ -4127,36 +4127,35 @@
           "notes": "Real latitude measure column, aggregated as AVG and placed on Rows as [avg:Latitude:qk]."
         },
         {
-          "slot_id": "detail",
-          "template_field": "Detail",
+          "slot_id": "detail1",
+          "template_field": "Detail1",
           "derivation": "none",
           "role": [
-            "detail"
+            "lod"
           ],
-          "kind": "categorical",
+          "kind": "geo",
           "bindable": true,
           "required": true,
-          "notes": "Detail/grain dimension: one mark per member (e.g. City, Site, Team, or point name). Placed on the level-of-detail shelf as [none:Detail:nk]. Renamed from the draft's [Country] to a generic [Detail] because the XML declares no geographic semantic-role — calling it Country would imply geo behavior the template does not carry."
+          "notes": "First grain dimension on the level-of-detail shelf as [none:Detail1:nk]. kind:'geo' is a binder-internal routing label so an UNBOUND detail2 prunes via the same optional-geo-LOD path as spatial-symbol-map; the emitted <lod> XML carries NO semantic-role, so Tableau does NOT geocode it (these are real coordinate columns, not generated geo fields). The dedicated resolveLatLonSymbolMap binds this directly, bypassing generic name-affinity routing."
         },
         {
-          "slot_id": "size_color_measure",
-          "template_field": "Measure",
-          "derivation": "sum",
+          "slot_id": "detail2",
+          "template_field": "Detail2",
+          "derivation": "none",
           "role": [
-            "size",
-            "color"
+            "lod"
           ],
-          "kind": "quantitative",
+          "kind": "geo",
           "bindable": true,
-          "required": true,
-          "notes": "Measure used for BOTH symbol size and continuous color as [sum:Measure:qk]. REQUIRED (not optional): the XML hard-references [sum:Measure:qk] in the size encoding, the color encoding, and the datasource-level color style-rule; validateBinding SKIPS unbound optional slots, so leaving this optional would strand a dangling [Measure] template field on apply unless the target datasource happens to carry [Measure]. The current optional-slot apply glue is proven only for facets."
+          "required": false,
+          "notes": "Second grain dimension as [none:Detail2:nk]. OPTIONAL: bound when the data has a second non-coordinate dimension so no marks collapse (e.g. pm_name AND city — 26 offices stay 26 marks, not per-city AVG-centroids). When the data has only ONE dimension this slot is UNBOUND and pruned (bindable && !required && kind:'geo' && role:['lod'] — the exact optionalFieldPrunesFor predicate). Data with 3+ non-coordinate dims exceeds this template's capacity and fails closed to propose (dropping a dim would re-collapse marks)."
         }
       ],
       "calcs": [],
       "hazards": [
         {
-          "code": "coordinate-slot-affinity-unproven",
-          "detail": "UNKNOWN: current no-LLM quantitative binding is role-greedy, not latitude/longitude-name-affine; coordinate slots can swap unless a route/proposal test proves otherwise.",
+          "code": "coordinate-slot-affinity",
+          "detail": "CLOSED: a dedicated coordinate-affinity resolver in classify.ts (resolveLatLonSymbolMap) binds longitude→cols / latitude→rows by field-NAME affinity, never generic role-greedy quant order, and fails closed on any ambiguity. The axis-swap regression is locked by the mandatory reversed-schema-order test in binder.test.ts (Blake wall #2). The generic role-greedy path is bypassed for this template.",
           "xml": "spatial-symbol-map-latlon.xml:rows-cols"
         },
         {
