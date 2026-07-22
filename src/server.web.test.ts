@@ -140,6 +140,8 @@ describe('server', () => {
     // Flow tools are gated off by default...
     expect(registeredToolNames).not.toContain('list-flows');
     expect(registeredToolNames).not.toContain('get-flow');
+    expect(registeredToolNames).not.toContain('list-flow-runs');
+    expect(registeredToolNames).not.toContain('list-flow-tasks');
     // ...while unrelated tools stay registered.
     expect(registeredToolNames).toContain('list-datasources');
   });
@@ -156,6 +158,8 @@ describe('server', () => {
     // The single switch turns on every flow tool...
     expect(registeredToolNames).toContain('list-flows');
     expect(registeredToolNames).toContain('get-flow');
+    expect(registeredToolNames).toContain('list-flow-runs');
+    expect(registeredToolNames).toContain('list-flow-tasks');
     // ...alongside the unrelated tools.
     expect(registeredToolNames).toContain('list-datasources');
   });
