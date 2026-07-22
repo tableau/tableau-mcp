@@ -14,9 +14,16 @@ export type DesktopConnection = {
 export const EXTERNAL_API_UNAVAILABLE_MESSAGE =
   'This Tableau Desktop build does not serve the External Client API — update Desktop.';
 
+export const PINNED_DESKTOP_UNREACHABLE_MESSAGE =
+  'The pinned Tableau Desktop is no longer reachable — it was closed or restarted. Relaunch the agent from Tableau Desktop to reconnect.';
+
 export class ExternalClientApiUnavailableError extends Error {
-  constructor(sessionId: string | number) {
-    super(`${EXTERNAL_API_UNAVAILABLE_MESSAGE} Requested session: ${sessionId}.`);
+  constructor(sessionId: string | number, { pinned = false }: { pinned?: boolean } = {}) {
+    super(
+      pinned
+        ? `${PINNED_DESKTOP_UNREACHABLE_MESSAGE} Session: ${sessionId}.`
+        : `${EXTERNAL_API_UNAVAILABLE_MESSAGE} Requested session: ${sessionId}.`,
+    );
     this.name = 'ExternalClientApiUnavailableError';
   }
 }
@@ -41,7 +48,9 @@ export class SessionManager {
       });
       await executor.start();
       if (!executor.isAvailable()) {
-        throw new ExternalClientApiUnavailableError(sessionId);
+        throw new ExternalClientApiUnavailableError(sessionId, {
+          pinned: config.desktopSessionId === sessionId,
+        });
       }
 
       session = {
