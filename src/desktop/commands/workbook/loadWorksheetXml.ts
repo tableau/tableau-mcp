@@ -19,7 +19,6 @@ import { runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { xmlNamesEqual } from '../../xmlElement.js';
 import { withApplyLock } from './applyMutex.js';
-import { focusAppliedSheetBestEffort } from './focusAppliedSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { getWorksheetFragment } from './getWorksheetXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
@@ -29,8 +28,8 @@ export type LoadWorksheetXmlError =
   | { type: 'validation-failed'; issues: Array<ValidationIssue> }
   // The caller's worksheet_name disagrees with the `<worksheet name>` in the authored XML, or the
   // payload carries no top-level `<worksheet>` fragment to gate on (e.g. a whole `<workbook>`
-  // document). Caught BEFORE apply so the post-apply goto-sheet can never target a stale/default
-  // sheet, and so the agent gets an actionable message instead of a misleading empty-name mismatch.
+  // document). Caught BEFORE apply so the agent gets an actionable message instead of a misleading
+  // empty-name mismatch.
   | { type: 'name-mismatch'; message: string }
   // The load-worksheet command reported command-level completion, but Tableau
   // rejected the actual document load (surfaced in the response payload, not in
@@ -145,8 +144,7 @@ function readbackOutcome(
  * Names are compared after trim and Unicode NFC normalization (case-sensitive) so visually
  * identical NFD/NFC spellings do not false-mismatch. Returns the validated canonical name — the
  * name exactly as authored in the XML (trimmed), which is what Tableau stores when it applies the
- * raw XML — for the load, the readback, and the post-apply goto-sheet, so focus can never target a
- * stale/default sheet (e.g. "Sheet 1"), and so upsertSheetIntoWorkbook's own name check still matches.
+ * raw XML — for the load and readback, and so upsertSheetIntoWorkbook's own name check still matches.
  *
  * Only a single top-level `<worksheet>` fragment is a legal payload here (the same fragment
  * get-worksheet-xml returns and upsertSheetIntoWorkbook requires). A `<workbook>`-wrapped document has
@@ -203,14 +201,11 @@ export async function loadWorksheetXml({
   executor,
   signal,
   readbackVerificationOut,
-  suppressFocus = false,
 }: {
   worksheetName: string;
   xml: string;
   readbackVerificationOut?: ReadbackVerificationResult[];
-  // When true, skip the post-apply goto-sheet. Set by build-and-apply-worksheet for
-  // worksheets that belong to a multi-task dashboard plan, so the final dashboard apply
-  // owns focus instead of the last of N parallel worksheet applies (compose-focus seam).
+  // Legacy internal call compatibility. Applies never navigate, so this has no effect.
   suppressFocus?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   xml = xml.trim();
@@ -250,9 +245,8 @@ export async function loadWorksheetXml({
     });
   }
 
-  // Canonical-name gate (focus hardening): require the caller's worksheet_name to agree with
-  // the XML root name before apply, then thread the validated canonical name through the load,
-  // readback, and goto-sheet so navigation can never land on a stale/default sheet.
+  // Require the caller's worksheet_name to agree with the XML root name before apply, then
+  // thread the validated canonical name through the load and readback.
   const canonicalNameResult = resolveCanonicalWorksheetName(worksheetName, xml);
   if (canonicalNameResult.isErr()) {
     log({
@@ -274,7 +268,6 @@ export async function loadWorksheetXml({
     executor,
     signal,
     readbackVerificationOut,
-    suppressFocus,
   });
   if (result.isErr()) {
     return result;
@@ -290,12 +283,10 @@ async function loadWorksheetXmlViaExternalApi({
   executor,
   signal,
   readbackVerificationOut,
-  suppressFocus = false,
 }: {
   worksheetName: string;
   xml: string;
   readbackVerificationOut?: ReadbackVerificationResult[];
-  suppressFocus?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   return withApplyLock(async () => {
     const workbookResult = await getWorkbookXml({ executor, signal });
@@ -351,17 +342,6 @@ async function loadWorksheetXmlViaExternalApi({
     readbackVerificationOut?.push(publicReadbackVerificationResult(verification));
     const outcomeResult = readbackOutcome(verification);
     if (outcomeResult.isErr()) return outcomeResult;
-
-    // Focus the applied sheet UNLESS this apply belongs to a multi-task plan (compose-focus
-    // seam) — the final dashboard apply owns focus in that case.
-    if (!suppressFocus) {
-      await focusAppliedSheetBestEffort({
-        sheetName: worksheetName,
-        appliedVia: 'load-worksheet',
-        executor,
-        signal,
-      });
-    }
 
     return outcomeResult;
   });
