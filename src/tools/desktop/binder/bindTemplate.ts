@@ -727,14 +727,19 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'bind-template',
     title,
-    description: 'Bind/apply template; calcs[] first.',
+    description: 'Bind/apply template; calcs first.',
     paramsSchema,
     annotations: {
       title,
-      readOnlyHint: true, // Reads the live workbook and computes; never mutates it.
+      // NOT read-only and NOT idempotent: auto_apply:true mutates the live workbook via
+      // loadWorkbookXml, and calcs[] author (mutate) even without auto-apply. The old
+      // readOnly/idempotent hints told the host/model that retrying a bind is free — a
+      // direct incentive for the blind-retry thrash (a completed apply re-run is a real
+      // re-mutation, not a no-op). Honest hints let the host treat repeats as consequential.
+      readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,
-      idempotentHint: true,
+      idempotentHint: false,
     },
     callback: async (
       { session, ask, proposal, minConfidence, auto_apply, target_worksheet, calcs },
