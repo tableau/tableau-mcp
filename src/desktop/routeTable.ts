@@ -154,6 +154,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'preflight-rejection',
     text: 'If preflight rejects apply, fix per FIX lines. Prefer file mode',
   },
+  {
+    kind: 'prose',
+    id: 'no-native-tool-escape',
+    text: 'If NO native tool covers the asked shape, say so plainly — do not hand-edit XML with the tools here. The raw XML surface (get/apply workbook XML) exists behind TOOL_PROFILE=full, an operator opt-in the user can enable.',
+  },
 ];
 
 export function renderInstructionEntry(entry: DesktopInstructionEntry): string {

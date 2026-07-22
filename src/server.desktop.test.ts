@@ -120,7 +120,9 @@ Command census: tabdoc:goto-sheet switches sheets; author-* tools author semanti
 
 Omit session for one Desktop; use list-instances when multiple are open.
 
-If preflight rejects apply, fix per FIX lines. Prefer file mode`,
+If preflight rejects apply, fix per FIX lines. Prefer file mode
+
+If NO native tool covers the asked shape, say so plainly — do not hand-edit XML with the tools here. The raw XML surface (get/apply workbook XML) exists behind TOOL_PROFILE=full, an operator opt-in the user can enable.`,
     );
   });
 
