@@ -4,7 +4,7 @@ sidebar_position: 6
 
 # Generate Insight Bundle
 
-Generates the selected insight bundle for a Pulse metric.
+Generates an insight bundle for the current aggregated value for a Pulse metric.
 
 ## APIs called
 

@@ -224,7 +224,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
     const paramsSchema = await Provider.from(tool.paramsSchema);
     expect(tool.name).toBe('generate-pulse-metric-value-insight-bundle');
-    expect(tool.description).toContain('Generate the selected insight bundle for a Pulse metric');
+    expect(tool.description).toContain(
+      'Generate an insight bundle for the current aggregated value',
+    );
     expect(paramsSchema).toMatchObject({
       bundleRequest: expect.any(Object),
       slim: expect.any(Object),

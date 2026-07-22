@@ -33,7 +33,7 @@ export const getGeneratePulseMetricValueInsightBundleTool = (
     server,
     name: 'generate-pulse-metric-value-insight-bundle',
     description: `
-Generate the selected insight bundle for a Pulse metric using the Tableau REST API. Provide the Pulse metric and metric definition details in \`bundleRequest\`.
+Generate an insight bundle for the current aggregated value for Pulse Metric using Tableau REST API.  You need the full information of the Pulse Metric and Pulse Metric Definition to use this tool.
 
 **Parameters:**
 - \`bundleRequest\` (required): The request to generate a bundle for.  Most of the information comes from data returned from other tools that retrieve Pulse Metric and Pulse Metric Definition information.  When creating the bundleRequest, you will need to set options using the following values:
