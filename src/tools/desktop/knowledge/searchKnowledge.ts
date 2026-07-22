@@ -20,7 +20,7 @@ export const getSearchKnowledgeTool = (
     name: 'search-knowledge',
     title: toolTitle,
     description:
-      'Find relevant expertise for a task (top N by uri+title). Best queried with short concept phrases (e.g. "symbol map latitude longitude"), not tool names. Use THIS to discover knowledge, not list.',
+      'Find targeted expertise by concept phrase, not tool name. Search snippets are not modules: read mustReadUri once before authoring. Use this to discover knowledge, not list.',
     paramsSchema,
     annotations: {
       title: toolTitle,

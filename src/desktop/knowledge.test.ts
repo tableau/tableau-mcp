@@ -28,6 +28,15 @@ describe('knowledge/search', { timeout: 30_000 }, () => {
     }
   });
 
+  it('requires the caller to read the top hit before authoring', () => {
+    const [top, second] = searchKnowledge('dashboard', 5);
+
+    expect(top.mustReadUri).toBe(top.uri);
+    expect(top.instruction).toBe('snippet is not the module — read this URI before authoring');
+    expect(second).not.toHaveProperty('mustReadUri');
+    expect(second).not.toHaveProperty('instruction');
+  });
+
   it('orders hits by descending score', () => {
     const hits = searchKnowledge('year over year date comparison by month', 5);
     for (let i = 1; i < hits.length; i++) {
@@ -43,6 +52,33 @@ describe('knowledge/search', { timeout: 30_000 }, () => {
   it('returns [] for an empty query', () => {
     expect(searchKnowledge('', 5)).toEqual([]);
     expect(searchKnowledge('   ', 5)).toEqual([]);
+  });
+
+  it('tokenizes short representative asks and surfaces the expected module in the top 3', () => {
+    const cases: Array<[string, string]> = [
+      ['waterfall sort', 'strategy/viz-design/advanced-chart-builds'],
+      ['margin definition', 'strategy/analytics/profitability-margin-definitions'],
+      ['pie chart of countries', 'strategy/viz-design/chart-selection'],
+    ];
+
+    for (const [query, expectedSlug] of cases) {
+      const top3 = searchKnowledge(query, 3);
+      expect(
+        top3.every((hit) => hit.match === 'keyword'),
+        query,
+      ).toBe(true);
+      expect(
+        top3.some((hit) => hit.slug === expectedSlug),
+        query,
+      ).toBe(true);
+    }
+  });
+
+  it('singularizes plural query tokens before ranking', () => {
+    const slugs = (query: string): string[] => searchKnowledge(query, 5).map((hit) => hit.slug);
+
+    expect(slugs('countries')).toEqual(slugs('country'));
+    expect(slugs('charts')).toEqual(slugs('chart'));
   });
 
   it('promotes long natural queries to keyword-ranked hits with expected docs in the top 3', () => {
@@ -114,7 +150,9 @@ describe('knowledge/search', { timeout: 30_000 }, () => {
       expect(query.length, query).toBeGreaterThan(32);
       expect(result.hits, query).toEqual([]);
       expect(result.nearestMatches?.length, query).toBeGreaterThan(0);
-      expect(result.note, query).toMatch(/zero exact matches/i);
+      expect(result.note, query).toMatch(/hits is empty/i);
+      expect(result.note, query).toMatch(/nearestMatches/i);
+      expect(result.nearestMatches?.[0].mustReadUri, query).toBe(result.nearestMatches?.[0].uri);
     }
   });
 

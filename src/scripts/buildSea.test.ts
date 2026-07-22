@@ -19,9 +19,15 @@ describe('SEA release workflow', () => {
     expect(workflow).toMatch(
       /npx tsx src\/scripts\/seaSmoke\.ts \.\/tableau-mcp-desktop --require-tool bind-template/,
     );
+    expect(workflow).toMatch(
+      /npx tsx src\/scripts\/seaSmoke\.ts \.\/tableau-mcp-desktop --require-tool search-knowledge --min-knowledge-resources 100 --search-knowledge "pie chart of countries"/,
+    );
     expect(workflow).toMatch(/npx tsx src\/scripts\/seaSmoke\.ts \.\\tableau-mcp\.exe\s/);
     expect(workflow).toMatch(
       /npx tsx src\/scripts\/seaSmoke\.ts \.\\tableau-mcp-desktop\.exe --require-tool bind-template/,
+    );
+    expect(workflow).toMatch(
+      /npx tsx src\/scripts\/seaSmoke\.ts \.\\tableau-mcp-desktop\.exe --require-tool search-knowledge --min-knowledge-resources 100 --search-knowledge "pie chart of countries"/,
     );
   });
 });

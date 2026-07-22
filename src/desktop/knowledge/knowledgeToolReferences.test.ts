@@ -254,4 +254,25 @@ describe('desktop knowledge tool references', () => {
       })),
     ).toEqual([]);
   });
+
+  it('never teaches underscore aliases for the knowledge tools', () => {
+    const forbiddenAliases = ['search_knowledge', 'read_knowledge_resource'];
+    const knowledgeDir = getKnowledgeDir();
+    const offenders = listMarkdownFiles(knowledgeDir).flatMap((file) => {
+      const relativeFile = relative(knowledgeDir, file);
+      return readFileSync(file, 'utf-8')
+        .split('\n')
+        .flatMap((line, index) =>
+          forbiddenAliases
+            .filter((alias) => line.includes(alias))
+            .map((alias) => ({
+              file: relativeFile,
+              alias,
+              line: `${index + 1}: ${line.trim()}`,
+            })),
+        );
+    });
+
+    expect(offenders).toEqual([]);
+  });
 });
