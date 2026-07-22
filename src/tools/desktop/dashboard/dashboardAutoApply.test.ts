@@ -76,6 +76,10 @@ const boundB = boundResultFor('line-basic', 'Profit by Month');
 
 const proposeResult: BinderResult = {
   status: 'propose',
+  decline_reason: {
+    code: 'no_llm_classifier_declined',
+    detail: 'classifyNoLlm returned no deterministic template; routed to proposal candidates',
+  },
   llm_input: { ask: 'weird ask', candidate_templates: [], fields: [] } as unknown as Extract<
     BinderResult,
     { status: 'propose' }

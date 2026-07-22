@@ -724,6 +724,26 @@ function federatedDuplicateBaseName(name: string): string {
   return name.replace(FEDERATED_DATA_FILE_SUFFIX_RE, '');
 }
 
+function askDirectsFieldToDetail(rawAsk: string, f: SchemaField): boolean {
+  const names = [bareName(f.columnName), f.caption, f.name].filter(
+    (n): n is string => !!n && n.length > 0,
+  );
+  return names.some((name) => {
+    const body = escapeRegex(name.toLowerCase().trim()).replace(/-/g, '[\\s-]+');
+    if (!body) return false;
+    const re = new RegExp(
+      `(^|[^a-z0-9])${body}([^a-z0-9]{0,16})(?:for|as|on)\\s+(?:the\\s+)?(?:detail|label|labels|detail/label|label/detail)\\b`,
+      'i',
+    );
+    return re.test(rawAsk);
+  });
+}
+
+function askContainsFullFieldName(rawAsk: string, f: SchemaField): boolean {
+  const names = [f.caption, f.name].filter((n): n is string => !!n && n.length > 0);
+  return names.some((name) => nameTokens(name).length > 1 && phraseIndexInAsk(rawAsk, name) >= 0);
+}
+
 /**
  * Pick the single best DETAIL (mark-identity) dimension from a WIDE schema's categoricals
  * (3+), so a real-world map (team_id, team_api_id, group_name, country_code, team_name, …)
@@ -731,7 +751,9 @@ function federatedDuplicateBaseName(name: string): string {
  * identity is one FINE label dimension, not every descriptive attribute and NOT a coarse
  * bucket. Scoring:
  *   +2  a token overlaps the ask (names the intended subject — but NOT if the field is coarse)
+ *   +3  the ask contains the field's full multi-token caption/name (but NOT if coarse)
  *   +1  a label-like `name` token
+ *   +6  an explicit shelf/detail directive names this field
  *   −2  per technical token (id/code/hex/url/emoji/source/…) — not the grain
  *   −3  per COARSE grouping token (group/stage/category/region/…) — the wrong grain; a
  *       coarse dim on detail collapses marks (Sol: ask-overlap ≠ finest grain).
@@ -764,6 +786,11 @@ function pickBestDetailDim(
       }
     }
     if (askOverlap) score += 2;
+    if (!isCoarse && askContainsFullFieldName(rawAsk, f)) score += 3;
+    // An explicit shelf/detail directive is stronger evidence than generic token overlap:
+    // "using Team Name for detail/label" names the mark identity, while other "* Name"
+    // fields only share the label-like token and must not tie it away.
+    if (askDirectsFieldToDetail(rawAsk, f)) score += 6;
     return score;
   };
   const ranked = categoricals
@@ -1719,8 +1746,7 @@ export function classifyNoLlm(
   // resolver runs BEFORE generic keyword scoring, because a pure "map of <locations>" ask
   // carries no measure and role-greedy binding cannot fill the coordinate axes by name.
   // It only fires for the eligible spatial-symbol-map-latlon template and is fail-closed
-  // (returns null on any ambiguity), so a non-coordinate ask falls straight through to the
-  // generic path with byte-identical behavior.
+  // (returns null on any ambiguity), so a non-coordinate ask falls through to the generic path.
   const latlon = manifests.get(LATLON_SYMBOL_MAP_TEMPLATE);
   if (latlon && latlon.fast_path_eligible) {
     const latlonBindings = resolveLatLonSymbolMap(latlon, ask, maskedAsk, summary);
@@ -1730,13 +1756,6 @@ export function classifyNoLlm(
   }
 
   // Keyword-score the eligible fast-path templates against the masked ask.
-  // spatial-symbol-map-latlon is RESOLVER-ONLY: it carries generic map keywords
-  // ('map'/'symbol-map'/'spatial'), so leaving it in this loop would let it win by
-  // keyword AND bind via the generic role-greedy path — the exact axis-swap / dropped-
-  // detail wrong-bind the dedicated resolver exists to prevent. When the resolver
-  // declined above (ambiguous coordinates, 0 or 3+ dims, or no coordinate intent) the
-  // correct outcome is propose, NOT a generic bind of this template. Exclude it here so
-  // the resolver is the ONLY door to it. (Andy-review P1, GPT-5.6-Sol, 2026-07-22.)
   const scored: Array<{ m: TemplateManifest; score: number }> = [];
   for (const m of manifests.values()) {
     if (!m.fast_path_eligible) continue;
