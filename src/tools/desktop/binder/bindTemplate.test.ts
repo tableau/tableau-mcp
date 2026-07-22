@@ -737,6 +737,37 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect((body.guidance as string).length).toBeLessThan(200);
   });
 
+  it('applied:true non-waterfall bind is terminal: guidance says done and nextAction.kind is "done"', async () => {
+    // Blake's spiral: a completed auto-apply (symbol map, no unfilled re-bind slot) must
+    // carry a terminal marker so the agent stops instead of burning 100s on search-commands
+    // over an already-rendered chart. The prose stop-clause works with today's host; the
+    // structuredContent.nextAction{kind:'done'} is the durable machine contract.
+    const { getExecutor } = setupAutoApplyMocks();
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'symbol map of Sales by State',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.guidance).toContain('no further tool calls');
+    expect(result.structuredContent).toEqual({
+      nextAction: { label: 'Chart complete — no further calls needed', kind: 'done' },
+    });
+    // structuredContent lives on the envelope, not in the JSON body.
+    expect(Object.keys(body).sort()).toEqual([
+      'applied',
+      'guidance',
+      'phase_ms',
+      'sheet_name',
+      'status',
+    ]);
+    expect((body.guidance as string).length).toBeLessThan(200);
+  });
+
   it('auto_apply=true applies a validated Call-2 proposal bind with the events anchor', async () => {
     const { applyWorkbookDocument, getEvents, getExecutor } = setupAutoApplyMocks({
       bind: boundViaProposalResult,
@@ -950,6 +981,31 @@ describe('bindTemplateTool auto_apply gate', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.guidance).not.toContain('anchor_category');
     expect(body.guidance).not.toContain('Waterfall default sort');
+  });
+
+  it('applied waterfall with an unfilled order slot still steers a re-bind and is NOT terminal', async () => {
+    // WATERFALL GUARD (non-negotiable): the m1 demo. A genuine unfilled sequence slot MUST
+    // still emit the imperative re-bind steer and MUST NOT carry the terminal marker. A naive
+    // blanket-terminate of every applied:true fails this test.
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallResult,
+      inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.guidance).toContain('Waterfall step order: schema has display_order');
+    expect(body.guidance).toContain('proposal.sort:{by:"display_order",direction:"asc"}');
+    expect(body.guidance).not.toContain('no further tool calls');
+    expect(result.structuredContent).toBeUndefined();
   });
 
   it('adds waterfall discovery guidance to propose results', async () => {

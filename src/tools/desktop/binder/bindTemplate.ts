@@ -48,6 +48,7 @@ import {
   authorCalculationsInWorkbook,
 } from '../data-source/authorCalcCore.js';
 import {
+  doneNextAction,
   jsonToolResult,
   type NextAction,
   prefillNextAction,
@@ -147,6 +148,11 @@ const WATERFALL_ANCHOR_MAPPING_KEY = 'Anchor Category';
 // in the ORIGINAL bind (proposal.sort) instead of giving up on refine or falling to XML surgery.
 const WATERFALL_SORT_HINT =
   'Waterfall default sort is DESC by the bound measure; override with proposal.sort:{by:<field>,direction:"asc"|"desc"} IN THE BIND — refine-worksheet cannot sort by a field that is not on the view.';
+// Terminal stop-clause appended to the applied:true receipt when NO re-bind slot is unfilled
+// (Blake's spiral): the model reads guidance verbatim, so this directly contradicts the
+// bundled skill's "adapt fields/formatting" + the ambient "search-commands available" pulls.
+// Paired with structuredContent.nextAction{kind:'done'} for a future route-gate/host.
+const TERMINAL_GUIDANCE = 'Done — no further tool calls needed.';
 
 function nextActionForEscalation(reason: EscalateReason): NextAction {
   if (reason === 'ambiguous-field' || reason === 'field-not-found') {
@@ -309,6 +315,25 @@ function appendWaterfallDiscoveryGuidance(
 ): string {
   const additions = buildWaterfallDiscoveryGuidance(res, schemaSummary, proposal);
   return additions.length > 0 ? `${guidance} ${additions.join(' ')}` : guidance;
+}
+
+/**
+ * True iff this applied waterfall bind still has a NAMED, fillable re-bind slot (an anchor
+ * category candidate or an explicit order column) — the m1 genuine-unfilled case that MUST
+ * keep steering a re-bind. It is the exact complement of "terminal": the applied:true receipt
+ * is only marked done when this is false. Built from the SAME four helpers the steer uses so
+ * the two sides cannot drift. The gray-zone waterfall whose only emission would be the bare
+ * WATERFALL_SORT_HINT (no named order column) is deliberately NOT unfilled here — matching the
+ * cartographer's boundary: steer ⟺ a named candidate field is actually fillable.
+ */
+function waterfallReBindSlotUnfilled(res: BinderResult, schemaSummary?: SchemaSummary): boolean {
+  if (!isWaterfallResult(res)) {
+    return false;
+  }
+  const anchorUnfilled =
+    !hasAnchorCategoryBinding(res) && waterfallAnchorCandidates(schemaSummary).length > 0;
+  const orderUnfilled = !hasSortOverride(res) && waterfallOrderCandidates(schemaSummary).length > 0;
+  return anchorUnfilled || orderUnfilled;
 }
 
 function buildGuidance(
@@ -568,7 +593,7 @@ async function performAutoApply({
   bindMs: number;
   eventsAnchor?: number;
   schemaSummary: SchemaSummary;
-}): Promise<BindTemplateToolResult> {
+}): Promise<StructuredBindTemplateToolResult> {
   const { args } = res;
 
   // ── Events-clean gate (W60 blind-spot #1) ────────────────────────
@@ -651,12 +676,16 @@ async function performAutoApply({
   // enable a manual second call that never happens once the apply succeeds.
   const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, res.status);
   const literalTitle = decodeXmlEntities(args.title);
-  const guidance = appendWaterfallDiscoveryGuidance(
-    `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
-    res,
-    schemaSummary,
-  );
-  return {
+  const receipt = `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`;
+  // Blake's spiral fix: the applied:true receipt is TERMINAL unless a genuine, named re-bind
+  // slot is still unfilled (the m1 waterfall case). On INCOMPLETE we keep today's steer and
+  // attach NO structuredContent (byte-for-byte identical to the pre-fix code). On COMPLETE we
+  // append the stop-clause AND the machine-readable done marker so nothing re-asserts "keep going".
+  const incomplete = waterfallReBindSlotUnfilled(res, schemaSummary);
+  const guidance = incomplete
+    ? appendWaterfallDiscoveryGuidance(receipt, res, schemaSummary)
+    : `${receipt} ${TERMINAL_GUIDANCE}`;
+  const applied: AppliedFastPathResult = {
     status: res.status,
     ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
     ...(base.warnings && base.warnings.length > 0 ? { warnings: base.warnings } : {}),
@@ -665,6 +694,7 @@ async function performAutoApply({
     sheet_name: literalTitle,
     phase_ms: { bind: bindMs, inject: injectMs, apply: applyMs },
   };
+  return incomplete ? applied : withNextAction(applied, doneNextAction());
 }
 
 function renderAuthoredCalcPrefix(

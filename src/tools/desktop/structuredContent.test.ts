@@ -1,4 +1,5 @@
 import {
+  doneNextAction,
   jsonToolResult,
   prefillNextAction,
   textToolResult,
@@ -29,5 +30,12 @@ describe('structuredContent helpers', () => {
 
   it('rejects labels over 60 characters', () => {
     expect(() => prefillNextAction('x'.repeat(61))).toThrow('nextAction label');
+  });
+
+  it('doneNextAction returns a done-kind action within the label brand limit', () => {
+    expect(doneNextAction()).toEqual({
+      label: 'Chart complete — no further calls needed',
+      kind: 'done',
+    });
   });
 });
