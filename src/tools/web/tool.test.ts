@@ -79,6 +79,8 @@ describe('Tool', () => {
   });
 
   it('should return successful result when callback succeeds', async () => {
+    vi.stubEnv('LOG_LEVEL', 'debug'); // Enable debug logs for this test
+
     const tool = new WebTool(mockParams);
     const successResult = { data: 'success' };
     const callback = vi
@@ -86,6 +88,7 @@ describe('Tool', () => {
       .mockImplementation(async (_requestId: string) => new Ok(successResult));
 
     const spy = vi.spyOn(tool, 'notifyInvocation');
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const result = await tool.logAndExecute({
       extra: mockExtra,
       args: { param1: 'test' },
@@ -108,6 +111,32 @@ describe('Tool', () => {
         param1: 'test',
       },
     });
+
+    // Assert that the invocation log line carries populated LUID fields
+    const logLines = stderrSpy.mock.calls
+      .map((call) => {
+        try {
+          return JSON.parse(call[0] as string);
+        } catch {
+          return null;
+        }
+      })
+      .filter((entry) => entry !== null);
+
+    const invocationLogCall = logLines.find(
+      (entry) => entry.logger === 'tool' && entry.message?.includes('invoked'),
+    );
+
+    expect(invocationLogCall).toBeDefined();
+    expect(invocationLogCall).toMatchObject({
+      message: expect.stringContaining('get-datasource-metadata'),
+      level: 'debug',
+      logger: 'tool',
+      site_luid: 'test-site-luid',
+      user_luid: 'test-user-luid',
+    });
+
+    stderrSpy.mockRestore();
   });
 
   it('should return error result when callback throws', async () => {

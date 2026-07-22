@@ -3,7 +3,6 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { ViewNotAllowedError } from '../../../errors/mcpToolError.js';
-import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
   getViewLineageByLuid,
@@ -80,7 +79,7 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
                   configWithOverrides.boundedContext.datasourceIds,
                 )[0];
               } catch (error) {
-                log({
+                extra.logger.log({
                   message: `Failed to enrich view ${view.id} with lineage metadata`,
                   level: 'warning',
                   logger: 'lineage',

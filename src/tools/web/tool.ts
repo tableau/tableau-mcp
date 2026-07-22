@@ -3,7 +3,6 @@ import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
 import { ZodRawShape } from 'zod';
 
 import { ZodiosValidationError } from '../../errors/mcpToolError.js';
-import { log } from '../../logging/logger.js';
 import { WebMcpServer } from '../../server.web.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../../server/oauth/scopes.js';
 import {
@@ -149,7 +148,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
       extra.authInfo?.clientId;
 
     this.notifyInvocation({ requestId, args, username });
-    log({
+    extra.logger.log({
       message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(args)}`,
       level: 'debug',
       logger: 'tool',
@@ -214,7 +213,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
       if (!errorCode) {
         errorCode = '500'; // Default to 500 if no HTTP status can be determined
       }
-      log({
+      extra.logger.log({
         message: 'Tool execution failed',
         level: 'error',
         logger: 'tool',

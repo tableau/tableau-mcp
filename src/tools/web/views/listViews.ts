@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
@@ -125,7 +124,7 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
                     ),
                   );
                 } catch (error) {
-                  log({
+                  extra.logger.log({
                     message: 'Failed to enrich views with lineage metadata',
                     level: 'warning',
                     logger: 'lineage',
