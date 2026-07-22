@@ -363,6 +363,7 @@ export const getDashboardAutoApplyTool = (
                 sheetType: 'worksheet',
                 templateParameters: bound.args.template_parameters,
                 fieldMapping: bound.args.field_mapping,
+                templateSlots: manifests.get(bound.args.template_name)?.slots,
                 applyNonce,
                 optionalFieldPrunes: bound.args.optional_field_prunes,
               });

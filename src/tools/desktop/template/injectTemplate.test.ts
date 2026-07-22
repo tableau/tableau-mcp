@@ -14,6 +14,9 @@ vi.mock('../../../desktop/templates/injectTemplate.js');
 vi.mock('../../../desktop/templates/fieldReferenceRewriter.js');
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('../../../desktop/commands/workbook/cacheFingerprint.js');
+vi.mock('../../../desktop/intelligence/provider.js', () => ({
+  bundledIntelligenceProvider: { getTemplateManifest: vi.fn() },
+}));
 vi.mock('fs');
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
@@ -187,7 +190,11 @@ describe('injectTemplateTool', () => {
       { Sales: '[sum:Sales:qk]' },
       'Sample Superstore',
       undefined,
-      { namespaceCalcs: true, applyNonce: expect.any(String) },
+      {
+        namespaceCalcs: true,
+        applyNonce: expect.any(String),
+        templateSlots: undefined,
+      },
     );
   });
 

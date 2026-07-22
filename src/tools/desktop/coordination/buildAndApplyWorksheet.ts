@@ -442,7 +442,11 @@ export const getBuildAndApplyWorksheetTool = (
             fieldMapping,
             rewriteDatasource,
             fieldMetadata,
-            { namespaceCalcs: true, applyNonce },
+            {
+              namespaceCalcs: true,
+              applyNonce,
+              templateSlots: explicitBind.templateSlots,
+            },
           );
 
           // Extract worksheet element

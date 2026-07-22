@@ -17,7 +17,7 @@ import { ParsedWindow, ParsedWorkbook, ParsedWorksheet } from '../metadata/types
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import { type DateparseAxisSpec, spliceDateparseTemporalAxis } from './dateparseTemporalAxis.js';
 import { spliceBoundFacet } from './facetSplice.js';
-import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
+import { rewriteFieldReferences, type TemplateSlotReference } from './fieldReferenceRewriter.js';
 import { injectTemplate, InsertPosition, SheetType } from './injectTemplate.js';
 import { type OptionalFieldPruneSpec, pruneUnboundOptionalFields } from './optionalFieldPrune.js';
 import { spliceWaterfallAnchorFilter } from './waterfallAnchorFilter.js';
@@ -59,6 +59,8 @@ export interface InjectTemplateCoreParams {
   templateParameters?: Record<string, string>;
   /** Template field name → column-instance ref map (RAW; escaped once downstream). */
   fieldMapping?: Record<string, string>;
+  /** Manifest-declared bindable slots used to remove/guard literal template fields. */
+  templateSlots?: readonly TemplateSlotReference[];
   insertPosition?: InsertPosition;
   relativeSheetName?: string;
   /**
@@ -187,6 +189,7 @@ export function buildInjectedWorkbookXml({
   sheetType,
   templateParameters,
   fieldMapping,
+  templateSlots,
   insertPosition,
   relativeSheetName,
   applyNonce,
@@ -207,6 +210,15 @@ export function buildInjectedWorkbookXml({
     }
   }
 
+  if (
+    !templateParameters?.['DATASOURCE'] &&
+    templateSlots?.some((slot) => slot.bindable !== false && slot.required)
+  ) {
+    throw new Error(
+      'Template binding is incomplete: provide a datasource and choose every required chart field, then retry. No worksheet was produced.',
+    );
+  }
+
   if (templateParameters?.['DATASOURCE']) {
     processed = pruneUnboundOptionalFields(processed, optionalFieldPrunes);
     // W28-C: splice a BOUND facet pill onto the trellis shelf BEFORE the frozen
@@ -224,7 +236,7 @@ export function buildInjectedWorkbookXml({
       fieldMapping ?? {},
       templateParameters['DATASOURCE'],
       undefined,
-      { namespaceCalcs: true, applyNonce },
+      { namespaceCalcs: true, applyNonce, templateSlots },
     );
     processed = spliceWaterfallAnchorFilter(processed, fieldMapping ?? {});
   }

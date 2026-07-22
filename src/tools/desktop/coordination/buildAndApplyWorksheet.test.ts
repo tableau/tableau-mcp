@@ -559,7 +559,11 @@ describe('buildAndApplyWorksheetTool', () => {
       expect.any(Object),
       'DS',
       expect.any(Object),
-      { namespaceCalcs: true, applyNonce: expect.any(String) },
+      {
+        namespaceCalcs: true,
+        applyNonce: expect.any(String),
+        templateSlots: expect.any(Array),
+      },
     );
   });
 
@@ -589,7 +593,11 @@ describe('buildAndApplyWorksheetTool', () => {
       expect.any(Object),
       'DS_B',
       expect.any(Object),
-      { namespaceCalcs: true, applyNonce: expect.any(String) },
+      {
+        namespaceCalcs: true,
+        applyNonce: expect.any(String),
+        templateSlots: expect.any(Array),
+      },
     );
   });
 

@@ -383,6 +383,120 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
   });
 });
 
+describe('buildInjectedWorkbookXml — manifest slot finalization', () => {
+  const EMPTY_WORKBOOK = "<?xml version='1.0'?><workbook><worksheets/><windows/></workbook>";
+  const RANKING_TEMPLATE = readFileSync(
+    join(__dirname, '../data/templates/ranking-ordered-bar.xml'),
+    'utf-8',
+  );
+  const RANKING_SLOTS = [
+    {
+      template_field: 'Region',
+      required: true,
+      bindable: true,
+      kind: 'categorical',
+      role: ['rows', 'sort-dimension'],
+    },
+    {
+      template_field: 'Sales',
+      required: true,
+      bindable: true,
+      kind: 'quantitative',
+      role: ['cols', 'sort-measure'],
+    },
+    {
+      template_field: 'Facet',
+      required: false,
+      bindable: true,
+      kind: 'categorical',
+      role: ['rows'],
+    },
+  ];
+
+  it('blocks a partial mapping before a literal required placeholder can be injected', () => {
+    expect(() =>
+      buildInjectedWorkbookXml({
+        workbookXml: EMPTY_WORKBOOK,
+        templateXml: RANKING_TEMPLATE,
+        title: 'Goals by Country',
+        sheetType: 'worksheet',
+        templateParameters: { DATASOURCE: 'World Cup' },
+        fieldMapping: {
+          Region: '[World Cup].[none:Country:nk]',
+        },
+        templateSlots: RANKING_SLOTS,
+        applyNonce: 'partial-ranking',
+      }),
+    ).toThrow(
+      'Template binding is incomplete after binding "Country": choose a quantitative value field for the chart and retry with a complete field mapping. No worksheet was produced.',
+    );
+
+    try {
+      buildInjectedWorkbookXml({
+        workbookXml: EMPTY_WORKBOOK,
+        templateXml: RANKING_TEMPLATE,
+        title: 'Goals by Country',
+        sheetType: 'worksheet',
+        templateParameters: { DATASOURCE: 'World Cup' },
+        fieldMapping: {
+          Region: '[World Cup].[none:Country:nk]',
+        },
+        templateSlots: RANKING_SLOTS,
+        applyNonce: 'partial-ranking-message',
+      });
+    } catch (error) {
+      expect((error as Error).message).toContain('Country');
+      expect((error as Error).message).not.toContain('Sales');
+    }
+  });
+
+  it('removes an unused optional facet from the injected fragment', () => {
+    const result = buildInjectedWorkbookXml({
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml: RANKING_TEMPLATE,
+      title: 'Goals by Country',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'World Cup' },
+      fieldMapping: {
+        Region: '[World Cup].[none:Country:nk]',
+        Sales: '[World Cup].[sum:Goals For:qk]',
+      },
+      templateSlots: RANKING_SLOTS,
+      applyNonce: 'optional-ranking',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).not.toContain('[Facet]');
+    expect(result.xml).not.toContain(':Facet:');
+  });
+
+  it('keeps fully mapped output byte-stable', () => {
+    const common = {
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml: RANKING_TEMPLATE,
+      title: 'Goals by Country and Group',
+      sheetType: 'worksheet' as const,
+      templateParameters: { DATASOURCE: 'World Cup' },
+      fieldMapping: {
+        Region: '[World Cup].[none:Country:nk]',
+        Sales: '[World Cup].[sum:Goals For:qk]',
+        Facet: '[World Cup].[none:Group:nk]',
+      },
+      applyNonce: 'full-ranking',
+    };
+    const previousBehavior = buildInjectedWorkbookXml(common);
+    const guarded = buildInjectedWorkbookXml({ ...common, templateSlots: RANKING_SLOTS });
+
+    expect(previousBehavior.ok).toBe(true);
+    expect(guarded.ok).toBe(true);
+    if (!previousBehavior.ok || !guarded.ok) return;
+    const normalizeUuid = (xml: string): string =>
+      xml.replace(/uuid="\{[^}]*\}"/g, 'uuid="{UUID}"');
+    expect(normalizeUuid(guarded.xml)).toBe(normalizeUuid(previousBehavior.xml));
+  });
+});
+
 describe('classifyWorksheetReplaceTarget', () => {
   const WB = `<?xml version='1.0'?>
 <workbook>

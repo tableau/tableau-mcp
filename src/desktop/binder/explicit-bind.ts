@@ -43,6 +43,7 @@ export type ExplicitBindResult =
       datasource: string;
       fieldMapping: Record<string, string>;
       fieldMetadata: Record<string, { datatype: string; type: string }>;
+      templateSlots: SlotSpec[];
       optionalFieldPrunes: OptionalFieldPruneSpec[];
       warnings: string[];
       passthrough: boolean;
@@ -112,6 +113,7 @@ export function bindExplicitTemplate(
       datasource: opts.datasource ?? schema.datasource,
       fieldMapping: Array.isArray(input) ? (opts.passthroughFieldMapping ?? {}) : input,
       fieldMetadata: {},
+      templateSlots: [],
       optionalFieldPrunes: [],
       warnings: [
         manifestLayerUnavailable
@@ -145,6 +147,7 @@ export function bindExplicitTemplate(
     datasource: rawDatasourceFor(built.fieldBySlot, opts.datasource ?? schema.datasource),
     fieldMapping: emitRawFieldMapping(manifest, built.fieldBySlot),
     fieldMetadata: fieldMetadataFor(manifest, built.fieldBySlot),
+    templateSlots: manifest.slots,
     optionalFieldPrunes: optionalFieldPrunesFor(manifest, built.fieldBySlot),
     warnings: [...warnings, ...(validation.warnings ?? [])],
     passthrough: false,

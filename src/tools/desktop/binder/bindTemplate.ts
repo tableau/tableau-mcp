@@ -651,6 +651,7 @@ async function performAutoApply({
   bindMs,
   eventsAnchor,
   schemaSummary,
+  manifest,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -661,6 +662,7 @@ async function performAutoApply({
   bindMs: number;
   eventsAnchor?: number;
   schemaSummary: SchemaSummary;
+  manifest: TemplateManifest;
 }): Promise<StructuredBindTemplateToolResult> {
   const { args } = res;
 
@@ -712,6 +714,7 @@ async function performAutoApply({
       sheetType: args.sheet_type,
       templateParameters: args.template_parameters,
       fieldMapping: args.field_mapping,
+      templateSlots: manifest.slots,
       applyNonce,
       optionalFieldPrunes: args.optional_field_prunes,
       dateparseAxis: args.dateparse_axis,
@@ -1114,6 +1117,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             bindMs,
             eventsAnchor,
             schemaSummary,
+            manifest: manifest!,
           });
           recordBoundRecoveryAfterFinalResult({
             session: resolvedSession,
