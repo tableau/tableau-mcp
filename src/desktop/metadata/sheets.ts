@@ -131,10 +131,23 @@ export function extractSheetXml(workbookXml: string, sheetName: string): string 
   return serializeXML({ worksheet });
 }
 
-// Builds a whole-workbook document carrying only the one edited worksheet (and its window).
-// The workbook POST upserts by name: it overwrites the colliding live sheet and, because the
-// doc carries no other sheets, leaves the rest of the live workbook untouched.
-export function buildMinimalSheetDoc(
+// The External Client API per-sheet `/document` route returns a whole `<workbook>` scoped to the
+// requested sheet, but callers require a single `<worksheet>` fragment. Slice it out. A document
+// that is already a bare `<worksheet>` fragment is returned unchanged; null if no worksheet exists.
+export function worksheetDocumentToFragment(documentXml: string, sheetName: string): string | null {
+  const fragment = extractSheetXml(documentXml, sheetName);
+  if (fragment !== null) {
+    return fragment;
+  }
+  return parseXML(documentXml).worksheet ? documentXml : null;
+}
+
+// The External Client API has no per-sheet write route — applying one sheet re-POSTs the whole
+// document, which Desktop treats as authoritative and replaces the open workbook with. So the doc
+// must carry the ENTIRE live workbook with only this sheet swapped in; anything omitted (sibling
+// sheets, dashboards) would be pruned. Upsert by name: replace the matching worksheet, or append
+// it if absent (a new sheet). Windows are left intact so every sheet keeps its own.
+export function upsertSheetIntoWorkbook(
   workbookXml: string,
   sheetName: string,
   editedWorksheetXml: string,
@@ -146,23 +159,17 @@ export function buildMinimalSheetDoc(
     throw new Error(`Edited XML does not contain a <worksheet name="${sheetName}">`);
   }
 
-  if (workbook.workbook?.worksheets) {
-    workbook.workbook.worksheets.worksheet = editedWorksheet;
-  }
+  if (!workbook.workbook) workbook.workbook = {};
+  if (!workbook.workbook.worksheets) workbook.workbook.worksheets = {};
 
-  if (workbook.workbook?.windows) {
-    const windows = normalizeArray(workbook.workbook.windows.window);
-    const targetWindow = windows.find(
-      (win) => win['@_class'] === 'worksheet' && win['@_name'] === sheetName,
-    );
-    if (targetWindow) {
-      workbook.workbook.windows.window = targetWindow;
-    } else {
-      delete workbook.workbook.windows.window;
-    }
+  const worksheets = normalizeArray(workbook.workbook.worksheets.worksheet);
+  const index = worksheets.findIndex((ws) => ws['@_name'] === sheetName);
+  if (index === -1) {
+    worksheets.push(editedWorksheet);
+  } else {
+    worksheets[index] = editedWorksheet;
   }
-
-  delete workbook.workbook?.dashboards;
+  workbook.workbook.worksheets.worksheet = worksheets.length === 1 ? worksheets[0] : worksheets;
 
   return serializeXML(workbook);
 }

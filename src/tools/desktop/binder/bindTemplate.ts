@@ -69,13 +69,8 @@ const paramsSchema = {
   ask: z.string(),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
-  auto_apply: z.boolean().optional().describe('Apply on bound; default false.'),
-  target_worksheet: z
-    .string()
-    .optional()
-    .describe(
-      'Replace this EXISTING sheet in place (edit-the-open-sheet asks); omit to create a new sheet.',
-    ),
+  auto_apply: z.boolean().optional().describe('Apply when bound.'),
+  target_worksheet: z.string().optional().describe('Existing sheet to replace; omit for new.'),
   calcs: z
     .array(
       z.object({
@@ -86,7 +81,7 @@ const paramsSchema = {
       }),
     )
     .optional()
-    .describe('Authored before binding.'),
+    .describe('Pre-bind calcs.'),
 };
 
 /**
@@ -866,7 +861,8 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'bind-template',
     title,
-    description: 'Bind/apply template; calcs first.',
+    description:
+      'Reads workbook + resolves fields itself; binds/applies. Plain chart: FIRST auto_apply:true, no discovery.',
     paramsSchema,
     annotations: {
       title,
