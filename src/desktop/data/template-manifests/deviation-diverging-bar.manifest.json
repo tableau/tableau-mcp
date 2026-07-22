@@ -3,9 +3,7 @@
   "family": "deviation",
   "readiness": "YELLOW",
   "fast_path_eligible": false,
-  "fast_path_blockers": [
-    "HARDCODED_FILTER_MEMBERS"
-  ],
+  "fast_path_blockers": [],
   "portability_evidence": {
     "fixture_bind": true,
     "render_verified": "none"
@@ -13,7 +11,10 @@
   "datasource_placeholder": true,
   "placeholders": [
     "TITLE",
-    "DATASOURCE"
+    "DATASOURCE",
+    "field_base_1",
+    "field_base_2",
+    "field_base_3"
   ],
   "intent_keywords": [
     "diverging-bar",
@@ -22,11 +23,11 @@
     "above-below",
     "positive-negative"
   ],
-  "description": "A diverging bar chart: one Automatic bar per category (Sub-Category on rows) whose length is a signed Profit-Ratio template calc (SUM([Profit])/SUM([Sales])) on cols, so bars extend left/right of zero and are colored on a diverging orange-blue ramp; sorted DESC by the ratio. Shows deviation above/below a zero baseline. Structurally compiled, not render-verified; the source Region='Central' filter rides along verbatim (HARDCODED_FILTER_MEMBERS).",
+  "description": "A diverging bar chart: one bar per category whose length is a signed numerator-to-denominator template ratio, so bars extend left/right of zero and use a diverging orange-blue ramp; sorted descending by the ratio. The donor member filter was removed for data portability. Structurally compiled and not render-verified.",
   "slots": [
     {
       "slot_id": "sub_category",
-      "template_field": "Sub-Category",
+      "template_field": "{{field_base_1}}",
       "derivation": "none",
       "role": [
         "rows",
@@ -35,11 +36,12 @@
       "kind": "categorical",
       "bindable": true,
       "required": true,
-      "notes": "One bar per member on rows; computed-sort orders these DESC by the Profit-Ratio calc."
+      "purpose": "Categorical dimension that defines one diverging bar per member.",
+      "notes": "One bar per member on rows; computed-sort orders these descending by the signed ratio calc."
     },
     {
       "slot_id": "profit",
-      "template_field": "Profit",
+      "template_field": "{{field_base_2}}",
       "derivation": "sum",
       "role": [
         "calc-input"
@@ -47,11 +49,12 @@
       "kind": "quantitative",
       "bindable": true,
       "required": true,
-      "notes": "Not on a shelf directly \u2014 feeds the Profit-Ratio template calc (numerator). replaceFieldReferences rewrites [Profit] inside the formula on bind."
+      "purpose": "Continuous measure used as the signed ratio numerator.",
+      "notes": "Not on a shelf directly; feeds the template ratio numerator and is rewritten inside the formula on bind."
     },
     {
       "slot_id": "sales",
-      "template_field": "Sales",
+      "template_field": "{{field_base_3}}",
       "derivation": "sum",
       "role": [
         "calc-input"
@@ -59,7 +62,8 @@
       "kind": "quantitative",
       "bindable": true,
       "required": true,
-      "notes": "Not on a shelf directly \u2014 feeds the Profit-Ratio template calc (denominator). replaceFieldReferences rewrites [Sales] inside the formula on bind."
+      "purpose": "Continuous measure used as the signed ratio denominator.",
+      "notes": "Not on a shelf directly; feeds the template ratio denominator and is rewritten inside the formula on bind."
     }
   ],
   "calcs": [
@@ -75,10 +79,10 @@
       "kind": "calc",
       "bindable": false,
       "required": true,
-      "formula": "SUM([Profit])/SUM([Sales])",
+      "formula": "SUM([{{field_base_2}}])/SUM([{{field_base_3}}])",
       "formula_refs": [
-        "Profit",
-        "Sales"
+        "{{field_base_2}}",
+        "{{field_base_3}}"
       ],
       "depends_on_slots": [
         "profit",
@@ -87,14 +91,14 @@
       "result_role": "measure",
       "inputs": [
         {
-          "ref": "Profit",
+          "ref": "{{field_base_2}}",
           "slot_id": "profit",
           "slot_kind": "quantitative",
           "required": true,
           "template_internal": false
         },
         {
-          "ref": "Sales",
+          "ref": "{{field_base_3}}",
           "slot_id": "sales",
           "slot_kind": "quantitative",
           "required": true,
@@ -104,7 +108,7 @@
       "prereqs": [
         "raw-formula-refs"
       ],
-      "notes": "The signed diverging measure: SUM([Profit])/SUM([Sales]) drives the bar length (cols), the diverging color, AND the computed-sort. A self-closing <calculation>, so parseTemplateCalcs sees it \u2014 a declared calc slot; both bare refs rewrite on bind."
+      "notes": "The signed numerator/denominator ratio drives bar length, diverging color, and computed-sort. Both placeholder refs rewrite on bind."
     }
   ],
   "hazards": [
@@ -114,18 +118,8 @@
       "xml": "deviation-diverging-bar.xml:68"
     },
     {
-      "code": "hardcoded-filter-blocking",
-      "detail": "The source workbook pins Region to a single INCLUSION member (function='member' Region='\"Central\"') kept on the Filters shelf (<slices>). This lane does NOT run the compile-time filter neutralizer (no XML edits), so the member rides along VERBATIM and is flagged HARDCODED_FILTER_MEMBERS: a bound dataset without a 'Central' region member renders empty. A follow-up can PARAMETERIZE it to unblock.",
-      "xml": "deviation-diverging-bar.xml:30-32"
-    },
-    {
-      "code": "hardcoded-member-inclusion",
-      "detail": "STRUCTURED hazard class read by the bind-time period guard (src/binder/period-guard.ts, W36-D-v1). The load-bearing filter here is a categorical MEMBER INCLUSION (Region='Central'), NOT a date-part period exclusion — so the incomplete-period guard deliberately DECLINES to veto this template on period grounds (it would be wrong to call a Region pin an 'incomplete period'). It stays ineligible via its HARDCODED_FILTER_MEMBERS blocker; its v2 path is member parameterization (collapse to level-members), not a period trim. Classified explicitly so the period guard's non-fire is auditable rather than incidental.",
-      "xml": "deviation-diverging-bar.xml:30-32"
-    },
-    {
       "code": "raw-formula-refs",
-      "detail": "The Profit-Ratio calc references the bare bindable [Profit]/[Sales]; templates.ts rewriteFormulaFieldRefs repairs them on bind ONLY because both are bindable bare-key slots (same pattern as correlation-scatter-plot-chart). Gate #6 asserts both are bound.",
+      "detail": "The signed-ratio calc references two bindable base placeholders; rewriteFormulaFieldRefs resolves both on bind, and Gate #6 asserts both slots are bound.",
       "xml": "deviation-diverging-bar.xml:19-20"
     }
   ]

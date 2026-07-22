@@ -90,11 +90,14 @@ export interface RewriteFieldReferencesOptions {
 
 /** Minimal, repo-agnostic manifest slot shape needed by the rewrite guard. */
 export interface TemplateSlotReference {
+  /** Stable manifest/proposal identity; accepted as a field-mapping alias. */
+  slot_id?: string;
   template_field: string;
   required: boolean;
   bindable?: boolean;
   kind?: string;
   role?: readonly string[];
+  purpose?: string;
 }
 
 /**
@@ -169,6 +172,7 @@ export function rewriteFieldReferences(
     errorHandler: (): void => {},
   });
   const doc = parser.parseFromString(templateXml, 'text/xml') as unknown as Document;
+  const normalizedFieldMapping = normalizeFieldMapping(fieldMapping, options?.templateSlots);
 
   const derivationMap = DERIVATION_SHORT_TO_LONG;
 
@@ -197,7 +201,7 @@ export function rewriteFieldReferences(
   const bareKeyInfo: Record<string, FieldInfo> = {};
   const qualifiedKeyInfo: Record<string, FieldInfo> = {}; // key = "field@deriv" (deriv lowercased)
 
-  for (const [rawKey, columnInstance] of Object.entries(fieldMapping)) {
+  for (const [rawKey, columnInstance] of Object.entries(normalizedFieldMapping)) {
     const parsed = parseColumnInstance(columnInstance);
     if (!parsed) continue;
     const atIdx = rawKey.lastIndexOf('@');
@@ -220,7 +224,12 @@ export function rewriteFieldReferences(
   // Remove optional placeholders while the DOM still carries template names.
   // Doing this before mapped fields are renamed avoids confusing an actual user
   // field whose name happens to equal another slot's template placeholder.
-  pruneUnusedOptionalTemplateSlots(doc, fieldMapping, mappedFields, options?.templateSlots);
+  pruneUnusedOptionalTemplateSlots(
+    doc,
+    normalizedFieldMapping,
+    mappedFields,
+    options?.templateSlots,
+  );
 
   // 0. Per-apply CALC NAMESPACING (opt-in; requires a caller-supplied nonce).
   if (options?.namespaceCalcs && options.applyNonce) {
@@ -463,6 +472,7 @@ export function rewriteFieldReferences(
     baseTarget,
     options?.templateSlots,
   );
+  assertNoFieldPlaceholderResidue(doc);
 
   // Wrap <run> text with newlines / angle brackets in CDATA (matches Tableau).
   const runElements = selectElements('//run', doc);
@@ -521,12 +531,53 @@ const OPTIONAL_REFERENCE_ELEMENTS = new Set([
   'lod',
 ]);
 
+function splitMappingKey(key: string): { base: string; derivation?: string } {
+  const atIdx = key.lastIndexOf('@');
+  const suffix = atIdx >= 0 ? key.substring(atIdx + 1) : '';
+  return atIdx > 0 && /^[A-Za-z][A-Za-z0-9-]*$/.test(suffix)
+    ? { base: key.slice(0, atIdx), derivation: suffix }
+    : { base: key };
+}
+
+/**
+ * Expand stable slot-id mapping aliases to the exact template placeholder token.
+ * Canonical template_field keys remain supported; conflicting alias/canonical
+ * values fail loud instead of making substitution depend on object key order.
+ */
+function normalizeFieldMapping(
+  fieldMapping: Record<string, string>,
+  slots?: readonly TemplateSlotReference[],
+): Record<string, string> {
+  if (!slots?.some((slot) => slot.slot_id)) return fieldMapping;
+  const bySlotId = new Map(
+    slots
+      .filter((slot): slot is TemplateSlotReference & { slot_id: string } => !!slot.slot_id)
+      .map((slot) => [slot.slot_id, slot]),
+  );
+  const normalized: Record<string, string> = {};
+
+  for (const [rawKey, value] of Object.entries(fieldMapping)) {
+    const { base, derivation } = splitMappingKey(rawKey);
+    const slot = bySlotId.get(base);
+    const canonical = slot
+      ? `${slot.template_field}${derivation ? `@${derivation}` : ''}`
+      : rawKey;
+    const prior = normalized[canonical];
+    if (prior !== undefined && prior !== value) {
+      throw new Error(
+        `Field mapping provides conflicting values for '${canonical}' through template-field and slot-id keys.`,
+      );
+    }
+    normalized[canonical] = value;
+  }
+
+  return normalized;
+}
+
 function rawMappingFields(fieldMapping: Record<string, string>): Set<string> {
   const fields = new Set<string>();
   for (const key of Object.keys(fieldMapping)) {
-    const atIdx = key.lastIndexOf('@');
-    const suffix = atIdx >= 0 ? key.substring(atIdx + 1) : '';
-    fields.add(atIdx > 0 && /^[A-Za-z][A-Za-z0-9-]*$/.test(suffix) ? key.slice(0, atIdx) : key);
+    fields.add(splitMappingKey(key).base);
   }
   return fields;
 }
@@ -667,6 +718,21 @@ function assertNoUnresolvedTemplateSlots(
   );
 }
 
+function assertNoFieldPlaceholderResidue(doc: Document): void {
+  const residue = new Set<string>();
+  const capture = (value: string): void => {
+    for (const match of value.matchAll(/\{\{field_base_[1-9]\d*\}\}/g)) residue.add(match[0]);
+  };
+  for (const element of selectElements('//*[@*]', doc)) {
+    for (const attribute of Array.from(element.attributes) as Attr[]) capture(attribute.value);
+  }
+  for (const text of selectTexts('//text()', doc)) capture(text.data);
+  if (residue.size === 0) return;
+  throw new Error(
+    `Unresolved template field placeholder(s) ${[...residue].sort().join(', ')} remain after substitution. No worksheet was produced.`,
+  );
+}
+
 /** Escape special regex characters in field names. */
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -797,7 +863,9 @@ function namespaceTemplateCalcColumns(
     if (!m) continue;
     const bare = m[1];
     if (mappedFields.has(bare)) continue;
-    if (!renameMap.has(bare)) renameMap.set(bare, `${bare}_tpl_${suffix}`);
+    const placeholder = bare.match(/^\{\{(field_base_[1-9]\d*)\}\}$/);
+    const internalBase = placeholder ? `Calculation_${placeholder[1]}` : bare;
+    if (!renameMap.has(bare)) renameMap.set(bare, `${internalBase}_tpl_${suffix}`);
   }
   if (renameMap.size === 0) return;
 

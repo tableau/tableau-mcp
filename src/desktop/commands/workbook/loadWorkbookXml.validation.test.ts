@@ -109,26 +109,26 @@ describe('loadWorkbookXml validation preflight', () => {
       sheetType: 'worksheet',
       templateParameters: { DATASOURCE: datasource },
       fieldMapping: {
-        Category: `[${datasource}].[none:country:nk]`,
-        Measure: `[${datasource}].[sum:goalDifference:qk]`,
+        '{{field_base_1}}': `[${datasource}].[none:country:nk]`,
+        '{{field_base_2}}': `[${datasource}].[sum:goalDifference:qk]`,
       },
       templateSlots: [
         {
-          template_field: 'Category',
+          template_field: '{{field_base_1}}',
           required: true,
           bindable: true,
           kind: 'categorical',
           role: ['rows', 'sort-dimension'],
         },
         {
-          template_field: 'Measure',
+          template_field: '{{field_base_2}}',
           required: true,
           bindable: true,
           kind: 'quantitative',
           role: ['cols', 'sort-measure'],
         },
         {
-          template_field: 'Facet',
+          template_field: '{{field_base_3}}',
           required: false,
           bindable: true,
           kind: 'categorical',
@@ -139,13 +139,11 @@ describe('loadWorkbookXml validation preflight', () => {
     });
     expect(injected.ok).toBe(true);
     invariant(injected.ok);
-    // The bind must actually consume the donor placeholders — a no-op mapping
-    // (the pre-rename donor keys) would leave literal [Category]/[Measure]
-    // columns and make this whole preflight scenario vacuous.
+    // The bind must consume every explicit placeholder rather than passing a
+    // donor-specific template through preflight unchanged.
     expect(injected.xml).toContain('[none:country:nk]');
     expect(injected.xml).toContain('[sum:goalDifference:qk]');
-    expect(injected.xml).not.toContain("name='[Category]'");
-    expect(injected.xml).not.toContain("name='[Measure]'");
+    expect(injected.xml).not.toMatch(/\{\{field_base_\d+\}\}/);
 
     const applyWorkbookDocument = vi
       .fn()

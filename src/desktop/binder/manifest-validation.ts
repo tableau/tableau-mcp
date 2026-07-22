@@ -108,6 +108,8 @@ const NON_BINDABLE_KINDS: ReadonlySet<SlotKind> = new Set<SlotKind>([
   'parameter',
 ]);
 
+const FIELD_BASE_PLACEHOLDER_RE = /^\{\{field_base_[1-9]\d*\}\}$/;
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
@@ -219,6 +221,13 @@ function validateSlot(
   if (!slotId) errors.push(`${where}: slot_id must be a non-empty string`);
   if (typeof slot.template_field !== 'string' || slot.template_field.length === 0) {
     errors.push(`${where} (${slotId ?? '?'}): template_field must be a non-empty string`);
+  } else if (
+    slot.template_field.includes('{{') &&
+    !FIELD_BASE_PLACEHOLDER_RE.test(slot.template_field)
+  ) {
+    errors.push(
+      `${where} (${slotId ?? '?'}): template_field placeholder '${slot.template_field}' must match {{field_base_N}} with N >= 1`,
+    );
   }
   if (typeof slot.derivation !== 'string' || !DERIVATIONS.has(slot.derivation as Derivation)) {
     errors.push(
@@ -235,6 +244,12 @@ function validateSlot(
     errors.push(`${where} (${slotId ?? '?'}): bindable must be boolean`);
   if (typeof slot.required !== 'boolean')
     errors.push(`${where} (${slotId ?? '?'}): required must be boolean`);
+  if (
+    slot.purpose !== undefined &&
+    (typeof slot.purpose !== 'string' || slot.purpose.trim().length === 0)
+  ) {
+    errors.push(`${where} (${slotId ?? '?'}): purpose must be a non-empty string when present`);
+  }
   if (
     slot.qualified_key_required !== undefined &&
     typeof slot.qualified_key_required !== 'boolean'

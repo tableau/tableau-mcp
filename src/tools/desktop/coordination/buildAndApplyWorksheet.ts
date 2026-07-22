@@ -498,7 +498,7 @@ export const getBuildAndApplyWorksheetTool = (
           // [Facet] → the bound field so the facet actually renders.
           templateXml = pruneUnboundOptionalFields(templateXml, explicitBind.optionalFieldPrunes);
           templateXml = ensureUserNamespace(templateXml);
-          templateXml = spliceBoundFacet(templateXml, fieldMapping);
+          templateXml = spliceBoundFacet(templateXml, fieldMapping, explicitBind.templateSlots);
           templateXml = rewriteFieldReferences(
             templateXml,
             fieldMapping,

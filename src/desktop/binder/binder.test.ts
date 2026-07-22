@@ -791,8 +791,8 @@ describe('binder/bindTemplate — Call 1 no-LLM (bound)', () => {
       expect(res.args.sheet_type).toBe('worksheet');
       expect(res.args.template_parameters.DATASOURCE).toBe('Superstore');
       expect(res.args.field_mapping).toEqual({
-        Category: '[Superstore].[none:Region:nk]',
-        Measure: '[Superstore].[sum:Sales:qk]',
+        '{{field_base_1}}': '[Superstore].[none:Region:nk]',
+        '{{field_base_2}}': '[Superstore].[sum:Sales:qk]',
       });
       expect(res.args.field_mapping).not.toHaveProperty('Region');
       expect(res.args.field_mapping).not.toHaveProperty('Sales');

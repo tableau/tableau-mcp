@@ -79,8 +79,9 @@ describe('rewriteFieldReferences — kpi-text (aggregated measure)', () => {
 
 describe('rewriteFieldReferences — ranking-ordered-bar (computed sort)', () => {
   const mapping = {
-    Category: '[DS].[none:Segment:nk]',
-    Measure: '[DS].[sum:Profit:qk]',
+    '{{field_base_1}}': '[DS].[none:Segment:nk]',
+    '{{field_base_2}}': '[DS].[sum:Profit:qk]',
+    '{{field_base_3}}': '[DS].[none:Group:nk]',
   };
   const datasource = 'Superstore';
 

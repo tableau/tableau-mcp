@@ -722,20 +722,20 @@ describe('portability/invariant — field-mapping quality spot-checks', () => {
     const r = await bind('line chart of ARR by Renewal Date', SAAS);
     const map = fieldMapping(r);
     expect(map).toEqual({
-      'Order Date': '[SaaS Revenue].[tmn:Renewal Date:qk]',
-      Sales: '[SaaS Revenue].[sum:ARR:qk]',
+      '{{field_base_1}}': '[SaaS Revenue].[tmn:Renewal Date:qk]',
+      '{{field_base_2}}': '[SaaS Revenue].[sum:ARR:qk]',
     });
     // temporal: the date field is bound with a date-truncation derivation (tmn = month)
-    expect(map?.['Order Date']).toContain('[tmn:Renewal Date:');
+    expect(map?.['{{field_base_1}}']).toContain('[tmn:Renewal Date:');
     // quantitative: the measure is bound with a numeric aggregation (sum) on a :qk instance
-    expect(map?.['Sales']).toBe('[SaaS Revenue].[sum:ARR:qk]');
+    expect(map?.['{{field_base_2}}']).toBe('[SaaS Revenue].[sum:ARR:qk]');
   });
 
   it('ranking-ordered-bar (SaaS): measure -> quantitative slot, dimension -> categorical slot', async () => {
     const r = await bind('bar chart of ARR by Industry', SAAS);
     expect(fieldMapping(r)).toEqual({
-      Category: '[SaaS Revenue].[none:Industry:nk]', // categorical (none/:nk)
-      Measure: '[SaaS Revenue].[sum:ARR:qk]', // quantitative (sum/:qk)
+      '{{field_base_1}}': '[SaaS Revenue].[none:Industry:nk]', // categorical (none/:nk)
+      '{{field_base_2}}': '[SaaS Revenue].[sum:ARR:qk]', // quantitative (sum/:qk)
     });
   });
 

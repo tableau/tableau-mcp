@@ -3,7 +3,7 @@
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
   "content_version": "2.51.0+content.2026-07-22",
-  "schema_version": "1",
+  "schema_version": "2",
   "generated": "2026-07-22",
   "engine_compat": {
     "server_min": "2.51.0",
@@ -72,8 +72,8 @@
     },
     {
       "path": "data-visualization-templates-xml/deviation-diverging-bar.xml",
-      "sha256": "dfd31d10c3c1cd0de8dd039334a33fcb536962d46afc58ab74db24e86fe6b356",
-      "bytes": 3728
+      "sha256": "e43d5fa6d79bdcaf8104485c27476cb7157fb655515414838948cbc6865935f5",
+      "bytes": 3196
     },
     {
       "path": "data-visualization-templates-xml/deviation-gain-loss-chart.xml",
@@ -192,8 +192,8 @@
     },
     {
       "path": "data-visualization-templates-xml/ranking-ordered-bar.xml",
-      "sha256": "2711084b71a823fd31e760cdec13648f004f4dbcc16b0f269e771f9323e05c0c",
-      "bytes": 2536
+      "sha256": "720fd6bd684e39c8adc235cf04ee1ae697b2b3a34040654ddc5871f45f487c0d",
+      "bytes": 2641
     },
     {
       "path": "data-visualization-templates-xml/ranking-ordered-column.xml",
@@ -227,8 +227,8 @@
     },
     {
       "path": "data-visualization-templates-xml/trend-line-chart.xml",
-      "sha256": "fe35111190516e789d2db3666a7f4f86899e149839b203079a4e42f297c80f44",
-      "bytes": 2104
+      "sha256": "4af8518ebbc66454ae6c4bf0e3fe6318f0ed0938120666bb1e0d64221361dc94",
+      "bytes": 2201
     },
     {
       "path": "data-visualization-templates-xml/ww-floating-bars.xml",
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "f7c50b81f61e9db16cb0167a5e46a011f65d75a47c7b41add97b9801daa259dc",
-      "bytes": 276246
+      "sha256": "f3c6fca7091eb5c5b138088e659033424086c7db0a5685c63d9de39049fd9ccb",
+      "bytes": 275715
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -317,8 +317,8 @@
     },
     {
       "path": "template-manifests/deviation-diverging-bar.manifest.json",
-      "sha256": "66116aa3eb4bcb096fd93215bcd092d065ea2dd2bba9d0d88189b7e61169654f",
-      "bytes": 5490
+      "sha256": "aa872b6794edfdd07e690efba1f5b15da42ccf73fd7469daf498ce072007173e",
+      "bytes": 4143
     },
     {
       "path": "template-manifests/deviation-gain-loss-chart.manifest.json",
@@ -427,8 +427,8 @@
     },
     {
       "path": "template-manifests/ranking-ordered-bar.manifest.json",
-      "sha256": "5b9d5478988d1747512b92f1dbd7ddbd43b45678d73df201c923005fe3ef53be",
-      "bytes": 3312
+      "sha256": "c7fc08724605ce1676ab272ecf27e59be5d33e51580a0a512a006cada4874698",
+      "bytes": 3751
     },
     {
       "path": "template-manifests/ranking-ordered-column.manifest.json",
@@ -457,8 +457,8 @@
     },
     {
       "path": "template-manifests/trend-line-chart.manifest.json",
-      "sha256": "fa6b42af1e6a01fa376c3d300a60c1f95142edbb6bceae9cabce921991c364a9",
-      "bytes": 5599
+      "sha256": "6f0802925fd667535c2d357f06d8bedcf387cab9540817cfdb0c32d9afcfec93",
+      "bytes": 5919
     },
     {
       "path": "template-manifests/ww-floating-bars.manifest.json",

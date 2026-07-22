@@ -205,7 +205,10 @@ export function buildInjectedWorkbookXml({
 
   if (templateParameters) {
     for (const [key, value] of Object.entries(templateParameters)) {
-      if (key === 'DATASOURCE') continue;
+      // Field placeholders are resolved only through manifest-backed
+      // field_mapping. Generic parameter replacement would bypass derivation,
+      // metadata, optional-prune, and survivor guards.
+      if (key === 'DATASOURCE' || /^field_base_[1-9]\d*$/.test(key)) continue;
       processed = processed.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), escapeXml(value));
     }
   }
@@ -230,7 +233,7 @@ export function buildInjectedWorkbookXml({
     // this slot's field_mapping key, so the rewrite leaves the (now-calc) column and its
     // Month-Trunc CI alone — the axis truncates a parsed date instead of a raw string.
     processed = spliceDateparseTemporalAxis(processed, dateparseAxis ?? null);
-    processed = spliceBoundFacet(processed, fieldMapping ?? {});
+    processed = spliceBoundFacet(processed, fieldMapping ?? {}, templateSlots);
     processed = rewriteFieldReferences(
       processed,
       fieldMapping ?? {},

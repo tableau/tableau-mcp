@@ -98,6 +98,14 @@ describe('binder/manifest — loader + shape', () => {
     badPredicate.fast_path_eligible = false;
     expect(validateManifest(badPredicate).join(' ')).toMatch(/fast_path_eligible/);
 
+    const badPurpose = structuredClone(base);
+    badPurpose.slots[0].purpose = '   ';
+    expect(validateManifest(badPurpose).join(' ')).toMatch(/purpose/);
+
+    const malformedPlaceholder = structuredClone(base);
+    malformedPlaceholder.slots[0].template_field = '{{field_1}}';
+    expect(validateManifest(malformedPlaceholder).join(' ')).toMatch(/template_field.*placeholder/);
+
     expect(validateManifest(null).length).toBeGreaterThan(0);
     expect(validateManifest({}).length).toBeGreaterThan(0);
   });
