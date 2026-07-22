@@ -221,9 +221,10 @@ describe('addFieldTool', () => {
   });
 
   it('should pass index and workbookFile to addFieldToRows (target=rows)', async () => {
+    const worksheetXml = '<worksheet><table><rows>[A] / [B]</rows></table></worksheet>';
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockImplementation((p) =>
-      p === WORKBOOK_FILE ? '<workbook/>' : '<worksheet/>',
+      p === WORKBOOK_FILE ? '<workbook/>' : worksheetXml,
     );
     vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
     vi.mocked(writeFileSync).mockReturnValue(undefined);
@@ -237,11 +238,39 @@ describe('addFieldTool', () => {
     });
 
     expect(metadataModule.addFieldToRows).toHaveBeenCalledWith(
-      '<worksheet/>',
+      worksheetXml,
       COLUMN_REF,
       2,
       '<workbook/>',
     );
+  });
+
+  it('rejects negative, fractional, and out-of-range indexes before mutating XML', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(
+      '<worksheet><table><rows>[A] / [B]</rows></table></worksheet>',
+    );
+
+    for (const index of [-1, 1.5, 3]) {
+      vi.clearAllMocks();
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readFileSync).mockReturnValue(
+        '<worksheet><table><rows>[A] / [B]</rows></table></worksheet>',
+      );
+
+      const result = await getResult({
+        worksheetFile: WORKSHEET_FILE,
+        target: 'rows',
+        columnRef: COLUMN_REF,
+        index,
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('index must be an integer in the range 0..2');
+      expect(metadataModule.addFieldToRows).not.toHaveBeenCalled();
+      expect(writeFileSync).not.toHaveBeenCalled();
+    }
   });
 
   // --- target=cols (ported from addFieldToCols) ---
@@ -284,9 +313,10 @@ describe('addFieldTool', () => {
   });
 
   it('should pass index and workbookFile to addFieldToCols (target=cols)', async () => {
+    const worksheetXml = '<worksheet><table><cols>[A]</cols></table></worksheet>';
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockImplementation((p) =>
-      p === WORKBOOK_FILE ? '<workbook/>' : '<worksheet/>',
+      p === WORKBOOK_FILE ? '<workbook/>' : worksheetXml,
     );
     vi.mocked(metadataModule.addFieldToCols).mockReturnValue(MODIFIED_XML);
     vi.mocked(writeFileSync).mockReturnValue(undefined);
@@ -300,7 +330,7 @@ describe('addFieldTool', () => {
     });
 
     expect(metadataModule.addFieldToCols).toHaveBeenCalledWith(
-      '<worksheet/>',
+      worksheetXml,
       COLUMN_REF,
       0,
       '<workbook/>',
@@ -391,8 +421,10 @@ describe('addFieldTool', () => {
   });
 
   it('should pass index to addFieldToEncoding when provided (target=encoding)', async () => {
+    const worksheetXml =
+      '<worksheet><table><panes><pane><encodings><size column="[A]" /></encodings></pane></panes></table></worksheet>';
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(readFileSync).mockReturnValue(worksheetXml);
     vi.mocked(metadataModule.addFieldToEncoding).mockReturnValue(MODIFIED_XML);
     vi.mocked(writeFileSync).mockReturnValue(undefined);
 
@@ -405,7 +437,7 @@ describe('addFieldTool', () => {
     });
 
     expect(metadataModule.addFieldToEncoding).toHaveBeenCalledWith(
-      '<worksheet/>',
+      worksheetXml,
       'size',
       COLUMN_REF,
       1,

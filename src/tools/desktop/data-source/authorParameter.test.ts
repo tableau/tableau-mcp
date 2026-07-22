@@ -81,13 +81,14 @@ describe('authorParameterTool', () => {
       },
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.parameterName).toBe('[Parameter 2]'); // [Parameter 1] taken
     expect(parsed.caption).toBe('p.Period');
     expect(parsed.reopenRequired).toBe(true);
     expect(parsed.stagePath).toBe(stagePath);
+    expect(parsed.reopenError).toBe('reopen not available');
 
     const written = readFileSync(stagePath, 'utf-8');
     expect(written).toContain("caption='p.Period'");
@@ -105,7 +106,13 @@ describe('authorParameterTool', () => {
       initialXml: XML_NO_PARAMS_DS,
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      stagePath,
+      reopenRequired: true,
+      reopenError: 'reopen not available',
+    });
     const written = readFileSync(stagePath, 'utf-8');
     expect(written).toContain("name='Parameters'");
     expect(written).toContain("caption='p.Top N'");
@@ -215,7 +222,7 @@ describe('authorParameterTool', () => {
     expect(process.env.TABLEAU_DESKTOP_SESSION_ID).toBeUndefined();
   });
 
-  it('degrades to reopenRequired when reopen fails without changing env or killing the old pid', async () => {
+  it('returns isError=true with staged-file evidence when reopen fails', async () => {
     process.env.TABLEAU_DESKTOP_SESSION_ID = '12345';
     const stagePath = join(tmp, 'stage-reopen-failed.twb');
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
@@ -225,7 +232,7 @@ describe('authorParameterTool', () => {
       args: { caption: 'p.Period', datatype: 'string', value: 'Month', stagePath },
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed).toMatchObject({
@@ -236,11 +243,12 @@ describe('authorParameterTool', () => {
       reopenError: 'launch timed out',
     });
     expect(parsed.reopened).toBeUndefined();
+    expect(readFileSync(stagePath, 'utf-8')).toContain("caption='p.Period'");
     expect(process.env.TABLEAU_DESKTOP_SESSION_ID).toBe('12345');
     expect(kill).not.toHaveBeenCalled();
   });
 
-  it('degrades to reopenRequired when readback lacks the new parameter caption', async () => {
+  it('returns isError=true when readback lacks the new parameter caption', async () => {
     process.env.TABLEAU_DESKTOP_SESSION_ID = '12345';
     const stagePath = join(tmp, 'stage-readback-missing.twb');
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
@@ -253,7 +261,7 @@ describe('authorParameterTool', () => {
       readbackXml: XML_WITH_PARAMS_DS,
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed).toMatchObject({

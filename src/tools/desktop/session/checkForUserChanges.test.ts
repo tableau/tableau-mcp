@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
+import * as discoveryModule from '../../../desktop/externalApi/discovery.js';
 import { GetEventsFailedError } from '../../../errors/mcpToolError.js';
 import { GetEventsResponse } from '../../../sdks/desktop/agentApi/types.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -9,6 +10,8 @@ import { Provider } from '../../../utils/provider.js';
 import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getCheckForUserChangesTool } from './checkForUserChanges.js';
+
+vi.mock('../../../desktop/externalApi/discovery.js');
 
 describe('checkForUserChangesTool', () => {
   const resultSchema = z.object({
@@ -20,6 +23,7 @@ describe('checkForUserChangesTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -94,6 +98,35 @@ describe('checkForUserChangesTool', () => {
       message: 'No user changes detected since sequence 50.',
       currentSequence: 50,
     });
+  });
+
+  it('reports a nonzero change count even when event details are not returned', async () => {
+    const mockGetExecutor = vi.fn().mockResolvedValue({
+      getEvents: vi.fn().mockResolvedValue({
+        isOk: () => true,
+        isErr: () => false,
+        value: {
+          events: [],
+          latest_sequence: 55,
+          count: 2,
+        },
+      }),
+    });
+
+    const result = await getToolResult({
+      session: '12345',
+      sinceSequence: 50,
+      mockGetExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+
+    const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(resultObj.message).toContain('User changes detected');
+    expect(resultObj.message).toContain('2 events occurred since sequence 50');
+    expect(resultObj.instructions).toContain('event details were not returned');
+    expect(resultObj.currentSequence).toBe(55);
   });
 
   it('should detect user changes with single event', async () => {

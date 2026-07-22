@@ -181,12 +181,22 @@ export const getAuthorParameterTool = (
             ...(killWarning ? { killWarning } : {}),
           });
         },
+        getSuccessResult: (result): CallToolResult => ({
+          isError: isReopenErrorFallback(result),
+          content: [{ type: 'text', text: JSON.stringify(result) }],
+        }),
       });
     },
   });
 
   return tool;
 };
+
+function isReopenErrorFallback(
+  result: AuthorParameterResult,
+): result is AuthorParameterFallbackResult {
+  return 'reopenRequired' in result && result.reopenError !== undefined;
+}
 
 async function verifyReopenedParameter({
   getExecutor,

@@ -23,7 +23,9 @@ const resultSchema = z.object({
     kind: z.string(),
     query: z.string(),
   }),
-  isError: z.boolean(),
+  status: z.string(),
+  stale: z.boolean().optional(),
+  note: z.string().optional(),
 });
 
 const WORKBOOK_FILE = '/cache/workbook.xml';
@@ -110,7 +112,7 @@ describe('resolveFieldTool', () => {
     expect(result.content[0].text).toBe(new FileReadError(readError).message);
   });
 
-  it('should return isError=false for exact resolution', async () => {
+  it('returns resolved status for exact resolution', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<workbook/>');
     vi.mocked(metadataModule.resolveField).mockReturnValue(exactResolution);
@@ -121,10 +123,11 @@ describe('resolveFieldTool', () => {
     invariant(result.content[0].type === 'text');
     const body = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(body.resolution.kind).toBe('exact');
-    expect(body.isError).toBe(false);
+    expect(body.status).toBe('resolved');
+    expect(JSON.parse(result.content[0].text)).not.toHaveProperty('isError');
   });
 
-  it('should return isError=true for ambiguous resolution', async () => {
+  it('returns ambiguous status without a nested error flag for ambiguous resolution', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<workbook/>');
     vi.mocked(metadataModule.resolveField).mockReturnValue(ambiguousResolution);
@@ -135,10 +138,11 @@ describe('resolveFieldTool', () => {
     invariant(result.content[0].type === 'text');
     const body = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(body.resolution.kind).toBe('ambiguous');
-    expect(body.isError).toBe(true);
+    expect(body.status).toBe('ambiguous');
+    expect(JSON.parse(result.content[0].text)).not.toHaveProperty('isError');
   });
 
-  it('should return isError=true for not_found resolution', async () => {
+  it('returns not_found status without a nested error flag for not_found resolution', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<workbook/>');
     vi.mocked(metadataModule.resolveField).mockReturnValue(notFoundResolution);
@@ -149,7 +153,8 @@ describe('resolveFieldTool', () => {
     invariant(result.content[0].type === 'text');
     const body = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(body.resolution.kind).toBe('not_found');
-    expect(body.isError).toBe(true);
+    expect(body.status).toBe('not_found');
+    expect(JSON.parse(result.content[0].text)).not.toHaveProperty('isError');
   });
 
   it('should pass datasource option to resolveField', async () => {
@@ -229,7 +234,8 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.resolution.kind).toBe('exact');
     expect(body.resolution.column_ref).toContain('Sales');
-    expect(body.isError).toBe(false);
+    expect(body.status).toBe('resolved');
+    expect(body).not.toHaveProperty('isError');
     // Cache + sidecar rewritten with the refreshed XML / current session.
     expect(writeFileSync).toHaveBeenCalledWith(WORKBOOK_FILE, LIVE_XML, 'utf-8');
     expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKBOOK_FILE, SESSION);
@@ -250,10 +256,10 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const text = result.content[0].text;
-    // Byte-identical to the pre-change body: pure compact JSON, NOTHING concatenated
+    // Pure compact JSON, NOTHING concatenated
     // after it. Round-trip identity proves no note was appended when session is absent.
-    expect(text).toBe(JSON.stringify({ resolution: staleNotFound, isError: true }));
-    expect(JSON.parse(text)).toEqual({ resolution: staleNotFound, isError: true });
+    expect(text).toBe(JSON.stringify({ resolution: staleNotFound, status: 'not_found' }));
+    expect(JSON.parse(text)).toEqual({ resolution: staleNotFound, status: 'not_found' });
     expect(writeFileSync).not.toHaveBeenCalled();
     expect(cacheFingerprintModule.writeSidecar).not.toHaveBeenCalled();
   });
@@ -279,9 +285,13 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const text = result.content[0].text;
-    expect(text).toContain('"kind":"not_found"');
-    expect(text).toContain('transient executor fault');
-    expect(text).toContain('list-instances');
+    const body = resultSchema.parse(JSON.parse(text));
+    expect(body.resolution.kind).toBe('not_found');
+    expect(body.status).toBe('stale_not_found');
+    expect(body.stale).toBe(true);
+    expect(body.note).toContain('stale cache');
+    expect(body.note).toContain('transient executor fault');
+    expect(body.note).toContain('list-instances');
     // The failed refresh must NOT rewrite the cache/sidecar (no partial write).
     expect(writeFileSync).not.toHaveBeenCalled();
     expect(cacheFingerprintModule.writeSidecar).not.toHaveBeenCalled();
@@ -307,9 +317,13 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const text = result.content[0].text;
-    expect(text).toContain('"kind":"not_found"');
-    expect(text).toContain('transient executor fault');
-    expect(text).toContain('list-instances');
+    const body = resultSchema.parse(JSON.parse(text));
+    expect(body.resolution.kind).toBe('not_found');
+    expect(body.status).toBe('stale_not_found');
+    expect(body.stale).toBe(true);
+    expect(body.note).toContain('stale cache');
+    expect(body.note).toContain('transient executor fault');
+    expect(body.note).toContain('list-instances');
     expect(writeFileSync).not.toHaveBeenCalled();
     expect(cacheFingerprintModule.writeSidecar).not.toHaveBeenCalled();
   });
@@ -353,6 +367,8 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
     invariant(r1.content[0].type === 'text' && r2.content[0].type === 'text');
     expect(JSON.parse(r1.content[0].text).resolution.kind).toBe('exact');
     expect(JSON.parse(r2.content[0].text).resolution.kind).toBe('exact');
+    expect(JSON.parse(r1.content[0].text)).not.toHaveProperty('isError');
+    expect(JSON.parse(r2.content[0].text)).not.toHaveProperty('isError');
   });
 
   it('still not_found after one refresh: actionable message, refreshes once (no loop), cache rewritten', async () => {
@@ -378,9 +394,11 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const text = result.content[0].text;
-    expect(text).toContain('"kind":"not_found"');
-    expect(text).toContain('genuinely does not exist');
-    expect(text).toContain('stop re-reading stale caches');
+    const body = resultSchema.parse(JSON.parse(text));
+    expect(body.resolution.kind).toBe('not_found');
+    expect(body.status).toBe('not_found');
+    expect(body.note).toContain('genuinely does not exist');
+    expect(body.note).toContain('stop re-reading stale caches');
     // The refresh DID succeed (field just absent), so the cache is rewritten to LIVE.
     expect(writeFileSync).toHaveBeenCalledWith(WORKBOOK_FILE, LIVE_XML, 'utf-8');
     expect(metadataModule.resolveField).toHaveBeenCalledTimes(2);

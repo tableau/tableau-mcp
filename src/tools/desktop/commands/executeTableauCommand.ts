@@ -90,6 +90,10 @@ export const getExecuteTableauCommandTool = (
 
           return new Ok(payload);
         },
+        getSuccessResult: (payload): CallToolResult => ({
+          isError: hasOutputSerializationFailed(payload),
+          content: [{ type: 'text', text: JSON.stringify(payload) }],
+        }),
       });
     },
   });
@@ -112,8 +116,13 @@ function shapeCommandResult({
   envelopeWarnings: ExecuteCommandWarning[];
   guardWarnings: string[];
 }): ExecuteTableauCommandSuccess {
+  const outputSerializationFailed = envelopeWarnings.some(
+    (warning) => warning.code === 'output-serialization-failed',
+  );
   const payload: ExecuteTableauCommandSuccess = {
-    message: 'Command executed successfully.',
+    message: outputSerializationFailed
+      ? 'Command executed, but the requested result cannot be returned because Desktop reported output serialization failed.'
+      : 'Command executed successfully.',
   };
 
   if (result !== undefined && result !== null) {
@@ -143,4 +152,10 @@ function shapeCommandResult({
   }
 
   return payload;
+}
+
+function hasOutputSerializationFailed(payload: ExecuteTableauCommandSuccess): boolean {
+  return (
+    payload.warnings?.some((warning) => warning.code === 'output-serialization-failed') ?? false
+  );
 }

@@ -4,12 +4,15 @@ import { join } from 'path';
 import { Ok } from 'ts-results-es';
 
 import { _resetExternalApiCommandRegistryForTest } from '../../../desktop/externalApi/commandRegistry.js';
+import * as discoveryModule from '../../../desktop/externalApi/discovery.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getExecuteTableauCommandTool } from './executeTableauCommand.js';
+
+vi.mock('../../../desktop/externalApi/discovery.js');
 
 const SESSION = 'session-1';
 const SORT_NESTED_LIVE_500_FIX =
@@ -58,6 +61,10 @@ function enableExternalApiRegistry(commands: Record<string, unknown>): void {
 }
 
 describe('executeTableauCommandTool', () => {
+  beforeEach(() => {
+    vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
     _resetExternalApiCommandRegistryForTest();
@@ -185,7 +192,7 @@ describe('executeTableauCommandTool', () => {
     expect(Buffer.byteLength(result.content[0].text, 'utf-8')).toBeLessThan(18 * 1024);
   });
 
-  it('renders envelope warnings as visible warning lines on success', async () => {
+  it('returns isError=true when command output serialization failed', async () => {
     const executeCommand = vi.fn().mockResolvedValue(
       new Ok({
         command_id: 'c1',
@@ -202,12 +209,16 @@ describe('executeTableauCommandTool', () => {
 
     const result = await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
 
-    expect(result.isError).toBeFalsy();
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
     expect(payload.message).toContain(
+      'Command executed, but the requested result cannot be returned',
+    );
+    expect(payload.message).toContain(
       'WARNING: output-serialization-failed - Command output could not be serialized.',
     );
+    expect(payload.message).not.toContain('Command executed successfully');
     expect(payload.warnings).toEqual([
       {
         code: 'output-serialization-failed',
