@@ -1,4 +1,5 @@
 import { getConfig } from '../../config.js';
+import { logger } from '../../logging/logger.js';
 import { OverridableConfig } from '../../overridableConfig.js';
 import { WebMcpServer } from '../../server.web.js';
 import { TableauWebRequestHandlerExtra } from './toolContext.js';
@@ -21,6 +22,7 @@ export function getMockRequestHandlerExtra(): TableauWebRequestHandlerExtra {
     },
     setSiteLuid: vi.fn(),
     setUserLuid: vi.fn(),
+    logger,
     getConfigWithOverrides: vi.fn().mockResolvedValue(new OverridableConfig({})),
     signal: new AbortController().signal,
     requestId: 2,

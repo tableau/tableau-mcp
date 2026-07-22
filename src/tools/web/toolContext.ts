@@ -3,6 +3,7 @@ import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.j
 import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
 
 import { Config } from '../../config.js';
+import { Logger } from '../../logging/logger.js';
 import { OverridableConfig } from '../../overridableConfig.js';
 import { WebMcpServer } from '../../server.web.js';
 import { TableauAuthInfo } from '../../server/oauth/schemas.js';
@@ -12,6 +13,7 @@ import { TableauToolCallback, TableauToolContext } from '../toolContext.js';
 export type TableauWebToolContext = TableauToolContext<WebMcpServer> & {
   _userLuid?: string;
   _siteLuid?: string;
+  logger: Logger;
 
   tableauAuthInfo: TableauAuthInfo | undefined;
   getConfigWithOverrides: () => Promise<OverridableConfig>;
