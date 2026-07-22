@@ -88,21 +88,29 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
         callback: async (): Promise<Result<SummaryDataCompletedResult, McpToolError>> => {
           let transientAccountingSessionId = SUMMARY_DATA_UNRESOLVED_SESSION_SCOPE;
           const resolvedMaxRows = clampMaxRows(maxRows);
-          const signature = summaryDataSignature({
+          const resolvedSignature = summaryDataSignature({
             worksheet,
             maxRows: resolvedMaxRows,
             columns,
           });
+          const unresolvedSignature = summaryDataUnresolvedSignature({
+            requestedSession: session,
+            worksheet,
+            maxRows: resolvedMaxRows,
+            columns,
+          });
+          let transientAccountingSignature = unresolvedSignature;
           try {
             const sessionResult = resolveSession(session);
             if (sessionResult.isErr()) {
               return withTransientRetryAccounting(
                 summaryDataError(sessionResult.error, 'retryable', 'session-resolution-failed'),
                 transientAccountingSessionId,
-                signature,
+                transientAccountingSignature,
               ).toErr();
             }
             transientAccountingSessionId = sessionResult.value;
+            transientAccountingSignature = resolvedSignature;
 
             const result = await runExternalApiReadTool<SummaryDataCompletedResult>({
               session: sessionResult.value,
@@ -185,16 +193,23 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
               return withTransientRetryAccounting(
                 requestError(result.error),
                 sessionResult.value,
-                signature,
+                resolvedSignature,
               ).toErr();
             }
-            sessionRouteState.clearSummaryDataTransientFailure(sessionResult.value, signature);
+            sessionRouteState.clearSummaryDataTransientFailure(
+              sessionResult.value,
+              resolvedSignature,
+            );
+            sessionRouteState.clearSummaryDataTransientFailure(
+              SUMMARY_DATA_UNRESOLVED_SESSION_SCOPE,
+              unresolvedSignature,
+            );
             return result;
           } catch (error) {
             return withTransientRetryAccounting(
               requestError(new UnknownError(getExceptionMessage(error))),
               transientAccountingSessionId,
-              signature,
+              transientAccountingSignature,
             ).toErr();
           }
         },
@@ -363,10 +378,39 @@ function summaryDataSignature({
   maxRows: number;
   columns: string[] | undefined;
 }): string {
-  return JSON.stringify({
+  return JSON.stringify(summaryDataSignatureParts({ worksheet, maxRows, columns }));
+}
+
+function summaryDataSignatureParts({
+  worksheet,
+  maxRows,
+  columns,
+}: {
+  worksheet: string | undefined;
+  maxRows: number;
+  columns: string[] | undefined;
+}): { worksheet: string | null; maxRows: number; columns: string[] | null } {
+  return {
     worksheet: worksheet?.trim() || null,
     maxRows,
     columns: columns && columns.length > 0 ? columns : null,
+  };
+}
+
+function summaryDataUnresolvedSignature({
+  requestedSession,
+  worksheet,
+  maxRows,
+  columns,
+}: {
+  requestedSession: string | undefined;
+  worksheet: string | undefined;
+  maxRows: number;
+  columns: string[] | undefined;
+}): string {
+  return JSON.stringify({
+    requestedSession: requestedSession ?? null,
+    args: summaryDataSignatureParts({ worksheet, maxRows, columns }),
   });
 }
 

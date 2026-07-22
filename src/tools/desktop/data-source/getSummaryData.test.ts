@@ -382,6 +382,38 @@ describe('getSummaryDataTool', () => {
     }
   });
 
+  it('does not escalate a session-resolution failure after an intervening success', async () => {
+    const harness = await startHarness();
+    vi.mocked(sessionResolution.resolveSession).mockReturnValueOnce(
+      new ArgsValidationError('Desktop discovery temporarily unavailable').toErr(),
+    );
+
+    try {
+      const firstFailure = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
+      const success = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
+      vi.mocked(sessionResolution.resolveSession).mockReturnValueOnce(
+        new ArgsValidationError('Desktop discovery temporarily unavailable').toErr(),
+      );
+      const nextFailure = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
+
+      expect(parseJsonResult(firstFailure)).toMatchObject({
+        status: 'retryable',
+        reason: 'session-resolution-failed',
+      });
+      expect(parseResult(success).status).toBe('success');
+      expect(parseJsonResult(nextFailure)).toMatchObject({
+        status: 'retryable',
+        reason: 'session-resolution-failed',
+        guidance: expect.stringContaining('transient — one retry is reasonable'),
+      });
+      expect(nextFailure.structuredContent).toEqual({
+        nextAction: { label: 'Retry get-summary-data once', kind: 'prefill' },
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('escalates the second consecutive session-resolution failure for the same signature to terminal', async () => {
     const harness = await startHarness();
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(
@@ -404,6 +436,42 @@ describe('getSummaryDataTool', () => {
       });
       expect(second.structuredContent).toEqual({
         nextAction: { label: 'Data retrieval failed — report outcome', kind: 'done' },
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('keeps first session-resolution failures retryable for distinct requested sessions', async () => {
+    const harness = await startHarness();
+    vi.mocked(sessionResolution.resolveSession).mockReturnValue(
+      new ArgsValidationError('Desktop discovery temporarily unavailable').toErr(),
+    );
+
+    try {
+      const sessionA = await harness.callTool({
+        session: 'desktop-a',
+        worksheet: 'Sales by Region',
+        maxRows: 50,
+      });
+      const sessionB = await harness.callTool({
+        session: 'desktop-b',
+        worksheet: 'Sales by Region',
+        maxRows: 50,
+      });
+
+      expect(parseJsonResult(sessionA)).toMatchObject({
+        status: 'retryable',
+        reason: 'session-resolution-failed',
+        guidance: expect.stringContaining('transient — one retry is reasonable'),
+      });
+      expect(parseJsonResult(sessionB)).toMatchObject({
+        status: 'retryable',
+        reason: 'session-resolution-failed',
+        guidance: expect.stringContaining('transient — one retry is reasonable'),
+      });
+      expect(sessionB.structuredContent).toEqual({
+        nextAction: { label: 'Retry get-summary-data once', kind: 'prefill' },
       });
     } finally {
       await harness.close();

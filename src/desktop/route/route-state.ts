@@ -242,7 +242,11 @@ export class SessionRouteStateStore {
   /** Per-session LRU cap for bind recovery records. */
   static readonly MAX_BIND_RECOVERY_ASKS = 8;
 
-  /** Per-session LRU cap for get-summary-data transient-failure counters. */
+  /**
+   * Per-session LRU cap for get-summary-data transient-failure counters. Rotating more than
+   * this many failing signatures can evict a first failure before its retry, so the terminal
+   * guard is intentionally best-effort for that rare pattern in exchange for bounded memory.
+   */
   static readonly MAX_SUMMARY_DATA_FAILURE_SIGNATURES = 8;
 
   /** Receipt cap for capacity-rejected asks. */
