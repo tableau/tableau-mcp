@@ -22,6 +22,7 @@ import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { spliceBoundFacet } from '../../../desktop/templates/facetSplice.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
+import { pruneUnboundOptionalFields } from '../../../desktop/templates/optionalFieldPrune.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import {
@@ -91,17 +92,15 @@ function inferSingleDatasourceFromColumnRefs(
 }
 
 const paramsSchema = {
-  session: z.string().optional().describe(''),
-  taskSpec: z
-    .object({
-      worksheetName: z.string(),
-      worksheetFile: z.string().describe(''),
-      type: z.enum(['kpi', 'chart']),
-      template: z.string().optional().describe(''),
-      fields: z.array(z.string()).describe(''),
-      workbookFile: z.string().describe(''),
-    })
-    .describe(''),
+  session: z.string().optional(),
+  taskSpec: z.object({
+    worksheetName: z.string(),
+    worksheetFile: z.string(),
+    type: z.enum(['kpi', 'chart']),
+    template: z.string().optional(),
+    fields: z.array(z.string()),
+    workbookFile: z.string(),
+  }),
 };
 
 const toolTitle = 'Build and Apply Worksheet';
@@ -112,7 +111,8 @@ export const getBuildAndApplyWorksheetTool = (
     server,
     name: 'build-and-apply-worksheet',
     title: toolTitle,
-    description: 'Build/apply worksheet.',
+    description:
+      'Build a worksheet from a spec and apply it in one validated call — the one-shot manual path when no template binds.',
     paramsSchema,
     annotations: {
       title: toolTitle,
@@ -280,6 +280,7 @@ export const getBuildAndApplyWorksheetTool = (
           // W28-C: splice a BOUND facet pill onto the trellis shelf BEFORE the frozen
           // core rewrite (identity no-op when no facet is bound). The core then maps
           // [Facet] → the bound field so the facet actually renders.
+          templateXml = pruneUnboundOptionalFields(templateXml, explicitBind.optionalFieldPrunes);
           templateXml = ensureUserNamespace(templateXml);
           templateXml = spliceBoundFacet(templateXml, fieldMapping);
           templateXml = rewriteFieldReferences(

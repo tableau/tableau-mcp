@@ -58,6 +58,8 @@ export interface FieldResolution {
   candidates?: FieldCandidate[];
   /** Human-readable explanation suitable for logging or surfacing to the user. */
   reason?: string;
+  /** Advisory notes, e.g. deterministic duplicate-column choices the caller should surface. */
+  notes?: string[];
   /**
    * For `rewritten`: the transformations applied (e.g.,
    * 'parsed-aggregation-prefix', 'mapped-calc-to-User').
@@ -225,6 +227,92 @@ function toCandidate(field: FieldReference & { column_ref: string }): FieldCandi
   };
 }
 
+function displayName(field: FieldReference & { column_ref: string }): string {
+  return field.caption ?? normalizeName(field.columnName);
+}
+
+function numericSuffixParts(name: string): { base: string; suffix: string | null } {
+  const match = name.match(/^(.*?)(\d+)$/);
+  if (!match || match[1].length === 0) return { base: name, suffix: null };
+  return { base: match[1], suffix: match[2] };
+}
+
+function nearDuplicateNote(
+  fields: Array<FieldReference & { column_ref: string }>,
+  chosen: FieldReference & { column_ref: string },
+): string | undefined {
+  const chosenName = displayName(chosen);
+  const chosenParts = numericSuffixParts(chosenName);
+  const family = fields.filter((candidate) => {
+    if (candidate.datasource !== chosen.datasource) return false;
+    return numericSuffixParts(displayName(candidate)).base === chosenParts.base;
+  });
+  if (family.length < 2 || !family.some((candidate) => candidate !== chosen)) return undefined;
+
+  const names = [...new Set(family.map(displayName))].sort((a, b) => {
+    const aSuffix = numericSuffixParts(a).suffix;
+    const bSuffix = numericSuffixParts(b).suffix;
+    if (aSuffix === null && bSuffix !== null) return -1;
+    if (aSuffix !== null && bSuffix === null) return 1;
+    return a.localeCompare(b);
+  });
+  return `dataset has near-duplicate columns ${names.join('/')} - used ${chosenName}; consider cleaning the source`;
+}
+
+function exactResolution(
+  query: string,
+  fields: Array<FieldReference & { column_ref: string }>,
+  field: FieldReference & { column_ref: string },
+): FieldResolution {
+  const note = nearDuplicateNote(fields, field);
+  return {
+    kind: 'exact',
+    query,
+    column_ref: field.column_ref,
+    datasource: field.datasource,
+    ...(note ? { notes: [note] } : {}),
+  };
+}
+
+function rewrittenResolution(
+  query: string,
+  fields: Array<FieldReference & { column_ref: string }>,
+  field: FieldReference & { column_ref: string },
+  extras: Omit<FieldResolution, 'kind' | 'query' | 'column_ref' | 'datasource' | 'notes'> = {},
+): FieldResolution {
+  const note = nearDuplicateNote(fields, field);
+  return {
+    kind: 'rewritten',
+    query,
+    column_ref: field.column_ref,
+    datasource: field.datasource,
+    ...extras,
+    ...(note ? { notes: [note] } : {}),
+  };
+}
+
+function disambiguateRanked(
+  candidates: Array<FieldReference & { column_ref: string }>,
+  query: string,
+  fields: Array<FieldReference & { column_ref: string }>,
+): FieldResolution | null {
+  const captionMatches = candidates.filter((field) => field.caption === query);
+  if (captionMatches.length === 1) return exactResolution(query, fields, captionMatches[0]);
+
+  const parts = candidates.map((candidate) => ({
+    candidate,
+    parts: numericSuffixParts(displayName(candidate)),
+  }));
+  const bases = new Set(parts.map(({ parts: p }) => p.base));
+  const unsuffixed = parts.filter(({ parts: p }) => p.suffix === null);
+  const suffixed = parts.filter(({ parts: p }) => p.suffix !== null);
+  if (bases.size === 1 && unsuffixed.length === 1 && suffixed.length > 0) {
+    return exactResolution(query, fields, unsuffixed[0].candidate);
+  }
+
+  return null;
+}
+
 function datasourceCaptionMap(workbookXml: string): Map<string, Set<string>> {
   const workbook = parseXML(workbookXml);
   const datasources = normalizeArray<any>(workbook.workbook?.datasources?.datasource);
@@ -297,12 +385,7 @@ export function resolveField(
   let allFields = listAvailableFields(workbookXml);
   const exactRefMatch = allFields.find((f) => f.column_ref === trimmed);
   if (exactRefMatch) {
-    return {
-      kind: 'exact',
-      query,
-      column_ref: exactRefMatch.column_ref,
-      datasource: exactRefMatch.datasource,
-    };
+    return exactResolution(query, allFields, exactRefMatch);
   }
   // A datasource-qualified ref is already disambiguated; a miss must not fuzzy-match.
   if (COLUMN_REF_REGEX.test(trimmed)) {
@@ -348,15 +431,11 @@ export function resolveField(
     ? []
     : allFields.filter((f) => fieldMatchesExact(f, trimmed));
   if (exactMatches.length === 1) {
-    const f = exactMatches[0];
-    return {
-      kind: 'exact',
-      query,
-      column_ref: f.column_ref,
-      datasource: f.datasource,
-    };
+    return exactResolution(query, allFields, exactMatches[0]);
   }
   if (exactMatches.length > 1) {
+    const ranked = disambiguateRanked(exactMatches, trimmed, allFields);
+    if (ranked) return ranked;
     return {
       kind: 'ambiguous',
       query,
@@ -374,16 +453,16 @@ export function resolveField(
   const bareMatches = allFields.filter((f) => fieldMatchesByBareName(f, trimmed));
   if (bareMatches.length === 1) {
     const f = bareMatches[0];
-    return {
-      kind: isBracketedQuery ? 'rewritten' : 'exact',
-      query,
-      column_ref: f.column_ref,
-      datasource: f.datasource,
-      reason: isBracketedQuery ? 'stripped surrounding brackets' : undefined,
-      rewrites: isBracketedQuery ? ['normalized-brackets'] : undefined,
-    };
+    return isBracketedQuery
+      ? rewrittenResolution(query, allFields, f, {
+          reason: 'stripped surrounding brackets',
+          rewrites: ['normalized-brackets'],
+        })
+      : exactResolution(query, allFields, f);
   }
   if (bareMatches.length > 1) {
+    const ranked = disambiguateRanked(bareMatches, trimmed, allFields);
+    if (ranked) return ranked;
     return {
       kind: 'ambiguous',
       query,
@@ -402,6 +481,7 @@ export function resolveField(
     if (baseCandidates.length === 1) {
       const base = baseCandidates[0];
       const rewrites = ['parsed-aggregation-prefix'];
+      const note = nearDuplicateNote(allFields, base);
       // If the base is already aggregated (calc field with SUM(...) etc.),
       // ignore the requested aggregation — using the base column_ref avoids
       // double-aggregation. This mirrors coordination.ts's existing behavior
@@ -417,6 +497,7 @@ export function resolveField(
             base.formula ?? '?'
           }); ignored requested "${reqAgg}".`,
           rewrites,
+          ...(note ? { notes: [note] } : {}),
         };
       }
       const mapped = mapAggregationToken(reqAgg);
@@ -435,9 +516,24 @@ export function resolveField(
         datasource: base.datasource,
         reason: `applied aggregation "${reqAgg}" to base field "${baseName}"`,
         rewrites,
+        ...(note ? { notes: [note] } : {}),
       };
     }
     if (baseCandidates.length > 1) {
+      const ranked = disambiguateRanked(baseCandidates, baseName, allFields);
+      if (ranked?.column_ref) {
+        const base = allFields.find((field) => field.column_ref === ranked.column_ref);
+        const mapped = mapAggregationToken(reqAgg);
+        if (base && mapped !== undefined) {
+          return {
+            ...ranked,
+            kind: 'rewritten',
+            column_ref: buildAggregatedRef(base, mapped),
+            reason: `applied aggregation "${reqAgg}" to base field "${baseName}"`,
+            rewrites: ['parsed-aggregation-prefix'],
+          };
+        }
+      }
       return {
         kind: 'ambiguous',
         query,

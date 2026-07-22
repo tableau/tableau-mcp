@@ -175,6 +175,103 @@ describe('binder/validate — gate 2: field resolution', () => {
       ).toBe(true);
   });
 
+  it('no-fire: exact caption match wins over a same-name column match', () => {
+    const captionExact: SchemaSummary = {
+      datasource: 'DS',
+      fields: [
+        field({
+          columnName: '[Country Code]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+          caption: 'Country',
+          datasource: 'DS',
+        }),
+        field({
+          columnName: '[Country]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+          datasource: 'DS',
+        }),
+        field({
+          columnName: '[Sales]',
+          role: 'measure',
+          type: 'quantitative',
+          datatype: 'real',
+          datasource: 'DS',
+        }),
+      ],
+    };
+    const m = manifests.get('ranking-ordered-bar')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'region', field: 'Country' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+    };
+    const r = validateBinding(m, p, captionExact);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.field_mapping.Region).toBe('[DS].[none:Country Code:nk]');
+  });
+
+  it('no-fire: unsuffixed near-duplicate beats the numeric-suffixed twin with a note', () => {
+    const nearDuplicate: SchemaSummary = {
+      datasource: 'DS',
+      fields: [
+        field({
+          columnName: '[Country]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+          datasource: 'DS',
+        }),
+        field({
+          columnName: '[Country1]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+          datasource: 'DS',
+        }),
+        field({
+          columnName: '[Goals For]',
+          role: 'measure',
+          type: 'quantitative',
+          datatype: 'integer',
+          datasource: 'DS',
+        }),
+        field({
+          columnName: '[Goals For1]',
+          role: 'measure',
+          type: 'quantitative',
+          datatype: 'integer',
+          datasource: 'DS',
+        }),
+      ],
+    };
+    const m = manifests.get('ranking-ordered-bar')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'region', field: 'Country' },
+        { slot_id: 'sales', field: 'Goals For' },
+      ],
+    };
+    const r = validateBinding(m, p, nearDuplicate);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.field_mapping.Region).toBe('[DS].[none:Country:nk]');
+      expect(r.field_mapping.Sales).toBe('[DS].[sum:Goals For:qk]');
+      expect(r.warnings).toEqual([
+        'dataset has near-duplicate columns Country/Country1 - used Country; consider cleaning the source',
+        'dataset has near-duplicate columns Goals For/Goals For1 - used Goals For; consider cleaning the source',
+      ]);
+    }
+  });
+
   it('no-fire: exact column_ref binds duplicate names from the intended datasource', () => {
     const twoDs: SchemaSummary = {
       datasource: 'DS_A',

@@ -33,6 +33,28 @@ const WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
   </datasources>
 </workbook>`;
 
+const COUNTRY_ONLY_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Football'>
+      <column name='[Country]' role='dimension' type='nominal' datatype='string' semantic-role='[Country].[Name]' />
+      <column name='[Goals For]' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+const COUNTRY_ONLY_DUPLICATE_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Football'>
+      <column name='[Country]' role='dimension' type='nominal' datatype='string' semantic-role='[Country].[Name]' />
+      <column name='[Country1]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Goals For]' role='measure' type='quantitative' datatype='integer' />
+      <column name='[Goals For1]' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
 let manifests: Map<string, TemplateManifest>;
 beforeAll(() => {
   manifests = loadManifests();
@@ -795,8 +817,73 @@ describe('binder/bindTemplate — W60 choropleth geo-slot completion', () => {
       // the ask-named [State/Province] fills the state slot (template_field 'State').
       expect(res.args.field_mapping['Country']).toBe('[Superstore].[none:Country/Region:nk]');
       expect(res.args.field_mapping['State']).toBe('[Superstore].[none:State/Province:nk]');
+      expect(res.args.optional_field_prunes).toBeUndefined();
       // Provenance is surfaced so the agent can say "using Country/Region".
       expect(res.warnings?.some((w) => /Country\/Region/.test(w))).toBe(true);
+    }
+  });
+});
+
+describe('binder/bindTemplate — country-only spatial maps', () => {
+  it('binds a country-only choropleth and marks state for XML pruning', async () => {
+    const res = await bindTemplate({
+      ask: 'choropleth of Goals For by Country',
+      workbookXml: COUNTRY_ONLY_WORKBOOK_XML,
+      manifests,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.used_llm).toBe(false);
+      expect(res.args.template_name).toBe('spatial-choropleth-map');
+      expect(res.args.field_mapping).toEqual({
+        Country: '[Football].[none:Country:nk]',
+        Profit: '[Football].[sum:Goals For:qk]',
+      });
+      expect(res.args.optional_field_prunes).toEqual([
+        { templateField: 'State', derivation: 'none', role: 'nk' },
+      ]);
+    }
+  });
+
+  it('binds a country-only symbol map and marks state/city for XML pruning', async () => {
+    const res = await bindTemplate({
+      ask: 'symbol map of Goals For by Country',
+      workbookXml: COUNTRY_ONLY_WORKBOOK_XML,
+      manifests,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.used_llm).toBe(false);
+      expect(res.args.template_name).toBe('spatial-symbol-map');
+      expect(res.args.field_mapping).toEqual({
+        'Country/Region': '[Football].[none:Country:nk]',
+        Sales: '[Football].[sum:Goals For:qk]',
+      });
+      expect(res.args.optional_field_prunes).toEqual([
+        { templateField: 'State/Province', derivation: 'none', role: 'nk' },
+        { templateField: 'City', derivation: 'none', role: 'nk' },
+      ]);
+    }
+  });
+
+  it('binds through near-duplicate country-only fields and surfaces cleanup notes', async () => {
+    const res = await bindTemplate({
+      ask: 'choropleth of Goals For by Country',
+      workbookXml: COUNTRY_ONLY_DUPLICATE_WORKBOOK_XML,
+      manifests,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.field_mapping).toEqual({
+        Country: '[Football].[none:Country:nk]',
+        Profit: '[Football].[sum:Goals For:qk]',
+      });
+      expect(res.warnings).toEqual(
+        expect.arrayContaining([
+          'dataset has near-duplicate columns Country/Country1 - used Country; consider cleaning the source',
+          'dataset has near-duplicate columns Goals For/Goals For1 - used Goals For; consider cleaning the source',
+        ]),
+      );
     }
   });
 });

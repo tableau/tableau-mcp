@@ -41,6 +41,28 @@ const WB_AGGREGATED_CALC = `<?xml version="1.0" encoding="UTF-8"?>
   </datasources>
 </workbook>`;
 
+const WB_NEAR_DUPLICATES = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook>
+  <datasources>
+    <datasource name="football" caption="Football">
+      <column name="[Country]" datatype="string" role="dimension" type="nominal"/>
+      <column name="[Country1]" datatype="string" role="dimension" type="nominal"/>
+      <column name="[Goals For]" datatype="integer" role="measure" type="quantitative"/>
+      <column name="[Goals For1]" datatype="integer" role="measure" type="quantitative"/>
+    </datasource>
+  </datasources>
+</workbook>`;
+
+const WB_CAPTION_EXACT = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook>
+  <datasources>
+    <datasource name="football" caption="Football">
+      <column name="[Country Code]" caption="Country" datatype="string" role="dimension" type="nominal"/>
+      <column name="[Country]" datatype="string" role="dimension" type="nominal"/>
+    </datasource>
+  </datasources>
+</workbook>`;
+
 describe('resolveField', () => {
   it('should return ambiguous when the same field name exists in two datasources', () => {
     const r = resolveField(WB_TWO_DATASOURCES, 'Profit');
@@ -119,6 +141,28 @@ describe('resolveField', () => {
     expect(r.kind).toBe('rewritten');
     expect(r.rewrites).toContain('ignored-redundant-aggregation');
     expect(r.reason).toMatch(/already aggregated/);
+  });
+
+  it('uses an exact caption match before a same-name column match', () => {
+    const r = resolveField(WB_CAPTION_EXACT, 'Country');
+    expect(r.kind).toBe('exact');
+    expect(r.column_ref).toBe('[football].[none:Country Code:nk]');
+  });
+
+  it('uses the unsuffixed twin and includes a cleanup note for near-duplicate columns', () => {
+    const r = resolveField(WB_NEAR_DUPLICATES, 'Country');
+    expect(r.kind).toBe('exact');
+    expect(r.column_ref).toBe('[football].[none:Country:nk]');
+    expect(r.notes).toEqual([
+      'dataset has near-duplicate columns Country/Country1 - used Country; consider cleaning the source',
+    ]);
+  });
+
+  it('carries the near-duplicate note through aggregation rewrites', () => {
+    const r = resolveField(WB_NEAR_DUPLICATES, 'sum of Goals For');
+    expect(r.kind).toBe('rewritten');
+    expect(r.column_ref).toBe('[football].[sum:Goals For:qk]');
+    expect(r.notes?.[0]).toContain('Goals For/Goals For1');
   });
 });
 

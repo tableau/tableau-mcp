@@ -136,6 +136,9 @@ describe('buildAndApplyWorksheetTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getBuildAndApplyWorksheetTool(new DesktopMcpServer());
     expect(tool.name).toBe('build-and-apply-worksheet');
+    expect(tool.description).toBe(
+      'Build a worksheet from a spec and apply it in one validated call — the one-shot manual path when no template binds.',
+    );
     expect(tool.annotations).toMatchObject({ readOnlyHint: false });
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),

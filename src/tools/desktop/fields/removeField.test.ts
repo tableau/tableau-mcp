@@ -51,7 +51,9 @@ describe('removeFieldTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getRemoveFieldTool(new DesktopMcpServer());
     expect(tool.name).toBe('remove-field');
-    expect(tool.description).toBe('Remove a field.');
+    expect(tool.description).toBe(
+      'Remove a field from a shelf (rows/cols/encoding) — the manual build path counterpart to add-field.',
+    );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetFile: expect.any(Object),

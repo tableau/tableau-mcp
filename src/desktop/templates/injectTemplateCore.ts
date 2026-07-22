@@ -19,6 +19,7 @@ import { type DateparseAxisSpec, spliceDateparseTemporalAxis } from './dateparse
 import { spliceBoundFacet } from './facetSplice.js';
 import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
 import { injectTemplate, InsertPosition, SheetType } from './injectTemplate.js';
+import { type OptionalFieldPruneSpec, pruneUnboundOptionalFields } from './optionalFieldPrune.js';
 import { spliceWaterfallAnchorFilter } from './waterfallAnchorFilter.js';
 
 /** Escape the five XML metacharacters (identical to the inject-template tool). */
@@ -66,6 +67,8 @@ export interface InjectTemplateCoreParams {
    * per-apply identity (workbook file + timestamp, or session + timestamp).
    */
   applyNonce: string;
+  /** Optional manifest-approved field refs to remove before normal field rewriting. */
+  optionalFieldPrunes?: OptionalFieldPruneSpec[];
   /**
    * temporal_axis_from_string: when the binder bound a date-like STRING to a temporal
    * slot, this spec turns the template's temporal base column into a DATEPARSE calc
@@ -163,6 +166,7 @@ export function buildInjectedWorkbookXml({
   insertPosition,
   relativeSheetName,
   applyNonce,
+  optionalFieldPrunes,
   dateparseAxis,
 }: InjectTemplateCoreParams): InjectTemplateCoreResult {
   // W60 demo-idempotence: a worksheet inject with a colliding title replaces the
@@ -180,6 +184,7 @@ export function buildInjectedWorkbookXml({
   }
 
   if (templateParameters?.['DATASOURCE']) {
+    processed = pruneUnboundOptionalFields(processed, optionalFieldPrunes);
     // W28-C: splice a BOUND facet pill onto the trellis shelf BEFORE the frozen
     // core rewrite (identity no-op when no facet is bound). The core then maps
     // [Facet] → the bound field.

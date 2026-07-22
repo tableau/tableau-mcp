@@ -147,13 +147,9 @@ function nextActionForEscalation(reason: EscalateReason): NextAction {
     return prefillNextAction('Pick a higher-confidence proposal');
   }
   if (TIER2_REASONS.has(reason)) {
-    return prefillNextAction(
-      'Build manually: place fields with add-field (rows/cols/encodings), then refine-worksheet',
-    );
+    return prefillNextAction('Build via build-and-apply-worksheet');
   }
-  return prefillNextAction(
-    'Build manually: place fields with add-field (rows/cols/encodings), then refine-worksheet',
-  );
+  return prefillNextAction('Build manually with worksheet tools');
 }
 
 function renderBlockers(blockers: Blocker[]): string {
@@ -172,6 +168,9 @@ function renderBlockers(blockers: Blocker[]): string {
 
 function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): string {
   let next: string;
+  const outcome = TIER2_REASONS.has(reason)
+    ? 'Fast-path template bind did not apply; direct authoring is available.'
+    : 'No worksheet was produced.';
   if (reason === 'ambiguous-field' || reason === 'field-not-found') {
     next =
       'Resolve the field(s) with the resolve-field tool, then call bind-template again with a corrected proposal; otherwise ask the user with ask-user (present the candidates).';
@@ -180,15 +179,16 @@ function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): 
       'Confidence was below the floor. Re-examine the candidate template(s), pick the best fit, and re-propose with higher confidence.';
   } else if (TIER2_REASONS.has(reason)) {
     next =
-      'This ask is not a fast-path template bind. Author the worksheet with the general field/worksheet build tools instead. ' +
-      'If a blocker names a real but not-fast-path-eligible template, that template can still be applied via the manual chain: ' +
-      'get workbook structure in file mode -> inject-template (that template_name + an explicit field_mapping) -> apply-workbook.';
+      'No fast-path template fits this ask/data - build it directly: build-and-apply-worksheet ' +
+      'does one validated build+apply, or place fields stepwise with add-field then ' +
+      'apply-worksheet, then refine-worksheet for top-N/sort. This is a normal path, not a ' +
+      'failure. If the inject-template/apply-workbook tools are available and a blocker names ' +
+      'a real template, that template can still be applied via: get workbook structure in ' +
+      'file mode -> inject-template (that template_name + an explicit field_mapping) -> apply-workbook.';
   } else {
     next = 'Author the worksheet with the general build tools instead.';
   }
-  return `Escalated (${reason}). No worksheet was produced. Blockers: ${renderBlockers(
-    blockers,
-  )}. Next: ${next}`;
+  return `Escalated (${reason}). ${outcome} Blockers: ${renderBlockers(blockers)}. Next: ${next}`;
 }
 
 function isWaterfallResult(res: BinderResult): boolean {
@@ -322,9 +322,9 @@ function buildGuidance(
         'If the asked viz shape is not among the candidates (e.g. pie/donut — no pie template is ' +
         'fast-path eligible), do not force a mismatched proposal: bind the nearest candidate and tell the ' +
         'user in one sentence why (for a pie ask, a sorted bar or treemap compares shares more precisely); ' +
-        'if they explicitly want the exact shape anyway, use the manual chain — get workbook structure in file mode -> ' +
-        "inject-template with template_name 'part-to-whole-pie-chart' (field_mapping: Region -> the " +
-        'category dimension, Sales -> the measure) -> apply-workbook. ' +
+        'if they explicitly want the exact shape anyway, build it with build-and-apply-worksheet; or, if the ' +
+        "inject-template/apply-workbook tools are available, inject-template with template_name 'part-to-whole-pie-chart' " +
+        '(field_mapping: Region -> the category dimension, Sales -> the measure) -> apply-workbook. ' +
         `${DERIVATION_OVERRIDE_INSTRUCTION}.`;
       break;
     case 'escalate':
@@ -526,7 +526,7 @@ function applyFallback(
     ...base,
     guidance:
       guidance ??
-      `${calcPrefix}Server-side auto-apply did not complete (${apply_error}). The bound args are intact — fall back to the manual chain: get workbook structure in file mode → inject-template → apply-workbook using the returned args.`,
+      `${calcPrefix}Server-side auto-apply did not complete (${apply_error}). The bound args are intact — fall back to build-and-apply-worksheet using the returned args; or, if the inject-template/apply-workbook tools are available, the template chain: get workbook structure in file mode → inject-template → apply-workbook.`,
     applied: false,
     apply_error,
   };
@@ -611,6 +611,7 @@ async function performAutoApply({
       templateParameters: args.template_parameters,
       fieldMapping: args.field_mapping,
       applyNonce,
+      optionalFieldPrunes: args.optional_field_prunes,
       dateparseAxis: args.dateparse_axis,
     });
   } catch (err) {

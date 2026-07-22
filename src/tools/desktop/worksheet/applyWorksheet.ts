@@ -44,7 +44,8 @@ export const getApplyWorksheetTool = (
     server,
     name: 'apply-worksheet',
     title,
-    description: 'Apply modified worksheet content to Tableau.',
+    description:
+      'Apply a modified cached worksheet file to Desktop — the apply leg of the manual build path (add-field/remove-field edit the file; this lands it).',
     paramsSchema,
     annotations: {
       title,

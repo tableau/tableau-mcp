@@ -14,6 +14,7 @@ import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprin
 import { parseDatasourceQualifiedColumnRef } from '../../../desktop/metadata/field-resolver.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
+import type { OptionalFieldPruneSpec } from '../../../desktop/templates/optionalFieldPrune.js';
 import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import {
   ArgsValidationError,
@@ -125,6 +126,7 @@ export const getInjectTemplateTool = (
             // contract — slot derivations come from the manifest, not the caller.
             let appliedFieldMapping = fieldMapping;
             let appliedTemplateParameters = templateParameters;
+            let optionalFieldPrunes: OptionalFieldPruneSpec[] = [];
             const explicitTemplateWarnings: string[] = [];
             if (
               templateParameters?.DATASOURCE &&
@@ -158,6 +160,7 @@ export const getInjectTemplateTool = (
               }
 
               if (!explicitBind.passthrough) appliedFieldMapping = explicitBind.fieldMapping;
+              optionalFieldPrunes = explicitBind.optionalFieldPrunes;
               appliedTemplateParameters = {
                 ...templateParameters,
                 DATASOURCE: resolvedDatasource,
@@ -176,6 +179,7 @@ export const getInjectTemplateTool = (
               insertPosition,
               relativeSheetName,
               applyNonce,
+              optionalFieldPrunes,
             });
 
             if (!result.ok) {

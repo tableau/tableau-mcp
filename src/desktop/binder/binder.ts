@@ -19,6 +19,7 @@
 // without the two-call round trip. The MCP tool never passes `llmPropose`.
 
 import type { DateparseAxisSpec } from '../templates/dateparseTemporalAxis.js';
+import type { OptionalFieldPruneSpec } from '../templates/optionalFieldPrune.js';
 import {
   buildLlmInput as buildCoreLlmInput,
   classifyNoLlm,
@@ -134,6 +135,8 @@ export interface InjectTemplateArgs {
   /** temporal_axis_from_string: when a temporal slot bound a date-like STRING, the
    * apply path injects a DATEPARSE calc for that slot (see dateparseTemporalAxis.ts). */
   dateparse_axis?: DateparseAxisSpec;
+  /** Optional template refs the apply path must remove when their manifest slots are unbound. */
+  optional_field_prunes?: OptionalFieldPruneSpec[];
 }
 
 export type LlmProposeFn = (input: LlmProposeInput) => Promise<BindingProposal>;
@@ -453,6 +456,7 @@ function validateAndBuild(
     ...(sort ? { sort } : {}),
     ...(proposal.top_n !== undefined ? { top_n: proposal.top_n } : {}),
     ...(v.dateparse_axis ? { dateparse_axis: v.dateparse_axis } : {}),
+    ...(v.optional_field_prunes ? { optional_field_prunes: v.optional_field_prunes } : {}),
   };
   return {
     status: 'bound',

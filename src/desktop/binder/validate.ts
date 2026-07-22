@@ -33,6 +33,7 @@ import Fuse from 'fuse.js';
 
 import { COLUMN_REF_REGEX } from '../metadata/field-resolver.js';
 import type { DateparseAxisSpec } from '../templates/dateparseTemporalAxis.js';
+import type { OptionalFieldPruneSpec } from '../templates/optionalFieldPrune.js';
 import { matchAvoidWhen } from './classify.js';
 import { escapeXml } from './escape.js';
 import type {
@@ -99,6 +100,8 @@ export type ValidateResult =
       /** temporal_axis_from_string: the apply-side DATEPARSE splice spec, when a temporal
        * slot accepted a date-like string source (undefined for every normal bind). */
       dateparse_axis?: DateparseAxisSpec;
+      /** Manifest-approved optional template refs to remove when their slots are unbound. */
+      optional_field_prunes?: OptionalFieldPruneSpec[];
     }
   | { ok: false; blockers: Blocker[] };
 
@@ -236,6 +239,70 @@ interface Resolution {
   kind: 'exact' | 'rewritten' | 'ambiguous' | 'not_found';
   field?: SchemaField;
   candidates?: SchemaField[];
+  notes?: string[];
+}
+
+function displayName(f: SchemaField): string {
+  return f.caption ?? bareName(f.columnName);
+}
+
+function numericSuffixParts(name: string): { base: string; suffix: string | null } {
+  const match = name.match(/^(.*?)(\d+)$/);
+  if (!match || match[1].length === 0) return { base: name, suffix: null };
+  return { base: match[1], suffix: match[2] };
+}
+
+function nearDuplicateNote(fields: SchemaField[], chosen: SchemaField): string | undefined {
+  const chosenName = displayName(chosen);
+  const chosenParts = numericSuffixParts(chosenName);
+  const family = fields.filter((candidate) => {
+    if (candidate.datasource !== chosen.datasource) return false;
+    const candidateName = displayName(candidate);
+    const candidateParts = numericSuffixParts(candidateName);
+    return candidateParts.base === chosenParts.base;
+  });
+  if (family.length < 2 || !family.some((candidate) => candidate !== chosen)) return undefined;
+
+  const names = [...new Set(family.map(displayName))].sort((a, b) => {
+    const aSuffix = numericSuffixParts(a).suffix;
+    const bSuffix = numericSuffixParts(b).suffix;
+    if (aSuffix === null && bSuffix !== null) return -1;
+    if (aSuffix !== null && bSuffix === null) return 1;
+    return a.localeCompare(b);
+  });
+  return `dataset has near-duplicate columns ${names.join('/')} - used ${chosenName}; consider cleaning the source`;
+}
+
+function exactWithNotes(fields: SchemaField[], field: SchemaField): Resolution {
+  const note = nearDuplicateNote(fields, field);
+  return { kind: 'exact', field, ...(note ? { notes: [note] } : {}) };
+}
+
+function rewrittenWithNotes(fields: SchemaField[], field: SchemaField): Resolution {
+  const note = nearDuplicateNote(fields, field);
+  return { kind: 'rewritten', field, ...(note ? { notes: [note] } : {}) };
+}
+
+function disambiguateRanked(
+  candidates: SchemaField[],
+  query: string,
+  fields: SchemaField[],
+): Resolution | null {
+  const captionMatches = candidates.filter((f) => f.caption === query);
+  if (captionMatches.length === 1) return exactWithNotes(fields, captionMatches[0]);
+
+  const parts = candidates.map((candidate) => ({
+    candidate,
+    parts: numericSuffixParts(displayName(candidate)),
+  }));
+  const bases = new Set(parts.map(({ parts: p }) => p.base));
+  const unsuffixed = parts.filter(({ parts: p }) => p.suffix === null);
+  const suffixed = parts.filter(({ parts: p }) => p.suffix !== null);
+  if (bases.size === 1 && unsuffixed.length === 1 && suffixed.length > 0) {
+    return exactWithNotes(fields, unsuffixed[0].candidate);
+  }
+
+  return null;
 }
 
 /**
@@ -251,7 +318,7 @@ export function resolveInSummary(s: SchemaSummary, query: string): Resolution {
 
   // Exact column_ref is already datasource-qualified, so resolve it before names/captions.
   const refMatches = s.fields.filter((f) => f.column_ref === q);
-  if (refMatches.length === 1) return { kind: 'exact', field: refMatches[0] };
+  if (refMatches.length === 1) return exactWithNotes(s.fields, refMatches[0]);
   if (refMatches.length > 1) return { kind: 'ambiguous', candidates: refMatches };
   if (COLUMN_REF_REGEX.test(q)) return { kind: 'not_found', candidates: [] };
 
@@ -259,8 +326,11 @@ export function resolveInSummary(s: SchemaSummary, query: string): Resolution {
   const exact = s.fields.filter(
     (f) => f.name === q || f.caption === q || bareName(f.columnName) === qBare,
   );
-  if (exact.length === 1) return { kind: 'exact', field: exact[0] };
-  if (exact.length > 1) return { kind: 'ambiguous', candidates: exact };
+  if (exact.length === 1) return exactWithNotes(s.fields, exact[0]);
+  if (exact.length > 1) {
+    const ranked = disambiguateRanked(exact, q, s.fields);
+    return ranked ?? { kind: 'ambiguous', candidates: exact };
+  }
 
   // Phase 2: case-insensitive bare match (classifier/agent may vary casing).
   const qi = q.toLowerCase();
@@ -270,8 +340,11 @@ export function resolveInSummary(s: SchemaSummary, query: string): Resolution {
       (f.caption ? f.caption.toLowerCase() === qi : false) ||
       bareName(f.columnName).toLowerCase() === qBare.toLowerCase(),
   );
-  if (ci.length === 1) return { kind: 'rewritten', field: ci[0] };
-  if (ci.length > 1) return { kind: 'ambiguous', candidates: ci };
+  if (ci.length === 1) return rewrittenWithNotes(s.fields, ci[0]);
+  if (ci.length > 1) {
+    const ranked = disambiguateRanked(ci, q, s.fields);
+    return ranked ?? { kind: 'ambiguous', candidates: ci };
+  }
 
   // Phase 3: fuzzy did-you-mean (mirrors resolveField's Fuse fallback).
   const fuse = new Fuse(s.fields, {
@@ -304,6 +377,26 @@ function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
   }
 }
 
+function optionalFieldPrunesFor(
+  manifest: TemplateManifest,
+  resolved: Map<string, { slot: SlotSpec; field: SchemaField }>,
+): OptionalFieldPruneSpec[] {
+  return manifest.slots
+    .filter(
+      (slot) =>
+        slot.bindable &&
+        !slot.required &&
+        slot.kind === 'geo' &&
+        slot.role.includes('lod') &&
+        !resolved.has(slot.slot_id),
+    )
+    .map((slot) => ({
+      templateField: slot.template_field,
+      derivation: slot.derivation,
+      role: 'nk',
+    }));
+}
+
 /**
  * `ask` is optional advisory context: when provided, avoid_when entries whose
  * terms overlap the ask are attached to a successful result as `warnings` (never
@@ -317,6 +410,7 @@ export function validateBinding(
   ask?: string,
 ): ValidateResult {
   const blockers: Blocker[] = [];
+  const resolutionNotes: string[] = [];
 
   const slotById = new Map<string, SlotSpec>();
   for (const slot of m.slots) slotById.set(slot.slot_id, slot);
@@ -390,6 +484,7 @@ export function validateBinding(
       });
       continue;
     }
+    resolutionNotes.push(...(r.notes ?? []));
     const f = r.field;
 
     // Gate 3: kind/role compatibility.
@@ -603,7 +698,10 @@ export function validateBinding(
   // as WARNINGS on the bound result. These NEVER block — the model (or the
   // no-LLM path that reached here) has already committed to this template; the
   // warning rides along so the caller sees the anti-pattern it chose.
-  const warnings = ask ? matchAvoidWhen(ask, m.avoid_when, m.intent_keywords) : [];
+  const warnings = [
+    ...resolutionNotes,
+    ...(ask ? matchAvoidWhen(ask, m.avoid_when, m.intent_keywords) : []),
+  ];
   // The datasource is workbook-controlled and flows verbatim into {{DATASOURCE}} (an XML
   // attribute), so escape it here at production alongside the field_mapping values —
   // escaped exactly once (validateAndBuild consumes this value as-is, no re-escape).
@@ -612,7 +710,13 @@ export function validateBinding(
   // done inside the splice (escapeXmlAttr), so pass the values RAW here. datasource is
   // not used by the splice (it edits base columns, not qualified refs) but carried for
   // completeness/debuggability.
-  const base = { ok: true as const, datasource: escapedDatasource, field_mapping };
+  const optionalFieldPrunes = optionalFieldPrunesFor(m, resolved);
+  const base = {
+    ok: true as const,
+    datasource: escapedDatasource,
+    field_mapping,
+    ...(optionalFieldPrunes.length > 0 ? { optional_field_prunes: optionalFieldPrunes } : {}),
+  };
   const withAxis = dateparseAxis ? { ...base, dateparse_axis: dateparseAxis } : base;
   return warnings.length > 0 ? { ...withAxis, warnings } : withAxis;
 }

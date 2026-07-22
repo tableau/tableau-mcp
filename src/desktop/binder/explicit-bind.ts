@@ -2,6 +2,7 @@ import {
   parseColumnInstanceRef,
   parseDatasourceQualifiedColumnRef,
 } from '../metadata/field-resolver.js';
+import type { OptionalFieldPruneSpec } from '../templates/optionalFieldPrune.js';
 import { loadManifests } from './manifest.js';
 import type { Derivation, SlotSpec, TemplateManifest } from './manifest-types.js';
 import { bareName, type SchemaField, type SchemaSummary } from './schema-summary.js';
@@ -42,6 +43,7 @@ export type ExplicitBindResult =
       datasource: string;
       fieldMapping: Record<string, string>;
       fieldMetadata: Record<string, { datatype: string; type: string }>;
+      optionalFieldPrunes: OptionalFieldPruneSpec[];
       warnings: string[];
       passthrough: boolean;
     }
@@ -110,6 +112,7 @@ export function bindExplicitTemplate(
       datasource: opts.datasource ?? schema.datasource,
       fieldMapping: Array.isArray(input) ? (opts.passthroughFieldMapping ?? {}) : input,
       fieldMetadata: {},
+      optionalFieldPrunes: [],
       warnings: [
         manifestLayerUnavailable
           ? `manifest-layer-unavailable: could not load template manifests; caller mapping for '${templateName}' applied without enforcement.`
@@ -142,6 +145,7 @@ export function bindExplicitTemplate(
     datasource: rawDatasourceFor(built.fieldBySlot, opts.datasource ?? schema.datasource),
     fieldMapping: emitRawFieldMapping(manifest, built.fieldBySlot),
     fieldMetadata: fieldMetadataFor(manifest, built.fieldBySlot),
+    optionalFieldPrunes: optionalFieldPrunesFor(manifest, built.fieldBySlot),
     warnings: [...warnings, ...(validation.warnings ?? [])],
     passthrough: false,
   };
@@ -411,6 +415,26 @@ function fieldMetadataFor(
     metadata[key] = { datatype: field.datatype, type: field.type };
   }
   return metadata;
+}
+
+function optionalFieldPrunesFor(
+  manifest: TemplateManifest,
+  fieldBySlot: Map<string, SchemaField>,
+): OptionalFieldPruneSpec[] {
+  return manifest.slots
+    .filter(
+      (slot) =>
+        slot.bindable &&
+        !slot.required &&
+        slot.kind === 'geo' &&
+        slot.role.includes('lod') &&
+        !fieldBySlot.has(slot.slot_id),
+    )
+    .map((slot) => ({
+      templateField: slot.template_field,
+      derivation: slot.derivation,
+      role: 'nk',
+    }));
 }
 
 function rawDatasourceFor(fieldBySlot: Map<string, SchemaField>, fallback: string): string {

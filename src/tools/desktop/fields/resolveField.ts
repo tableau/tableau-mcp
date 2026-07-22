@@ -36,7 +36,8 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'resolve-field',
     title,
-    description: 'Resolve a field reference.',
+    description:
+      'Disambiguate a field name to its exact column reference — the first play when duplicate or near-duplicate field names (e.g. Country vs Country1) make a bind ambiguous.',
     paramsSchema,
     annotations: {
       title,
