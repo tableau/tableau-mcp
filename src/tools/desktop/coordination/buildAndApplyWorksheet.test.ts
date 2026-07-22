@@ -351,7 +351,7 @@ describe('buildAndApplyWorksheetTool', () => {
         Region: { datatype: 'string', type: 'nominal' },
         Sales: { datatype: 'integer', type: 'quantitative' },
       },
-      { namespaceCalcs: true, applyNonce: expect.any(String) },
+      { namespaceCalcs: true, applyNonce: expect.any(String), templateSlots: [] },
     );
   });
 
@@ -453,7 +453,7 @@ describe('buildAndApplyWorksheetTool', () => {
         Region: { datatype: 'string', type: 'nominal' },
         Sales: { datatype: 'integer', type: 'quantitative' },
       },
-      { namespaceCalcs: true, applyNonce: expect.any(String) },
+      { namespaceCalcs: true, applyNonce: expect.any(String), templateSlots: [] },
     );
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
