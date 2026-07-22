@@ -1458,6 +1458,8 @@ describe('binder/bindTemplate — country-only spatial maps', () => {
 });
 
 describe('binder/buildLlmInput — family-aware truncation (attack 2)', () => {
+  const EXAMPLES_PAYLOAD_BYTE_BUDGET = 768;
+
   function synth(template: string, family: Family, keyword: string): TemplateManifest {
     return {
       template,
@@ -1518,6 +1520,44 @@ describe('binder/buildLlmInput — family-aware truncation (attack 2)', () => {
     const ask = 'kwa kwb kwc1 kwc2 kwc3';
     const input = buildLlmInput(ask, m, summarizeSchema(WORKBOOK_XML));
     expect(input.candidate_templates.length).toBe(5);
+  });
+
+  it('keeps serialized examples contribution bounded for the worst-case bundled manifest', () => {
+    const encoder = new TextEncoder();
+    const serializedBytes = (value: unknown): number =>
+      encoder.encode(JSON.stringify(value)).length;
+    const withoutExamples = (
+      input: ReturnType<typeof buildLlmInput>,
+    ): ReturnType<typeof buildLlmInput> => ({
+      ...input,
+      candidate_templates: input.candidate_templates.map((candidate) => ({
+        ...candidate,
+        slots: candidate.slots.map((slot) => {
+          const withoutExample = { ...slot };
+          delete withoutExample.examples;
+          return withoutExample;
+        }),
+      })),
+    });
+
+    let worst = { template: '', bytes: 0 };
+    for (const manifest of manifests.values()) {
+      const routedManifest: TemplateManifest = { ...manifest, source: 'local' };
+      const input = buildLlmInput(
+        manifest.intent_keywords.join(' ') || manifest.template,
+        new Map([[manifest.template, routedManifest]]),
+        summarizeSchema(WORKBOOK_XML),
+      );
+      const examplesBytes = serializedBytes(input) - serializedBytes(withoutExamples(input));
+      if (examplesBytes > worst.bytes)
+        worst = { template: manifest.template, bytes: examplesBytes };
+    }
+
+    expect(worst.bytes).toBeGreaterThan(0);
+    expect(
+      worst.bytes,
+      `${worst.template} examples serialized byte contribution`,
+    ).toBeLessThanOrEqual(EXAMPLES_PAYLOAD_BYTE_BUDGET);
   });
 
   it('exposes slot purpose and examples together in propose candidates', () => {

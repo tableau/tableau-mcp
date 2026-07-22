@@ -11,6 +11,8 @@ import {
   loadManifests,
   MANIFEST_INDEX_PATH,
   MANIFESTS_DIR,
+  MAX_SLOT_EXAMPLE_CHARS,
+  MAX_SLOT_EXAMPLES,
   validateManifest,
 } from './manifest.js';
 import type { SlotSpec, TemplateManifest } from './manifest-types.js';
@@ -113,6 +115,22 @@ describe('binder/manifest — loader + shape', () => {
     const blankExample = structuredClone(base);
     blankExample.slots[0].examples = ['Country', '   '];
     expect(validateManifest(blankExample).join(' ')).toMatch(/examples/);
+
+    const tooManyExamples = structuredClone(base);
+    tooManyExamples.slots[0].examples = Array.from(
+      { length: MAX_SLOT_EXAMPLES + 1 },
+      (_, i) => `Example ${i}`,
+    );
+    expect(validateManifest(tooManyExamples).join(' ')).toMatch(/examples/);
+
+    const tooLongExample = structuredClone(base);
+    tooLongExample.slots[0].examples = ['x'.repeat(MAX_SLOT_EXAMPLE_CHARS + 1)];
+    expect(validateManifest(tooLongExample).join(' ')).toMatch(/examples/);
+
+    const examplesWithoutPurpose = structuredClone(base);
+    delete examplesWithoutPurpose.slots[0].purpose;
+    examplesWithoutPurpose.slots[0].examples = ['Country'];
+    expect(validateManifest(examplesWithoutPurpose).join(' ')).toMatch(/examples require purpose/);
 
     const malformedPlaceholder = structuredClone(base);
     malformedPlaceholder.slots[0].template_field = '{{field_1}}';

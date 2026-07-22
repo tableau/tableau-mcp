@@ -163,4 +163,16 @@ describe('template placeholder lint', () => {
       'ranking-ordered-bar:region example "Region" contains donor vocabulary "Region"',
     ]);
   });
+
+  it('matches donor vocabulary by normalized token sequence, not substring', () => {
+    const cloned = new Map<string, TemplateManifest>();
+    for (const [name, manifest] of manifests) {
+      cloned.set(name, structuredClone(manifest));
+    }
+    cloned.get('ranking-ordered-bar')!.slots[0].examples = ['Regional Manager', 'Sub Category'];
+
+    expect(findDonorVocabularyInMigratedExamples(cloned, migrated)).toEqual([
+      'ranking-ordered-bar:region example "Sub Category" contains donor vocabulary "Sub-Category"',
+    ]);
+  });
 });

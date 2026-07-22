@@ -109,6 +109,8 @@ const NON_BINDABLE_KINDS: ReadonlySet<SlotKind> = new Set<SlotKind>([
 ]);
 
 const FIELD_BASE_PLACEHOLDER_RE = /^\{\{field_base_[1-9]\d*\}\}$/;
+export const MAX_SLOT_EXAMPLES = 3;
+export const MAX_SLOT_EXAMPLE_CHARS = 40;
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -254,11 +256,19 @@ function validateSlot(
     slot.examples !== undefined &&
     (!isStringArray(slot.examples) ||
       slot.examples.length === 0 ||
-      slot.examples.some((s) => s.trim().length === 0))
+      slot.examples.length > MAX_SLOT_EXAMPLES ||
+      slot.examples.some((s) => s.trim().length === 0) ||
+      slot.examples.some((s) => [...s].length > MAX_SLOT_EXAMPLE_CHARS))
   ) {
     errors.push(
-      `${where} (${slotId ?? '?'}): examples must be a non-empty string[] of non-empty strings when present`,
+      `${where} (${slotId ?? '?'}): examples must be a non-empty string[] of 1-${MAX_SLOT_EXAMPLES} non-empty strings, each <= ${MAX_SLOT_EXAMPLE_CHARS} chars, when present`,
     );
+  }
+  if (
+    slot.examples !== undefined &&
+    (typeof slot.purpose !== 'string' || slot.purpose.trim().length === 0)
+  ) {
+    errors.push(`${where} (${slotId ?? '?'}): examples require purpose on the same slot`);
   }
   if (
     slot.qualified_key_required !== undefined &&
