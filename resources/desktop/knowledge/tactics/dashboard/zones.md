@@ -1,6 +1,6 @@
 # Workbook XML: Dashboards, Zone Layout, and Actions
 
-Confirmed patterns for dashboard zone structure, device layouts, navigation buttons, zone resizing, dashboard actions (highlight and filter), and hiding worksheets. All patterns validated via `tableau-get-workbook` observation.
+Confirmed patterns for dashboard zone structure, device layouts, navigation buttons, zone resizing, dashboard actions (highlight and filter), and hiding worksheets. All patterns validated via `get-workbook-xml` observation.
 
 ---
 
@@ -16,11 +16,11 @@ Confirmed patterns for dashboard zone structure, device layouts, navigation butt
 
 ## ⚠️ Read this before hand-crafting dashboard XML
 
-**Strong recommendation: don't.** Use `tableau-plan-dashboard-creation` → `tableau-batch-create-and-cache-sheets` → `tableau-build-and-apply-dashboard` (the fast path), or `tableau-batch-create-and-cache-sheets` to allocate the dashboard shell and then push edits via `tableau-apply-dashboard-with-viewpoints`. Hand-crafting dashboard + window XML and injecting via a single `tableau-apply-workbook` call is the path most likely to trigger the metadata loader.
+**Strong recommendation: don't.** Use `plan-dashboard-creation` → `batch-create-and-cache-sheets` → `build-and-apply-dashboard` (the fast path), or `batch-create-and-cache-sheets` to allocate the dashboard shell and then push edits via `apply-dashboard-with-viewpoints`. Hand-crafting dashboard + window XML and injecting via a single `apply-workbook` call is the path most likely to trigger the metadata loader.
 
 If you must hand-craft anyway, these are the three assertions that actually fire — each one observed in production session logs (`<repositoryDir>/Logs/log.txt`):
 
-1. **`CheckSizeValidity` LogicAssert** — `<size sizing-mode='fixed'>` requires `minwidth == maxwidth` AND `minheight == maxheight`. A range triggers a fatal assert in `DashboardSizePresModelBuilder.cpp:180`. Symptom: `tableau-apply-workbook` returns "Failed to apply workbook XML"; log shows `condition: 'CheckSizeValidity(minWidth, minHeight, maxWidth, maxHeight, sizeMode)'`.
+1. **`CheckSizeValidity` LogicAssert** — `<size sizing-mode='fixed'>` requires `minwidth == maxwidth` AND `minheight == maxheight`. A range triggers a fatal assert in `DashboardSizePresModelBuilder.cpp:180`. Symptom: `apply-workbook` returns "Failed to apply workbook XML"; log shows `condition: 'CheckSizeValidity(minWidth, minHeight, maxWidth, maxHeight, sizeMode)'`.
 
    ```xml
    <!-- WRONG: min != max with fixed sizing -->
@@ -50,7 +50,7 @@ If you must hand-craft anyway, these are the three assertions that actually fire
    </window>
    ```
 
-3. **Silent zone flattening** — nested `<zone type-v2='layout-flow'>` rows whose children are sheet zones (with `name='...'`) can get silently dropped at apply. Dashboard-list readback can still report success, so the failure is invisible to the agent. Always verify post-apply by re-fetching with `tableau-get-dashboard` and counting zones: if the zone count went down, your layout structure was rejected and you need to restructure (use a flat `layout-basic` parent with absolute coords, OR mimic the reference workbook's `<zone param='horz' type-v2='layout-flow'>` row pattern with explicit per-child coords in 100000-based percentages).
+3. **Silent zone flattening** — nested `<zone type-v2='layout-flow'>` rows whose children are sheet zones (with `name='...'`) can get silently dropped at apply. Dashboard-list readback can still report success, so the failure is invisible to the agent. Always verify post-apply by re-fetching with `get-dashboard-xml` and counting zones: if the zone count went down, your layout structure was rejected and you need to restructure (use a flat `layout-basic` parent with absolute coords, OR mimic the reference workbook's `<zone param='horz' type-v2='layout-flow'>` row pattern with explicit per-child coords in 100000-based percentages).
 
 ---
 
@@ -471,7 +471,7 @@ To hide column/row field labels (the field name header above the values):
 - Window title contains an actual filename → **has file path**. `tabdoc:save` works.
 
 **TWBX repackaging** (reliable for any workbook state):
-1. Get workbook XML via `get-workbook`
+1. Get workbook XML via `get-workbook-xml`
 2. Clean auto-duplicated actions
 3. Write TWB to a temp working directory (e.g. `$env:TEMP/tableau-mcp-twbx-extract/` on Windows, `/tmp/tableau-mcp-twbx-extract/` on Unix) — **do NOT write to a project-relative path**, it pollutes the working tree
 4. Update TWBX zip entry via PowerShell `System.IO.Compression.ZipFile`
@@ -480,14 +480,14 @@ To hide column/row field labels (the field name header above the values):
 
 ## Dashboard XML via API — hard crash warning
 
-Submitting a dashboard element via `tableau-apply-workbook` can cause a **hard crash** in Tableau's workbook document apply path. When this happens, the workbook is left completely empty (all worksheets wiped). The apply history snapshots cannot protect against this — the crash prevents a post-apply snapshot from being saved. Use `tabdoc:undo` immediately if this occurs.
+Submitting a dashboard element via `apply-workbook` can cause a **hard crash** in Tableau's workbook document apply path. When this happens, the workbook is left completely empty (all worksheets wiped). The apply history snapshots cannot protect against this — the crash prevents a post-apply snapshot from being saved. Use `tabdoc:undo` immediately if this occurs.
 
 **This is not a soft error.** There is no recovery once it occurs.
 
 **Safe approach:**
 1. Build and verify all worksheets via API first
 2. Have the user create the dashboard manually in Tableau (drag sheets in)
-3. Inspect the result with `tableau-get-workbook` to capture the exact working XML
+3. Inspect the result with `get-workbook-xml` to capture the exact working XML
 4. Use that native-authored XML as a template for future dashboard creation
 
 **If you must attempt dashboard XML via API:** work on a separate workbook copy so that sheets are not at risk.
@@ -513,7 +513,7 @@ Use this module when you need to:
 ## Best Practices
 
 - **Always include `devicelayouts`**: Omitting the `devicelayouts` node causes all sheets to appear invisible on the dashboard. It is required even if you don't care about phone layouts.
-- **Use unique zone IDs**: Zone IDs must be unique across the entire workbook. Find the max existing ID with `tableau-get-workbook` and increment from there.
+- **Use unique zone IDs**: Zone IDs must be unique across the entire workbook. Find the max existing ID with `get-workbook-xml` and increment from there.
 - **Match zone IDs between `zones` and `devicelayouts`**: Sheet zone IDs must be identical in both the main `zones` block and the `devicelayouts/zones` block.
 - **Target zones by name, not by ID**: IDs are shared across dashboards — patching by ID modifies zones in other dashboards. Always scope modifications to a specific dashboard name.
 - **Add actions to the top-level `actions` node**: Dashboard actions are siblings of `worksheets`/`dashboards` at the workbook root — not inside the dashboard node itself.
@@ -537,31 +537,31 @@ Use this module when you need to:
 
 The recommended workflow for creating a dashboard via API:
 
-1. **Build and verify all worksheets first**: Use `tableau-apply-workbook` plus worksheet-list readback to confirm all source worksheets load correctly before attempting dashboard creation.
-2. **Have the user create the dashboard manually if possible**: Drag sheets into a dashboard in Tableau's UI, then call `tableau-get-workbook` to capture the exact native XML. Use that as a template — it is guaranteed to be valid.
+1. **Build and verify all worksheets first**: Use `apply-workbook` plus worksheet-list readback to confirm all source worksheets load correctly before attempting dashboard creation.
+2. **Have the user create the dashboard manually if possible**: Drag sheets into a dashboard in Tableau's UI, then call `get-workbook-xml` to capture the exact native XML. Use that as a template — it is guaranteed to be valid.
 3. **If building the dashboard XML manually**:
    - Assign fresh unique zone IDs (higher than any existing IDs in the workbook)
    - Include `style` → `size` → `zones` → `devicelayouts` → `simple-id` children in that order
    - Generate a new UUID for `simple-id`
    - Use the 0–100000 coordinate scale for zone positions
-4. **Submit with `tableau-apply-workbook`** and verify. If a hard crash occurs (workbook wiped), use `tabdoc:undo` immediately — the apply history snapshots cannot help here because the crash prevents the snapshot from being saved.
+4. **Submit with `apply-workbook`** and verify. If a hard crash occurs (workbook wiped), use `tabdoc:undo` immediately — the apply history snapshots cannot help here because the crash prevents the snapshot from being saved.
 5. **Verify**: List the workbook dashboards to confirm the new dashboard appears. If it timed out, check first before retrying — the dashboard may have been applied successfully.
 
 ### Preferred: Two-step dashboard creation (confirmed safe)
 
-Direct dashboard XML injection via `tableau-apply-workbook` frequently fails or crashes Tableau. A **two-step approach** using dedicated tools is safer and confirmed working:
+Direct dashboard XML injection via `apply-workbook` frequently fails or crashes Tableau. A **two-step approach** using dedicated tools is safer and confirmed working:
 
-1. **Create empty scaffold**: Call `tableau-batch-create-and-cache-sheets` with the dashboard name (and any worksheet names). This creates a minimal dashboard node with correct window pairing and applies the workbook in one step, returning cached file paths.
-2. **Populate zones**: Call `tableau-get-dashboard` to get the empty dashboard XML. Edit the cached file to add zone layout (sheet zones inside a `layout-basic` root zone, plus `devicelayouts`). Then call `tableau-apply-dashboard-with-viewpoints` with the modified file and the list of worksheet names.
+1. **Create empty scaffold**: Call `batch-create-and-cache-sheets` with the dashboard name (and any worksheet names). This creates a minimal dashboard node with correct window pairing and applies the workbook in one step, returning cached file paths.
+2. **Populate zones**: Call `get-dashboard-xml` to get the empty dashboard XML. Edit the cached file to add zone layout (sheet zones inside a `layout-basic` root zone, plus `devicelayouts`). Then call `apply-dashboard-with-viewpoints` with the modified file and the list of worksheet names.
 
-This avoids the hard crash because `tableau-batch-create-and-cache-sheets` handles the delicate dashboard/window pairing, and `tableau-apply-dashboard-with-viewpoints` handles viewpoint injection separately.
+This avoids the hard crash because `batch-create-and-cache-sheets` handles the delicate dashboard/window pairing, and `apply-dashboard-with-viewpoints` handles viewpoint injection separately.
 
-**What does NOT work reliably**: Building the complete dashboard + window XML by hand and injecting via `tableau-apply-workbook` in a single step — this is the path most likely to trigger the metadata loader crash.
+**What does NOT work reliably**: Building the complete dashboard + window XML by hand and injecting via `apply-workbook` in a single step — this is the path most likely to trigger the metadata loader crash.
 
 ## Source and Confidence
 
 - Source/evidence type: field-tested
-- Source: Dashboard zone/devicelayouts/action XML observed via tableau-get-workbook; contains confirmed-working snippets, provenance not fully attested post-IA-migration
+- Source: Dashboard zone/devicelayouts/action XML observed via get-workbook-xml; contains confirmed-working snippets, provenance not fully attested post-IA-migration
 - Customer-identifying details removed: yes
 - Confidence: needs review
 - Last reviewed: 2026-07-02

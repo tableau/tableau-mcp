@@ -11,7 +11,7 @@
 
 ## When to Use
 
-Use this after applying a dashboard — for example after `tableau-build-and-apply-dashboard` — when you want to confirm the composed layout looks right or check whether the dashboard reveals a meaningful insight in the data.
+Use this after applying a dashboard — for example after `build-and-apply-dashboard` — when you want to confirm the composed layout looks right or check whether the dashboard reveals a meaningful insight in the data.
 
 This applies to:
 

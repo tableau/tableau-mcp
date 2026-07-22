@@ -1,6 +1,6 @@
 # Workbook XML: Structure Reference
 
-Full reference for the Tableau TWB XML file saved by `tableau-get-workbook`. Use this when navigating the tree, building Python scripts, or debugging structure errors.
+Full reference for the Tableau TWB XML file saved by `get-workbook-xml`. Use this when navigating the tree, building Python scripts, or debugging structure errors.
 
 
 ---
@@ -17,12 +17,12 @@ Full reference for the Tableau TWB XML file saved by `tableau-get-workbook`. Use
 ## Workflow
 
 ```
-tableau-get-workbook        → saves cache/workbook-XXXX.xml
+get-workbook-xml        → saves cache/workbook-XXXX.xml
 edit cache/workbook-XXXX.xml (Python or shell)
-tableau-apply-workbook({ workbook_file: "cache/workbook-XXXX.xml" })
+apply-workbook({ workbook_file: "cache/workbook-XXXX.xml" })
 ```
 
-The `tableau-get-workbook` tool returns the cache file path. Pass that exact path to your Python script, save modified XML to `/tmp/modified_workbook.xml`, then submit with `tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`.
+The `get-workbook-xml` tool returns the cache file path. Pass that exact path to your Python script, save modified XML to `/tmp/modified_workbook.xml`, then submit with `apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`.
 
 ---
 
@@ -194,7 +194,7 @@ tree.write('/tmp/modified_workbook.xml', encoding='utf-8', xml_declaration=True)
 
 ```python
 tree.write('/tmp/modified_workbook.xml', encoding='utf-8', xml_declaration=True)
-# Then call: tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })
+# Then call: apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })
 ```
 
 Verify with `get_sheets_info` after submission.
@@ -235,7 +235,7 @@ For column-instances, mark encodings, and worksheet internals, see `workbook-wor
 
 - **Navigate by structure, not fragile indices**: Node order can vary; identify nodes by element name / role rather than assuming fixed child positions.
 - **Never modify preserved nodes**: `connection`, `named-connections`, `repository-location`, `datasource-relationships`, and `document-format-change-manifest` must not be changed without an explicit user request.
-- **Use a fresh workbook snapshot before every modification**: After `tableau-apply-workbook`, re-read with `tableau-get-workbook` (or file path from the tool) so you are not editing stale XML.
+- **Use a fresh workbook snapshot before every modification**: After `apply-workbook`, re-read with `get-workbook-xml` (or file path from the tool) so you are not editing stale XML.
 - **Always pair worksheet + window additions**: A new worksheet without a matching `window` entry can be dropped or invisible in Tableau.
 - **Never guess datasource IDs**: Datasource `name` values like `federated.XXXX` come from Tableau — read them from the live workbook XML.
 - **TWBX temp paths are valid**: When a `.twbx` is open, connection paths may point at OS temp folders; do not rewrite them.
@@ -256,9 +256,9 @@ For column-instances, mark encodings, and worksheet internals, see `workbook-wor
 
 Typical flow with XML on disk:
 
-1. `tableau-get-workbook` → edit the returned `.xml` path (or use `mode=inline` for small workbooks).
+1. `get-workbook-xml` → edit the returned `.xml` path (or use `mode=inline` for small workbooks).
 2. Apply structural changes following the modules above.
-3. `tableau-apply-workbook` with the modified file path.
+3. `apply-workbook` with the modified file path.
 4. Verify with worksheet/dashboard list readback.
 
 ---
@@ -287,7 +287,7 @@ Use this module when you need to:
 - Know which **nodes are safe to modify** vs. which must never be touched
 - Get the **correct XPath patterns** for navigating the tree with Python's `xml.etree.ElementTree`
 - Understand **namespace handling** for `user:` prefixed attributes
-- Know the standard **save-and-submit workflow** (`tableau-get-workbook` → modify → `tableau-apply-workbook`)
+- Know the standard **save-and-submit workflow** (`get-workbook-xml` → modify → `apply-workbook`)
 
 For chart-specific XML patterns, see the other knowledge modules (`workbook-worksheets.md`, `workbook-encodings.md`, etc.).
 
@@ -297,7 +297,7 @@ For chart-specific XML patterns, see the other knowledge modules (`workbook-work
 
 - **Never modify `connection`, `named-connections`, `document-format-change-manifest`, `repository-location`, or the `Parameters` datasource**: These nodes contain workbook metadata and live connection state. Modifying them breaks the workbook.
 - **Always register the `user:` namespace prefix** before writing: `ET.register_namespace('user', 'http://www.tableausoftware.com/xml/user')`. Otherwise `user:` attrs are written in Clark notation.
-- **Call `tableau-get-workbook` immediately before every modification**: The cached file path changes after each `tableau-apply-workbook`. Always use the freshest path.
+- **Call `get-workbook-xml` immediately before every modification**: The cached file path changes after each `apply-workbook`. Always use the freshest path.
 - **Navigate by attribute, not by index**: Element order inside `worksheets`, `datasources`, and `windows` is not guaranteed. Use `find()` with attribute predicates, not `[0]`/`[1]` indexing.
 - **Every new worksheet requires a matching `window` entry**: Missing the window entry causes workbook document apply to silently fail and the sheet to be dropped.
 
@@ -309,7 +309,7 @@ For chart-specific XML patterns, see the other knowledge modules (`workbook-work
 2. **Adding a dashboard to `worksheets`**: Dashboards belong in the `dashboards` node. Adding a dashboard to `worksheets` causes Tableau to crash on load.
 3. **Forgetting the `window` entry for a new worksheet**: This is the most common cause of "sheet disappeared after submission." Always submit worksheet + window together.
 4. **Using positional indexing to navigate the tree**: The `worksheets`, `windows`, and `datasources` elements may contain elements in any order. Always find by name attribute.
-5. **Re-using a stale cached file path**: After each `tableau-apply-workbook`, the workbook state is updated. Submitting from a stale file silently discards all intermediate changes.
+5. **Re-using a stale cached file path**: After each `apply-workbook`, the workbook state is updated. Submitting from a stale file silently discards all intermediate changes.
 
 ---
 
@@ -317,13 +317,13 @@ For chart-specific XML patterns, see the other knowledge modules (`workbook-work
 
 The standard Python workflow for any workbook modification:
 
-1. **Get the current file path**: Call `tableau-get-workbook` — returns `{ filePath, fileUrl }` pointing to the cached XML.
+1. **Get the current file path**: Call `get-workbook-xml` — returns `{ filePath, fileUrl }` pointing to the cached XML.
 2. **Parse**: `tree = ET.parse(WORKBOOK_FILE); root = tree.getroot()` — root is the `<workbook>` element.
 3. **Navigate** using `root.find('datasources')`, `root.find('worksheets')`, `root.find('windows')`, `root.find('dashboards')`.
 4. **Modify**: append, set attributes, or remove elements as needed (see other modules for specifics).
 5. **Write**: `tree.write('/tmp/modified_workbook.xml', encoding='utf-8', xml_declaration=True)`.
-6. **Submit**: `tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`.
-7. **Verify**: use worksheet-list readback or `tableau-get-workbook` to confirm changes applied.
+6. **Submit**: `apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`.
+7. **Verify**: use worksheet-list readback or `get-workbook-xml` to confirm changes applied.
 
 ## Source and Confidence
 

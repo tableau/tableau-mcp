@@ -1,6 +1,6 @@
 # Workbook XML: Adding and Refactoring Datasources
 
-Confirmed patterns for injecting, connecting, and refactoring datasources in Tableau Desktop workbooks via `tableau-apply-workbook`. All patterns validated via live `tableau-get-workbook` / `tableau-apply-workbook` observation.
+Confirmed patterns for injecting, connecting, and refactoring datasources in Tableau Desktop workbooks via `apply-workbook`. All patterns validated via live `get-workbook-xml` / `apply-workbook` observation.
 
 
 ---
@@ -9,7 +9,7 @@ Confirmed patterns for injecting, connecting, and refactoring datasources in Tab
 
 - Primary audience: Tableau agent / SE authoring XML
 - Authoring outcome improved: create, refine, troubleshoot
-- In-scope reason: Enables Claude to inject, connect, and refactor datasources via tableau-apply-workbook.
+- In-scope reason: Enables Claude to inject, connect, and refactor datasources via apply-workbook.
 - Out-of-scope risk: none
 - Tags: datasources, connections, relationships, joins, object-graph, custom-sql, tdsx, blending, data-blend, field-roles, captions, descriptions
 - Relevant user prompts/search terms: "refactor custom SQL to native tables", "multi-table relationships object-graph", "inject a tdsx datasource", "tell a data blend from a join", "how is a blend encoded in the workbook XML", "linking fields primary secondary datasource", "add a calculated field to a datasource", "set field captions and descriptions"
@@ -207,7 +207,7 @@ After refactoring, build side-by-side comparison worksheets:
 
 ## Connected datasource structure (for reference)
 
-When inspecting an existing connected datasource via `tableau-get-workbook`, the element looks like:
+When inspecting an existing connected datasource via `get-workbook-xml`, the element looks like:
 
 ```xml
 <datasource name="federated.0rogfc80n0surr1dg0o9r08ppyl0"
@@ -258,7 +258,7 @@ import zipfile, os, shutil
 
 TDSX_PATH = '<local-path>/My Tableau Repository/Datasources/MyDatasource.tdsx'
 EXTRACT_DIR = '/tmp/tdsx_extract'
-WORKBOOK_XML = 'cache/workbook-XXXX.xml'  # path from tableau-get-workbook
+WORKBOOK_XML = 'cache/workbook-XXXX.xml'  # path from get-workbook-xml
 
 # Step 1: Unzip the .tdsx
 os.makedirs(EXTRACT_DIR, exist_ok=True)
@@ -314,7 +314,7 @@ datasources_node.append(ds_element)
 wb_tree.write('/tmp/modified_workbook.xml', encoding='utf-8', xml_declaration=True)
 ```
 
-Then submit: `tableau-apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`
+Then submit: `apply-workbook({ workbook_file: "/tmp/modified_workbook.xml" })`
 
 ### Key transformation rules
 
@@ -483,7 +483,7 @@ END' />
 ## Best Practices
 
 - **Never modify `connection` or `named-connections` nodes** in an existing datasource: These contain file paths and authentication details for the live data connection.
-- **Use `tableau-list-available-fields` to find datasource IDs**: After injection or when building a new worksheet, call this tool to get the current datasource names (`federated.XXXX`) — never guess them.
+- **Use `list-available-fields` to find datasource IDs**: After injection or when building a new worksheet, call this tool to get the current datasource names (`federated.XXXX`) — never guess them.
 - **Set `caption` for readability**: The `caption` attribute controls the display name shown in Tableau's Data pane.
 - **Set descriptions for generated fields**: Carry forward source metadata comments when available; otherwise add high-confidence descriptions that explain meaning, calculation, source, and appropriate use.
 - **Keep identifiers as dimensions**: Numeric IDs and keys are non-additive dimensions unless the user explicitly asks for a generated measure such as `COUNTD([Match ID])`.
@@ -500,7 +500,7 @@ END' />
 1. **Using `<relation type='text'>` (custom SQL) when native tables would work**: Custom SQL blocks Tableau's query optimizer, hides the data model from users, and prevents relationship-based joins. Use native tables with `<object-graph>` relationships.
 2. **Omitting `<object-id>` in metadata-records for multi-table datasources**: Causes columns to bind to the wrong logical table.
 3. **Omitting the `<object-graph>` entirely**: Without it, Tableau doesn't know about the logical model and tables appear disconnected.
-4. **Re-using a stale file path**: After each `tableau-apply-workbook`, call `tableau-get-workbook` immediately before any further modification.
+4. **Re-using a stale file path**: After each `apply-workbook`, call `get-workbook-xml` immediately before any further modification.
 5. **Not patching `dbname` for extracted `.hyper` files**: The `.tds` file contains the original file path which may not exist on the current machine.
 6. **Injecting a published datasource (sqlproxy) programmatically**: Not supported — requires user action (Data > New Data Source > On a Server).
 7. **Placing `<column>` elements after `<object-graph>`**: Tableau silently ignores them. They must appear before `<semantic-values>` and `<object-graph>`.
@@ -511,7 +511,7 @@ END' />
 
 ### Refactoring custom SQL to native tables
 
-1. Call `tableau-get-workbook(mode=file)` to get the current workbook XML.
+1. Call `get-workbook-xml(mode=file)` to get the current workbook XML.
 2. Read the custom SQL from `<relation type='text'><![CDATA[...]]>` to identify tables, joins, and computed columns.
 3. Build a new `<datasource>` node with:
    - `<connection class='federated'>` wrapping a `<named-connection>` to the database
@@ -520,8 +520,8 @@ END' />
    - `<object-graph>` with `<objects>` and `<relationships>` defining joins
 4. Add `<column>` elements with `<calculation>` for any SQL-computed columns (aggregations → LOD expressions, CASE → IF/THEN).
 5. Insert the new datasource into the workbook's `<datasources>` node.
-6. Write to a cache file and submit via `tableau-apply-workbook(mode=file)`.
-7. Verify with `tableau-list-available-fields` and build validation worksheets.
+6. Write to a cache file and submit via `apply-workbook(mode=file)`.
+7. Verify with `list-available-fields` and build validation worksheets.
 
 ### Injecting a local `.tdsx` datasource
 
@@ -529,22 +529,22 @@ END' />
 2. Parse the `.tds` directly with `xml.etree.ElementTree`.
 3. Apply transformations: delete `source-platform`/`xmlns:user`, set `caption`, patch `dbname`, remove `document-format-change-manifest`.
 4. Insert into the workbook's `<datasources>` node.
-5. Write to cache file and submit via `tableau-apply-workbook(mode=file)`.
-6. Call `tableau-list-available-fields` to verify.
+5. Write to cache file and submit via `apply-workbook(mode=file)`.
+6. Call `list-available-fields` to verify.
 
 ---
 
 ## Limitations and open questions
 
 - **Published datasources (sqlproxy):** Programmatic injection of a published datasource connection has not been confirmed. The `list_published_datasources` tool can discover them, but connecting requires user action.
-- **Field enumeration:** After injection, individual field metadata is visible in Tableau's UI but `tableau-list-available-fields` may not enumerate all fields until a worksheet uses the datasource.
+- **Field enumeration:** After injection, individual field metadata is visible in Tableau's UI but `list-available-fields` may not enumerate all fields until a worksheet uses the datasource.
 - **NTILE / window functions:** Tableau has no direct equivalent of SQL `NTILE()`. Use rank-based range mapping with `{FIXED: MIN/MAX}` to approximate quintile scoring.
 - **Temp paths:** Extracted `.hyper` file paths are temporary — if `/tmp` is cleared, the connection breaks.
 
 ## Source and Confidence
 
 - Source/evidence type: field-tested
-- Source: Live tableau-get-workbook / tableau-apply-workbook round-trip capture
+- Source: Live get-workbook-xml / apply-workbook round-trip capture
 - Customer-identifying details removed: yes
 - Confidence: field-tested
 - Last reviewed: 2026-07-03

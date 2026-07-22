@@ -22,7 +22,7 @@ Consult this file whenever you are:
   or multi-measure rows/cols)
 - Customising mark class per axis (e.g. bar + line combo charts)
 - Diagnosing "wrong axis" bugs where a mark encoding lands on the wrong pane
-- Writing pane XML from scratch after `tableau-apply-worksheet` round-trips
+- Writing pane XML from scratch after `apply-worksheet` round-trips
 
 ## Best Practices
 
@@ -274,7 +274,7 @@ This file is a technical XML reference, not authoring guidance. Do not apply the
 ## Source and Confidence
 
 - Source/evidence type: field-tested
-- Source: Empirical XML injection + round-trip inspection via `tableau-apply-worksheet` / `tableau-get-worksheet`, Tableau Desktop, Sample - Superstore datasource
+- Source: Empirical XML injection + round-trip inspection via `apply-worksheet` / `get-worksheet-xml`, Tableau Desktop, Sample - Superstore datasource
 - Customer-identifying details removed: yes
 - Confidence: field-tested
 - Last reviewed: 2026-06-25

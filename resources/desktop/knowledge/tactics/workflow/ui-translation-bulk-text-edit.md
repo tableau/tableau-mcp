@@ -17,8 +17,8 @@ Use this when a user asks to translate — or bulk-rewrite — all visible text 
 
 ### The three text layers
 
-1. **Dashboard zones** — static `<text>` zones and button `<caption>` elements, in each dashboard's XML (via `tableau-get-dashboard`). **Safe to edit directly.**
-2. **Worksheet on-canvas text** — `<customized-label>` (chart captions) and `<customized-tooltip>` (hover text) inside each worksheet's `<pane>` (via `tableau-get-worksheet`). **Safe to edit directly.**
+1. **Dashboard zones** — static `<text>` zones and button `<caption>` elements, in each dashboard's XML (via `get-dashboard-xml`). **Safe to edit directly.**
+2. **Worksheet on-canvas text** — `<customized-label>` (chart captions) and `<customized-tooltip>` (hover text) inside each worksheet's `<pane>` (via `get-worksheet-xml`). **Safe to edit directly.**
 3. **Calculated-field / parameter captions and descriptions** — the `<column caption="...">` attributes and their `<desc>` formula-documentation blocks. This is the **data-dictionary layer**. Editing a `caption` renames the field everywhere it is referenced (every tooltip, legend, and Analysis-pane entry that names it). **Not a cosmetic edit — flag, do not translate silently.**
 
 ### Split-run coordination (German compounds)
@@ -54,7 +54,7 @@ Layer 3 (calculated-field / parameter `caption` + `<desc>`) is **refuse-first**.
 
 ### Prefer per-worksheet round-trips (W61)
 
-For text edits, work **one worksheet/dashboard at a time**: `tableau-get-worksheet` → edit the matched runs → `tableau-apply-worksheet`. Do **not** pull or re-apply the whole workbook to change tooltip/label text. Per-object round-trips keep the `<datasources>` block out of the edit path (a whole-workbook apply can silently collapse a datasource on an unrelated change) and keep only the object you are editing in context. The W61 cache-slice tools do these per-object round-trips without holding whole-workbook XML; `splice-write` validates the outer tag + name so exact-tag replacement is protected mechanically.
+For text edits, work **one worksheet/dashboard at a time**: `get-worksheet-xml` → edit the matched runs → `apply-worksheet`. Do **not** pull or re-apply the whole workbook to change tooltip/label text. Per-object round-trips keep the `<datasources>` block out of the edit path (a whole-workbook apply can silently collapse a datasource on an unrelated change) and keep only the object you are editing in context. The W61 cache-slice tools do these per-object round-trips without holding whole-workbook XML; `write-cached-xml` validates the cached object so exact-tag replacement is protected mechanically.
 
 The safe text-bearing shapes look like this:
 
@@ -91,15 +91,15 @@ The safe text-bearing shapes look like this:
 Translate matched runs/captions with **exact-tag replacement** (not loose text search), apply back **per worksheet**, then verify before moving on:
 
 ```
-1. tableau-get-worksheet         → read this worksheet's XML
+1. get-worksheet-xml          → read this worksheet's XML
 2. replace matched <run>/<customized-*> text (exact literal, umlauts, loanwords kept)
-3. tableau-apply-worksheet       → apply THIS worksheet only
+3. apply-worksheet           → apply THIS worksheet only
 4. worksheet-list readback    → confirm the sheet set is intact
-5. tableau-check-user-changes    → confirm nothing else moved/broke
+5. check-for-user-changes    → confirm nothing else moved/broke
 6. only then advance to the next worksheet/dashboard
 ```
 
-If `tableau-check-user-changes` shows an unexpected change, stop and reconcile before the next object — do not batch forward through a dirty state.
+If `check-for-user-changes` shows an unexpected change, stop and reconcile before the next object — do not batch forward through a dirty state.
 
 ## Related Knowledge
 

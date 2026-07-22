@@ -1,6 +1,6 @@
 # Tableau Date Handling in Workbook XML
 
-Confirmed patterns for date fields, date truncation, fiscal year offsets, custom date calculations, and DATEPARSE in Tableau workbook XML. All patterns validated via `tableau-get-workbook` observation.
+Confirmed patterns for date fields, date truncation, fiscal year offsets, custom date calculations, and DATEPARSE in Tableau workbook XML. All patterns validated via `get-workbook-xml` observation.
 
 **Core principle: prefer native date derivations over calculated fields.** Tableau's column-instance derivation system (`yr:`, `wk:`, `tmn:`, etc.) covers the vast majority of date granularity needs — year, quarter, month, week, day, hour — with a single CI and no calculated field. Native derivations produce correct labels automatically, participate in Tableau's date hierarchy, and keep the datasource clean. Only reach for a `DATEPART`/`DATEADD` calculated field when the derivation system genuinely can't express what you need (e.g. day-of-year integers for a cross-year overlay axis).
 
@@ -76,7 +76,7 @@ Use this module when you need to:
 
 ### Workflow for adding a date to a shelf
 
-1. Identify the column's internal name via `tableau-list-available-fields`.
+1. Identify the column's internal name via `list-available-fields`.
 2. If going on Columns, default to continuous unless discrete headers are explicitly needed.
 3. Add a `column-instance` to `datasource-dependencies` with correct `name`, `derivation`, `pivot="key"`, and `type`.
 4. Reference the CI on the shelf: `[datasourceId].[ci-name]`.
@@ -142,7 +142,7 @@ The `add-field` tool may write the CI prefix as the `derivation` attribute (e.g.
 ## Source and Confidence
 
 - Source/evidence type: field-tested
-- Source: Tableau workbook XML inspection via `tableau-get-workbook`, SE team field experience
+- Source: Tableau workbook XML inspection via `get-workbook-xml`, SE team field experience
 - Customer-identifying details removed: yes
 - Confidence: draft
 - Last reviewed: 2026-05-05

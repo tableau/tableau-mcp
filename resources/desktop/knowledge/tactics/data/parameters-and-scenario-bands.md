@@ -143,7 +143,7 @@ The `Forecast Indicator` field is a calc that returns `"Actual"` for observed ro
 - Runtime visibility: server-side-only
 - Version binding: twb 2026.1.0
 - Customer customization allowed: no
-- Tool/API dependency: `tableau-apply-worksheet`, `tableau-apply-workbook`
+- Tool/API dependency: `apply-worksheet`, `apply-workbook`
 - Eval candidate: yes
 - Eval coverage: none
 - Promotion target: authoring-expertise

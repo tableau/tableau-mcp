@@ -170,7 +170,7 @@ Tableau reorders `column-instance` elements alphabetically by CI name. Submissio
 
 ### Column metadata is corrected on round-trip
 
-If submitted `<column>` attributes (`datatype`, `type`, `semantic-role`) don't match the datasource's knowledge of the field, Tableau silently corrects them. Use `tableau-list-available-fields` to get correct metadata rather than guessing.
+If submitted `<column>` attributes (`datatype`, `type`, `semantic-role`) don't match the datasource's knowledge of the field, Tableau silently corrects them. Use `list-available-fields` to get correct metadata rather than guessing.
 
 ## When to Say No
 
@@ -179,7 +179,7 @@ This file is a technical XML reference, not authoring guidance. Do not apply the
 ## Source and Confidence
 
 - Source/evidence type: field-tested
-- Source: Empirical XML injection + round-trip inspection via `tableau-apply-worksheet` / `tableau-get-worksheet`, Tableau Desktop, Sample - Superstore datasource
+- Source: Empirical XML injection + round-trip inspection via `apply-worksheet` / `get-worksheet-xml`, Tableau Desktop, Sample - Superstore datasource
 - Customer-identifying details removed: yes
 - Confidence: field-tested
 - Last reviewed: 2026-06-25

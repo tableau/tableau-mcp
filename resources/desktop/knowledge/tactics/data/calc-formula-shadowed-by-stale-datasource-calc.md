@@ -63,7 +63,7 @@ RIGHT — namespace the template's own calc names per apply (dataset fields unto
      other dataset fields are NEVER renamed; the caption stays 'Actual Score'. -->
 ```
 
-The substitution layer does this automatically: `replaceFieldReferences` (`src/server/tools/templates.ts`) rewrites every template-internal calc name — column def, column-instances, color/size encodings, and self-referencing formula bodies — while leaving dataset-bound fields and captions alone. It is **default-on** for the `tableau-inject-template` apply path; opt out with `namespace_template_calcs: false` only after de-colliding the names yourself.
+The substitution layer does this automatically: `replaceFieldReferences` (`src/server/tools/templates.ts`) rewrites every template-internal calc name — column def, column-instances, color/size encodings, and self-referencing formula bodies — while leaving dataset-bound fields and captions alone. It is **default-on** for the `inject-template` apply path; opt out with `namespace_template_calcs: false` only after de-colliding the names yourself.
 
 ## Related Knowledge
 

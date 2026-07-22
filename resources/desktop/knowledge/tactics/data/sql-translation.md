@@ -177,7 +177,7 @@ The general workflow for translating a SQL view into Tableau:
 2. **Pick the right Tableau primitive per column.** Use the tables above. Default rule: `GROUP BY` → FIXED LOD; `OVER (...)` → table calc; scalar → scalar function; `CASE` → `IF/ELSEIF/ELSE`.
 3. **Author the calc field as a `<column>` with `<calculation>` child** in the data datasource. Use a `[Calculation_<digits>]` internal name and put the SQL-derived label in `caption`.
 4. **Mirror the column def + a `<column-instance>` in each worksheet's `<datasource-dependencies>`** that uses the new calc. Aggregate calcs need `derivation="User"` and the `usr:` CI prefix.
-5. **Apply with `tableau-apply-workbook`** and verify with `tableau-get-workbook` and `tableau-list-available-fields`. If the field shows red in the Data pane after apply, check (a) the column `name` is in `[Calculation_<digits>]` form, (b) all referenced fields exist in the worksheet's `datasource-dependencies`, (c) the formula is using internal names rather than captions.
+5. **Apply with `apply-workbook`** and verify with `get-workbook-xml` and `list-available-fields`. If the field shows red in the Data pane after apply, check (a) the column `name` is in `[Calculation_<digits>]` form, (b) all referenced fields exist in the worksheet's `datasource-dependencies`, (c) the formula is using internal names rather than captions.
 6. **For round-trip-stability concerns** (formulas getting rewritten by Tableau on save), see `expertise://tableau/tactics/data/round-trip-normalization`.
 
 ## Source and Confidence
