@@ -58,6 +58,7 @@ const EXPECTED_ELIGIBLE = [
   'slope-chart', // W63 render-stamp port: live-2026-07-13
   'spatial-choropleth-map',
   'spatial-symbol-map',
+  'spatial-symbol-map-latlon',
   'trend-line-chart',
   'ww-ou-arrow',
 ].sort();
@@ -197,7 +198,7 @@ const PINNED_PROPOSE: ReadonlyArray<readonly [ask: string, note: string]> = [
 ];
 
 describe('binder/bind-behavior-matrix — eligibility tripwire', () => {
-  it('the eligible set is exactly the 20 render-verified templates this matrix covers', () => {
+  it('the eligible set is exactly the render-verified templates this matrix covers', () => {
     // If a NEW template is stamped fast_path_eligible, this fails — extend the matrix
     // (add its one-shot / discover-and-pin entry) deliberately rather than under-cover it.
     expect(eligibleNames).toEqual(EXPECTED_ELIGIBLE);

@@ -1,12 +1,12 @@
 {
   "template": "spatial-symbol-map-latlon",
   "family": "spatial",
-  "readiness": "YELLOW",
-  "fast_path_eligible": false,
+  "readiness": "GREEN",
+  "fast_path_eligible": true,
   "fast_path_blockers": [],
   "portability_evidence": {
     "fixture_bind": true,
-    "render_verified": "none"
+    "render_verified": "live-2026-07-22"
   },
   "datasource_placeholder": true,
   "placeholders": [
@@ -26,7 +26,7 @@
     "spatial",
     "map"
   ],
-  "description": "A real latitude/longitude point symbol map: Longitude and Latitude measure columns are placed on Cols/Rows as AVG continuous axes, one fixed-size, single-color Circle mark per detail dimension member. Measure-free (a static symbol map — no size/color encoding). Use for datasets that already carry real coordinate columns rather than Tableau-generated geocoding fields, when you just want to plot WHERE things are (e.g. office locations) without encoding a magnitude.",
+  "description": "A real latitude/longitude point symbol map: Longitude and Latitude measure columns are placed on Cols/Rows as AVG continuous axes, one fixed-size, single-color Circle mark per detail dimension member. Measure-free (a static symbol map \u2014 no size/color encoding). Use for datasets that already carry real coordinate columns rather than Tableau-generated geocoding fields, when you just want to plot WHERE things are (e.g. office locations) without encoding a magnitude.",
   "slots": [
     {
       "slot_id": "longitude",
@@ -74,14 +74,14 @@
       "kind": "geo",
       "bindable": true,
       "required": false,
-      "notes": "Second grain dimension as [none:Detail2:nk]. OPTIONAL: bound when the data has a second non-coordinate dimension so no marks collapse (e.g. pm_name AND city — 26 offices stay 26 marks, not per-city AVG-centroids). When the data has only ONE dimension this slot is UNBOUND and pruned (bindable && !required && kind:'geo' && role:['lod'] — the exact optionalFieldPrunesFor predicate). Data with 3+ non-coordinate dims exceeds this template's capacity and fails closed to propose (dropping a dim would re-collapse marks)."
+      "notes": "Second grain dimension as [none:Detail2:nk]. OPTIONAL: bound when the data has a second non-coordinate dimension so no marks collapse (e.g. pm_name AND city \u2014 26 offices stay 26 marks, not per-city AVG-centroids). When the data has only ONE dimension this slot is UNBOUND and pruned (bindable && !required && kind:'geo' && role:['lod'] \u2014 the exact optionalFieldPrunesFor predicate). Data with 3+ non-coordinate dims exceeds this template's capacity and fails closed to propose (dropping a dim would re-collapse marks)."
     }
   ],
   "calcs": [],
   "hazards": [
     {
       "code": "coordinate-slot-affinity",
-      "detail": "CLOSED: a dedicated coordinate-affinity resolver in classify.ts (resolveLatLonSymbolMap) binds longitude→cols / latitude→rows by field-NAME affinity, never generic role-greedy quant order, and fails closed on any ambiguity. The axis-swap regression is locked by the mandatory reversed-schema-order test in binder.test.ts (Blake wall #2). The generic role-greedy path is bypassed for this template.",
+      "detail": "CLOSED: a dedicated coordinate-affinity resolver in classify.ts (resolveLatLonSymbolMap) binds longitude\u2192cols / latitude\u2192rows by field-NAME affinity, never generic role-greedy quant order, and fails closed on any ambiguity. The axis-swap regression is locked by the mandatory reversed-schema-order test in binder.test.ts (Blake wall #2). The generic role-greedy path is bypassed for this template.",
       "xml": "spatial-symbol-map-latlon.xml:rows-cols"
     },
     {

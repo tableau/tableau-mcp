@@ -63,6 +63,7 @@ const EXPECTED_ELIGIBLE = [
   'slope-chart',
   'spatial-choropleth-map',
   'spatial-symbol-map',
+  'spatial-symbol-map-latlon',
   'trend-line-chart',
   'ww-ou-arrow',
 ].sort();
@@ -255,6 +256,13 @@ const SAAS_ASKS: Ask[] = [
     mayBind: null,
     pinned: 'not-bound',
     note: 'GEO REFUSAL #3: symbol map is stamped but SaaS Region Name is not geocodable',
+  },
+  {
+    ask: 'map of the office locations',
+    targets: 'spatial-symbol-map-latlon',
+    mayBind: null,
+    pinned: 'not-bound',
+    note: 'GEO REFUSAL #4: the measure-free lat/long symbol map is render-stamped eligible (Blake wall #2), but the SaaS fixture carries no latitude/longitude columns, so resolveLatLonSymbolMap fails closed. Its confident-bind coverage lives in binder.test.ts against a real-coordinate fixture (N=3 live-proven).',
   },
   {
     ask: 'connected scatterplot of ARR vs Seats by Account Name colored by Industry',
@@ -525,7 +533,7 @@ function isWrongBind(row: Ask, r: BinderResult): boolean {
 }
 
 describe('portability/invariant — fixture & eligibility tripwires', () => {
-  it('the eligible set is exactly the 20 render-verified templates this suite covers', () => {
+  it('the eligible set is exactly the render-verified templates this suite covers', () => {
     // If a NEW template is stamped fast_path_eligible, this fails — extend the fixtures
     // with a natural ask targeting it (discover-and-pin) rather than under-covering.
     expect(eligibleNames).toEqual(EXPECTED_ELIGIBLE);

@@ -285,17 +285,22 @@ describe('binder/classifyNoLlm — measure-free lat/long symbol map (Blake wall 
     expect(classifyNoLlm('Build me a Tableau map of the office locations', forced, s)).toBeNull();
   });
 
-  it('stays gated OFF in production: the committed (un-forced) manifest never binds it', () => {
-    // fast_path_eligible is false + render_verified 'none' on the committed manifest, so
-    // the resolver is dormant and a lat/lon "map" ask falls through to propose. The
-    // orchestrator flips the flag only after a live render-stamp.
+  it('is LIVE in production: the committed manifest is render-stamped eligible and binds the office-map ask', () => {
+    // Render-stamped 2026-07-22 (live sing of the office-location ask, N=3: 16.3s/8.5s/14.7s,
+    // all confident single-BIND, judge 86). The committed manifest carries fast_path_eligible
+    // true + render_verified live-2026-07-22, so the resolver fires against the UN-forced
+    // manifest set — no test-only forcing needed anymore.
+    expect(manifests.get(LATLON)!.fast_path_eligible).toBe(true);
+    expect(manifests.get(LATLON)!.portability_evidence.render_verified).toBe('live-2026-07-22');
     const s = summarizeSchema(LATLON_WORKBOOK_XML);
-    expect(
-      classifyNoLlm('Build me a Tableau map of the office locations', manifests, s),
-    ).toBeNull();
-    // And a direct proposal is refused by the downstream eligibility gate.
-    expect(manifests.get(LATLON)!.fast_path_eligible).toBe(false);
-    expect(manifests.get(LATLON)!.portability_evidence.render_verified).toBe('none');
+    const cls = classifyNoLlm('Build me a Tableau map of the office locations', manifests, s);
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe(LATLON);
+    const detailFields = cls!.bindings
+      .filter((b) => b.slot_id.startsWith('detail'))
+      .map((b) => b.field)
+      .sort();
+    expect(detailFields).toEqual(['city', 'pm_name']);
   });
 
   it('does NOT hijack a plain geocoded map ask (no coordinate/point-location intent → generic path)', () => {
