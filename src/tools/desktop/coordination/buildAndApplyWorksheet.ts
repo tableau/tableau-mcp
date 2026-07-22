@@ -438,11 +438,19 @@ export const getBuildAndApplyWorksheetTool = (
               explicitBind.templateSlots,
               'measure',
             );
+            // One consumed ref satisfies one request: claim each ref as it
+            // matches so a duplicated requested field can't double-report as
+            // applied when the binder consumed it once.
+            const unclaimedConsumedRefs = new Set(consumedFieldRefs);
             appliedResolvedFields = supportedResolvedFields.filter((resolution) =>
-              consumedFieldRefs.has(resolution.columnRef),
+              unclaimedConsumedRefs.delete(resolution.columnRef),
             );
+            const appliedResolutionSet = new Set(appliedResolvedFields);
             for (const dropped of supportedResolvedFields) {
-              if (consumedFieldRefs.has(dropped.columnRef)) continue;
+              // Membership in the CLAIMED applied set, not the raw consumed-ref
+              // set — a duplicated request whose ref was consumed once must
+              // surface as dropped, not silently vanish.
+              if (appliedResolutionSet.has(dropped)) continue;
               droppedRequestedFields.push(dropped.requested);
               if (dropped.field.role === 'dimension') {
                 warnings.push(

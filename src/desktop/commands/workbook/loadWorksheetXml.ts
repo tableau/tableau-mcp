@@ -343,7 +343,19 @@ async function loadWorksheetXmlViaExternalApi({
         level: 'warning',
         message: 'Constructed worksheet apply document has non-blocking validation findings',
         logger: 'worksheetCommands',
-        data: { worksheetName, issues: workbookWarningIssues },
+        data: {
+          worksheetName,
+          warningCount: workbookWarningIssues.length,
+          // Capped + sanitized: validation messages can quote field names and
+          // XML context, so never log the unbounded raw array.
+          issues: sanitize(
+            workbookWarningIssues.slice(0, 5).map((issue) => ({
+              ruleId: issue.ruleId,
+              severity: issue.severity,
+              message: issue.message.slice(0, 200),
+            })),
+          ),
+        },
       });
     }
 
