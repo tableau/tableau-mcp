@@ -73,6 +73,17 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(plainChart?.action).toContain('proposals may carry sort and top_n.');
   });
 
+  it('requires a populated worksheet and makes no-data summary outcomes terminal', () => {
+    const dataValueQuestion = routes.find((route) => route.id === 'data-value-question');
+
+    expect(dataValueQuestion).toMatchObject({
+      action:
+        'on a populated worksheet, call get-summary-data once; answer only from returned rows. Any terminal/no-data result means stop; say so and offer to build a viz.',
+      stopConditions: ['Any terminal/no-data result means stop'],
+      requiredEvidence: ['get-summary-data returned rows or a terminal reason'],
+    });
+  });
+
   it('names the debug skill by its exact slug so recovery does not rely on description-matching', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
     expect(rendered).toContain('tableau-agent-debug');

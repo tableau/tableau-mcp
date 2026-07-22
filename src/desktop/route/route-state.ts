@@ -102,6 +102,10 @@ export interface UnprotectedPassthroughs {
   last_asks: string[];
 }
 
+export interface SummaryDataRequestRecord {
+  lastSeenAt: number;
+}
+
 /**
  * The MOST RECENT ask bind-template classified for this session (most-recent-ask-wins).
  * `last_outcome` is null between classification and the concluded bind-template outcome.
@@ -127,6 +131,8 @@ export interface SessionRouteState {
   route_overrides: RouteOverride[];
   /** Bounded per-ask bind recovery records, keyed by the same normalized ask as current_ask. */
   bindRecoveryByAsk: Map<string, BindRecoveryRecord>;
+  /** Recent get-summary-data signatures used to terminally block same-argument polling. */
+  summaryDataRequests: Map<string, SummaryDataRequestRecord>;
   /** Capacity-rejected bind admissions that intentionally proceeded unprotected. */
   unprotected_passthroughs: UnprotectedPassthroughs;
   /** Most recent bind-template ask classification for this session, if any. */
@@ -240,6 +246,10 @@ export class SessionRouteStateStore {
   /** Per-session LRU cap for bind recovery records. */
   static readonly MAX_BIND_RECOVERY_ASKS = 8;
 
+  /** Per-session LRU cap and repeat horizon for get-summary-data argument signatures. */
+  static readonly MAX_SUMMARY_DATA_SIGNATURES = 8;
+  static readonly SUMMARY_DATA_REPEAT_WINDOW_MS = 30_000;
+
   /** Receipt cap for capacity-rejected asks. */
   static readonly MAX_UNPROTECTED_PASSTHROUGH_ASKS = 4;
 
@@ -251,6 +261,7 @@ export class SessionRouteStateStore {
         deflections: [],
         route_overrides: [],
         bindRecoveryByAsk: new Map(),
+        summaryDataRequests: new Map(),
         unprotected_passthroughs: { count: 0, last_asks: [] },
       };
       this.bySession.set(sessionId, state);
@@ -311,6 +322,30 @@ export class SessionRouteStateStore {
   get(sessionId: string | undefined): SessionRouteState | undefined {
     if (!sessionId) return undefined;
     return this.bySession.get(sessionId);
+  }
+
+  /**
+   * Atomically records a get-summary-data argument signature and reports whether it was seen
+   * recently in the same Desktop session. Repeats refresh recency so a polling spiral remains
+   * terminal; expired signatures are admitted as a new ask.
+   */
+  isSummaryDataRepeat(sessionId: string | undefined, signature: string, now = Date.now()): boolean {
+    if (!sessionId) return false;
+    const state = this.ensure(sessionId);
+    const previous = state.summaryDataRequests.get(signature);
+    const isRepeat =
+      previous !== undefined &&
+      now - previous.lastSeenAt <= SessionRouteStateStore.SUMMARY_DATA_REPEAT_WINDOW_MS;
+
+    state.summaryDataRequests.delete(signature);
+    state.summaryDataRequests.set(signature, { lastSeenAt: now });
+    while (state.summaryDataRequests.size > SessionRouteStateStore.MAX_SUMMARY_DATA_SIGNATURES) {
+      const oldest = state.summaryDataRequests.keys().next().value;
+      if (oldest === undefined) break;
+      state.summaryDataRequests.delete(oldest);
+    }
+
+    return isRepeat;
   }
 
   /**

@@ -127,6 +127,45 @@ describe('SessionRouteStateStore', () => {
     expect(store.hasDeflection('S1', `ask-${cap + 2}`)).toBe(true);
   });
 
+  describe('summary-data repeat state', () => {
+    it('blocks the second and third identical signature inside the repeat window', () => {
+      const store = new SessionRouteStateStore();
+
+      expect(store.isSummaryDataRepeat('S1', 'signature-a', 1_000)).toBe(false);
+      expect(store.isSummaryDataRepeat('S1', 'signature-a', 2_000)).toBe(true);
+      expect(store.isSummaryDataRepeat('S1', 'signature-a', 3_000)).toBe(true);
+    });
+
+    it('allows the same signature after the repeat window expires', () => {
+      const store = new SessionRouteStateStore();
+
+      expect(store.isSummaryDataRepeat('S1', 'signature-a', 1_000)).toBe(false);
+      expect(
+        store.isSummaryDataRepeat(
+          'S1',
+          'signature-a',
+          1_000 + SessionRouteStateStore.SUMMARY_DATA_REPEAT_WINDOW_MS + 1,
+        ),
+      ).toBe(false);
+    });
+
+    it('keeps signatures session-scoped and LRU-bounded', () => {
+      const store = new SessionRouteStateStore();
+      const cap = SessionRouteStateStore.MAX_SUMMARY_DATA_SIGNATURES;
+
+      expect(store.isSummaryDataRepeat(undefined, 'signature-a', 1_000)).toBe(false);
+      expect(store.isSummaryDataRepeat('S1', 'shared', 1_000)).toBe(false);
+      expect(store.isSummaryDataRepeat('S2', 'shared', 1_000)).toBe(false);
+
+      for (let i = 0; i < cap + 1; i++) {
+        expect(store.isSummaryDataRepeat('S1', `signature-${i}`, 2_000 + i)).toBe(false);
+      }
+
+      expect(store.get('S1')?.summaryDataRequests.size).toBe(cap);
+      expect(store.isSummaryDataRepeat('S1', 'signature-0', 3_000)).toBe(false);
+    });
+  });
+
   describe('current ask classification state', () => {
     it('recordAskClassification lazy-inits state and sets current_ask with a pending outcome', () => {
       const store = new SessionRouteStateStore();
