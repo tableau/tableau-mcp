@@ -108,6 +108,30 @@ function hasZoneNamed(node: unknown, title: string): boolean {
 }
 
 /**
+ * Classify a worksheet name as an in-place replace target. 'replaceable' means
+ * removeSameNamedWorksheet will actually swap it (its fail-safes won't defer):
+ * 'in-dashboard' would silently corrupt the dashboard, so callers must refuse
+ * rather than let Desktop dedup the inject into a stray "Name (1)" copy.
+ * Unparseable XML reports 'not-found' — downstream parses surface the real error.
+ */
+export function classifyWorksheetReplaceTarget(
+  workbookXml: string,
+  name: string,
+): 'replaceable' | 'in-dashboard' | 'not-found' {
+  let workbook: ParsedWorkbook;
+  try {
+    workbook = parseXML(workbookXml);
+  } catch {
+    return 'not-found';
+  }
+  const worksheets = normalizeArray<ParsedWorksheet>(workbook.workbook?.worksheets?.worksheet);
+  if (!worksheets.some((ws) => ws?.['@_name'] === name)) {
+    return 'not-found';
+  }
+  return hasZoneNamed(workbook, name) ? 'in-dashboard' : 'replaceable';
+}
+
+/**
  * Remove every existing same-named worksheet (and worksheet-class window entry) so a
  * re-inject REPLACES the sheet instead of Desktop deduplicating it to "Name (1)" (W60:
  * repeat demo asks piled up suffixed copies). STRUCTURAL (parse → filter → serialize

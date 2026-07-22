@@ -33,11 +33,14 @@ import {
 } from '../../../desktop/refine/refineWorksheet.js';
 import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
-import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
+import {
+  buildInjectedWorkbookXml,
+  classifyWorksheetReplaceTarget,
+} from '../../../desktop/templates/injectTemplateCore.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { ExecuteCommandError, ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { decodeXmlEntities } from '../../../desktop/xmlElement.js';
-import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
+import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import {
@@ -65,6 +68,12 @@ const paramsSchema = {
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
   auto_apply: z.boolean().optional().describe('Apply on bound; default false.'),
+  target_worksheet: z
+    .string()
+    .optional()
+    .describe(
+      'Replace this EXISTING sheet in place (edit-the-open-sheet asks); omit to create a new sheet.',
+    ),
   calcs: z
     .array(
       z.object({
@@ -698,12 +707,12 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
       idempotentHint: true,
     },
     callback: async (
-      { session, ask, proposal, minConfidence, auto_apply, calcs },
+      { session, ask, proposal, minConfidence, auto_apply, target_worksheet, calcs },
       extra,
     ): Promise<CallToolResult> => {
       return await bindTemplateTool.logAndExecute<BindTemplateToolResult>({
         extra,
-        args: { session, ask, proposal, minConfidence, auto_apply, calcs },
+        args: { session, ask, proposal, minConfidence, auto_apply, target_worksheet, calcs },
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -793,6 +802,26 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               /* fail-open */
             }
           }
+          // ── Target-worksheet gate (e1/s7 stray-sheet class) ──────────
+          // Validated BEFORE the bind and for BOTH modes (auto-apply and the manual
+          // chain): an explicit target must be provably replaceable — a missing name
+          // or a dashboard-member sheet would make removeSameNamedWorksheet defer and
+          // Desktop dedup the inject into a stray "Name (1)" copy, the exact failure
+          // this parameter exists to prevent.
+          if (target_worksheet !== undefined) {
+            const target = classifyWorksheetReplaceTarget(workbookXml, target_worksheet);
+            if (target === 'not-found') {
+              return new ArgsValidationError(
+                `target_worksheet "${target_worksheet}" not found in the workbook — check list-worksheets, or omit target_worksheet to create a new sheet`,
+              ).toErr();
+            }
+            if (target === 'in-dashboard') {
+              return new ArgsValidationError(
+                `target_worksheet "${target_worksheet}" is a dashboard member sheet — replacing it in place could corrupt the dashboard; omit target_worksheet to create a new sheet`,
+              ).toErr();
+            }
+          }
+
           let res;
           try {
             res = await bindTemplate({
@@ -812,6 +841,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               /* fail-open */
             }
             throw e;
+          }
+          if (target_worksheet !== undefined && res.status === 'bound') {
+            res = { ...res, args: { ...res.args, title: target_worksheet } };
           }
           try {
             sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);

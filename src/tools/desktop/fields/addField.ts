@@ -52,7 +52,7 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
     name: 'add-field',
     title,
     description:
-      'Place a field on a shelf (rows/cols/encoding) — the manual build path when no template binds.',
+      'Place a field on a shelf (rows/cols/encoding); the manual path when no template binds.',
     paramsSchema,
     annotations: {
       title,

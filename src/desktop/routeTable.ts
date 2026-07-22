@@ -111,8 +111,14 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'edit-in-place',
     trigger: 'current/existing sheet/chart/view/dashboard',
     action:
-      'edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort or author-* tool. Never create new sheets unless asked.',
-    toolSequence: ['list-worksheets', 'list-dashboards', 'ask-user', 'refine-worksheet'],
+      'edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort or author-* tool; a NEW chart on the current sheet = bind-template with target_worksheet. Never create new sheets unless asked.',
+    toolSequence: [
+      'list-worksheets',
+      'list-dashboards',
+      'ask-user',
+      'refine-worksheet',
+      'bind-template',
+    ],
     stopConditions: ['Never create new sheets unless asked'],
     requiredEvidence: ['resolved worksheet/dashboard target before applying'],
   },
