@@ -1,7 +1,6 @@
 import { readFileSync } from 'fs';
-import { dirname, join, relative } from 'path';
+import { join, relative } from 'path';
 import ts from 'typescript';
-import { fileURLToPath } from 'url';
 
 import { desktopToolNames } from './toolName.js';
 
@@ -82,7 +81,7 @@ const NON_TOOL_VOCABULARY = [
   'validation-failed',
 ] as const;
 
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
+const REPO_ROOT = join(__dirname, '../../..');
 const TOOL_NAME_CANDIDATE_RE = /\b[a-z][a-z0-9]*(?:-[a-z0-9]+)+\b/g;
 
 type Candidate = {
