@@ -58,6 +58,17 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('tableau-desktop-authoring');
   });
 
+  it('caps targeted knowledge consultation at one read before authoring proceeds', () => {
+    const knowledge = routes.find((route) => route.id === 'knowledge-consult');
+
+    expect(knowledge).toMatchObject({
+      trigger:
+        'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) — never a plain chart ask the plain-chart route already handles',
+      toolSequence: ['search-knowledge', 'read-knowledge-resource'],
+      stopConditions: ['read the top hit once, then proceed'],
+    });
+  });
+
   it('teaches plain-chart proposals may carry sort and top_n', () => {
     const plainChart = routes.find((route) => route.id === 'plain-chart');
     expect(plainChart?.action).toContain('proposals may carry sort and top_n.');
