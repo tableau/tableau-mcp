@@ -41,6 +41,8 @@ type SuiteSummary = {
   started_at: string;
   finished_at: string;
   total_wall_ms: number;
+  harness?: string | null;
+  model?: string | null;
   cases: Array<{
     question_id: number;
     difficulty: string;
@@ -49,65 +51,63 @@ type SuiteSummary = {
     exit_code: number | null;
     wall_ms: number | null;
     timed_out: boolean;
-    tool_calls: number;
-    tools_used: Array<string>;
-    tokens: {
-      input: number | null;
-      output: number | null;
-      cache_read: number | null;
-      cache_creation: number | null;
-    };
     error: string | null;
   }>;
-  aggregate: {
-    total_cases: number;
-    completed: number;
-    errored: number;
-    timed_out: number;
-    avg_wall_ms: number | null;
-    total_input_tokens: number;
-    total_output_tokens: number;
-  };
 };
 
 type BirdResult = {
   run_id: string;
+  eval_run_id: string;
   question_id: number;
   difficulty: string;
   graded_at: string;
+  harness: string | null;
   model: string | null;
+  model_normalized: string | null;
   wall_s: number | null;
+  ttft_s: number | null;
+  cost_usd: number | null;
   tokens: {
     input_tokens: number | null;
     output_tokens: number | null;
     cache_creation_tokens: number | null;
     cache_read_tokens: number | null;
-    total_context_tokens: number | null;
+    total_tokens: number | null;
   };
   tool_calls: number;
   tools_used: Array<string>;
+  llm_calls: number;
+  error_count: number;
   signals: {
     numeric_match: boolean | null;
     semantic_match: number | null;
     columns_match: boolean | null;
     filters_match: boolean | null;
   };
-  verdict: 'pass' | 'partial' | 'fail' | 'error' | 'skip';
+  accuracy: number | null;
+  verdict: 'pass' | 'partial' | 'fail' | 'error' | 'skip' | 'grading_error';
 };
 
 type CaseGrade = {
   question_id: number;
   difficulty: string;
   run_id: string;
-  verdict: BirdResult['verdict'] | 'grading_error';
+  verdict: BirdResult['verdict'];
   numeric_match: boolean | null;
   semantic_match: number | null;
   columns_match: boolean | null;
   filters_match: boolean | null;
+  accuracy: number | null;
+  harness: string | null;
   model: string | null;
+  model_normalized: string | null;
   wall_s: number | null;
+  ttft_s: number | null;
+  cost_usd: number | null;
   tool_calls: number;
   tools_used: Array<string>;
+  llm_calls: number | null;
+  error_count: number | null;
   tokens: BirdResult['tokens'] | null;
   grade_file: string | null;
   grading_error: string | null;
@@ -222,10 +222,17 @@ async function main(): Promise<void> {
       semantic_match: gradeResult?.signals.semantic_match ?? null,
       columns_match: gradeResult?.signals.columns_match ?? null,
       filters_match: gradeResult?.signals.filters_match ?? null,
+      accuracy: gradeResult?.accuracy ?? null,
+      harness: gradeResult?.harness ?? null,
       model: gradeResult?.model ?? null,
+      model_normalized: gradeResult?.model_normalized ?? null,
       wall_s: gradeResult?.wall_s ?? null,
-      tool_calls: gradeResult?.tool_calls ?? c.tool_calls,
-      tools_used: gradeResult?.tools_used ?? c.tools_used,
+      ttft_s: gradeResult?.ttft_s ?? null,
+      cost_usd: gradeResult?.cost_usd ?? null,
+      tool_calls: gradeResult?.tool_calls ?? 0,
+      tools_used: gradeResult?.tools_used ?? [],
+      llm_calls: gradeResult?.llm_calls ?? null,
+      error_count: gradeResult?.error_count ?? null,
       tokens: gradeResult?.tokens ?? null,
       grade_file: gradeResult ? gradeFile : null,
       grading_error: gradingError,
@@ -245,12 +252,25 @@ async function main(): Promise<void> {
   const total = caseGrades.length;
   const passRate = total > 0 ? counts.pass / total : 0;
 
+  const mean = (values: Array<number>): number | null =>
+    values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : null;
+  const sum = (values: Array<number>): number => values.reduce((a, b) => a + b, 0);
+
+  const accuracyValues = caseGrades.map((g) => g.accuracy).filter((v): v is number => v != null);
+  const wallValues = caseGrades.map((g) => g.wall_s).filter((v): v is number => v != null);
+  const ttftValues = caseGrades.map((g) => g.ttft_s).filter((v): v is number => v != null);
+  const costValues = caseGrades.map((g) => g.cost_usd).filter((v): v is number => v != null);
+  const toolCallValues = caseGrades.map((g) => g.tool_calls);
+  const errorValues = caseGrades.map((g) => g.error_count).filter((v): v is number => v != null);
+
   const suiteGrade = {
     suite_run_id,
     suite_file: summary.suite_file,
     suite_started_at: summary.started_at,
     suite_finished_at: summary.finished_at,
     graded_at: new Date().toISOString(),
+    harness: summary.harness ?? caseGrades.find((g) => g.harness)?.harness ?? null,
+    model: caseGrades.find((g) => g.model_normalized)?.model_normalized ?? summary.model ?? null,
     summary: {
       total,
       pass: counts.pass,
@@ -260,6 +280,19 @@ async function main(): Promise<void> {
       skip: counts.skip,
       grading_error: counts.grading_error,
       pass_rate: Math.round(passRate * 1000) / 1000,
+    },
+    metrics: {
+      mean_accuracy: accuracyValues.length
+        ? Math.round((mean(accuracyValues) ?? 0) * 1000) / 1000
+        : null,
+      mean_wall_s: wallValues.length ? Math.round((mean(wallValues) ?? 0) * 10) / 10 : null,
+      mean_ttft_s: ttftValues.length ? Math.round((mean(ttftValues) ?? 0) * 10) / 10 : null,
+      total_cost_usd: costValues.length ? Math.round(sum(costValues) * 1e4) / 1e4 : null,
+      mean_cost_usd: costValues.length ? Math.round((mean(costValues) ?? 0) * 1e6) / 1e6 : null,
+      mean_tool_calls: toolCallValues.length
+        ? Math.round((mean(toolCallValues) ?? 0) * 10) / 10
+        : null,
+      total_errors: errorValues.length ? sum(errorValues) : null,
     },
     cases: caseGrades,
   };
@@ -273,11 +306,18 @@ async function main(): Promise<void> {
 
   console.log('\n═══════════════════════════════════════');
   console.log(`Suite grade: ${suite_run_id}`);
+  console.log(`  Harness/model: ${suiteGrade.harness ?? '?'} / ${suiteGrade.model ?? '?'}`);
   console.log(`  Pass rate: ${counts.pass}/${total} (${(passRate * 100).toFixed(1)}%)`);
   console.log(
     `  pass=${counts.pass}  partial=${counts.partial}  fail=${counts.fail}` +
       `  error=${counts.error}  skip=${counts.skip}` +
       (counts.grading_error > 0 ? `  grading_error=${counts.grading_error}` : ''),
+  );
+  const m = suiteGrade.metrics;
+  console.log(
+    `  accuracy=${m.mean_accuracy ?? '?'}  mean_wall=${m.mean_wall_s ?? '?'}s  ` +
+      `mean_ttft=${m.mean_ttft_s ?? '?'}s  total_cost=${m.total_cost_usd != null ? `$${m.total_cost_usd}` : '?'}  ` +
+      `mean_tools=${m.mean_tool_calls ?? '?'}  errors=${m.total_errors ?? '?'}`,
   );
   console.log(`  Grade file: ${suiteGradePath}`);
 }
