@@ -335,7 +335,9 @@ describe('binder/classifyNoLlm — measure-free lat/long symbol map (Blake wall 
     const bySlot = Object.fromEntries(cls!.bindings.map((b) => [b.slot_id, b.field]));
     expect(bySlot['longitude']).toBe('longitude');
     expect(bySlot['latitude']).toBe('latitude');
-    const detailFields = cls!.bindings.filter((b) => b.slot_id.startsWith('detail')).map((b) => b.field);
+    const detailFields = cls!.bindings
+      .filter((b) => b.slot_id.startsWith('detail'))
+      .map((b) => b.field);
     // exactly ONE detail dim, and it is the label (team_name) — not id/code/group noise.
     expect(detailFields).toEqual(['team_name']);
   });
