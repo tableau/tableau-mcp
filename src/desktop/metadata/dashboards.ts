@@ -192,11 +192,12 @@ export function dashboardDocumentToFragment(
   return parseXML(documentXml).dashboard ? documentXml : null;
 }
 
-// Builds a whole-workbook document carrying only the one edited dashboard (and its window).
-// The workbook POST upserts by name: it overwrites the colliding live dashboard and leaves the
-// rest of the live workbook untouched. Worksheets are stripped from the doc — they stay live and
-// the dashboard's zones still reference them by name — so the POST does not touch them at all.
-export function buildMinimalDashboardDoc(
+// The External Client API has no per-dashboard write route — applying one dashboard re-POSTs the
+// whole document, which Desktop treats as authoritative and replaces the open workbook with. So the
+// doc must carry the ENTIRE live workbook (worksheets included — the dashboard's zones reference
+// them by name) with only this dashboard swapped in; anything omitted would be pruned. Upsert by
+// name: replace the matching dashboard, or append it if absent. Windows are left intact.
+export function upsertDashboardIntoWorkbook(
   workbookXml: string,
   dashboardName: string,
   editedDashboardXml: string,
@@ -208,23 +209,17 @@ export function buildMinimalDashboardDoc(
     throw new Error(`Edited XML does not contain a <dashboard name="${dashboardName}">`);
   }
 
-  if (workbook.workbook?.dashboards) {
-    workbook.workbook.dashboards.dashboard = editedDashboard;
-  }
+  if (!workbook.workbook) workbook.workbook = {};
+  if (!workbook.workbook.dashboards) workbook.workbook.dashboards = {};
 
-  if (workbook.workbook?.windows) {
-    const windows = normalizeArray(workbook.workbook.windows.window);
-    const targetWindow = windows.find(
-      (win) => win['@_class'] === 'dashboard' && win['@_name'] === dashboardName,
-    );
-    if (targetWindow) {
-      workbook.workbook.windows.window = targetWindow;
-    } else {
-      delete workbook.workbook.windows.window;
-    }
+  const dashboards = normalizeArray(workbook.workbook.dashboards.dashboard);
+  const index = dashboards.findIndex((db) => db['@_name'] === dashboardName);
+  if (index === -1) {
+    dashboards.push(editedDashboard);
+  } else {
+    dashboards[index] = editedDashboard;
   }
-
-  delete workbook.workbook?.worksheets;
+  workbook.workbook.dashboards.dashboard = dashboards.length === 1 ? dashboards[0] : dashboards;
 
   return serializeXML(workbook);
 }

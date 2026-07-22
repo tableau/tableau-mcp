@@ -4,6 +4,7 @@ import {
   deleteSheet,
   extractSheetXml,
   listSheets,
+  upsertSheetIntoWorkbook,
   worksheetDocumentToFragment,
 } from './sheets.js';
 
@@ -92,7 +93,48 @@ describe('worksheetDocumentToFragment', () => {
   });
 
   it('returns null when the document contains no worksheet', () => {
-    expect(worksheetDocumentToFragment('<workbook><worksheets /></workbook>', 'Missing')).toBeNull();
+    expect(
+      worksheetDocumentToFragment('<workbook><worksheets /></workbook>', 'Missing'),
+    ).toBeNull();
+  });
+});
+
+describe('upsertSheetIntoWorkbook', () => {
+  // The External Client API POST replaces the open workbook wholesale, so the posted doc must carry
+  // the entire live workbook with only the target sheet swapped in — siblings and dashboards intact.
+  const LIVE_WORKBOOK = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <worksheets>
+    <worksheet name='Sheet 1'><table><old /></table></worksheet>
+    <worksheet name='Sheet 2'><table /></worksheet>
+  </worksheets>
+  <dashboards>
+    <dashboard name='Dashboard 1'><zones /></dashboard>
+  </dashboards>
+</workbook>`;
+
+  it('replaces the target sheet while preserving siblings and dashboards', () => {
+    const edited = "<worksheet name='Sheet 1'><table><new /></table></worksheet>";
+    const doc = upsertSheetIntoWorkbook(LIVE_WORKBOOK, 'Sheet 1', edited);
+
+    expect(doc).toContain('<new');
+    expect(doc).not.toContain('<old');
+    expect(doc).toContain('name="Sheet 2"');
+    expect(doc).toContain('name="Dashboard 1"');
+    expect(listSheets(doc)).toEqual(['Sheet 1', 'Sheet 2']);
+  });
+
+  it('appends a brand-new sheet, keeping the existing ones', () => {
+    const edited = "<worksheet name='Sheet 3'><table /></worksheet>";
+    const doc = upsertSheetIntoWorkbook(LIVE_WORKBOOK, 'Sheet 3', edited);
+
+    expect(listSheets(doc)).toEqual(['Sheet 1', 'Sheet 2', 'Sheet 3']);
+    expect(doc).toContain('name="Dashboard 1"');
+  });
+
+  it('throws when the edited XML does not carry a <worksheet> with the given name', () => {
+    const edited = "<worksheet name='Wrong'><table /></worksheet>";
+    expect(() => upsertSheetIntoWorkbook(LIVE_WORKBOOK, 'Sheet 1', edited)).toThrow();
   });
 });
 
