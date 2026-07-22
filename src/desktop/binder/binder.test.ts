@@ -452,11 +452,7 @@ ${dimensionColumns}
 
   it('fails closed when only part of a tied detail cluster collapses to one base', () => {
     const s = summarizeSchema(
-      latlonWorkbookXmlWithDimensions([
-        'Team Name',
-        'Team Name (Players.csv)',
-        'Venue Name',
-      ]),
+      latlonWorkbookXmlWithDimensions(['Team Name', 'Team Name (Players.csv)', 'Venue Name']),
     );
 
     expect(classifyNoLlm('map team venue name locations', manifests, s)).toBeNull();
