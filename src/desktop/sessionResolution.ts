@@ -27,7 +27,13 @@ const LIST_INSTANCES_TOOL: DesktopToolName = 'list-instances';
  * Uses the External Client API discovery files written by Tableau Desktop.
  */
 export function resolveSession(session: string | undefined): Result<string, McpToolError> {
-  const requestedSession = session?.trim() ? session : undefined;
+  // Treat empty/whitespace AND the sentinel "default" as ABSENT. Some clients inject
+  // session:"default" as a placeholder; when the agent is pinned to a Desktop pid that
+  // literal is not the pid, so it used to fail closed with a spurious "pinned to pid X but
+  // session 'default' requested" error on every session-scoped call (add-field, apply, …).
+  // "default" means "use whatever session is resolved", i.e. the pin — never a real id.
+  const trimmed = session?.trim();
+  const requestedSession = trimmed && trimmed.toLowerCase() !== 'default' ? trimmed : undefined;
   const config = getDesktopConfig();
   if (config.desktopSessionId !== undefined) {
     if (requestedSession !== undefined && requestedSession !== config.desktopSessionId) {

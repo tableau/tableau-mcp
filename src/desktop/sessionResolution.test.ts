@@ -57,6 +57,17 @@ describe('resolveSession', () => {
     expect(result.unwrap()).toBe('4242');
   });
 
+  it('treats the sentinel "default" as absent when pinned (no spurious pin-mismatch)', () => {
+    // Some clients inject session:"default" as a placeholder; before the fix that literal
+    // was compared against the pinned pid and failed closed on every session-scoped call.
+    mockConfig({ desktopSessionId: '4242' });
+    for (const sentinel of ['default', 'Default', ' DEFAULT ']) {
+      const result = resolveSession(sentinel);
+      expect(result.isOk(), `"${sentinel}" should resolve to the pin`).toBe(true);
+      expect(result.unwrap()).toBe('4242');
+    }
+  });
+
   it('returns an explicit session id verbatim when nothing is pinned', () => {
     mockConfig({ desktopSessionId: undefined });
     const result = resolveSession('7');
