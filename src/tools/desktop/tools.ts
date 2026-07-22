@@ -54,6 +54,7 @@ import { getSearchWorkbookExamplesTool } from './search/searchWorkbookExamples.j
 import { getCheckForUserChangesTool } from './session/checkForUserChanges.js';
 import { getListInstancesTool } from './session/listInstances.js';
 import { getInjectTemplateTool } from './template/injectTemplate.js';
+import { getActivateSheetTool } from './workbook/activateSheet.js';
 import { getApplyWorkbookTool } from './workbook/applyWorkbook.js';
 import { getGetWorkbookXmlTool } from './workbook/getWorkbookXml.js';
 import { getListDashboardsTool } from './workbook/listDashboards.js';
@@ -68,6 +69,7 @@ export const desktopToolFactories = [
   getCheckForUserChangesTool,
   getGetWorkbookXmlTool,
   getApplyWorkbookTool,
+  getActivateSheetTool,
   getListWorksheetsTool,
   getListDashboardsTool,
   getGetWorksheetXmlTool,
