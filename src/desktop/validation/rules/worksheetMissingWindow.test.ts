@@ -23,11 +23,11 @@ function workbook(worksheetNames: string[], windowNames: string[]): string {
 }
 
 describe('worksheet-missing-window rule', () => {
-  it('warns when a worksheet has no matching window entry', () => {
+  it('errors when a worksheet has no matching window entry', () => {
     const issues = worksheetMissingWindowRule.validate(workbook(['Sheet 1'], []));
 
     expect(issues).toHaveLength(1);
-    expect(issues[0].severity).toBe('warning');
+    expect(issues[0].severity).toBe('error');
     expect(issues[0].ruleId).toBe('worksheet-missing-window');
     expect(issues[0].message).toContain('Sheet 1');
     expect(issues[0].message.toLowerCase()).toContain('silently drop');
@@ -39,7 +39,7 @@ describe('worksheet-missing-window rule', () => {
     ).toHaveLength(0);
   });
 
-  it('warns only for the worksheet whose window is missing', () => {
+  it('errors only for the worksheet whose window is missing', () => {
     const issues = worksheetMissingWindowRule.validate(
       workbook(['Sheet 1', 'Sheet 2'], ['Sheet 1']),
     );
@@ -71,10 +71,10 @@ describe('worksheet-missing-window rule', () => {
     ).toHaveLength(0);
   });
 
-  it('does not block validation because it is a warning', () => {
+  it('blocks validation because a missing worksheet window produces an unreachable sheet', () => {
     const result = runValidation(workbook(['Sheet 1'], []), 'workbook');
 
-    expect(result.valid).toBe(true);
+    expect(result.valid).toBe(false);
     expect(result.issues.some((i) => i.ruleId === 'worksheet-missing-window')).toBe(true);
   });
 });

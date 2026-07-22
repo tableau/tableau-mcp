@@ -12,7 +12,10 @@ const parserOptions = {
   removeNSPrefix: false,
   parseTagValue: false,
   parseNodeValue: false,
-  trimValues: true,
+  // Preserve text whitespace: workbook <run> nodes (formatted titles/tooltips) carry
+  // significant leading/trailing spaces, and a single-sheet apply re-serializes the whole
+  // workbook — trimming would silently corrupt that text on untouched sibling sheets.
+  trimValues: false,
   parseTrueNumberOnly: false,
   arrayMode: false,
   alwaysCreateTextNode: false,

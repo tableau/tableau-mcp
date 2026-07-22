@@ -6,21 +6,44 @@ import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import * as validationRegistry from '../../validation/registry.js';
 import { loadWorksheetXml } from './loadWorksheetXml.js';
 
-vi.mock('../../validation/registry.js');
+const sheetUpsertMock = vi.hoisted(() => ({
+  upsertSheetIntoWorkbook: undefined as
+    | undefined
+    | ((workbookXml: string, sheetName: string, editedWorksheetXml: string) => string),
+}));
+
+vi.mock('../../metadata/sheets.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../metadata/sheets.js')>();
+  return {
+    ...actual,
+    upsertSheetIntoWorkbook: (
+      workbookXml: string,
+      sheetName: string,
+      editedWorksheetXml: string,
+    ) =>
+      sheetUpsertMock.upsertSheetIntoWorkbook
+        ? sheetUpsertMock.upsertSheetIntoWorkbook(workbookXml, sheetName, editedWorksheetXml)
+        : actual.upsertSheetIntoWorkbook(workbookXml, sheetName, editedWorksheetXml),
+  };
+});
 
 describe('loadWorksheetXml (External Client API transport)', () => {
   const mockSignal = new AbortController().signal;
   const worksheetName = 'Sheet 1';
   const validXml = `<worksheet name='${worksheetName}'><table><rows /></table></worksheet>`;
 
-  function liveWorkbook(worksheetNames: string[]): string {
+  function liveWorkbook(worksheetNames: string[], dashboardNames: string[] = []): string {
     const worksheets = worksheetNames
       .map((name) => `<worksheet name='${name}'><table /></worksheet>`)
+      .join('');
+    const dashboards = dashboardNames
+      .map((name) => `<dashboard name='${name}'><zones /></dashboard>`)
       .join('');
     const windows = worksheetNames
       .map((name) => `<window class='worksheet' name='${name}' />`)
       .join('');
-    return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets><windows>${windows}</windows></workbook>`;
+    const dashboardsBlock = dashboards ? `<dashboards>${dashboards}</dashboards>` : '';
+    return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets>${dashboardsBlock}<windows>${windows}</windows></workbook>`;
   }
 
   function dispatchingExecutor(workbookXml: string): {
@@ -73,6 +96,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    sheetUpsertMock.upsertSheetIntoWorkbook = undefined;
     vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
     vi.spyOn(validationRegistry, 'runValidation').mockReturnValue({ valid: true, issues: [] });
   });
@@ -81,8 +105,10 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     vi.restoreAllMocks();
   });
 
-  it('should apply a minimal document that upserts the edited sheet without deleting first', async () => {
-    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Sheet 1', 'Other']));
+  it('upserts the edited sheet into the whole live workbook, preserving siblings and dashboards', async () => {
+    const { executor, calls } = dispatchingExecutor(
+      liveWorkbook(['Sheet 1', 'Other'], ['Dashboard 1']),
+    );
 
     const result = await loadWorksheetXml({
       worksheetName,
@@ -97,10 +123,13 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     const applyCall = calls.find((c) => c.kind === 'apply');
     expect(typeof applyCall?.xml).toBe('string');
     expect(applyCall?.xml).toContain('name="Sheet 1"');
-    expect(applyCall?.xml).not.toContain('Other');
+    // The POST replaces the open workbook wholesale, so the sibling sheet and the live dashboard
+    // MUST survive in the posted doc — omitting them would prune them from Desktop.
+    expect(applyCall?.xml).toContain('name="Other"');
+    expect(applyCall?.xml).toContain('name="Dashboard 1"');
   });
 
-  it('focuses the worksheet after a successful minimal-doc apply', async () => {
+  it('focuses the worksheet after a successful apply', async () => {
     const { executor, calls } = dispatchingExecutor(liveWorkbook(['Sheet 1', 'Other']));
 
     const result = await loadWorksheetXml({
@@ -116,7 +145,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     );
   });
 
-  it('should apply a minimal document for a brand-new sheet', async () => {
+  it('appends a brand-new sheet while preserving the existing one', async () => {
     const { executor, calls } = dispatchingExecutor(liveWorkbook(['Some Other Sheet']));
 
     const result = await loadWorksheetXml({
@@ -128,7 +157,48 @@ describe('loadWorksheetXml (External Client API transport)', () => {
 
     expect(result.isOk()).toBe(true);
     expect(calls.find((c) => c.command === 'delete-sheet')).toBeUndefined();
-    expect(calls.find((c) => c.kind === 'apply')).toBeDefined();
+    const applyCall = calls.find((c) => c.kind === 'apply');
+    expect(applyCall).toBeDefined();
+    expect(applyCall?.xml).toContain('class="worksheet" name="Sheet 1"');
+    expect(applyCall?.xml).toContain('name="Some Other Sheet"');
+  });
+
+  it('rejects a constructed workbook document missing the worksheet window before POST', async () => {
+    vi.mocked(validationRegistry.runValidation).mockRestore();
+    sheetUpsertMock.upsertSheetIntoWorkbook = () => `<?xml version='1.0'?>
+<workbook>
+  <worksheets>
+    <worksheet name='Sheet 1'><table /></worksheet>
+  </worksheets>
+  <windows>
+    <window><cards /></window>
+  </windows>
+</workbook>`;
+    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Some Other Sheet']));
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-worksheet-xml-error');
+      expect(result.error.error.type).toBe('validation-failed');
+      invariant(result.error.error.type === 'validation-failed');
+      expect(result.error.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            ruleId: 'worksheet-missing-window',
+            severity: 'error',
+            message: expect.stringContaining('Sheet 1'),
+          }),
+        ]),
+      );
+    }
+    expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
   });
 
   it('should return error when XML is invalid', async () => {

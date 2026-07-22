@@ -62,6 +62,7 @@ import { DesktopTool } from '../tool.js';
 // confidence-required + title-max-80 tightening) is SHARED with validate-proposal so the
 // two tools cannot drift — see proposalSchema.ts.
 import { proposalSchema } from './proposalSchema.js';
+import { proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
   session: z.string().optional(),
@@ -117,7 +118,20 @@ type AppliedFastPathResult = {
   guidance: string;
 };
 
-type BindTemplateToolResult = BindTemplateToolResultBase | AppliedFastPathResult;
+type BlockedBindTemplateResult = {
+  status: 'blocked';
+  reason:
+    | 'awaiting_proposal'
+    | 'unchanged_proposal'
+    | 'retry_budget_exhausted'
+    | 'fallback_required';
+  guidance: string;
+};
+
+type BindTemplateToolResult =
+  | BindTemplateToolResultBase
+  | AppliedFastPathResult
+  | BlockedBindTemplateResult;
 type StructuredBindTemplateToolResult = StructuredResult<BindTemplateToolResult>;
 
 /** Escalation reasons that route back to the general (non-fast-path) authoring flow. */
@@ -148,6 +162,65 @@ const WATERFALL_SORT_HINT =
 // bundled skill's "adapt fields/formatting" + the ambient "search-commands available" pulls.
 // Paired with structuredContent.nextAction{kind:'done'} for a future route-gate/host.
 const TERMINAL_GUIDANCE = 'Done — no further tool calls needed.';
+const PROPOSAL_ATTEMPTED_PHASE = ['proposal', 'attempted'].join('-');
+const RETRY_USED_PHASE = ['retry', 'used'].join('-');
+
+function blockedResult(
+  reason: BlockedBindTemplateResult['reason'],
+  guidance: string,
+  nextActionLabel: string,
+): StructuredBindTemplateToolResult {
+  return withNextAction(
+    { status: 'blocked', reason, guidance },
+    prefillNextAction(nextActionLabel),
+  );
+}
+
+function recoveryGateBlock(
+  record: ReturnType<typeof sessionRouteState.getBindRecovery>,
+  currentProposalSignature: string | undefined,
+): StructuredBindTemplateToolResult | undefined {
+  if (!record) {
+    return undefined;
+  }
+
+  if (record.phase === 'terminal') {
+    return blockedResult(
+      'fallback_required',
+      'Blocked: bind-template already determined this ask is not recoverable in the fast path. Use build-and-apply-worksheet, or place fields stepwise with add-field then apply-worksheet; ask-user only if the fallback path needs a user decision.',
+      'Use fallback authoring path',
+    );
+  }
+
+  if (currentProposalSignature === undefined) {
+    return blockedResult(
+      'awaiting_proposal',
+      'Blocked: bind-template already returned a proposal request for this ask. Choose one proposal from the previous llm_input and call bind-template with {session, ask, proposal}; otherwise ask-user or use build-and-apply-worksheet.',
+      'Pick a proposal or ask user',
+    );
+  }
+
+  if (record.phase === RETRY_USED_PHASE) {
+    return blockedResult(
+      'retry_budget_exhausted',
+      'Blocked: the single changed proposal retry for this ask is already consumed. Stop retrying bind-template; ask-user if more information is needed, or use build-and-apply-worksheet.',
+      'Use fallback path or ask user',
+    );
+  }
+
+  if (
+    record.phase === PROPOSAL_ATTEMPTED_PHASE &&
+    record.lastProposalSignature === currentProposalSignature
+  ) {
+    return blockedResult(
+      'unchanged_proposal',
+      'Blocked: this proposal is semantically unchanged from the failed bind attempt. Title/confidence only changes do not count; change a binding, derivation, sort, or top_n based on evidence, otherwise ask-user or use build-and-apply-worksheet.',
+      'Change proposal or ask user',
+    );
+  }
+
+  return undefined;
+}
 
 function nextActionForEscalation(reason: EscalateReason): NextAction {
   if (reason === 'ambiguous-field' || reason === 'field-not-found') {
@@ -694,7 +767,7 @@ async function performAutoApply({
 
 function renderAuthoredCalcPrefix(
   captions: string[] | undefined,
-  status: BinderResult['status'],
+  status: BindTemplateToolResult['status'],
 ): string {
   return captions && captions.length > 0
     ? `Calcs authored: ${captions.join(', ')}. Bind outcome: ${status}. `
@@ -713,6 +786,72 @@ function annotateAuthoredCalcs<T extends StructuredBindTemplateToolResult>(
     authored_calcs: captions,
     guidance: `${renderAuthoredCalcPrefix(captions, result.status)}${result.guidance}`,
   };
+}
+
+function recordBindRecoveryAttemptFailOpen({
+  session,
+  askKey,
+  outcome,
+  currentProposalSignature,
+  reservationId,
+  terminal = false,
+  terminalFallback = false,
+}: {
+  session: string;
+  askKey: string;
+  outcome: BinderResult['status'];
+  currentProposalSignature?: string;
+  reservationId?: number;
+  terminal?: boolean;
+  terminalFallback?: boolean;
+}): void {
+  try {
+    const attempt = {
+      outcome,
+      ...(currentProposalSignature !== undefined
+        ? { proposalSignature: currentProposalSignature }
+        : {}),
+      ...(reservationId !== undefined ? { reservationId } : {}),
+    };
+    if (outcome === 'escalate' && currentProposalSignature === undefined && !terminalFallback) {
+      sessionRouteState.clearBindRecovery(session, askKey);
+      return;
+    }
+    if (terminalFallback) {
+      sessionRouteState.recordBindRecoveryTerminal(session, askKey, attempt);
+      return;
+    }
+    sessionRouteState.recordBindRecoveryAttempt(session, askKey, {
+      ...attempt,
+      ...(terminal ? { terminal: true } : {}),
+    });
+  } catch {
+    /* fail-open */
+  }
+}
+
+function recordBoundRecoveryAfterFinalResult({
+  session,
+  askKey,
+  currentProposalSignature,
+  reservationId,
+  result,
+}: {
+  session: string;
+  askKey: string;
+  currentProposalSignature?: string;
+  reservationId?: number;
+  result: StructuredBindTemplateToolResult;
+}): void {
+  const terminal = result.structuredContent?.nextAction.kind === 'done';
+  recordBindRecoveryAttemptFailOpen({
+    session,
+    askKey,
+    outcome: 'bound',
+    currentProposalSignature,
+    reservationId,
+    terminal,
+  });
 }
 
 const title = 'Bind Template';
@@ -750,6 +889,31 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return sessionResult.error.toErr();
           }
           const resolvedSession = sessionResult.value;
+          const askKey = normalizeAskForMatch(ask);
+          const currentProposalSignature =
+            proposal !== undefined ? proposalSignature(proposal as BindingProposal) : undefined;
+          let bindRecoveryReservationId: number | undefined;
+
+          try {
+            const blocked = recoveryGateBlock(
+              sessionRouteState.getBindRecovery(resolvedSession, askKey),
+              currentProposalSignature,
+            );
+            if (blocked) {
+              return new Ok(blocked);
+            }
+            bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
+              resolvedSession,
+              askKey,
+              {
+                ...(currentProposalSignature !== undefined
+                  ? { proposalSignature: currentProposalSignature }
+                  : {}),
+              },
+            );
+          } catch {
+            /* fail-open */
+          }
 
           const executor = await extra.getExecutor(resolvedSession);
 
@@ -814,7 +978,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           // Route-state recording is OBSERVATIONAL — a route-layer fault must never break a
           // bind (fail-open, the gate's own discipline): a swallowed classification simply
           // leaves the ask unrecorded and the gate later fail-opens on absent state.
-          const askKey = normalizeAskForMatch(ask);
           try {
             const routeDecision = classifyAskRoute(ask, [...manifests.values()]);
             sessionRouteState.recordAskClassification(resolvedSession, {
@@ -878,6 +1041,24 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
           try {
             sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
+            if (res.status === 'propose') {
+              recordBindRecoveryAttemptFailOpen({
+                session: resolvedSession,
+                askKey,
+                outcome: res.status,
+                currentProposalSignature,
+                reservationId: bindRecoveryReservationId,
+              });
+            } else if (res.status === 'escalate') {
+              recordBindRecoveryAttemptFailOpen({
+                session: resolvedSession,
+                askKey,
+                outcome: res.status,
+                currentProposalSignature,
+                reservationId: bindRecoveryReservationId,
+                terminalFallback: TIER2_REASONS.has(res.reason),
+              });
+            }
           } catch {
             /* fail-open */
           }
@@ -907,24 +1088,44 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           const canAutoApply =
             auto_apply === true && res.status === 'bound' && manifest?.fast_path_eligible === true;
 
-          if (!canAutoApply || res.status !== 'bound') {
+          if (res.status !== 'bound') {
             return new Ok(base);
           }
 
-          return new Ok(
-            await performAutoApply({
-              res,
-              base,
-              workbookXml,
+          if (!canAutoApply) {
+            recordBindRecoveryAttemptFailOpen({
               session: resolvedSession,
-              executor,
-              signal: extra.signal,
-              bindMs,
-              eventsAnchor,
-              schemaSummary,
-            }),
-          );
+              askKey,
+              outcome: res.status,
+              currentProposalSignature,
+              reservationId: bindRecoveryReservationId,
+              terminal: true,
+            });
+            return new Ok(base);
+          }
+
+          const appliedResult = await performAutoApply({
+            res,
+            base,
+            workbookXml,
+            session: resolvedSession,
+            executor,
+            signal: extra.signal,
+            bindMs,
+            eventsAnchor,
+            schemaSummary,
+          });
+          recordBoundRecoveryAfterFinalResult({
+            session: resolvedSession,
+            askKey,
+            currentProposalSignature,
+            reservationId: bindRecoveryReservationId,
+            result: appliedResult,
+          });
+          return new Ok(appliedResult);
         },
+        // Keep the standard MCP content-block envelope while lifting nextAction metadata
+        // out of the JSON body so the bind/propose/bound body contract stays unchanged.
         getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });
     },

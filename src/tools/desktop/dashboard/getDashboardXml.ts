@@ -7,7 +7,7 @@ import { formatArtifactSummary } from '../../../desktop/artifactSummary.js';
 import { DesktopCache } from '../../../desktop/cache.js';
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import {
-  getDashboardXml,
+  getDashboardFragment,
   isRouteMissing,
 } from '../../../desktop/commands/workbook/getDashboardXml.js';
 import {
@@ -65,7 +65,11 @@ export const getGetDashboardXmlTool = (
           }
           const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
-          const result = await getDashboardXml({ dashboardName, executor, signal: extra.signal });
+          const result = await getDashboardFragment({
+            dashboardName,
+            executor,
+            signal: extra.signal,
+          });
 
           if (result.isErr()) {
             const { type, error } = result.error;

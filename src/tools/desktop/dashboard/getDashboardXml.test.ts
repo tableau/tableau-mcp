@@ -52,7 +52,7 @@ describe('getDashboardXmlTool', () => {
 
   it('should return dashboard XML inline when mode is inline', async () => {
     const mockXml = '<dashboard name="Sales Dashboard"><zones></zones></dashboard>';
-    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Ok(mockXml));
+    vi.spyOn(getDashboardXmlModule, 'getDashboardFragment').mockResolvedValue(Ok(mockXml));
 
     const result = await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'inline' });
 
@@ -67,7 +67,7 @@ describe('getDashboardXmlTool', () => {
 
   it('should write to file and return path when mode is file', async () => {
     const mockXml = '<dashboard name="Sales Dashboard"><zones></zones></dashboard>';
-    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Ok(mockXml));
+    vi.spyOn(getDashboardXmlModule, 'getDashboardFragment').mockResolvedValue(Ok(mockXml));
 
     const result = await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'file' });
 
@@ -88,7 +88,7 @@ describe('getDashboardXmlTool', () => {
         error: { code: 'ERROR', message: 'Network error', recoverable: false },
       },
     };
-    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Err(error));
+    vi.spyOn(getDashboardXmlModule, 'getDashboardFragment').mockResolvedValue(Err(error));
 
     const result = await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'inline' });
 
@@ -105,7 +105,7 @@ describe('getDashboardXmlTool', () => {
         message: 'No dashboard found for "Sales Dashboard".',
       },
     };
-    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Err(error));
+    vi.spyOn(getDashboardXmlModule, 'getDashboardFragment').mockResolvedValue(Err(error));
 
     const result = await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'inline' });
 
@@ -122,7 +122,7 @@ describe('getDashboardXmlTool', () => {
         message: '2 dashboards found instead of 1.',
       },
     };
-    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Err(error));
+    vi.spyOn(getDashboardXmlModule, 'getDashboardFragment').mockResolvedValue(Err(error));
 
     const result = await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'inline' });
 
@@ -131,9 +131,9 @@ describe('getDashboardXmlTool', () => {
     expect(result.content[0].text).toBe(new GetDashboardXmlFailedError(error.error).message);
   });
 
-  it('should pass the abort signal to getDashboardXml command', async () => {
+  it('should pass the abort signal to getDashboardFragment', async () => {
     const mockGetDashboardXml = vi
-      .spyOn(getDashboardXmlModule, 'getDashboardXml')
+      .spyOn(getDashboardXmlModule, 'getDashboardFragment')
       .mockResolvedValue(Ok('<dashboard name="Sales Dashboard"/>'));
 
     const customSignal = new AbortController().signal;
@@ -147,7 +147,7 @@ describe('getDashboardXmlTool', () => {
   it('forces file mode when inline XML exceeds the cap, regardless of requested mode', async () => {
     const overCapXml =
       '<dashboard name="Sales Dashboard"><zones>' + 'x'.repeat(20000) + '</zones></dashboard>';
-    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Ok(overCapXml));
+    vi.spyOn(getDashboardXmlModule, 'getDashboardFragment').mockResolvedValue(Ok(overCapXml));
 
     const result = await getToolResult({ dashboardName: 'Sales Dashboard', mode: 'inline' });
 
@@ -165,7 +165,7 @@ describe('getDashboardXmlTool', () => {
   it('logs a cap-hit receipt when the cap fires', async () => {
     const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
     const overCapXml = '<dashboard name="D"><zones>' + 'x'.repeat(20000) + '</zones></dashboard>';
-    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Ok(overCapXml));
+    vi.spyOn(getDashboardXmlModule, 'getDashboardFragment').mockResolvedValue(Ok(overCapXml));
 
     await getToolResult({ dashboardName: 'D', mode: 'inline' });
 
@@ -179,7 +179,7 @@ describe('getDashboardXmlTool', () => {
 
   it('respects a smaller cap overridden via config', async () => {
     const smallXml = '<dashboard name="D"><zones/></dashboard>';
-    vi.spyOn(getDashboardXmlModule, 'getDashboardXml').mockResolvedValue(Ok(smallXml));
+    vi.spyOn(getDashboardXmlModule, 'getDashboardFragment').mockResolvedValue(Ok(smallXml));
 
     const result = await getToolResult({ dashboardName: 'D', mode: 'inline', capBytes: 8 });
 

@@ -1,5 +1,13 @@
+import { runValidation } from '../validation/registry.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
-import { addSheet, deleteSheet, extractSheetXml, listSheets } from './sheets.js';
+import {
+  addSheet,
+  deleteSheet,
+  extractSheetXml,
+  listSheets,
+  upsertSheetIntoWorkbook,
+  worksheetDocumentToFragment,
+} from './sheets.js';
 
 // Real-world shape: the <workbook> root declares xmlns:user, and a worksheet's level-members
 // filter carries a user:-prefixed attribute (confirmed pattern, see refineWorksheet.test.ts).
@@ -58,6 +66,125 @@ describe('extractSheetXml', () => {
     const xml = extractSheetXml(workbookWithConflict, 'q');
     expect(xml).toContain('http://example.com/already-declared');
     expect(xml).not.toContain('http://www.tableausoftware.com/xml/user');
+  });
+});
+describe('worksheetDocumentToFragment', () => {
+  // The live per-sheet /document route returns a whole <workbook> carrying every sheet, not a bare
+  // fragment. The helper must slice out only the requested sheet.
+  const WORKBOOK_WITH_TWO_SHEETS = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <worksheets>
+    <worksheet name='Sales by Region'><table /></worksheet>
+    <worksheet name='Profit by Category'><table /></worksheet>
+  </worksheets>
+</workbook>`;
+
+  it('slices the requested sheet out of a whole-workbook document, excluding siblings', () => {
+    const xml = worksheetDocumentToFragment(WORKBOOK_WITH_TWO_SHEETS, 'Sales by Region');
+    expect(xml).not.toBeNull();
+    expect(xml).toContain('name="Sales by Region"');
+    expect(xml).not.toContain('<workbook');
+    expect(xml).not.toContain('Profit by Category');
+  });
+
+  it('returns a document that is already a bare <worksheet> fragment unchanged', () => {
+    const fragment = '<worksheet name="Solo"><table /></worksheet>';
+    expect(worksheetDocumentToFragment(fragment, 'Solo')).toBe(fragment);
+  });
+
+  it('returns null when the document contains no worksheet', () => {
+    expect(
+      worksheetDocumentToFragment('<workbook><worksheets /></workbook>', 'Missing'),
+    ).toBeNull();
+  });
+});
+
+describe('upsertSheetIntoWorkbook', () => {
+  // The External Client API POST replaces the open workbook wholesale, so the posted doc must carry
+  // the entire live workbook with only the target sheet swapped in — siblings and dashboards intact.
+  const LIVE_WORKBOOK = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <worksheets>
+    <worksheet name='Sheet 1'><table><old /></table></worksheet>
+    <worksheet name='Sheet 2'><table /></worksheet>
+  </worksheets>
+  <dashboards>
+    <dashboard name='Dashboard 1'><zones /></dashboard>
+  </dashboards>
+  <windows>
+    <window class='worksheet' name='Sheet 1'><cards /></window>
+    <window class='worksheet' name='Sheet 2'><cards /></window>
+  </windows>
+</workbook>`;
+
+  it('replaces the target sheet while preserving siblings and dashboards', () => {
+    const edited = "<worksheet name='Sheet 1'><table><new /></table></worksheet>";
+    const doc = upsertSheetIntoWorkbook(LIVE_WORKBOOK, 'Sheet 1', edited);
+
+    expect(doc).toContain('<new');
+    expect(doc).not.toContain('<old');
+    expect(doc).toContain('name="Sheet 2"');
+    expect(doc).toContain('name="Dashboard 1"');
+    expect(listSheets(doc)).toEqual(['Sheet 1', 'Sheet 2']);
+  });
+
+  it('appends a brand-new sheet, keeping the existing ones', () => {
+    const edited = "<worksheet name='Sheet 3'><table /></worksheet>";
+    const doc = upsertSheetIntoWorkbook(LIVE_WORKBOOK, 'Sheet 3', edited);
+
+    expect(listSheets(doc)).toEqual(['Sheet 1', 'Sheet 2', 'Sheet 3']);
+    expect(doc).toContain('name="Dashboard 1"');
+    expect(doc).toContain('<window class="worksheet" name="Sheet 3">');
+    expect(runValidation(doc, 'workbook').issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ruleId: 'worksheet-missing-window',
+        }),
+      ]),
+    );
+  });
+
+  it('adds the worksheet window when replacing a sheet whose window is missing', () => {
+    const workbook = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <worksheets>
+    <worksheet name='Sheet 1'><table><old /></table></worksheet>
+  </worksheets>
+</workbook>`;
+    const edited = "<worksheet name='Sheet 1'><table><new /></table></worksheet>";
+    const doc = upsertSheetIntoWorkbook(workbook, 'Sheet 1', edited);
+
+    expect(doc).toContain('<new');
+    expect(doc).toContain('<window class="worksheet" name="Sheet 1">');
+    expect(runValidation(doc, 'workbook').issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ruleId: 'worksheet-missing-window',
+        }),
+      ]),
+    );
+  });
+
+  it('throws when the edited XML does not carry a <worksheet> with the given name', () => {
+    const edited = "<worksheet name='Wrong'><table /></worksheet>";
+    expect(() => upsertSheetIntoWorkbook(LIVE_WORKBOOK, 'Sheet 1', edited)).toThrow();
+  });
+
+  it('preserves whitespace-significant run text on an untouched sibling sheet', () => {
+    // A single-sheet apply re-serializes the whole workbook. A sibling's formatted <run> text with
+    // significant leading/trailing spaces must survive verbatim — trimming corrupts titles/tooltips.
+    const workbook = `<?xml version='1.0' encoding='utf-8' ?>
+<workbook>
+  <worksheets>
+    <worksheet name='Edited'><table><old /></table></worksheet>
+    <worksheet name='Sibling'><table><formatted-text><run>Sales: </run><run>  $1.2M</run></formatted-text></table></worksheet>
+  </worksheets>
+</workbook>`;
+    const edited = "<worksheet name='Edited'><table><new /></table></worksheet>";
+    const doc = upsertSheetIntoWorkbook(workbook, 'Edited', edited);
+
+    expect(doc).toContain('<run>Sales: </run>');
+    expect(doc).toContain('<run>  $1.2M</run>');
   });
 });
 

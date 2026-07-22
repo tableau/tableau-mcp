@@ -41,10 +41,18 @@ export type MockExternalApiServer = {
 
 const DEFAULT_TOKEN = 'valid-token';
 const DEFAULT_WORKBOOK_XML = '<?xml version="1.0"?><workbook><worksheets /></workbook>';
-const DEFAULT_WORKSHEET_XML =
-  '<worksheet name="Sales by Region"><table><rows /></table></worksheet>';
-const DEFAULT_DASHBOARD_XML =
-  '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>';
+// The live per-item /document routes return a whole <workbook> scoped to the requested item, NOT a
+// bare fragment (verified against Desktop 0.1.1). The mock mirrors that so the read paths' slice is
+// exercised: the worksheet document carries a sibling sheet the slice must exclude by name.
+const DEFAULT_WORKSHEET_DOCUMENT_XML =
+  '<?xml version="1.0"?><workbook><worksheets>' +
+  '<worksheet name="Sales by Region"><table><rows /></table></worksheet>' +
+  '<worksheet name="Profit by Category"><table><rows /></table></worksheet>' +
+  '</worksheets></workbook>';
+const DEFAULT_DASHBOARD_DOCUMENT_XML =
+  '<?xml version="1.0"?><workbook><dashboards>' +
+  '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>' +
+  '</dashboards></workbook>';
 const DEFAULT_STORYBOARD_XML = '<storyboard name="QBR Story"><story-points /></storyboard>';
 const DEFAULT_WORKSHEETS = [
   {
@@ -308,7 +316,7 @@ export async function startMockExternalApiServer(
         sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
         return;
       }
-      sendXml(res, 200, DEFAULT_WORKSHEET_XML);
+      sendXml(res, 200, DEFAULT_WORKSHEET_DOCUMENT_XML);
       return;
     }
 
@@ -319,7 +327,7 @@ export async function startMockExternalApiServer(
         sendProblem(res, 404, 'sheet-not-found', `Dashboard not found: ${dashboardId}`);
         return;
       }
-      sendXml(res, 200, DEFAULT_DASHBOARD_XML);
+      sendXml(res, 200, DEFAULT_DASHBOARD_DOCUMENT_XML);
       return;
     }
 

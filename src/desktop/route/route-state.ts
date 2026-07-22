@@ -58,6 +58,50 @@ export interface RouteOverride {
 /** Terminal dispositions a bind-template call can produce (mirrors BinderResult.status). */
 export type BindOutcome = 'bound' | 'propose' | 'escalate';
 
+export type BindRecoveryPhase =
+  | 'awaiting-proposal'
+  | 'proposal-attempted'
+  | 'retry-used'
+  | 'terminal';
+
+export interface BindAttempt {
+  /** ISO timestamp the bind recovery observation was recorded. */
+  ts: string;
+  /** Store-scoped reservation id returned by admission; outcome recording uses it to correlate concurrency. */
+  reservationId?: number;
+  /** Absent while an admitted call is still in flight or failed before a binder outcome. */
+  outcome?: BindOutcome;
+  /** Canonical semantic signature for proposal-bearing calls. */
+  proposalSignature?: string;
+  /** True only for the single changed-proposal retry after the first proposal-bearing call. */
+  consumesRetryBudget: boolean;
+}
+
+export interface BindRecoveryRecord {
+  phase: BindRecoveryPhase;
+  attempts: BindAttempt[];
+  lastProposalSignature?: string;
+  /** Outcome records that could not be correlated to a live pending reservation. */
+  uncorrelatedOutcomeCount?: number;
+}
+
+export interface BindRecoveryAttemptInput {
+  outcome: BindOutcome;
+  proposalSignature?: string;
+  reservationId?: number;
+  /** Explicit terminal-done marker; callers use this only after final bind processing concludes. */
+  terminal?: boolean;
+}
+
+export interface BindRecoveryAdmissionInput {
+  proposalSignature?: string;
+}
+
+export interface UnprotectedPassthroughs {
+  count: number;
+  last_asks: string[];
+}
+
 /**
  * The MOST RECENT ask bind-template classified for this session (most-recent-ask-wins).
  * `last_outcome` is null between classification and the concluded bind-template outcome.
@@ -81,6 +125,10 @@ export interface SessionRouteState {
   deflections: RouteDeflection[];
   /** Route overrides recorded for this session (one per (session, ask) post-deflection). */
   route_overrides: RouteOverride[];
+  /** Bounded per-ask bind recovery records, keyed by the same normalized ask as current_ask. */
+  bindRecoveryByAsk: Map<string, BindRecoveryRecord>;
+  /** Capacity-rejected bind admissions that intentionally proceeded unprotected. */
+  unprotected_passthroughs: UnprotectedPassthroughs;
   /** Most recent bind-template ask classification for this session, if any. */
   current_ask?: SessionAskClassification;
 }
@@ -89,7 +137,13 @@ export interface RouteReceipt {
   route?: RouteClass;
   shape?: AskShape;
   template?: string;
-  bind_attempts?: { count: number; outcomes: BindOutcome[] };
+  bind_attempts?: {
+    count: number;
+    outcomes: BindOutcome[];
+    phase?: BindRecoveryPhase;
+    retry_budget_consumed?: number;
+    uncorrelated_outcomes?: number;
+  };
   deflections?: Array<{
     tool: string;
     ts: string;
@@ -103,6 +157,7 @@ export interface RouteReceipt {
     template?: string;
     shape?: AskShape;
   }>;
+  unprotected_passthroughs?: UnprotectedPassthroughs;
 }
 
 export function serializeRouteReceipt(
@@ -111,13 +166,30 @@ export function serializeRouteReceipt(
   if (!state) return undefined;
   const receipt: RouteReceipt = {};
   if (state.current_ask) {
+    const bindRecovery = state.bindRecoveryByAsk.get(state.current_ask.ask);
     receipt.route = state.current_ask.route;
     receipt.shape = state.current_ask.shape;
     receipt.template = state.current_ask.template ?? undefined;
-    receipt.bind_attempts = {
-      count: state.current_ask.last_outcome === null ? 0 : 1,
-      outcomes: state.current_ask.last_outcome === null ? [] : [state.current_ask.last_outcome],
-    };
+    if (bindRecovery) {
+      receipt.bind_attempts = {
+        count: bindRecovery.attempts.length,
+        outcomes: bindRecovery.attempts.flatMap((attempt) =>
+          attempt.outcome === undefined ? [] : [attempt.outcome],
+        ),
+        phase: bindRecovery.phase,
+        retry_budget_consumed: bindRecovery.attempts.filter(
+          (attempt) => attempt.consumesRetryBudget,
+        ).length,
+        ...(bindRecovery.uncorrelatedOutcomeCount
+          ? { uncorrelated_outcomes: bindRecovery.uncorrelatedOutcomeCount }
+          : {}),
+      };
+    } else {
+      receipt.bind_attempts = {
+        count: state.current_ask.last_outcome === null ? 0 : 1,
+        outcomes: state.current_ask.last_outcome === null ? [] : [state.current_ask.last_outcome],
+      };
+    }
   }
   if (state.deflections.length > 0) {
     receipt.deflections = state.deflections.map((deflection) => ({
@@ -136,11 +208,19 @@ export function serializeRouteReceipt(
       shape: override.shape,
     }));
   }
+  if (state.unprotected_passthroughs.count > 0) {
+    receipt.unprotected_passthroughs = {
+      count: state.unprotected_passthroughs.count,
+      last_asks: [...state.unprotected_passthroughs.last_asks],
+    };
+  }
   return Object.keys(receipt).length > 0 ? receipt : undefined;
 }
 
 export class SessionRouteStateStore {
   private bySession = new Map<string, SessionRouteState>();
+
+  private nextBindRecoveryReservationId = 0;
 
   /**
    * Safety cap on retained session states. A long-lived server that never sees an
@@ -157,10 +237,22 @@ export class SessionRouteStateStore {
    */
   static readonly MAX_ENTRIES_PER_SESSION = 200;
 
+  /** Per-session LRU cap for bind recovery records. */
+  static readonly MAX_BIND_RECOVERY_ASKS = 8;
+
+  /** Receipt cap for capacity-rejected asks. */
+  static readonly MAX_UNPROTECTED_PASSTHROUGH_ASKS = 4;
+
   private ensure(sessionId: string): SessionRouteState {
     let state = this.bySession.get(sessionId);
     if (!state) {
-      state = { session_id: sessionId, deflections: [], route_overrides: [] };
+      state = {
+        session_id: sessionId,
+        deflections: [],
+        route_overrides: [],
+        bindRecoveryByAsk: new Map(),
+        unprotected_passthroughs: { count: 0, last_asks: [] },
+      };
       this.bySession.set(sessionId, state);
       while (this.bySession.size > SessionRouteStateStore.MAX_STATES) {
         const oldest = this.bySession.keys().next().value;
@@ -169,6 +261,50 @@ export class SessionRouteStateStore {
       }
     }
     return state;
+  }
+
+  private isActiveBindRecovery(record: BindRecoveryRecord): boolean {
+    return record.phase !== 'terminal';
+  }
+
+  private touchBindRecovery(
+    state: SessionRouteState,
+    ask: string,
+    record: BindRecoveryRecord,
+  ): boolean {
+    state.bindRecoveryByAsk.delete(ask);
+    state.bindRecoveryByAsk.set(ask, record);
+    while (state.bindRecoveryByAsk.size > SessionRouteStateStore.MAX_BIND_RECOVERY_ASKS) {
+      const terminalAsk = [...state.bindRecoveryByAsk.entries()].find(
+        ([candidateAsk, candidateRecord]) =>
+          candidateAsk !== ask && !this.isActiveBindRecovery(candidateRecord),
+      )?.[0];
+      if (terminalAsk !== undefined) {
+        state.bindRecoveryByAsk.delete(terminalAsk);
+        continue;
+      }
+
+      const selfIsTerminal = !this.isActiveBindRecovery(record);
+      if (selfIsTerminal) {
+        state.bindRecoveryByAsk.delete(ask);
+        return false;
+      }
+
+      state.bindRecoveryByAsk.delete(ask);
+      return false;
+    }
+    return true;
+  }
+
+  private recordUnprotectedPassthrough(state: SessionRouteState, ask: string): void {
+    state.unprotected_passthroughs.count += 1;
+    state.unprotected_passthroughs.last_asks.push(ask);
+    while (
+      state.unprotected_passthroughs.last_asks.length >
+      SessionRouteStateStore.MAX_UNPROTECTED_PASSTHROUGH_ASKS
+    ) {
+      state.unprotected_passthroughs.last_asks.shift();
+    }
   }
 
   /** Route state for a session, if any. Undefined for an unknown/absent id (no-op). */
@@ -190,6 +326,256 @@ export class SessionRouteStateStore {
   hasOverride(sessionId: string | undefined, ask: string): boolean {
     const state = this.get(sessionId);
     return !!state && state.route_overrides.some((o) => o.ask === ask);
+  }
+
+  /** Bind recovery record for a session/normalized-ask pair, if retained. */
+  getBindRecovery(sessionId: string | undefined, ask: string): BindRecoveryRecord | undefined {
+    const state = this.get(sessionId);
+    const record = state?.bindRecoveryByAsk.get(ask);
+    if (state && record) {
+      this.touchBindRecovery(state, ask, record);
+    }
+    return record;
+  }
+
+  private classifyBindRecoveryPhase(
+    previous: BindRecoveryRecord | undefined,
+    proposalSignature: string | undefined,
+  ): Pick<BindAttempt, 'consumesRetryBudget'> & { phase: BindRecoveryPhase } {
+    const hasProposal = proposalSignature !== undefined;
+    const priorProposalSignature = previous?.lastProposalSignature;
+    const changedProposal =
+      hasProposal &&
+      priorProposalSignature !== undefined &&
+      priorProposalSignature !== proposalSignature;
+
+    const consumesRetryBudget = previous?.phase === 'proposal-attempted' && changedProposal;
+    const phase: BindRecoveryPhase = !hasProposal
+      ? 'awaiting-proposal'
+      : consumesRetryBudget || previous?.phase === 'retry-used'
+        ? 'retry-used'
+        : 'proposal-attempted';
+
+    return { phase, consumesRetryBudget };
+  }
+
+  private withLastProposalSignature(
+    previous: BindRecoveryRecord | undefined,
+    proposalSignature: string | undefined,
+  ): Pick<BindRecoveryRecord, 'lastProposalSignature'> {
+    if (proposalSignature !== undefined) return { lastProposalSignature: proposalSignature };
+    if (previous?.lastProposalSignature !== undefined) {
+      return { lastProposalSignature: previous.lastProposalSignature };
+    }
+    return {};
+  }
+
+  private upgradesLastReservation(
+    previous: BindRecoveryRecord | undefined,
+    proposalSignature: string | undefined,
+  ): boolean {
+    const lastAttempt = previous?.attempts.at(-1);
+    return (
+      lastAttempt !== undefined &&
+      lastAttempt.outcome === undefined &&
+      lastAttempt.proposalSignature === proposalSignature
+    );
+  }
+
+  private upgradeReservedAttempt(
+    previous: BindRecoveryRecord | undefined,
+    reservationId: number,
+    bindAttempt: BindAttempt & { outcome: BindOutcome },
+  ): { attempts: BindAttempt[]; uncorrelated: boolean } {
+    const previousAttempts = previous?.attempts ?? [];
+    const reservedAttemptIndex = previousAttempts.findIndex(
+      (attempt) => attempt.reservationId === reservationId,
+    );
+    if (reservedAttemptIndex === -1) {
+      return {
+        attempts: previousAttempts,
+        uncorrelated: true,
+      };
+    }
+    const reservedAttempt = previousAttempts[reservedAttemptIndex];
+    if (reservedAttempt.outcome !== undefined) {
+      return {
+        attempts: previousAttempts,
+        uncorrelated: true,
+      };
+    }
+
+    const attempts = previousAttempts.slice();
+    attempts[reservedAttemptIndex] = {
+      ...reservedAttempt,
+      outcome: bindAttempt.outcome,
+    };
+    return { attempts, uncorrelated: false };
+  }
+
+  private upgradeOrAppendAttempt(
+    previous: BindRecoveryRecord | undefined,
+    proposalSignature: string | undefined,
+    bindAttempt: BindAttempt & { outcome: BindOutcome },
+  ): BindAttempt[] {
+    if (!this.upgradesLastReservation(previous, proposalSignature)) {
+      return [...(previous?.attempts ?? []), bindAttempt];
+    }
+    const previousAttempts = previous?.attempts ?? [];
+    const lastAttempt = previousAttempts.at(-1);
+    if (!lastAttempt) return [bindAttempt];
+    return [...previousAttempts.slice(0, -1), { ...lastAttempt, outcome: bindAttempt.outcome }];
+  }
+
+  private withUncorrelatedOutcomeCount(
+    previous: BindRecoveryRecord | undefined,
+    uncorrelated: boolean,
+  ): Pick<BindRecoveryRecord, 'uncorrelatedOutcomeCount'> {
+    const count = (previous?.uncorrelatedOutcomeCount ?? 0) + (uncorrelated ? 1 : 0);
+    return count > 0 ? { uncorrelatedOutcomeCount: count } : {};
+  }
+
+  /**
+   * Atomically admit a bind recovery call before any downstream work. The reservation itself
+   * enforces in-flight duplicate blocking; later outcome recording upgrades this reservation id.
+   */
+  reserveBindRecoveryAdmission(
+    sessionId: string | undefined,
+    ask: string,
+    admission: BindRecoveryAdmissionInput,
+  ): number | undefined {
+    if (!sessionId) return undefined;
+    const state = this.ensure(sessionId);
+    const previous = state.bindRecoveryByAsk.get(ask);
+    const { phase, consumesRetryBudget } = this.classifyBindRecoveryPhase(
+      previous,
+      admission.proposalSignature,
+    );
+    const bindAttempt: BindAttempt = {
+      ts: new Date().toISOString(),
+      ...(admission.proposalSignature !== undefined
+        ? { proposalSignature: admission.proposalSignature }
+        : {}),
+      consumesRetryBudget,
+    };
+    const reservationId = this.nextBindRecoveryReservationId++;
+    const record: BindRecoveryRecord = {
+      phase,
+      attempts: [...(previous?.attempts ?? []), { ...bindAttempt, reservationId }],
+      ...this.withLastProposalSignature(previous, admission.proposalSignature),
+      ...this.withUncorrelatedOutcomeCount(previous, false),
+    };
+
+    if (this.touchBindRecovery(state, ask, record)) {
+      return reservationId;
+    }
+    this.recordUnprotectedPassthrough(state, ask);
+    return undefined;
+  }
+
+  /**
+   * Record one bind recovery observation for a normalized ask. This is separate from
+   * current_ask so the scratch gate keeps its most-recent pending-call semantics.
+   */
+  recordBindRecoveryAttempt(
+    sessionId: string | undefined,
+    ask: string,
+    attempt: BindRecoveryAttemptInput,
+  ): SessionRouteState | undefined {
+    if (!sessionId) return undefined;
+    const state = this.ensure(sessionId);
+
+    if (attempt.terminal) {
+      state.bindRecoveryByAsk.delete(ask);
+      return state;
+    }
+
+    const previous = state.bindRecoveryByAsk.get(ask);
+    const { phase, consumesRetryBudget } = this.classifyBindRecoveryPhase(
+      previous,
+      attempt.proposalSignature,
+    );
+
+    const bindAttempt: BindAttempt & { outcome: BindOutcome } = {
+      ts: new Date().toISOString(),
+      outcome: attempt.outcome,
+      ...(attempt.reservationId !== undefined ? { reservationId: attempt.reservationId } : {}),
+      ...(attempt.proposalSignature !== undefined
+        ? { proposalSignature: attempt.proposalSignature }
+        : {}),
+      consumesRetryBudget,
+    };
+    const upgraded =
+      attempt.reservationId === undefined
+        ? {
+            attempts: this.upgradeOrAppendAttempt(previous, attempt.proposalSignature, bindAttempt),
+            uncorrelated: false,
+          }
+        : this.upgradeReservedAttempt(previous, attempt.reservationId, bindAttempt);
+    const record: BindRecoveryRecord = {
+      phase: upgraded.uncorrelated && previous ? previous.phase : phase,
+      attempts: upgraded.attempts,
+      ...this.withLastProposalSignature(
+        previous,
+        attempt.reservationId === undefined ? attempt.proposalSignature : undefined,
+      ),
+      ...this.withUncorrelatedOutcomeCount(previous, upgraded.uncorrelated),
+    };
+
+    this.touchBindRecovery(state, ask, record);
+    return state;
+  }
+
+  /**
+   * Record a non-recoverable bind end-state that should block future same-ask retries.
+   * This is distinct from `terminal: true`, which clears successful done/bound records.
+   */
+  recordBindRecoveryTerminal(
+    sessionId: string | undefined,
+    ask: string,
+    attempt: Omit<BindRecoveryAttemptInput, 'terminal'>,
+  ): SessionRouteState | undefined {
+    if (!sessionId) return undefined;
+    const state = this.ensure(sessionId);
+    const previous = state.bindRecoveryByAsk.get(ask);
+    const { consumesRetryBudget } = this.classifyBindRecoveryPhase(
+      previous,
+      attempt.proposalSignature,
+    );
+    const bindAttempt: BindAttempt & { outcome: BindOutcome } = {
+      ts: new Date().toISOString(),
+      outcome: attempt.outcome,
+      ...(attempt.reservationId !== undefined ? { reservationId: attempt.reservationId } : {}),
+      ...(attempt.proposalSignature !== undefined
+        ? { proposalSignature: attempt.proposalSignature }
+        : {}),
+      consumesRetryBudget,
+    };
+    const upgraded =
+      attempt.reservationId === undefined
+        ? {
+            attempts: this.upgradeOrAppendAttempt(previous, attempt.proposalSignature, bindAttempt),
+            uncorrelated: false,
+          }
+        : this.upgradeReservedAttempt(previous, attempt.reservationId, bindAttempt);
+    const record: BindRecoveryRecord = {
+      phase: upgraded.uncorrelated && previous ? previous.phase : 'terminal',
+      attempts: upgraded.attempts,
+      ...this.withLastProposalSignature(
+        previous,
+        attempt.reservationId === undefined ? attempt.proposalSignature : undefined,
+      ),
+      ...this.withUncorrelatedOutcomeCount(previous, upgraded.uncorrelated),
+    };
+
+    this.touchBindRecovery(state, ask, record);
+    return state;
+  }
+
+  clearBindRecovery(sessionId: string | undefined, ask: string): boolean {
+    const state = this.get(sessionId);
+    if (!state) return false;
+    return state.bindRecoveryByAsk.delete(ask);
   }
 
   /**
