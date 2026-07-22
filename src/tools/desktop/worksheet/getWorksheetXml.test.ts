@@ -52,7 +52,7 @@ describe('getWorksheetXmlTool', () => {
 
   it('should return worksheet XML inline when mode is inline', async () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
-    vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(Ok(mockXml));
+    vi.spyOn(getWorksheetXmlModule, 'getWorksheetFragment').mockResolvedValue(Ok(mockXml));
 
     const result = await getToolResult({
       session: '12345',
@@ -71,7 +71,7 @@ describe('getWorksheetXmlTool', () => {
 
   it('should write to file and return path when mode is file', async () => {
     const mockXml = '<worksheet name="Sheet 1"><table></table></worksheet>';
-    vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(Ok(mockXml));
+    vi.spyOn(getWorksheetXmlModule, 'getWorksheetFragment').mockResolvedValue(Ok(mockXml));
 
     const result = await getToolResult({
       session: '12345',
@@ -96,7 +96,7 @@ describe('getWorksheetXmlTool', () => {
         error: { code: 'ERROR', message: 'Network error', recoverable: false },
       },
     };
-    vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(Err(error));
+    vi.spyOn(getWorksheetXmlModule, 'getWorksheetFragment').mockResolvedValue(Err(error));
 
     const result = await getToolResult({
       session: '12345',
@@ -114,7 +114,7 @@ describe('getWorksheetXmlTool', () => {
       type: 'get-worksheet-xml-error' as const,
       error: { type: 'no-worksheet-found' as const, message: 'No worksheet found for Sheet 1.' },
     };
-    vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(Err(error));
+    vi.spyOn(getWorksheetXmlModule, 'getWorksheetFragment').mockResolvedValue(Err(error));
 
     const result = await getToolResult({
       session: '12345',
@@ -135,7 +135,7 @@ describe('getWorksheetXmlTool', () => {
         message: '3 worksheets found instead of 1.',
       },
     };
-    vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(Err(error));
+    vi.spyOn(getWorksheetXmlModule, 'getWorksheetFragment').mockResolvedValue(Err(error));
 
     const result = await getToolResult({
       session: '12345',
@@ -148,9 +148,9 @@ describe('getWorksheetXmlTool', () => {
     expect(result.content[0].text).toBe(new GetWorksheetXmlFailedError(error.error).message);
   });
 
-  it('should pass the abort signal to getWorksheetXml command', async () => {
+  it('should pass the abort signal to getWorksheetFragment', async () => {
     const mockGetWorksheetXml = vi
-      .spyOn(getWorksheetXmlModule, 'getWorksheetXml')
+      .spyOn(getWorksheetXmlModule, 'getWorksheetFragment')
       .mockResolvedValue(Ok('<worksheet name="Sheet 1"/>'));
 
     const customSignal = new AbortController().signal;
@@ -172,7 +172,7 @@ describe('getWorksheetXmlTool', () => {
 
   it('forces file mode when inline XML exceeds the cap, regardless of requested mode', async () => {
     const overCapXml = '<worksheet name="Sales">' + 'x'.repeat(20000) + '</worksheet>';
-    vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(Ok(overCapXml));
+    vi.spyOn(getWorksheetXmlModule, 'getWorksheetFragment').mockResolvedValue(Ok(overCapXml));
 
     const result = await getToolResult({
       session: '12345',
@@ -194,7 +194,7 @@ describe('getWorksheetXmlTool', () => {
   it('logs a cap-hit receipt when the cap fires', async () => {
     const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => {});
     const overCapXml = '<worksheet name="Sales">' + 'x'.repeat(20000) + '</worksheet>';
-    vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(Ok(overCapXml));
+    vi.spyOn(getWorksheetXmlModule, 'getWorksheetFragment').mockResolvedValue(Ok(overCapXml));
 
     await getToolResult({ session: '12345', worksheetName: 'Sales', mode: 'inline' });
 
@@ -208,7 +208,7 @@ describe('getWorksheetXmlTool', () => {
 
   it('respects a smaller cap overridden via config', async () => {
     const smallXml = '<worksheet name="Sales"><a/></worksheet>';
-    vi.spyOn(getWorksheetXmlModule, 'getWorksheetXml').mockResolvedValue(Ok(smallXml));
+    vi.spyOn(getWorksheetXmlModule, 'getWorksheetFragment').mockResolvedValue(Ok(smallXml));
 
     const result = await getToolResult({
       session: '12345',

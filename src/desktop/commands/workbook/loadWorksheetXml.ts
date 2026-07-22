@@ -3,7 +3,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { log } from '../../../logging/logger.js';
 import { sanitizeValue } from '../../../logging/sanitize.js';
 import { normalizeArray, parseXML } from '../../metadata/parser.js';
-import { buildMinimalSheetDoc } from '../../metadata/sheets.js';
+import { upsertSheetIntoWorkbook } from '../../metadata/sheets.js';
 import type { ParsedWorksheet } from '../../metadata/types.js';
 import {
   ExecuteCommandError,
@@ -21,7 +21,7 @@ import { xmlNamesEqual } from '../../xmlElement.js';
 import { withApplyLock } from './applyMutex.js';
 import { focusAppliedSheetBestEffort } from './focusAppliedSheet.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
-import { getWorksheetXml } from './getWorksheetXml.js';
+import { getWorksheetFragment } from './getWorksheetXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
 
 export type LoadWorksheetXmlError =
@@ -79,7 +79,7 @@ async function verifyPostApplyWorksheetReadback(
   signal: WithExecutorAndAbortSignal['signal'],
 ): Promise<PostApplyWorksheetReadbackVerification> {
   try {
-    const reread = await getWorksheetXml({ worksheetName, executor, signal });
+    const reread = await getWorksheetFragment({ worksheetName, executor, signal });
     if (reread.isErr()) {
       const message =
         reread.error.type === 'get-worksheet-xml-error'
@@ -146,10 +146,10 @@ function readbackOutcome(
  * identical NFD/NFC spellings do not false-mismatch. Returns the validated canonical name — the
  * name exactly as authored in the XML (trimmed), which is what Tableau stores when it applies the
  * raw XML — for the load, the readback, and the post-apply goto-sheet, so focus can never target a
- * stale/default sheet (e.g. "Sheet 1"), and so buildMinimalSheetDoc's own name check still matches.
+ * stale/default sheet (e.g. "Sheet 1"), and so upsertSheetIntoWorkbook's own name check still matches.
  *
  * Only a single top-level `<worksheet>` fragment is a legal payload here (the same fragment
- * get-worksheet-xml returns and buildMinimalSheetDoc requires). A `<workbook>`-wrapped document has
+ * get-worksheet-xml returns and upsertSheetIntoWorkbook requires). A `<workbook>`-wrapped document has
  * no top-level identity to gate on, so it is rejected before apply with a recovery hint rather than
  * failing as a misleading mismatch against an empty XML name.
  */
@@ -265,9 +265,9 @@ export async function loadWorksheetXml({
   }
   const canonicalName = canonicalNameResult.value;
 
-  // External Client API ("Athena V0") exposes no per-sheet apply route, so applying a single
-  // sheet re-posts a minimal whole-workbook document.
-  // The POST upserts by name: it overwrites the colliding sheet in place and leaves the rest live.
+  // External Client API ("Athena V0") exposes no per-sheet apply route, so applying a single sheet
+  // re-posts the whole live workbook with just this sheet swapped in (the POST replaces the open
+  // workbook wholesale, so anything omitted would be pruned).
   const result = await loadWorksheetXmlViaExternalApi({
     worksheetName: canonicalName,
     xml,
@@ -303,15 +303,15 @@ async function loadWorksheetXmlViaExternalApi({
       return Err({ type: 'execute-command-error', error: workbookResult.error });
     }
 
-    let minimalDoc: string;
+    let workbookDoc: string;
     try {
-      minimalDoc = buildMinimalSheetDoc(workbookResult.value, worksheetName, xml);
+      workbookDoc = upsertSheetIntoWorkbook(workbookResult.value, worksheetName, xml);
     } catch (error) {
       return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
     }
 
-    const minimalDocValidation = runValidation(minimalDoc, 'workbook');
-    if (!minimalDocValidation.valid) {
+    const workbookDocValidation = runValidation(workbookDoc, 'workbook');
+    if (!workbookDocValidation.valid) {
       log({
         level: 'error',
         message:
@@ -319,18 +319,18 @@ async function loadWorksheetXmlViaExternalApi({
         logger: 'worksheetCommands',
         data: {
           worksheetName,
-          issues: minimalDocValidation.issues,
-          xmlPreview: sanitize(minimalDoc),
+          issues: workbookDocValidation.issues,
+          xmlPreview: sanitize(workbookDoc),
         },
       });
 
       return Err({
         type: 'load-worksheet-xml-error',
-        error: { type: 'validation-failed', issues: minimalDocValidation.issues },
+        error: { type: 'validation-failed', issues: workbookDocValidation.issues },
       });
     }
 
-    const applyResult = await applyWorkbookText({ xml: minimalDoc, executor, signal });
+    const applyResult = await applyWorkbookText({ xml: workbookDoc, executor, signal });
     if (applyResult.isErr()) {
       return Err({ type: 'execute-command-error', error: applyResult.error });
     }
