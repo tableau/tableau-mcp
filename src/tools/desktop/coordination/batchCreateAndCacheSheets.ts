@@ -161,6 +161,7 @@ export const getBatchCreateAndCacheSheetsTool = (
             const file = cache.getCacheFilePath({ prefix: 'worksheet', id: safeWsName });
             try {
               writeFileSync(file, wsResult.value, 'utf-8');
+              writeSidecar(file, resolvedSession);
             } catch (error) {
               worksheetFailures.push({
                 name,
@@ -168,7 +169,6 @@ export const getBatchCreateAndCacheSheetsTool = (
               });
               continue;
             }
-            writeSidecar(file, resolvedSession);
             worksheetFiles[name] = file;
           }
 

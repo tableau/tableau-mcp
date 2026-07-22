@@ -45,7 +45,7 @@ import {
   withNextAction,
 } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
-import { buildDashboardXml, computeZones } from './dashboardZones.js';
+import { buildDashboardXml, computeZones, type Zone } from './dashboardZones.js';
 
 /**
  * Whether a fully zone-populated `<dashboard>` node injected as part of a single
@@ -106,10 +106,9 @@ type DashboardAutoApplyPartialResult = {
   applied: 'partial';
   dashboard: string;
   sheets: Array<{ title: string; template_name: string }>;
-  zones: {
-    landed: [];
-    failed: Array<{ id: number; kind: 'text' | 'worksheet'; name?: string }>;
-  };
+  zones:
+    | { state: 'unknown'; attempted: Zone[] }
+    | { state: 'failed'; attempted: Zone[]; landed: []; failed: Zone[] };
   apply_error: string;
   guidance: string;
   replaced?: Replaced;
@@ -484,20 +483,22 @@ export const getDashboardAutoApplyTool = (
                 err.type === 'load-dashboard-xml-error'
                   ? JSON.stringify(err.error)
                   : `workbook load command failed: ${JSON.stringify(err.error)}`;
+              const zonesState =
+                err.type === 'execute-command-error'
+                  ? { state: 'unknown' as const, attempted: realZones }
+                  : {
+                      state: 'failed' as const,
+                      attempted: realZones,
+                      landed: [],
+                      failed: realZones,
+                    };
               return new IncompleteOperationError(
                 withNextAction(
                   {
                     applied: 'partial',
                     dashboard: dashboardName,
                     sheets,
-                    zones: {
-                      landed: [],
-                      failed: realZones.map((zone) => ({
-                        id: zone.id,
-                        kind: zone.kind,
-                        ...(zone.kind === 'worksheet' ? { name: zone.name } : {}),
-                      })),
-                    },
+                    zones: zonesState,
                     apply_error: message,
                     guidance:
                       `The workbook (sheets + an empty "${dashboardName}" dashboard) was applied, but laying ` +

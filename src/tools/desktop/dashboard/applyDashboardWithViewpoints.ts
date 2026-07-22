@@ -19,12 +19,20 @@ import {
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { IncompleteOperationError } from '../incompleteOperationError.js';
 import { DesktopTool } from '../tool.js';
+import { accountDashboardViewpoints, type ViewpointAccounting } from './viewpointAccounting.js';
 
 const paramsSchema = {
   session: z.string().optional().describe(''),
   dashboardName: z.string().describe(''),
   dashboardFile: z.string().describe(''),
   worksheetNames: z.array(z.string()).describe(''),
+};
+
+type ApplyDashboardWithViewpointsResult = {
+  message: string;
+  dashboardName: string;
+  viewpointCount: number;
+  viewpointState: ViewpointAccounting['state'];
 };
 
 const title = 'Apply Dashboard with Viewpoints';
@@ -48,7 +56,7 @@ export const getApplyDashboardWithViewpointsTool = (
       { session, dashboardName, dashboardFile, worksheetNames },
       extra,
     ): Promise<CallToolResult> => {
-      return await tool.logAndExecute({
+      return await tool.logAndExecute<ApplyDashboardWithViewpointsResult>({
         extra,
         args: { session, dashboardName, dashboardFile, worksheetNames },
         callback: async () => {
@@ -101,7 +109,20 @@ export const getApplyDashboardWithViewpointsTool = (
           // Re-read after dashboard apply so its window exists, then inject viewpoints.
           const workbookResult = await getWorkbookXml({ executor, signal: extra.signal });
           if (workbookResult.isErr()) {
-            return new DesktopCommandExecutionError(workbookResult.error).toErr();
+            const error = new DesktopCommandExecutionError(workbookResult.error);
+            return new IncompleteOperationError({
+              dashboardName,
+              dashboardApplied: true,
+              stage: 'post-dashboard-workbook-read',
+              viewpoints: {
+                state: 'unknown',
+                requested: worksheetNames,
+              },
+              apply_error: error.message,
+              guidance:
+                `Dashboard "${dashboardName}" was applied, but the post-apply workbook re-read failed. ` +
+                'Do not recreate the dashboard; re-read the workbook and retry viewpoint injection.',
+            }).toErr();
           }
 
           const updatedWorkbookXml = injectViewpoints(
@@ -109,18 +130,34 @@ export const getApplyDashboardWithViewpointsTool = (
             dashboardName,
             worksheetNames,
           );
+          const viewpointAccounting = accountDashboardViewpoints({
+            beforeXml: workbookResult.value,
+            afterXml: updatedWorkbookXml,
+            dashboardName,
+            requested: worksheetNames,
+          });
 
-          if (worksheetNames.length > 0 && updatedWorkbookXml === workbookResult.value) {
+          if (viewpointAccounting.state === 'failed') {
             return new IncompleteOperationError({
               dashboardName,
               dashboardApplied: true,
-              viewpointCount: 0,
-              requestedViewpointCount: worksheetNames.length,
-              failedViewpoints: worksheetNames,
+              stage: 'viewpoint-injection',
+              viewpoints: viewpointAccounting,
               guidance:
-                `Dashboard "${dashboardName}" was applied, but no dashboard window was found after apply, ` +
-                'so no viewpoints were injected. Re-read the live workbook and retry viewpoint injection.',
+                `Dashboard "${dashboardName}" was applied, but only ` +
+                `${viewpointAccounting.landed.length}/${worksheetNames.length} requested viewpoint(s) ` +
+                'were present in the post-injection workbook XML. Do not recreate the dashboard; retry ' +
+                'viewpoint injection for the failed worksheets.',
             }).toErr();
+          }
+
+          if (viewpointAccounting.state === 'success-already-present') {
+            return new Ok({
+              message: `Dashboard "${dashboardName}" already had ${viewpointAccounting.landed.length} requested viewpoint(s).`,
+              dashboardName,
+              viewpointCount: viewpointAccounting.landed.length,
+              viewpointState: viewpointAccounting.state,
+            });
           }
 
           const workbookApplyResult = await loadWorkbookXml({
@@ -133,9 +170,21 @@ export const getApplyDashboardWithViewpointsTool = (
             const { type, error } = workbookApplyResult.error;
             switch (type) {
               case 'execute-command-error':
-                return new DesktopCommandExecutionError(error).toErr();
+                return viewpointApplyIncomplete({
+                  dashboardName,
+                  worksheetNames,
+                  viewpointAccounting,
+                  state: 'unknown',
+                  errorMessage: new DesktopCommandExecutionError(error).message,
+                });
               case 'load-workbook-xml-error':
-                return new WorkbookXmlLoadFailedError(error).toErr();
+                return viewpointApplyIncomplete({
+                  dashboardName,
+                  worksheetNames,
+                  viewpointAccounting,
+                  state: 'failed',
+                  errorMessage: new WorkbookXmlLoadFailedError(error).message,
+                });
               default: {
                 const _: never = type;
               }
@@ -145,7 +194,8 @@ export const getApplyDashboardWithViewpointsTool = (
           return new Ok({
             message: `Successfully applied dashboard "${dashboardName}" with ${worksheetNames.length} viewpoint(s).`,
             dashboardName,
-            viewpointCount: worksheetNames.length,
+            viewpointCount: viewpointAccounting.landed.length,
+            viewpointState: viewpointAccounting.state,
           });
         },
       });
@@ -154,3 +204,41 @@ export const getApplyDashboardWithViewpointsTool = (
 
   return tool;
 };
+
+function viewpointApplyIncomplete({
+  dashboardName,
+  worksheetNames,
+  viewpointAccounting,
+  state,
+  errorMessage,
+}: {
+  dashboardName: string;
+  worksheetNames: string[];
+  viewpointAccounting: ViewpointAccounting;
+  state: 'failed' | 'unknown';
+  errorMessage: string;
+}): ReturnType<IncompleteOperationError<object>['toErr']> {
+  return new IncompleteOperationError({
+    dashboardName,
+    dashboardApplied: true,
+    stage: 'viewpoint-workbook-apply',
+    viewpoints:
+      state === 'unknown'
+        ? {
+            state,
+            requested: worksheetNames,
+            attempted: viewpointAccounting.landed,
+          }
+        : {
+            state,
+            requested: worksheetNames,
+            landed: [],
+            failed: worksheetNames,
+          },
+    apply_error: errorMessage,
+    guidance:
+      `Dashboard "${dashboardName}" was applied, but applying the workbook with viewpoints did not ` +
+      `complete (${errorMessage}). Do not recreate the dashboard; re-read the workbook before retrying ` +
+      'viewpoint injection.',
+  }).toErr();
+}

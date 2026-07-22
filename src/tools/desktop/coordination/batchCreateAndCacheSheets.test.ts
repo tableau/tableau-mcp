@@ -11,11 +11,13 @@ vi.mock('../../../desktop/commands/workbook/getWorkbookXml.js');
 vi.mock('../../../desktop/commands/workbook/loadWorkbookXml.js');
 vi.mock('../../../desktop/commands/workbook/getWorksheetXml.js');
 vi.mock('../../../desktop/commands/workbook/getDashboardXml.js');
+vi.mock('../../../desktop/commands/workbook/cacheFingerprint.js');
 vi.mock('../../../desktop/metadata/index.js');
 vi.mock('fs');
 
 import { writeFileSync } from 'fs';
 
+import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { getDashboardFragment } from '../../../desktop/commands/workbook/getDashboardXml.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { getWorksheetFragment } from '../../../desktop/commands/workbook/getWorksheetXml.js';
@@ -43,6 +45,7 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(getWorksheetFragment).mockResolvedValue(new Ok(WORKSHEET_XML));
   vi.mocked(getDashboardFragment).mockResolvedValue(new Ok(DASHBOARD_XML));
   vi.mocked(writeFileSync).mockImplementation(() => {});
+  vi.mocked(writeSidecar).mockImplementation(() => {});
   return extra;
 }
 
@@ -217,6 +220,34 @@ describe('batchCreateAndCacheSheetsTool', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.failed.worksheets).toEqual([
       { name: 'Uncached', error: 'cache write failed: disk full' },
+    ]);
+    expect(body.succeeded.dashboard).toEqual(['DB']);
+    expect(body.message).not.toContain('Ready for Phase 2');
+  });
+
+  it('should aggregate worksheet sidecar write failures', async () => {
+    const extra = makeExtra();
+    vi.mocked(writeSidecar)
+      .mockImplementationOnce(() => {})
+      .mockImplementationOnce(() => {
+        throw new Error('sidecar denied');
+      })
+      .mockImplementation(() => {});
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        worksheetNames: ['NoSidecar'],
+        dashboardName: 'DB',
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.failed.worksheets).toEqual([
+      { name: 'NoSidecar', error: 'cache write failed: sidecar denied' },
     ]);
     expect(body.succeeded.dashboard).toEqual(['DB']);
     expect(body.message).not.toContain('Ready for Phase 2');

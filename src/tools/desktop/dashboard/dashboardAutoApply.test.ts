@@ -616,12 +616,78 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       { title: 'Sales by Region', template_name: 'bar-basic' },
       { title: 'Profit by Month', template_name: 'line-basic' },
     ]);
-    expect(body.zones.landed).toEqual([]);
-    expect(body.zones.failed).toEqual([
-      { id: 10, kind: 'worksheet', name: 'Sales by Region' },
-      { id: 11, kind: 'worksheet', name: 'Profit by Month' },
-    ]);
+    const expectedZones = [
+      { kind: 'worksheet', h: 100000, id: 10, name: 'Sales by Region', w: 50000, x: 0, y: 0 },
+      {
+        kind: 'worksheet',
+        h: 100000,
+        id: 11,
+        name: 'Profit by Month',
+        w: 50000,
+        x: 50000,
+        y: 0,
+      },
+    ];
+    expect(body.zones).toEqual({
+      state: 'failed',
+      attempted: expectedZones,
+      landed: [],
+      failed: expectedZones,
+    });
     expect(String(body.apply_error)).toContain('zone load failed');
+  });
+
+  it('zone transport timeout reports unknown zone state with complete attempted specs', async () => {
+    const { getExecutor } = setupMocks();
+    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
+      Err({
+        type: 'execute-command-error',
+        error: { type: 'command-timed-out', error: 'Timeout' },
+      }),
+    );
+
+    const result = await getToolResult({
+      session: '1',
+      asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+      title: 'Executive Overview',
+      getExecutor,
+      zonesViaWorkbook: false,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe('partial');
+    expect(body.zones).toEqual({
+      state: 'unknown',
+      attempted: [
+        {
+          kind: 'text',
+          h: 8000,
+          id: 10,
+          w: 100000,
+          x: 0,
+          y: 0,
+          text: 'Executive Overview',
+          bold: 'true',
+          fontAlignment: '1',
+          fontColor: '#1f77b4',
+          fontName: 'Tableau Semibold',
+          fontSize: '16',
+        },
+        { kind: 'worksheet', h: 92000, id: 11, name: 'Sales by Region', w: 50000, x: 0, y: 8000 },
+        {
+          kind: 'worksheet',
+          h: 92000,
+          id: 12,
+          name: 'Profit by Month',
+          w: 50000,
+          x: 50000,
+          y: 8000,
+        },
+      ],
+    });
+    expect(String(body.apply_error)).toContain('command-timed-out');
   });
 
   it('duplicate resolved titles within the batch refuse — zero dispatches, indices named', async () => {
