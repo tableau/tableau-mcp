@@ -7,7 +7,7 @@
   "portability_evidence": {
     "fixture_bind": true,
     "render_verified": "live-2026-07-06",
-    "xml_sha256": "b75f203fdb787be456d1d37e74d3d292de8850ab3f304016e3ff5401dfc175ea",
+    "xml_sha256": "0fc23160012b8f3c50d8a17027b304a3995b765873798b0f464e337105256632",
     "render_evidence": {
       "method": "gate-composite",
       "date": "2026-07-06",

@@ -20,6 +20,7 @@ import {
 } from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
+import { activateSheetBestEffort } from '../../../desktop/commands/workbook/activateSheet.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import {
   loadWorkbookXml,
@@ -732,18 +733,30 @@ async function performAutoApply({
   const injectMs = Date.now() - injectStart;
 
   // ── Apply leg (SAME validated path; runValidation preflight runs) ─
+  const literalTitle = decodeXmlEntities(args.title);
   const applyStart = Date.now();
-  const applyResult = await loadWorkbookXml({ xml: spliced.xml, executor, signal });
-  const applyMs = Date.now() - applyStart;
+  const applyResult = await loadWorkbookXml({
+    xml: spliced.xml,
+    executor,
+    signal,
+  });
   if (applyResult.isErr()) {
     return applyFallback(base, `apply failed: ${describeApplyError(applyResult.error)}`);
   }
+  // Activation policy signal: this is the public standalone plain-chart auto-apply
+  // boundary. Dashboard composition binds/injects its intermediate sheets internally
+  // and never enters this path, so only the requested standalone chart navigates.
+  await activateSheetBestEffort({
+    sheetName: literalTitle,
+    executor,
+    signal,
+  });
+  const applyMs = Date.now() - applyStart;
 
   // W60 response-shape trim (P4): on success, return ONLY the trimmed fast-path shape —
   // drop the args echo, apply_instruction, apply_hint, and used_llm from `base`. Those
   // enable a manual second call that never happens once the apply succeeds.
   const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, res.status);
-  const literalTitle = decodeXmlEntities(args.title);
   const receipt = `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`;
   // Blake's spiral fix: the applied:true receipt is TERMINAL unless a genuine, named re-bind
   // slot is still unfilled (the m1 waterfall case). On INCOMPLETE we keep today's steer and

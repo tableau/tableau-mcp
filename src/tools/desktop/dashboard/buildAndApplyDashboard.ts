@@ -3,6 +3,7 @@ import { existsSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { activateSheetBestEffort } from '../../../desktop/commands/workbook/activateSheet.js';
 import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { injectViewpoints } from '../../../desktop/commands/workbook/injectViewpoints.js';
@@ -149,6 +150,14 @@ export const getBuildAndApplyDashboardTool = (
               }
             }
           }
+
+          // Composition policy: Phase-2 worksheet builds stay focus-neutral; the
+          // completed dashboard is the single terminal artifact that owns navigation.
+          await activateSheetBestEffort({
+            sheetName: dashboardName,
+            executor,
+            signal: extra.signal,
+          });
 
           return new Ok({
             message: `Successfully built and applied dashboard "${dashboardName}".`,

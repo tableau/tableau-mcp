@@ -12,7 +12,7 @@ Confirmed patterns for dashboard zone structure, device layouts, navigation butt
 - In-scope reason: Provides the exact zone XML structure, devicelayouts rules, and dashboard action syntax Claude needs to programmatically create or edit dashboard layouts via MCP tools.
 - Out-of-scope risk: none
 - Tags: dashboard, zones, layout, devicelayouts, navigation-buttons, dashboard-actions, filter-zones, parameter-controls, zone-ids, zone-coordinates, dashboard-xml, zone-style, viewpoints, zone-flattening, window-uuid
-- Relevant user prompts/search terms: "dashboard sheets not showing", "zones disappear after apply", "navigation button goto-sheet", "dashboard action tsc:brush", "filter zone renders empty", "parameter control on dashboard", "hard crash metadata loader", "zone coordinates 100000 scale", "devicelayouts required", "zone IDs shared across dashboards", "how do I position sheets on a dashboard", "place worksheets on a dashboard", "add a sheet to a dashboard layout", "arrange dashboard objects"
+- Relevant user prompts/search terms: "dashboard sheets not showing", "zones disappear after apply", "navigation button goto-sheet XML action", "activate-sheet for agent navigation", "dashboard action tsc:brush", "filter zone renders empty", "parameter control on dashboard", "hard crash metadata loader", "zone coordinates 100000 scale", "devicelayouts required", "zone IDs shared across dashboards", "how do I position sheets on a dashboard", "place worksheets on a dashboard", "add a sheet to a dashboard layout", "arrange dashboard objects"
 
 ## ⚠️ Read this before hand-crafting dashboard XML
 
@@ -231,6 +231,8 @@ Zoom type values: `"entire-view"`, `"fit-width"`, `"fit-height"`, `"none"` (Norm
 ## Navigation buttons
 
 Navigation buttons are zones with `type-v2="dashboard-object"` placed as **siblings** of the `layout-basic` container (direct children of the root `<zones>` element), NOT inside the layout-basic container:
+
+The `tabdoc:goto-sheet` string below is a workbook XML button action, not an `execute-tableau-command` recipe. For agent-driven sheet/dashboard navigation, use `activate-sheet`; raw `tabdoc:goto-sheet` is refused at the execute boundary.
 
 ```xml
 <zone x="85875" y="889" w="8875" h="4111" type-v2="dashboard-object" id="249">

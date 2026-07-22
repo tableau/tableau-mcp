@@ -10,13 +10,17 @@ import {
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import { DATA_ROOT, readResourceAsset, RESOURCES_ROOT } from './desktop/assets.js';
-import { listKnowledgeResources, readKnowledgeResource } from './desktop/knowledge/index.js';
+import {
+  getKnowledgeCorpusEntryCount,
+  getKnowledgeDir,
+  listKnowledgeResources,
+  readKnowledgeResource,
+} from './desktop/knowledge/index.js';
 import { buildDesktopInstructions } from './desktop/routeTable.js';
 import { SessionManager } from './desktop/sessionManager.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
 import { getCheckForUserChangesTool } from './tools/desktop/session/checkForUserChanges.js';
-import { getListInstancesTool } from './tools/desktop/session/listInstances.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { DesktopToolName } from './tools/desktop/toolName.js';
@@ -92,12 +96,13 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * all, so verified Tableau behavior (e.g. the waterfall subtotal/total exclusion rule,
  * the Top-N-needs-a-context-filter rule) stayed dark on every sing. The corpus is
  * served as MCP resources anyway; these two tiny tools are the only way the model reaches it.
- * Thirty-one tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise
- * and first-class workbook/data reads/navigation;
- * no raw XML get/apply, no cache, no validation. This is the "make it shorter" answer — a
- * lean, semantically-named surface under the 46k tools/list cliff, not a describe-stub trim
- * of the 45-tool default. Mechanism map live-proven 2026-07-19 (CODA): calcs/sets/
- * actions/formatting MERGE; parameters born at OPEN via author-parameter.
+ * Thirty-two tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise
+ * and first-class workbook/data reads/navigation; the only raw XML read is get-worksheet-xml,
+ * the read leg the manual add-field/remove-field/apply-worksheet path needs to mint its
+ * worksheetFile — no whole-workbook get/apply, no cache, no validation XML tools. This is the
+ * "make it shorter" answer — a lean, semantically-named surface under the 46k tools/list cliff,
+ * not a describe-stub trim of the 45-tool default. Mechanism map live-proven 2026-07-19 (CODA):
+ * calcs/sets/actions/formatting MERGE; parameters born at OPEN via author-parameter.
  */
 export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
   new Set<DesktopToolName>([
@@ -106,6 +111,9 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'add-field',
     'remove-field',
     'resolve-field',
+    // The manual field-edit path's read leg: mints the worksheetFile cache path that
+    // add-field/remove-field/apply-worksheet consume. Without it the manual path cannot start.
+    'get-worksheet-xml',
     'apply-worksheet',
     'build-and-apply-worksheet',
     'dashboard-auto-apply',
@@ -181,6 +189,7 @@ export const DESKTOP_INSTRUCTIONS = buildDesktopInstructions({ sessionPinned: fa
 
 export class DesktopMcpServer extends Server {
   private readonly sessionManager = new SessionManager();
+  private knowledgeCorpusChecked = false;
 
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
     super({
@@ -195,6 +204,16 @@ export class DesktopMcpServer extends Server {
   }
 
   registerResources = async (): Promise<void> => {
+    if (!this.knowledgeCorpusChecked) {
+      this.knowledgeCorpusChecked = true;
+      if (getKnowledgeCorpusEntryCount() === 0) {
+        log({
+          message: `Knowledge corpus is empty; expected assets under ${getKnowledgeDir()}`,
+          level: 'warning',
+          logger: 'DesktopMcpServer',
+        });
+      }
+    }
     await this._registerDashboardXmlGuide();
     this._registerKnowledgeResources();
   };
@@ -253,13 +272,6 @@ export class DesktopMcpServer extends Server {
     // check-for-user-changes needs the legacy events endpoint, which the External Client API does
     // not expose; don't advertise a tool that can only return an error.
     excluded.add(getCheckForUserChangesTool);
-
-    // When the launching Desktop pinned a session, every tool defaults to it, so
-    // list-instances has nothing to add — dropping it keeps the agent from ever
-    // spending a turn discovering which instance to control.
-    if (config.desktopSessionId !== undefined) {
-      excluded.add(getListInstancesTool);
-    }
 
     const factories = [
       ...desktopToolFactories,

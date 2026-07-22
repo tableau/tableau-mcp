@@ -90,6 +90,17 @@ describe('batchCreateAndCacheSheetsTool', () => {
     expect(addDashboard).toHaveBeenCalledWith(expect.any(String), 'DB');
   });
 
+  it('keeps the entire batch focus-neutral', async () => {
+    await getResult({
+      session: SESSION,
+      worksheetNames: ['WS1', 'WS2'],
+      dashboardName: 'DB',
+    });
+
+    expect(loadWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(loadWorkbookXml).mock.calls[0]?.[0]).not.toHaveProperty('activateSheetName');
+  });
+
   it('should return error when getWorkbookXml fails', async () => {
     const extra = makeExtra();
     vi.mocked(getWorkbookXml).mockResolvedValue(

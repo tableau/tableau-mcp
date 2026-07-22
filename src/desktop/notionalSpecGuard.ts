@@ -460,9 +460,9 @@ export function validateNotionalSpecArgs(
     return fail(
       `Unknown parameter "WorksheetId" for ${GENERATE_VIZ_FROM_NOTIONAL_SPEC_COMMAND}. ` +
         'Passing WorksheetId is documented as producing a 500 — the command renders on the ' +
-        'current worksheet. Target the sheet with tabdoc:goto-sheet first, then call this ' +
+        'current worksheet. Target the sheet with activate-sheet first, then call this ' +
         'command with only NotionalSpecJson (and optional ClearSheet).',
-      'Remove the WorksheetId parameter and call tabdoc:goto-sheet beforehand instead.',
+      'Remove the WorksheetId parameter and call activate-sheet beforehand instead.',
     );
   }
 

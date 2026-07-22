@@ -1,6 +1,8 @@
 import { Err, Ok } from 'ts-results-es';
 
 import * as loggerModule from '../../../logging/logger.js';
+import { normalizeArray, parseXML } from '../../metadata/parser.js';
+import type { ParsedWindow } from '../../metadata/types.js';
 import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import { loadDashboardXml } from './loadDashboardXml.js';
 
@@ -103,10 +105,22 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(applied).toContain('name="Sheet 1"');
   });
 
-  it('focuses the dashboard after a successful apply', async () => {
-    const { executor, calls } = dispatchingExecutor(
-      liveWorkbook(['Sales Dashboard', 'Other DB'], ['Sheet 1']),
-    );
+  it('preserves the live active worksheet and does not navigate after apply', async () => {
+    const workbookXml = `<?xml version='1.0'?><workbook>
+      <worksheets>
+        <worksheet name='Sheet 1'><table /></worksheet>
+        <worksheet name='Sheet 2'><table /></worksheet>
+      </worksheets>
+      <dashboards>
+        <dashboard name='Sales Dashboard'><zones /></dashboard>
+      </dashboards>
+      <windows>
+        <window class='worksheet' name='Sheet 1' />
+        <window class='worksheet' name='Sheet 2' active='true' maximized='true' />
+        <window class='dashboard' name='Sales Dashboard' />
+      </windows>
+    </workbook>`;
+    const { executor, calls } = dispatchingExecutor(workbookXml);
 
     const result = await loadDashboardXml({
       dashboardName,
@@ -116,9 +130,18 @@ describe('loadDashboardXml (External Client API transport)', () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(calls.some((c) => c.command === 'goto-sheet' && c.args?.sheet === dashboardName)).toBe(
-      true,
-    );
+    const appliedXml = calls.find((call) => call.kind === 'apply')?.xml;
+    expect(appliedXml).toBeDefined();
+    const windows = normalizeArray<ParsedWindow>(parseXML(appliedXml!).workbook?.windows?.window);
+    expect(windows.map((window) => window['@_name'])).toEqual([
+      'Sheet 1',
+      'Sheet 2',
+      'Sales Dashboard',
+    ]);
+    expect(windows[1]).toMatchObject({ '@_active': 'true', '@_maximized': 'true' });
+    expect(windows[2]).not.toHaveProperty('@_active');
+    expect(windows[2]).not.toHaveProperty('@_maximized');
+    expect(calls.some((call) => call.command === 'goto-sheet')).toBe(false);
   });
 
   it('keeps live worksheets referenced by the dashboard zones in the posted document', async () => {
@@ -222,7 +245,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
     }
   });
 
-  it('should pass the abort signal to executeCommand', async () => {
+  it('should pass the abort signal to the workbook apply', async () => {
     const customSignal = new AbortController().signal;
     const { executor } = dispatchingExecutor(liveWorkbook(['Sales Dashboard']));
 
@@ -233,8 +256,6 @@ describe('loadDashboardXml (External Client API transport)', () => {
       signal: customSignal,
     });
 
-    expect(executor.executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({ signal: customSignal }),
-    );
+    expect(executor.applyWorkbookDocument).toHaveBeenCalledWith(expect.any(String), customSignal);
   });
 });

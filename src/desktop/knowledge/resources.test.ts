@@ -5,6 +5,10 @@ describe('desktop knowledge resources', () => {
     clearKnowledgeCache();
   });
 
+  it('ships at least 100 knowledge resources', () => {
+    expect(listKnowledgeResources().length).toBeGreaterThanOrEqual(100);
+  });
+
   it('surfaces the bulk UI translation entry for workbook translation prompts', () => {
     const query = 'translate the workbook into German';
     const resource = listKnowledgeResources().find((entry) =>
