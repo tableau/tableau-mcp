@@ -7,7 +7,7 @@
   "portability_evidence": {
     "fixture_bind": true,
     "render_verified": "live-2026-07-10",
-    "xml_sha256": "5db1a3b2cfec461045137ab393da8ae58fc972eddb54f4d1722d8082e260ec8f"
+    "xml_sha256": "c4d9b24c7d8c622fc4a163f554c34460ab25f4eb3daee06fd38377d5c08d9f23"
   },
   "datasource_placeholder": true,
   "placeholders": [

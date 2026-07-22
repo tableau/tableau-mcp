@@ -7,7 +7,7 @@
   "portability_evidence": {
     "fixture_bind": true,
     "render_verified": "live-2026-07-04",
-    "xml_sha256": "1dbfa890b4e36aff212910b8c2f0a22d6c7746856c8db0d26c39e5eae8b5bb73",
+    "xml_sha256": "55f32fb929b7b5dde59d8ccc7343dec3c4b7fa4bfc17df220eda8bf178b01bc3",
     "render_evidence": {
       "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
       "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
