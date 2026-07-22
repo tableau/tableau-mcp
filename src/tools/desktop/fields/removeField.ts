@@ -41,7 +41,7 @@ const paramsSchema = {
   worksheetName: z
     .string()
     .optional()
-    .describe('Sheet to edit; cached on first use. Give this or worksheetFile.'),
+    .describe('Sheet to edit (fetched fresh); or pass worksheetFile to stack edits.'),
   worksheetFile: z
     .string()
     .optional()
