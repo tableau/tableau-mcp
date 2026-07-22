@@ -2,6 +2,11 @@ import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-comp
 import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
 
 import * as configModule from './config.desktop.js';
+import {
+  buildDesktopInstructions,
+  SESSION_RESOLUTION_TEXT_PINNED,
+  SESSION_RESOLUTION_TEXT_UNPINNED,
+} from './desktop/routeTable.js';
 import * as loggerModule from './logging/logger.js';
 import {
   DEMO_TOOL_PROFILE,
@@ -56,7 +61,7 @@ describe('DesktopMcpServer', () => {
     expect(registeredNames).toContain('list-worksheets');
   });
 
-  it('does not register list-instances when a Desktop session is pinned', async () => {
+  it('registers list-instances even when a Desktop session is pinned', async () => {
     const base = configModule.getDesktopConfig();
     const spy = vi
       .spyOn(configModule, 'getDesktopConfig')
@@ -69,7 +74,7 @@ describe('DesktopMcpServer', () => {
       const registeredNames = (
         vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
       ).map(([name]) => name);
-      expect(registeredNames).not.toContain('list-instances');
+      expect(registeredNames).toContain('list-instances');
       expect(registeredNames).toContain('list-worksheets');
     } finally {
       spy.mockRestore();
@@ -111,7 +116,7 @@ If ambiguity changes workbook content, call ask-user with urgency=blocking; stop
 
 For current/existing sheet/chart/view/dashboard, edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort or author-* tool; a NEW chart on the current sheet = bind-template with target_worksheet. Never create new sheets unless asked.
 
-Command census: tabdoc:goto-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort. Use search-commands ONLY for unlisted commands.
+Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort. Use search-commands ONLY for unlisted commands.
 
 Omit session for one Desktop; use list-instances when multiple are open.
 
@@ -121,6 +126,13 @@ If preflight rejects apply, fix per FIX lines. Prefer file mode`,
 
   it('tells agents to narrate with Tableau vocabulary', () => {
     expect(DESKTOP_INSTRUCTIONS).toContain('Use Tableau terms: workbook/viz/sheet/field');
+  });
+
+  it('keeps pin-aware session guidance (list-instances, target another) when pinned', () => {
+    const pinned = buildDesktopInstructions({ sessionPinned: true });
+    expect(pinned).toContain(SESSION_RESOLUTION_TEXT_PINNED);
+    expect(pinned).toContain('list-instances');
+    expect(pinned).not.toContain(SESSION_RESOLUTION_TEXT_UNPINNED);
   });
 });
 
@@ -350,10 +362,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 31-tool data-first singable surface — native authoring + workbook reads + atomic sheet activation, no workbook round-trip/cache/validation XML tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 32-tool data-first singable surface — native authoring + workbook reads + atomic sheet activation + the manual path read leg, no workbook round-trip/cache/validation XML tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(31);
+    expect(selected).toHaveLength(32);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the three
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -384,16 +396,19 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'list-workbook-datasources',
       'list-site-datasources',
       'activate-sheet',
+      // The manual field-edit path's read leg — mints the worksheetFile add-field/
+      // remove-field/apply-worksheet consume.
+      'get-worksheet-xml',
     ]) {
       expect(selected.map((t) => t.name)).toContain(verb);
     }
     // Zero agent-visible workbook round-trip/cache/validation XML tools: the full hand-XML
     // surgery surface stays OUT, including get-workbook-xml + apply-workbook. Navigation gets
-    // only the dedicated atomic activate-sheet fallback.
+    // only the dedicated atomic activate-sheet fallback. get-worksheet-xml is the lone
+    // per-sheet read exception (asserted present above) — the manual path cannot start without it.
     for (const banished of [
       'get-workbook-xml',
       'apply-workbook',
-      'get-worksheet-xml',
       'read-cached-xml',
       'write-cached-xml',
       'validate-workbook-xml',

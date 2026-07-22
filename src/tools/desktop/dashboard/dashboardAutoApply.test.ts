@@ -10,6 +10,8 @@ import * as injectViewpointsModule from '../../../desktop/commands/workbook/inje
 import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
+import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
+import type { ParsedWindow } from '../../../desktop/metadata/types.js';
 import * as injectTemplateModule from '../../../desktop/templates/injectTemplate.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
@@ -96,6 +98,7 @@ const escalateResult: BinderResult = {
 describe('dashboardAutoApplyTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -111,7 +114,7 @@ describe('dashboardAutoApplyTool', () => {
     expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
   });
 
-  it('the live probe verdict is PASS — primary single-dispatch mode is the shipped default', () => {
+  it('the live probe verdict is PASS — one content-creation dispatch is the shipped default', () => {
     // W60 zones-live-probe (2026-07-08, session 18055): a fully zone-populated
     // dashboard node survived a single workbook-level apply on readback. Pin the
     // verdict so a future edit cannot silently flip back to fallback mode.
@@ -182,7 +185,8 @@ function setupMocks({
     .join('');
   const workbookXml = `<?xml version="1.0"?><workbook><dashboards>${dashboardsXml}</dashboards><windows></windows></workbook>`;
 
-  vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(workbookXml));
+  let liveXml = workbookXml;
+  vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockImplementation(async () => Ok(liveXml));
   const bindSpy = vi.mocked(binderModule.bindTemplate);
   let call = 0;
   bindSpy.mockImplementation(async () => binds[call++ % binds.length]);
@@ -213,7 +217,12 @@ function setupMocks({
   );
 
   const executeCommand = vi.fn().mockResolvedValue(dispatch);
-  const applyWorkbookDocument = vi.fn().mockResolvedValue(dispatch);
+  const applyWorkbookDocument = vi.fn(async (xml: string) => {
+    if (dispatch.isOk()) {
+      liveXml = xml;
+    }
+    return dispatch;
+  });
   const getEvents =
     userEventsDuringBatch === 'unsupported'
       ? vi.fn().mockResolvedValue(Err('events unsupported on this transport'))
@@ -261,9 +270,10 @@ async function getToolResult({
 describe('dashboardAutoApplyTool happy path', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
-  it('applies exactly once (one read, one dispatch) and returns the trimmed success shape', async () => {
+  it('keeps the internal sheet build focus-neutral and returns the trimmed success shape', async () => {
     const { applyWorkbookDocument, getExecutor } = setupMocks();
 
     const result = await getToolResult({
@@ -293,8 +303,59 @@ describe('dashboardAutoApplyTool happy path', () => {
       'sheets',
     ]);
 
-    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(1);
+    // The public dashboard boundary performs the one primary read plus a fresh
+    // best-effort activation read; internal worksheets never activate independently.
+    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(2);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('activates the composed dashboard once through validated goto-sheet', async () => {
+    const injectedWorkbook = `<?xml version="1.0"?><workbook>
+      <worksheets><worksheet name="Old Sheet"><table /></worksheet></worksheets>
+      <dashboards></dashboards>
+      <windows><window class="worksheet" name="Old Sheet" active="true" maximized="true" /></windows>
+    </workbook>`;
+    const { executeCommand, applyWorkbookDocument, getExecutor } = setupMocks({
+      inject: { ok: true, xml: injectedWorkbook },
+    });
+    vi.mocked(injectTemplateModule.injectTemplate).mockImplementation((workbookXml: string) => {
+      return workbookXml
+        .replace(
+          '</dashboards>',
+          '<dashboard name="Sales Dashboard"><zones/></dashboard></dashboards>',
+        )
+        .replace('</windows>', '<window class="dashboard" name="Sales Dashboard" /></windows>');
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const [primaryXml] = applyWorkbookDocument.mock.calls[0] ?? [];
+    const primaryWindows = normalizeArray<ParsedWindow>(
+      parseXML(String(primaryXml)).workbook?.windows?.window,
+    );
+    expect(primaryWindows.find((window) => window['@_name'] === 'Old Sheet')).toMatchObject({
+      '@_active': 'true',
+      '@_maximized': 'true',
+    });
+    expect(
+      primaryWindows.find((window) => window['@_name'] === 'Sales Dashboard'),
+    ).not.toMatchObject({
+      '@_active': 'true',
+      '@_maximized': 'true',
+    });
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        namespace: 'tabdoc',
+        command: 'goto-sheet',
+        args: { Sheet: 'Sales Dashboard' },
+      }),
+    );
   });
 
   it('injects the dashboard wrapper with zones referencing every resolved title', async () => {
@@ -391,6 +452,7 @@ describe('dashboardAutoApplyTool happy path', () => {
 describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
   it('any ask "propose" refuses the whole batch — zero dispatches, every outcome intact', async () => {
@@ -641,6 +703,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
 describe('dashboardAutoApplyTool session-default-when-unique', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
   function mockInstances(pids: number[]): void {
@@ -696,9 +759,23 @@ describe('dashboardAutoApplyTool session-default-when-unique', () => {
     expect(getExecutor).not.toHaveBeenCalled();
   });
 
-  it('an explicit session always wins (discovery is never consulted)', async () => {
+  it('targets an explicit session that is one of the running instances', async () => {
     mockInstances([11, 22]);
     const { getExecutor } = setupMocks();
+
+    const result = await getToolResult({
+      session: '22',
+      asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(getExecutor).toHaveBeenCalledWith('22');
+  });
+
+  it('rejects an explicit session that is not a running instance, naming the running pids', async () => {
+    mockInstances([11, 22]);
+    const getExecutor = vi.fn().mockResolvedValue({});
 
     const result = await getToolResult({
       session: '7',
@@ -706,8 +783,10 @@ describe('dashboardAutoApplyTool session-default-when-unique', () => {
       getExecutor,
     });
 
-    expect(result.isError).toBe(false);
-    expect(getExecutor).toHaveBeenCalledWith('7');
-    expect(externalDiscovery.discoverInstances).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('7');
+    expect(result.content[0].text).toContain('list-instances');
+    expect(getExecutor).not.toHaveBeenCalled();
   });
 });

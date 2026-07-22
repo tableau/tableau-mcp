@@ -1,14 +1,18 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import * as configModule from '../../../config.desktop.js';
 import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
+import * as getWorksheetXmlModule from '../../../desktop/commands/workbook/getWorksheetXml.js';
+import * as discoveryModule from '../../../desktop/externalApi/discovery.js';
 import * as metadataModule from '../../../desktop/metadata/index.js';
 import {
   ArgsValidationError,
   FileNotFoundError,
   FileReadError,
+  GetWorksheetXmlFailedError,
   XmlModificationError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -19,6 +23,8 @@ import { getAddFieldTool } from './addField.js';
 
 vi.mock('../../../desktop/metadata/index.js');
 vi.mock('../../../desktop/commands/workbook/cacheFingerprint.js');
+vi.mock('../../../desktop/commands/workbook/getWorksheetXml.js');
+vi.mock('../../../desktop/externalApi/discovery.js');
 vi.mock('fs');
 
 type EncodingType = 'color' | 'size' | 'lod' | 'detail' | 'text' | 'tooltip' | 'path' | 'angle';
@@ -47,6 +53,7 @@ describe('addFieldTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPinnedSession(undefined);
+    vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -57,6 +64,7 @@ describe('addFieldTool', () => {
     );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
+      worksheetName: expect.any(Object),
       worksheetFile: expect.any(Object),
       target: expect.any(Object),
       columnRef: expect.any(Object),
@@ -166,8 +174,11 @@ describe('addFieldTool', () => {
     expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(WORKSHEET_FILE, SESSION);
   });
 
-  it('rejects and writes no sidecar when the requested session conflicts with the pin', async () => {
+  it('rejects and writes no sidecar when the requested session is not a running instance', async () => {
     mockPinnedSession('99999');
+    vi.mocked(discoveryModule.discoverInstances).mockReturnValue([
+      { pid: 99999 } as ReturnType<typeof discoveryModule.discoverInstances>[number],
+    ]);
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
     vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
@@ -182,7 +193,8 @@ describe('addFieldTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('99999');
+    expect(result.content[0].text).toContain(SESSION);
+    expect(result.content[0].text).toContain('list-instances');
     expect(cacheFingerprintModule.writeSidecar).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
   });
@@ -199,6 +211,7 @@ describe('addFieldTool', () => {
     const result = await callback(
       {
         session: SESSION,
+        worksheetName: undefined,
         worksheetFile: WORKSHEET_FILE,
         target: 'rows',
         columnRef: COLUMN_REF,
@@ -211,6 +224,92 @@ describe('addFieldTool', () => {
 
     expect(result.isError).toBe(false);
     expect(extra.getExecutor).not.toHaveBeenCalled();
+  });
+
+  // --- name-based path (no prior get-worksheet-xml call) ---
+  it('fetches + caches the sheet by name when no worksheetFile is given, then edits it', async () => {
+    const FRAGMENT = '<worksheet name="Sheet 1"><table/></worksheet>';
+    vi.mocked(getWorksheetXmlModule.getWorksheetFragment).mockResolvedValue(Ok(FRAGMENT));
+    // The minted cache file exists after the internal write; the edit reads it back.
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(FRAGMENT);
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    const result = await getResult({
+      worksheetName: 'Sheet 1',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(body.message).toContain('Rows shelf');
+    // The fetch happened, and the minted cache path (worksheet-Sheet_1-*) is returned so
+    // follow-up edits can pass it as worksheetFile.
+    expect(getWorksheetXmlModule.getWorksheetFragment).toHaveBeenCalledWith(
+      expect.objectContaining({ worksheetName: 'Sheet 1' }),
+    );
+    expect(body.file).toMatch(/worksheet-Sheet_1-/);
+    // The minted fragment was written to the cache before the field edit.
+    expect(writeFileSync).toHaveBeenCalledWith(body.file, FRAGMENT, 'utf-8');
+    // ...and the modified XML was written back to the same path.
+    expect(writeFileSync).toHaveBeenCalledWith(body.file, MODIFIED_XML, 'utf-8');
+  });
+
+  it('surfaces a fetch error (unknown worksheet) without writing anything', async () => {
+    const fetchErr = {
+      type: 'get-worksheet-xml-error' as const,
+      error: { type: 'no-worksheet-found' as const, message: 'No worksheet found for Ghost.' },
+    };
+    vi.mocked(getWorksheetXmlModule.getWorksheetFragment).mockResolvedValue(Err(fetchErr));
+
+    const result = await getResult({
+      worksheetName: 'Ghost',
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(new GetWorksheetXmlFailedError(fetchErr.error).message);
+    expect(writeFileSync).not.toHaveBeenCalled();
+    expect(metadataModule.addFieldToRows).not.toHaveBeenCalled();
+  });
+
+  it('errors when neither worksheetName nor worksheetFile is provided', async () => {
+    const result = await getResult({ target: 'rows', columnRef: COLUMN_REF });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      new ArgsValidationError(
+        'Provide either worksheetName (to edit an existing sheet) or worksheetFile (a cached path).',
+      ).message,
+    );
+    expect(getWorksheetXmlModule.getWorksheetFragment).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it('prefers worksheetFile over worksheetName when both are given (no fetch)', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue('<worksheet/>');
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    const result = await getResult({
+      worksheetName: 'Sheet 1',
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(resultSchema.parse(JSON.parse(result.content[0].text)).file).toBe(WORKSHEET_FILE);
+    // worksheetFile is authoritative — the name-based fetch must not run.
+    expect(getWorksheetXmlModule.getWorksheetFragment).not.toHaveBeenCalled();
   });
 
   it('should pass index and workbookFile to addFieldToRows (target=rows)', async () => {
@@ -477,7 +576,8 @@ describe('addFieldTool', () => {
 });
 
 async function getResult(params: {
-  worksheetFile: string;
+  worksheetName?: string;
+  worksheetFile?: string;
   target: Target;
   columnRef: string;
   encodingType?: EncodingType;
@@ -485,12 +585,13 @@ async function getResult(params: {
   workbookFile?: string;
   session?: string;
 }): Promise<CallToolResult> {
-  const { worksheetFile, target, columnRef, encodingType, index, workbookFile } = params;
+  const { worksheetName, worksheetFile, target, columnRef, encodingType, index, workbookFile } =
+    params;
   const session = ('session' in params ? params.session : SESSION) as string;
   const tool = getAddFieldTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
-    { session, worksheetFile, target, columnRef, encodingType, index, workbookFile },
+    { session, worksheetName, worksheetFile, target, columnRef, encodingType, index, workbookFile },
     getMockRequestHandlerExtra(),
   );
 }

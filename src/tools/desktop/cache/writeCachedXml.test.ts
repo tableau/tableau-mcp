@@ -10,12 +10,14 @@ import { getWriteCachedXmlTool } from './writeCachedXml.js';
 
 vi.mock('../../../desktop/cache.js');
 vi.mock('../../../desktop/commands/workbook/cacheFingerprint.js');
+vi.mock('../../../desktop/externalApi/discovery.js');
 vi.mock('fs');
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 
 import { DesktopCache } from '../../../desktop/cache.js';
 import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
+import * as discoveryModule from '../../../desktop/externalApi/discovery.js';
 
 const CACHE_DIR = resolve('/tmp/test-cache');
 const CACHED_FILE = `${CACHE_DIR}/worksheet-session-1.xml`;
@@ -46,6 +48,7 @@ describe('writeCachedXmlTool', () => {
     vi.clearAllMocks();
     setupCacheMock();
     mockPinnedSession(undefined);
+    vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
     vi.mocked(writeFileSync).mockImplementation(() => {});
   });
 
@@ -89,14 +92,18 @@ describe('writeCachedXmlTool', () => {
     expect(cacheFingerprintModule.writeSidecar).toHaveBeenCalledWith(resolve(CACHED_FILE), SESSION);
   });
 
-  it('rejects and writes no sidecar when the requested session conflicts with the pin', async () => {
+  it('rejects and writes no sidecar when the requested session is not a running instance', async () => {
     mockPinnedSession('99999');
+    vi.mocked(discoveryModule.discoverInstances).mockReturnValue([
+      { pid: 99999 } as ReturnType<typeof discoveryModule.discoverInstances>[number],
+    ]);
 
     const result = await getResult(CACHED_FILE, VALID_XML, {}, SESSION);
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('99999');
+    expect(result.content[0].text).toContain(SESSION);
+    expect(result.content[0].text).toContain('list-instances');
     expect(cacheFingerprintModule.writeSidecar).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
   });

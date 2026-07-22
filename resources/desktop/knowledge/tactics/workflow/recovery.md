@@ -36,7 +36,7 @@ For reversing the **most recent** apply, use `tabdoc:undo` instead — it is fas
 
 The Agent API may report `status: "completed"` even when Tableau shows a GUI error dialog. Use this escalation ladder:
 
-1. **Verify via MCP tools first.** After every apply, use worksheet-list readback or `tabdoc:goto-sheet` to confirm the expected sheets exist. If a sheet you just added is missing, the apply was silently rejected.
+1. **Verify via MCP tools first.** After every apply, use worksheet-list readback or `activate-sheet` to confirm the expected sheets exist. Raw `tabdoc:goto-sheet` is refused at the execute boundary because a bad sheet value can open a blocking Desktop dialog. If a sheet you just added is missing, the apply was silently rejected.
 
 2. **Check MCP server logs.** Look for `exec_command_failed`, `fetch failed`, or `Command timed out` entries. These indicate the apply never reached Tableau or was rejected at the API level.
 
@@ -77,7 +77,8 @@ If the new fields appear in the returned list with correct `type`/`role`, the ap
 
 **Force the catch-up (don't rollback):**
 ```
-execute_tableau_command command='tabdoc:goto-sheet' args='{"sheet":"<any worksheet>"}'
+activate-sheet
+  sheetName: "<any worksheet>"
 ```
 Switching to any worksheet triggers a full view-context evaluation that completes the metadata resolution. The warning clears.
 

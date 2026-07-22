@@ -101,7 +101,7 @@ Profit:	</run>
 </worksheet>
   </worksheets>
   <windows>
-    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+    <window class='worksheet' name='{{TITLE}}'>
   <viewpoint>
     <zoom type='entire-view' />
   </viewpoint>

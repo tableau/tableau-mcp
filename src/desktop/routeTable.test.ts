@@ -6,6 +6,8 @@ import {
   generateDesktopInstructions,
   renderInstructionEntry,
   SESSION_RESOLUTION_ID,
+  SESSION_RESOLUTION_TEXT_PINNED,
+  SESSION_RESOLUTION_TEXT_UNPINNED,
 } from './routeTable.js';
 
 const routes = DESKTOP_ROUTE_TABLE.filter(
@@ -39,7 +41,8 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
     expect(rendered).toContain('Command census:');
     expect(rendered).not.toContain('tabdoc:generate-viz-from-notional-spec');
-    expect(rendered).toContain('tabdoc:goto-sheet');
+    expect(rendered).not.toContain('tabdoc:goto-sheet');
+    expect(rendered).toContain('activate-sheet');
     expect(rendered).toContain('Use search-commands ONLY for unlisted commands.');
   });
 
@@ -149,24 +152,25 @@ describe('generateDesktopInstructions', () => {
 });
 
 describe('buildDesktopInstructions', () => {
-  const sessionResolutionText = DESKTOP_ROUTE_TABLE.find(
+  const sessionResolutionEntry = DESKTOP_ROUTE_TABLE.find(
     (entry) => entry.id === SESSION_RESOLUTION_ID && entry.kind === 'prose',
   );
 
-  it('keeps the session-resolution guidance when no session is pinned', () => {
+  it('keeps the unpinned session-resolution guidance when no session is pinned', () => {
     const unpinned = buildDesktopInstructions({ sessionPinned: false });
     expect(unpinned).toBe(generateDesktopInstructions(DESKTOP_ROUTE_TABLE));
+    expect(unpinned).toContain(SESSION_RESOLUTION_TEXT_UNPINNED);
     expect(unpinned).toContain('list-instances');
   });
 
-  it('drops the session-resolution guidance when a session is pinned', () => {
+  it('swaps in pin-aware session guidance when a session is pinned', () => {
     const pinned = buildDesktopInstructions({ sessionPinned: true });
-    expect(sessionResolutionText?.kind).toBe('prose');
-    if (sessionResolutionText?.kind === 'prose') {
-      expect(pinned).not.toContain(sessionResolutionText.text);
-    }
-    expect(pinned).not.toContain('list-instances');
-    // The other routes must survive the filter untouched.
+    expect(sessionResolutionEntry?.kind).toBe('prose');
+    expect(pinned).toContain(SESSION_RESOLUTION_TEXT_PINNED);
+    // Still names list-instances — the pin is a default, and the agent may target another Desktop.
+    expect(pinned).toContain('list-instances');
+    expect(pinned).not.toContain(SESSION_RESOLUTION_TEXT_UNPINNED);
+    // The other routes must survive untouched.
     expect(pinned).toContain('You control Tableau Desktop.');
   });
 });
