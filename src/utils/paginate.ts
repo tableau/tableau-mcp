@@ -96,6 +96,90 @@ export async function paginate<T>(args: PaginateArgs<T>): Promise<Array<T>> {
   return items;
 }
 
+/**
+ * Validation for {@link getPage} inputs. Both `pageNumber` and `limit`
+ * must be positive when provided; `limit` additionally may not exceed
+ * {@link MAX_PAGE_SIZE} since a single page can never return more than a full
+ * server page. Mirrors the `.gt(0)` style used by {@link pageConfigSchema}.
+ */
+const getPageConfigSchema = z
+  .object({
+    pageNumber: z.coerce.number().gt(0),
+    limit: z.coerce.number().gt(0).lte(MAX_PAGE_SIZE),
+  })
+  .partial();
+
+type GetPageArgs<T> = {
+  /** 1-based page number to fetch. Defaults to `1`. */
+  pageNumber?: number;
+  /** Per-page trim applied on top of the server cap. Must be `<= MAX_PAGE_SIZE`. */
+  limit?: number;
+  /**
+   * Global offset ceiling across all pages (e.g. an admin `maxResultLimit`).
+   * `null`/omitted means "no cap". Items whose absolute (0-based) offset is
+   * `>= maxResultLimit` are trimmed off, so later pages can return fewer items
+   * — or none at all — even though Tableau reports more `totalAvailable`.
+   */
+  maxResultLimit?: number | null;
+  getDataFn: (page: {
+    pageSize: number;
+    pageNumber: number;
+  }) => Promise<{ pagination: Pagination; data: Array<T> }>;
+};
+
+/**
+ * Result of {@link getPage}: a single page's items plus the total the caller
+ * should present.
+ *
+ * - `data` — the (possibly trimmed) items for the requested page.
+ * - `totalAvailable` — `min(rawTotal, maxResultLimit)`; equal to the raw total
+ *   Tableau reported when there is no cap. When a server-side `maxResultLimit`
+ *   offset ceiling is in force, this is capped to it so the caller presents the
+ *   number of items actually reachable rather than the uncapped server total.
+ */
+export type GetPageResult<T> = {
+  data: Array<T>;
+  totalAvailable: number;
+};
+
+/**
+ * Fetch a SINGLE page (no looping). Unlike {@link paginate}, this issues
+ * exactly one {@link getDataFn} call and returns just that page, applying an
+ * optional global `maxResultLimit` offset ceiling and an optional per-page
+ * `limit` trim.
+ *
+ * A full page (`MAX_PAGE_SIZE`) is always requested so absolute offsets stay
+ * stable across pages regardless of the caller's `limit`. The absolute
+ * (0-based) offset of the first item on the page is `(pageNumber - 1) *
+ * MAX_PAGE_SIZE`; anything at or beyond `maxResultLimit` is dropped so the
+ * cumulative number of items across all pages never exceeds the cap.
+ */
+export async function getPage<T>(args: GetPageArgs<T>): Promise<GetPageResult<T>> {
+  // Validate caller-facing knobs (pageNumber/limit) up front, consistent with
+  // the file's zod-based validation style. maxResultLimit is a server-provided
+  // cap, not user input, so it is not validated here.
+  getPageConfigSchema.parse({ pageNumber: args.pageNumber, limit: args.limit });
+
+  const pageNumber = args.pageNumber ?? 1;
+  const pageSize = MAX_PAGE_SIZE; // always request full page for stable offsets
+  const { pagination, data } = await args.getDataFn({ pageSize, pageNumber });
+  const totalAvailable = pagination.totalAvailable;
+  const apiCount = data.length;
+  const maxResultLimit = args.maxResultLimit ?? null;
+  const pageStartOffset = (pageNumber - 1) * pageSize; // 0-based abs index of first item on page
+  const serverAllowed =
+    maxResultLimit == null
+      ? apiCount
+      : Math.max(0, Math.min(apiCount, maxResultLimit - pageStartOffset));
+  const callerCap = args.limit != null ? Math.min(args.limit, serverAllowed) : serverAllowed;
+  const trimmed = data.slice(0, callerCap);
+  // Cap the reported total to the server-side offset ceiling so the caller
+  // presents the number of items actually reachable, not the uncapped total.
+  const cappedTotalAvailable =
+    maxResultLimit == null ? totalAvailable : Math.min(totalAvailable, maxResultLimit);
+  return { data: trimmed, totalAvailable: cappedTotalAvailable };
+}
+
 const pulsePaginateConfigSchema = z
   .object({
     limit: z.coerce.number().gt(0).optional(),

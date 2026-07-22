@@ -13,14 +13,28 @@ import {
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { MAX_PAGE_SIZE, paginate } from '../../../utils/paginate.js';
+import { getPage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateWorkbooksFilterString } from './workbooksFilterUtils.js';
 
 const paramsSchema = {
   filter: z.string().optional(),
-  limit: z.number().gt(0).optional(),
+  pageNumber: z
+    .number()
+    .int()
+    .gt(0)
+    .optional()
+    .describe('Which 1000-item page to fetch (1-based, default 1).'),
+  limit: z
+    .number()
+    .int()
+    .gt(0)
+    .max(MAX_PAGE_SIZE)
+    .optional()
+    .describe(
+      'The maximum number of workbooks to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants.',
+    ),
 };
 
 export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
@@ -29,6 +43,8 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
     name: 'list-workbooks',
     description: `
   Retrieves a list of workbooks on a Tableau site including their metadata such as name, description, and information about the views contained in the workbook. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Superstore) for precise and flexible workbook discovery. Use this tool when a user requests to list, search, or filter Tableau workbooks on a site.
+
+  This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1000-item page to fetch (1-based, default 1). The response is a flat object \`{ data, totalAvailable }\`; paginate by incrementing \`pageNumber\` until you have collected \`totalAvailable\` items.
 
   **Supported Filter Fields and Operators**
   | Field             | Operators            |
@@ -70,7 +86,7 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, limit }, extra): Promise<CallToolResult> => {
+    callback: async ({ filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateWorkbooksFilterString(filter) : undefined;
 
@@ -87,39 +103,39 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
                   listWorkbooksTool.name,
                 );
 
-                const workbooks = await paginate({
-                  pageConfig: {
-                    pageSize: MAX_PAGE_SIZE,
-                    limit: maxResultLimit
-                      ? Math.min(maxResultLimit, limit ?? maxResultLimit)
-                      : limit,
-                  },
-                  getDataFn: async (pageConfig) => {
+                const page = await getPage({
+                  pageNumber,
+                  limit,
+                  maxResultLimit,
+                  getDataFn: async ({ pageSize, pageNumber }) => {
                     const { pagination, workbooks: data } =
                       await restApi.workbooksMethods.queryWorkbooksForSite({
                         siteId: restApi.siteId,
                         filter: validatedFilter ?? '',
-                        pageSize: pageConfig.pageSize,
-                        pageNumber: pageConfig.pageNumber,
+                        pageSize,
+                        pageNumber,
                       });
 
                     return { pagination, data };
                   },
                 });
 
+                const workbooks = page.data;
+
                 if (configWithOverrides.disableMetadataApiRequests || workbooks.length === 0) {
-                  return workbooks;
+                  return { ...page, data: workbooks };
                 }
 
                 try {
                   const response = await restApi.metadataMethods.graphql(
                     getWorkbookLineageQuery(workbooks.map((workbook) => workbook.id)),
                   );
-                  return mergeWorkbookLineage(
+                  const enriched = mergeWorkbookLineage(
                     workbooks,
                     getWorkbookLineageByLuid(response),
                     configWithOverrides.boundedContext.datasourceIds,
                   );
+                  return { ...page, data: enriched };
                 } catch (error) {
                   log({
                     message: 'Failed to enrich workbooks with lineage metadata',
@@ -127,14 +143,30 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
                     logger: 'lineage',
                     data: getExceptionMessage(error),
                   });
-                  return workbooks;
+                  return { ...page, data: workbooks };
                 }
               },
             }),
           );
         },
-        constrainSuccessResult: (workbooks) =>
-          constrainWorkbooks({ workbooks, boundedContext: configWithOverrides.boundedContext }),
+        constrainSuccessResult: (page) => {
+          const constrained = constrainWorkbooks({
+            workbooks: page.data,
+            boundedContext: configWithOverrides.boundedContext,
+          });
+
+          if (constrained.type !== 'success') {
+            return constrained;
+          }
+
+          return {
+            type: 'success',
+            result: {
+              data: constrained.result,
+              totalAvailable: page.totalAvailable,
+            },
+          };
+        },
       });
     },
   });

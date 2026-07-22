@@ -8,7 +8,7 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { CustomView } from '../../../sdks/tableau/types/customView.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { MAX_PAGE_SIZE, paginate } from '../../../utils/paginate.js';
+import { getPage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
@@ -17,7 +17,21 @@ import { parseAndValidateCustomViewsFilterString } from './customViewsFilterUtil
 const paramsSchema = {
   workbookId: z.string().min(1),
   filter: z.string().optional(),
-  limit: z.number().gt(0).optional(),
+  pageNumber: z
+    .number()
+    .int()
+    .gt(0)
+    .optional()
+    .describe('Which 1000-item page to fetch (1-based, default 1).'),
+  limit: z
+    .number()
+    .int()
+    .gt(0)
+    .max(MAX_PAGE_SIZE)
+    .optional()
+    .describe(
+      'The maximum number of custom views to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants.',
+    ),
 };
 
 export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
@@ -27,6 +41,8 @@ export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof par
     // workbookId intentionally omitted from the filter field table since it originates from the workbookId parameter
     description: `
   Retrieves a list of custom views for a Tableau workbook including their metadata such as name, owner, and the view they are found in. Supports optional filtering via field:operator:value expressions (e.g., viewId:eq:<view_id>) for precise and flexible custom view discovery. The tool always includes the workbookId in the final filter expression based on the required workbookId argument. Including the workbookId field in the filter will be ignored. Use this tool when a user requests to list, search, or filter Tableau custom views for a workbook.
+
+  This tool returns a single page of results (up to 1000 items) as a JSON object of the shape { data, totalAvailable }. Use the pageNumber argument to select which 1000-item page to fetch (1-based, default 1). To collect all results, keep incrementing pageNumber until you have gathered totalAvailable items.
 
   **Supported Filter Fields and Operators**
   | Field               | Operators            |
@@ -53,7 +69,7 @@ export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof par
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ workbookId, filter, limit }, extra): Promise<CallToolResult> => {
+    callback: async ({ workbookId, filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
 
       if (filter?.includes('workbookId:')) {
@@ -113,33 +129,45 @@ export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof par
                 listCustomViewsTool.name,
               );
 
-              const customViews = await paginate({
-                pageConfig: {
-                  pageSize: MAX_PAGE_SIZE,
-                  limit: maxResultLimit ? Math.min(maxResultLimit, limit ?? maxResultLimit) : limit,
-                },
-                getDataFn: async (pageConfig) => {
+              const page = await getPage({
+                pageNumber,
+                limit,
+                maxResultLimit,
+                getDataFn: async ({ pageSize, pageNumber }) => {
                   const { pagination, customViews: data } =
                     await restApi.viewsMethods.listCustomViews({
                       siteId: restApi.siteId,
                       filter: validatedFilter ?? '',
-                      pageSize: pageConfig.pageSize,
-                      pageNumber: pageConfig.pageNumber,
+                      pageSize,
+                      pageNumber,
                     });
 
                   return { pagination, data };
                 },
               });
 
-              return Ok(customViews);
+              return Ok(page);
             },
           });
         },
-        constrainSuccessResult: async (customViews) =>
-          constrainCustomViews({
-            customViews,
+        constrainSuccessResult: (page) => {
+          const constrained = constrainCustomViews({
+            customViews: page.data,
             boundedContext: configWithOverrides.boundedContext,
-          }),
+          });
+
+          if (constrained.type !== 'success') {
+            return constrained;
+          }
+
+          return {
+            type: 'success',
+            result: {
+              data: constrained.result,
+              totalAvailable: page.totalAvailable,
+            },
+          };
+        },
       });
     },
   });

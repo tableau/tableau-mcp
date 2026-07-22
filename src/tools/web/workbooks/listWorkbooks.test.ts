@@ -1,9 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { OverridableConfig } from '../../../overridableConfig.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getCombinationsOfBoundedContextInputs } from '../../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { constrainWorkbooks, getListWorkbooksTool } from './listWorkbooks.js';
 import { mockWorkbook, mockWorkbook2 } from './mockWorkbook.js';
@@ -16,6 +18,12 @@ const mockWorkbooksResponse = {
   },
   workbooks: [{ workbook: mockWorkbook }],
 };
+
+function makePageOfWorkbooks(count: number): Array<{ workbook: typeof mockWorkbook }> {
+  return Array.from({ length: count }, (_, i) => ({
+    workbook: { ...mockWorkbook, id: `workbook-${i}`, name: `Workbook ${i}` },
+  }));
+}
 
 const mocks = vi.hoisted(() => ({
   mockQueryWorkbooksForSite: vi.fn(),
@@ -51,13 +59,111 @@ describe('listWorkbooksTool', () => {
     const result = await getToolResult({ filter: 'name:eq:Superstore' });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Superstore');
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(JSON.stringify(parsed.data)).toContain('Superstore');
+    expect(parsed.data).toHaveLength(1);
+    expect(parsed.totalAvailable).toBe(1);
+
+    expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledTimes(1);
     expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filter: 'name:eq:Superstore',
       pageSize: 1000,
-      pageNumber: undefined,
+      pageNumber: 1,
     });
+  });
+
+  it('should fetch only a single page and not loop when more results are available', async () => {
+    mocks.mockQueryWorkbooksForSite.mockResolvedValue({
+      pagination: {
+        pageNumber: 1,
+        pageSize: 1000,
+        totalAvailable: 2600,
+      },
+      workbooks: makePageOfWorkbooks(1000),
+    });
+
+    const result = await getToolResult({ filter: 'name:eq:Superstore' });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.data.length).toBeLessThanOrEqual(1000);
+    expect(parsed.data).toHaveLength(1000);
+    expect(parsed.totalAvailable).toBe(2600);
+
+    // Single-page semantics: the REST method is called exactly once (no looping).
+    expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledTimes(1);
+  });
+
+  it('should pass pageNumber through to the REST API', async () => {
+    mocks.mockQueryWorkbooksForSite.mockResolvedValue({
+      pagination: {
+        pageNumber: 3,
+        pageSize: 1000,
+        totalAvailable: 2600,
+      },
+      workbooks: makePageOfWorkbooks(600),
+    });
+
+    await getToolResult({ filter: 'name:eq:Superstore', pageNumber: 3 });
+
+    expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledTimes(1);
+    expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      filter: 'name:eq:Superstore',
+      pageSize: 1000,
+      pageNumber: 3,
+    });
+  });
+
+  it('should trim the page to the caller-provided limit without capping totalAvailable', async () => {
+    mocks.mockQueryWorkbooksForSite.mockResolvedValue({
+      pagination: {
+        pageNumber: 1,
+        pageSize: 1000,
+        totalAvailable: 2600,
+      },
+      workbooks: makePageOfWorkbooks(1000),
+    });
+
+    const result = await getToolResult({ filter: 'name:eq:Superstore', limit: 600 });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.data).toHaveLength(600);
+    // The caller's own `limit` never caps totalAvailable.
+    expect(parsed.totalAvailable).toBe(2600);
+    expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledTimes(1);
+  });
+
+  it('should cap totalAvailable and trim the page when a server maxResultLimit is smaller than the page', async () => {
+    mocks.mockQueryWorkbooksForSite.mockResolvedValue({
+      pagination: {
+        pageNumber: 1,
+        pageSize: 1000,
+        totalAvailable: 2600,
+      },
+      workbooks: makePageOfWorkbooks(1000),
+    });
+
+    // Global server cap of 600 across pages.
+    const extra = getMockRequestHandlerExtra();
+    extra.getConfigWithOverrides = vi
+      .fn()
+      .mockResolvedValue(new OverridableConfig({ MAX_RESULT_LIMIT: '600' }));
+
+    const result = await getToolResult({ filter: 'name:eq:Superstore' }, extra);
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.data).toHaveLength(600);
+    // The server cap trimmed this page below what the API returned, so totalAvailable is capped.
+    expect(parsed.totalAvailable).toBe(600);
+    expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledTimes(1);
   });
 
   it('should handle API errors gracefully', async () => {
@@ -142,11 +248,18 @@ describe('listWorkbooksTool', () => {
   });
 });
 
-async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
+async function getToolResult(
+  params: { filter: string; pageNumber?: number; limit?: number },
+  extra: TableauWebRequestHandlerExtra = getMockRequestHandlerExtra(),
+): Promise<CallToolResult> {
   const listWorkbooksTool = getListWorkbooksTool(new WebMcpServer());
   const callback = await Provider.from(listWorkbooksTool.callback);
   return await callback(
-    { filter: params.filter, limit: undefined },
-    getMockRequestHandlerExtra(),
+    {
+      filter: params.filter,
+      pageNumber: params.pageNumber,
+      limit: params.limit,
+    },
+    extra,
   );
 }

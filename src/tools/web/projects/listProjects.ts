@@ -6,14 +6,28 @@ import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Project } from '../../../sdks/tableau/types/project.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { MAX_PAGE_SIZE, paginate } from '../../../utils/paginate.js';
+import { getPage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateProjectsFilterString } from './projectsFilterUtils.js';
 
 const paramsSchema = {
   filter: z.string().optional(),
-  limit: z.number().gt(0).optional(),
+  pageNumber: z
+    .number()
+    .int()
+    .gt(0)
+    .optional()
+    .describe('Which 1000-item page to fetch (1-based, default 1).'),
+  limit: z
+    .number()
+    .int()
+    .gt(0)
+    .max(MAX_PAGE_SIZE)
+    .optional()
+    .describe(
+      'The maximum number of projects to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants.',
+    ),
 };
 
 export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
@@ -46,7 +60,10 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
   - List child projects of a specific parent:
       filter: "parentProjectId:eq:abc-123"
   - List projects updated after January 1, 2023:
-      filter: "updatedAt:gt:2023-01-01T00:00:00Z"`,
+      filter: "updatedAt:gt:2023-01-01T00:00:00Z"
+
+  **Pagination**
+  This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1-based page to fetch (default 1). The response is a flat object \`{ data, totalAvailable }\`; to collect every project, keep incrementing \`pageNumber\` until you have gathered \`totalAvailable\` items.`,
     paramsSchema,
     annotations: {
       title: 'List Projects',
@@ -55,7 +72,7 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, limit }, extra): Promise<CallToolResult> => {
+    callback: async ({ filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateProjectsFilterString(filter) : undefined;
 
@@ -70,33 +87,44 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
               callback: async (restApi) => {
                 const maxResultLimit = configWithOverrides.getMaxResultLimit(listProjectsTool.name);
 
-                const projects = await paginate({
-                  pageConfig: {
-                    pageSize: MAX_PAGE_SIZE,
-                    limit: maxResultLimit
-                      ? Math.min(maxResultLimit, limit ?? maxResultLimit)
-                      : limit,
-                  },
-                  getDataFn: async (pageConfig) => {
+                return await getPage({
+                  pageNumber,
+                  limit,
+                  maxResultLimit,
+                  getDataFn: async ({ pageSize, pageNumber }) => {
                     const { pagination, projects: data } =
                       await restApi.projectsMethods.queryProjects({
                         siteId: restApi.siteId,
                         filter: validatedFilter ?? '',
-                        pageSize: pageConfig.pageSize,
-                        pageNumber: pageConfig.pageNumber,
+                        pageSize,
+                        pageNumber,
                       });
 
                     return { pagination, data };
                   },
                 });
-
-                return projects;
               },
             }),
           );
         },
-        constrainSuccessResult: (projects) =>
-          constrainProjects({ projects, boundedContext: configWithOverrides.boundedContext }),
+        constrainSuccessResult: (page) => {
+          const constrained = constrainProjects({
+            projects: page.data,
+            boundedContext: configWithOverrides.boundedContext,
+          });
+
+          if (constrained.type !== 'success') {
+            return constrained;
+          }
+
+          return {
+            type: 'success',
+            result: {
+              data: constrained.result,
+              totalAvailable: page.totalAvailable,
+            },
+          };
+        },
       });
     },
   });

@@ -1,9 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { OverridableConfig } from '../../../overridableConfig.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getCombinationsOfBoundedContextInputs } from '../../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { constrainDatasources, getListDatasourcesTool } from './listDatasources.js';
 import { mockDatasources } from './mockDatasources.js';
@@ -41,12 +43,104 @@ describe('listDatasourcesTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Superstore');
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.data.map((d: { name: string }) => d.name)).toContain('Superstore Datasource');
+    expect(parsed.totalAvailable).toBe(mockDatasources.pagination.totalAvailable);
+
     expect(mocks.mockListDatasources).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filter: 'name:eq:Superstore',
       pageSize: 1000,
-      pageNumber: undefined,
+      pageNumber: 1,
     });
+  });
+
+  it('should fetch a single page without looping', async () => {
+    // A full page of 1000 items while Tableau reports more available.
+    const page = Array.from({ length: 1000 }, (_, i) => ({
+      id: `id-${i}`,
+      name: `Datasource ${i}`,
+      project: { id: 'p1', name: 'Project' },
+      tags: { tag: [] },
+    }));
+    mocks.mockListDatasources.mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 2600 },
+      datasources: page,
+    });
+
+    const result = await getToolResult({ filter: 'name:eq:Superstore' });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.data.length).toBeLessThanOrEqual(1000);
+    expect(parsed.data.length).toBe(1000);
+    expect(parsed.totalAvailable).toBe(2600);
+    // Single page: the REST method is called exactly once (no looping).
+    expect(mocks.mockListDatasources).toHaveBeenCalledTimes(1);
+  });
+
+  it('should request the requested pageNumber', async () => {
+    mocks.mockListDatasources.mockResolvedValue(mockDatasources);
+    await getToolResult({ filter: 'name:eq:Superstore', pageNumber: 3 });
+    expect(mocks.mockListDatasources).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      filter: 'name:eq:Superstore',
+      pageSize: 1000,
+      pageNumber: 3,
+    });
+  });
+
+  it('should trim to the caller limit without capping totalAvailable', async () => {
+    const page = Array.from({ length: 1000 }, (_, i) => ({
+      id: `id-${i}`,
+      name: `Datasource ${i}`,
+      project: { id: 'p1', name: 'Project' },
+      tags: { tag: [] },
+    }));
+    mocks.mockListDatasources.mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 2600 },
+      datasources: page,
+    });
+
+    const result = await getToolResult({ filter: 'name:eq:Superstore', limit: 600 });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.data.length).toBe(600);
+    // The caller's own limit never caps totalAvailable.
+    expect(parsed.totalAvailable).toBe(2600);
+    expect(mocks.mockListDatasources).toHaveBeenCalledTimes(1);
+  });
+
+  it('should cap totalAvailable when a server maxResultLimit trims the page', async () => {
+    const page = Array.from({ length: 1000 }, (_, i) => ({
+      id: `id-${i}`,
+      name: `Datasource ${i}`,
+      project: { id: 'p1', name: 'Project' },
+      tags: { tag: [] },
+    }));
+    mocks.mockListDatasources.mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 2600 },
+      datasources: page,
+    });
+
+    const extra = getMockRequestHandlerExtra();
+    const stubConfig = new OverridableConfig({});
+    // Server cap smaller than the page => this page is trimmed and totalAvailable is capped.
+    vi.spyOn(stubConfig, 'getMaxResultLimit').mockReturnValue(700);
+    vi.mocked(extra.getConfigWithOverrides).mockResolvedValue(stubConfig);
+
+    const result = await getToolResult({ filter: 'name:eq:Superstore' }, extra);
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.data.length).toBe(700);
+    expect(parsed.totalAvailable).toBe(700);
+    expect(mocks.mockListDatasources).toHaveBeenCalledTimes(1);
   });
 
   it('should handle API errors gracefully', async () => {
@@ -131,11 +225,14 @@ describe('listDatasourcesTool', () => {
   });
 });
 
-async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
+async function getToolResult(
+  params: { filter: string; pageNumber?: number; limit?: number },
+  extra: TableauWebRequestHandlerExtra = getMockRequestHandlerExtra(),
+): Promise<CallToolResult> {
   const listDatasourcesTool = getListDatasourcesTool(new WebMcpServer());
   const callback = await Provider.from(listDatasourcesTool.callback);
   return await callback(
-    { filter: params.filter, limit: undefined },
-    getMockRequestHandlerExtra(),
+    { filter: params.filter, pageNumber: params.pageNumber, limit: params.limit },
+    extra,
   );
 }

@@ -6,14 +6,28 @@ import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { DataSource } from '../../../sdks/tableau/types/dataSource.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { MAX_PAGE_SIZE, paginate } from '../../../utils/paginate.js';
+import { getPage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateDatasourcesFilterString } from './datasourcesFilterUtils.js';
 
 const paramsSchema = {
   filter: z.string().optional(),
-  limit: z.number().gt(0).optional(),
+  pageNumber: z
+    .number()
+    .int()
+    .gt(0)
+    .optional()
+    .describe('Which 1000-item page to fetch (1-based, default 1).'),
+  limit: z
+    .number()
+    .int()
+    .gt(0)
+    .max(MAX_PAGE_SIZE)
+    .optional()
+    .describe(
+      'The maximum number of data sources to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants.',
+    ),
 };
 
 export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
@@ -48,7 +62,7 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
   | ownerDomain            | eq, in                                    |
   | ownerEmail             | eq                                        |
   | ownerName              | eq, in                                    |
-  | projectName*           | eq, in                                    |
+  | projectName            | eq, in                                    |
   | serverName             | eq, in                                    |
   | serverPort             | eq                                        |
   | size                   | eq, gt, gte, lt, lte                      |
@@ -69,6 +83,9 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
       filter: "createdAt:gt:2023-01-01T00:00:00Z"
   - List data sources with the name "Project Views" in the "Finance" project and created after January 1, 2023:
       filter: "name:eq:Project Views,projectName:eq:Finance,createdAt:gt:2023-01-01T00:00:00Z"
+
+  **Pagination**
+  This tool returns a single page of up to 1000 data sources per call. Use \`pageNumber\` to select which 1000-item page to fetch (1-based, default 1). The response is a flat object \`{ data, totalAvailable }\`. To collect all data sources, increment \`pageNumber\` (starting at 1) until you have collected \`totalAvailable\` items.
   `,
     paramsSchema,
     annotations: {
@@ -78,47 +95,59 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, limit }, extra): Promise<CallToolResult> => {
+    callback: async ({ filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
       return await listDatasourcesTool.logAndExecute({
         extra,
         args: { filter, limit },
-        callback: async () => {
-          const datasources = await useRestApi({
-            ...extra,
-            jwtScopes: listDatasourcesTool.requiredApiScopes,
-            callback: async (restApi) => {
-              const maxResultLimit = configWithOverrides.getMaxResultLimit(
-                listDatasourcesTool.name,
-              );
+        callback: async () =>
+          new Ok(
+            await useRestApi({
+              ...extra,
+              jwtScopes: listDatasourcesTool.requiredApiScopes,
+              callback: async (restApi) => {
+                const maxResultLimit = configWithOverrides.getMaxResultLimit(
+                  listDatasourcesTool.name,
+                );
 
-              const datasources = await paginate({
-                pageConfig: {
-                  pageSize: MAX_PAGE_SIZE,
-                  limit: maxResultLimit ? Math.min(maxResultLimit, limit ?? maxResultLimit) : limit,
-                },
-                getDataFn: async (pageConfig) => {
-                  const { pagination, datasources: data } =
-                    await restApi.datasourcesMethods.listDatasources({
-                      siteId: restApi.siteId,
-                      filter: validatedFilter ?? '',
-                      pageSize: pageConfig.pageSize,
-                      pageNumber: pageConfig.pageNumber,
-                    });
+                const page = await getPage({
+                  pageNumber,
+                  limit,
+                  maxResultLimit,
+                  getDataFn: async ({ pageSize, pageNumber }) => {
+                    const { pagination, datasources: data } =
+                      await restApi.datasourcesMethods.listDatasources({
+                        siteId: restApi.siteId,
+                        filter: validatedFilter ?? '',
+                        pageSize,
+                        pageNumber,
+                      });
 
-                  return { pagination, data };
-                },
-              });
+                    return { pagination, data };
+                  },
+                });
 
-              return datasources;
-            },
+                return page;
+              },
+            }),
+          ),
+        constrainSuccessResult: (page) => {
+          const constrained = constrainDatasources({
+            datasources: page.data,
+            boundedContext: configWithOverrides.boundedContext,
           });
-
-          return new Ok(datasources);
+          if (constrained.type !== 'success') {
+            return constrained;
+          }
+          return {
+            type: 'success',
+            result: {
+              data: constrained.result,
+              totalAvailable: page.totalAvailable,
+            },
+          };
         },
-        constrainSuccessResult: (datasources) =>
-          constrainDatasources({ datasources, boundedContext: configWithOverrides.boundedContext }),
       });
     },
   });
