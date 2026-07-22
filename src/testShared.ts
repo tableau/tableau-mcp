@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
 import { ProductVersion } from './sdks/tableau/types/serverInfo.js';
 
 export const testProductVersion = {
@@ -16,6 +20,20 @@ export function stubDefaultEnvVars(): void {
   vi.stubEnv('PAT_NAME', 'sponge');
   vi.stubEnv('PAT_VALUE', 'bob');
   vi.stubEnv('TABLEAU_MCP_TEST', 'true');
-  vi.stubEnv('TABLEAU_EXTERNAL_API_DISCOVERY_DIR', `${process.cwd()}/.empty-desktop-discovery`);
+  vi.stubEnv('TABLEAU_EXTERNAL_API_DISCOVERY_DIR', getEmptyDesktopDiscoveryDir());
   vi.stubEnv('PRODUCT_TELEMETRY_ENABLED', 'false');
 }
+
+const emptyDesktopDiscoveryDirs: string[] = [];
+
+function getEmptyDesktopDiscoveryDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'tableau-mcp-empty-desktop-discovery-'));
+  emptyDesktopDiscoveryDirs.push(dir);
+  return dir;
+}
+
+process.once('exit', () => {
+  for (const dir of emptyDesktopDiscoveryDirs) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

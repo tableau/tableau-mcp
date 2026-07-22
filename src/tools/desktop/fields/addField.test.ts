@@ -273,6 +273,26 @@ describe('addFieldTool', () => {
     }
   });
 
+  it('counts a slash inside a shelf field name as part of the field, not a separator', async () => {
+    const worksheetXml =
+      '<worksheet><table><rows>[Sample].[sum:Revenue/Cost:qk]</rows></table></worksheet>';
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(worksheetXml);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+      index: 2,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('index must be an integer in the range 0..1');
+    expect(metadataModule.addFieldToRows).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
+  });
+
   // --- target=cols (ported from addFieldToCols) ---
   it('should return error when addFieldToCols throws (target=cols)', async () => {
     vi.mocked(existsSync).mockReturnValue(true);

@@ -121,7 +121,7 @@ function shapeCommandResult({
   );
   const payload: ExecuteTableauCommandSuccess = {
     message: outputSerializationFailed
-      ? 'Command executed, but the requested result cannot be returned because Desktop reported output serialization failed.'
+      ? 'Command executed, but the requested result cannot be returned because Desktop reported output serialization failed; the command executed; state may have changed; do NOT retry - re-read state instead.'
       : 'Command executed successfully.',
   };
 

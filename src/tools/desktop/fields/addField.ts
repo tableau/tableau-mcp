@@ -4,6 +4,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
+import { parseShelfValue } from '../../../desktop/metadata/fields.js';
 import {
   addFieldToCols,
   addFieldToEncoding,
@@ -213,20 +214,4 @@ function getWorksheet(parsed: any): any | undefined {
     return normalizeArray(parsed.worksheet)[0];
   }
   return undefined;
-}
-
-function parseShelfValue(value: string | string[] | undefined): string[] {
-  if (!value) {
-    return [];
-  }
-  if (typeof value === 'string') {
-    return value
-      .split('/')
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-  if (Array.isArray(value)) {
-    return value.map((v) => (typeof v === 'string' ? v.trim() : String(v).trim())).filter(Boolean);
-  }
-  return [];
 }

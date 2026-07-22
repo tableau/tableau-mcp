@@ -136,7 +136,10 @@ export const getAuthorParameterTool = (
               caption,
               stagePath: trimmedStagePath,
               reopenRequired: true,
-              hint: 'parameters are born at OPEN — reopen Desktop from stagePath and re-pin the session; merged calcs/sets/actions/formatting carry through the reopen',
+              hint:
+                `parameter was staged at ${trimmedStagePath}; mutation staged at ${trimmedStagePath}. ` +
+                'do NOT rerun author-parameter (a rerun creates a second uniquely-named parameter). ' +
+                'Recovery: reopen the staged file / restore the session; merged calcs/sets/actions/formatting carry through the reopen.',
               ...(reopenError ? { reopenError } : {}),
             });
 

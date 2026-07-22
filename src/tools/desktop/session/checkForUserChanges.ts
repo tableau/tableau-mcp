@@ -74,6 +74,28 @@ export const getCheckForUserChangesTool = (
             });
           }
 
+          if (count === 0 && events.length > 0) {
+            log({
+              message: 'User changes detected despite zero event count',
+              level: 'warning',
+              logger: 'checkForUserChangesTool',
+              data: {
+                sinceSequence,
+                latestSequence,
+                count,
+                eventDetailsCount: events.length,
+              },
+            });
+
+            return new Ok({
+              message: `User changes detected! Desktop returned ${events.length} ${events.length === 1 ? 'event detail' : 'event details'} since sequence ${sinceSequence} with count=0 (inconsistent-response).`,
+              events: events.map((e) => `[${e.sequence}] ${e.timestamp}: ${e.type}`),
+              instructions:
+                'Treat the workbook as changed. Desktop returned an inconsistent-response; refresh the workbook state before making further changes.',
+              currentSequence: latestSequence,
+            });
+          }
+
           if (count === 0) {
             log({
               message: 'No user changes detected',

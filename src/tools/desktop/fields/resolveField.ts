@@ -26,6 +26,11 @@ const paramsSchema = {
 interface ResolveFieldResult {
   resolution: FieldResolution;
   status: 'resolved' | 'ambiguous' | 'not_found' | 'stale_not_found';
+  /**
+   * @deprecated Kept for existing consumers that still falsy-check the JSON body.
+   * Remove after callers migrate to `status`; keep true for ambiguous/not_found/error statuses.
+   */
+  isError: boolean;
   stale?: true;
   /** Optional guidance included in the JSON body (self-heal outcome). */
   note?: string;
@@ -142,9 +147,11 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
               'do not conclude the field is missing from a cache that could not be refreshed.';
           }
 
+          const status = getResolutionStatus(resolution, stale);
           return new Ok<ResolveFieldResult>({
             resolution,
-            status: getResolutionStatus(resolution, stale),
+            status,
+            isError: isResolutionStatusError(status),
             ...(stale ? { stale } : {}),
             ...(note ? { note } : {}),
           });
@@ -176,4 +183,8 @@ function getResolutionStatus(
     return 'ambiguous';
   }
   return stale ? 'stale_not_found' : 'not_found';
+}
+
+function isResolutionStatusError(status: ResolveFieldResult['status']): boolean {
+  return status !== 'resolved';
 }

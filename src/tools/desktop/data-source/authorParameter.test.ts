@@ -242,6 +242,10 @@ describe('authorParameterTool', () => {
       reopenRequired: true,
       reopenError: 'launch timed out',
     });
+    expect(parsed.hint).toContain(`parameter was staged at ${stagePath}`);
+    expect(parsed.hint).toContain('do NOT rerun');
+    expect(parsed.hint).toContain('reopen the staged file');
+    expect(parsed.hint).toContain('restore the session');
     expect(parsed.reopened).toBeUndefined();
     expect(readFileSync(stagePath, 'utf-8')).toContain("caption='p.Period'");
     expect(process.env.TABLEAU_DESKTOP_SESSION_ID).toBe('12345');

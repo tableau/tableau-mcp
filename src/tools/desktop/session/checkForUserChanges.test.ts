@@ -129,6 +129,42 @@ describe('checkForUserChangesTool', () => {
     expect(resultObj.currentSequence).toBe(55);
   });
 
+  it('reports changes when count is zero but event details are returned', async () => {
+    const mockGetExecutor = vi.fn().mockResolvedValue({
+      getEvents: vi.fn().mockResolvedValue({
+        isOk: () => true,
+        isErr: () => false,
+        value: {
+          events: [
+            {
+              sequence: 51,
+              timestamp: '2026-05-26T10:00:00Z',
+              type: 'doc:field-added-event',
+            },
+          ],
+          latest_sequence: 51,
+          count: 0,
+        },
+      }),
+    });
+
+    const result = await getToolResult({
+      session: '12345',
+      sinceSequence: 50,
+      mockGetExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+
+    const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(resultObj.message).toContain('User changes detected');
+    expect(resultObj.message).toContain('inconsistent-response');
+    expect(resultObj.events).toEqual(['[51] 2026-05-26T10:00:00Z: doc:field-added-event']);
+    expect(resultObj.instructions).toContain('Treat the workbook as changed');
+    expect(resultObj.currentSequence).toBe(51);
+  });
+
   it('should detect user changes with single event', async () => {
     const mockEventsResponse: GetEventsResponse = {
       events: [

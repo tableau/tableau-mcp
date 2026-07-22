@@ -215,6 +215,9 @@ describe('executeTableauCommandTool', () => {
     expect(payload.message).toContain(
       'Command executed, but the requested result cannot be returned',
     );
+    expect(payload.message).toContain('the command executed; state may have changed');
+    expect(payload.message).toContain('do NOT retry');
+    expect(payload.message).toContain('re-read state instead');
     expect(payload.message).toContain(
       'WARNING: output-serialization-failed - Command output could not be serialized.',
     );

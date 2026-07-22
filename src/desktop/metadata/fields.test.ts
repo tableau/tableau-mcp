@@ -22,9 +22,11 @@ const WORKSHEET_XML = `<?xml version="1.0" encoding="UTF-8"?>
       <datasource-dependencies datasource="Sample">
         <column name="[Sales]" datatype="real" role="measure" type="quantitative"/>
         <column name="[Profit]" datatype="real" role="measure" type="quantitative"/>
+        <column name="[Revenue/Cost]" datatype="real" role="measure" type="quantitative"/>
         <column name="[Category]" datatype="string" role="dimension" type="nominal"/>
         <column-instance name="[sum:Sales:qk]" column="[Sales]" derivation="Sum" pivot="key" type="quantitative"/>
         <column-instance name="[sum:Profit:qk]" column="[Profit]" derivation="Sum" pivot="key" type="quantitative"/>
+        <column-instance name="[sum:Revenue/Cost:qk]" column="[Revenue/Cost]" derivation="Sum" pivot="key" type="quantitative"/>
         <column-instance name="[none:Category:nk]" column="[Category]" derivation="None" pivot="key" type="nominal"/>
       </datasource-dependencies>
     </view>
@@ -118,6 +120,35 @@ describe('addFieldToRows / removeFieldFromRows', () => {
   it('keeps the legacy column-instance validation error for datasource-qualified non-instance refs', () => {
     expect(() => addFieldToRows(WORKSHEET_XML, '[Sample].[Profit]')).toThrow(
       /Invalid column-instance name format: \[Profit\]/,
+    );
+  });
+
+  it('does not split a shelf field name that contains slash characters', () => {
+    const slashFieldXml = WORKSHEET_XML.replace(
+      '<rows>[Sample].[sum:Sales:qk]</rows>',
+      '<rows>[Sample].[sum:Revenue/Cost:qk]</rows>',
+    );
+
+    const modified = addFieldToRows(slashFieldXml, '[Sample].[sum:Profit:qk]', 1);
+    const rowFields = listFields(modified).filter((f) => f.location === 'rows');
+
+    expect(rowFields.map((f) => f.column)).toEqual([
+      '[Sample].[sum:Revenue/Cost:qk]',
+      '[Sample].[sum:Profit:qk]',
+    ]);
+  });
+
+  it('treats index 0 as append-equivalent on an empty shelf', () => {
+    const emptyRowsXml = WORKSHEET_XML.replace(
+      '<rows>[Sample].[sum:Sales:qk]</rows>',
+      '<rows></rows>',
+    );
+
+    const explicitZero = addFieldToRows(emptyRowsXml, '[Sample].[sum:Profit:qk]', 0);
+    const omittedIndex = addFieldToRows(emptyRowsXml, '[Sample].[sum:Profit:qk]');
+
+    expect(listFields(explicitZero).filter((f) => f.location === 'rows')).toEqual(
+      listFields(omittedIndex).filter((f) => f.location === 'rows'),
     );
   });
 });
