@@ -37,6 +37,9 @@ const TRANSIENT_FAILURE_GUIDANCE =
   'The request may be transient — one retry is reasonable. If it fails again, report the failure.';
 const REPEATED_TRANSIENT_FAILURE_GUIDANCE =
   'The request is still failing — report the outcome; do not call again.';
+// Session resolution failures happen before a Desktop pid is known; keep them in a
+// dedicated session scope so unresolved discovery noise cannot poison a resolved session.
+const SUMMARY_DATA_UNRESOLVED_SESSION_SCOPE = '__summary-data-session-unresolved__';
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
@@ -83,21 +86,23 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
         extra,
         args: { session, worksheet, maxRows, columns },
         callback: async (): Promise<Result<SummaryDataCompletedResult, McpToolError>> => {
+          let transientAccountingSessionId = SUMMARY_DATA_UNRESOLVED_SESSION_SCOPE;
+          const resolvedMaxRows = clampMaxRows(maxRows);
+          const signature = summaryDataSignature({
+            worksheet,
+            maxRows: resolvedMaxRows,
+            columns,
+          });
           try {
-            const resolvedMaxRows = clampMaxRows(maxRows);
-            const signature = summaryDataSignature({
-              worksheet,
-              maxRows: resolvedMaxRows,
-              columns,
-            });
             const sessionResult = resolveSession(session);
             if (sessionResult.isErr()) {
-              return summaryDataError(
-                sessionResult.error,
-                'retryable',
-                'session-resolution-failed',
+              return withTransientRetryAccounting(
+                summaryDataError(sessionResult.error, 'retryable', 'session-resolution-failed'),
+                transientAccountingSessionId,
+                signature,
               ).toErr();
             }
+            transientAccountingSessionId = sessionResult.value;
 
             const result = await runExternalApiReadTool<SummaryDataCompletedResult>({
               session: sessionResult.value,
@@ -186,7 +191,11 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
             sessionRouteState.clearSummaryDataTransientFailure(sessionResult.value, signature);
             return result;
           } catch (error) {
-            return requestError(new UnknownError(getExceptionMessage(error))).toErr();
+            return withTransientRetryAccounting(
+              requestError(new UnknownError(getExceptionMessage(error))),
+              transientAccountingSessionId,
+              signature,
+            ).toErr();
           }
         },
         getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
@@ -331,9 +340,7 @@ function nextActionForSummaryError(
   reason: SummaryDataErrorReason,
 ): NextAction {
   if (status === 'terminal') {
-    return doneNextAction(
-      reason === 'request-failed' ? SUMMARY_DATA_FAILURE_DONE_LABEL : SUMMARY_DATA_DONE_LABEL,
-    );
+    return doneNextAction(SUMMARY_DATA_FAILURE_DONE_LABEL);
   }
   if (status === 'retryable') {
     return prefillNextAction('Retry get-summary-data once');

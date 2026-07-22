@@ -382,6 +382,113 @@ describe('getSummaryDataTool', () => {
     }
   });
 
+  it('escalates the second consecutive session-resolution failure for the same signature to terminal', async () => {
+    const harness = await startHarness();
+    vi.mocked(sessionResolution.resolveSession).mockReturnValue(
+      new ArgsValidationError('Desktop discovery temporarily unavailable').toErr(),
+    );
+
+    try {
+      const first = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
+      const second = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
+
+      expect(parseJsonResult(first)).toMatchObject({
+        status: 'retryable',
+        reason: 'session-resolution-failed',
+        guidance: expect.stringContaining('transient — one retry is reasonable'),
+      });
+      expect(parseJsonResult(second)).toMatchObject({
+        status: 'terminal',
+        reason: 'session-resolution-failed',
+        guidance: expect.stringContaining('still failing — report the outcome; do not call again'),
+      });
+      expect(second.structuredContent).toEqual({
+        nextAction: { label: 'Data retrieval failed — report outcome', kind: 'done' },
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('escalates the second consecutive caught exception for the same signature to terminal', async () => {
+    const harness = await startHarness();
+    vi.mocked(sessionResolution.resolveSession).mockImplementation(() => {
+      throw new Error('Desktop discovery exploded');
+    });
+
+    try {
+      const first = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
+      const second = await harness.callTool({ worksheet: 'Sales by Region', maxRows: 50 });
+
+      expect(parseJsonResult(first)).toMatchObject({
+        status: 'retryable',
+        reason: 'request-failed',
+        guidance: expect.stringContaining('transient — one retry is reasonable'),
+        error: { type: 'unknown', message: 'Desktop discovery exploded' },
+      });
+      expect(parseJsonResult(second)).toMatchObject({
+        status: 'terminal',
+        reason: 'request-failed',
+        guidance: expect.stringContaining('still failing — report the outcome; do not call again'),
+      });
+      expect(second.structuredContent).toEqual({
+        nextAction: { label: 'Data retrieval failed — report outcome', kind: 'done' },
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('keeps unresolved-session and resolved-session transient scopes separate', async () => {
+    const harness = await startHarness((server) => {
+      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
+        status: 500,
+        contentType: 'application/problem+json',
+        body: JSON.stringify({
+          type: 'summary-failed',
+          title: 'Summary unavailable',
+          status: 500,
+          detail: 'Could not query worksheet',
+        }),
+      });
+    });
+    vi.mocked(sessionResolution.resolveSession).mockReturnValueOnce(
+      new ArgsValidationError('Desktop discovery temporarily unavailable').toErr(),
+    );
+
+    try {
+      const unresolvedFailure = await harness.callTool({
+        worksheet: 'Sales by Region',
+        maxRows: 50,
+      });
+      const resolvedTransportFailure = await harness.callTool({
+        worksheet: 'Sales by Region',
+        maxRows: 50,
+      });
+      const secondResolvedTransportFailure = await harness.callTool({
+        worksheet: 'Sales by Region',
+        maxRows: 50,
+      });
+
+      expect(parseJsonResult(unresolvedFailure)).toMatchObject({
+        status: 'retryable',
+        reason: 'session-resolution-failed',
+      });
+      expect(parseJsonResult(resolvedTransportFailure)).toMatchObject({
+        status: 'retryable',
+        reason: 'request-failed',
+        guidance: expect.stringContaining('transient — one retry is reasonable'),
+      });
+      expect(parseJsonResult(secondResolvedTransportFailure)).toMatchObject({
+        status: 'terminal',
+        reason: 'request-failed',
+        guidance: expect.stringContaining('still failing — report the outcome; do not call again'),
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('uses the only worksheet when worksheet is omitted', async () => {
     const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets', {
