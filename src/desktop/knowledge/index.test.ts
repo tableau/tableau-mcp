@@ -12,6 +12,7 @@ import {
   getKnowledgeDir,
   listKnowledgeResources,
   readKnowledgeResource,
+  searchKnowledge,
   searchKnowledgeWithFallback,
 } from './index.js';
 
@@ -164,6 +165,51 @@ describe('knowledge/index', () => {
       expect(() => searchKnowledgeWithFallback('chart choice', 3)).toThrow(
         `Knowledge corpus is empty; expected assets under ${KNOWLEDGE_DIR}`,
       );
+    });
+
+    it('singularizes known-safe plural endings before keyword ranking', () => {
+      setupFsMock({
+        [join(KNOWLEDGE_DIR, 'country.md')]:
+          '# Country\n- Relevant user prompts/search terms: country\n\n## When to Use\nCountry maps.',
+        [join(KNOWLEDGE_DIR, 'category.md')]:
+          '# Category\n- Relevant user prompts/search terms: category\n\n## When to Use\nCategory bars.',
+        [join(KNOWLEDGE_DIR, 'class.md')]:
+          '# Class\n- Relevant user prompts/search terms: class\n\n## When to Use\nClass attributes.',
+        [join(KNOWLEDGE_DIR, 'box.md')]:
+          '# Box\n- Relevant user prompts/search terms: box\n\n## When to Use\nBox plots.',
+      });
+
+      expect(searchKnowledge('countries', 1)[0]?.slug).toBe('country');
+      expect(searchKnowledge('categories', 1)[0]?.slug).toBe('category');
+      expect(searchKnowledge('classes', 1)[0]?.slug).toBe('class');
+      expect(searchKnowledge('boxes', 1)[0]?.slug).toBe('box');
+    });
+
+    it('does not singularize exception words that look like plural endings', () => {
+      setupFsMock({
+        [join(KNOWLEDGE_DIR, 'series.md')]:
+          '# Series\n- Relevant user prompts/search terms: series\n\n## When to Use\nTime series.',
+        [join(KNOWLEDGE_DIR, 'sery.md')]:
+          '# Sery\n- Relevant user prompts/search terms: sery\n\n## When to Use\nSynthetic stem.',
+        [join(KNOWLEDGE_DIR, 'species.md')]:
+          '# Species\n- Relevant user prompts/search terms: species\n\n## When to Use\nSpecies dimension.',
+        [join(KNOWLEDGE_DIR, 'specy.md')]:
+          '# Specy\n- Relevant user prompts/search terms: specy\n\n## When to Use\nSynthetic stem.',
+      });
+
+      expect(searchKnowledge('series', 1)[0]?.slug).toBe('series');
+      expect(searchKnowledge('species', 1)[0]?.slug).toBe('species');
+    });
+
+    it('does not turn stopword-only queries into whole-string hits', () => {
+      setupFsMock({
+        [join(KNOWLEDGE_DIR, 'stopwords.md')]:
+          '# The And With\n- Relevant user prompts/search terms: the and with\n\n## When to Use\nStopword phrase.',
+      });
+
+      const result = searchKnowledgeWithFallback('the and with', 3);
+
+      expect(result.hits).toEqual([]);
     });
   });
 });

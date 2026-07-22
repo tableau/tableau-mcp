@@ -277,16 +277,36 @@ function keywordFallbackQuery(query: string): string {
   return tokens.length > 0 ? tokens.join(' | ') : query.trim();
 }
 
+const SINGULARIZE_EXCEPTIONS = new Set(['axes', 'series', 'species']);
+
 function singularizeToken(word: string): string {
+  if (SINGULARIZE_EXCEPTIONS.has(word)) {
+    return word;
+  }
+  if (word.length >= 5 && word.endsWith('ies')) {
+    return `${word.slice(0, -3)}y`;
+  }
+  if (word.length >= 5 && /(?:sses|xes|zes|ches|shes)$/.test(word)) {
+    return word.slice(0, -2);
+  }
   if (word.length >= 5 && word.endsWith('s') && !word.endsWith('ss') && !word.endsWith('es')) {
     return word.slice(0, -1);
   }
   return word;
 }
 
+function rawQueryTokens(query: string): string[] {
+  return (query.match(/[A-Za-z0-9][A-Za-z0-9_-]*/g) ?? []).map((word) => word.toLowerCase());
+}
+
+function hasMeaningfulQueryTokenBeforeLengthFilter(query: string): boolean {
+  return rawQueryTokens(query).some(
+    (word) => !QUERY_STOPWORDS.has(word) && !QUERY_TOOL_JARGON.has(word),
+  );
+}
+
 function queryTokens(query: string): string[] {
-  const tokens = (query.match(/[A-Za-z0-9][A-Za-z0-9_-]*/g) ?? [])
-    .map((word) => word.toLowerCase())
+  const tokens = rawQueryTokens(query)
     .filter((word) => word.length > 2 && !QUERY_STOPWORDS.has(word) && !QUERY_TOOL_JARGON.has(word))
     .map(singularizeToken);
   return [...new Set(tokens)];
@@ -316,7 +336,11 @@ function toKnowledgeHit(
 
 function searchKnowledgeByKeywordIntersection(query: string, limit: number): KnowledgeHit[] {
   const tokens = queryTokens(query);
-  if (tokens.length === 0) return searchKnowledgeByWholeString(query, limit);
+  if (tokens.length === 0) {
+    return hasMeaningfulQueryTokenBeforeLengthFilter(query)
+      ? searchKnowledgeByWholeString(query, limit)
+      : [];
+  }
 
   const fuse = ensureKnowledgeKeywordFuse();
   const ranked = new Map<

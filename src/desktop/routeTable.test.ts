@@ -62,10 +62,20 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(knowledge).toMatchObject({
       trigger:
-        'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult',
+        'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no single-sheet chart-creation binding path applies; this precedence does not override edit-in-place ("format the existing bar chart") or dashboard ("dashboard with bar and line") routes; for a new single-sheet chart ask with a named chart type, plain-chart stays first even with calc/formatting riders; chart-route escalation may still consult',
       toolSequence: ['search-knowledge', 'read-knowledge-resource'],
       stopConditions: ['read the top hit once, then proceed'],
     });
+  });
+
+  it('scopes plain-chart precedence to new single-sheet chart creation without stealing edit or dashboard asks', () => {
+    const knowledge = routes.find((route) => route.id === 'knowledge-consult');
+    const rendered = knowledge ? renderInstructionEntry(knowledge) : '';
+
+    expect(rendered).toContain('single-sheet chart-creation');
+    expect(rendered).toContain('does not override edit-in-place ("format the existing bar chart")');
+    expect(rendered).toContain('dashboard ("dashboard with bar and line") routes');
+    expect(rendered).toContain('new single-sheet chart ask with a named chart type');
   });
 
   it('places the deterministic plain-chart route before knowledge consultation', () => {

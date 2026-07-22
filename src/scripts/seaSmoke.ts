@@ -323,18 +323,24 @@ export async function runSeaSmoke({
     waiter.resolve(message);
   });
 
-  const closePromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
-    (resolve, reject) => {
-      child.once('error', reject);
-      child.once('close', (code, signal) => {
-        const error = new Error(
-          `SEA smoke process closed before all responses arrived (code ${String(code)} signal ${String(signal)})`,
-        );
-        rejectPending(error);
-        resolve({ code, signal });
-      });
-    },
-  );
+  const processDone = new Promise<{
+    code: number | null;
+    signal: NodeJS.Signals | null;
+    error?: Error;
+  }>((resolve) => {
+    child.once('error', (error) => {
+      const processError = error instanceof Error ? error : new Error(String(error));
+      rejectPending(processError);
+      resolve({ code: null, signal: null, error: processError });
+    });
+    child.once('close', (code, signal) => {
+      const error = new Error(
+        `SEA smoke process closed before all responses arrived (code ${String(code)} signal ${String(signal)})`,
+      );
+      rejectPending(error);
+      resolve({ code, signal });
+    });
+  });
 
   const awaitResponse = async (id: number): Promise<JsonObject> => {
     return await new Promise<JsonObject>((resolve, reject) => {
@@ -378,13 +384,16 @@ export async function runSeaSmoke({
 
   const timeout = setTimeout(() => {
     timedOut = true;
+    rejectPending(new Error(`SEA smoke timed out after ${timeoutMs}ms. stderr: ${stderr.trim()}`));
     child.kill();
   }, timeoutMs);
 
   try {
     await exchange();
   } catch (error) {
-    child.kill();
+    if (!timedOut) {
+      child.kill();
+    }
     clearTimeout(timeout);
     if (timedOut) {
       throw new Error(`SEA smoke timed out after ${timeoutMs}ms. stderr: ${stderr.trim()}`);
@@ -392,11 +401,14 @@ export async function runSeaSmoke({
     throw error;
   }
 
-  const { code, signal } = await closePromise;
+  const { code, signal, error } = await processDone;
   clearTimeout(timeout);
 
   if (timedOut) {
     throw new Error(`SEA smoke timed out after ${timeoutMs}ms. stderr: ${stderr.trim()}`);
+  }
+  if (error) {
+    throw error;
   }
   if (code !== 0) {
     throw new Error(

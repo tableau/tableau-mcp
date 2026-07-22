@@ -34,7 +34,7 @@ describe('DesktopMcpServer knowledge startup check', () => {
   it('real knowledge resource listing throws a loud asset-root error for an empty root', async () => {
     const emptyRoot = mkdtempSync(join(process.cwd(), '.tmp-empty-knowledge-root-'));
     const resourcesRoot = join(emptyRoot, 'resources', 'desktop');
-    mkdirSync(resourcesRoot, { recursive: true });
+    mkdirSync(join(resourcesRoot, 'knowledge'), { recursive: true });
 
     try {
       vi.resetModules();

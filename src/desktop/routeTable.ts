@@ -62,7 +62,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'route',
     id: 'knowledge-consult',
     trigger:
-      'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult',
+      'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no single-sheet chart-creation binding path applies; this precedence does not override edit-in-place ("format the existing bar chart") or dashboard ("dashboard with bar and line") routes; for a new single-sheet chart ask with a named chart type, plain-chart stays first even with calc/formatting riders; chart-route escalation may still consult',
     action:
       'FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.',
     toolSequence: ['search-knowledge', 'read-knowledge-resource'],

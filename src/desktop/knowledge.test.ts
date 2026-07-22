@@ -78,6 +78,13 @@ describe('knowledge/search', { timeout: 30_000 }, () => {
     const slugs = (query: string): string[] => searchKnowledge(query, 5).map((hit) => hit.slug);
 
     expect(slugs('charts')).toEqual(slugs('chart'));
+    expect(slugs('countries')).toEqual(slugs('country'));
+  });
+
+  it('does not promote stopword-only queries to whole-string hits', () => {
+    const result = searchKnowledgeWithFallback('the and with', 5);
+
+    expect(result.hits).toEqual([]);
   });
 
   it('falls back to whole-string fuzzy search when tokenization removes every term', () => {

@@ -17,6 +17,11 @@ import {
 describe('SEA smoke helper', () => {
   beforeEach(() => {
     spawnMock.mockReset();
+    vi.useRealTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('builds a minimal MCP initialize and tools/list handshake', () => {
@@ -260,5 +265,75 @@ describe('SEA smoke helper', () => {
     child.emit('close', 0, null);
 
     await expect(smoke).resolves.toBeUndefined();
+  });
+
+  it('rejects the pending exchange immediately on timeout without waiting for close', async () => {
+    vi.useFakeTimers();
+    const child = new EventEmitter() as EventEmitter & {
+      stdin: Writable;
+      stdout: PassThrough;
+      stderr: PassThrough;
+      kill: ReturnType<typeof vi.fn>;
+    };
+    child.stdin = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    });
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.kill = vi.fn();
+    spawnMock.mockReturnValue(child);
+
+    const smoke = runSeaSmoke({
+      binaryPath: './tableau-mcp-desktop',
+      timeoutMs: 5,
+    });
+    const rejection = vi.fn();
+    smoke.catch(rejection);
+
+    try {
+      await vi.advanceTimersByTimeAsync(5);
+      await Promise.resolve();
+
+      expect(rejection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'SEA smoke timed out after 5ms. stderr: ',
+        }),
+      );
+      expect(child.kill).toHaveBeenCalledTimes(1);
+    } finally {
+      child.emit('close', null, 'SIGTERM');
+      await smoke.catch(() => undefined);
+    }
+  });
+
+  it('rejects the pending exchange on spawn error without orphaning closePromise', async () => {
+    const child = new EventEmitter() as EventEmitter & {
+      stdin: Writable;
+      stdout: PassThrough;
+      stderr: PassThrough;
+      kill: ReturnType<typeof vi.fn>;
+    };
+    child.stdin = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    });
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.kill = vi.fn();
+    spawnMock.mockReturnValue(child);
+
+    const smoke = runSeaSmoke({
+      binaryPath: './tableau-mcp-desktop',
+      timeoutMs: 1_000,
+    });
+    const spawnError = new Error('spawn failed');
+
+    child.emit('error', spawnError);
+
+    await expect(smoke).rejects.toBe(spawnError);
+    expect(child.kill).toHaveBeenCalledTimes(1);
   });
 });
