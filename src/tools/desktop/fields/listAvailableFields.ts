@@ -111,9 +111,9 @@ export const getListAvailableFieldsTool = (
     name: 'list-available-fields',
     title,
     description: [
-      'List datasource fields.',
-      'Call before shelves/encodings.',
-      'Full gives column_ref; slim gives ref parts.',
+      'List datasource fields for exploration/field questions/non-template authoring.',
+      'Not needed before bind-template.',
+      'Full gives column_ref; slim ref parts.',
     ].join(' '),
     paramsSchema,
     annotations: {

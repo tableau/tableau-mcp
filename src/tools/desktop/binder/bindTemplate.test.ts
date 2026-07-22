@@ -329,7 +329,9 @@ describe('bindTemplateTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getBindTemplateTool(new DesktopMcpServer());
     expect(tool.name).toBe('bind-template');
-    expect(tool.description).toBe('Bind/apply template; calcs first.');
+    expect(tool.description).toBe(
+      'Reads workbook + resolves fields itself; binds/applies. Plain chart: FIRST auto_apply:true, no discovery.',
+    );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       ask: expect.any(Object),
