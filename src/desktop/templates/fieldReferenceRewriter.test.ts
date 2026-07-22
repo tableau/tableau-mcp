@@ -77,8 +77,8 @@ describe('rewriteFieldReferences — ref-class coverage: kpi-text (aggregated me
 describe('rewriteFieldReferences — ref-class coverage: ranking-ordered-bar (dimension + measure + computed-sort)', () => {
   let ranking: string;
   const mapping = {
-    Region: '[DS].[none:Category:nk]',
-    Sales: '[DS].[sum:Profit:qk]',
+    Category: '[DS].[none:Segment:nk]',
+    Measure: '[DS].[sum:Profit:qk]',
   };
   const datasource = 'Superstore';
   beforeAll(() => {
@@ -87,30 +87,30 @@ describe('rewriteFieldReferences — ref-class coverage: ranking-ordered-bar (di
 
   it('rewrites both bare base <column> declarations', () => {
     const r = rewriteFieldReferences(ranking, mapping, datasource);
-    expect(r).toMatch(/<column [^>]*name="\[Category\]"/);
+    expect(r).toMatch(/<column [^>]*name="\[Segment\]"/);
     expect(r).toMatch(/<column [^>]*name="\[Profit\]"/);
-    expect(r).not.toContain('name="[Region]"');
-    expect(r).not.toContain('name="[Sales]"');
+    expect(r).not.toContain('name="[Category]"');
+    expect(r).not.toContain('name="[Measure]"');
   });
 
   it('rewrites plain instance names with lowercase short codes (none/sum)', () => {
     const r = rewriteFieldReferences(ranking, mapping, datasource);
-    expect(r).toContain('name="[none:Category:nk]"');
+    expect(r).toContain('name="[none:Segment:nk]"');
     expect(r).toContain('name="[sum:Profit:qk]"');
   });
 
   it('rewrites the <computed-sort> column= and using= refs (dimension + measure)', () => {
     const r = rewriteFieldReferences(ranking, mapping, datasource);
-    expect(r).toContain('column="[Superstore].[none:Category:nk]"');
+    expect(r).toContain('column="[Superstore].[none:Segment:nk]"');
     expect(r).toContain('using="[Superstore].[sum:Profit:qk]"');
   });
 
   it('rewrites the rows/cols text-node refs with ZERO old field-ref residue', () => {
     const r = rewriteFieldReferences(ranking, mapping, datasource);
-    expect(r).toContain('<rows>[Superstore].[none:Category:nk]</rows>');
+    expect(r).toContain('<rows>[Superstore].[none:Segment:nk]</rows>');
     expect(r).toContain('<cols>[Superstore].[sum:Profit:qk]</cols>');
     expect(r).not.toContain('{{DATASOURCE}}');
-    expect(r).not.toMatch(/:Region:|:Sales:/);
+    expect(r).not.toMatch(/:Category:|:Measure:/);
   });
 });
 

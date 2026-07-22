@@ -2,11 +2,11 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.35.0+content.2026-07-22",
+  "content_version": "2.47.0+content.2026-07-22",
   "schema_version": "1",
   "generated": "2026-07-22",
   "engine_compat": {
-    "server_min": "2.35.0",
+    "server_min": "2.47.0",
     "node": ">=22.7.5"
   },
   "resources": [
@@ -192,13 +192,13 @@
     },
     {
       "path": "data-visualization-templates-xml/ranking-ordered-bar.xml",
-      "sha256": "63040f0d4b4ee0f84f995a82ea0a7845453e078708e1cd55aa13f878ffc00d0e",
-      "bytes": 2514
+      "sha256": "2711084b71a823fd31e760cdec13648f004f4dbcc16b0f269e771f9323e05c0c",
+      "bytes": 2536
     },
     {
       "path": "data-visualization-templates-xml/ranking-ordered-column.xml",
-      "sha256": "05c11de9177a6a48db4180669cbaec11d19a6c0a08c7379e418edbe0b1c61cf9",
-      "bytes": 2430
+      "sha256": "96154a728ec065eeadd08af44836dd633b74dd6aa16b6547f99d537a78add8a3",
+      "bytes": 2452
     },
     {
       "path": "data-visualization-templates-xml/slope-chart.xml",
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "c7a8786441cfc95e53b9230a1c772a875c7526de6779587fd290b8ea2fb91114",
-      "bytes": 276232
+      "sha256": "f7c50b81f61e9db16cb0167a5e46a011f65d75a47c7b41add97b9801daa259dc",
+      "bytes": 276246
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -427,13 +427,13 @@
     },
     {
       "path": "template-manifests/ranking-ordered-bar.manifest.json",
-      "sha256": "1ef1517c621eacd37c289328a95852d41afa5ccad41ec2b8d5b3bd65780b648e",
-      "bytes": 3308
+      "sha256": "5b9d5478988d1747512b92f1dbd7ddbd43b45678d73df201c923005fe3ef53be",
+      "bytes": 3312
     },
     {
       "path": "template-manifests/ranking-ordered-column.manifest.json",
-      "sha256": "90e4e6d009fe9cf7ca006241bf610db69348b8e133d13da67380ea156adabd7a",
-      "bytes": 1926
+      "sha256": "65d0f9356e7a81468f177e31c648d31f2bb2558c9c7b15c7d14dfe9ac14875df",
+      "bytes": 1936
     },
     {
       "path": "template-manifests/slope-chart.manifest.json",

@@ -7,7 +7,7 @@
   "portability_evidence": {
     "fixture_bind": true,
     "render_verified": "live-2026-07-04",
-    "xml_sha256": "63040f0d4b4ee0f84f995a82ea0a7845453e078708e1cd55aa13f878ffc00d0e",
+    "xml_sha256": "2711084b71a823fd31e760cdec13648f004f4dbcc16b0f269e771f9323e05c0c",
     "render_evidence": {
       "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
       "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
@@ -26,9 +26,9 @@
     "The 'top' here is positional layering — marks drawn on top of a reference line or another chart layer — not a top-N ranking; a positional or annotation placement is not a sorted bar chart."
   ],
   "slots": [
-    { "slot_id": "region", "template_field": "Region", "derivation": "none",
+    { "slot_id": "region", "template_field": "Category", "derivation": "none",
       "role": ["rows", "sort-dimension"], "kind": "categorical", "bindable": true, "required": true },
-    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
+    { "slot_id": "sales", "template_field": "Measure", "derivation": "sum",
       "role": ["cols", "sort-measure"], "kind": "quantitative", "bindable": true, "required": true },
     { "slot_id": "facet_row", "template_field": "Facet", "derivation": "none",
       "role": ["rows"], "kind": "categorical", "bindable": true, "required": false,

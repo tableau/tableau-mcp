@@ -734,8 +734,8 @@ describe('portability/invariant — field-mapping quality spot-checks', () => {
   it('ranking-ordered-bar (SaaS): measure -> quantitative slot, dimension -> categorical slot', async () => {
     const r = await bind('bar chart of ARR by Industry', SAAS);
     expect(fieldMapping(r)).toEqual({
-      Region: '[SaaS Revenue].[none:Industry:nk]', // categorical (none/:nk)
-      Sales: '[SaaS Revenue].[sum:ARR:qk]', // quantitative (sum/:qk)
+      Category: '[SaaS Revenue].[none:Industry:nk]', // categorical (none/:nk)
+      Measure: '[SaaS Revenue].[sum:ARR:qk]', // quantitative (sum/:qk)
     });
   });
 

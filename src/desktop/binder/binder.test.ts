@@ -791,15 +791,36 @@ describe('binder/bindTemplate — Call 1 no-LLM (bound)', () => {
       expect(res.args.sheet_type).toBe('worksheet');
       expect(res.args.template_parameters.DATASOURCE).toBe('Superstore');
       expect(res.args.field_mapping).toEqual({
-        Region: '[Superstore].[none:Region:nk]',
-        Sales: '[Superstore].[sum:Sales:qk]',
+        Category: '[Superstore].[none:Region:nk]',
+        Measure: '[Superstore].[sum:Sales:qk]',
       });
+      expect(res.args.field_mapping).not.toHaveProperty('Region');
+      expect(res.args.field_mapping).not.toHaveProperty('Sales');
       // IMPORTANT NEW FACT: bound result exposes the worksheet-path apply hint so a
       // caller can run the worksheet-level chain (tabdoc:new-worksheet → substitute →
       // apply-worksheet) OR the inject-template + apply-workbook chain from one result.
       expect(res.apply_hint).toBe('worksheet-path');
       expect(res.apply_instruction).toMatch(/tabdoc:new-worksheet/);
       expect(res.apply_instruction).toMatch(/apply-worksheet/);
+    }
+  });
+
+  it("'column chart of Sales by Region' → ranking-ordered-column with neutral field_mapping keys", async () => {
+    const res = await bindTemplate({
+      ask: 'column chart of Sales by Region',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.used_llm).toBe(false);
+      expect(res.args.template_name).toBe('ranking-ordered-column');
+      expect(res.args.field_mapping).toEqual({
+        Category: '[Superstore].[none:Region:nk]',
+        Measure: '[Superstore].[sum:Sales:qk]',
+      });
+      expect(res.args.field_mapping).not.toHaveProperty('Region');
+      expect(res.args.field_mapping).not.toHaveProperty('Sales');
     }
   });
 });

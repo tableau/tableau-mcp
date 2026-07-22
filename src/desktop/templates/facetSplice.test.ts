@@ -57,8 +57,8 @@ describe('desktop/templates/facetSplice', () => {
       expect(spliceBoundFacet(trendXml, unfaceted)).toBe(trendXml);
       expect(
         spliceBoundFacet(rankingXml, {
-          Region: `[${DS}].[none:Region:nk]`,
-          Sales: `[${DS}].[sum:Sales:qk]`,
+          Category: `[${DS}].[none:Region:nk]`,
+          Measure: `[${DS}].[sum:Sales:qk]`,
         }),
       ).toBe(rankingXml);
     });
@@ -148,8 +148,8 @@ describe('desktop/templates/facetSplice', () => {
 
   describe('faceted apply — ranking-ordered-bar facet_row (role: rows)', () => {
     const faceted = {
-      Region: `[${DS}].[none:Region:nk]`,
-      Sales: `[${DS}].[sum:Sales:qk]`,
+      Category: `[${DS}].[none:Region:nk]`,
+      Measure: `[${DS}].[sum:Sales:qk]`,
       Facet: `[${DS}].[none:Category:nk]`,
     };
     const out = apply(rankingXml, faceted, DS);
@@ -194,7 +194,7 @@ describe('desktop/templates/facetSplice', () => {
     it('ranking-ordered-bar: shelves carry exactly the two required pills, no facet', () => {
       const out = apply(
         rankingXml,
-        { Region: `[${DS}].[none:Region:nk]`, Sales: `[${DS}].[sum:Sales:qk]` },
+        { Category: `[${DS}].[none:Region:nk]`, Measure: `[${DS}].[sum:Sales:qk]` },
         DS,
       );
       expect(out).toContain(`<rows>[${DS}].[none:Region:nk]</rows>`);
@@ -288,8 +288,8 @@ describe('desktop/templates/facetSplice', () => {
 
     describe('ranking-ordered-bar apply copy — facet_row (rows shelf)', () => {
       const faceted = {
-        Region: `[${DS}].[none:Region:nk]`,
-        Sales: `[${DS}].[sum:Sales:qk]`,
+        Category: `[${DS}].[none:Region:nk]`,
+        Measure: `[${DS}].[sum:Sales:qk]`,
         Facet: `[${DS}].[none:Category:nk]`,
       };
 
@@ -321,8 +321,8 @@ describe('desktop/templates/facetSplice', () => {
 
       it('ranking-ordered-bar: no facet → splice returns the SAME reference; apply == core alone', () => {
         const mapping = {
-          Region: `[${DS}].[none:Region:nk]`,
-          Sales: `[${DS}].[sum:Sales:qk]`,
+          Category: `[${DS}].[none:Region:nk]`,
+          Measure: `[${DS}].[sum:Sales:qk]`,
         };
         expect(spliceBoundFacet(rankingApplyXml, mapping)).toBe(rankingApplyXml);
         expect(apply(rankingApplyXml, mapping, DS)).toBe(

@@ -214,7 +214,7 @@ describe('binder/validate — gate 2: field resolution', () => {
     };
     const r = validateBinding(m, p, captionExact);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.field_mapping.Region).toBe('[DS].[none:Country Code:nk]');
+    if (r.ok) expect(r.field_mapping.Category).toBe('[DS].[none:Country Code:nk]');
   });
 
   it('no-fire: unsuffixed near-duplicate beats the numeric-suffixed twin with a note', () => {
@@ -263,8 +263,8 @@ describe('binder/validate — gate 2: field resolution', () => {
     const r = validateBinding(m, p, nearDuplicate);
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.field_mapping.Region).toBe('[DS].[none:Country:nk]');
-      expect(r.field_mapping.Sales).toBe('[DS].[sum:Goals For:qk]');
+      expect(r.field_mapping.Category).toBe('[DS].[none:Country:nk]');
+      expect(r.field_mapping.Measure).toBe('[DS].[sum:Goals For:qk]');
       expect(r.warnings).toEqual([
         'dataset has near-duplicate columns Country/Country1 - used Country; consider cleaning the source',
         'dataset has near-duplicate columns Goals For/Goals For1 - used Goals For; consider cleaning the source',
@@ -326,8 +326,8 @@ describe('binder/validate — gate 2: field resolution', () => {
     if (r.ok) {
       expect(r.datasource).toBe('DS_B');
       expect(r.field_mapping).toEqual({
-        Region: '[DS_B].[none:Region:nk]',
-        Sales: '[DS_B].[sum:Sales:qk]',
+        Category: '[DS_B].[none:Region:nk]',
+        Measure: '[DS_B].[sum:Sales:qk]',
       });
     }
   });

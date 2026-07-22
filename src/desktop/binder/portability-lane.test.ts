@@ -114,8 +114,8 @@ describe('portability-lane — non-Superstore bindTemplate field_mapping (W1)', 
       expect(res.args.template_name).toBe('ranking-ordered-bar');
       expect(res.args.template_parameters.DATASOURCE).toBe('HealthcareClaimsDS');
       expect(res.args.field_mapping).toEqual({
-        Region: '[HealthcareClaimsDS].[none:Payer:nk]',
-        Sales: '[HealthcareClaimsDS].[sum:Paid Amount:qk]',
+        Category: '[HealthcareClaimsDS].[none:Payer:nk]',
+        Measure: '[HealthcareClaimsDS].[sum:Paid Amount:qk]',
       });
       expect(JSON.stringify(res.args.field_mapping)).not.toContain('Superstore');
     }

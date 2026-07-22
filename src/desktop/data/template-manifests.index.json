@@ -3726,7 +3726,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-04",
-        "xml_sha256": "63040f0d4b4ee0f84f995a82ea0a7845453e078708e1cd55aa13f878ffc00d0e",
+        "xml_sha256": "2711084b71a823fd31e760cdec13648f004f4dbcc16b0f269e771f9323e05c0c",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
           "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
@@ -3758,7 +3758,7 @@
       "slots": [
         {
           "slot_id": "region",
-          "template_field": "Region",
+          "template_field": "Category",
           "derivation": "none",
           "role": [
             "rows",
@@ -3770,7 +3770,7 @@
         },
         {
           "slot_id": "sales",
-          "template_field": "Sales",
+          "template_field": "Measure",
           "derivation": "sum",
           "role": [
             "cols",
@@ -3811,7 +3811,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-05",
-        "xml_sha256": "05c11de9177a6a48db4180669cbaec11d19a6c0a08c7379e418edbe0b1c61cf9",
+        "xml_sha256": "96154a728ec065eeadd08af44836dd633b74dd6aa16b6547f99d537a78add8a3",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review",
           "lane": "W2-R008 live-verify 2026-07-05",
@@ -3841,7 +3841,7 @@
       "slots": [
         {
           "slot_id": "region",
-          "template_field": "Region",
+          "template_field": "Category",
           "derivation": "none",
           "role": [
             "cols",
@@ -3853,7 +3853,7 @@
         },
         {
           "slot_id": "sales",
-          "template_field": "Sales",
+          "template_field": "Measure",
           "derivation": "sum",
           "role": [
             "rows",
@@ -3868,7 +3868,7 @@
       "hazards": [
         {
           "code": "computed-sort-pill-coupling",
-          "detail": "computed-sort sorts [none:Region:nk] using [sum:Sales:qk]; both slots must bind or the sort dangles (both are required, so coverage satisfies this). [Region] has NO aggregate-role-from here, so GREEN stands (verification: AGREE).",
+          "detail": "computed-sort sorts [none:Category:nk] using [sum:Measure:qk]; both slots must bind or the sort dangles (both are required, so coverage satisfies this). [Category] has NO aggregate-role-from here, so GREEN stands (verification: AGREE).",
           "xml": "ranking-ordered-column.xml:24"
         }
       ]
