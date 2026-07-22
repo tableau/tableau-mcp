@@ -2,14 +2,17 @@
  * Suite runner for the BIRD California Schools eval.
  *
  * Runs all 30 cases (or a filtered subset) sequentially against the live
- * Tableau MCP server. Each case is executed via run-case.ts so trace routing,
- * hooks, and LangSmith posting are identical to ad-hoc runs.
+ * Tableau MCP server. Each case is executed via run-case.ts, so agent selection
+ * (AGENT_HARNESS/AGENT_MODEL) and LangSmith plugin tracing are identical to ad-hoc
+ * runs. Per-case quality/latency/cost/token metrics are NOT collected here — they are
+ * sourced from the LangSmith trace at grading time (grade-suite.ts).
  *
  * Usage:
  *   npx tsx evals/run-suite.ts
  *   npx tsx evals/run-suite.ts --suite evals/suites/bird-california-schools.json
  *   npx tsx evals/run-suite.ts --difficulty simple
  *   npx tsx evals/run-suite.ts --ids 5,11,12
+ *   npx tsx evals/run-suite.ts --agent-harness codex --agent-model gpt-5.6-codex
  *
  * Required environment: same as run-case.ts (Tableau auth + LANGSMITH_API_KEY).
  * Set EVAL_DATASOURCE_LUID to the LUID of the published California Schools datasource.
@@ -22,6 +25,8 @@ import { randomUUID } from 'crypto';
 import dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
+
+import { getAdapter, resolveHarness } from './adapters/index.js';
 
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 dotenv.config({ path: path.join(REPO_ROOT, '.env') });
@@ -38,12 +43,22 @@ const DEFAULT_SUITE = path.join(EVALS_DIR, 'suites', 'bird-california-schools.js
 
 const args = process.argv.slice(2);
 
+function getArgValue(flag: string): string | undefined {
+  const index = args.indexOf(flag);
+  return index === -1 ? undefined : args[index + 1];
+}
+
 const suiteFile = getArgValue('--suite') ?? DEFAULT_SUITE;
 const difficultyFilter = getArgValue('--difficulty');
 const idsFilter = getArgValue('--ids')
   ?.split(',')
   .map((s) => parseInt(s.trim(), 10))
   .filter(Number.isFinite);
+
+const harness = resolveHarness(getArgValue('--agent-harness'), 'AGENT_HARNESS');
+const model = getAdapter(harness).resolveModel(
+  getArgValue('--agent-model') ?? process.env.AGENT_MODEL,
+);
 
 type BirdCase = {
   question_id: number;
@@ -72,59 +87,17 @@ type EvalCaseFile = {
   budget: { max_wall_ms: number };
 };
 
-type StopData = {
-  usage?: {
-    input_tokens: number | null;
-    output_tokens: number | null;
-    cache_read_input_tokens: number | null;
-    cache_creation_input_tokens: number | null;
-  };
-};
-
-type HookRecord = {
-  tool_name?: string;
-  normalized_tool_name?: string;
-};
-
 type CaseRunResult = {
   question_id: number;
   difficulty: string;
   run_id: string;
   run_dir: string;
+  eval_run_id: string;
   exit_code: number | null;
   wall_ms: number | null;
   timed_out: boolean;
-  tool_calls: number;
-  tools_used: Array<string>;
-  tokens: {
-    input: number | null;
-    output: number | null;
-    cache_read: number | null;
-    cache_creation: number | null;
-  };
   error: string | null;
 };
-
-function getArgValue(flag: string): string | undefined {
-  const index = args.indexOf(flag);
-  return index === -1 ? undefined : args[index + 1];
-}
-
-function readJsonlFile<T>(filePath: string): Array<T> {
-  if (!fs.existsSync(filePath)) return [];
-  return fs
-    .readFileSync(filePath, 'utf-8')
-    .split('\n')
-    .filter((line) => line.trim())
-    .map((line) => {
-      try {
-        return JSON.parse(line) as T;
-      } catch {
-        return null;
-      }
-    })
-    .filter((v): v is T => v !== null);
-}
 
 function readOptionalJson<T>(filePath: string): T | null {
   if (!fs.existsSync(filePath)) return null;
@@ -156,39 +129,20 @@ function buildEvalCaseFile(birdCase: BirdCase, absoluteSuitePath: string): EvalC
 function collectRunMetrics(runDir: string): Omit<CaseRunResult, 'question_id' | 'difficulty'> {
   const runMeta = readOptionalJson<{
     run_id: string;
+    eval_run_id?: string;
     wall_ms?: number;
-    claude_exit_code?: number;
+    agent_exit_code?: number;
     timed_out?: boolean;
     error?: string | null;
-    budget: { max_wall_ms: number };
   }>(path.join(runDir, 'run.json'));
-
-  const hookRecords = readJsonlFile<HookRecord>(path.join(runDir, 'hook.jsonl'));
-  const stop = readOptionalJson<StopData>(path.join(runDir, 'stop.json'));
   const runId = path.basename(runDir);
-
-  const tools = hookRecords
-    .map((r) => {
-      const raw = r.normalized_tool_name ?? r.tool_name ?? '';
-      const parts = raw.split('__');
-      return parts[parts.length - 1] || raw;
-    })
-    .filter(Boolean);
-
   return {
     run_id: runMeta?.run_id ?? runId,
     run_dir: runDir,
-    exit_code: runMeta?.claude_exit_code ?? null,
+    eval_run_id: runMeta?.eval_run_id ?? runMeta?.run_id ?? runId,
+    exit_code: runMeta?.agent_exit_code ?? null,
     wall_ms: runMeta?.wall_ms ?? null,
     timed_out: runMeta?.timed_out ?? false,
-    tool_calls: hookRecords.length,
-    tools_used: [...new Set(tools)],
-    tokens: {
-      input: stop?.usage?.input_tokens ?? null,
-      output: stop?.usage?.output_tokens ?? null,
-      cache_read: stop?.usage?.cache_read_input_tokens ?? null,
-      cache_creation: stop?.usage?.cache_creation_input_tokens ?? null,
-    },
     error: runMeta?.error ?? null,
   };
 }
@@ -233,10 +187,11 @@ function main(): void {
   const absoluteSuitePath = path.resolve(suiteFile);
   const startedAt = new Date().toISOString();
 
-  console.log(`\nSuite run: ${suiteRunId}`);
-  console.log(`Suite:     ${suiteFile}`);
-  console.log(`Cases:     ${cases.length}`);
-  console.log(`Run dir:   ${suiteRunDir}\n`);
+  console.log(`\nSuite run:       ${suiteRunId}`);
+  console.log(`Suite:           ${suiteFile}`);
+  console.log(`Cases:           ${cases.length}`);
+  console.log(`Harness / model: ${harness} / ${model || '(cli default)'}`);
+  console.log(`Run dir:         ${suiteRunDir}\n`);
 
   const runCaseScript = path.join(EVALS_DIR, 'run-case.ts');
   const results: Array<CaseRunResult> = [];
@@ -257,11 +212,24 @@ function main(): void {
     const runDir = path.join(RUNS_DIR, today, runId);
 
     const budgetSec = Math.round(birdCase.budget.max_wall_ms / 1000);
-    process.stdout.write(`    Running Claude (up to ${budgetSec}s)...`);
+    process.stdout.write(`    Running ${harness} (up to ${budgetSec}s)...`);
+
+    const runCaseArgs = [
+      'tsx',
+      runCaseScript,
+      caseFilePath,
+      '--run-id',
+      runId,
+      '--suite-run-id',
+      suiteRunId,
+      '--agent-harness',
+      harness,
+    ];
+    if (model) runCaseArgs.push('--agent-model', model);
 
     let spawnError: string | null = null;
     try {
-      execFileSync('npx', ['tsx', runCaseScript, caseFilePath, '--run-id', runId], {
+      execFileSync('npx', runCaseArgs, {
         env: process.env,
         cwd: REPO_ROOT,
         timeout: birdCase.budget.max_wall_ms + 30_000,
@@ -284,9 +252,7 @@ function main(): void {
     const status =
       metrics.exit_code === 0 ? 'OK' : metrics.timed_out ? 'TIMEOUT' : `EXIT ${metrics.exit_code}`;
     console.log(
-      `    ${status} | ${metrics.wall_ms != null ? `${Math.round(metrics.wall_ms / 1000)}s` : '?s'} | ` +
-        `${metrics.tool_calls} tool calls | ` +
-        `tokens: ${metrics.tokens.input ?? '?'} in / ${metrics.tokens.output ?? '?'} out`,
+      `    ${status} | ${metrics.wall_ms != null ? `${Math.round(metrics.wall_ms / 1000)}s` : '?s'}`,
     );
   }
 
@@ -295,8 +261,6 @@ function main(): void {
   const completed = results.filter((r) => r.exit_code === 0).length;
   const errored = results.filter((r) => r.exit_code !== 0 && !r.timed_out).length;
   const timedOut = results.filter((r) => r.timed_out).length;
-  const totalInput = results.reduce((s, r) => s + (r.tokens.input ?? 0), 0);
-  const totalOutput = results.reduce((s, r) => s + (r.tokens.output ?? 0), 0);
   const avgWall =
     results.filter((r) => r.wall_ms != null).length > 0
       ? Math.round(totalWallMs / results.filter((r) => r.wall_ms != null).length)
@@ -307,6 +271,8 @@ function main(): void {
     suite_file: absoluteSuitePath,
     started_at: startedAt,
     finished_at: finishedAt,
+    harness,
+    model: model || null,
     total_wall_ms: totalWallMs,
     cases: results,
     aggregate: {
@@ -315,8 +281,6 @@ function main(): void {
       errored,
       timed_out: timedOut,
       avg_wall_ms: avgWall,
-      total_input_tokens: totalInput,
-      total_output_tokens: totalOutput,
     },
   };
 
@@ -327,12 +291,9 @@ function main(): void {
   console.log(`Suite complete: ${suiteRunId}`);
   console.log(`  ${completed}/${results.length} OK | ${errored} error | ${timedOut} timeout`);
   console.log(`  Total wall time: ${(totalWallMs / 1000).toFixed(1)}s`);
-  console.log(`  Total tokens: ${totalInput} in / ${totalOutput} out`);
   console.log(`  Summary: ${summaryPath}`);
-  console.log('\nTo grade cases:');
-  for (const r of results) {
-    console.log(`  npx tsx ${path.join(EVALS_DIR, 'grade-bird.ts')} ${r.run_dir}`);
-  }
+  console.log('\nTo grade the whole suite (sources metrics from LangSmith traces):');
+  console.log(`  npx tsx ${path.join(EVALS_DIR, 'grade-suite.ts')} ${suiteRunDir}`);
 }
 
 main();
