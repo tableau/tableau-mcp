@@ -102,12 +102,39 @@ describe('binder/manifest — loader + shape', () => {
     badPurpose.slots[0].purpose = '   ';
     expect(validateManifest(badPurpose).join(' ')).toMatch(/purpose/);
 
+    const goodExamples = structuredClone(base);
+    goodExamples.slots[0].examples = ['Country', 'Product Line'];
+    expect(validateManifest(goodExamples)).toEqual([]);
+
+    const emptyExamples = structuredClone(base);
+    emptyExamples.slots[0].examples = [];
+    expect(validateManifest(emptyExamples).join(' ')).toMatch(/examples/);
+
+    const blankExample = structuredClone(base);
+    blankExample.slots[0].examples = ['Country', '   '];
+    expect(validateManifest(blankExample).join(' ')).toMatch(/examples/);
+
     const malformedPlaceholder = structuredClone(base);
     malformedPlaceholder.slots[0].template_field = '{{field_1}}';
     expect(validateManifest(malformedPlaceholder).join(' ')).toMatch(/template_field.*placeholder/);
 
     expect(validateManifest(null).length).toBeGreaterThan(0);
     expect(validateManifest({}).length).toBeGreaterThan(0);
+  });
+});
+
+describe('binder/manifest — migrated pilot slot examples', () => {
+  it('the three placeholder-migrated pilots carry examples on every bindable slot', () => {
+    for (const template of ['deviation-diverging-bar', 'ranking-ordered-bar', 'trend-line-chart']) {
+      const m = manifests.get(template);
+      expect(m, `${template} manifest present`).toBeDefined();
+      for (const slot of m!.slots.filter((candidate) => candidate.bindable)) {
+        expect(
+          slot.examples && slot.examples.length,
+          `${template}:${slot.slot_id} examples[] populated`,
+        ).toBeGreaterThanOrEqual(2);
+      }
+    }
   });
 });
 

@@ -37,6 +37,7 @@
       "bindable": true,
       "required": true,
       "purpose": "Categorical dimension that defines one diverging bar per member.",
+      "examples": ["Product Line", "Team", "Cost Center"],
       "notes": "One bar per member on rows; computed-sort orders these descending by the signed ratio calc."
     },
     {
@@ -50,6 +51,7 @@
       "bindable": true,
       "required": true,
       "purpose": "Continuous measure used as the signed ratio numerator.",
+      "examples": ["Goal Difference", "Margin Change", "Budget Variance"],
       "notes": "Not on a shelf directly; feeds the template ratio numerator and is rewritten inside the formula on bind."
     },
     {
@@ -63,6 +65,7 @@
       "bindable": true,
       "required": true,
       "purpose": "Continuous measure used as the signed ratio denominator.",
+      "examples": ["Revenue", "Target", "Total Spend"],
       "notes": "Not on a shelf directly; feeds the template ratio denominator and is rewritten inside the formula on bind."
     }
   ],

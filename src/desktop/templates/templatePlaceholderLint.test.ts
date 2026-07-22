@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 
 import { loadManifests } from '../binder/manifest.js';
+import type { TemplateManifest } from '../binder/manifest-types.js';
+import { findDonorVocabularyInMigratedExamples } from './templatePlaceholderLint.js';
 
 const XML_DIR = path.join(
   process.cwd(),
@@ -137,5 +139,28 @@ describe('template placeholder lint', () => {
       [...offenders].sort(),
       `${name}: concrete donor field tokens must become {{field_base_N}}`,
     ).toEqual([]);
+  });
+
+  it('migrated pilot examples contain no donor vocabulary', () => {
+    expect(findDonorVocabularyInMigratedExamples(manifests, migrated)).toEqual([]);
+  });
+
+  it('rejects donor vocabulary in migrated pilot examples only', () => {
+    const cloned = new Map<string, TemplateManifest>();
+    for (const [name, manifest] of manifests) {
+      cloned.set(name, structuredClone(manifest));
+    }
+    cloned.get('ranking-ordered-bar')!.slots[0].examples = ['Country', 'Region'];
+
+    expect(findDonorVocabularyInMigratedExamples(cloned, migrated)).toEqual([
+      'ranking-ordered-bar:region example "Region" contains donor vocabulary "Region"',
+    ]);
+
+    const grandfathered = structuredClone(manifests.get('part-to-whole-waterfall')!);
+    grandfathered.slots[0].examples = ['Sales'];
+    cloned.set('part-to-whole-waterfall', grandfathered);
+    expect(findDonorVocabularyInMigratedExamples(cloned, migrated)).toEqual([
+      'ranking-ordered-bar:region example "Region" contains donor vocabulary "Region"',
+    ]);
   });
 });

@@ -251,6 +251,16 @@ function validateSlot(
     errors.push(`${where} (${slotId ?? '?'}): purpose must be a non-empty string when present`);
   }
   if (
+    slot.examples !== undefined &&
+    (!isStringArray(slot.examples) ||
+      slot.examples.length === 0 ||
+      slot.examples.some((s) => s.trim().length === 0))
+  ) {
+    errors.push(
+      `${where} (${slotId ?? '?'}): examples must be a non-empty string[] of non-empty strings when present`,
+    );
+  }
+  if (
     slot.qualified_key_required !== undefined &&
     typeof slot.qualified_key_required !== 'boolean'
   ) {

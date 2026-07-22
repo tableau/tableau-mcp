@@ -1519,6 +1519,33 @@ describe('binder/buildLlmInput — family-aware truncation (attack 2)', () => {
     const input = buildLlmInput(ask, m, summarizeSchema(WORKBOOK_XML));
     expect(input.candidate_templates.length).toBe(5);
   });
+
+  it('exposes slot purpose and examples together in propose candidates', () => {
+    const input = buildLlmInput(
+      'rank Goals For by Country as a bar chart',
+      manifests,
+      summarizeSchema(COUNTRY_ONLY_WORKBOOK_XML),
+    );
+    const ranking = input.candidate_templates.find(
+      (candidate) => candidate.template === 'ranking-ordered-bar',
+    );
+
+    expect(ranking).toBeDefined();
+    expect(ranking!.slots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slot_id: 'region',
+          purpose: expect.stringContaining('ranked horizontal bar'),
+          examples: expect.arrayContaining(['Country', 'Product Line']),
+        }),
+        expect.objectContaining({
+          slot_id: 'sales',
+          purpose: expect.stringContaining('bar length'),
+          examples: expect.arrayContaining(['Points', 'Revenue']),
+        }),
+      ]),
+    );
+  });
 });
 
 describe('binder/bindTemplate — evidence gate escalation (attacks 5+10)', () => {

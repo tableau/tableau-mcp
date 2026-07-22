@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "f3c6fca7091eb5c5b138088e659033424086c7db0a5685c63d9de39049fd9ccb",
-      "bytes": 275715
+      "sha256": "00bf2e4d4f9b17954252c17d8563b3ec67220155694853421cd41c6e7bfd367a",
+      "bytes": 276725
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -317,8 +317,8 @@
     },
     {
       "path": "template-manifests/deviation-diverging-bar.manifest.json",
-      "sha256": "aa872b6794edfdd07e690efba1f5b15da42ccf73fd7469daf498ce072007173e",
-      "bytes": 4143
+      "sha256": "9d295183697b3260d2fa450bd46b8b640eccaea78d9e99d1f5cd749ebba074d3",
+      "bytes": 4333
     },
     {
       "path": "template-manifests/deviation-gain-loss-chart.manifest.json",
@@ -427,8 +427,8 @@
     },
     {
       "path": "template-manifests/ranking-ordered-bar.manifest.json",
-      "sha256": "c7fc08724605ce1676ab272ecf27e59be5d33e51580a0a512a006cada4874698",
-      "bytes": 3751
+      "sha256": "4011a2ced6b628fc8c4332943fda7ef537038576e6756f3ad9ef035298a81a73",
+      "bytes": 3923
     },
     {
       "path": "template-manifests/ranking-ordered-column.manifest.json",
@@ -457,8 +457,8 @@
     },
     {
       "path": "template-manifests/trend-line-chart.manifest.json",
-      "sha256": "6f0802925fd667535c2d357f06d8bedcf387cab9540817cfdb0c32d9afcfec93",
-      "bytes": 5919
+      "sha256": "60817fe4a916bee01887cc2fd36e2708e9b0038a7ce23d6d988a4a449c71b2e1",
+      "bytes": 6099
     },
     {
       "path": "template-manifests/ww-floating-bars.manifest.json",

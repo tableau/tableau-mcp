@@ -144,6 +144,11 @@ export interface SlotSpec {
    * migrated bindable slots; optional at runtime until the migration completes.
    */
   purpose?: string;
+  /**
+   * Agent-facing examples of field captions that would fit this slot. Present only
+   * as matching hints alongside `purpose`; not used by deterministic binding.
+   */
+  examples?: string[];
   /** true when template_field is reused at >1 derivation ⇒ binder MUST emit `template_field@derivation`. */
   qualified_key_required?: boolean;
   /**

@@ -1404,6 +1404,11 @@
           "bindable": true,
           "required": true,
           "purpose": "Categorical dimension that defines one diverging bar per member.",
+          "examples": [
+            "Product Line",
+            "Team",
+            "Cost Center"
+          ],
           "notes": "One bar per member on rows; computed-sort orders these descending by the signed ratio calc."
         },
         {
@@ -1417,6 +1422,11 @@
           "bindable": true,
           "required": true,
           "purpose": "Continuous measure used as the signed ratio numerator.",
+          "examples": [
+            "Goal Difference",
+            "Margin Change",
+            "Budget Variance"
+          ],
           "notes": "Not on a shelf directly; feeds the template ratio numerator and is rewritten inside the formula on bind."
         },
         {
@@ -1430,6 +1440,11 @@
           "bindable": true,
           "required": true,
           "purpose": "Continuous measure used as the signed ratio denominator.",
+          "examples": [
+            "Revenue",
+            "Target",
+            "Total Spend"
+          ],
           "notes": "Not on a shelf directly; feeds the template ratio denominator and is rewritten inside the formula on bind."
         }
       ],
@@ -3764,7 +3779,12 @@
           "kind": "categorical",
           "bindable": true,
           "required": true,
-          "purpose": "Categorical dimension that defines one ranked horizontal bar per member."
+          "purpose": "Categorical dimension that defines one ranked horizontal bar per member.",
+          "examples": [
+            "Country",
+            "Product Line",
+            "Team"
+          ]
         },
         {
           "slot_id": "sales",
@@ -3777,7 +3797,12 @@
           "kind": "quantitative",
           "bindable": true,
           "required": true,
-          "purpose": "Continuous measure that controls bar length and descending rank order."
+          "purpose": "Continuous measure that controls bar length and descending rank order.",
+          "examples": [
+            "Points",
+            "Revenue",
+            "Goal Difference"
+          ]
         },
         {
           "slot_id": "facet_row",
@@ -3790,6 +3815,11 @@
           "bindable": true,
           "required": false,
           "purpose": "Optional categorical dimension that partitions the ranking into row-oriented small multiples.",
+          "examples": [
+            "Season",
+            "Business Unit",
+            "League"
+          ],
           "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on rows AHEAD of the ranked category pill, trellising the ranking into stacked panes (one ranked bar set per member). Optional → EXCLUDED from the required-bindable fixture_bind set (only {region, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots — it never steals the ranked (region) dim, and a bare 'by <dim>' never facets (fail-closed). XML declares {{field_base_3}} as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the default sorted-bar render is byte-unchanged). Modeled on box-plot-chart's required:false facet."
         }
       ],
@@ -4356,6 +4386,11 @@
           "required": true,
           "temporal_from_string": true,
           "purpose": "Temporal dimension that defines the continuous Month-Trunc x-axis.",
+          "examples": [
+            "Match Date",
+            "Invoice Month",
+            "Snapshot Time"
+          ],
           "notes": "XML instance is [tmn:{{field_base_1}}:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim (no normalization). templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'. temporal_from_string:true — a date-like STRING (e.g. a 'YYYY-MM' month) is accepted here; the apply path injects a DATEPARSE calc and truncates it to a continuous month axis (dateparseTemporalAxis.ts)."
         },
         {
@@ -4368,7 +4403,12 @@
           "kind": "quantitative",
           "bindable": true,
           "required": true,
-          "purpose": "Continuous measure plotted over time on the y-axis."
+          "purpose": "Continuous measure plotted over time on the y-axis.",
+          "examples": [
+            "Active Users",
+            "Revenue",
+            "Points"
+          ]
         },
         {
           "slot_id": "facet_col",
@@ -4381,6 +4421,11 @@
           "bindable": true,
           "required": false,
           "purpose": "Optional categorical dimension that partitions the trend into column-oriented small multiples.",
+          "examples": [
+            "Country",
+            "Product Line",
+            "Team"
+          ],
           "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on cols AHEAD of the truncated date pill, trellising the trend into side-by-side panes (one line per member). Optional → EXCLUDED from the required-bindable fixture_bind set (only {order_date, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots — a bare 'by <dim>' never facets (fail-closed), and it never steals a slot-bound dim. XML declares {{field_base_3}} as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the un-faceted default render is byte-unchanged). Modeled on box-plot-chart's required:false facet."
         }
       ],

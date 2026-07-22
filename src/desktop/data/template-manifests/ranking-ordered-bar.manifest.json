@@ -28,13 +28,16 @@
   "slots": [
     { "slot_id": "region", "template_field": "{{field_base_1}}", "derivation": "none",
       "role": ["rows", "sort-dimension"], "kind": "categorical", "bindable": true, "required": true,
-      "purpose": "Categorical dimension that defines one ranked horizontal bar per member." },
+      "purpose": "Categorical dimension that defines one ranked horizontal bar per member.",
+      "examples": ["Country", "Product Line", "Team"] },
     { "slot_id": "sales", "template_field": "{{field_base_2}}", "derivation": "sum",
       "role": ["cols", "sort-measure"], "kind": "quantitative", "bindable": true, "required": true,
-      "purpose": "Continuous measure that controls bar length and descending rank order." },
+      "purpose": "Continuous measure that controls bar length and descending rank order.",
+      "examples": ["Points", "Revenue", "Goal Difference"] },
     { "slot_id": "facet_row", "template_field": "{{field_base_3}}", "derivation": "none",
       "role": ["rows"], "kind": "categorical", "bindable": true, "required": false,
       "purpose": "Optional categorical dimension that partitions the ranking into row-oriented small multiples.",
+      "examples": ["Season", "Business Unit", "League"],
       "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on rows AHEAD of the ranked category pill, trellising the ranking into stacked panes (one ranked bar set per member). Optional \u2192 EXCLUDED from the required-bindable fixture_bind set (only {region, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots \u2014 it never steals the ranked (region) dim, and a bare 'by <dim>' never facets (fail-closed). XML declares {{field_base_3}} as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the default sorted-bar render is byte-unchanged). Modeled on box-plot-chart's required:false facet." }
   ],
   "calcs": [],
