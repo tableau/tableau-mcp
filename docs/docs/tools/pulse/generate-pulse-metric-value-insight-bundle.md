@@ -116,7 +116,7 @@ The type of bundle to generate. The default is `ban`.
 | `basic`       | Return a basic insight bundle. Similar to a springboard insight, but data is focused on the dimensions of a metric that are low bandwidth because they have small value sets. It shows the current value, period over period change, and the highest ranked insight for the metric for that data. |
 | `springboard` | Return a springboard insight bundle with the current value, period over period change, and the highest ranked insight for the metric.                                                                                                                                                             |
 | `detail`      | Shows insights on performance over time of the metric, a summary visualization of metric highs and lows and trends, breakdowns of top contributors for each filterable dimension of the metric, and followup insights based on the top ranked insights not already presented.                     |
-| `exploration` | Return an exploration insight bundle focused on performance trends, with BAN, anchor, and follow-up insight groups. Available in API 3.26 (Tableau Cloud September 2025) and later. Not available for Tableau Server.                                                                             |
+| `exploration` | Return an exploration insight bundle focused on performance trends, with BAN, anchor, and follow-up insight groups.                                                                                                                                                                               |
 
 ## Example result
 
