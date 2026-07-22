@@ -391,14 +391,14 @@ describe('buildInjectedWorkbookXml — manifest slot finalization', () => {
   );
   const RANKING_SLOTS = [
     {
-      template_field: 'Region',
+      template_field: 'Category',
       required: true,
       bindable: true,
       kind: 'categorical',
       role: ['rows', 'sort-dimension'],
     },
     {
-      template_field: 'Sales',
+      template_field: 'Measure',
       required: true,
       bindable: true,
       kind: 'quantitative',
@@ -422,7 +422,7 @@ describe('buildInjectedWorkbookXml — manifest slot finalization', () => {
         sheetType: 'worksheet',
         templateParameters: { DATASOURCE: 'World Cup' },
         fieldMapping: {
-          Region: '[World Cup].[none:Country:nk]',
+          Category: '[World Cup].[none:Country:nk]',
         },
         templateSlots: RANKING_SLOTS,
         applyNonce: 'partial-ranking',
@@ -439,14 +439,14 @@ describe('buildInjectedWorkbookXml — manifest slot finalization', () => {
         sheetType: 'worksheet',
         templateParameters: { DATASOURCE: 'World Cup' },
         fieldMapping: {
-          Region: '[World Cup].[none:Country:nk]',
+          Category: '[World Cup].[none:Country:nk]',
         },
         templateSlots: RANKING_SLOTS,
         applyNonce: 'partial-ranking-message',
       });
     } catch (error) {
       expect((error as Error).message).toContain('Country');
-      expect((error as Error).message).not.toContain('Sales');
+      expect((error as Error).message).not.toContain('Measure');
     }
   });
 
@@ -458,8 +458,8 @@ describe('buildInjectedWorkbookXml — manifest slot finalization', () => {
       sheetType: 'worksheet',
       templateParameters: { DATASOURCE: 'World Cup' },
       fieldMapping: {
-        Region: '[World Cup].[none:Country:nk]',
-        Sales: '[World Cup].[sum:Goals For:qk]',
+        Category: '[World Cup].[none:Country:nk]',
+        Measure: '[World Cup].[sum:Goals For:qk]',
       },
       templateSlots: RANKING_SLOTS,
       applyNonce: 'optional-ranking',
@@ -479,8 +479,8 @@ describe('buildInjectedWorkbookXml — manifest slot finalization', () => {
       sheetType: 'worksheet' as const,
       templateParameters: { DATASOURCE: 'World Cup' },
       fieldMapping: {
-        Region: '[World Cup].[none:Country:nk]',
-        Sales: '[World Cup].[sum:Goals For:qk]',
+        Category: '[World Cup].[none:Country:nk]',
+        Measure: '[World Cup].[sum:Goals For:qk]',
         Facet: '[World Cup].[none:Group:nk]',
       },
       applyNonce: 'full-ranking',
