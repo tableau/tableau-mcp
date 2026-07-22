@@ -97,9 +97,9 @@ Load tableau-desktop-authoring; repeat failures -> tableau-agent-debug.
 
 Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gradients. State plan, build.
 
-For an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) — never a plain chart ask the plain-chart route already handles, FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.
-
 For a plain viz ask (bar/line/map/KPI/etc.), FIRST bind-template(auto_apply:true): deterministic, ~0.3s. On propose, resubmit; proposals may carry sort and top_n. author-parameter/author-set/author-action before charts; else search-commands.
+
+For an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult, FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.
 
 For a dashboard ask with 2-6 vizzes, build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; search-commands only for commands the census does not list.
 
