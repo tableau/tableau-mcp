@@ -12,6 +12,8 @@ import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWor
 import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
+import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
+import type { ParsedWindow } from '../../../desktop/metadata/types.js';
 import { serializeRouteReceipt, sessionRouteState } from '../../../desktop/route/route-state.js';
 import {
   buildInjectedWorkbookXml,
@@ -23,6 +25,7 @@ import {
   DesktopCommandExecutionError,
   NoDesktopInstancesFoundError,
 } from '../../../errors/mcpToolError.js';
+import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -101,6 +104,17 @@ const INJECTED_RANKING_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
       <simple-id uuid='00000000-0000-0000-0000-000000000001' />
     </worksheet>
   </worksheets>
+</workbook>`;
+const INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <worksheets>
+    <worksheet name='Old Sheet'><table /></worksheet>
+    <worksheet name='Sales by Region'><table /></worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' name='Old Sheet' active='true' maximized='true' />
+    <window class='worksheet' name='Sales by Region' />
+  </windows>
 </workbook>`;
 const P_AND_L_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
 <workbook>
@@ -990,6 +1004,7 @@ function setupAutoApplyMocks({
   inject = { ok: true as const, xml: '<workbook/>' },
   validationValid = true,
   dispatch = Ok({ command_id: 'cmd-1', status: 'completed', submitted_at: '', result: {} }),
+  activationDispatch,
   workbookReads = [XML],
   // Events-clean gate (W60): 0 = clean workbook (gate passes); N>0 = the user touched
   // the workbook between read and apply; 'unsupported' = executor without events
@@ -1001,6 +1016,7 @@ function setupAutoApplyMocks({
   inject?: { ok: true; xml: string } | { ok: false; issues: string[] };
   validationValid?: boolean;
   dispatch?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
+  activationDispatch?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
   workbookReads?: string[];
   userEventsDuringBind?: number | 'unsupported';
 } = {}): {
@@ -1009,11 +1025,14 @@ function setupAutoApplyMocks({
   getEvents: ReturnType<typeof vi.fn>;
   getExecutor: ReturnType<typeof vi.fn>;
 } {
-  const getWorkbookXmlSpy = vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml');
-  for (const xml of workbookReads) {
-    getWorkbookXmlSpy.mockResolvedValueOnce(Ok(xml));
-  }
-  getWorkbookXmlSpy.mockResolvedValue(Ok(workbookReads.at(-1) ?? XML));
+  let liveXml = workbookReads[0] ?? XML;
+  let workbookReadIndex = 0;
+  vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockImplementation(async () => {
+    if (workbookReadIndex < workbookReads.length) {
+      liveXml = workbookReads[workbookReadIndex++];
+    }
+    return Ok(liveXml);
+  });
   vi.mocked(binderModule.bindTemplate).mockResolvedValue(bind);
   vi.spyOn(bundledIntelligenceProvider, 'listTemplateManifests').mockReturnValue([
     {
@@ -1034,8 +1053,13 @@ function setupAutoApplyMocks({
       : { valid: false, issues: [{ ruleId: 'r', severity: 'error', message: 'boom' }] },
   );
 
-  const executeCommand = vi.fn().mockResolvedValue(dispatch);
-  const applyWorkbookDocument = vi.fn().mockResolvedValue(dispatch);
+  const executeCommand = vi.fn().mockResolvedValue(activationDispatch ?? dispatch);
+  const applyWorkbookDocument = vi.fn(async (xml: string) => {
+    if (dispatch.isOk()) {
+      liveXml = xml;
+    }
+    return dispatch;
+  });
   const getEvents =
     userEventsDuringBind === 'unsupported'
       ? vi.fn().mockResolvedValue(Err('events unsupported on this transport'))
@@ -1084,8 +1108,10 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(executeCommand).not.toHaveBeenCalled();
   });
 
-  it('auto_apply=true on a Call-1 bind applies server-side exactly once', async () => {
-    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks();
+  it('auto_apply=true on a standalone Call-1 bind applies then issues validated goto-sheet', async () => {
+    const { executeCommand, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+    });
 
     const result = await getToolResult({
       session: '1',
@@ -1117,8 +1143,85 @@ describe('bindTemplateTool auto_apply gate', () => {
         applyNonce: expect.any(String),
       }),
     );
-    // Exactly one apply dispatch (the collapsed 4-call chain becomes one tool call).
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    const primaryWindows = normalizeArray<ParsedWindow>(
+      parseXML(appliedXmlAt(applyWorkbookDocument, 0)).workbook?.windows?.window,
+    );
+    expect(primaryWindows.find((window) => window['@_name'] === 'Old Sheet')).toMatchObject({
+      '@_active': 'true',
+      '@_maximized': 'true',
+    });
+    expect(
+      primaryWindows.find((window) => window['@_name'] === 'Sales by Region'),
+    ).not.toMatchObject({
+      '@_active': 'true',
+      '@_maximized': 'true',
+    });
+    expect(executeCommand).toHaveBeenCalledWith({
+      namespace: 'tabdoc',
+      command: 'goto-sheet',
+      args: { Sheet: 'Sales by Region' },
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it('auto_apply=true validates the brand-new worksheet in a fresh post-apply read', async () => {
+    const { executeCommand, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(2);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'goto-sheet',
+        args: { Sheet: 'Sales by Region' },
+      }),
+    );
+  });
+
+  it('activation failure preserves the applied:true response envelope byte-for-byte', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
+    const { executeCommand, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+      activationDispatch: Err({ type: 'command-timed-out', error: 'activation timeout' }),
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      JSON.stringify({
+        status: 'bound',
+        guidance:
+          'Applied "Sales by Region" to the live workbook (bind 0ms, inject 0ms, apply 0ms). Done — no further tool calls needed.',
+        applied: true,
+        sheet_name: 'Sales by Region',
+        phase_ms: { bind: 0, inject: 0, apply: 0 },
+      }),
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warning',
+        data: expect.objectContaining({ sheetName: 'Sales by Region' }),
+      }),
+    );
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
   });
 
   it('applied:true returns ONLY the trimmed fast-path shape (W60 P4 response-shape trim)', async () => {
@@ -1929,7 +2032,13 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
   });
 
   it('applies onto the named existing sheet: inject titled with the target, sheet_name reports it', async () => {
-    const { getExecutor } = setupAutoApplyMocks();
+    const targetWorkbookXml = INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW.replace(
+      /Sales by Region/g,
+      'se-eval-scratch',
+    );
+    const { executeCommand, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: targetWorkbookXml },
+    });
     vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
 
     const result = await getToolResult({
@@ -1949,6 +2058,13 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
       expect.objectContaining({ title: 'se-eval-scratch' }),
     );
     expect(vi.mocked(classifyWorksheetReplaceTarget)).toHaveBeenCalledWith(XML, 'se-eval-scratch');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'goto-sheet',
+        args: { Sheet: 'se-eval-scratch' },
+      }),
+    );
   });
 
   it('unknown target fails closed BEFORE the bind even runs', async () => {
@@ -2224,7 +2340,11 @@ describe('bindTemplateTool route-state recording', () => {
 });
 
 function appliedXml(applyWorkbookDocument: ReturnType<typeof vi.fn>): string {
-  const [xml] = applyWorkbookDocument.mock.calls[0] ?? [];
+  return appliedXmlAt(applyWorkbookDocument, 0);
+}
+
+function appliedXmlAt(applyWorkbookDocument: ReturnType<typeof vi.fn>, index: number): string {
+  const [xml] = applyWorkbookDocument.mock.calls[index] ?? [];
   invariant(typeof xml === 'string');
   return xml;
 }

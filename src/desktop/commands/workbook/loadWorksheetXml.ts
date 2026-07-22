@@ -205,8 +205,6 @@ export async function loadWorksheetXml({
   worksheetName: string;
   xml: string;
   readbackVerificationOut?: ReadbackVerificationResult[];
-  // Legacy internal call compatibility. Applies never navigate, so this has no effect.
-  suppressFocus?: boolean;
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {

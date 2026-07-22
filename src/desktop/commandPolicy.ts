@@ -27,7 +27,7 @@ const SITE_FIX =
 const TABLE_CALC_FIX = 'author table calculations through supported calculation tools';
 const PAGE_FIX = 'use a page navigation call with exactly one of page-number or page-name';
 const GOTO_SHEET_FIX =
-  'use the activate-sheet tool with {"sheetName":"<existing worksheet, dashboard, or story name>"} instead; it validates the target before applying the navigation';
+  'use the activate-sheet tool with {"sheetName":"<existing worksheet or dashboard name>"} instead; it validates the target before executing the navigation';
 
 function refuse(reason: string, fix?: string): CommandPolicy {
   return { action: 'refuse', reason, fix };
@@ -113,7 +113,7 @@ export function formatUnvalidatedTargetRefusal(command: string, policy: CommandP
     policy.fix ?? 'use a supported navigation tool that validates the target before dispatch';
   return (
     `Refusing Tableau command "${command}" because execute-tableau-command cannot pre-validate ` +
-    'its sheet target against live workbook windows. An invalid sheet value can open a blocking ' +
+    'its sheet target against the live worksheet/dashboard inventory. An invalid sheet value can open a blocking ' +
     `Tableau Desktop dialog (Error 47BF7751). NOT sent. FIX: ${fix}`
   );
 }
