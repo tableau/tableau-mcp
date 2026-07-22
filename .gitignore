@@ -10,6 +10,7 @@ test-logs/
 evals/suite-runs/
 evals/runs/
 evals/grades/
+evals/reports/
 config.json
 env.list
 manifest.json
