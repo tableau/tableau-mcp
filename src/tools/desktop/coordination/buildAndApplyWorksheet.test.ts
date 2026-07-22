@@ -46,6 +46,31 @@ const TWO_DATASOURCE_WORKBOOK_XML = `<?xml version="1.0"?>
   </datasources>
 </workbook>`;
 
+const MILLER_WORKBOOK_XML = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource
+      name="federated.0mkveh20xfko2115afimd1odnzrh"
+      caption="worldcup-standings"
+    >
+      <column
+        name="[country]"
+        caption="Country"
+        datatype="string"
+        role="dimension"
+        type="nominal"
+      />
+      <column
+        name="[goalDifference]"
+        caption="Goal Difference"
+        datatype="integer"
+        role="measure"
+        type="quantitative"
+      />
+    </datasource>
+  </datasources>
+</workbook>`;
+
 const TEMPLATE_XML =
   '<workbook><worksheets><worksheet name="TEMPLATE"><table/></worksheet></worksheets></workbook>';
 
@@ -154,6 +179,288 @@ describe('buildAndApplyWorksheetTool', () => {
     expect(result.content[0].text).toContain('Sheet1');
     expect(result.content[0].text).toContain('ranking-ordered-bar');
     expect(result.content[0].text).toContain('HOST VERIFICATION');
+  });
+
+  it('returns an error before apply when every requested field is dropped', async () => {
+    const result = await getResult({
+      session: SESSION,
+      taskSpec: { ...TASK_SPEC_BASE, fields: ['Country', 'Goal Difference'] },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('All requested fields were dropped');
+    expect(result.content[0].text).toContain('"Country"');
+    expect(result.content[0].text).toContain('"Goal Difference"');
+    expect(result.content[0].text).toContain('resolve-field');
+    expect(result.content[0].text).toContain('exact column_ref');
+    expect(loadWorksheetXml).not.toHaveBeenCalled();
+  });
+
+  it('leads with dropped fields and fails host verification on a partial apply', async () => {
+    const extra = makeExtra();
+    vi.mocked(listAvailableFields).mockReturnValue([
+      {
+        column_ref: '[DS].[none:Region:nk]',
+        role: 'dimension',
+        datasource: 'DS',
+        columnName: '[Region]',
+        columnInstanceName: '[none:Region:nk]',
+        derivation: 'None' as any,
+        type: 'nominal',
+        datatype: 'string',
+      },
+      {
+        column_ref: '[DS].[sum:Sales:qk]',
+        role: 'measure',
+        datasource: 'DS',
+        columnName: '[Sales]',
+        columnInstanceName: '[sum:Sales:qk]',
+        derivation: 'Sum' as any,
+        type: 'quantitative',
+        datatype: 'integer',
+      },
+    ]);
+    vi.mocked(getTemplateColumnRequirements).mockReturnValue([
+      { name: 'Region', role: 'dimension', datatype: 'string', type: 'nominal' },
+      { name: 'Sales', role: 'measure', datatype: 'integer', type: 'quantitative' },
+    ]);
+    vi.mocked(loadWorksheetXml).mockResolvedValue(
+      new Ok({
+        readbackWarnings: [],
+        readbackVerification: { ok: true, status: 'passed' },
+      }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        taskSpec: {
+          ...TASK_SPEC_BASE,
+          fields: ['[DS].[none:Region:nk]', '[DS].[sum:Sales:qk]', 'Missing Field'],
+        },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toMatch(/^WARNING — dropped requested field/);
+    expect(payload.message).toContain('"Missing Field"');
+    expect(payload.message).toContain('HOST VERIFICATION — failed');
+    expect(payload.message).not.toContain('readback clean');
+    expect(payload.message).not.toContain('preflight clean');
+    expect(payload.message).not.toContain('Built and applied');
+    expect(payload.fieldCount).toBe(2);
+    expect(payload.requestedFieldCount).toBe(3);
+  });
+
+  it('rejects a qualified ref whose base field exists but exact column_ref is missing', async () => {
+    const wrongRef = '[DS].[avg:Sales:qk]';
+    const extra = makeExtra();
+    vi.mocked(listAvailableFields).mockReturnValue([
+      {
+        column_ref: '[DS].[sum:Sales:qk]',
+        role: 'measure',
+        datasource: 'DS',
+        columnName: '[Sales]',
+        columnInstanceName: '[sum:Sales:qk]',
+        derivation: 'Sum' as any,
+        type: 'quantitative',
+        datatype: 'integer',
+      },
+    ]);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        taskSpec: {
+          ...TASK_SPEC_BASE,
+          fields: [wrongRef, '[DS].[sum:Sales:qk]'],
+        },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(
+          `Field "${wrongRef}" was dropped: its exact column_ref is not present; nearest valid column_ref is "[DS].[sum:Sales:qk]"`,
+        ),
+      ]),
+    );
+    const rewriteArgs = vi.mocked(rewriteFieldReferences).mock.calls[0];
+    expect(rewriteArgs?.[1]).toEqual({ Sales: '[DS].[sum:Sales:qk]' });
+    expect(JSON.stringify(rewriteArgs?.[1])).not.toContain(wrongRef);
+  });
+
+  it('resolves lowercase caption input against a title-cased field caption', async () => {
+    const extra = makeExtra();
+    vi.mocked(listAvailableFields).mockReturnValue([
+      {
+        column_ref: '[DS].[none:Country:nk]',
+        role: 'dimension',
+        datasource: 'DS',
+        columnName: '[Country]',
+        columnInstanceName: '[none:Country:nk]',
+        caption: 'Country',
+        derivation: 'None' as any,
+        type: 'nominal',
+        datatype: 'string',
+      },
+      {
+        column_ref: '[DS].[sum:Sales:qk]',
+        role: 'measure',
+        datasource: 'DS',
+        columnName: '[Sales]',
+        columnInstanceName: '[sum:Sales:qk]',
+        derivation: 'Sum' as any,
+        type: 'quantitative',
+        datatype: 'integer',
+      },
+    ]);
+    vi.mocked(getTemplateColumnRequirements).mockReturnValue([
+      { name: 'Region', role: 'dimension', datatype: 'string', type: 'nominal' },
+      { name: 'Sales', role: 'measure', datatype: 'integer', type: 'quantitative' },
+    ]);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        taskSpec: {
+          ...TASK_SPEC_BASE,
+          fields: ['country', '[DS].[sum:Sales:qk]'],
+        },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(rewriteFieldReferences).toHaveBeenCalledWith(
+      TEMPLATE_XML,
+      {
+        Region: '[DS].[none:Country:nk]',
+        Sales: '[DS].[sum:Sales:qk]',
+      },
+      'DS',
+      {
+        Region: { datatype: 'string', type: 'nominal' },
+        Sales: { datatype: 'integer', type: 'quantitative' },
+      },
+      { namespaceCalcs: true, applyNonce: expect.any(String) },
+    );
+  });
+
+  it('treats case-folded caption collisions as ambiguous', async () => {
+    const extra = makeExtra();
+    vi.mocked(listAvailableFields).mockReturnValue([
+      {
+        column_ref: '[DS].[none:Country:nk]',
+        role: 'dimension',
+        datasource: 'DS',
+        columnName: '[Country]',
+        columnInstanceName: '[none:Country:nk]',
+        caption: 'Country',
+        derivation: 'None' as any,
+        type: 'nominal',
+        datatype: 'string',
+      },
+      {
+        column_ref: '[DS].[none:country:nk]',
+        role: 'dimension',
+        datasource: 'DS',
+        columnName: '[country]',
+        columnInstanceName: '[none:country:nk]',
+        caption: 'country',
+        derivation: 'None' as any,
+        type: 'nominal',
+        datatype: 'string',
+      },
+      {
+        column_ref: '[DS].[sum:Sales:qk]',
+        role: 'measure',
+        datasource: 'DS',
+        columnName: '[Sales]',
+        columnInstanceName: '[sum:Sales:qk]',
+        derivation: 'Sum' as any,
+        type: 'quantitative',
+        datatype: 'integer',
+      },
+    ]);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        taskSpec: {
+          ...TASK_SPEC_BASE,
+          fields: ['COUNTRY', '[DS].[sum:Sales:qk]'],
+        },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(
+          'Field "COUNTRY" was dropped: its caption/local name is ambiguous across 2 fields',
+        ),
+      ]),
+    );
+    expect(vi.mocked(rewriteFieldReferences).mock.calls[0]?.[1]).toEqual({
+      Sales: '[DS].[sum:Sales:qk]',
+    });
+  });
+
+  it('resolves Miller caption-cased fields in the federated datasource', async () => {
+    const extra = makeExtra();
+    const actualMetadata = await vi.importActual<
+      typeof import('../../../desktop/metadata/index.js')
+    >('../../../desktop/metadata/index.js');
+    vi.mocked(readFileSync).mockReturnValue(MILLER_WORKBOOK_XML as any);
+    vi.mocked(listAvailableFields).mockImplementation(actualMetadata.listAvailableFields);
+    vi.mocked(getTemplateColumnRequirements).mockReturnValue([
+      { name: 'Region', role: 'dimension', datatype: 'string', type: 'nominal' },
+      { name: 'Sales', role: 'measure', datatype: 'integer', type: 'quantitative' },
+    ]);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        taskSpec: {
+          ...TASK_SPEC_BASE,
+          fields: ['Country', 'Goal Difference'],
+        },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(rewriteFieldReferences).toHaveBeenCalledWith(
+      TEMPLATE_XML,
+      {
+        Region: '[federated.0mkveh20xfko2115afimd1odnzrh].[none:country:nk]',
+        Sales: '[federated.0mkveh20xfko2115afimd1odnzrh].[sum:goalDifference:qk]',
+      },
+      'federated.0mkveh20xfko2115afimd1odnzrh',
+      {
+        Region: { datatype: 'string', type: 'nominal' },
+        Sales: { datatype: 'integer', type: 'quantitative' },
+      },
+      { namespaceCalcs: true, applyNonce: expect.any(String) },
+    );
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.fieldCount).toBe(2);
+    expect(payload.warnings).not.toEqual(
+      expect.arrayContaining([expect.stringContaining('was dropped')]),
+    );
   });
 
   it('reports skipped readback caveat when apply succeeds without verification', async () => {
