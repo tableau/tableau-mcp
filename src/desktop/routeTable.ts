@@ -44,6 +44,17 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'route',
+    id: 'knowledge-consult',
+    trigger:
+      'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) — never a plain chart ask the plain-chart route already handles',
+    action:
+      'FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.',
+    toolSequence: ['search-knowledge', 'read-knowledge-resource'],
+    stopConditions: ['read the top hit once, then proceed'],
+    requiredEvidence: ['one targeted knowledge module or no search hit'],
+  },
+  {
+    kind: 'route',
     id: 'plain-chart',
     trigger: 'a plain viz ask (bar/line/map/KPI/etc.)',
     action:

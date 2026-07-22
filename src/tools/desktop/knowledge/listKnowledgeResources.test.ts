@@ -47,14 +47,18 @@ describe('listKnowledgeResourcesTool', () => {
     expect(parsed.resources[0].uri).toBe('expertise://tableau/strategy/viz-design/chart-selection');
   });
 
-  it('should return empty list when no resources exist', async () => {
-    vi.mocked(listKnowledgeResources).mockReturnValue([]);
+  it('should return an explicit asset-root error when no resources exist', async () => {
+    vi.mocked(listKnowledgeResources).mockImplementation(() => {
+      throw new Error(
+        'Knowledge corpus is empty; expected assets under /app/resources/desktop/knowledge',
+      );
+    });
 
     const result = await getResult();
 
-    expect(result.isError).toBeFalsy();
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text).resources).toHaveLength(0);
+    expect(result.content[0].text).toContain('/app/resources/desktop/knowledge');
   });
 });
 
