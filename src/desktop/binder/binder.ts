@@ -141,6 +141,11 @@ export interface InjectTemplateArgs {
 
 export type LlmProposeFn = (input: LlmProposeInput) => Promise<BindingProposal>;
 
+export type DeclineReason = {
+  code: 'no_llm_classifier_declined' | 'no_llm_validation_declined';
+  detail: string;
+};
+
 /**
  * The tier-1 default APPLY chain is WORKSHEET-LEVEL (live-proven 2026-07-04):
  * create a sheet and apply the substituted template worksheet FRAGMENT — smaller,
@@ -167,7 +172,12 @@ export type BinderResult =
       /** Advisory avoid_when cautions matching the ask; present only when non-empty. Never blocks. */
       warnings?: string[];
     }
-  | { status: 'propose'; llm_input: LlmProposeInput; output_schema: Record<string, unknown> }
+  | {
+      status: 'propose';
+      decline_reason: DeclineReason;
+      llm_input: LlmProposeInput;
+      output_schema: Record<string, unknown>;
+    }
   | { status: 'escalate'; reason: EscalateReason; blockers: Blocker[]; proposal?: BindingProposal };
 
 /**
@@ -512,6 +522,10 @@ export async function bindTemplate(args: {
 
   // ── Call 1: no-LLM fast path ─────────────────────────────────────
   const cls = classifyNoLlm(args.ask, args.manifests, summary);
+  let declineReason: DeclineReason = {
+    code: 'no_llm_classifier_declined',
+    detail: 'classifyNoLlm returned no deterministic template; routed to proposal candidates',
+  };
   if (cls) {
     const proposal: BindingProposal = {
       template: cls.template,
@@ -528,6 +542,13 @@ export async function bindTemplate(args: {
       }
       return res;
     }
+    declineReason = {
+      code: 'no_llm_validation_declined',
+      detail:
+        res.status === 'escalate'
+          ? `classifyNoLlm selected '${cls.template}', but deterministic validation declined (${res.reason})`
+          : `classifyNoLlm selected '${cls.template}', but deterministic validation did not bind`,
+    };
     // else fall through — the no-LLM guess didn't validate.
   }
 
@@ -541,6 +562,7 @@ export async function bindTemplate(args: {
   // ── Model-free MCP server: hand the propose payload to the agent ──
   return {
     status: 'propose',
+    decline_reason: declineReason,
     llm_input: buildLlmInput(args.ask, args.manifests, summary),
     output_schema: PROPOSAL_OUTPUT_SCHEMA,
   };

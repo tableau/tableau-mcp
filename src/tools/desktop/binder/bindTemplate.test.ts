@@ -187,6 +187,10 @@ const boundResult: BinderResult = {
 
 const proposeResult: BinderResult = {
   status: 'propose',
+  decline_reason: {
+    code: 'no_llm_classifier_declined',
+    detail: 'classifyNoLlm returned no deterministic template; routed to proposal candidates',
+  },
   llm_input: {
     ask: 'bar chart of Sales by Region',
     candidate_templates: [],
@@ -196,6 +200,10 @@ const proposeResult: BinderResult = {
 };
 const waterfallProposeResult: BinderResult = {
   status: 'propose',
+  decline_reason: {
+    code: 'no_llm_classifier_declined',
+    detail: 'classifyNoLlm returned no deterministic template; routed to proposal candidates',
+  },
   llm_input: {
     ask: 'P&L waterfall',
     candidate_templates: [
@@ -362,6 +370,7 @@ describe('bindTemplateTool', () => {
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.status).toBe('propose');
+    expect(body.decline_reason).toEqual(proposeResult.decline_reason);
     expect(body.output_schema).toEqual({ type: 'object' });
     expect(body.guidance).toContain('output_schema');
     expect(body.guidance).toContain('build it with build-and-apply-worksheet');
