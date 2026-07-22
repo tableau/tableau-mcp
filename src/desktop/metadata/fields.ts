@@ -407,7 +407,7 @@ export function parseShelfValue(value: string | string[] | undefined): string[] 
 function splitShelfString(value: string): string[] {
   const parts: string[] = [];
   let current = '';
-  let bracketDepth = 0;
+  let inBracketedName = false;
 
   const pushCurrent = (): void => {
     const trimmed = current.trim();
@@ -417,18 +417,24 @@ function splitShelfString(value: string): string[] {
     current = '';
   };
 
-  for (const char of value) {
-    if (char === '[') {
-      bracketDepth += 1;
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i];
+    if (char === '[' && !inBracketedName) {
+      inBracketedName = true;
       current += char;
       continue;
     }
-    if (char === ']') {
-      bracketDepth = Math.max(0, bracketDepth - 1);
+    if (char === ']' && inBracketedName) {
+      if (value[i + 1] === ']') {
+        current += ']]';
+        i++;
+        continue;
+      }
+      inBracketedName = false;
       current += char;
       continue;
     }
-    if (char === '/' && bracketDepth === 0) {
+    if (char === '/' && !inBracketedName) {
       pushCurrent();
       continue;
     }

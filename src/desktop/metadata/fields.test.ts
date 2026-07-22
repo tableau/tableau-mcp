@@ -6,6 +6,7 @@ import {
   moveFieldInCols,
   moveFieldInEncoding,
   moveFieldInRows,
+  parseShelfValue,
   removeFieldFromCols,
   removeFieldFromEncoding,
   removeFieldFromRows,
@@ -73,6 +74,28 @@ describe('listFields', () => {
   it('should return an empty array for a worksheet with no fields', () => {
     const emptyXml = '<worksheet name="Empty"><table></table></worksheet>';
     expect(listFields(emptyXml)).toEqual([]);
+  });
+});
+
+describe('parseShelfValue', () => {
+  it('does not split on a slash after an escaped closing bracket inside a pill name', () => {
+    expect(parseShelfValue('[Sample].[sum:Revenue]]/Cost:qk]')).toEqual([
+      '[Sample].[sum:Revenue]]/Cost:qk]',
+    ]);
+  });
+
+  it('splits adjacent pills after an escaped closing bracket in the first pill name', () => {
+    expect(parseShelfValue('[Sample].[sum:Revenue]]/Cost:qk] / [Sample].[sum:Profit:qk]')).toEqual([
+      '[Sample].[sum:Revenue]]/Cost:qk]',
+      '[Sample].[sum:Profit:qk]',
+    ]);
+  });
+
+  it('keeps plain slash-containing pill names together', () => {
+    expect(parseShelfValue('[Sample].[sum:Revenue/Cost:qk] / [Sample].[sum:Profit:qk]')).toEqual([
+      '[Sample].[sum:Revenue/Cost:qk]',
+      '[Sample].[sum:Profit:qk]',
+    ]);
   });
 });
 
