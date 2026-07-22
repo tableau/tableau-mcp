@@ -7,7 +7,7 @@
   "portability_evidence": {
     "fixture_bind": true,
     "render_verified": "live-2026-07-06",
-    "xml_sha256": "215d8fbe9970b79ecd46242799d600fd4775056d887571b5242b7b2726d00681",
+    "xml_sha256": "a11963e06787ea973007a20d882712c3c8719efd43efd0a1ae03387ef79d984e",
     "render_evidence": {
       "method": "gate-composite",
       "basis": "golden-parity gate run 2026-07-06 (source-anchor replay): structural 0.97297 (5/5 critical), pixel 1.0 (4 ROIs: whole-chart ink-colors + hue, left/right staircase clusters; same-geometry back-to-back captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 17=17 (Superstore Sub-Category) on source and applied renders; running total verified live (status bar Running Sum of SUM(Profit) 4,117,943) | style-delta re-verify 2026-07-07: CookBook dark theme removed (black table background; choropleth also re-enabled base map layers). STRUCTURE unchanged. Live re-verified: bind(no-LLM)->inject->apply->render on Sample - Superstore, marks correct, light theme + map layers visually confirmed (W60). Pixel parity vs the dark source golden intentionally diverges on background/base-layer attrs.",

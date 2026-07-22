@@ -29,11 +29,13 @@ function windowXml(name: string, windowClass: 'worksheet' | 'dashboard', attribu
 function buildWorkbook({
   worksheetNames = ['Alpha', 'Beta'],
   dashboardNames = [],
+  activeSheetName,
 }: {
   worksheetNames?: string[];
   dashboardNames?: string[];
+  activeSheetName?: string;
 } = {}): string {
-  const firstSheet = worksheetNames[0] ?? dashboardNames[0];
+  const firstSheet = activeSheetName ?? worksheetNames[0] ?? dashboardNames[0];
   return [
     "<?xml version='1.0' encoding='utf-8'?>",
     "<workbook version='18.1'>",
@@ -145,6 +147,11 @@ describe('activateSheetBestEffort', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('swallows a goto-sheet failure and logs the skipped activation', async () => {
@@ -154,13 +161,15 @@ describe('activateSheetBestEffort', () => {
     });
     const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
 
-    await expect(
-      activateSheetBestEffort({
-        sheetName: 'Beta',
-        executor,
-        signal,
-      }),
-    ).resolves.toBeUndefined();
+    const activation = activateSheetBestEffort({
+      sheetName: 'Beta',
+      executor,
+      signal,
+    });
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    await expect(activation).resolves.toBeUndefined();
     expect(logSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         level: 'warning',
@@ -175,14 +184,74 @@ describe('activateSheetBestEffort', () => {
       xml: buildWorkbook({ worksheetNames: ['Alpha'] }),
     });
 
-    await expect(
-      activateSheetBestEffort({
-        sheetName: 'Beta',
-        executor,
-        signal,
-      }),
-    ).resolves.toBeUndefined();
+    const activation = activateSheetBestEffort({
+      sheetName: 'Beta',
+      executor,
+      signal,
+    });
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    await expect(activation).resolves.toBeUndefined();
     expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('waits for settle, verifies focus, and reissues goto-sheet once after snap-back', async () => {
+    const { executor, getWorkbookDocument, executeCommand } = makeExecutor({
+      xmlSequence: [
+        buildWorkbook({ activeSheetName: 'Alpha' }),
+        buildWorkbook({ activeSheetName: 'Alpha' }),
+        buildWorkbook({ activeSheetName: 'Alpha' }),
+      ],
+    });
+
+    const activation = activateSheetBestEffort({
+      sheetName: 'Beta',
+      executor,
+      signal,
+    });
+
+    await vi.advanceTimersByTimeAsync(499);
+    expect(executeCommand).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenLastCalledWith(
+      expect.objectContaining({ command: 'goto-sheet', args: { Sheet: 'Beta' } }),
+    );
+
+    await vi.advanceTimersByTimeAsync(699);
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(activation).resolves.toBeUndefined();
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(2);
+    expect(executeCommand).toHaveBeenCalledTimes(2);
+    expect(executeCommand).toHaveBeenLastCalledWith(
+      expect.objectContaining({ command: 'goto-sheet', args: { Sheet: 'Beta' } }),
+    );
+  });
+
+  it('does not reissue goto-sheet when the verification read shows the target is focused', async () => {
+    const { executor, getWorkbookDocument, executeCommand } = makeExecutor({
+      xmlSequence: [
+        buildWorkbook({ activeSheetName: 'Alpha' }),
+        buildWorkbook({ activeSheetName: 'Beta' }),
+      ],
+    });
+
+    const activation = activateSheetBestEffort({
+      sheetName: 'Beta',
+      executor,
+      signal,
+    });
+
+    await vi.advanceTimersByTimeAsync(1200);
+
+    await expect(activation).resolves.toBeUndefined();
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(2);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -244,18 +313,31 @@ async function getToolResult({
 
 function makeExecutor({
   xml = buildWorkbook(),
+  xmlSequence,
   executeResult = Ok({ command_id: 'goto-1' }),
 }: {
   xml?: string;
+  xmlSequence?: string[];
   executeResult?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
 } = {}): {
   executor: ToolExecutor;
   getWorkbookDocument: ReturnType<typeof vi.fn>;
   executeCommand: ReturnType<typeof vi.fn>;
 } {
-  const getWorkbookDocument = vi.fn().mockResolvedValue(
+  const getWorkbookDocument = vi.fn();
+  const xmls = xmlSequence && xmlSequence.length > 0 ? xmlSequence : [xml];
+  for (const entry of xmls) {
+    getWorkbookDocument.mockResolvedValueOnce(
+      Ok({
+        xml: entry,
+        applicationVersion: undefined,
+        xsdPayloadVersion: undefined,
+      }),
+    );
+  }
+  getWorkbookDocument.mockResolvedValue(
     Ok({
-      xml,
+      xml: xmls[xmls.length - 1],
       applicationVersion: undefined,
       xsdPayloadVersion: undefined,
     }),

@@ -7,7 +7,7 @@
   "portability_evidence": {
     "fixture_bind": true,
     "render_verified": "live-2026-07-05",
-    "xml_sha256": "cb23201e338af6c48b1bd63d35b136e96cbe77ccd2d89efcd9ae2de228cbb752",
+    "xml_sha256": "9a7a21845b9b8cc1a4bef961421f1416aedf48f94922df0ef3c7e57aef29e74c",
     "render_evidence": {
       "basis": "hand-stamp: live tier1-smoke render + non-blank pixel-floor probe + human review (coverage-envelope extension from 4 to up to 7 families); no numeric structural-parity score was measured",
       "lane": "tier1-smoke live-verify 2026-07-05 (Tableau Desktop pid 36540, open 'Super Bowl by the Numbers' datasource; no-LLM binder: O/U Line(avg)->cols, Super Bowl->rows, Teams/Conference->detail)",

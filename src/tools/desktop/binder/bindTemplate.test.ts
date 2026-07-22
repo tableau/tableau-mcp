@@ -1165,7 +1165,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
   });
 
-  it('auto_apply=true validates the brand-new worksheet in a fresh post-apply read', async () => {
+  it('auto_apply=true validates the brand-new worksheet and verifies focus after settle', async () => {
     const { executeCommand, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
     });
@@ -1178,8 +1178,9 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(3);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledTimes(2);
     expect(executeCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         command: 'goto-sheet',
