@@ -203,8 +203,8 @@ function unbracket(value: string): string {
   return m ? m[1] : value;
 }
 
-function normalizeCaption(value: string): string {
-  return value.trim().toLocaleLowerCase();
+function normalizeCaption(value: string | undefined): string {
+  return (value ?? '').trim().toLocaleLowerCase();
 }
 
 function fieldCaptionCandidates(
@@ -224,7 +224,7 @@ function fieldCaptionCandidates(
 function resolveCiByCaption(
   cis: ColumnInstance[],
   columns: Map<string, ColumnDefinition>,
-  caption: string,
+  caption: string | undefined,
   kind: 'target field' | 'sort-by field',
   predicate: (ci: ColumnInstance) => boolean,
 ): ColumnInstance | RefineRefusal {
@@ -612,16 +612,28 @@ export function planSortDirection(
  * Plan a computed sort for one caption-addressed dimension by one caption-addressed
  * measure. This is the explicit sort primitive for sheets where "flip direction" is not
  * enough: callers name the displayed fields, never Tableau's internal CI refs.
+ *
+ * `targetField` (the dimension whose axis gets sorted) is optional: when omitted, the
+ * dimension is auto-detected from the sheet's single categorical shelf axis via
+ * planSortByFieldOnCategoricalAxis — the common case where only the sort-by measure is
+ * named. It refuses (never throws) if the axis is absent or ambiguous.
  */
 export function planSortByField(
   xml: string,
-  opts: { targetField: string; sortByField: string; direction?: SortDirection },
+  opts: { targetField?: string; sortByField: string; direction?: SortDirection },
 ): SortByFieldPlan | RefineRefusal {
   const direction = opts.direction ?? 'ASC';
   if (direction !== 'ASC' && direction !== 'DESC') {
     return refuse(
       `sort_by_field.direction must be "ASC" or "DESC" (got ${JSON.stringify(opts.direction)}).`,
     );
+  }
+
+  if (!opts.targetField || !opts.targetField.trim()) {
+    return planSortByFieldOnCategoricalAxis(xml, {
+      sortByField: opts.sortByField,
+      direction,
+    });
   }
 
   const invalidShape = validateComputedSortShape(xml);
