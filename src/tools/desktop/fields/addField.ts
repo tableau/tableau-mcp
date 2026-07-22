@@ -36,7 +36,7 @@ const ENCODING_TYPES = [
 const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
 const paramsSchema = {
-  session: z.string(),
+  session: z.string().optional(),
   worksheetFile: z.string(),
   target: z.enum(FIELD_TARGETS),
   columnRef: z.string(),
