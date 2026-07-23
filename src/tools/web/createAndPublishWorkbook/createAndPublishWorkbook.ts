@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { getConfig } from '../../../config.js';
 import { getDataAppWorkspaceStore } from '../../../dataApps/init.js';
 import type { ValidatedPackage } from '../../../dataApps/types.js';
 import { McpToolError, PublishWorkbookError } from '../../../errors/mcpToolError.js';
@@ -208,7 +209,9 @@ report the workbook \`name\` and \`id\` instead.
 
                 auditOutcome = 'published';
                 return new Ok({
-                  ...toPublishResult(published, target),
+                  // Rebase the returned link onto the configured SERVER origin: some servers
+                  // advertise an internal gateway host/IP in webpageUrl that the caller can't reach.
+                  ...toPublishResult(published, target, getConfig().server),
                   warnings,
                   validationId: args.validationId,
                   digest,

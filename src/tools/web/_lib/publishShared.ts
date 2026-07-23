@@ -169,15 +169,45 @@ export function toWorkbookViewsUrl(webpageUrl: string): string {
   return trimmed.endsWith('/views') ? trimmed : `${trimmed}/views`;
 }
 
+// Rebase a server-advertised URL onto the origin the client is actually configured to reach. The
+// publish response's webpageUrl carries the server's own gateway host, which on some deployments
+// (e.g. on-prem / test servers) is an internal IP that differs from the configured SERVER origin the
+// user connects through — returning that host yields a link the caller may not be able to open. We
+// keep the server's path/hash (they hold the real repository id and SPA route) and swap only
+// scheme+host+port for the configured origin. Returns the input unchanged if either value is missing
+// or unparseable — never fabricates.
+export function rebaseUrlOrigin(rawUrl: string, serverOrigin: string | undefined): string {
+  if (!serverOrigin) {
+    return rawUrl;
+  }
+  try {
+    const parsed = new URL(rawUrl);
+    const origin = new URL(serverOrigin).origin;
+    return `${origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return rawUrl;
+  }
+}
+
 // Map the SDK's PublishedWorkbook onto the tool result. projectId is the *resolved* target we
 // published into (not published.project?.id). `url` is the canonical clickable workbook URL: the
-// server's webpageUrl with `/views` appended (see toWorkbookViewsUrl) so it lands on the workbook's
-// Views tab. The raw server value is preserved verbatim on `webpageUrl`. Both are omitted when the
-// server returned no webpageUrl — better an absent link than a fabricated one.
+// server's webpageUrl rebased onto the configured SERVER origin (so it's reachable through the same
+// address the client connects with — some servers advertise an internal gateway host/IP) and then
+// pointed at the Views tab (see toWorkbookViewsUrl). The raw server value is preserved verbatim on
+// `webpageUrl`. Both are omitted when the server returned no webpageUrl — better an absent link than
+// a fabricated one.
 export function toPublishResult(
   published: PublishedWorkbook,
   target: ResolvedProject,
+  serverOrigin?: string,
 ): PublishResult {
+  const url =
+    published.webpageUrl !== undefined
+      ? toWorkbookViewsUrl(rebaseUrlOrigin(published.webpageUrl, serverOrigin))
+      : undefined;
+  // #region agent log
+  fetch('http://127.0.0.1:7510/ingest/522dca03-68ef-48f5-a385-dd8fde0e88bd',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f768f7'},body:JSON.stringify({sessionId:'f768f7',runId:'post-fix',hypothesisId:'A/D-fix',location:'publishShared.ts:toPublishResult',message:'rebased webpageUrl onto configured SERVER origin + /views',data:{rawWebpageUrl:published.webpageUrl,serverOrigin,finalUrl:url,targetProjectId:target.id},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   return {
     id: published.id,
     name: published.name,
@@ -186,7 +216,7 @@ export function toPublishResult(
     // Prefer the name the resolver knew (default-project path); otherwise recover it from the
     // publish response (explicit-projectId path). Undefined only if neither supplied one.
     projectName: target.name ?? published.project?.name,
-    url: published.webpageUrl ? toWorkbookViewsUrl(published.webpageUrl) : undefined,
+    url,
     contentUrl: published.contentUrl,
     webpageUrl: published.webpageUrl,
   };

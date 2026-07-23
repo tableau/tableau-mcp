@@ -156,6 +156,9 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
       maxContentLength: Infinity,
     });
 
+    // #region agent log
+    fetch('http://127.0.0.1:7510/ingest/522dca03-68ef-48f5-a385-dd8fde0e88bd',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f768f7'},body:JSON.stringify({sessionId:'f768f7',runId:'post-fix',hypothesisId:'A/D',location:'publishingMethods.ts:159',message:'raw publish response from Tableau server',data:{webpageUrl:response.data?.workbook?.webpageUrl,contentUrl:response.data?.workbook?.contentUrl,id:response.data?.workbook?.id,name:response.data?.workbook?.name,restBaseURL:this._apiClient.axios?.defaults?.baseURL,serverEnv:process.env.SERVER},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     return publishedWorkbookSchema.parse(response.data?.workbook);
   };
 
