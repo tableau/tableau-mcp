@@ -45,8 +45,7 @@ ignored.
 
 ### `limit`
 
-The maximum number of custom views to return. Must be less than or equal to `1000`. Use this to
-return fewer than all matching custom views.
+The maximum number of custom views to return. Must be less than or equal to `1000`.
 
 Example: `600`
 

@@ -17,15 +17,7 @@ import { parseAndValidateCustomViewsFilterString } from './customViewsFilterUtil
 const paramsSchema = {
   workbookId: z.string().min(1),
   filter: z.string().optional(),
-  limit: z
-    .number()
-    .int()
-    .gt(0)
-    .max(MAX_PAGE_SIZE)
-    .optional()
-    .describe(
-      'The maximum number of custom views to return (must be <= 1000). Use this to return fewer than all matching custom views.',
-    ),
+  limit: z.number().int().gt(0).max(MAX_PAGE_SIZE).optional(),
 };
 
 export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
