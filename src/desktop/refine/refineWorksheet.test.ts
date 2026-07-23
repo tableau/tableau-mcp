@@ -7,6 +7,7 @@ import { spliceWaterfallAnchorFilter } from '../templates/waterfallAnchorFilter.
 import { runValidation } from '../validation/registry.js';
 import { parseXml } from '../validation/rules/parseXml.js';
 import {
+  appliedSortByFieldDirection,
   confirmSortByFieldApplied,
   confirmSortDirectionApplied,
   confirmTopNApplied,
@@ -511,6 +512,74 @@ describe('planSortByField', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.reason).toMatch(/more than one categorical axis/i);
+  });
+});
+
+describe('appliedSortByFieldDirection — distinguishes wrong-direction from never-landed', () => {
+  const COL = '[Superstore].[none:line_item:nk]';
+  const USING = '[Superstore].[sum:display_order:qk]';
+  const withSort = (direction: string): string =>
+    BASE.replace(
+      /<datasource-dependencies datasource='Superstore'>[\s\S]*?<\/datasource-dependencies>/,
+      `<datasource-dependencies datasource='Superstore'>${LINE_ITEM_COL}${DISPLAY_ORDER_COL}${LINE_ITEM_CI}${DISPLAY_ORDER_CI}</datasource-dependencies>`,
+    ).replace(
+      /<computed-sort[^>]*\/>/,
+      `<computed-sort column='${COL}' direction='${direction}' using='${USING}' />`,
+    );
+
+  it('returns the direction that actually landed (ASC when DESC was requested)', () => {
+    // The wrong-direction readback: the node is present, so this is NOT a never-landed miss.
+    expect(appliedSortByFieldDirection(withSort('ASC'), COL, USING)).toBe('ASC');
+    expect(appliedSortByFieldDirection(withSort('DESC'), COL, USING)).toBe('DESC');
+  });
+
+  it('returns null when no matching computed-sort landed at all (async-settle miss)', () => {
+    const noSort = BASE.replace(/<computed-sort[^>]*\/>/, '');
+    expect(appliedSortByFieldDirection(noSort, COL, USING)).toBeNull();
+  });
+
+  it('confirmSortByFieldApplied stays false on the wrong direction (no false success)', () => {
+    // The two helpers agree: applied ASC never confirms the requested DESC.
+    expect(confirmSortByFieldApplied(withSort('ASC'), COL, USING, 'DESC')).toBe(false);
+    expect(appliedSortByFieldDirection(withSort('ASC'), COL, USING)).toBe('ASC');
+  });
+
+  it('neither throws nor false-positives on a column ref containing a quote', () => {
+    const quoted = "[none:O'Brien:nk]";
+    const withQuoted = `<worksheet name='q' xmlns:user='http://www.tableausoftware.com/xml/user'>
+      <table><view>
+        <computed-sort column="${quoted}" direction='ASC' using="${USING}" />
+      </view></table>
+    </worksheet>`;
+    expect(appliedSortByFieldDirection(withQuoted, quoted, USING)).toBe('ASC');
+    expect(appliedSortByFieldDirection(withQuoted, '[none:Other:nk]', USING)).toBeNull();
+  });
+});
+
+describe('planSortByField — nested sortDirection.direction is honored (defect 1 unit)', () => {
+  const WATERFALL = BASE.replace(
+    /<datasource-dependencies datasource='Superstore'>[\s\S]*?<\/datasource-dependencies>/,
+    `<datasource-dependencies datasource='Superstore'>${LINE_ITEM_COL}${DISPLAY_ORDER_COL}${LINE_ITEM_CI}${DISPLAY_ORDER_CI}</datasource-dependencies>`,
+  )
+    .replaceAll('[Superstore].[none:Region:nk]', '[Superstore].[none:line_item:nk]')
+    .replaceAll('[Superstore].[sum:Sales:qk]', '[Superstore].[sum:display_order:qk]')
+    .replace(/<computed-sort[^>]*\/>/, '');
+
+  it('applies DESC when the planner is given DESC (the value the tool derives from the nested alias)', () => {
+    // The tool normalizes sortDirection.direction into this DESC before calling the planner;
+    // this pins the planner half — DESC in must produce direction='DESC', never a silent ASC.
+    const r = planSortByField(WATERFALL, {
+      targetField: 'Line Item',
+      sortByField: 'display_order',
+      direction: 'DESC',
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.direction).toBe('DESC');
+    expect(r.xml).toContain(
+      "<computed-sort column='[Superstore].[none:line_item:nk]' direction='DESC' using='[Superstore].[sum:display_order:qk]' />",
+    );
+    expect(r.xml).not.toContain("direction='ASC'");
   });
 });
 
