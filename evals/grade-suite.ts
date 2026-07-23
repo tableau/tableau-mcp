@@ -9,8 +9,9 @@
  *   npx tsx evals/grade-suite.ts           # auto-discovers most recent suite run
  *
  * Optional environment:
- *   OPENAI_API_KEY    — enables semantic_match (LLM judge); verdict degrades to numeric-only without it
- *   BIRD_GRADE_MODEL  — override LLM judge model (default: gpt-4o-mini)
+ *   GRADER_HARNESS    — coding-agent harness for the semantic_match judge (default claude-code);
+ *                       verdict degrades to numeric-only if no usable harness is available
+ *   GRADER_MODEL      — override the judge harness model (default: the harness's own default)
  */
 
 /* eslint-disable no-console */
