@@ -81,6 +81,23 @@ export interface RewriteFieldReferencesOptions {
    * collision-free names.
    */
   applyNonce?: string;
+  /**
+   * Manifest-declared bindable slots. When supplied, unused optional slots are
+   * removed structurally and any unresolved required slot fails before apply.
+   */
+  templateSlots?: readonly TemplateSlotReference[];
+}
+
+/** Minimal, repo-agnostic manifest slot shape needed by the rewrite guard. */
+export interface TemplateSlotReference {
+  /** Stable manifest/proposal identity; accepted as a field-mapping alias. */
+  slot_id?: string;
+  template_field: string;
+  required: boolean;
+  bindable?: boolean;
+  kind?: string;
+  role?: readonly string[];
+  purpose?: string;
 }
 
 /**
@@ -155,6 +172,7 @@ export function rewriteFieldReferences(
     errorHandler: (): void => {},
   });
   const doc = parser.parseFromString(templateXml, 'text/xml') as unknown as Document;
+  const normalizedFieldMapping = normalizeFieldMapping(fieldMapping, options?.templateSlots);
 
   const derivationMap = DERIVATION_SHORT_TO_LONG;
 
@@ -183,7 +201,7 @@ export function rewriteFieldReferences(
   const bareKeyInfo: Record<string, FieldInfo> = {};
   const qualifiedKeyInfo: Record<string, FieldInfo> = {}; // key = "field@deriv" (deriv lowercased)
 
-  for (const [rawKey, columnInstance] of Object.entries(fieldMapping)) {
+  for (const [rawKey, columnInstance] of Object.entries(normalizedFieldMapping)) {
     const parsed = parseColumnInstance(columnInstance);
     if (!parsed) continue;
     const atIdx = rawKey.lastIndexOf('@');
@@ -202,6 +220,16 @@ export function rewriteFieldReferences(
   for (const k of Object.keys(bareKeyInfo)) mappedFields.add(k);
   for (const k of Object.keys(qualifiedKeyInfo))
     mappedFields.add(k.substring(0, k.lastIndexOf('@')));
+
+  // Remove optional placeholders while the DOM still carries template names.
+  // Doing this before mapped fields are renamed avoids confusing an actual user
+  // field whose name happens to equal another slot's template placeholder.
+  pruneUnusedOptionalTemplateSlots(
+    doc,
+    normalizedFieldMapping,
+    mappedFields,
+    options?.templateSlots,
+  );
 
   // 0. Per-apply CALC NAMESPACING (opt-in; requires a caller-supplied nonce).
   if (options?.namespaceCalcs && options.applyNonce) {
@@ -435,6 +463,17 @@ export function rewriteFieldReferences(
     }
   }
 
+  // Defense in depth after every substitution pass: a required template field
+  // that was not successfully mapped must never reach Desktop as a literal
+  // sample-data column. Optional cleanup is verified here for the same reason.
+  assertNoUnresolvedTemplateSlots(
+    doc,
+    mappedFields,
+    baseTarget,
+    options?.templateSlots,
+  );
+  assertNoFieldPlaceholderResidue(doc);
+
   // Wrap <run> text with newlines / angle brackets in CDATA (matches Tableau).
   const runElements = selectElements('//run', doc);
   for (const run of runElements) {
@@ -478,6 +517,219 @@ function selectElements(xp: string, doc: Document): Element[] {
 function selectTexts(xp: string, doc: Document): Text[] {
   return (xpath.select(xp, doc as unknown as Node) as Node[]).filter(
     (n): n is Text => n.nodeType === TEXT_NODE,
+  );
+}
+
+const OPTIONAL_REFERENCE_ELEMENTS = new Set([
+  'column',
+  'column-instance',
+  'computed-sort',
+  'encoding',
+  'filter',
+  'format',
+  'groupfilter',
+  'lod',
+]);
+
+function splitMappingKey(key: string): { base: string; derivation?: string } {
+  const atIdx = key.lastIndexOf('@');
+  const suffix = atIdx >= 0 ? key.substring(atIdx + 1) : '';
+  return atIdx > 0 && /^[A-Za-z][A-Za-z0-9-]*$/.test(suffix)
+    ? { base: key.slice(0, atIdx), derivation: suffix }
+    : { base: key };
+}
+
+/**
+ * Expand stable slot-id mapping aliases to the exact template placeholder token.
+ * Canonical template_field keys remain supported; conflicting alias/canonical
+ * values fail loud instead of making substitution depend on object key order.
+ */
+function normalizeFieldMapping(
+  fieldMapping: Record<string, string>,
+  slots?: readonly TemplateSlotReference[],
+): Record<string, string> {
+  if (!slots?.some((slot) => slot.slot_id)) return fieldMapping;
+  const bySlotId = new Map(
+    slots
+      .filter((slot): slot is TemplateSlotReference & { slot_id: string } => !!slot.slot_id)
+      .map((slot) => [slot.slot_id, slot]),
+  );
+  const normalized: Record<string, string> = {};
+
+  for (const [rawKey, value] of Object.entries(fieldMapping)) {
+    const { base, derivation } = splitMappingKey(rawKey);
+    const slot = bySlotId.get(base);
+    const canonical = slot
+      ? `${slot.template_field}${derivation ? `@${derivation}` : ''}`
+      : rawKey;
+    const prior = normalized[canonical];
+    if (prior !== undefined && prior !== value) {
+      throw new Error(
+        `Field mapping provides conflicting values for '${canonical}' through template-field and slot-id keys.`,
+      );
+    }
+    normalized[canonical] = value;
+  }
+
+  return normalized;
+}
+
+function rawMappingFields(fieldMapping: Record<string, string>): Set<string> {
+  const fields = new Set<string>();
+  for (const key of Object.keys(fieldMapping)) {
+    fields.add(splitMappingKey(key).base);
+  }
+  return fields;
+}
+
+function referencesTemplateField(value: string, templateField: string): boolean {
+  for (const match of value.matchAll(/\[([^\]]+)\]/g)) {
+    const token = match[1];
+    if (token === templateField) {
+      // In `[datasource].[instance]`, the first bracket token is a datasource,
+      // not a field. Do not mistake a same-named datasource for a placeholder.
+      const afterToken = value.slice((match.index ?? 0) + match[0].length);
+      if (!afterToken.startsWith('.[')) return true;
+    }
+    if (parseInstanceName(match[0])?.field === templateField) return true;
+  }
+  return false;
+}
+
+function removeElement(element: Element): void {
+  element.parentNode?.removeChild(element);
+}
+
+function pruneShelfFieldReferences(doc: Document, templateField: string): void {
+  for (const tag of ['rows', 'cols']) {
+    for (const shelf of selectElements(`//${tag}`, doc)) {
+      for (const text of Array.from(shelf.childNodes).filter(
+        (node): node is Text => node.nodeType === TEXT_NODE,
+      )) {
+        if (!referencesTemplateField(text.data, templateField)) continue;
+        const kept = text.data
+          .split(/\s+\/\s+/)
+          .filter((pill) => !referencesTemplateField(pill, templateField));
+        text.data = kept.join(' / ');
+      }
+    }
+  }
+}
+
+function pruneOptionalTemplateField(doc: Document, templateField: string): void {
+  for (const element of selectElements('//*', doc)) {
+    if (!OPTIONAL_REFERENCE_ELEMENTS.has(element.tagName)) continue;
+    const referencesField = Array.from(element.attributes).some((attribute) =>
+      referencesTemplateField(attribute.value, templateField),
+    );
+    if (referencesField) removeElement(element);
+  }
+  pruneShelfFieldReferences(doc, templateField);
+}
+
+function pruneUnusedOptionalTemplateSlots(
+  doc: Document,
+  fieldMapping: Record<string, string>,
+  mappedFields: Set<string>,
+  slots?: readonly TemplateSlotReference[],
+): void {
+  if (!slots || slots.length === 0) return;
+  const rawMappedFields = rawMappingFields(fieldMapping);
+  const pruned = new Set<string>();
+  for (const slot of slots) {
+    if (
+      slot.bindable === false ||
+      slot.required ||
+      mappedFields.has(slot.template_field) ||
+      rawMappedFields.has(slot.template_field) ||
+      pruned.has(slot.template_field)
+    ) {
+      continue;
+    }
+    pruneOptionalTemplateField(doc, slot.template_field);
+    pruned.add(slot.template_field);
+  }
+}
+
+function documentReferencesTemplateField(doc: Document, templateField: string): boolean {
+  for (const element of selectElements('//*[@*]', doc)) {
+    if (
+      Array.from(element.attributes).some((attribute) =>
+        referencesTemplateField(attribute.value, templateField),
+      )
+    ) {
+      return true;
+    }
+  }
+  return selectTexts('//text()', doc).some((text) =>
+    referencesTemplateField(text.data, templateField),
+  );
+}
+
+function userFacingFieldDescription(slot: TemplateSlotReference): string {
+  switch (slot.kind) {
+    case 'quantitative':
+      return 'a quantitative value field';
+    case 'categorical':
+      return 'a categorical field';
+    case 'temporal':
+      return 'a date field';
+    case 'geo':
+      return 'a geographic field';
+    default:
+      return 'a field';
+  }
+}
+
+function assertNoUnresolvedTemplateSlots(
+  doc: Document,
+  mappedFields: Set<string>,
+  baseTarget: Record<string, string>,
+  slots?: readonly TemplateSlotReference[],
+): void {
+  if (!slots || slots.length === 0) return;
+  const unresolved: TemplateSlotReference[] = [];
+  const seen = new Set<string>();
+
+  for (const slot of slots) {
+    if (slot.bindable === false) continue;
+    const mapped = mappedFields.has(slot.template_field);
+    if (mapped && baseTarget[slot.template_field] === slot.template_field) continue;
+    const survived = documentReferencesTemplateField(doc, slot.template_field);
+    if (survived && !seen.has(slot.template_field)) {
+      unresolved.push(slot);
+      seen.add(slot.template_field);
+    }
+  }
+
+  if (unresolved.length === 0) return;
+  const descriptions = [...new Set(unresolved.map(userFacingFieldDescription))];
+  const choice =
+    descriptions.length === 1
+      ? descriptions[0]
+      : `${descriptions.slice(0, -1).join(', ')} and ${descriptions.at(-1)}`;
+  const boundUserFields = [...new Set(Object.values(baseTarget))];
+  const boundContext =
+    boundUserFields.length > 0
+      ? ` after binding ${boundUserFields.map((field) => `"${field}"`).join(', ')}`
+      : '';
+  throw new Error(
+    `Template binding is incomplete${boundContext}: choose ${choice} for the chart and retry with a complete field mapping. No worksheet was produced.`,
+  );
+}
+
+function assertNoFieldPlaceholderResidue(doc: Document): void {
+  const residue = new Set<string>();
+  const capture = (value: string): void => {
+    for (const match of value.matchAll(/\{\{field_base_[1-9]\d*\}\}/g)) residue.add(match[0]);
+  };
+  for (const element of selectElements('//*[@*]', doc)) {
+    for (const attribute of Array.from(element.attributes) as Attr[]) capture(attribute.value);
+  }
+  for (const text of selectTexts('//text()', doc)) capture(text.data);
+  if (residue.size === 0) return;
+  throw new Error(
+    `Unresolved template field placeholder(s) ${[...residue].sort().join(', ')} remain after substitution. No worksheet was produced.`,
   );
 }
 
@@ -611,7 +863,9 @@ function namespaceTemplateCalcColumns(
     if (!m) continue;
     const bare = m[1];
     if (mappedFields.has(bare)) continue;
-    if (!renameMap.has(bare)) renameMap.set(bare, `${bare}_tpl_${suffix}`);
+    const placeholder = bare.match(/^\{\{(field_base_[1-9]\d*)\}\}$/);
+    const internalBase = placeholder ? `Calculation_${placeholder[1]}` : bare;
+    if (!renameMap.has(bare)) renameMap.set(bare, `${internalBase}_tpl_${suffix}`);
   }
   if (renameMap.size === 0) return;
 

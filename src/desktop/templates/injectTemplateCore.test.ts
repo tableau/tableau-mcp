@@ -247,6 +247,32 @@ describe('buildInjectedWorkbookXml — temporal_axis_from_string end-to-end (rea
   );
   // An empty workbook to inject into (bind-template's auto_apply passes the live one).
   const EMPTY_WORKBOOK = "<?xml version='1.0'?><workbook><worksheets/><windows/></workbook>";
+  const TREND_SLOTS = [
+    {
+      slot_id: 'order_date',
+      template_field: '{{field_base_1}}',
+      required: true,
+      bindable: true,
+      kind: 'temporal',
+      role: ['cols'],
+    },
+    {
+      slot_id: 'sales',
+      template_field: '{{field_base_2}}',
+      required: true,
+      bindable: true,
+      kind: 'quantitative',
+      role: ['rows'],
+    },
+    {
+      slot_id: 'facet_col',
+      template_field: '{{field_base_3}}',
+      required: false,
+      bindable: true,
+      kind: 'categorical',
+      role: ['cols'],
+    },
+  ];
 
   it('injects a DATEPARSE month axis when the temporal slot bound a string month (e4 shape)', () => {
     const result = buildInjectedWorkbookXml({
@@ -258,9 +284,14 @@ describe('buildInjectedWorkbookXml — temporal_axis_from_string end-to-end (rea
       // only the measure slot maps to the real field. This mirrors what validate.ts emits
       // when order_date accepts a string via temporal_from_string.
       templateParameters: { DATASOURCE: 'federated.mau' },
-      fieldMapping: { Sales: '[federated.mau].[sum:mau:qk]' },
+      fieldMapping: { sales: '[federated.mau].[sum:mau:qk]' },
+      templateSlots: TREND_SLOTS,
       applyNonce: 'e4-nonce',
-      dateparseAxis: { templateField: 'Order Date', sourceField: 'month', format: 'yyyy-MM' },
+      dateparseAxis: {
+        templateField: '{{field_base_1}}',
+        sourceField: 'month',
+        format: 'yyyy-MM',
+      },
     });
 
     expect(result.ok).toBe(true);
@@ -270,7 +301,9 @@ describe('buildInjectedWorkbookXml — temporal_axis_from_string end-to-end (rea
     // The core rewrite namespaces calc columns with the apply nonce, so [Order Date]
     // becomes [Order Date_tpl_<nonce-suffix>] consistently across the calc, its CI, and
     // the axis pill. Capture the namespaced calc name and assert the whole axis is coherent.
-    const calcName = xml.match(/name="(\[Order Date[^"]*\])"[^>]*>\s*<calculation/)?.[1];
+    const calcName = xml.match(
+      /name="(\[Calculation_field_base_1[^"]*\])"[^>]*>\s*<calculation/,
+    )?.[1];
     expect(calcName).toBeTruthy();
 
     // 1) The temporal base column is now a DATEPARSE calc over the string month (the
@@ -300,9 +333,10 @@ describe('buildInjectedWorkbookXml — temporal_axis_from_string end-to-end (rea
       sheetType: 'worksheet' as const,
       templateParameters: { DATASOURCE: 'federated.sales' },
       fieldMapping: {
-        'Order Date': '[federated.sales].[tmn:order_date:qk]',
-        Sales: '[federated.sales].[sum:sales:qk]',
+        order_date: '[federated.sales].[tmn:order_date:qk]',
+        sales: '[federated.sales].[sum:sales:qk]',
       },
+      templateSlots: TREND_SLOTS,
       applyNonce: 'normal-nonce',
     };
     const withUndef = buildInjectedWorkbookXml({ ...common, dateparseAxis: undefined });
@@ -404,6 +438,122 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
     expect(result.xml).toContain('[Football].[none:Country:nk]');
     expect(result.xml).toContain('[Football].[none:State:nk]');
     expect(result.xml).toContain('[Football].[none:City:nk]');
+  });
+});
+
+describe('buildInjectedWorkbookXml — manifest slot finalization', () => {
+  const EMPTY_WORKBOOK = "<?xml version='1.0'?><workbook><worksheets/><windows/></workbook>";
+  const RANKING_TEMPLATE = readFileSync(
+    join(__dirname, '../data/templates/ranking-ordered-bar.xml'),
+    'utf-8',
+  );
+  const RANKING_SLOTS = [
+    {
+      slot_id: 'region',
+      template_field: '{{field_base_1}}',
+      required: true,
+      bindable: true,
+      kind: 'categorical',
+      role: ['rows', 'sort-dimension'],
+    },
+    {
+      slot_id: 'sales',
+      template_field: '{{field_base_2}}',
+      required: true,
+      bindable: true,
+      kind: 'quantitative',
+      role: ['cols', 'sort-measure'],
+    },
+    {
+      slot_id: 'facet_row',
+      template_field: '{{field_base_3}}',
+      required: false,
+      bindable: true,
+      kind: 'categorical',
+      role: ['rows'],
+    },
+  ];
+
+  it('blocks a partial mapping before a literal required placeholder can be injected', () => {
+    expect(() =>
+      buildInjectedWorkbookXml({
+        workbookXml: EMPTY_WORKBOOK,
+        templateXml: RANKING_TEMPLATE,
+        title: 'Goals by Country',
+        sheetType: 'worksheet',
+        templateParameters: { DATASOURCE: 'World Cup' },
+        fieldMapping: {
+          region: '[World Cup].[none:Country:nk]',
+        },
+        templateSlots: RANKING_SLOTS,
+        applyNonce: 'partial-ranking',
+      }),
+    ).toThrow(
+      'Template binding is incomplete after binding "Country": choose a quantitative value field for the chart and retry with a complete field mapping. No worksheet was produced.',
+    );
+
+    try {
+      buildInjectedWorkbookXml({
+        workbookXml: EMPTY_WORKBOOK,
+        templateXml: RANKING_TEMPLATE,
+        title: 'Goals by Country',
+        sheetType: 'worksheet',
+        templateParameters: { DATASOURCE: 'World Cup' },
+        fieldMapping: {
+          region: '[World Cup].[none:Country:nk]',
+        },
+        templateSlots: RANKING_SLOTS,
+        applyNonce: 'partial-ranking-message',
+      });
+    } catch (error) {
+      expect((error as Error).message).toContain('Country');
+      expect((error as Error).message).not.toContain('Measure');
+    }
+  });
+
+  it('removes an unused optional facet from the injected fragment', () => {
+    const result = buildInjectedWorkbookXml({
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml: RANKING_TEMPLATE,
+      title: 'Goals by Country',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'World Cup' },
+      fieldMapping: {
+        region: '[World Cup].[none:Country:nk]',
+        sales: '[World Cup].[sum:Goals For:qk]',
+      },
+      templateSlots: RANKING_SLOTS,
+      applyNonce: 'optional-ranking',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).not.toContain('{{field_base_3}}');
+  });
+
+  it('keeps fully mapped output byte-stable', () => {
+    const common = {
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml: RANKING_TEMPLATE,
+      title: 'Goals by Country and Group',
+      sheetType: 'worksheet' as const,
+      templateParameters: { DATASOURCE: 'World Cup' },
+      fieldMapping: {
+        '{{field_base_1}}': '[World Cup].[none:Country:nk]',
+        '{{field_base_2}}': '[World Cup].[sum:Goals For:qk]',
+        '{{field_base_3}}': '[World Cup].[none:Group:nk]',
+      },
+      applyNonce: 'full-ranking',
+    };
+    const previousBehavior = buildInjectedWorkbookXml(common);
+    const guarded = buildInjectedWorkbookXml({ ...common, templateSlots: RANKING_SLOTS });
+
+    expect(previousBehavior.ok).toBe(true);
+    expect(guarded.ok).toBe(true);
+    if (!previousBehavior.ok || !guarded.ok) return;
+    const normalizeUuid = (xml: string): string =>
+      xml.replace(/uuid="\{[^}]*\}"/g, 'uuid="{UUID}"');
+    expect(normalizeUuid(guarded.xml)).toBe(normalizeUuid(previousBehavior.xml));
   });
 });
 

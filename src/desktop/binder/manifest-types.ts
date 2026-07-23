@@ -128,12 +128,27 @@ export type Derivation =
 
 export interface SlotSpec {
   slot_id: string; // stable id used by the LLM contract, e.g. "region", "order_date_month"
-  template_field: string; // bare field name AS IT APPEARS in the template <column name='[...]'>
+  /**
+   * Exact base token AS IT APPEARS in the template <column name='[...]'>.
+   * Migrated bindable slots use `{{field_base_N}}`; concrete names remain
+   * temporarily valid only for templates on the migration grandfather list.
+   */
+  template_field: string;
   derivation: Derivation; // template's derivation for THIS instance → drives field_mapping key + value
   role: string[]; // structural roles this instance fills: ["rows","sort-dimension"]
   kind: SlotKind;
   bindable: boolean; // false ⇒ binder must NOT fill it (calc/generated/pseudo/parameter)
   required: boolean;
+  /**
+   * Semantic reason this field exists in the chart. Required by corpus lint for
+   * migrated bindable slots; optional at runtime until the migration completes.
+   */
+  purpose?: string;
+  /**
+   * Agent-facing examples of field captions that would fit this slot. Present only
+   * as matching hints alongside `purpose`; not used by deterministic binding.
+   */
+  examples?: string[];
   /** true when template_field is reused at >1 derivation ⇒ binder MUST emit `template_field@derivation`. */
   qualified_key_required?: boolean;
   /**

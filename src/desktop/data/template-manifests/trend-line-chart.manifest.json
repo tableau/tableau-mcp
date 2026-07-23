@@ -7,9 +7,9 @@
   "portability_evidence": {
     "fixture_bind": true,
     "render_verified": "live-2026-07-04",
-    "xml_sha256": "724d015fcaf3c49a954ac9c0a2a2b777b735da5f6256bec32c61954f4b39c273",
+    "xml_sha256": "cf42a82bd95b0a37d8768b2aa3a11a2a703fc7a03a6822f3e15a9fb196d3cb0b",
     "render_evidence": {
-      "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
+      "basis": "hand-stamp: live render + structural parity + human review; the normal real-date placeholder migration preserves byte-identical post-bind XML versus the stamped literal-token form, proven by templatePlaceholderPilots.test.ts",
       "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
       "structural": null,
       "critical_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
@@ -19,27 +19,33 @@
     }
   },
   "datasource_placeholder": true,
-  "placeholders": ["TITLE", "DATASOURCE"],
+  "placeholders": ["TITLE", "DATASOURCE", "field_base_1", "field_base_2", "field_base_3"],
   "intent_keywords": ["trend", "over-time", "line", "line-chart", "time-series", "timeline", "by-month", "monthly", "weekly", "daily", "per-month", "over-the-last", "last-12-months", "over-months", "active-users", "mau", "dau", "sales-over-time", "year-over-year", "yoy", "prior-year", "current-year", "rolling", "moving-average", "moving-sum", "running-total", "month-over-month", "period-over-period", "forecast", "change-over-time", "calendar-year", "across-the-calendar"],
   "description": "A line of an aggregated measure over a truncated date on the x-axis; shows trend across time.",
   "avoid_when": [
     "The x-axis is a set of DISCRETE, non-temporal CATEGORIES (categorical members such as products or segments) instead of a continuous time axis. A line CONNECTS adjacent points and so IMPLIES CONTINUITY between them, drawing a misleading slope across unrelated categorical members; a cross-category breakdown with no time axis belongs on a bar chart. Keep this line template for a continuous time x-axis only \u2014 do not bind a discrete category to the x."
   ],
   "slots": [
-    { "slot_id": "order_date", "template_field": "Order Date", "derivation": "tmn",
+    { "slot_id": "order_date", "template_field": "{{field_base_1}}", "derivation": "tmn",
       "role": ["cols"], "kind": "temporal", "bindable": true, "required": true,
       "temporal_from_string": true,
-      "notes": "XML instance is [tmn:Order Date:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim (no normalization). templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'. temporal_from_string:true — a date-like STRING (e.g. a 'YYYY-MM' month) is accepted here; the apply path injects a DATEPARSE calc and truncates it to a continuous month axis (dateparseTemporalAxis.ts)." },
-    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
-      "role": ["rows"], "kind": "quantitative", "bindable": true, "required": true },
-    { "slot_id": "facet_col", "template_field": "Facet", "derivation": "none",
+      "purpose": "Temporal dimension that defines the continuous Month-Trunc x-axis.",
+      "examples": ["Match Date", "Invoice Month", "Snapshot Time"],
+      "notes": "XML instance is [tmn:{{field_base_1}}:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim (no normalization). templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'. temporal_from_string:true — a date-like STRING (e.g. a 'YYYY-MM' month) is accepted here; the apply path injects a DATEPARSE calc and truncates it to a continuous month axis (dateparseTemporalAxis.ts)." },
+    { "slot_id": "sales", "template_field": "{{field_base_2}}", "derivation": "sum",
+      "role": ["rows"], "kind": "quantitative", "bindable": true, "required": true,
+      "purpose": "Continuous measure plotted over time on the y-axis.",
+      "examples": ["Active Users", "Revenue", "Points"] },
+    { "slot_id": "facet_col", "template_field": "{{field_base_3}}", "derivation": "none",
       "role": ["cols"], "kind": "categorical", "bindable": true, "required": false,
-      "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on cols AHEAD of the truncated date pill, trellising the trend into side-by-side panes (one line per member). Optional \u2192 EXCLUDED from the required-bindable fixture_bind set (only {order_date, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots \u2014 a bare 'by <dim>' never facets (fail-closed), and it never steals a slot-bound dim. XML declares [Facet] as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the un-faceted default render is byte-unchanged). Modeled on box-plot-chart's required:false facet." }
+      "purpose": "Optional categorical dimension that partitions the trend into column-oriented small multiples.",
+      "examples": ["Country", "Product Line", "Team"],
+      "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on cols AHEAD of the truncated date pill, trellising the trend into side-by-side panes (one line per member). Optional \u2192 EXCLUDED from the required-bindable fixture_bind set (only {order_date, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots \u2014 a bare 'by <dim>' never facets (fail-closed), and it never steals a slot-bound dim. XML declares {{field_base_3}} as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the un-faceted default render is byte-unchanged). Modeled on box-plot-chart's required:false facet." }
   ],
   "calcs": [],
   "hazards": [
     { "code": "month-trunc-short-form-ruling",
-      "detail": "RULING (H3.2 tmn/tmo reconciliation): 'tmn' is the REAL Month-Trunc short-form live Tableau writes — confirmed in this template XML (derivation='Month-Trunc' name='[tmn:Order Date:qk]'), in real Tableau Public workbooks (data/twb-example-index.json: [sqlserver…].[tmn:Order Date:qk], [dataengine…].[tmn:DateTime (Days):ok]), in src/metadata/fields.ts:434, and in tactics/tree/column-instance-prefixes.md. The binder/manifests standardize on canonical 'tmn'; templates.ts derivationMap accepts BOTH 'tmn' and legacy 'tmo' as aliases → 'Month-Trunc'. XML is ground truth; no derivation normalization is applied.",
+      "detail": "RULING (H3.2 tmn/tmo reconciliation): 'tmn' is the REAL Month-Trunc short-form live Tableau writes — confirmed in this template XML (derivation='Month-Trunc' name='[tmn:{{field_base_1}}:qk]'), in real Tableau Public workbooks, in src/metadata/fields.ts, and in tactics/tree/column-instance-prefixes.md. The binder/manifests standardize on canonical 'tmn'; templates.ts derivationMap accepts BOTH 'tmn' and legacy 'tmo' as aliases → 'Month-Trunc'. XML is ground truth; no derivation normalization is applied.",
       "xml": "trend-line-chart.xml:13" },
     { "code": "line-implies-continuity-needs-time-axis",
       "detail": "Product evidence (product team, 2026-07) — has bitten someone: a line mark connects adjacent points, so it IMPLIES CONTINUITY along the x-axis. The order_date slot must bind a real continuous time field; binding a DISCRETE category to the x draws a slope between unrelated members that reads as a trend where none exists (a 'compare X across categories' ask must route to a bar chart, not here). Tracked-hazard companion to the discrete-categories avoid_when: the classifier demotes an otherwise-clean line bind when the ask names a discrete categorical breakdown with no time axis.",

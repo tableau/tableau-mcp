@@ -791,15 +791,36 @@ describe('binder/bindTemplate — Call 1 no-LLM (bound)', () => {
       expect(res.args.sheet_type).toBe('worksheet');
       expect(res.args.template_parameters.DATASOURCE).toBe('Superstore');
       expect(res.args.field_mapping).toEqual({
-        Region: '[Superstore].[none:Region:nk]',
-        Sales: '[Superstore].[sum:Sales:qk]',
+        '{{field_base_1}}': '[Superstore].[none:Region:nk]',
+        '{{field_base_2}}': '[Superstore].[sum:Sales:qk]',
       });
+      expect(res.args.field_mapping).not.toHaveProperty('Region');
+      expect(res.args.field_mapping).not.toHaveProperty('Sales');
       // IMPORTANT NEW FACT: bound result exposes the worksheet-path apply hint so a
       // caller can run the worksheet-level chain (tabdoc:new-worksheet → substitute →
       // apply-worksheet) OR the inject-template + apply-workbook chain from one result.
       expect(res.apply_hint).toBe('worksheet-path');
       expect(res.apply_instruction).toMatch(/tabdoc:new-worksheet/);
       expect(res.apply_instruction).toMatch(/apply-worksheet/);
+    }
+  });
+
+  it("'column chart of Sales by Region' → ranking-ordered-column with neutral field_mapping keys", async () => {
+    const res = await bindTemplate({
+      ask: 'column chart of Sales by Region',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.used_llm).toBe(false);
+      expect(res.args.template_name).toBe('ranking-ordered-column');
+      expect(res.args.field_mapping).toEqual({
+        Category: '[Superstore].[none:Region:nk]',
+        Measure: '[Superstore].[sum:Sales:qk]',
+      });
+      expect(res.args.field_mapping).not.toHaveProperty('Region');
+      expect(res.args.field_mapping).not.toHaveProperty('Sales');
     }
   });
 });
@@ -1437,6 +1458,8 @@ describe('binder/bindTemplate — country-only spatial maps', () => {
 });
 
 describe('binder/buildLlmInput — family-aware truncation (attack 2)', () => {
+  const EXAMPLES_PAYLOAD_BYTE_BUDGET = 768;
+
   function synth(template: string, family: Family, keyword: string): TemplateManifest {
     return {
       template,
@@ -1497,6 +1520,71 @@ describe('binder/buildLlmInput — family-aware truncation (attack 2)', () => {
     const ask = 'kwa kwb kwc1 kwc2 kwc3';
     const input = buildLlmInput(ask, m, summarizeSchema(WORKBOOK_XML));
     expect(input.candidate_templates.length).toBe(5);
+  });
+
+  it('keeps serialized examples contribution bounded for the worst-case bundled manifest', () => {
+    const encoder = new TextEncoder();
+    const serializedBytes = (value: unknown): number =>
+      encoder.encode(JSON.stringify(value)).length;
+    const withoutExamples = (
+      input: ReturnType<typeof buildLlmInput>,
+    ): ReturnType<typeof buildLlmInput> => ({
+      ...input,
+      candidate_templates: input.candidate_templates.map((candidate) => ({
+        ...candidate,
+        slots: candidate.slots.map((slot) => {
+          const withoutExample = { ...slot };
+          delete withoutExample.examples;
+          return withoutExample;
+        }),
+      })),
+    });
+
+    let worst = { template: '', bytes: 0 };
+    for (const manifest of manifests.values()) {
+      const routedManifest: TemplateManifest = { ...manifest, source: 'local' };
+      const input = buildLlmInput(
+        manifest.intent_keywords.join(' ') || manifest.template,
+        new Map([[manifest.template, routedManifest]]),
+        summarizeSchema(WORKBOOK_XML),
+      );
+      const examplesBytes = serializedBytes(input) - serializedBytes(withoutExamples(input));
+      if (examplesBytes > worst.bytes)
+        worst = { template: manifest.template, bytes: examplesBytes };
+    }
+
+    expect(worst.bytes).toBeGreaterThan(0);
+    expect(
+      worst.bytes,
+      `${worst.template} examples serialized byte contribution`,
+    ).toBeLessThanOrEqual(EXAMPLES_PAYLOAD_BYTE_BUDGET);
+  });
+
+  it('exposes slot purpose and examples together in propose candidates', () => {
+    const input = buildLlmInput(
+      'rank Goals For by Country as a bar chart',
+      manifests,
+      summarizeSchema(COUNTRY_ONLY_WORKBOOK_XML),
+    );
+    const ranking = input.candidate_templates.find(
+      (candidate) => candidate.template === 'ranking-ordered-bar',
+    );
+
+    expect(ranking).toBeDefined();
+    expect(ranking!.slots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slot_id: 'region',
+          purpose: expect.stringContaining('ranked horizontal bar'),
+          examples: expect.arrayContaining(['Country', 'Product Line']),
+        }),
+        expect.objectContaining({
+          slot_id: 'sales',
+          purpose: expect.stringContaining('bar length'),
+          examples: expect.arrayContaining(['Points', 'Revenue']),
+        }),
+      ]),
+    );
   });
 });
 

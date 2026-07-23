@@ -59,7 +59,10 @@ vi.mock('../../../desktop/templates/injectTemplateCore.js', () => ({
   classifyWorksheetReplaceTarget: vi.fn(),
 }));
 vi.mock('../../../desktop/templates/templatePath.js');
-vi.mock('../../../desktop/validation/registry.js');
+vi.mock('../../../desktop/validation/registry.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../desktop/validation/registry.js')>();
+  return { ...actual, runValidation: vi.fn() };
+});
 // Partial fs mock: the bound template is read via the mocked SEA-aware
 // `readTemplate` seam (templatePath.js above), so fs reads stay live for the real
 // manifest/content loads (manifest.ts / provider.ts via the assets seam); only
@@ -1874,6 +1877,41 @@ describe('bindTemplateTool auto_apply gate', () => {
     const validationOrder = vi.mocked(validationRegistry.runValidation).mock.invocationCallOrder[0];
     const dispatchOrder = applyWorkbookDocument.mock.invocationCallOrder[0];
     expect(validationOrder).toBeLessThan(dispatchOrder);
+  });
+
+  it('Miller World Cup repro: auto_apply ignores telemetry-only Parameter 1/Parameter 2 findings', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks();
+    vi.mocked(validationRegistry.runValidation).mockReturnValue({
+      valid: false,
+      issues: [
+        {
+          ruleId: 'calc-field-names',
+          severity: 'warning',
+          message:
+            'Non-standard internal name detected (telemetry only): [Parameter 1]. If this field works correctly in Tableau, this warning can be ignored.',
+        },
+        {
+          ruleId: 'calc-field-names',
+          severity: 'warning',
+          message:
+            'Non-standard internal name detected (telemetry only): [Parameter 2]. If this field works correctly in Tableau, this warning can be ignored.',
+        },
+      ],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Bar chart of countries by Points, sorted descending',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.guidance).not.toContain('preflight validation failed');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 });
 
