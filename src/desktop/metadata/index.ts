@@ -21,6 +21,7 @@ export {
   moveFieldInCols,
   moveFieldInEncoding,
   moveFieldInRows,
+  parseShelfValue,
   removeFieldFromCols,
   removeFieldFromEncoding,
   removeFieldFromRows,
