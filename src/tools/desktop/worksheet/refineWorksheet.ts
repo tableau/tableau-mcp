@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { getWorksheetFragment } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import {
+  appliedSortByFieldDirection,
   confirmSortByFieldApplied,
   confirmSortDirectionApplied,
   confirmTopNApplied,
@@ -201,6 +202,11 @@ export const getRefineWorksheetTool = (
           let patched: string;
           let confirm: (readback: string) => boolean;
           let nodeLabel: string;
+          // For sort_by_field: when the sort node lands but with a DIFFERENT direction than
+          // requested (e.g. Desktop silently reverted DESC to ASC), produce a precise refusal
+          // instead of the generic "did not contain" async-settle message — a wrong-direction
+          // apply must never be reported as success, and the reason must say what went wrong.
+          let readbackMiss: ((readback: string) => string | null) | undefined;
 
           if (operation === 'top_n') {
             const plan = planTopN(sourceXml, {
@@ -227,8 +233,20 @@ export const getRefineWorksheetTool = (
             confirm = (rb) => confirmSortDirectionApplied(rb, col, dir);
             nodeLabel = `<computed-sort direction="${dir}">${col ? ` on ${col}` : ''}`;
           } else {
+            // Accept the model's natural nested shape sortDirection.direction ('ASC'/'DESC')
+            // as an alias for the flat lowercase `direction` on sort_by_field. Without this,
+            // a call passing only sortDirection silently dropped the requested direction and
+            // defaulted to ASC — then falsely confirmed success on the wrong direction. The
+            // flat param wins when both are present; the nested alias is normalized to lower.
+            const requestedDirection =
+              direction ??
+              (sortDirection?.direction ? sortDirection.direction.toLowerCase() : undefined);
             const sortByDirection =
-              direction === 'desc' ? 'DESC' : direction === 'asc' ? 'ASC' : undefined;
+              requestedDirection === 'desc'
+                ? 'DESC'
+                : requestedDirection === 'asc'
+                  ? 'ASC'
+                  : undefined;
             const plan = planSortByField(sourceXml, {
               targetField,
               sortByField: sortByField as string,
@@ -242,6 +260,14 @@ export const getRefineWorksheetTool = (
             const using = plan.using;
             const dir = plan.direction;
             confirm = (rb) => confirmSortByFieldApplied(rb, col, using, dir);
+            readbackMiss = (rb) => {
+              const landed = appliedSortByFieldDirection(rb, col, using);
+              return landed !== null && landed !== dir
+                ? `applied, but the sort direction is ${landed}, not the requested ${dir} — ` +
+                    'Desktop did not honor the direction change. Not retrying; fall back to ' +
+                    'the standard path.'
+                : null;
+            };
             nodeLabel = `<computed-sort direction="${dir}" column="${col}" using="${using}">`;
           }
 
@@ -283,6 +309,7 @@ export const getRefineWorksheetTool = (
           // 6. Read back and confirm the expected node landed durably. The apply is async
           // after SUCCEEDED, so poll rather than trusting one immediate readback — the
           // first read can race the settle and still show pre-apply XML.
+          let lastReadback = '';
           for (let attempt = 1; attempt <= READBACK_POLL_MAX_ATTEMPTS; attempt++) {
             const readback = await getWorksheetFragment({
               worksheetName: canonicalWorksheetName,
@@ -302,6 +329,7 @@ export const getRefineWorksheetTool = (
                 }
               }
             }
+            lastReadback = readback.value;
             if (confirm(readback.value)) {
               return new Ok({
                 refined: true,
@@ -315,6 +343,15 @@ export const getRefineWorksheetTool = (
                 signal: extra.signal,
               });
             }
+          }
+
+          // The confirm never matched across the full poll budget. If the sort node DID land
+          // but with a direction other than requested (Desktop reverted DESC to ASC), report
+          // that precisely — the polling above already gave a correct-direction apply every
+          // chance to settle, so a mismatch now is durable, not a race.
+          const mismatchReason = readbackMiss?.(lastReadback);
+          if (mismatchReason) {
+            return refusal(operation, canonicalWorksheetName, mismatchReason);
           }
 
           return refusal(
