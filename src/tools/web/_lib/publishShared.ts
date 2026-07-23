@@ -205,9 +205,6 @@ export function toPublishResult(
     published.webpageUrl !== undefined
       ? toWorkbookViewsUrl(rebaseUrlOrigin(published.webpageUrl, serverOrigin))
       : undefined;
-  // #region agent log
-  fetch('http://127.0.0.1:7510/ingest/522dca03-68ef-48f5-a385-dd8fde0e88bd',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f768f7'},body:JSON.stringify({sessionId:'f768f7',runId:'post-fix',hypothesisId:'A/D-fix',location:'publishShared.ts:toPublishResult',message:'rebased webpageUrl onto configured SERVER origin + /views',data:{rawWebpageUrl:published.webpageUrl,serverOrigin,finalUrl:url,targetProjectId:target.id},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   return {
     id: published.id,
     name: published.name,
