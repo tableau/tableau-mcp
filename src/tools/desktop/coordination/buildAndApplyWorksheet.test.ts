@@ -20,9 +20,10 @@ vi.mock('../../../desktop/templates/templateColumnRequirements.js');
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('fs');
 
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 
 import { bindExplicitTemplate } from '../../../desktop/binder/explicit-bind.js';
+import { _resetManifestCache } from '../../../desktop/binder/manifest.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import { deflectionText } from '../../../desktop/route/route-gate.js';
@@ -185,6 +186,112 @@ describe('buildAndApplyWorksheetTool', () => {
     expect(result.content[0].text).toContain('Sheet1');
     expect(result.content[0].text).toContain('ranking-ordered-bar');
     expect(result.content[0].text).toContain('HOST VERIFICATION');
+  });
+
+  it('applies the waterfall anchor filter for P&L subtotal and total rows', async () => {
+    const actualFs = await vi.importActual<typeof import('fs')>('fs');
+    const actualRewriter = await vi.importActual<
+      typeof import('../../../desktop/templates/fieldReferenceRewriter.js')
+    >('../../../desktop/templates/fieldReferenceRewriter.js');
+    const waterfallXml = actualFs.readFileSync(
+      'src/desktop/data/templates/part-to-whole-waterfall.xml',
+      'utf8',
+    );
+    const waterfallManifest = actualFs.readFileSync(
+      'src/desktop/data/template-manifests/part-to-whole-waterfall.manifest.json',
+      'utf8',
+    );
+    const workbookXml =
+      '<workbook><datasources><datasource name="P&amp;L Data"/></datasources></workbook>';
+    const extra = makeExtra();
+
+    vi.mocked(readTemplate).mockReturnValue(waterfallXml);
+    vi.mocked(readFileSync).mockImplementation((path) => {
+      if (path === TASK_SPEC_BASE.workbookFile) return workbookXml;
+      if (String(path).endsWith('part-to-whole-waterfall.manifest.json')) {
+        return waterfallManifest;
+      }
+      throw new Error(`Unexpected read: ${String(path)}`);
+    });
+    vi.mocked(readdirSync).mockReturnValue(['part-to-whole-waterfall.manifest.json'] as any);
+    vi.mocked(listAvailableFields).mockReturnValue([
+      {
+        column_ref: '[P&L Data].[none:line_item:nk]',
+        role: 'dimension',
+        datasource: 'P&L Data',
+        columnName: '[line_item]',
+        columnInstanceName: '[none:line_item:nk]',
+        derivation: 'None' as any,
+        type: 'nominal',
+        datatype: 'string',
+      },
+      {
+        column_ref: '[P&L Data].[sum:amount:qk]',
+        role: 'measure',
+        datasource: 'P&L Data',
+        columnName: '[amount]',
+        columnInstanceName: '[sum:amount:qk]',
+        derivation: 'Sum' as any,
+        type: 'quantitative',
+        datatype: 'real',
+      },
+      {
+        column_ref: '[P&L Data].[none:category:nk]',
+        role: 'dimension',
+        datasource: 'P&L Data',
+        columnName: '[category]',
+        columnInstanceName: '[none:category:nk]',
+        derivation: 'None' as any,
+        type: 'nominal',
+        datatype: 'string',
+      },
+    ]);
+    vi.mocked(getTemplateColumnRequirements).mockReturnValue([
+      { name: 'Sub-Category', role: 'dimension', datatype: 'string', type: 'nominal' },
+      { name: 'Profit', role: 'measure', datatype: 'real', type: 'quantitative' },
+    ]);
+    vi.mocked(rewriteFieldReferences).mockImplementation(actualRewriter.rewriteFieldReferences);
+    let appliedXml = '';
+    vi.mocked(loadWorksheetXml).mockImplementation(async ({ xml }) => {
+      appliedXml = xml;
+      return new Ok({ readbackWarnings: [] });
+    });
+    _resetManifestCache();
+
+    try {
+      const result = await getResult(
+        {
+          session: SESSION,
+          taskSpec: {
+            ...TASK_SPEC_BASE,
+            template: 'part-to-whole-waterfall',
+            fields: [
+              '[P&L Data].[none:line_item:nk]',
+              '[P&L Data].[sum:amount:qk]',
+              '[P&L Data].[none:category:nk]',
+            ],
+          },
+        },
+        extra,
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(appliedXml).toMatch(/<mark class=(['"])GanttBar\1\s*\/>/);
+      expect(appliedXml).toMatch(/<table-calc\b[^>]*\btype=(['"])CumTotal\1/);
+      expect(appliedXml).toMatch(/formula=(['"])-SUM\(\[amount\]\)\1/);
+      expect(appliedXml).toContain(
+        "<column datatype='string' name='[category]' role='dimension' type='nominal' />",
+      );
+      expect(appliedXml).toContain(
+        "<filter class='categorical' column='[P&amp;L Data].[none:category:nk]'>",
+      );
+      expect(appliedXml).toContain("<groupfilter function='except'");
+      expect(appliedXml).toContain("member='&quot;subtotal&quot;'");
+      expect(appliedXml).toContain("member='&quot;total&quot;'");
+    } finally {
+      _resetManifestCache();
+      vi.mocked(readdirSync).mockReset();
+    }
   });
 
   it('returns an error before apply when every requested field is dropped', async () => {

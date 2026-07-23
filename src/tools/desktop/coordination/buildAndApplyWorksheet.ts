@@ -25,6 +25,7 @@ import {
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { spliceBoundFacet } from '../../../desktop/templates/facetSplice.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
+import { spliceWaterfallAnchorFilter } from '../../../desktop/templates/waterfallAnchorFilter.js';
 import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
 import { pruneUnboundOptionalFields } from '../../../desktop/templates/optionalFieldPrune.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
@@ -509,6 +510,11 @@ export const getBuildAndApplyWorksheetTool = (
               templateSlots: explicitBind.templateSlots,
             },
           );
+          // Parity with the binder auto-apply path (injectTemplateCore): a waterfall
+          // built through this fallback must also exclude subtotal/total rows, or the
+          // running total double-counts them. No-ops unless the XML is a waterfall with
+          // a bound anchor_category. Was missing here since #560 wired only the inject core.
+          templateXml = spliceWaterfallAnchorFilter(templateXml, fieldMapping);
 
           // Extract worksheet element
           const worksheetMatch = templateXml.match(/<worksheet(?!s)[^>]*>[\s\S]*?<\/worksheet>/);
