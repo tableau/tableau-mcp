@@ -30,8 +30,9 @@ export type PublishResult = {
   // response supplied a name.
   projectName?: string;
   // The canonical clickable workbook URL — bind links (prose or a UI card's href) to this. It is
-  // the server's webpageUrl passed through verbatim; omitted when the server returned none. See
-  // toPublishResult for why we surface rather than construct it.
+  // the server's webpageUrl with the `/views` segment appended so it lands on the workbook's Views
+  // tab (the bare .../#/workbooks/{id} page is not a reliable landing route); omitted when the
+  // server returned no webpageUrl. See toPublishResult. The raw server value stays on `webpageUrl`.
   url?: string;
   contentUrl?: string;
   webpageUrl?: string;
@@ -158,12 +159,21 @@ export function emitPublishAudit(
   }
 }
 
+// The server's workbook webpageUrl (e.g. .../#/workbooks/19) points at the workbook page; the bare
+// route is not a reliable landing target, so we append the `/views` segment to open the workbook's
+// Views tab instead. This is a deterministic, site-path-agnostic transform — we only append a fixed
+// segment, never fabricate an id or a per-sheet /views/{sheet} path (which we genuinely cannot build
+// post-publish: the publish response carries no views). Idempotent and tolerant of a trailing slash.
+export function toWorkbookViewsUrl(webpageUrl: string): string {
+  const trimmed = webpageUrl.replace(/\/+$/, '');
+  return trimmed.endsWith('/views') ? trimmed : `${trimmed}/views`;
+}
+
 // Map the SDK's PublishedWorkbook onto the tool result. projectId is the *resolved* target we
-// published into (not published.project?.id). `url` is the canonical clickable workbook URL,
-// surfaced verbatim from the server's webpageUrl — the only correct URL in hand. We can't build one
-// ourselves post-publish: the publish response carries no views (so no /views/{sheet} URL) and the
-// numeric repository id lives only inside webpageUrl (the GUID `id` isn't URL-routable). Omitted
-// when the server returned no webpageUrl — better an absent link than a fabricated one.
+// published into (not published.project?.id). `url` is the canonical clickable workbook URL: the
+// server's webpageUrl with `/views` appended (see toWorkbookViewsUrl) so it lands on the workbook's
+// Views tab. The raw server value is preserved verbatim on `webpageUrl`. Both are omitted when the
+// server returned no webpageUrl — better an absent link than a fabricated one.
 export function toPublishResult(
   published: PublishedWorkbook,
   target: ResolvedProject,
@@ -176,7 +186,7 @@ export function toPublishResult(
     // Prefer the name the resolver knew (default-project path); otherwise recover it from the
     // publish response (explicit-projectId path). Undefined only if neither supplied one.
     projectName: target.name ?? published.project?.name,
-    url: published.webpageUrl,
+    url: published.webpageUrl ? toWorkbookViewsUrl(published.webpageUrl) : undefined,
     contentUrl: published.contentUrl,
     webpageUrl: published.webpageUrl,
   };

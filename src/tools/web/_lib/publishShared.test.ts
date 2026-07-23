@@ -1,4 +1,10 @@
-import { buildPublishActor, emitPublishAudit } from './publishShared.js';
+import { PublishedWorkbook } from '../../../sdks/tableau/methods/publishingMethods.js';
+import {
+  buildPublishActor,
+  emitPublishAudit,
+  toPublishResult,
+  toWorkbookViewsUrl,
+} from './publishShared.js';
 
 const mocks = vi.hoisted(() => ({ mockLog: vi.fn() }));
 
@@ -19,6 +25,55 @@ describe('buildPublishActor', () => {
       siteLuid: 'test-site-luid',
       siteName: 'tc25',
     });
+  });
+});
+
+describe('toWorkbookViewsUrl', () => {
+  it('appends the /views segment to a bare workbook URL', () => {
+    expect(toWorkbookViewsUrl('http://patrickgr-wsw10:8080/#/workbooks/19')).toBe(
+      'http://patrickgr-wsw10:8080/#/workbooks/19/views',
+    );
+  });
+
+  it('is site-path agnostic', () => {
+    expect(toWorkbookViewsUrl('https://x.tableau.com/#/site/tc25/workbooks/42')).toBe(
+      'https://x.tableau.com/#/site/tc25/workbooks/42/views',
+    );
+  });
+
+  it('is idempotent when the URL already ends in /views', () => {
+    expect(toWorkbookViewsUrl('http://host/#/workbooks/19/views')).toBe(
+      'http://host/#/workbooks/19/views',
+    );
+  });
+
+  it('tolerates a trailing slash', () => {
+    expect(toWorkbookViewsUrl('http://host/#/workbooks/19/')).toBe(
+      'http://host/#/workbooks/19/views',
+    );
+  });
+});
+
+describe('toPublishResult', () => {
+  const published = (overrides: Partial<PublishedWorkbook> = {}): PublishedWorkbook =>
+    ({
+      id: 'wb-123',
+      name: 'My Viz',
+      contentUrl: 'MyViz',
+      webpageUrl: 'https://test.tableau.com/#/workbooks/wb-123',
+      ...overrides,
+    }) as PublishedWorkbook;
+
+  it('surfaces the /views URL on `url` and keeps webpageUrl verbatim', () => {
+    const result = toPublishResult(published(), { id: 'proj-1', name: 'Default' });
+    expect(result.url).toBe('https://test.tableau.com/#/workbooks/wb-123/views');
+    expect(result.webpageUrl).toBe('https://test.tableau.com/#/workbooks/wb-123');
+  });
+
+  it('leaves `url` undefined when the server returned no webpageUrl', () => {
+    const result = toPublishResult(published({ webpageUrl: undefined }), { id: 'proj-1' });
+    expect(result.url).toBeUndefined();
+    expect(result.webpageUrl).toBeUndefined();
   });
 });
 

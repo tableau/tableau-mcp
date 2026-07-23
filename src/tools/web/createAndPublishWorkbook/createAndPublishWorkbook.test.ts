@@ -130,12 +130,14 @@ describe('createAndPublishWorkbookTool', () => {
     expect(new Uint8Array(call.fileContents)).toEqual(RECEIPT_BYTES);
   });
 
-  it('passes the server response URL through verbatim on the card payload', async () => {
+  it('surfaces the /views workbook URL on the card while keeping webpageUrl verbatim', async () => {
     const validationId = await saveReceipt();
     const result = await getToolResult({ validationId });
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
-    expect(payload.url).toBe('https://test.tableau.com/#/workbooks/wb-123');
+    // `url` (the clickable card link) lands on the workbook's Views tab...
+    expect(payload.url).toBe('https://test.tableau.com/#/workbooks/wb-123/views');
+    // ...while the raw server value is preserved verbatim on `webpageUrl`.
     expect(payload.webpageUrl).toBe('https://test.tableau.com/#/workbooks/wb-123');
     expect(payload.appView).toBe('published-workbook-card');
     expect(payload.projectName).toBe('Default');
