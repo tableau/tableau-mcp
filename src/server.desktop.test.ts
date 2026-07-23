@@ -120,7 +120,9 @@ Command census: activate-sheet switches sheets; author-* tools author semantics;
 
 Omit session for one Desktop; use list-instances when multiple are open.
 
-If preflight rejects apply, fix per FIX lines. Prefer file mode`,
+If preflight rejects apply, fix per FIX lines. Prefer file mode
+
+If NO native tool covers the asked shape, say so plainly — never invent or hand-author XML. Retrieving worksheet XML to feed the field tools (get-worksheet-xml -> add-field/apply-worksheet) is a sanctioned path, not hand-authoring. Whole-workbook XML surgery (get/apply workbook XML) lives behind TOOL_PROFILE=full, an operator opt-in the user can enable.`,
     );
   });
 
