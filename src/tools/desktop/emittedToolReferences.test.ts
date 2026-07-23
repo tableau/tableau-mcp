@@ -45,6 +45,11 @@ const NON_TOOL_VOCABULARY = [
   'in-dashboard',
   'kind-mismatch',
   'kpi-text',
+  // m7 declarative-filter XML vocabulary emitted into the context-filter node (not tool names):
+  // the filter groupfilter functions/attributes, same class as 'column-instance' / 'level-members'.
+  'level-members',
+  'ui-enumeration',
+  'ui-marker',
   'load-dashboard-xml-error',
   'load-rejected',
   'load-workbook',
