@@ -39,6 +39,7 @@ export const webToolNames = [
   'update-user',
   'delete-content',
   'confirm-delete-content',
+  'render-interactive-viz',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
@@ -99,7 +100,7 @@ export const webToolGroups = {
   jobs: ['list-jobs'],
   users: ['list-users', 'update-user'],
   'token-management': ['revoke-access-token', 'reset-consent'],
-  'mcp-apps': ['get-embed-token', 'record-event'],
+  'mcp-apps': ['get-embed-token', 'record-event', 'render-interactive-viz'],
   'admin-insights': ['query-admin-insights'],
   content: ['delete-content', 'confirm-delete-content'],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;

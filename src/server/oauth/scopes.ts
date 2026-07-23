@@ -326,6 +326,10 @@ const toolScopeMap: Record<
     mcp: [],
     api: new Set<TableauApiScope>(),
   },
+  'render-interactive-viz': {
+    mcp: ['tableau:mcp:view:read', 'tableau:mcp:workbook:read'],
+    api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
   // Dispatches on `kind` to ts-events, site-content, job-performance (raw VDS) or stale-content
   // (server-side anti-join). Union of the scopes required by all four kinds.
   'query-admin-insights': {
@@ -392,6 +396,7 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   if (!mcpAppsEnabled) {
     enabledTools.delete('get-embed-token');
     enabledTools.delete('record-event');
+    enabledTools.delete('render-interactive-viz');
     enabledTools.delete('confirm-update-cloud-extract-refresh-task');
     enabledTools.delete('confirm-delete-content');
   }
