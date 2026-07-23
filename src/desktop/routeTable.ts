@@ -96,10 +96,10 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'data-value-question',
     trigger: 'a data-value question',
     action:
-      'FIRST get-summary-data; answer only from returned rows. If none, say so and offer a viz.',
+      'on a populated worksheet, call get-summary-data; answer only from returned rows. A terminal/no-data result means stop; one retry on transient failure is allowed, then report the outcome.',
     toolSequence: ['get-summary-data'],
-    stopConditions: ['answer only from returned rows'],
-    requiredEvidence: ['get-summary-data returned rows or a no-suitable-worksheet explanation'],
+    stopConditions: ['A terminal/no-data result means stop'],
+    requiredEvidence: ['get-summary-data returned rows or a discriminated status'],
   },
   {
     kind: 'route',

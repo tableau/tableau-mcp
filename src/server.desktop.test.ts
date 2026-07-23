@@ -108,7 +108,7 @@ For an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which char
 
 For a dashboard ask with 2-6 vizzes, build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; search-commands only for commands the census does not list.
 
-For a data-value question, FIRST get-summary-data; answer only from returned rows. If none, say so and offer a viz.
+For a data-value question, on a populated worksheet, call get-summary-data; answer only from returned rows. A terminal/no-data result means stop; one retry on transient failure is allowed, then report the outcome.
 
 For a dynamic ask or a calc/derived field the data lacks (ratio, running total, LOD), use author-* verbs: author-parameter FIRST (on { reopened: true } continue immediately), then author-set, author-calc, author-action, format-labels. Build with bind-template and authored captions.
 
