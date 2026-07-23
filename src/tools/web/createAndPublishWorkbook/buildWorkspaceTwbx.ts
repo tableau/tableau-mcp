@@ -9,7 +9,8 @@
 
 import type { DataAppSnapshot } from '../../../dataApps/types.js';
 import { BuildTwbxError } from '../../../errors/mcpToolError.js';
-import { buildTwbx, BuildTwbxResult } from './buildTwbx.js';
+import type { DataAppManifest } from '../dataApps/templates.js';
+import { buildTwbx, BuildTwbxResult, DataAppDatasource } from './buildTwbx.js';
 
 /** The single extension entrypoint every workspace package is built around (buildTwbx's .trex
  *  hard-codes `<source-location>index.html</source-location>`, so the packaged entry MUST be this). */
@@ -24,8 +25,38 @@ export interface BuildWorkspaceTwbxOptions {
   workbookName: string;
   /** The extension id (also the `Packages/<id>/` folder name). Validated by buildTwbx. */
   packageId: string;
-  /** Optional toolbar button label; defaults (inside buildTwbx) to the workbook name. */
-  toolbarLabel?: string;
+}
+
+/**
+ * Read the datasource bindings the builder needs from the workspace's `dataapp.json` manifest. The
+ * manifest is a workspace file (not shipped as package content); it records the published-datasource
+ * identity + the zombie-sheet field resolved at scaffold time. A missing/malformed manifest, or one
+ * with no datasources, yields an empty list — the builder then produces an extension-only workbook.
+ */
+export function readDatasourceBindings(snapshot: DataAppSnapshot): DataAppDatasource[] {
+  const manifestFile = snapshot.files.find(
+    (file) => normalizePath(file.path) === WORKSPACE_MANIFEST,
+  );
+  if (!manifestFile) {
+    return [];
+  }
+  let manifest: DataAppManifest;
+  try {
+    manifest = JSON.parse(new TextDecoder().decode(manifestFile.content)) as DataAppManifest;
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(manifest.datasources)) {
+    return [];
+  }
+  return manifest.datasources.map((ds) => ({
+    sqlproxyName: ds.sqlproxyName,
+    contentUrl: ds.contentUrl,
+    caption: ds.name,
+    host: ds.host,
+    port: ds.port,
+    field: ds.field,
+  }));
 }
 
 // A single decoded content-relative file (path already normalized) that will be packaged.
@@ -77,11 +108,13 @@ export function buildWorkspaceTwbx(
     .filter((file) => file.path !== WORKSPACE_ENTRYPOINT)
     .map((file) => ({ path: file.path, bytes: file.content }));
 
+  const datasources = readDatasourceBindings(snapshot);
+
   return buildTwbx({
     packageId: options.packageId,
     workbookName: options.workbookName,
     html: entry.content,
     assets: assets.length > 0 ? assets : undefined,
-    toolbar: options.toolbarLabel ? { label: options.toolbarLabel } : undefined,
+    datasources: datasources.length > 0 ? datasources : undefined,
   });
 }

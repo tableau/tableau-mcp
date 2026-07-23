@@ -59,7 +59,7 @@ describe('validateWorkbookPackageTool', () => {
     const workspace = await store.create(SCOPE, {
       appName: 'My App',
       packageId,
-      template: 'static-html',
+      template: 'live-extension',
       files,
     });
     return workspace.appId;
@@ -244,7 +244,7 @@ describe('validateWorkbookPackageTool', () => {
     const otherWorkspace = await store.create(otherScope, {
       appName: 'Other',
       packageId: 'com.example.other',
-      template: 'static-html',
+      template: 'live-extension',
       files: GOOD_FILES,
     });
     const result = await run({ appId: otherWorkspace.appId, workbookName: 'Other' });
@@ -260,22 +260,15 @@ describe('validateWorkbookPackageTool', () => {
 
     const tool = getValidateWorkbookPackageTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
-    const result = await callback(
-      { appId, workbookName: 'My App', toolbarLabel: undefined },
-      extra,
-    );
+    const result = await callback({ appId, workbookName: 'My App' }, extra);
     expect(result.isError).toBe(true);
   });
 });
 
-async function run(args: {
-  appId: string;
-  workbookName: string;
-  toolbarLabel?: string;
-}): Promise<CallToolResult> {
+async function run(args: { appId: string; workbookName: string }): Promise<CallToolResult> {
   const tool = getValidateWorkbookPackageTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
-  return await callback({ toolbarLabel: undefined, ...args }, getMockRequestHandlerExtra());
+  return await callback({ ...args }, getMockRequestHandlerExtra());
 }
 
 async function getData(result: CallToolResult): Promise<ValidateResult> {

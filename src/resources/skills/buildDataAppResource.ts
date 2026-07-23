@@ -8,9 +8,10 @@ export const getBuildDataAppResource: WebResourceFactory = (): WebResourceRegist
   uri: buildDataAppResourceUri,
   title: 'Build a Data App',
   description:
-    'Canonical workflow for turning a business question into a static, real-data-backed app: ' +
-    'detect intent, query freely, author a workspace, render for review, iterate, validate, get ' +
-    'explicit consent, and publish only the validated receipt.',
+    'Canonical workflow for turning a business question into a live-query Tableau data app (a ' +
+    'bundled dashboard extension that queries a published datasource live): detect intent, identify ' +
+    'the datasource, scaffold the workspace, introspect and author the query + visualization, ' +
+    'validate, get explicit consent, publish only the validated receipt, and review in Tableau.',
   mimeType: 'text/markdown',
   read: () => ({
     contents: [

@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { DataAppSnapshot } from '../../../dataApps/types.js';
 import { BuildTwbxError } from '../../../errors/mcpToolError.js';
+import { EXTENSIONS_LIB_PATH } from './buildTwbx.js';
 import {
   buildWorkspaceTwbx,
   listPackagedWorkspaceFiles,
+  readDatasourceBindings,
   WORKSPACE_ENTRYPOINT,
   WORKSPACE_MANIFEST,
 } from './buildWorkspaceTwbx.js';
@@ -29,18 +31,37 @@ function entries(bytes: Uint8Array): Record<string, string> {
 
 const options = { workbookName: 'My App', packageId: 'com.example.myapp' };
 
+const MANIFEST = {
+  schemaVersion: 2,
+  appName: 'My App',
+  packageId: 'com.example.myapp',
+  entrypoint: 'index.html',
+  template: 'live-extension',
+  datasources: [
+    {
+      luid: '00c07e8d-62a8-4bb0-96fd-a3227b610253',
+      contentUrl: 'WorldCupSongs',
+      name: 'World Cup Songs',
+      sqlproxyName: 'sqlproxy.abc123',
+      host: 'tableau.example.com',
+      port: '8080',
+      field: { fieldName: 'song_title', caption: 'Song Title', dataType: 'STRING' },
+    },
+  ],
+};
+
 const SCAFFOLD = {
   'index.html':
     '<!doctype html><html><head><link rel="stylesheet" href="src/styles.css"></head>' +
-    '<body><div id="app"></div><script src="src/data.js"></script><script src="src/app.js"></script></body></html>',
+    '<body><div id="app"></div><script src="src/tableau.extensions.1.latest.js"></script>' +
+    '<script src="src/app.js"></script></body></html>',
   'src/app.js': 'console.log("app");',
   'src/styles.css': 'body{margin:0}',
-  'src/data.js': 'var DATA_APP_ROWS=[];',
-  'dataapp.json': '{"schemaVersion":1,"appName":"My App"}',
+  'dataapp.json': JSON.stringify(MANIFEST),
 };
 
 describe('buildWorkspaceTwbx', () => {
-  it('packages the entrypoint and every scaffold asset under content/, preserving nested paths', () => {
+  it('packages the entrypoint, scaffold assets, and the injected lib under content/', () => {
     const { bytes } = buildWorkspaceTwbx(snapshot(SCAFFOLD), options);
     const paths = Object.keys(entries(bytes)).sort();
     expect(paths).toEqual(
@@ -51,15 +72,22 @@ describe('buildWorkspaceTwbx', () => {
         'Packages/com.example.myapp/content/index.html',
         'Packages/com.example.myapp/content/src/app.js',
         'Packages/com.example.myapp/content/src/styles.css',
-        'Packages/com.example.myapp/content/src/data.js',
+        `Packages/com.example.myapp/content/${EXTENSIONS_LIB_PATH}`,
       ].sort(),
     );
+  });
+
+  it('wires the manifest datasource bindings into the .twb (sqlproxy + zombie sheet)', () => {
+    const twb = entries(buildWorkspaceTwbx(snapshot(SCAFFOLD), options).bytes)['My App.twb'];
+    expect(twb).toContain("name='sqlproxy.abc123'");
+    expect(twb).toContain("dbname='WorldCupSongs'");
+    expect(twb).toContain('<rows>[sqlproxy.abc123].[none:song_title:nk]</rows>');
+    expect(twb).toContain("id='5' name='Sheet 1'");
   });
 
   it('does NOT ship the tool-managed dataapp.json manifest as package content', () => {
     const files = entries(buildWorkspaceTwbx(snapshot(SCAFFOLD), options).bytes);
     const shipped = Object.keys(files);
-    expect(shipped.some((p) => p.endsWith('/content/dataapp.json'))).toBe(false);
     expect(shipped.some((p) => p.includes('dataapp.json'))).toBe(false);
   });
 
@@ -99,11 +127,34 @@ describe('buildWorkspaceTwbx', () => {
     ).toThrow(BuildTwbxError);
   });
 
+  describe('readDatasourceBindings', () => {
+    it('maps manifest datasources into builder bindings', () => {
+      const bindings = readDatasourceBindings(snapshot(SCAFFOLD));
+      expect(bindings).toEqual([
+        {
+          sqlproxyName: 'sqlproxy.abc123',
+          contentUrl: 'WorldCupSongs',
+          caption: 'World Cup Songs',
+          host: 'tableau.example.com',
+          port: '8080',
+          field: { fieldName: 'song_title', caption: 'Song Title', dataType: 'STRING' },
+        },
+      ]);
+    });
+
+    it('returns an empty list when the manifest is missing or has no datasources', () => {
+      expect(readDatasourceBindings(snapshot({ 'index.html': '<html></html>' }))).toEqual([]);
+      expect(
+        readDatasourceBindings(snapshot({ 'index.html': '<html></html>', 'dataapp.json': '{}' })),
+      ).toEqual([]);
+    });
+  });
+
   describe('listPackagedWorkspaceFiles', () => {
     it('includes the entrypoint and all non-manifest files, excluding dataapp.json', () => {
       const packaged = listPackagedWorkspaceFiles(snapshot(SCAFFOLD));
       const paths = packaged.map((f) => f.path).sort();
-      expect(paths).toEqual(['index.html', 'src/app.js', 'src/data.js', 'src/styles.css']);
+      expect(paths).toEqual(['index.html', 'src/app.js', 'src/styles.css']);
       expect(paths).toContain(WORKSPACE_ENTRYPOINT);
       expect(paths).not.toContain(WORKSPACE_MANIFEST);
     });

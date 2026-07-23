@@ -8,6 +8,7 @@ import { appIdSchema, generateOpaqueId } from '../../../dataApps/opaqueId.js';
 import { BuildTwbxError, McpToolError } from '../../../errors/mcpToolError.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { checkUnder64Mb } from '../_lib/publishShared.js';
+import { EXTENSIONS_LIB_PATH } from '../createAndPublishWorkbook/buildTwbx.js';
 import {
   buildWorkspaceTwbx,
   listPackagedWorkspaceFiles,
@@ -22,10 +23,6 @@ const paramsSchema = {
     .string()
     .max(255)
     .describe('Display name for the workbook and the base name of the `.twb` inside the package.'),
-  toolbarLabel: z
-    .string()
-    .optional()
-    .describe('Label for the toolbar button. Defaults to the workbook name.'),
 };
 
 // The kinds of check this tool performs. They are all STRUCTURAL/SIZE/REFERENCE checks — never a
@@ -72,7 +69,7 @@ It checks:
 - **Size** — the built package is under the 64 MB single-request publish limit.
 
 **Parameters:** \`appId\` (required) — the workspace handle. \`workbookName\` (required) — the display
-name for the workbook. \`toolbarLabel\` (optional) — toolbar button label.
+name for the workbook.
 
 **Result:** \`{ ok, validationId?, digest?, warnings, checksPerformed, byteLength, expiresAt? }\`.
 On success \`ok\` is true and \`validationId\`/\`digest\`/\`expiresAt\` are set. Hard structural, reference,
@@ -126,7 +123,6 @@ A successful (ok:true) result means the package is structurally VALID and under 
             const built = buildWorkspaceTwbx(snapshot, {
               packageId,
               workbookName: args.workbookName,
-              toolbarLabel: args.toolbarLabel,
             });
             bytes = built.bytes;
             advisoryWarnings = [...built.warnings];
@@ -142,8 +138,13 @@ A successful (ok:true) result means the package is structurally VALID and under 
             throw error;
           }
 
-          // ASSET REFERENCES (hard) — run against the EXACT files that were packaged.
-          const referenceWarnings = assetReferenceCheck(listPackagedWorkspaceFiles(snapshot));
+          // ASSET REFERENCES (hard) — run against the EXACT files that were packaged. The Extensions
+          // API library is injected by buildTwbx (not a workspace file), so add its known path as a
+          // satisfied reference; index.html legitimately references it.
+          const referenceWarnings = assetReferenceCheck([
+            ...listPackagedWorkspaceFiles(snapshot),
+            { path: EXTENSIONS_LIB_PATH, content: '' },
+          ]);
 
           // SIZE (hard).
           const sizeError = checkUnder64Mb(bytes.byteLength);

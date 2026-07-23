@@ -343,7 +343,9 @@ describe('get-stale-content-report tool', () => {
             'Item Parent Project Name': 'default',
             'Owner Email': 'a@example.com',
             'Created At': '2025-12-01T00:00:00Z',
-            'Last Accessed At': '2026-04-15T00:00:00Z',
+            // Relative to "now" so this "recent" fixture never crosses the 90-day threshold as the
+            // wall clock advances (previously hardcoded, which rotted into a false failure).
+            'Last Accessed At': new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
             'Size (bytes)': 100,
           },
           {

@@ -64,7 +64,7 @@ export class FakeWorkspaceStore implements DataAppWorkspaceStore {
       appId,
       appName: input.appName,
       packageId: input.packageId,
-      template: input.template ?? 'static-html',
+      template: input.template ?? 'live-extension',
       files,
       createdAt: now,
       updatedAt: now,

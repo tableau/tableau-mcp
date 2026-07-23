@@ -1,20 +1,21 @@
 /**
- * CI-safe, in-memory integration test for the full static data-app workflow:
+ * CI-safe, in-memory integration test for the full LIVE data-app workflow:
  *
- *   scaffold -> batch upsert -> read preview resource -> validate (receipt) -> mutate source ->
- *   publish (mocked REST)
+ *   scaffold (REST/VDS wiring) -> batch upsert (authored live app) -> read preview resource ->
+ *   validate (receipt) -> mutate source -> publish (mocked REST)
  *
  * It drives the REAL tool callbacks and the REAL preview resource against a REAL
- * `FileSystemWorkspaceStore` rooted in a throwaway temp directory, mocking only the Tableau REST
- * boundary (`useRestApi`) at publish time. No live service is contacted and nothing is written
- * outside the temp root.
+ * `FileSystemWorkspaceStore` rooted in a throwaway temp directory, mocking only the Tableau REST/VDS
+ * boundary (`useRestApi`). No live service is contacted and nothing is written outside the temp root.
  *
- * PLACEMENT DEVIATION: the Task 7 brief listed this at `tests/e2e/dataApps/staticDataAppFlow.test.ts`.
- * The `tests/e2e` suite (`vitest.config.e2e.ts`) spawns the built server binary and connects to a
- * live Tableau site, so it is neither CI-safe nor part of `scripts/agent-check` (which runs only the
- * `src/` unit config). Per the task's explicit instruction to "use unit/in-memory integration if the
- * tests/e2e config requires services, documenting placement deviation", the flow lives here as a
- * colocated unit-suite integration test so it is exercised by `scripts/agent-check`.
+ * The app is a bundled dashboard extension that queries its published datasource LIVE via
+ * `readMetadataAsync`/`queryAsync` — there is NO embedded data snapshot. Visual review of the live
+ * result happens in Tableau after publish (a live query cannot run outside the Tableau host), so this
+ * test asserts the mechanical package/receipt/publish contract, not runtime rendering.
+ *
+ * PLACEMENT DEVIATION: the true end-to-end publish (against the local API build, asserting the
+ * extension renders + `queryAsync` returns rows) is a deliberate, out-of-`agent-check` e2e concern.
+ * This colocated unit-suite integration test exercises the CI-safe portion of the flow.
  */
 
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -22,6 +23,7 @@ import { createHash } from 'crypto';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { Ok } from 'ts-results-es';
 
 import { FileSystemWorkspaceStore } from '../../../dataApps/fileSystemWorkspaceStore.js';
 import { resetDataAppWorkspaceStore, setDataAppWorkspaceStore } from '../../../dataApps/init.js';
@@ -36,14 +38,18 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getCreateAndPublishWorkbookTool } from '../createAndPublishWorkbook/createAndPublishWorkbook.js';
-import { buildScaffoldFiles } from '../dataApps/templates.js';
+import { buildScaffoldFiles, EXTENSIONS_LIB_REF } from '../dataApps/templates.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getValidateWorkbookPackageTool } from '../validateWorkbookPackage/validateWorkbookPackage.js';
 import { getScaffoldDataAppTool, ScaffoldDataAppResult } from './scaffoldDataApp.js';
 import { getUpsertDataAppFilesTool, UpsertDataAppFilesResult } from './upsertDataAppFiles.js';
 
+const DS_LUID = '00c07e8d-62a8-4bb0-96fd-a3227b610253';
+
 const mocks = vi.hoisted(() => ({
   mockUseRestApi: vi.fn(),
+  mockQueryDatasource: vi.fn(),
+  mockReadMetadata: vi.fn(),
   mockQueryProjects: vi.fn(),
   mockPublishWorkbook: vi.fn(),
 }));
@@ -60,8 +66,8 @@ const SCOPE: WorkspaceScope = resolveWorkspaceScope({
   server: 'https://my-tableau-server.com',
 }).unwrap();
 
-// Authored (real) app content the agent writes ONCE via upsert-data-app-files. Deliberately distinct
-// from the scaffold placeholder so we can prove the two are never conflated.
+// Authored (real) LIVE app content the agent writes via upsert-data-app-files. It loads the injected
+// Extensions API library, then a live app.js that queries via queryAsync — NO data.js snapshot.
 const AUTHORED_INDEX_HTML = `<!doctype html>
 <html lang="en">
   <head>
@@ -72,21 +78,28 @@ const AUTHORED_INDEX_HTML = `<!doctype html>
   <body>
     <h1>Quarterly Sales</h1>
     <div id="app"></div>
-    <script src="src/data.js"></script>
+    <script src="${EXTENSIONS_LIB_REF}"></script>
     <script src="src/app.js"></script>
   </body>
 </html>
 `;
-const AUTHORED_DATA_JS = `var DATA_APP_ROWS = [
-  { quarter: 'Q1', sales: 120 },
-  { quarter: 'Q2', sales: 155 },
-  { quarter: 'Q3', sales: 143 }
-];
-`;
 const AUTHORED_APP_JS = `(function () {
+  'use strict';
   var root = document.getElementById('app');
-  if (!root) return;
-  root.textContent = JSON.stringify(DATA_APP_ROWS);
+  function extractData(result) {
+    var p = result && result.payload;
+    if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { return []; } }
+    return (p && p.data) || (result && result.data) || [];
+  }
+  tableau.extensions.initializeAsync().then(function () {
+    var dc = tableau.extensions.dashboardContent;
+    return dc.dashboard.getAllDataSourcesAsync();
+  }).then(function (list) {
+    var ds = list[0];
+    return ds.queryAsync({ fields: [{ fieldCaption: 'Category' }, { fieldCaption: 'Sales', function: 'SUM' }] });
+  }).then(function (result) {
+    root.textContent = JSON.stringify(extractData(result));
+  });
 })();
 `;
 const AUTHORED_STYLES_CSS = 'body { font-family: system-ui, sans-serif; }\n';
@@ -94,15 +107,15 @@ const AUTHORED_STYLES_CSS = 'body { font-family: system-ui, sans-serif; }\n';
 function authoredFiles(): Array<{ path: string; content: string }> {
   return [
     { path: 'index.html', content: AUTHORED_INDEX_HTML },
-    { path: 'src/data.js', content: AUTHORED_DATA_JS },
     { path: 'src/app.js', content: AUTHORED_APP_JS },
     { path: 'src/styles.css', content: AUTHORED_STYLES_CSS },
   ];
 }
 
 let root: string;
+let storeRef: FileSystemWorkspaceStore;
 
-describe('static data-app workflow (in-memory integration)', () => {
+describe('live data-app workflow (in-memory integration)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     root = mkdtempSync(join(tmpdir(), 'data-app-flow-'));
@@ -111,18 +124,41 @@ describe('static data-app workflow (in-memory integration)', () => {
       workspaceTtlMs: 60_000,
       validationTtlMs: 60_000,
       maxFileCount: 50,
-      maxFileBytes: 1_000_000,
-      maxWorkspaceBytes: 10_000_000,
+      maxFileBytes: 5_000_000,
+      maxWorkspaceBytes: 20_000_000,
     });
     setDataAppWorkspaceStore(storeRef);
 
-    // Wire the mocked Tableau REST boundary used only by publish. Validation never touches this.
+    // Wire the mocked Tableau REST/VDS boundary: scaffold uses datasources/vizql; publish uses
+    // projects/publishing. isDatasourceAllowed short-circuits (no bounded context) without REST.
     mocks.mockUseRestApi.mockImplementation(async ({ callback }: { callback: any }) =>
       callback({
+        datasourcesMethods: { queryDatasource: mocks.mockQueryDatasource },
+        vizqlDataServiceMethods: { readMetadata: mocks.mockReadMetadata },
         projectsMethods: { queryProjects: mocks.mockQueryProjects },
         publishingMethods: { publishWorkbook: mocks.mockPublishWorkbook },
         siteId: 'test-site-id',
         userId: 'test-user-id',
+      }),
+    );
+    mocks.mockQueryDatasource.mockResolvedValue({
+      id: DS_LUID,
+      name: 'Quarterly Sales DS',
+      contentUrl: 'QuarterlySalesDS',
+      project: { id: 'p1', name: 'default' },
+      tags: {},
+    });
+    mocks.mockReadMetadata.mockResolvedValue(
+      new Ok({
+        data: [
+          {
+            fieldName: 'category',
+            fieldCaption: 'Category',
+            dataType: 'STRING',
+            fieldRole: 'DIMENSION',
+          },
+          { fieldName: 'sales', fieldCaption: 'Sales', dataType: 'REAL', fieldRole: 'MEASURE' },
+        ],
       }),
     );
     mocks.mockQueryProjects.mockResolvedValue({
@@ -142,45 +178,38 @@ describe('static data-app workflow (in-memory integration)', () => {
   });
 
   it('publishes the exact validated bytes even after the source is mutated post-validation', async () => {
-    // 1. scaffold
-    const scaffold = await scaffoldApp();
-    const { appId } = scaffold;
+    const { appId } = await scaffoldApp();
     expect(appId).toMatch(/^[0-9a-f]{32}$/);
 
-    // 2. batch upsert HTML/JS/CSS/data in a single call (source is transmitted exactly once, here).
     const upsert = await upsertFiles(appId, authoredFiles());
     expect(upsert.files.map((f) => f.path).sort()).toEqual(
-      ['index.html', 'src/app.js', 'src/data.js', 'src/styles.css'].sort(),
+      ['index.html', 'src/app.js', 'src/styles.css'].sort(),
     );
 
-    // 3. read the preview resource — it reflects the AUTHORED content, not the scaffold placeholder.
     const previewText = await readPreview(appId);
     expect(previewText).toContain('Quarterly Sales');
 
-    // 4. validate -> receipt. No REST call happens during validation.
+    // validate -> receipt. No REST call happens during validation.
+    const restCallsBeforeValidate = mocks.mockUseRestApi.mock.calls.length;
     const validation = await validate(appId, 'Quarterly Sales');
     expect(validation.ok).toBe(true);
     invariant(validation.validationId, 'expected a validationId on a successful validation');
     invariant(validation.digest, 'expected a digest on a successful validation');
-    expect(mocks.mockUseRestApi).not.toHaveBeenCalled();
+    expect(mocks.mockUseRestApi.mock.calls.length).toBe(restCallsBeforeValidate);
     const receiptDigest = validation.digest;
 
-    // 5. mutate the source AFTER validation. The receipt must be unaffected.
+    // mutate the source AFTER validation. The receipt must be unaffected.
     await upsertFiles(appId, [
       { path: 'index.html', content: AUTHORED_INDEX_HTML.replace('Quarterly Sales', 'MUTATED') },
-      { path: 'src/data.js', content: 'var DATA_APP_ROWS = [{ quarter: "MUTATED", sales: 0 }];\n' },
     ]);
 
-    // 6. publish, consuming ONLY the receipt.
     const publish = await publishReceipt(validation.validationId);
     expect(publish.isError).toBe(false);
 
-    // 7. the uploaded bytes are byte-for-byte the validated package: their digest equals the receipt
-    // digest, and equals the digest of the immutable bytes the store kept — NOT the mutated source.
     const uploaded = uploadedBytes();
     expect(sha256(uploaded)).toBe(receiptDigest);
 
-    const stored = await currentStore().getValidation(SCOPE, validation.validationId);
+    const stored = await storeRef.getValidation(SCOPE, validation.validationId);
     expect(sha256(uploaded)).toBe(sha256(stored.bytes));
 
     const publishPayload = JSON.parse(textOf(publish)) as { digest: string; validationId: string };
@@ -191,7 +220,6 @@ describe('static data-app workflow (in-memory integration)', () => {
   it('does not confuse the scaffold placeholder with later authored content', async () => {
     const { appId } = await scaffoldApp();
 
-    // Preview of the untouched scaffold shows the placeholder, not the authored app.
     const placeholder = await readPreview(appId);
     expect(placeholder).toContain('My App'); // the scaffold title
     expect(placeholder).not.toContain('Quarterly Sales');
@@ -203,7 +231,6 @@ describe('static data-app workflow (in-memory integration)', () => {
     expect(authored).toContain('Quarterly Sales');
     const authoredDigest = await previewDigest(appId);
 
-    // The two snapshots are distinct — a later authored app never inherits the placeholder digest.
     expect(authoredDigest).not.toBe(placeholderDigest);
   });
 
@@ -220,7 +247,6 @@ describe('static data-app workflow (in-memory integration)', () => {
     expect(publishTool.paramsSchema).not.toHaveProperty('assets');
     expect(publishTool.paramsSchema).not.toHaveProperty('workbookName');
 
-    // Only upsert-data-app-files accepts file content.
     const upsertTool = getUpsertDataAppFilesTool(new WebMcpServer());
     expect(upsertTool.paramsSchema).toHaveProperty('files');
   });
@@ -242,7 +268,15 @@ describe('static data-app workflow (in-memory integration)', () => {
     expect(validation.ok).toBe(false);
     expect(validation.validationId).toBeUndefined();
     expect(validation.warnings.join(' ')).toContain('missing-chart.png');
-    // A validation OUTCOME (ok:false), not a thrown terminal error.
+  });
+
+  it('does NOT flag the injected Extensions API library as a missing asset', async () => {
+    const { appId } = await scaffoldApp();
+    // The scaffold index.html references EXTENSIONS_LIB_REF, which is injected by the builder and is
+    // NOT present in the workspace source. Validation must still succeed.
+    const validation = await validate(appId, 'My App');
+    expect(validation.ok).toBe(true);
+    expect(validation.warnings.some((w) => w.includes(EXTENSIONS_LIB_REF))).toBe(false);
   });
 
   it('requires re-validation to publish changed content (receipts are snapshot-bound)', async () => {
@@ -251,22 +285,19 @@ describe('static data-app workflow (in-memory integration)', () => {
 
     const first = await validate(appId, 'Quarterly Sales');
     invariant(first.validationId && first.digest);
-    const firstStored = await currentStore().getValidation(SCOPE, first.validationId);
+    const firstStored = await storeRef.getValidation(SCOPE, first.validationId);
 
-    // Author a materially different app, then validate again to get a fresh receipt.
     await upsertFiles(appId, [
-      { path: 'src/data.js', content: 'var DATA_APP_ROWS = [{ quarter: "Q4", sales: 999 }];\n' },
+      { path: 'src/app.js', content: AUTHORED_APP_JS.replace('Category', 'Region') },
     ]);
     const second = await validate(appId, 'Quarterly Sales');
     invariant(second.validationId && second.digest);
-    const secondStored = await currentStore().getValidation(SCOPE, second.validationId);
+    const secondStored = await storeRef.getValidation(SCOPE, second.validationId);
 
-    // The change is reflected only in the NEW receipt; the old receipt is frozen.
     expect(second.validationId).not.toBe(first.validationId);
     expect(secondStored.sourceDigest).not.toBe(firstStored.sourceDigest);
     expect(second.digest).not.toBe(first.digest);
 
-    // Publishing the OLD receipt still uploads the OLD bytes; the NEW receipt uploads the NEW bytes.
     await publishReceipt(first.validationId);
     expect(sha256(uploadedBytes())).toBe(first.digest);
 
@@ -275,29 +306,27 @@ describe('static data-app workflow (in-memory integration)', () => {
     expect(sha256(uploadedBytes())).toBe(second.digest);
   });
 
-  it('produces a static app that makes no runtime Tableau data request', async () => {
-    const { appId } = await scaffoldApp();
-    await upsertFiles(appId, authoredFiles());
+  it('produces a live scaffold (no data.js snapshot) that queries via the Extensions API', async () => {
+    await scaffoldApp();
 
-    // The scaffold itself carries no live-query shim, proxy, or network fetch.
-    const scaffoldText = buildScaffoldFiles({ appName: 'My App', packageId: 'com.example.app' })
-      .map((f) => f.content)
-      .join('\n')
-      .toLowerCase();
-    for (const forbidden of ['fetch(', 'xmlhttprequest', 'window.tableaudata', '/api/', 'vizql']) {
-      expect(scaffoldText).not.toContain(forbidden);
-    }
+    const scaffold = buildScaffoldFiles({
+      appName: 'My App',
+      packageId: 'com.example.app',
+      datasources: [],
+    });
+    const paths = scaffold.map((f) => f.path).sort();
+    expect(paths).toEqual(['dataapp.json', 'index.html', 'src/app.js', 'src/styles.css'].sort());
+    expect(paths).not.toContain('src/data.js');
 
-    // The authored data is a static, embedded snapshot (rows literal), not a live request.
-    const store = currentStore();
-    const dataJs = Buffer.from(await store.readFile(SCOPE, appId, 'src/data.js')).toString('utf8');
-    expect(dataJs).toContain('DATA_APP_ROWS');
-    expect(dataJs.toLowerCase()).not.toContain('fetch(');
+    const appJs = scaffold.find((f) => f.path === 'src/app.js')!.content;
+    expect(appJs).toContain('initializeAsync');
+    expect(appJs).toContain('readMetadataAsync');
+    expect(appJs).toContain('extractData');
+    // The live boot skeleton must not embed a static row snapshot.
+    expect(appJs).not.toContain('DATA_APP_ROWS');
 
-    // Validation is entirely offline — it never reaches the Tableau REST boundary.
-    const validation = await validate(appId, 'Quarterly Sales');
-    expect(validation.ok).toBe(true);
-    expect(mocks.mockUseRestApi).not.toHaveBeenCalled();
+    const indexHtml = scaffold.find((f) => f.path === 'index.html')!.content;
+    expect(indexHtml).toContain(EXTENSIONS_LIB_REF);
   });
 
   it('distinguishes a terminal publish failure from a recoverable validation outcome and a missing receipt', async () => {
@@ -317,7 +346,7 @@ describe('static data-app workflow (in-memory integration)', () => {
     const validation = await validate(appId, 'Quarterly Sales');
     invariant(validation.validationId);
 
-    // (b) A terminal package/publish failure surfaces as isError with the publish failure text.
+    // (b) A terminal publish failure surfaces as isError with the publish failure text.
     mocks.mockPublishWorkbook.mockRejectedValueOnce(
       new Error('403 Forbidden from Tableau publish'),
     );
@@ -325,32 +354,26 @@ describe('static data-app workflow (in-memory integration)', () => {
     expect(publishFailure.isError).toBe(true);
     expect(textOf(publishFailure)).toMatch(/forbidden/i);
 
-    // (c) A missing/expired receipt is a distinct not-found signal, raised BEFORE any REST call.
+    // (c) A missing/expired receipt is a distinct not-found signal, raised BEFORE any publish call.
     mocks.mockPublishWorkbook.mockClear();
     const missingReceipt = await publishReceipt('f'.repeat(32));
     expect(missingReceipt.isError).toBe(true);
     expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
-    // The three signals are observably different: ok:false (recoverable) vs a terminal publish error
-    // vs a not-found receipt error. A transient datasource-query auth error would arise on the
-    // separate query-datasource path (not part of this static flow) and is likewise not conflated
-    // with these package/publish terminal failures.
   });
 });
 
 // --- helpers ---------------------------------------------------------------------------------------
 
-function currentStore(): FileSystemWorkspaceStore {
-  // The store set in beforeEach.
-  return storeRef;
-}
-
-let storeRef: FileSystemWorkspaceStore;
-
 async function scaffoldApp(): Promise<ScaffoldDataAppResult> {
   const tool = getScaffoldDataAppTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   const result = await callback(
-    { appName: 'My App', packageId: 'com.example.app', template: undefined },
+    {
+      appName: 'My App',
+      packageId: 'com.example.app',
+      datasources: [{ luid: DS_LUID, contentUrl: 'QuarterlySalesDS', name: 'Quarterly Sales DS' }],
+      template: undefined,
+    },
     getMockRequestHandlerExtra(),
   );
   expect(result.isError).toBe(false);
@@ -390,7 +413,7 @@ async function validateRaw(
   }
   const tool = getValidateWorkbookPackageTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
-  return callback({ appId, workbookName, toolbarLabel: undefined }, getMockRequestHandlerExtra());
+  return callback({ appId, workbookName }, getMockRequestHandlerExtra());
 }
 
 async function publishReceipt(validationId: string): Promise<CallToolResult> {
@@ -423,8 +446,6 @@ async function previewDigest(appId: string): Promise<string> {
 }
 
 function resourceExtra(): any {
-  // Server-verified request signals only: no auth, no session -> resolves to the stdio actor scope,
-  // matching the tool callbacks above.
   return {
     signal: new AbortController().signal,
     requestId: 1,

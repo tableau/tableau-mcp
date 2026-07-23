@@ -121,6 +121,7 @@ describe('data-app preview resources/read integration', () => {
       files: buildScaffoldFiles({
         appName: 'Alice App',
         packageId: 'com.example.alice',
+        datasources: [],
       }),
     });
     const connection = await connectClientWithAuth(authInfoFor('alice'));
@@ -147,6 +148,7 @@ describe('data-app preview resources/read integration', () => {
       files: buildScaffoldFiles({
         appName: 'Alice Secret App',
         packageId: 'com.example.alice',
+        datasources: [],
       }),
     });
     const connection = await connectClientWithAuth(authInfoFor('bob'));
@@ -169,6 +171,7 @@ describe('data-app preview resources/read integration', () => {
       files: buildScaffoldFiles({
         appName: 'Session App',
         packageId: 'com.example.session',
+        datasources: [],
       }),
     });
     const connection = await connectClientWithSession('session-a');
@@ -196,6 +199,7 @@ describe('data-app preview resources/read integration', () => {
       files: buildScaffoldFiles({
         appName: 'Session Secret App',
         packageId: 'com.example.session',
+        datasources: [],
       }),
     });
     const connection = await connectClientWithSession('session-b');

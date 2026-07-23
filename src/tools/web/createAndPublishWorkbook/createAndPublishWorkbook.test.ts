@@ -135,8 +135,9 @@ describe('createAndPublishWorkbookTool', () => {
     const result = await getToolResult({ validationId });
     invariant(result.content[0].type === 'text');
     const payload = JSON.parse(result.content[0].text);
-    // `url` (the clickable card link) lands on the workbook's Views tab...
-    expect(payload.url).toBe('https://test.tableau.com/#/workbooks/wb-123/views');
+    // `url` (the clickable card link) lands on the workbook's Views tab, rebased onto the configured
+    // SERVER origin so it's reachable through the same address the client connects with...
+    expect(payload.url).toBe('https://my-tableau-server.com/#/workbooks/wb-123/views');
     // ...while the raw server value is preserved verbatim on `webpageUrl`.
     expect(payload.webpageUrl).toBe('https://test.tableau.com/#/workbooks/wb-123');
     expect(payload.appView).toBe('published-workbook-card');

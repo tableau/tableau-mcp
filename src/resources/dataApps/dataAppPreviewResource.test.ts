@@ -67,8 +67,8 @@ async function seedWorkspace(
   const ws = await store.create(scope, {
     appName,
     packageId: 'com.example.myapp',
-    template: 'static-html',
-    files: buildScaffoldFiles({ appName, packageId: 'com.example.myapp' }),
+    template: 'live-extension',
+    files: buildScaffoldFiles({ appName, packageId: 'com.example.myapp', datasources: [] }),
   });
   return ws.appId;
 }

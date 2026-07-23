@@ -47,23 +47,28 @@ describe('build-data-app resource', () => {
       expect(text).toMatch(/chart|visualize|dashboard/i);
     });
 
-    it('describes free-form querying that lets the model decide', async () => {
+    it('tells the model to introspect the datasource, then author the query itself', async () => {
       const text = await getText();
-      expect(text).toMatch(/query freely/i);
-      expect(text).toMatch(/you.{0,20}decide/i);
+      expect(text).toMatch(/introspect/i);
+      // The model authors the query/visualization (it is not seeded by the scaffold).
+      expect(text).toMatch(/queryAsync|query-datasource/i);
+      expect(text).toMatch(/author/i);
     });
 
-    it('describes workspace authoring written once', async () => {
+    it('describes authoring app.js in the workspace via upsert', async () => {
       const text = await getText();
       expect(text).toMatch(/workspace/i);
-      expect(text).toMatch(/write.{0,20}(files|source).{0,20}once|once, rather/i);
+      expect(text).toMatch(/app\.js/i);
+      expect(text).toMatch(/upsert-data-app-files/i);
     });
 
-    it('describes rendering and stopping for visual review', async () => {
+    it('describes rendering safely and reviewing the live app in Tableau after publish', async () => {
       const text = await getText();
       expect(text).toMatch(/render/i);
-      expect(text).toMatch(/stop/i);
+      // Safe DOM only — never raw HTML with live values.
+      expect(text).toMatch(/textContent|createElement/);
       expect(text).toMatch(/review/i);
+      expect(text).toMatch(/after publish/i);
     });
 
     it('describes validation as a precondition to publish', async () => {
@@ -82,17 +87,21 @@ describe('build-data-app resource', () => {
       expect(text).toMatch(/receipt/i);
       expect(text).toContain('`validationId`');
       expect(text).toMatch(/preserve.{0,30}`validationId`/i);
-      expect(text).toMatch(/pass.{0,30}`validationId`.{0,30}`validationId` input/i);
+      expect(text).toMatch(/pass.{0,30}`validationId`/i);
     });
 
-    it('states static data only and contains no live-VDS or Heroku guidance', async () => {
+    it('encodes the live-query model and the three learnings; no static-snapshot or Heroku guidance', async () => {
       const text = await getText();
-      expect(text).toMatch(/static/i);
+      // Live model, not a static snapshot.
+      expect(text).toMatch(/live/i);
+      expect(text).toMatch(/readMetadataAsync|queryAsync/);
+      expect(text).toMatch(/no embedded data\s+snapshot/i);
+      // Learning 1: results are wrapped as { payload: "<json>" }.
+      expect(text).toMatch(/payload/i);
+      // Learning 2: the datasource must be on the dashboard (zombie worksheet).
+      expect(text).toMatch(/zombie/i);
+      // No non-extension proxy path, no Heroku hosting guidance.
       expect(text).not.toMatch(/heroku/i);
-      // The skill may say the app does NOT use a live connection (a boundary statement), but must
-      // never instruct the model to set one up.
-      expect(text).not.toMatch(/connect to.{0,20}(vds|vizql|live)/i);
-      expect(text).not.toMatch(/set up.{0,20}(vds|vizql|live)/i);
       expect(text).not.toMatch(/proxy/i);
     });
   });

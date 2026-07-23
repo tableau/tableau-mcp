@@ -137,7 +137,7 @@ export class FileSystemWorkspaceStore implements DataAppWorkspaceStore {
       scopeHash,
       appName: input.appName,
       packageId: input.packageId,
-      template: input.template ?? 'static-html',
+      template: input.template ?? 'live-extension',
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
       expiresAt: expiresAt.toISOString(),
