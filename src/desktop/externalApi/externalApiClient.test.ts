@@ -212,8 +212,13 @@ describe('ExternalApiClient', () => {
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap().datasources).toEqual([
-      { id: 'wb-ds-superstore', name: 'Sample - Superstore', caption: 'Sample - Superstore' },
-      { id: 'wb-ds-quota', name: 'Quota Targets', caption: 'Quota Targets' },
+      {
+        id: 'wb-ds-superstore',
+        luid: 'luid-superstore',
+        name: 'Sample - Superstore',
+        caption: 'Sample - Superstore',
+      },
+      { id: 'wb-ds-quota', luid: null, name: 'Quota Targets', caption: 'Quota Targets' },
     ]);
 
     const last = server.requests.at(-1);

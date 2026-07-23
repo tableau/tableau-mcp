@@ -20,7 +20,7 @@ export const getListWorkbookDatasourcesTool = (
     name: 'list-workbook-datasources',
     title,
     description:
-      "List the workbook's OWN connected datasources (id/name/caption); pair with list-site-datasources for published LUIDs.",
+      "List the workbook's OWN connected datasources (id/name/caption; luid for published, non-federated ones).",
     paramsSchema,
     annotations: {
       title,
@@ -60,11 +60,14 @@ export const getListWorkbookDatasourcesTool = (
 
 function projectDatasource(datasource: DatasourceItem): {
   id?: string;
+  luid?: string;
   name?: string;
   caption?: string;
 } {
   return {
     ...(datasource.id !== undefined ? { id: datasource.id } : {}),
+    // The API emits luid: null for embedded/federated datasources; only surface a real LUID.
+    ...(typeof datasource.luid === 'string' ? { luid: datasource.luid } : {}),
     ...(datasource.name !== undefined ? { name: datasource.name } : {}),
     ...(datasource.caption !== undefined ? { caption: datasource.caption } : {}),
   };
