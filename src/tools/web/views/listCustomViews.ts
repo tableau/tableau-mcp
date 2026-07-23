@@ -141,7 +141,7 @@ export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof par
             },
           });
         },
-        constrainSuccessResult: (customViews) =>
+        constrainSuccessResult: async (customViews) =>
           constrainCustomViews({
             customViews,
             boundedContext: configWithOverrides.boundedContext,

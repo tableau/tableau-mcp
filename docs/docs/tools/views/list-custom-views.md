@@ -50,7 +50,7 @@ return fewer than all matching custom views.
 
 Example: `600`
 
-- See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
+See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
 
 ## Example result
 
