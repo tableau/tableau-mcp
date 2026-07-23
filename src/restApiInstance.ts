@@ -1,7 +1,7 @@
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { getConfig } from './config.js';
-import { log } from './logging/logger.js';
+import { Logger, logger as defaultLogger } from './logging/logger.js';
 import { notifier, shouldNotifyWhenLevelIsAtLeast } from './logging/notification.js';
 import { maskRequest, maskResponse } from './logging/secretMask.js';
 import {
@@ -50,7 +50,7 @@ type JwtScopes =
 
 export type RestApiArgs = Pick<
   TableauWebRequestHandlerExtra,
-  'config' | 'server' | 'signal' | 'tableauAuthInfo' | 'setSiteLuid' | 'setUserLuid'
+  'config' | 'server' | 'signal' | 'tableauAuthInfo' | 'setSiteLuid' | 'setUserLuid' | 'logger'
 > &
   (
     | {
@@ -66,7 +66,7 @@ const getNewRestApiInstanceAsync = async (
   args: RestApiArgs & {
     jwtScopes: Set<JwtScopes>;
   },
-): Promise<{ restApi: RestApi; signOutWhenCompleted: boolean }> => {
+): Promise<{ restApi: RestApi; signOutWhenCompleted: boolean; boundLogger: Logger }> => {
   const {
     config,
     server,
@@ -77,6 +77,8 @@ const getNewRestApiInstanceAsync = async (
     setSiteLuid,
     setUserLuid,
   } = args;
+
+  const boundLogger = args.logger ?? defaultLogger;
 
   if (!disableLogging) {
     const { requestId } = args;
@@ -107,13 +109,13 @@ const getNewRestApiInstanceAsync = async (
       ? undefined
       : [
           getRequestInterceptor(server, args.requestId),
-          getRequestErrorInterceptor(server, args.requestId),
+          getRequestErrorInterceptor(server, args.requestId, boundLogger),
         ],
     responseInterceptor: disableLogging
       ? undefined
       : [
           getResponseInterceptor(server, args.requestId),
-          getResponseErrorInterceptor(server, args.requestId),
+          getResponseErrorInterceptor(server, args.requestId, boundLogger),
         ],
   });
 
@@ -150,7 +152,7 @@ const getNewRestApiInstanceAsync = async (
     }
   }
 
-  return { restApi, signOutWhenCompleted };
+  return { restApi, signOutWhenCompleted, boundLogger };
 };
 
 export const useRestApi = async <T>(
@@ -160,7 +162,7 @@ export const useRestApi = async <T>(
   },
 ): Promise<T> => {
   const { callback, ...remaining } = args;
-  const { restApi, signOutWhenCompleted } = await getNewRestApiInstanceAsync({
+  const { restApi, signOutWhenCompleted, boundLogger } = await getNewRestApiInstanceAsync({
     ...remaining,
     jwtScopes: new Set(args.jwtScopes),
   });
@@ -180,9 +182,13 @@ export const useRestApi = async <T>(
       // session expires on its own regardless.
       try {
         await restApi.signOut();
-        log({ message: 'Signed out of Tableau REST API', level: 'debug', logger: 'auth' });
+        boundLogger.log({
+          message: 'Signed out of Tableau REST API',
+          level: 'debug',
+          logger: 'auth',
+        });
       } catch (error) {
-        log({
+        boundLogger.log({
           message: `Failed to sign out of Tableau REST API: ${getExceptionMessage(error)}`,
           level: 'warning',
           logger: 'auth',
@@ -202,10 +208,10 @@ export const getRequestInterceptor =
   };
 
 export const getRequestErrorInterceptor =
-  (server: Server, requestId: RequestId): ErrorInterceptor =>
+  (server: Server, requestId: RequestId, boundLogger: Logger = defaultLogger): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.request) {
-      log({
+      boundLogger.log({
         message: `Request ${requestId} failed`,
         level: 'error',
         logger: 'rest-api',
@@ -241,10 +247,10 @@ export const getResponseInterceptor =
   };
 
 export const getResponseErrorInterceptor =
-  (server: Server, requestId: RequestId): ErrorInterceptor =>
+  (server: Server, requestId: RequestId, boundLogger: Logger = defaultLogger): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.response) {
-      log({
+      boundLogger.log({
         message: `Response from request ${requestId} failed`,
         level: 'error',
         logger: 'rest-api',

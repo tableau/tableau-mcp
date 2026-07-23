@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getConfig } from './config.js';
+import { Logger } from './logging/logger.js';
 import { notifier } from './logging/notification.js';
 import {
   getRequestErrorInterceptor,
@@ -444,6 +445,119 @@ describe('restApiInstance', () => {
           requestId: mockRequestId,
         }),
       );
+    });
+  });
+
+  describe('Bound Logger Integration', () => {
+    it('should use bound logger for sign-out logs with populated LUIDs', async () => {
+      vi.stubEnv('AUTH', 'pat');
+
+      const mockLogFn = vi.fn();
+      const boundLogger = new Logger({
+        getSiteLuid: () => 'test-site-luid',
+        getUserLuid: () => 'test-user-luid',
+      });
+      boundLogger.log = mockLogFn;
+
+      await useRestApi({
+        config: getConfig(),
+        requestId: mockRequestId,
+        server: new WebMcpServer(),
+        tableauAuthInfo: undefined,
+        jwtScopes: [],
+        signal: new AbortController().signal,
+        logger: boundLogger,
+        callback: (restApi) => Promise.resolve(restApi),
+      });
+
+      // Verify sign-out success log was called with the bound logger
+      expect(mockLogFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Signed out of Tableau REST API',
+          level: 'debug',
+          logger: 'auth',
+        }),
+      );
+    });
+
+    it('should use bound logger for sign-out failure logs with populated LUIDs', async () => {
+      vi.stubEnv('AUTH', 'pat');
+
+      const mockLogFn = vi.fn();
+      const boundLogger = new Logger({
+        getSiteLuid: () => 'test-site-luid',
+        getUserLuid: () => 'test-user-luid',
+      });
+      boundLogger.log = mockLogFn;
+
+      await useRestApi({
+        config: getConfig(),
+        requestId: mockRequestId,
+        server: new WebMcpServer(),
+        tableauAuthInfo: undefined,
+        jwtScopes: [],
+        signal: new AbortController().signal,
+        logger: boundLogger,
+        callback: (restApi) => {
+          vi.mocked(restApi.signOut).mockRejectedValueOnce(new Error('Sign-out failed'));
+          return Promise.resolve('ok');
+        },
+      });
+
+      // Verify sign-out failure log was called with the bound logger
+      expect(mockLogFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('Failed to sign out of Tableau REST API'),
+          level: 'warning',
+          logger: 'auth',
+        }),
+      );
+    });
+
+    it('should use bound logger for request error interceptor with populated LUIDs', () => {
+      const server = new WebMcpServer();
+      const mockLogFn = vi.fn();
+      const boundLogger = new Logger({
+        getSiteLuid: () => 'test-site-luid',
+        getUserLuid: () => 'test-user-luid',
+      });
+      boundLogger.log = mockLogFn;
+
+      const errorInterceptor = getRequestErrorInterceptor(server, mockRequestId, boundLogger);
+      const mockError = new Error('Non-Axios request error');
+
+      errorInterceptor(mockError, mockHost);
+
+      // Verify the bound logger was used
+      expect(mockLogFn).toHaveBeenCalledWith({
+        message: `Request ${mockRequestId} failed`,
+        level: 'error',
+        logger: 'rest-api',
+        data: mockError,
+      });
+    });
+
+    it('should use bound logger for response error interceptor with populated LUIDs', () => {
+      const server = new WebMcpServer();
+      const mockLogFn = vi.fn();
+      const boundLogger = new Logger({
+        getSiteLuid: () => 'test-site-luid',
+        getUserLuid: () => 'test-user-luid',
+      });
+      boundLogger.log = mockLogFn;
+
+      const errorInterceptor = getResponseErrorInterceptor(server, mockRequestId, boundLogger);
+      const mockError = new Error('Non-Axios response error');
+
+      errorInterceptor(mockError, mockHost);
+
+      // Verify the bound logger was used
+      expect(mockLogFn).toHaveBeenCalledWith({
+        message: `Response from request ${mockRequestId} failed`,
+        level: 'error',
+        logger: 'rest-api',
+        data: mockError,
+      });
     });
   });
 });
