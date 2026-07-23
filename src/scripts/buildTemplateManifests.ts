@@ -83,6 +83,7 @@ console.log(`✅ Wrote ${relative(process.cwd(), INDEX_PATH)} (${templates.lengt
 // Hash every bundled authoring resource. Deterministic: files are enumerated in
 // sorted relative-path order, and `generated` is date-only so a same-day re-run
 // produces no spurious diff. content-manifest.json itself is excluded.
+// Flag-only windows-section edits can change XML hashes while leaving render-affecting bytes unchanged; retained render_verified evidence is deliberate.
 const resourcePaths = [
   ...manifestFiles.map((f) => join(MANIFESTS_DIR, f)),
   INDEX_PATH,

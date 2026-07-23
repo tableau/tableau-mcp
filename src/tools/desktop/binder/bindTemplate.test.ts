@@ -1248,7 +1248,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(4);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     expect(executeCommand).toHaveBeenCalledTimes(2);
     expect(executeCommand).toHaveBeenCalledWith(
@@ -2207,7 +2207,7 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
-  it('applies onto the named existing sheet: inject titled with the target, sheet_name reports it', async () => {
+  it('applies onto the named existing sheet without activation for composition-neutral replacement', async () => {
     const targetWorkbookXml = INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW.replace(
       /Sales by Region/g,
       'se-eval-scratch',
@@ -2235,12 +2235,7 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
     );
     expect(vi.mocked(classifyWorksheetReplaceTarget)).toHaveBeenCalledWith(XML, 'se-eval-scratch');
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-    expect(executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: 'goto-sheet',
-        args: { Sheet: 'se-eval-scratch' },
-      }),
-    );
+    expect(executeCommand).not.toHaveBeenCalled();
   });
 
   it('unknown target fails closed BEFORE the bind even runs', async () => {
