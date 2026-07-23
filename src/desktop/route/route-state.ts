@@ -127,6 +127,8 @@ export interface SessionRouteState {
   route_overrides: RouteOverride[];
   /** Bounded per-ask bind recovery records, keyed by the same normalized ask as current_ask. */
   bindRecoveryByAsk: Map<string, BindRecoveryRecord>;
+  /** Consecutive transient get-summary-data failures keyed by argument signature. */
+  summaryDataTransientFailures: Map<string, number>;
   /** Capacity-rejected bind admissions that intentionally proceeded unprotected. */
   unprotected_passthroughs: UnprotectedPassthroughs;
   /** Most recent bind-template ask classification for this session, if any. */
@@ -240,6 +242,13 @@ export class SessionRouteStateStore {
   /** Per-session LRU cap for bind recovery records. */
   static readonly MAX_BIND_RECOVERY_ASKS = 8;
 
+  /**
+   * Per-session LRU cap for get-summary-data transient-failure counters. Rotating more than
+   * this many failing signatures can evict a first failure before its retry, so the terminal
+   * guard is intentionally best-effort for that rare pattern in exchange for bounded memory.
+   */
+  static readonly MAX_SUMMARY_DATA_FAILURE_SIGNATURES = 8;
+
   /** Receipt cap for capacity-rejected asks. */
   static readonly MAX_UNPROTECTED_PASSTHROUGH_ASKS = 4;
 
@@ -251,6 +260,7 @@ export class SessionRouteStateStore {
         deflections: [],
         route_overrides: [],
         bindRecoveryByAsk: new Map(),
+        summaryDataTransientFailures: new Map(),
         unprotected_passthroughs: { count: 0, last_asks: [] },
       };
       this.bySession.set(sessionId, state);
@@ -311,6 +321,29 @@ export class SessionRouteStateStore {
   get(sessionId: string | undefined): SessionRouteState | undefined {
     if (!sessionId) return undefined;
     return this.bySession.get(sessionId);
+  }
+
+  recordSummaryDataTransientFailure(sessionId: string | undefined, signature: string): number {
+    if (!sessionId) return 1;
+    const state = this.ensure(sessionId);
+    const count = (state.summaryDataTransientFailures.get(signature) ?? 0) + 1;
+    state.summaryDataTransientFailures.delete(signature);
+    state.summaryDataTransientFailures.set(signature, count);
+    while (
+      state.summaryDataTransientFailures.size >
+      SessionRouteStateStore.MAX_SUMMARY_DATA_FAILURE_SIGNATURES
+    ) {
+      const oldest = state.summaryDataTransientFailures.keys().next().value;
+      if (oldest === undefined) break;
+      state.summaryDataTransientFailures.delete(oldest);
+    }
+    return count;
+  }
+
+  clearSummaryDataTransientFailure(sessionId: string | undefined, signature: string): boolean {
+    const state = this.get(sessionId);
+    if (!state) return false;
+    return state.summaryDataTransientFailures.delete(signature);
   }
 
   /**

@@ -82,6 +82,17 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(plainChart?.action).toContain('proposals may carry sort and top_n.');
   });
 
+  it('stops on terminal summary outcomes but permits one transient retry', () => {
+    const dataValueQuestion = routes.find((route) => route.id === 'data-value-question');
+
+    expect(dataValueQuestion).toMatchObject({
+      action:
+        'on a populated worksheet, call get-summary-data; answer only from returned rows. A terminal/no-data result means stop; one retry on transient failure is allowed, then report the outcome.',
+      stopConditions: ['A terminal/no-data result means stop'],
+      requiredEvidence: ['get-summary-data returned rows or a discriminated status'],
+    });
+  });
+
   it('names the debug skill by its exact slug so recovery does not rely on description-matching', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
     expect(rendered).toContain('tableau-agent-debug');

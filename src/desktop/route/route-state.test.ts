@@ -127,6 +127,46 @@ describe('SessionRouteStateStore', () => {
     expect(store.hasDeflection('S1', `ask-${cap + 2}`)).toBe(true);
   });
 
+  describe('summary-data transient failure state', () => {
+    it('counts transient failures by session and signature without storing payloads', () => {
+      const store = new SessionRouteStateStore();
+
+      expect(store.recordSummaryDataTransientFailure('S1', 'signature-a')).toBe(1);
+      expect(store.recordSummaryDataTransientFailure('S1', 'signature-a')).toBe(2);
+      expect(store.recordSummaryDataTransientFailure('S1', 'signature-b')).toBe(1);
+      expect(store.recordSummaryDataTransientFailure('S2', 'signature-a')).toBe(1);
+      expect(store.recordSummaryDataTransientFailure(undefined, 'signature-a')).toBe(1);
+
+      expect(store.get('S1')?.summaryDataTransientFailures.get('signature-a')).toBe(2);
+      expect(store.get('S1')?.summaryDataTransientFailures.get('signature-b')).toBe(1);
+      expect(store.get('S2')?.summaryDataTransientFailures.get('signature-a')).toBe(1);
+    });
+
+    it('clears a signature after a success or genuine no-data outcome', () => {
+      const store = new SessionRouteStateStore();
+
+      store.recordSummaryDataTransientFailure('S1', 'signature-a');
+      store.recordSummaryDataTransientFailure('S1', 'signature-a');
+      expect(store.clearSummaryDataTransientFailure('S1', 'signature-a')).toBe(true);
+      expect(store.get('S1')?.summaryDataTransientFailures.has('signature-a')).toBe(false);
+      expect(store.clearSummaryDataTransientFailure('S1', 'signature-a')).toBe(false);
+      expect(store.clearSummaryDataTransientFailure(undefined, 'signature-a')).toBe(false);
+    });
+
+    it('keeps transient signatures LRU-bounded', () => {
+      const store = new SessionRouteStateStore();
+      const cap = SessionRouteStateStore.MAX_SUMMARY_DATA_FAILURE_SIGNATURES;
+
+      for (let i = 0; i < cap + 1; i++) {
+        store.recordSummaryDataTransientFailure('S1', `signature-${i}`);
+      }
+
+      expect(store.get('S1')?.summaryDataTransientFailures.size).toBe(cap);
+      expect(store.get('S1')?.summaryDataTransientFailures.has('signature-0')).toBe(false);
+      expect(store.get('S1')?.summaryDataTransientFailures.has(`signature-${cap}`)).toBe(true);
+    });
+  });
+
   describe('current ask classification state', () => {
     it('recordAskClassification lazy-inits state and sets current_ask with a pending outcome', () => {
       const store = new SessionRouteStateStore();
