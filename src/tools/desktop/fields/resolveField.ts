@@ -25,8 +25,14 @@ const paramsSchema = {
 
 interface ResolveFieldResult {
   resolution: FieldResolution;
+  status: 'resolved' | 'ambiguous' | 'not_found' | 'stale_not_found';
+  /**
+   * @deprecated Kept for existing consumers that still falsy-check the JSON body.
+   * Remove after callers migrate to `status`; keep true for ambiguous/not_found/error statuses.
+   */
   isError: boolean;
-  /** Optional guidance appended after the resolution JSON (self-heal outcome). */
+  stale?: true;
+  /** Optional guidance included in the JSON body (self-heal outcome). */
   note?: string;
 }
 
@@ -125,30 +131,37 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
           }
 
-          const isError = resolution.kind === 'ambiguous' || resolution.kind === 'not_found';
-
           let note: string | undefined;
+          let stale: true | undefined;
           if (refreshed && resolution.kind === 'not_found') {
             note =
               `Refreshed the workbook live from Tableau and "${query}" still does not resolve. ` +
               'The field genuinely does not exist in the CURRENT workbook — stop re-reading stale caches. ' +
               'Call list-available-fields (with session) to see the fields that DO exist, or ask-user to clarify.';
           } else if (refreshFailure && resolution.kind === 'not_found') {
+            stale = true;
             note =
               `Attempted a live refresh from Tableau to rule out a stale cache, but it failed: ${refreshFailure}\n\n` +
-              `This is NOT proof that "${query}" is absent — the live workbook could not be read. ` +
+              `This stale cache result is NOT proof that "${query}" is absent — the live workbook could not be read. ` +
               'Check the session with list-instances (Tableau may have disconnected or restarted), then retry; ' +
               'do not conclude the field is missing from a cache that could not be refreshed.';
           }
 
-          return new Ok<ResolveFieldResult>({ resolution, isError, note });
+          const status = getResolutionStatus(resolution, stale);
+          return new Ok<ResolveFieldResult>({
+            resolution,
+            status,
+            isError: isResolutionStatusError(status),
+            ...(stale ? { stale } : {}),
+            ...(note ? { note } : {}),
+          });
         },
-        getSuccessResult: ({ resolution, isError, note }): CallToolResult => ({
+        getSuccessResult: (result): CallToolResult => ({
           isError: false,
           content: [
             {
               type: 'text' as const,
-              text: `${JSON.stringify({ resolution, isError })}${note ? `\n\n${note}` : ''}`,
+              text: JSON.stringify(result),
             },
           ],
         }),
@@ -158,3 +171,20 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
 
   return resolveFieldTool;
 };
+
+function getResolutionStatus(
+  resolution: FieldResolution,
+  stale: true | undefined,
+): ResolveFieldResult['status'] {
+  if (resolution.kind === 'exact') {
+    return 'resolved';
+  }
+  if (resolution.kind === 'ambiguous') {
+    return 'ambiguous';
+  }
+  return stale ? 'stale_not_found' : 'not_found';
+}
+
+function isResolutionStatusError(status: ResolveFieldResult['status']): boolean {
+  return status !== 'resolved';
+}

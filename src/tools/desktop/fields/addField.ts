@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { DesktopCache } from '../../../desktop/cache.js';
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
+import { parseShelfValue } from '../../../desktop/metadata/fields.js';
 import {
   getWorksheetFragment,
   isRouteMissing,
@@ -14,6 +15,7 @@ import {
   addFieldToEncoding,
   addFieldToRows,
 } from '../../../desktop/metadata/index.js';
+import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
 import {
@@ -208,6 +210,23 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             }
           }
 
+          if (index !== undefined) {
+            let existingLength: number;
+            try {
+              existingLength = getCurrentPlacementLength(worksheetXml, target, encodingType);
+            } catch (error) {
+              return new XmlModificationError(
+                error instanceof Error ? error.message : String(error),
+              ).toErr();
+            }
+
+            if (!Number.isInteger(index) || index < 0 || index > existingLength) {
+              return new ArgsValidationError(
+                `index must be an integer in the range 0..${existingLength} for ${target}.`,
+              ).toErr();
+            }
+          }
+
           let modifiedXml: string;
           let placement: string;
           try {
@@ -265,3 +284,39 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
 
   return addFieldTool;
 };
+
+function getCurrentPlacementLength(
+  worksheetXml: string,
+  target: (typeof FIELD_TARGETS)[number],
+  encodingType?: (typeof ENCODING_TYPES)[number],
+): number {
+  const parsed = parseXML(worksheetXml);
+  const worksheet = getWorksheet(parsed);
+  if (!worksheet) {
+    throw new Error('No worksheet found in XML');
+  }
+
+  if (target === 'rows' || target === 'cols') {
+    return parseShelfValue(worksheet.table?.[target]).length;
+  }
+
+  const canonicalEncodingType = encodingType === 'detail' ? 'lod' : encodingType;
+  if (canonicalEncodingType === undefined) {
+    throw new Error('encodingType is required when target=encoding');
+  }
+  const firstPane = normalizeArray(worksheet.table?.panes?.pane)[0];
+  return normalizeArray(firstPane?.encodings?.[canonicalEncodingType]).length;
+}
+
+function getWorksheet(parsed: any): any | undefined {
+  if (parsed.workbook?.worksheets) {
+    return normalizeArray(parsed.workbook.worksheets.worksheet)[0];
+  }
+  if (parsed.workbook?.worksheet) {
+    return normalizeArray(parsed.workbook.worksheet)[0];
+  }
+  if (parsed.worksheet) {
+    return normalizeArray(parsed.worksheet)[0];
+  }
+  return undefined;
+}

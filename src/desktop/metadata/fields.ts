@@ -388,23 +388,61 @@ export function moveFieldInCols(worksheetXml: string, columnRef: string, newInde
 }
 
 /**
- * Internal helper to parse shelf value into array
+ * Parse a shelf value into pill refs. Shelf text uses "/" between pills, while field
+ * names can also contain "/" inside bracketed column-instance refs.
  */
-function parseShelfValue(value: string | string[] | undefined): string[] {
+export function parseShelfValue(value: string | string[] | undefined): string[] {
   if (!value) {
     return [];
   }
   if (typeof value === 'string') {
-    // Split by '/' separator (custom language format)
-    return value
-      .split('/')
-      .map((s) => s.trim())
-      .filter(Boolean);
+    return splitShelfString(value);
   }
   if (Array.isArray(value)) {
-    return value.map((v) => (typeof v === 'string' ? v.trim() : String(v).trim())).filter(Boolean);
+    return value.flatMap((v) => splitShelfString(typeof v === 'string' ? v : String(v)));
   }
   return [];
+}
+
+function splitShelfString(value: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let inBracketedName = false;
+
+  const pushCurrent = (): void => {
+    const trimmed = current.trim();
+    if (trimmed) {
+      parts.push(trimmed);
+    }
+    current = '';
+  };
+
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i];
+    if (char === '[' && !inBracketedName) {
+      inBracketedName = true;
+      current += char;
+      continue;
+    }
+    if (char === ']' && inBracketedName) {
+      if (value[i + 1] === ']') {
+        current += ']]';
+        i++;
+        continue;
+      }
+      inBracketedName = false;
+      current += char;
+      continue;
+    }
+    if (char === '/' && !inBracketedName) {
+      pushCurrent();
+      continue;
+    }
+    current += char;
+  }
+
+  pushCurrent();
+  return parts;
 }
 
 /**
