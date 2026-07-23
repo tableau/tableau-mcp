@@ -241,7 +241,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // DO NOT GROW these: trim them down and lower/remove the entry. Never raise a
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
-    ['bind-template', 2255], // raised for the m7 declarative filters[] proposal schema (top-N-within-context); the zod filter schema carries NO descriptions so it is already minimal, and the aggregate 30k/52k surface caps stay green
+    ['bind-template', 2245], // ratcheted down while funding exact Call-2 template/slot copy guidance; aggregate 30k/52k surface caps stay green
     ['refine-worksheet', 1583], // raised for omitted-targetField axis detection; funded by a ~500-byte same-tool describe trim
     ['plan-dashboard-creation', 1509], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1558], // ratcheted down in the CODA funding trim; do not grow

@@ -126,8 +126,8 @@ describe('getSummaryDataTool', () => {
       });
       expect(result.structuredContent).toEqual({
         nextAction: {
-          label: 'Data retrieval complete — no further calls needed',
-          kind: 'done',
+          label: 'Build the requested chart with bind-template',
+          kind: 'prefill',
         },
       });
       expect(harness.server.requests.some((request) => request.path.endsWith('/summaryData'))).toBe(
@@ -160,7 +160,10 @@ describe('getSummaryDataTool', () => {
           'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — bind a chart first (bind-template) or name a populated sheet.',
       });
       expect(result.structuredContent).toMatchObject({
-        nextAction: { kind: 'done' },
+        nextAction: {
+          label: 'Build the requested chart with bind-template',
+          kind: 'prefill',
+        },
       });
     } finally {
       await harness.close();

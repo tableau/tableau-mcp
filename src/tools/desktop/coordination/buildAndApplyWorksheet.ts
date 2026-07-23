@@ -11,6 +11,7 @@ import {
 } from '../../../desktop/binder/explicit-bind.js';
 import type { SlotSpec } from '../../../desktop/binder/manifest-types.js';
 import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
+import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
 import {
@@ -30,6 +31,7 @@ import { pruneUnboundOptionalFields } from '../../../desktop/templates/optionalF
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { spliceWaterfallAnchorFilter } from '../../../desktop/templates/waterfallAnchorFilter.js';
+import type { ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
 import {
   classifyWorksheetPromiseOutcome,
   formatWorksheetPromiseCheck,
@@ -232,7 +234,7 @@ const paramsSchema = {
     type: z.enum(['kpi', 'chart']).optional(),
     template: z.string().optional(),
     fields: z.array(z.string()),
-    workbookFile: z.string(),
+    workbookFile: z.string().optional().describe('Cache path; omit to fetch current workbook.'),
   }),
 };
 
@@ -261,7 +263,7 @@ export const getBuildAndApplyWorksheetTool = (
         callback: async () => {
           const { worksheetName, workbookFile, template, fields } = taskSpec;
 
-          if (!existsSync(workbookFile)) {
+          if (workbookFile !== undefined && !existsSync(workbookFile)) {
             return new FileNotFoundError(workbookFile).toErr();
           }
 
@@ -293,14 +295,24 @@ export const getBuildAndApplyWorksheetTool = (
             return new Ok(gateResult);
           }
 
-          // Cross-instance cache-bleed guard (W9): refuse a cache produced by a different
-          // (or restarted) Desktop session — its XML may not match the current workbook.
-          const workbookSidecar = checkSidecar(workbookFile, resolvedSession, 'workbook');
-          if (!workbookSidecar.ok) {
-            return new CacheSessionMismatchError(workbookSidecar.message!).toErr();
+          let executor: ToolExecutor | undefined;
+          let workbookXml: string;
+          if (workbookFile !== undefined) {
+            // Cross-instance cache-bleed guard (W9): refuse a cache produced by a different
+            // (or restarted) Desktop session — its XML may not match the current workbook.
+            const workbookSidecar = checkSidecar(workbookFile, resolvedSession, 'workbook');
+            if (!workbookSidecar.ok) {
+              return new CacheSessionMismatchError(workbookSidecar.message!).toErr();
+            }
+            workbookXml = readFileSync(workbookFile, 'utf-8');
+          } else {
+            executor = await extra.getExecutor(resolvedSession);
+            const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });
+            if (xmlResult.isErr()) {
+              return new DesktopCommandExecutionError(xmlResult.error).toErr();
+            }
+            workbookXml = xmlResult.value;
           }
-
-          const workbookXml = readFileSync(workbookFile, 'utf-8');
 
           // Get available fields for role detection
           const availableFields = listAvailableFields(workbookXml);
@@ -526,7 +538,7 @@ export const getBuildAndApplyWorksheetTool = (
           const worksheetXml = worksheetMatch[0];
 
           // Apply to Tableau
-          const executor = await extra.getExecutor(resolvedSession);
+          executor ??= await extra.getExecutor(resolvedSession);
           const signal = extra.signal;
           const applyResult = await loadWorksheetXml({
             worksheetName,

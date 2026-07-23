@@ -71,8 +71,8 @@ const paramsSchema = {
   ask: z.string(),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
-  auto_apply: z.boolean().optional().describe('Apply when bound.'),
-  target_worksheet: z.string().optional().describe('Existing sheet to replace; omit for new.'),
+  auto_apply: z.boolean().optional().describe('Auto-apply.'),
+  target_worksheet: z.string().optional(),
   calcs: z
     .array(
       z.object({
@@ -82,8 +82,7 @@ const paramsSchema = {
         role: z.string().optional(),
       }),
     )
-    .optional()
-    .describe('Pre-bind calcs.'),
+    .optional(),
 };
 
 /**
@@ -387,6 +386,20 @@ function appendWaterfallDiscoveryGuidance(
   return additions.length > 0 ? `${guidance} ${additions.join(' ')}` : guidance;
 }
 
+function renderProposalCopyContract(res: Extract<BinderResult, { status: 'propose' }>): string {
+  const contracts = res.llm_input.candidate_templates.map((candidate) => {
+    const slotIds = candidate.slots.map((slot) => JSON.stringify(slot.slot_id)).join(', ');
+    return `template ${JSON.stringify(candidate.template)} uses slot IDs [${slotIds}]`;
+  });
+  if (contracts.length === 0) {
+    return 'No candidate contract was returned; do not invent a template or slot IDs.';
+  }
+  return (
+    `Call-2 copy contract: ${contracts.join('; ')}. ` +
+    'Choose one returned candidate and copy those exact identifiers into proposal; never invent aliases or slot names.'
+  );
+}
+
 /**
  * True iff this applied waterfall bind still has a NAMED, fillable re-bind slot (an anchor
  * category candidate or an explicit order column) — the m1 genuine-unfilled case that MUST
@@ -421,6 +434,7 @@ function buildGuidance(
         'No deterministic (no-LLM) match. Choose exactly one template from llm_input.candidate_templates, ' +
         'bind every bindable slot to a field from llm_input.fields (match role/kind; use the exact field name), ' +
         'then call bind-template again with { session, ask, proposal } matching output_schema. ' +
+        `${renderProposalCopyContract(res)} ` +
         // Candidates carry fast-path-eligible templates (plus side-loaded local templates). Pie/donut
         // is now stamped eligible, so name that honest bind route before the generic shape-miss exits.
         "Pie/donut is available via bind-template through the eligible 'part-to-whole-pie-chart' template; " +
@@ -1139,8 +1153,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'bind-template',
     title,
-    description:
-      'Reads workbook + resolves fields itself; binds/applies. Plain chart: FIRST auto_apply:true, no discovery.',
+    description: 'Bind and apply a chart.',
     paramsSchema,
     annotations: {
       title,

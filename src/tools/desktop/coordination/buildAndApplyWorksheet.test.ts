@@ -8,6 +8,7 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getBuildAndApplyWorksheetTool } from './buildAndApplyWorksheet.js';
 
 vi.mock('../../../desktop/commands/workbook/loadWorksheetXml.js');
+vi.mock('../../../desktop/commands/workbook/getWorkbookXml.js');
 vi.mock('../../../desktop/binder/explicit-bind.js', async () => {
   const actual = await vi.importActual<typeof import('../../../desktop/binder/explicit-bind.js')>(
     '../../../desktop/binder/explicit-bind.js',
@@ -24,6 +25,7 @@ import { existsSync, readdirSync, readFileSync } from 'fs';
 
 import { bindExplicitTemplate } from '../../../desktop/binder/explicit-bind.js';
 import { _resetManifestCache } from '../../../desktop/binder/manifest.js';
+import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import { deflectionText } from '../../../desktop/route/route-gate.js';
@@ -103,6 +105,7 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
     { name: 'Sales', role: 'measure', datatype: 'integer', type: 'quantitative' },
   ]);
   vi.mocked(rewriteFieldReferences).mockReturnValue(TEMPLATE_XML);
+  vi.mocked(getWorkbookXml).mockResolvedValue(new Ok(WORKBOOK_XML));
   vi.mocked(loadWorksheetXml).mockResolvedValue(new Ok({ readbackWarnings: [] }));
   return extra;
 }
@@ -186,6 +189,23 @@ describe('buildAndApplyWorksheetTool', () => {
     expect(result.content[0].text).toContain('Sheet1');
     expect(result.content[0].text).toContain('ranking-ordered-bar');
     expect(result.content[0].text).toContain('HOST VERIFICATION');
+    expect(readFileSync).toHaveBeenCalledWith(TASK_SPEC_BASE.workbookFile, 'utf-8');
+    expect(getWorkbookXml).not.toHaveBeenCalled();
+  });
+
+  it('self-fetches the current workbook when workbookFile is omitted', async () => {
+    const { workbookFile: _omitted, ...taskSpec } = TASK_SPEC_BASE;
+    const extra = makeExtra();
+
+    const result = await getResult({ session: SESSION, taskSpec }, extra);
+
+    expect(result.isError).toBeFalsy();
+    expect(getWorkbookXml).toHaveBeenCalledWith(
+      expect.objectContaining({ executor: expect.any(Object), signal: extra.signal }),
+    );
+    expect(extra.getExecutor).toHaveBeenCalledTimes(1);
+    expect(readFileSync).not.toHaveBeenCalled();
+    expect(loadWorksheetXml).toHaveBeenCalledTimes(1);
   });
 
   it('applies the waterfall anchor filter for P&L subtotal and total rows', async () => {
@@ -797,7 +817,7 @@ describe('buildAndApplyWorksheetTool', () => {
     expect(result.content[0].text).not.toContain('HOST VERIFICATION — verified');
   });
 
-  it('should return error when workbook file does not exist', async () => {
+  it('returns an error for an explicit workbook file that does not exist', async () => {
     const extra = makeExtra();
     vi.mocked(existsSync).mockReturnValue(false);
 
@@ -805,6 +825,7 @@ describe('buildAndApplyWorksheetTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('workbook.xml');
+    expect(getWorkbookXml).not.toHaveBeenCalled();
   });
 
   it('should return error when template is not provided', async () => {
@@ -1046,7 +1067,13 @@ describe('buildAndApplyWorksheetTool — route gate (ROUTE_ENFORCEMENT)', () => 
 });
 
 async function getResult(
-  params: { session: string; taskSpec: typeof TASK_SPEC_BASE & { template?: string } },
+  params: {
+    session: string;
+    taskSpec: Omit<typeof TASK_SPEC_BASE, 'template' | 'workbookFile'> & {
+      template?: string;
+      workbookFile?: string;
+    };
+  },
   extra = makeExtra(),
 ): Promise<CallToolResult> {
   const tool = getBuildAndApplyWorksheetTool(new DesktopMcpServer());

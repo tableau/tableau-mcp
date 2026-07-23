@@ -436,9 +436,7 @@ describe('bindTemplateTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getBindTemplateTool(new DesktopMcpServer());
     expect(tool.name).toBe('bind-template');
-    expect(tool.description).toBe(
-      'Reads workbook + resolves fields itself; binds/applies. Plain chart: FIRST auto_apply:true, no discovery.',
-    );
+    expect(tool.description).toBe('Bind and apply a chart.');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       ask: expect.any(Object),
@@ -508,6 +506,80 @@ describe('bindTemplateTool', () => {
     expect(body.guidance).toContain('if the inject-template/apply-workbook tools are available');
     expect(body.guidance).not.toContain('use the manual chain');
   });
+
+  it.each([
+    {
+      label: 'fabricated template alias',
+      proposal: {
+        template: 'waterfall',
+        title: 'P&L waterfall',
+        bindings: [],
+        confidence: 0.9,
+      },
+      escalation: {
+        status: 'escalate',
+        reason: 'template-not-found',
+        blockers: [
+          {
+            code: 'template-not-found',
+            detail: "template 'waterfall' was not found",
+          },
+        ],
+      } satisfies BinderResult,
+    },
+    {
+      label: 'fabricated slot names',
+      proposal: {
+        template: 'part-to-whole-waterfall',
+        title: 'P&L waterfall',
+        bindings: [
+          { slot_id: 'steps', field: 'line_item' },
+          { slot_id: 'measure', field: 'amount' },
+          { slot_id: 'color', field: 'category' },
+        ],
+        confidence: 0.9,
+      },
+      escalation: {
+        status: 'escalate',
+        reason: 'kind-mismatch',
+        blockers: [
+          {
+            code: 'kind-mismatch',
+            slot_id: 'steps',
+            detail: "binding names unknown slot_id 'steps'",
+          },
+        ],
+      } satisfies BinderResult,
+    },
+  ])(
+    'names the exact returned contract and cleanly escalates a Call-2 $label',
+    async ({ proposal, escalation }) => {
+      vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(P_AND_L_WORKBOOK_XML));
+      vi.mocked(binderModule.bindTemplate)
+        .mockResolvedValueOnce(waterfallProposeResult)
+        .mockResolvedValueOnce(escalation);
+
+      const call1 = await getToolResult({ session: '1', ask: 'P&L waterfall' });
+      invariant(call1.content[0].type === 'text');
+      const call1Body = JSON.parse(call1.content[0].text);
+      expect(call1Body.guidance).toContain(
+        'template "part-to-whole-waterfall" uses slot IDs ["profit", "sub_category", "anchor_category"]',
+      );
+      expect(call1Body.guidance).toContain('copy those exact identifiers');
+
+      const call2 = await getToolResult({
+        session: '1',
+        ask: 'P&L waterfall',
+        proposal,
+      });
+      expect(call2.isError).toBe(false);
+      invariant(call2.content[0].type === 'text');
+      const call2Body = JSON.parse(call2.content[0].text);
+      expect(call2Body.status).toBe('escalate');
+      expect(call2Body.reason).toBe(escalation.reason);
+      expect(call2Body.guidance).toContain(`Escalated (${escalation.reason})`);
+    },
+  );
 
   it('returns status "escalate" as a normal outcome (isError false) with routed guidance (Call 2)', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));

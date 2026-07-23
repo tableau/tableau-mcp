@@ -79,4 +79,7 @@ export const proposalSchema = z
       )
       .optional(),
   })
-  .strict();
+  .strict()
+  .describe(
+    'Omit on FIRST call. On Call 2, use ONLY exact returned `template` + slot IDs; never invent aliases (`waterfall`) or slots (`steps`/`measure`/`color`).',
+  );

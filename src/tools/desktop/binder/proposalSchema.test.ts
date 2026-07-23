@@ -14,6 +14,13 @@ describe('proposalSchema — strict object contract', () => {
     confidence: 0.9,
   };
 
+  it('tells callers to copy the immediately preceding proposal contract exactly', () => {
+    expect(proposalSchema.description).toContain('Omit on FIRST call');
+    expect(proposalSchema.description).toContain('exact returned `template` + slot IDs');
+    expect(proposalSchema.description).toContain('never invent aliases (`waterfall`)');
+    expect(proposalSchema.description).toContain('slots (`steps`/`measure`/`color`)');
+  });
+
   it('accepts a well-formed proposal', () => {
     expect(proposalSchema.safeParse(valid).success).toBe(true);
   });

@@ -28,6 +28,7 @@ const EMPTY_SHEET_GUIDANCE =
 const NO_ROWS_GUIDANCE =
   "The summary query returned no rows. Do NOT call get-summary-data again for this ask — the answer is 'no data'; say so.";
 const SUMMARY_DATA_DONE_LABEL = 'Data retrieval complete — no further calls needed';
+const EMPTY_SHEET_BIND_LABEL = 'Build the requested chart with bind-template';
 const SUMMARY_DATA_FAILURE_DONE_LABEL = 'Data retrieval failed — report outcome';
 const WORKSHEET_AMBIGUOUS_GUIDANCE =
   'Choose one worksheet by exact id or name, then call get-summary-data again.';
@@ -332,7 +333,7 @@ function emptySheetResult(worksheet: WorksheetItem, maxRows: number): SummaryDat
       summaryData: { columns: [], rows: [] },
       guidance: EMPTY_SHEET_GUIDANCE,
     },
-    doneNextAction(SUMMARY_DATA_DONE_LABEL),
+    prefillNextAction(EMPTY_SHEET_BIND_LABEL),
   );
 }
 
