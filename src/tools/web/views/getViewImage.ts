@@ -83,7 +83,6 @@ export const getGetViewImageTool = (
                 siteId: restApi.siteId,
                 width,
                 height,
-                resolution: 'high',
                 format: formatResult.value,
                 viewFilters,
               });

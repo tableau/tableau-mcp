@@ -90,7 +90,6 @@ describe('getCustomViewImageTool', () => {
       customViewId: mockCustomView.id,
       width: undefined,
       height: undefined,
-      resolution: 'high',
       format: undefined,
       viewFilters: undefined,
     });
@@ -112,7 +111,6 @@ describe('getCustomViewImageTool', () => {
       customViewId: mockCustomView.id,
       width: undefined,
       height: undefined,
-      resolution: 'high',
       format: 'SVG',
       viewFilters: undefined,
     });
@@ -142,7 +140,7 @@ describe('getCustomViewImageTool', () => {
       customViewId: mockCustomView.id,
       width: undefined,
       height: undefined,
-      resolution: 'high',
+      format: undefined,
       viewFilters: { Region: 'West' },
     });
   });
@@ -189,7 +187,6 @@ describe('getCustomViewImageTool', () => {
       customViewId: mockCustomView.id,
       width: undefined,
       height: undefined,
-      resolution: 'high',
       format: undefined,
       viewFilters: undefined,
     });
@@ -223,7 +220,6 @@ describe('getCustomViewImageTool', () => {
       customViewId: mockCustomView.id,
       width: undefined,
       height: undefined,
-      resolution: 'high',
       format: undefined,
       viewFilters: undefined,
     });
@@ -242,8 +238,8 @@ describe('getCustomViewImageTool', () => {
       customViewId: mockCustomView.id,
       width: undefined,
       height: undefined,
-      resolution: 'high',
       format: 'PNG',
+      viewFilters: undefined,
     });
   });
 
@@ -260,8 +256,8 @@ describe('getCustomViewImageTool', () => {
       customViewId: mockCustomView.id,
       width: undefined,
       height: undefined,
-      resolution: 'high',
       format: 'SVG',
+      viewFilters: undefined,
     });
   });
 
