@@ -8,6 +8,15 @@ the pull request._
 <!-- Thank you for your contribution! Please fill out the following template to help us review your pull
 request! -->
 
+<!-- TITLE: say plainly what the change does. Keep the `type(scope):` prefix; skip jargon, slogans, and
+version numbers. Good: "fix(remove-field): refetch the worksheet before removing a field". -->
+
+## Decision
+
+<!-- The one thing a reviewer is being asked to accept. State whether it is a RULE WE NOW KEEP (e.g.
+"every worksheet-mutating tool refreshes state first") or a ONE-OFF for this case. Do not leave the
+reviewer to infer which. This is the most important line in the PR. -->
+
 ## Description
 
 <!-- Please include a summary of the change. -->
