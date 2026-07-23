@@ -390,7 +390,6 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   // Remove the MCP-Apps-only tools if the mcp-apps feature is disabled. The confirm-* tools are the
   // human-gesture confirm steps for their preview tools and only exist when the iframe can render.
   if (!mcpAppsEnabled) {
-    enabledTools.delete('get-embed-token');
     enabledTools.delete('record-event');
     enabledTools.delete('confirm-update-cloud-extract-refresh-task');
     enabledTools.delete('confirm-delete-content');
