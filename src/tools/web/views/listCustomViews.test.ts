@@ -68,7 +68,6 @@ describe('listCustomViewsTool', () => {
     expect(listCustomViewsTool.paramsSchema).toMatchObject({
       workbookId: expect.any(Object),
       filter: expect.any(Object),
-      pageNumber: expect.any(Object),
       limit: expect.any(Object),
     });
   });
@@ -83,8 +82,7 @@ describe('listCustomViewsTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(`${result.content[0].text}`);
-    expect(parsed.data).toMatchObject(mockCustomViews.customViews);
-    expect(parsed.totalAvailable).toBe(mockCustomViews.pagination.totalAvailable);
+    expect(parsed).toMatchObject(mockCustomViews.customViews);
     expect(mocks.mockListCustomViews).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filter: `workbookId:eq:${mockWorkbook.id},viewId:eq:${mockCustomView.view.id}`,
@@ -131,7 +129,7 @@ describe('listCustomViewsTool', () => {
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(JSON.parse(`${result.content[0].text}`).data).toMatchObject(mockCustomViews.customViews);
+    expect(JSON.parse(`${result.content[0].text}`)).toMatchObject(mockCustomViews.customViews);
     expect(mocks.mockListCustomViews).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filter: `workbookId:eq:${mockWorkbook.id},viewId:eq:${mockCustomView.view.id}`,
@@ -171,7 +169,7 @@ describe('listCustomViewsTool', () => {
     });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(JSON.parse(`${result.content[0].text}`).data).toMatchObject(mockCustomViews.customViews);
+    expect(JSON.parse(`${result.content[0].text}`)).toMatchObject(mockCustomViews.customViews);
   });
 
   it('should filter out custom views whose underlying view is not in INCLUDE_VIEW_IDS', async () => {
@@ -212,9 +210,8 @@ describe('listCustomViewsTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(`${result.content[0].text}`);
-    expect(parsed.data.length).toBe(MAX_PAGE_SIZE);
-    expect(parsed.data.length).toBeLessThanOrEqual(MAX_PAGE_SIZE);
-    expect(parsed.totalAvailable).toBe(2600);
+    expect(parsed.length).toBe(MAX_PAGE_SIZE);
+    expect(parsed.length).toBeLessThanOrEqual(MAX_PAGE_SIZE);
     // Single-page semantics: the REST method must be called exactly once (no looping).
     expect(mocks.mockListCustomViews).toHaveBeenCalledTimes(1);
     expect(mocks.mockListCustomViews).toHaveBeenCalledWith({
@@ -225,25 +222,24 @@ describe('listCustomViewsTool', () => {
     });
   });
 
-  it('should pass the requested pageNumber straight through to the API', async () => {
+  it('should always request the first page from the API', async () => {
     mocks.mockListCustomViews.mockResolvedValue(mockCustomViews);
     mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
 
     await getToolResult({
       workbookId: mockWorkbook.id,
       filter: `viewId:eq:${mockCustomView.view.id}`,
-      pageNumber: 3,
     });
 
     expect(mocks.mockListCustomViews).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filter: `workbookId:eq:${mockWorkbook.id},viewId:eq:${mockCustomView.view.id}`,
-      pageNumber: 3,
+      pageNumber: 1,
       pageSize: MAX_PAGE_SIZE,
     });
   });
 
-  it('should trim the page to the caller limit without capping totalAvailable', async () => {
+  it('should trim the results to the caller limit', async () => {
     const fullPage = makeCustomViewPage(MAX_PAGE_SIZE);
     mocks.mockListCustomViews.mockResolvedValue({
       pagination: {
@@ -264,9 +260,7 @@ describe('listCustomViewsTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(`${result.content[0].text}`);
-    expect(parsed.data.length).toBe(600);
-    // The caller's own limit never caps totalAvailable.
-    expect(parsed.totalAvailable).toBe(2600);
+    expect(parsed.length).toBe(600);
     expect(mocks.mockListCustomViews).toHaveBeenCalledTimes(1);
     expect(mocks.mockListCustomViews).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -276,7 +270,7 @@ describe('listCustomViewsTool', () => {
     });
   });
 
-  it('should cap totalAvailable and trim the page when a server maxResultLimit is smaller than the page', async () => {
+  it('should trim the results when a server maxResultLimit is smaller than the page', async () => {
     vi.stubEnv('MAX_RESULT_LIMIT', '700');
     const fullPage = makeCustomViewPage(MAX_PAGE_SIZE);
     mocks.mockListCustomViews.mockResolvedValue({
@@ -297,9 +291,8 @@ describe('listCustomViewsTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(`${result.content[0].text}`);
-    // Server cap (700) trims this page below the 1000 the API returned, so totalAvailable is capped.
-    expect(parsed.data.length).toBe(700);
-    expect(parsed.totalAvailable).toBe(700);
+    // Server cap (700) trims this page below the 1000 the API returned.
+    expect(parsed.length).toBe(700);
     expect(mocks.mockListCustomViews).toHaveBeenCalledTimes(1);
   });
 
@@ -380,7 +373,6 @@ describe('listCustomViewsTool', () => {
 async function getToolResult(params: {
   workbookId: string;
   filter: string;
-  pageNumber?: number;
   limit?: number;
 }): Promise<CallToolResult> {
   const listCustomViewsTool = getListCustomViewsTool(new WebMcpServer());
@@ -389,7 +381,6 @@ async function getToolResult(params: {
     {
       workbookId: params.workbookId,
       filter: params.filter,
-      pageNumber: params.pageNumber,
       limit: params.limit,
     },
     getMockRequestHandlerExtra(),
