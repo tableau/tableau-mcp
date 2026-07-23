@@ -34,13 +34,26 @@ there is no local-artifact fallback for grading.
 
 ## Prerequisites
 
-### 1. Install the coding-agent CLIs you plan to use
+### 1. Install Node dependencies
+
+The eval scripts (`tsx`, `langsmith`, `dotenv`, `openai`) are devDependencies. From the
+repo root:
+
+```bash
+npm install
+```
+
+> **Common error:** `Error: Cannot find module 'langsmith'` when running `eval:grade`
+> means deps aren't installed — run `npm install`. (`langsmith` is required by
+> `langsmith-reader.ts` even for tool-coverage grading.)
+
+### 2. Install the coding-agent CLIs you plan to use
 
 - **Claude Code** — `claude` on PATH
 - **Cursor** — `cursor-agent` on PATH
 - **Codex** — `codex` on PATH
 
-### 2. Install the LangSmith coding-agent tracing plugin for each harness
+### 3. Install the LangSmith coding-agent tracing plugin for each harness
 
 Grading reads the trace back from LangSmith, so the corresponding plugin **must** be
 installed and configured for whichever harness you run. See LangSmith's coding-agent
@@ -139,6 +152,60 @@ where the CLI supports it). Trace poll behavior is tunable with
 npm run eval:run -- input "how many schools have SAT scores above 1200?"
 npm run eval:grade -- evals/runs/YYYY-MM-DD/<run-id>   # tool-coverage grading (trace-sourced)
 ```
+
+---
+
+## Admin Tool Cases
+
+`evals/cases/admin/` holds tool-coverage cases for the admin tools — both read-only
+(`list-users`, `query-admin-insights`) and mutation tools run in **preview mode**
+(`update-user`, `delete-content`, `update-cloud-extract-refresh-task`). Full onboarding
+guide: [`ADMIN_EVALS.md`](./ADMIN_EVALS.md). The essentials:
+
+### Extra configuration
+
+Admin tools are gated and require a **site-admin PAT** (`SiteAdministratorCreator`,
+`SiteAdministratorExplorer`, or `ServerAdministrator`). Add to `.env`:
+
+```bash
+# Registers the admin tools (list-users, query-admin-insights, update-user,
+# delete-content, update-cloud-extract-refresh-task). Requires a site-admin PAT.
+ADMIN_TOOLS_ENABLED=true
+INSIGHTS_TOOLS_ENABLED=true          # query-admin-insights
+
+# Disposable throwaway targets on a NON-production test site, used by the
+# mutation-preview cases (nothing is applied — preview phase only).
+EVAL_UPDATE_USER_LUID=<disposable-test-user-luid>
+EVAL_DELETE_WORKBOOK_LUID=<disposable-test-workbook-luid>
+EVAL_EXTRACT_TASK_LUID=<disposable-extract-refresh-task-luid>   # Cloud only
+```
+
+> `run-case.ts`'s `tableauServerEnv()` forwards `ADMIN_TOOLS_ENABLED` /
+> `INSIGHTS_TOOLS_ENABLED` / `FEATURE_GATE_PROVIDER[_CONFIG]` / `FLOW_TOOLS_ENABLED` to
+> the MCP stdio subprocess. Without that passthrough the admin tools never register and
+> every admin case fails with `missing_tools`.
+
+### Run the admin cases
+
+```bash
+npm run build
+
+# read-only smoke tests (cheapest — prove the gate + PAT work)
+npm run eval:run -- evals/cases/admin/list-users.json
+npm run eval:run -- evals/cases/admin/query-admin-insights.json
+
+# mutation PREVIEW cases (safe — nothing is applied)
+npm run eval:run -- evals/cases/admin/update-user-preview.json
+npm run eval:run -- evals/cases/admin/delete-content-preview.json
+npm run eval:run -- evals/cases/admin/update-extract-refresh-task-preview.json
+
+# grade each (tool coverage from the LangSmith trace)
+npm run eval:grade -- evals/runs/$(date +%F)/<run-id>
+```
+
+These are tool-coverage cases (no gold numeric answer) — run one-per-file via `eval:run`
++ `eval:grade`, **not** the BIRD suite runner. See [`ADMIN_EVALS.md`](./ADMIN_EVALS.md)
+for the mutation two-phase (preview→confirm) strategy and failure triage.
 
 ---
 
