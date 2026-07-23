@@ -84,8 +84,8 @@ describe('getViewImageTool', () => {
       viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
       width: undefined,
       height: undefined,
-      resolution: 'high',
       format: undefined,
+      viewFilters: undefined,
     });
   });
 
@@ -108,8 +108,8 @@ describe('getViewImageTool', () => {
       viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
       width: undefined,
       height: undefined,
-      resolution: 'high',
       format: 'SVG',
+      viewFilters: undefined,
     });
   });
 
@@ -189,8 +189,8 @@ describe('getViewImageTool', () => {
       viewId: mockView.id,
       width: undefined,
       height: undefined,
-      resolution: 'high',
       format: undefined,
+      viewFilters: undefined,
     });
     // viewIds is a synchronous Set lookup — no need to fetch the view itself.
     expect(mocks.mockGetView).not.toHaveBeenCalled();
@@ -224,8 +224,8 @@ describe('getViewImageTool', () => {
       viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
       width: undefined,
       height: undefined,
-      resolution: 'high',
       format: undefined,
+      viewFilters: undefined,
     });
   });
 
@@ -242,8 +242,8 @@ describe('getViewImageTool', () => {
       viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
       width: undefined,
       height: undefined,
-      resolution: 'high',
       format: 'PNG',
+      viewFilters: undefined,
     });
   });
 
@@ -260,8 +260,8 @@ describe('getViewImageTool', () => {
       viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
       width: undefined,
       height: undefined,
-      resolution: 'high',
       format: 'SVG',
+      viewFilters: undefined,
     });
   });
 

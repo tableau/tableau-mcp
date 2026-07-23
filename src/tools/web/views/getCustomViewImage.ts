@@ -90,7 +90,6 @@ export const getGetCustomViewImageTool = (
                 siteId: restApi.siteId,
                 width,
                 height,
-                resolution: 'high',
                 format: formatResult.value,
                 viewFilters,
               });

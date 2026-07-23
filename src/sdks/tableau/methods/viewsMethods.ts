@@ -163,7 +163,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     siteId,
     width,
     height,
-    resolution = 'high',
+    resolution,
     format,
     viewFilters,
   }: {
