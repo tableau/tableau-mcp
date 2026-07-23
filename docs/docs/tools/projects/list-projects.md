@@ -7,25 +7,10 @@ sidebar_position: 1
 Retrieves a list of projects on a Tableau site, including metadata such as name, description, parent
 project, content permissions, owner, and timestamps.
 
-## Pagination
-
-This tool returns a single page of up to 1000 projects per call. The response is a flat object:
-
-```json
-{
-  "data": [ /* the projects on the requested page (<= 1000) */ ],
-  "totalAvailable": 2600
-}
-```
-
-- `data` — the projects for the requested page, after any bounded-context filtering.
-- `totalAvailable` — the number of projects the client should paginate up to. This is
-  `min(rawTotal, MAX_RESULT_LIMIT)` — equal to the raw total Tableau reports for the query when no
-  server-side cap is configured, and capped to [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
-  when one is in force. The caller's own `limit` does not affect this value.
-
-The **client** drives pagination: increment [`pageNumber`](#pagenumber) (starting at 1) on
-successive calls until you have collected `totalAvailable` items.
+This tool returns a single page of up to 1000 projects per call. The response is a flat object
+of the shape `{ data, totalAvailable }` (see [Example result](#example-result)). To collect
+every project, start at `pageNumber: 1` and increment `pageNumber` on each subsequent call until
+you have collected `totalAvailable` items.
 
 To get the **count** of projects matching the request, read `totalAvailable` from a single call
 (for example, `pageNumber: 1`) without paging through every item.
@@ -72,9 +57,9 @@ Example: `updatedAt:gt:2023-01-01T00:00:00Z`
 
 ### `pageNumber`
 
-The 1-based page to fetch. Each page contains up to 1000 projects. When omitted, defaults to page
-`1`. Increment this value on successive calls to page through the full result set (see
-[Pagination](#pagination)).
+Which 1000-item page of projects to fetch. This is a 1-based page index (page size is fixed at
+1000); when omitted it defaults to `1`. Increment `pageNumber` across calls to page through the
+full result set.
 
 Example: `2`
 
@@ -83,15 +68,13 @@ Example: `2`
 ### `limit`
 
 The maximum number of projects to return **from the requested page**. Must be a positive integer
-less than or equal to `1000` (the page size). Use this to fetch fewer than a full page — for
-example, to retrieve only the remaining items on a final partial page. This does not fetch across
-pages; use [`pageNumber`](#pagenumber) to move between pages.
-
-Note: `limit` only trims the client-requested page and does not affect `totalAvailable`. The
-server-side overall cap is [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit),
-which is what caps `totalAvailable`.
+no greater than 1000 (the fixed page size). Use this to fetch fewer than a full page — for
+example, to request a partial final page. It does not fetch across pages.
 
 Example: `500`
+
+See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit),
+the overall cap on how many results can be paginated through across all pages.
 
 ## Example result
 
@@ -125,3 +108,12 @@ Example: `500`
   "totalAvailable": 2
 }
 ```
+
+The response fields are:
+
+- `data`: the projects on the requested page (at most 1000, or fewer when `limit` or a server
+  cap applies).
+- `totalAvailable`: the number of projects the client should paginate up to. This is
+  `min(rawTotal, MAX_RESULT_LIMIT)` — equal to Tableau's raw total for the query when no
+  server-side cap is configured, and capped to [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
+  when one is in force. Your own `limit` argument does not affect this value.

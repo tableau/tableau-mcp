@@ -6,21 +6,13 @@ sidebar_position: 1
 
 Retrieves a list of views.
 
-This tool returns a single page of up to 1000 views per call. The response is a flat object:
+This tool returns a single page of up to 1000 views per call. The response is a flat object
+of the shape `{ data, totalAvailable }` (see [Example result](#example-result)). To collect
+every view, start at `pageNumber: 1` and increment `pageNumber` on each subsequent call until
+you have collected `totalAvailable` items.
 
-```json
-{
-  "data": [ /* the views on this page (after enrichment and server-side filtering) */ ],
-  "totalAvailable": 2600
-}
-```
-
-- `data`: the views for the requested page (at most 1000).
-- `totalAvailable`: the number of views the client should paginate up to. This is `min(rawTotal, MAX_RESULT_LIMIT)` — equal to Tableau's raw total for the query when no server-side cap is configured, and capped to [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit) when one is in force. A caller-supplied `limit` does not affect this value.
-
-To retrieve all views, the client paginates by incrementing `pageNumber` (starting at 1) until it has collected `totalAvailable` items.
-
-To get the **count** of views matching the request, read `totalAvailable` from a single call (for example, `pageNumber: 1`) without paging through every item.
+To get the **count** of views matching the request, read `totalAvailable` from a single call
+(for example, `pageNumber: 1`) without paging through every item.
 
 ## APIs called
 
@@ -41,7 +33,9 @@ Example: `name:eq:Overview`
 
 ### `pageNumber`
 
-Which 1000-item page to fetch (1-based). When omitted, the first page is returned (page 1). The page size is fixed at 1000 items, so page 2 returns items 1001-2000, and so on.
+Which 1000-item page of views to fetch. This is a 1-based page index (page size is fixed at
+1000); when omitted it defaults to `1`. Increment `pageNumber` across calls to page through the
+full result set.
 
 Example: `2`
 
@@ -49,11 +43,14 @@ Example: `2`
 
 ### `limit`
 
-The maximum number of views to return from the requested page. Must be `<= 1000`. Use this to fetch fewer than a full page (for example, the final partial page a client wants). This is a client-side trim applied to the single page; it does not affect `totalAvailable` in the response.
+The maximum number of views to return **from the requested page**. Must be a positive integer
+no greater than 1000 (the fixed page size). Use this to fetch fewer than a full page — for
+example, to request a partial final page. It does not fetch across pages.
 
 Example: `600`
 
-See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit), the server-side overall cap across all pages.
+See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit),
+the overall cap on how many results can be paginated through across all pages.
 
 ## Example result
 
@@ -81,3 +78,12 @@ See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_re
   "totalAvailable": 1
 }
 ```
+
+The response fields are:
+
+- `data`: the views on the requested page (at most 1000, or fewer when `limit` or a server cap
+  applies).
+- `totalAvailable`: the number of views the client should paginate up to. This is
+  `min(rawTotal, MAX_RESULT_LIMIT)` — equal to Tableau's raw total for the query when no
+  server-side cap is configured, and capped to [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
+  when one is in force. Your own `limit` argument does not affect this value.
