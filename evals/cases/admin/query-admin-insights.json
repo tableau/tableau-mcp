@@ -1,0 +1,12 @@
+{
+  "id": "query-admin-insights",
+  "name": "Query Admin Insights (admin)",
+  "description": "Admin read tool backed by the Admin Insights published datasource. Requires ADMIN_TOOLS_ENABLED=true and site-admin PAT. Exercises the admin gate + VizQL query path against Admin Insights.",
+  "tags": ["admin", "admin-insights", "read-only", "real-server"],
+  "prompt": "Use the Tableau MCP server's Admin Insights tool to report how many users have signed in on this site in the last 30 days. Summarize the number and the field(s) you filtered on. Do not modify anything.",
+  "expected_tools": ["query-admin-insights"],
+  "budget": {
+    "max_tool_calls": 8,
+    "max_wall_ms": 180000
+  }
+}
