@@ -266,6 +266,9 @@ export type WorkbookInventory = z.infer<typeof workbookInventorySchema>;
 export const datasourceItemSchema = z
   .object({
     id: z.string().optional(),
+    // Server LUID of the datasource; present only for a published, non-federated datasource and null
+    // otherwise. Mirrors the luid on `GET /v0/site/datasources` (nullable string in OpenAPI 3.1).
+    luid: z.string().nullish(),
     name: z.string().optional(),
     caption: z.string().optional(),
   })

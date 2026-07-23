@@ -95,11 +95,15 @@ const DEFAULT_STORYBOARDS = [
 const DEFAULT_WORKBOOK_DATASOURCES = [
   {
     id: 'wb-ds-superstore',
+    // Published, non-federated: the server resolves a real LUID.
+    luid: 'luid-superstore',
     name: 'Sample - Superstore',
     caption: 'Sample - Superstore',
   },
   {
     id: 'wb-ds-quota',
+    // Embedded/federated: the API emits luid: null.
+    luid: null,
     name: 'Quota Targets',
     caption: 'Quota Targets',
   },
