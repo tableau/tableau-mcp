@@ -122,12 +122,15 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
                     configWithOverrides.boundedContext.datasourceIds,
                   );
                 } catch (error) {
-                  log({
-                    message: 'Failed to enrich workbooks with lineage metadata',
-                    level: 'warning',
-                    logger: 'lineage',
-                    data: getExceptionMessage(error),
-                  });
+                  log(
+                    {
+                      message: 'Failed to enrich workbooks with lineage metadata',
+                      level: 'warning',
+                      logger: 'lineage',
+                      data: getExceptionMessage(error),
+                    },
+                    extra,
+                  );
                   return workbooks;
                 }
               },

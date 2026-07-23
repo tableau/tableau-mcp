@@ -80,12 +80,15 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
                   configWithOverrides.boundedContext.datasourceIds,
                 )[0];
               } catch (error) {
-                log({
-                  message: `Failed to enrich view ${view.id} with lineage metadata`,
-                  level: 'warning',
-                  logger: 'lineage',
-                  data: getExceptionMessage(error),
-                });
+                log(
+                  {
+                    message: `Failed to enrich view ${view.id} with lineage metadata`,
+                    level: 'warning',
+                    logger: 'lineage',
+                    data: getExceptionMessage(error),
+                  },
+                  extra,
+                );
                 return view;
               }
             },

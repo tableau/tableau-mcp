@@ -149,11 +149,14 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
       extra.authInfo?.clientId;
 
     this.notifyInvocation({ requestId, args, username });
-    log({
-      message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(args)}`,
-      level: 'debug',
-      logger: 'tool',
-    });
+    log(
+      {
+        message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(args)}`,
+        level: 'debug',
+        logger: 'tool',
+      },
+      extra,
+    );
 
     const productTelemetryForwarder = getProductTelemetry(
       config.productTelemetryEndpoint,
@@ -214,12 +217,15 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
       if (!errorCode) {
         errorCode = '500'; // Default to 500 if no HTTP status can be determined
       }
-      log({
-        message: 'Tool execution failed',
-        level: 'error',
-        logger: 'tool',
-        data: error,
-      });
+      log(
+        {
+          message: 'Tool execution failed',
+          level: 'error',
+          logger: 'tool',
+          data: error,
+        },
+        extra,
+      );
       toolResult = getErrorResult(requestId, error);
       return toolResult;
     } finally {

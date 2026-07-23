@@ -125,12 +125,15 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
                     ),
                   );
                 } catch (error) {
-                  log({
-                    message: 'Failed to enrich views with lineage metadata',
-                    level: 'warning',
-                    logger: 'lineage',
-                    data: getExceptionMessage(error),
-                  });
+                  log(
+                    {
+                      message: 'Failed to enrich views with lineage metadata',
+                      level: 'warning',
+                      logger: 'lineage',
+                      data: getExceptionMessage(error),
+                    },
+                    extra,
+                  );
                   return flattenViewUsage(views);
                 }
               },
