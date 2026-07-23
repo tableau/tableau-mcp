@@ -1,0 +1,12 @@
+{
+  "id": "list-users",
+  "name": "List Users (admin)",
+  "description": "Admin read tool. Requires ADMIN_TOOLS_ENABLED=true and a site-admin PAT. Smoke test that the admin gate lets an admin through and the tool returns users.",
+  "tags": ["admin", "users", "read-only", "real-server"],
+  "prompt": "Use the Tableau MCP server to list users on the configured Tableau site. Return a concise summary with user names, site roles, and LUIDs when available. Do not modify any user.",
+  "expected_tools": ["list-users"],
+  "budget": {
+    "max_tool_calls": 5,
+    "max_wall_ms": 120000
+  }
+}

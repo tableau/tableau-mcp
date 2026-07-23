@@ -239,6 +239,10 @@ function tableauServerEnv(): Record<string, string> {
     'DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION',
     'DISABLE_METADATA_API_REQUESTS',
     'FLOW_TOOLS_ENABLED',
+    'ADMIN_TOOLS_ENABLED',
+    'INSIGHTS_TOOLS_ENABLED',
+    'FEATURE_GATE_PROVIDER',
+    'FEATURE_GATE_PROVIDER_CONFIG',
   ];
   const env: Record<string, string> = {};
   for (const key of keys) {
