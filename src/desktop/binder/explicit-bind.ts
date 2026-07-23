@@ -43,6 +43,8 @@ export type ExplicitBindResult =
       datasource: string;
       fieldMapping: Record<string, string>;
       fieldMetadata: Record<string, { datatype: string; type: string }>;
+      consumedFieldRefs: string[];
+      templateSlots: SlotSpec[];
       optionalFieldPrunes: OptionalFieldPruneSpec[];
       warnings: string[];
       passthrough: boolean;
@@ -106,12 +108,15 @@ export function bindExplicitTemplate(
   }
 
   if (!manifest) {
+    const fieldMapping = Array.isArray(input) ? (opts.passthroughFieldMapping ?? {}) : input;
     return {
       ok: true,
       template: templateName,
       datasource: opts.datasource ?? schema.datasource,
-      fieldMapping: Array.isArray(input) ? (opts.passthroughFieldMapping ?? {}) : input,
+      fieldMapping,
       fieldMetadata: {},
+      consumedFieldRefs: Object.values(fieldMapping),
+      templateSlots: [],
       optionalFieldPrunes: [],
       warnings: [
         manifestLayerUnavailable
@@ -145,6 +150,8 @@ export function bindExplicitTemplate(
     datasource: rawDatasourceFor(built.fieldBySlot, opts.datasource ?? schema.datasource),
     fieldMapping: emitRawFieldMapping(manifest, built.fieldBySlot),
     fieldMetadata: fieldMetadataFor(manifest, built.fieldBySlot),
+    consumedFieldRefs: consumedFieldRefsFor(manifest, built.fieldBySlot),
+    templateSlots: manifest.slots,
     optionalFieldPrunes: optionalFieldPrunesFor(manifest, built.fieldBySlot),
     warnings: [...warnings, ...(validation.warnings ?? [])],
     passthrough: false,
@@ -415,6 +422,22 @@ function fieldMetadataFor(
     metadata[key] = { datatype: field.datatype, type: field.type };
   }
   return metadata;
+}
+
+function consumedFieldRefsFor(
+  manifest: TemplateManifest,
+  fieldBySlot: Map<string, SchemaField>,
+): string[] {
+  const refs: string[] = [];
+  const seen = new Set<string>();
+  for (const slot of manifest.slots) {
+    if (!slot.bindable) continue;
+    const ref = fieldBySlot.get(slot.slot_id)?.column_ref;
+    if (!ref || seen.has(ref)) continue;
+    seen.add(ref);
+    refs.push(ref);
+  }
+  return refs;
 }
 
 function optionalFieldPrunesFor(

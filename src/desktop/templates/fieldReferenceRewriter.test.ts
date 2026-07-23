@@ -45,6 +45,86 @@ describe('rewriteFieldReferences — raw-vs-escaped boundary (named contract)', 
   });
 });
 
+describe('rewriteFieldReferences — explicit base-name placeholders', () => {
+  const slots = [
+    {
+      slot_id: 'category',
+      template_field: '{{field_base_1}}',
+      required: true,
+      bindable: true,
+      kind: 'categorical',
+      role: ['rows'],
+    },
+    {
+      slot_id: 'value',
+      template_field: '{{field_base_2}}',
+      required: true,
+      bindable: true,
+      kind: 'quantitative',
+      role: ['cols'],
+    },
+  ];
+  const xml =
+    '<workbook><worksheets><worksheet><table><view>' +
+    "<datasource-dependencies datasource='{{DATASOURCE}}'>" +
+    "<column datatype='string' name='[{{field_base_1}}]' role='dimension' type='nominal' />" +
+    "<column datatype='real' name='[{{field_base_2}}]' role='measure' type='quantitative' />" +
+    "<column-instance column='[{{field_base_1}}]' derivation='None' name='[none:{{field_base_1}}:nk]' />" +
+    "<column-instance column='[{{field_base_2}}]' derivation='Sum' name='[sum:{{field_base_2}}:qk]' />" +
+    '</datasource-dependencies>' +
+    "<computed-sort column='[{{DATASOURCE}}].[none:{{field_base_1}}:nk]' using='[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]' />" +
+    '</view><rows>[{{DATASOURCE}}].[none:{{field_base_1}}:nk]</rows>' +
+    '<cols>[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]</cols></table></worksheet></worksheets></workbook>';
+
+  it('expands stable slot-id mapping keys through every reference class', () => {
+    const out = rewriteFieldReferences(
+      xml,
+      {
+        category: '[DS].[none:Segment:nk]',
+        value: '[DS].[sum:Revenue:qk]',
+      },
+      'DS',
+      undefined,
+      { templateSlots: slots },
+    );
+
+    expect(out).toContain('column="[DS].[none:Segment:nk]"');
+    expect(out).toContain('using="[DS].[sum:Revenue:qk]"');
+    expect(out).toContain('<rows>[DS].[none:Segment:nk]</rows>');
+    expect(out).toContain('<cols>[DS].[sum:Revenue:qk]</cols>');
+    expect(out).not.toMatch(/\{\{field_base_\d+\}\}/);
+  });
+
+  it('fails loud when any field placeholder survives without manifest metadata', () => {
+    expect(() => rewriteFieldReferences(xml, {}, 'DS')).toThrow(
+      /unresolved template field placeholder/i,
+    );
+  });
+
+  it('turns a placeholder-backed dateparse calc into an internal calc name', () => {
+    const calcXml =
+      '<workbook><worksheets><worksheet><table><view>' +
+      "<datasource-dependencies datasource='{{DATASOURCE}}'>" +
+      "<column datatype='date' name='[{{field_base_1}}]' role='dimension' type='ordinal'>" +
+      "<calculation class='tableau' formula=\"DATEPARSE('yyyy-MM', [month])\" />" +
+      '</column>' +
+      "<column datatype='string' name='[month]' role='dimension' type='nominal' />" +
+      "<column-instance column='[{{field_base_1}}]' derivation='Month-Trunc' name='[tmn:{{field_base_1}}:qk]' />" +
+      '</datasource-dependencies></view>' +
+      '<cols>[{{DATASOURCE}}].[tmn:{{field_base_1}}:qk]</cols>' +
+      '</table></worksheet></worksheets></workbook>';
+
+    const out = rewriteFieldReferences(calcXml, {}, 'DS', undefined, {
+      namespaceCalcs: true,
+      applyNonce: 'dateparse-placeholder',
+      templateSlots: [slots[0]],
+    });
+
+    expect(out).toMatch(/Calculation_field_base_1_tpl_[0-9a-f]{8}/);
+    expect(out).not.toContain('{{field_base_1}}');
+  });
+});
+
 describe('rewriteFieldReferences — ref-class coverage: kpi-text (aggregated measure)', () => {
   let kpiText: string;
   const mapping = { Value: '[DS].[sum:Revenue:qk]' };
@@ -77,8 +157,9 @@ describe('rewriteFieldReferences — ref-class coverage: kpi-text (aggregated me
 describe('rewriteFieldReferences — ref-class coverage: ranking-ordered-bar (dimension + measure + computed-sort)', () => {
   let ranking: string;
   const mapping = {
-    Region: '[DS].[none:Category:nk]',
-    Sales: '[DS].[sum:Profit:qk]',
+    '{{field_base_1}}': '[DS].[none:Segment:nk]',
+    '{{field_base_2}}': '[DS].[sum:Profit:qk]',
+    '{{field_base_3}}': '[DS].[none:Group:nk]',
   };
   const datasource = 'Superstore';
   beforeAll(() => {
@@ -87,30 +168,30 @@ describe('rewriteFieldReferences — ref-class coverage: ranking-ordered-bar (di
 
   it('rewrites both bare base <column> declarations', () => {
     const r = rewriteFieldReferences(ranking, mapping, datasource);
-    expect(r).toMatch(/<column [^>]*name="\[Category\]"/);
+    expect(r).toMatch(/<column [^>]*name="\[Segment\]"/);
     expect(r).toMatch(/<column [^>]*name="\[Profit\]"/);
-    expect(r).not.toContain('name="[Region]"');
-    expect(r).not.toContain('name="[Sales]"');
+    expect(r).not.toContain('name="[Category]"');
+    expect(r).not.toContain('name="[Measure]"');
   });
 
   it('rewrites plain instance names with lowercase short codes (none/sum)', () => {
     const r = rewriteFieldReferences(ranking, mapping, datasource);
-    expect(r).toContain('name="[none:Category:nk]"');
+    expect(r).toContain('name="[none:Segment:nk]"');
     expect(r).toContain('name="[sum:Profit:qk]"');
   });
 
   it('rewrites the <computed-sort> column= and using= refs (dimension + measure)', () => {
     const r = rewriteFieldReferences(ranking, mapping, datasource);
-    expect(r).toContain('column="[Superstore].[none:Category:nk]"');
+    expect(r).toContain('column="[Superstore].[none:Segment:nk]"');
     expect(r).toContain('using="[Superstore].[sum:Profit:qk]"');
   });
 
   it('rewrites the rows/cols text-node refs with ZERO old field-ref residue', () => {
     const r = rewriteFieldReferences(ranking, mapping, datasource);
-    expect(r).toContain('<rows>[Superstore].[none:Category:nk]</rows>');
+    expect(r).toContain('<rows>[Superstore].[none:Segment:nk]</rows>');
     expect(r).toContain('<cols>[Superstore].[sum:Profit:qk]</cols>');
     expect(r).not.toContain('{{DATASOURCE}}');
-    expect(r).not.toMatch(/:Region:|:Sales:/);
+    expect(r).not.toMatch(/:Category:|:Measure:/);
   });
 });
 

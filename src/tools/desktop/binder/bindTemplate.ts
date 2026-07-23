@@ -909,6 +909,7 @@ async function performAutoApply({
   eventsAnchor,
   schemaSummary,
   suppressActivation,
+  manifest,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -920,6 +921,7 @@ async function performAutoApply({
   eventsAnchor?: number;
   schemaSummary: SchemaSummary;
   suppressActivation: boolean;
+  manifest: TemplateManifest;
 }): Promise<StructuredBindTemplateToolResult> {
   const { args } = res;
 
@@ -971,6 +973,7 @@ async function performAutoApply({
       sheetType: args.sheet_type,
       templateParameters: args.template_parameters,
       fieldMapping: args.field_mapping,
+      templateSlots: manifest.slots,
       applyNonce,
       optionalFieldPrunes: args.optional_field_prunes,
       dateparseAxis: args.dateparse_axis,
@@ -1365,7 +1368,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new Ok(base);
           }
 
-          if (!canAutoApply) {
+          if (!canAutoApply || manifest === undefined) {
             recordBindRecoveryAttemptFailOpen({
               session: resolvedSession,
               askKey,
@@ -1388,6 +1391,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             eventsAnchor,
             schemaSummary,
             suppressActivation: target_worksheet !== undefined,
+            manifest,
           });
           recordBoundRecoveryAfterFinalResult({
             session: resolvedSession,

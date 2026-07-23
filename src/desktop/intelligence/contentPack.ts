@@ -19,7 +19,7 @@ import type { ContentManifest, ContentResource, EngineCompat } from './provider.
  * `SCHEMA_VERSION` (src/scripts/buildTemplateManifests.ts). A pack whose
  * `schema_version` exceeds this is rejected wholesale — never partially read.
  */
-export const SUPPORTED_SCHEMA_VERSION = '1';
+export const SUPPORTED_SCHEMA_VERSION = '2';
 
 /**
  * The max pack ENVELOPE format this engine can parse. Distinct from the content

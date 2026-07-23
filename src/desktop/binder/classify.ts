@@ -73,6 +73,8 @@ export interface LlmProposeInput {
       role: string[];
       kind: SlotKind;
       required: boolean;
+      purpose?: string;
+      examples?: string[];
       derivation?: Derivation;
       // Present + true on a temporal slot that also accepts a date-like STRING field
       // (DATEPARSE'd to a continuous axis) — tells the proposer a 'YYYY-MM' string month
@@ -1919,6 +1921,10 @@ export function buildLlmInput(
           role: slot.role,
           kind: slot.kind,
           required: slot.required,
+          ...(slot.purpose ? { purpose: slot.purpose } : {}),
+          ...(slot.purpose && slot.examples && slot.examples.length > 0
+            ? { examples: slot.examples }
+            : {}),
           derivation: slot.derivation, // template default; override only if the ask differs
           ...(slot.temporal_from_string ? { temporal_from_string: true } : {}),
         })),

@@ -27,7 +27,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /** Bumped when the manifest/content SHAPE changes in a way consumers must react to. */
-const SCHEMA_VERSION = '1';
+const SCHEMA_VERSION = '2';
 const GENERATOR = 'src/scripts/buildTemplateManifests.ts';
 const RERUN = 'npx tsx src/scripts/buildTemplateManifests.ts';
 

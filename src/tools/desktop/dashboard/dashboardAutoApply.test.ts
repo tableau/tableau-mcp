@@ -44,7 +44,10 @@ vi.mock('../../../desktop/templates/injectTemplateCore.js', async (importOrigina
 vi.mock('../../../desktop/externalApi/discovery.js');
 vi.mock('../../../desktop/libraries/workbook-serialization-converter/index.js');
 vi.mock('../../../desktop/templates/templatePath.js');
-vi.mock('../../../desktop/validation/registry.js');
+vi.mock('../../../desktop/validation/registry.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../desktop/validation/registry.js')>();
+  return { ...actual, runValidation: vi.fn() };
+});
 // Partial fs mock: templates come from the mocked SEA-aware `readTemplate` seam
 // (templatePath.js above); fs reads stay live for the real manifest/content loads
 // and only writes are stubbed so no test touches disk.
