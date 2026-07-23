@@ -307,6 +307,71 @@ const boundWithSortAndTopNResult: BinderResult = {
     top_n: 10,
   },
 };
+// m7 declarative-filter (order-of-operations) fixtures. READ workbook carries product/region/sales
+// so the filter splice can resolve "Region" → its CI; the injected sheet ranks PRODUCT (top-10),
+// with a worksheet window so the shown filter card has a home.
+const M7_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='M7'>
+      <column caption='Product' name='[product]' role='dimension' type='nominal' datatype='string' />
+      <column caption='Region' name='[region]' role='dimension' type='nominal' datatype='string' />
+      <column caption='Sales' name='[sales]' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>`;
+const INJECTED_M7_RANKING_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <worksheets>
+    <worksheet name='Top 10 Products' xmlns:user='http://www.tableausoftware.com/xml/user'>
+      <table>
+        <view>
+          <datasources>
+            <datasource caption='M7' name='M7' />
+          </datasources>
+          <datasource-dependencies datasource='M7'>
+            <column caption='Product' datatype='string' name='[product]' role='dimension' type='nominal' />
+            <column caption='Sales' datatype='integer' name='[sales]' role='measure' type='quantitative' />
+            <column-instance column='[product]' derivation='None' name='[none:product:nk]' pivot='key' type='nominal' />
+            <column-instance column='[sales]' derivation='Sum' name='[sum:sales:qk]' pivot='key' type='quantitative' />
+          </datasource-dependencies>
+          <aggregation value='true' />
+        </view>
+        <style />
+        <panes>
+          <pane>
+            <view><breakdown value='auto' /></view>
+            <mark class='Bar' />
+          </pane>
+        </panes>
+        <rows>[M7].[none:product:nk]</rows>
+        <cols>[M7].[sum:sales:qk]</cols>
+      </table>
+      <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+    </worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' name='Top 10 Products'>
+      <cards />
+      <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+    </window>
+  </windows>
+</workbook>`;
+const boundM7TopNContextFilterResult: BinderResult = {
+  ...boundViaProposalResult,
+  args: {
+    template_name: 'ranking-ordered-bar',
+    title: 'Top 10 Products',
+    sheet_type: 'worksheet',
+    template_parameters: { DATASOURCE: 'M7' },
+    field_mapping: {
+      Region: '[M7].[none:product:nk]',
+      Sales: '[M7].[sum:sales:qk]',
+    },
+    top_n: 10,
+    filters: [{ field: 'Region', context: true }],
+  },
+};
 const boundWaterfallResult: BinderResult = {
   ...boundViaProposalResult,
   args: {
@@ -1695,6 +1760,92 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(xml).toContain(
       "<computed-sort column='[Superstore].[none:Region:nk]' direction='DESC' using='[Superstore].[sum:Sales:qk]' />",
     );
+    expect(xml).toMatch(/function='end'\s+end='top'\s+count='10'/);
+  });
+
+  it('m7: splices a context Region filter AFTER top_n, declares its CI, adds it to <slices>, and shows a filter card', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundM7TopNContextFilterResult,
+      inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Show me the top 10 products by sales, and let me filter down to one region.',
+      proposal: {
+        ...sampleProposal,
+        top_n: 10,
+        filters: [{ field: 'Region', context: true }],
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const xml = appliedXml(applyWorkbookDocument);
+
+    // (a) context='true' on the Region filter, enumerate-all interactive control (no member list).
+    expect(xml).toContain(
+      "<filter class='categorical' column='[M7].[none:region:nk]' context='true'>",
+    );
+    expect(xml).toMatch(
+      /<filter class='categorical' column='\[M7\]\.\[none:region:nk\]' context='true'><groupfilter function='level-members' level='\[none:region:nk\]' user:ui-enumeration='all' \/><\/filter>/,
+    );
+
+    // (b) the Region CI declared in <datasource-dependencies> (column + column-instance).
+    expect(xml).toContain(
+      "<column datatype='string' name='[region]' role='dimension' type='nominal' />",
+    );
+    expect(xml).toContain(
+      "<column-instance column='[region]' derivation='None' name='[none:region:nk]' pivot='key' type='nominal' />",
+    );
+    // ... and added to <slices> alongside the top-N product CI.
+    expect(xml).toContain('<column>[M7].[none:region:nk]</column>');
+
+    // (c) the shown <card type='filter'> in the sheet's window (filter_action_wired gate).
+    expect(xml).toContain("<card mode='dropdown' param='[M7].[none:region:nk]' type='filter' />");
+
+    // (d) planTopN still emits the top-N groupfilter on PRODUCT, unaffected by the region CI
+    // (splice-after means planTopN never saw a second dimension → no ambiguity refusal).
+    expect(xml).toMatch(/function='end'\s+end='top'\s+count='10'/);
+    expect(xml).toContain("<filter class='categorical' column='[M7].[none:product:nk]'>");
+  });
+
+  it('m7: a context filter with explicit member values emits an inclusive member union', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: {
+        ...boundM7TopNContextFilterResult,
+        args: {
+          ...boundM7TopNContextFilterResult.args,
+          filters: [{ field: 'Region', values: ['East'], context: true }],
+        },
+      } as BinderResult,
+      inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'top 10 products by sales in the East region',
+      proposal: {
+        ...sampleProposal,
+        top_n: 10,
+        filters: [{ field: 'Region', values: ['East'], context: true }],
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const xml = appliedXml(applyWorkbookDocument);
+    expect(xml).toContain(
+      "<filter class='categorical' column='[M7].[none:region:nk]' context='true'>",
+    );
+    expect(xml).toContain(
+      "<groupfilter function='member' level='[none:region:nk]' member='East' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />",
+    );
+    // top-N unaffected.
     expect(xml).toMatch(/function='end'\s+end='top'\s+count='10'/);
   });
 

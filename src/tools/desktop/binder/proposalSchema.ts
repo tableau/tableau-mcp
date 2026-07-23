@@ -62,5 +62,21 @@ export const proposalSchema = z
       .strict()
       .optional(),
     top_n: z.number().int().positive().optional(),
+    // Declarative interactive dimension filters (m7 order-of-operations). Mirrors the
+    // library's FilterSpec / PROPOSAL_OUTPUT_SCHEMA `filters` sibling. `.strict()` on each
+    // filter object matches the advertised additionalProperties:false so a smuggled key
+    // fails closed rather than being silently dropped (the watch-class fail-open this file
+    // guards). `values` optional: omit for an enumerate-all interactive control.
+    filters: z
+      .array(
+        z
+          .object({
+            field: z.string(),
+            values: z.array(z.string()).optional(),
+            context: z.boolean().optional(),
+          })
+          .strict(),
+      )
+      .optional(),
   })
   .strict();

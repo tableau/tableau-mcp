@@ -556,14 +556,240 @@ function ensureSortByColumnDependency(
   return { ok: true, xml: out, columnRef: field.column_ref };
 }
 
+/**
+ * Declare a FILTER field's column + column-instance in <datasource-dependencies> — the mirror
+ * of {@link ensureSortByColumnDependency} for an m7 context filter. A <filter column='[DS].[CI]'>
+ * references a phantom CI unless both the base <column> and the <column-instance> exist in the
+ * dependency block, so this ensures them (idempotent: skips whichever is already declared).
+ * Returns the parsed CI parts the caller needs to emit the filter node (`instanceName`, `role`).
+ */
+function ensureFilterColumnDependency(
+  xml: string,
+  field: NonNullable<ReturnType<typeof resolveInSummary>['field']>,
+):
+  | { ok: true; xml: string; columnRef: string; instanceName: string; level: string; role: string }
+  | { ok: false; reason: string } {
+  const parsed = parseQualifiedColumnInstance(field.column_ref);
+  if (!parsed) {
+    return {
+      ok: false,
+      reason: `filter field "${field.name}" did not resolve to a column-instance ref`,
+    };
+  }
+
+  const columnName = bareColumnName(field.columnName);
+  const columnDeclared = new RegExp(
+    `<column\\s[^>]*\\bname=(['"])\\[${columnName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\1`,
+  ).test(xml);
+  const instanceDeclared =
+    xml.includes(`name='${parsed.instanceName}'`) || xml.includes(`name="${parsed.instanceName}"`);
+  if (columnDeclared && instanceDeclared) {
+    return {
+      ok: true,
+      xml,
+      columnRef: field.column_ref,
+      instanceName: parsed.instanceName,
+      level: parsed.instanceName,
+      role: parsed.role,
+    };
+  }
+
+  const declarations: string[] = [];
+  if (!columnDeclared) {
+    declarations.push(
+      `<column datatype='${escapeXmlAttribute(field.datatype)}' name='[${escapeXmlAttribute(
+        columnName,
+      )}]' role='${field.role}' type='${escapeXmlAttribute(field.type)}' />`,
+    );
+  }
+  if (!instanceDeclared) {
+    declarations.push(
+      `<column-instance column='[${escapeXmlAttribute(columnName)}]' derivation='${derivationAttribute(
+        parsed.deriv,
+      )}' name='${escapeXmlAttribute(parsed.instanceName)}' pivot='key' type='${typeForRole(
+        parsed.role,
+      )}' />`,
+    );
+  }
+
+  const out = xml.replace(
+    /^([ \t]*)(<column-instance\b)/m,
+    (_whole, indent: string, columnInstance: string) =>
+      `${indent}${declarations.join(`\n${indent}`)}\n${indent}${columnInstance}`,
+  );
+  if (out === xml) {
+    return {
+      ok: false,
+      reason: `could not declare filter field "${field.name}" in datasource-dependencies`,
+    };
+  }
+  return {
+    ok: true,
+    xml: out,
+    columnRef: field.column_ref,
+    instanceName: parsed.instanceName,
+    level: parsed.instanceName,
+    role: parsed.role,
+  };
+}
+
+/**
+ * Emit an interactive dimension filter node (m7). A `context:true` filter carries
+ * `context='true'` — Tableau order-of-operations step 3, which runs BEFORE the Top-N
+ * dimension filter (step 4), so a top-N within this dimension ranks WITHIN the selection.
+ * With no member `values`, emit the enumerate-all interactive control
+ * (`function='level-members'` + `user:ui-enumeration='all'`, single node — the confirmed
+ * "all members selected" control form); with values, an inclusive member union.
+ */
+function buildInteractiveFilterNode(p: {
+  columnRef: string;
+  level: string;
+  context: boolean;
+  values?: string[];
+}): string {
+  const contextAttr = p.context ? " context='true'" : '';
+  const level = escapeXmlAttribute(p.level);
+  if (p.values && p.values.length > 0) {
+    const members = p.values
+      .map(
+        (v) =>
+          `<groupfilter function='member' level='${level}' member='${escapeXmlAttribute(v)}' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />`,
+      )
+      .join('');
+    return (
+      `<filter class='categorical' column='${escapeXmlAttribute(p.columnRef)}'${contextAttr}>` +
+      `<groupfilter function='union' user:ui-enumeration='inclusive' user:ui-marker='enumerate'>${members}</groupfilter>` +
+      '</filter>'
+    );
+  }
+  return (
+    `<filter class='categorical' column='${escapeXmlAttribute(p.columnRef)}'${contextAttr}>` +
+    `<groupfilter function='level-members' level='${level}' user:ui-enumeration='all' />` +
+    '</filter>'
+  );
+}
+
+/**
+ * Insert a filter node AFTER </datasource-dependencies> (so it precedes <slices>/<aggregation>,
+ * matching the top-N filter placement) and add the filtered CI to <slices>, reusing the SAME
+ * ordering the refine planner uses (insertFilterAndSlices). Kept local (that helper is not
+ * exported); creates or extends <slices> exactly as the top-N path does.
+ */
+function insertFilterNodeAndSlice(xml: string, filterXml: string, sliceColumn: string): string {
+  let out = xml.replace(/<\/datasource-dependencies>/, (m) => `${m}\n      ${filterXml}`);
+  const sliceEntry = `<column>${sliceColumn}</column>`;
+  if (/<slices\b[^>]*\/>/.test(out)) {
+    out = out.replace(/<slices\b[^>]*\/>/, `<slices>${sliceEntry}</slices>`);
+  } else if (/<slices>[\s\S]*?<\/slices>/.test(out)) {
+    // Guard against duplicates by the exact slice ENTRY, not the bare CI ref: the CI ref also
+    // appears in the filter node just inserted, so `includes(sliceColumn)` would wrongly skip
+    // a legitimate second slice (e.g. planTopN already added the product CI to <slices>).
+    if (!out.includes(sliceEntry)) {
+      out = out.replace(/<\/slices>/, `${sliceEntry}</slices>`);
+    }
+  } else if (/<aggregation\b/.test(out)) {
+    out = out.replace(/(\s*)(<aggregation\b)/, `$1<slices>${sliceEntry}</slices>$1$2`);
+  } else {
+    out = out.replace(filterXml, `${filterXml}\n      <slices>${sliceEntry}</slices>`);
+  }
+  return out;
+}
+
+/** Splice a filter card into ONE worksheet-window body, creating the cards scaffold if absent. */
+function spliceCardIntoWindowBody(inner: string, card: string, columnRef: string): string {
+  // Already carries a filter card for this CI — leave it.
+  if (
+    inner.includes(`param='${escapeXmlAttribute(columnRef)}'`) &&
+    /type=['"]filter['"]/.test(inner)
+  ) {
+    return inner;
+  }
+  const leftStripRe =
+    /(<edge\b[^>]*\bname=(['"])left\2[^>]*>\s*<strip\b[^>]*>)([\s\S]*?)(<\/strip>)/;
+  const cardsBlockRe = /(<cards>)([\s\S]*?)(<\/cards>)/;
+  const emptyCardsRe = /<cards\s*\/>/;
+  if (leftStripRe.test(inner)) {
+    return inner.replace(
+      leftStripRe,
+      (_w, open: string, _q, _q2, body: string, close: string) => `${open}${body}${card}${close}`,
+    );
+  }
+  if (cardsBlockRe.test(inner)) {
+    return inner.replace(
+      cardsBlockRe,
+      (_w, open: string, body: string, close: string) =>
+        `${open}${body}<edge name='left'><strip size='160'>${card}</strip></edge>${close}`,
+    );
+  }
+  if (emptyCardsRe.test(inner)) {
+    return inner.replace(
+      emptyCardsRe,
+      `<cards><edge name='left'><strip size='160'>${card}</strip></edge></cards>`,
+    );
+  }
+  // No cards node — create the scaffold as the FIRST child (worksheet window content model:
+  // <cards> then viewpoint/simple-id).
+  return `<cards><edge name='left'><strip size='160'>${card}</strip></edge></cards>${inner}`;
+}
+
+/**
+ * Fully decode XML entities to a FIXPOINT. The inject path escapes the title TWICE (the binder
+ * escapes proposal.title once into args.title, then inject core escapes it again for {{TITLE}}),
+ * so a serialized window name can be doubly-escaped (`&amp;amp;`). decodeXmlEntities peels ONE
+ * level; iterating to stability collapses any escape depth so a decoded window name compares
+ * equal to the plain literal title. Bounded (each pass strictly shrinks or is the last).
+ */
+function fullyDecodeXmlEntities(value: string): string {
+  let prev = value;
+  for (let i = 0; i < 8; i++) {
+    const next = decodeXmlEntities(prev);
+    if (next === prev) break;
+    prev = next;
+  }
+  return prev;
+}
+
+/**
+ * Emit a SHOWN interactive filter CARD into the sheet's worksheet <window> (the judge's
+ * filter_action_wired gate — a context filter alone is OoO-correct but INVISIBLE). Adds
+ * `<card mode='dropdown' param='<CI>' type='filter' />` on the window's LEFT edge, creating
+ * the <cards>/<edge name='left'>/<strip> scaffold when absent. Best-effort: on any structural
+ * miss (no matching window, card already present) it returns the XML unchanged rather than
+ * corrupting the tree — the OoO filter still applied, the card is a visibility add-on.
+ *
+ * `literalTitle` is the PLAIN (fully-decoded) sheet name: each candidate window's `name` is
+ * fully decoded before comparison, so single- OR double-escaped serializations both match and a
+ * whole-workbook re-serialize never mutates a sibling sheet's cards.
+ */
+function insertShownFilterCard(xml: string, literalTitle: string, columnRef: string): string {
+  const card = `<card mode='dropdown' param='${escapeXmlAttribute(columnRef)}' type='filter' />`;
+  const windowRe = /<window\b([^>]*)\bclass=(['"])worksheet\2([^>]*)>([\s\S]*?)<\/window>/g;
+  return xml.replace(windowRe, (whole, pre: string, _q, post: string, inner: string) => {
+    const nameAttr = attrValue(`${pre} ${post}`, 'name');
+    if (nameAttr === null || fullyDecodeXmlEntities(nameAttr) !== literalTitle) return whole;
+    const openTag = whole.slice(0, whole.length - inner.length - '</window>'.length);
+    return `${openTag}${spliceCardIntoWindowBody(inner, card, columnRef)}</window>`;
+  });
+}
+
+/** Read a single/double-quoted attribute value out of an element's attribute text (null if absent). */
+function attrValue(attrs: string, key: string): string | null {
+  const m = attrs.match(new RegExp(`\\b${key}=(?:'([^']*)'|"([^"]*)")`));
+  if (!m) return null;
+  return m[1] ?? m[2] ?? '';
+}
+
 function applyProposalSplices({
   xml,
   args,
   schemaSummary,
+  literalTitle,
 }: {
   xml: string;
   args: BoundResult['args'];
   schemaSummary: SchemaSummary;
+  /** The PLAIN (fully-decoded) sheet name — scopes the shown-filter-card edit to this sheet's window. */
+  literalTitle: string;
 }): { ok: true; xml: string; warnings: string[] } | { ok: false; reason: string } {
   let out = xml;
   const warnings: string[] = [];
@@ -607,6 +833,35 @@ function applyProposalSplices({
     const filtered = planTopN(out, { n: args.top_n });
     if (!filtered.ok) return { ok: false, reason: `top_n splice failed: ${filtered.reason}` };
     out = filtered.xml;
+  }
+  // Declarative interactive filters (m7). CRITICAL ORDERING: this runs AFTER the top_n splice
+  // so planTopN sees the clean single-dimension sheet and never trips its >1-dimension refusal
+  // (a filter-only CI would otherwise look like a second rankable dimension). A context:true
+  // filter is Tableau OoO step 3 (before the top-N dimension filter at step 4), so a "top N
+  // within the selected region" ranks WITHIN the selection rather than globally-then-filtered.
+  if (args.filters && args.filters.length > 0) {
+    for (const filter of args.filters) {
+      const resolved = resolveInSummary(schemaSummary, filter.field);
+      if ((resolved.kind !== 'exact' && resolved.kind !== 'rewritten') || !resolved.field) {
+        warnings.push(`filter splice skipped: no unique field named "${filter.field}"`);
+        continue;
+      }
+      const declared = ensureFilterColumnDependency(out, resolved.field);
+      if (!declared.ok) {
+        warnings.push(`filter splice skipped: ${declared.reason}`);
+        continue;
+      }
+      const filterNode = buildInteractiveFilterNode({
+        columnRef: declared.columnRef,
+        level: declared.level,
+        context: filter.context === true,
+        values: filter.values,
+      });
+      declared.xml = insertFilterNodeAndSlice(declared.xml, filterNode, declared.columnRef);
+      // The SHOWN card is what the judge's filter_action_wired gate checks — an OoO-correct
+      // context filter with no control is invisible. Best-effort (no-op if the window is absent).
+      out = insertShownFilterCard(declared.xml, literalTitle, declared.columnRef);
+    }
   }
   return { ok: true, xml: out, warnings };
 }
@@ -723,7 +978,11 @@ async function performAutoApply({
   if (!injected.ok) {
     return applyFallback(base, `inject failed: ${injected.issues.join('; ')}`);
   }
-  const spliced = applyProposalSplices({ xml: injected.xml, args, schemaSummary });
+  // The window name in the injected doc is escaped to the SAME depth as {{TITLE}} in the
+  // worksheet (both come from args.title through inject core), so fully-decode args.title to
+  // the plain literal and scope the shown-filter-card splice to that window by name.
+  const literalTitle = fullyDecodeXmlEntities(args.title);
+  const spliced = applyProposalSplices({ xml: injected.xml, args, schemaSummary, literalTitle });
   if (!spliced.ok) {
     return applyFallback(base, spliced.reason);
   }
@@ -733,7 +992,6 @@ async function performAutoApply({
   const injectMs = Date.now() - injectStart;
 
   // ── Apply leg (SAME validated path; runValidation preflight runs) ─
-  const literalTitle = decodeXmlEntities(args.title);
   const applyStart = Date.now();
   const applyResult = await loadWorkbookXml({
     xml: spliced.xml,

@@ -69,4 +69,37 @@ describe('proposalSignature', () => {
       proposalSignature(baseProposal),
     );
   });
+
+  it('changes when a declarative filter is added (m7 — so an add-filter re-bind is not blocked as unchanged)', () => {
+    // The recovery gate blocks a retry whose signature is unchanged. Adding an interactive
+    // context filter is a real semantic change and MUST produce a distinct signature, else the
+    // "add the Region context filter" re-bind would be refused as a duplicate.
+    expect(
+      proposalSignature({
+        ...baseProposal,
+        filters: [{ field: 'Region', context: true }],
+      }),
+    ).not.toBe(proposalSignature(baseProposal));
+  });
+
+  it('treats filter order as non-semantic but values/context as semantic', () => {
+    const a = {
+      ...baseProposal,
+      filters: [
+        { field: 'Region', context: true },
+        { field: 'Segment', values: ['Consumer'] },
+      ],
+    };
+    const reordered = { ...baseProposal, filters: [...a.filters].reverse() };
+    expect(proposalSignature(reordered)).toBe(proposalSignature(a));
+
+    const contextFlipped = {
+      ...baseProposal,
+      filters: [
+        { field: 'Region', context: false },
+        { field: 'Segment', values: ['Consumer'] },
+      ],
+    };
+    expect(proposalSignature(contextFlipped)).not.toBe(proposalSignature(a));
+  });
 });
