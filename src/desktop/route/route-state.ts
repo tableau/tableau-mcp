@@ -81,6 +81,11 @@ export interface BindRecoveryRecord {
   phase: BindRecoveryPhase;
   attempts: BindAttempt[];
   lastProposalSignature?: string;
+  /** One-shot retry for an apply failure proven to have occurred before mutation dispatch. */
+  preDispatchRetryAllowance?: {
+    proposalSignature: string;
+    remaining: 0 | 1;
+  };
   /** Outcome records that could not be correlated to a live pending reservation. */
   uncorrelatedOutcomeCount?: number;
 }
@@ -403,6 +408,16 @@ export class SessionRouteStateStore {
     return {};
   }
 
+  private withPreDispatchRetryAllowance(
+    previous: BindRecoveryRecord | undefined,
+    nextProposalSignature: string | undefined,
+  ): Pick<BindRecoveryRecord, 'preDispatchRetryAllowance'> {
+    const allowance = previous?.preDispatchRetryAllowance;
+    return allowance?.proposalSignature === nextProposalSignature
+      ? { preDispatchRetryAllowance: allowance }
+      : {};
+  }
+
   private upgradesLastReservation(
     previous: BindRecoveryRecord | undefined,
     proposalSignature: string | undefined,
@@ -492,10 +507,12 @@ export class SessionRouteStateStore {
       consumesRetryBudget,
     };
     const reservationId = this.nextBindRecoveryReservationId++;
+    const nextProposalSignature = admission.proposalSignature ?? previous?.lastProposalSignature;
     const record: BindRecoveryRecord = {
       phase,
       attempts: [...(previous?.attempts ?? []), { ...bindAttempt, reservationId }],
       ...this.withLastProposalSignature(previous, admission.proposalSignature),
+      ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
       ...this.withUncorrelatedOutcomeCount(previous, false),
     };
 
@@ -545,6 +562,10 @@ export class SessionRouteStateStore {
             uncorrelated: false,
           }
         : this.upgradeReservedAttempt(previous, attempt.reservationId, bindAttempt);
+    const nextProposalSignature =
+      attempt.reservationId === undefined
+        ? (attempt.proposalSignature ?? previous?.lastProposalSignature)
+        : previous?.lastProposalSignature;
     const record: BindRecoveryRecord = {
       phase: upgraded.uncorrelated && previous ? previous.phase : phase,
       attempts: upgraded.attempts,
@@ -552,6 +573,7 @@ export class SessionRouteStateStore {
         previous,
         attempt.reservationId === undefined ? attempt.proposalSignature : undefined,
       ),
+      ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
       ...this.withUncorrelatedOutcomeCount(previous, upgraded.uncorrelated),
     };
 
@@ -591,6 +613,10 @@ export class SessionRouteStateStore {
             uncorrelated: false,
           }
         : this.upgradeReservedAttempt(previous, attempt.reservationId, bindAttempt);
+    const nextProposalSignature =
+      attempt.reservationId === undefined
+        ? (attempt.proposalSignature ?? previous?.lastProposalSignature)
+        : previous?.lastProposalSignature;
     const record: BindRecoveryRecord = {
       phase: upgraded.uncorrelated && previous ? previous.phase : 'terminal',
       attempts: upgraded.attempts,
@@ -598,11 +624,49 @@ export class SessionRouteStateStore {
         previous,
         attempt.reservationId === undefined ? attempt.proposalSignature : undefined,
       ),
+      ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
       ...this.withUncorrelatedOutcomeCount(previous, upgraded.uncorrelated),
     };
 
     this.touchBindRecovery(state, ask, record);
     return state;
+  }
+
+  grantPreDispatchRetryAllowance(
+    sessionId: string | undefined,
+    ask: string,
+    proposalSignature: string,
+  ): boolean {
+    const state = this.get(sessionId);
+    const record = state?.bindRecoveryByAsk.get(ask);
+    if (!state || !record || record.lastProposalSignature !== proposalSignature) return false;
+    if (record.preDispatchRetryAllowance?.proposalSignature === proposalSignature) return false;
+    return this.touchBindRecovery(state, ask, {
+      ...record,
+      preDispatchRetryAllowance: { proposalSignature, remaining: 1 },
+    });
+  }
+
+  consumePreDispatchRetryAllowance(
+    sessionId: string | undefined,
+    ask: string,
+    proposalSignature: string,
+  ): boolean {
+    const state = this.get(sessionId);
+    const record = state?.bindRecoveryByAsk.get(ask);
+    const allowance = record?.preDispatchRetryAllowance;
+    if (
+      !state ||
+      !record ||
+      allowance?.proposalSignature !== proposalSignature ||
+      allowance.remaining !== 1
+    ) {
+      return false;
+    }
+    return this.touchBindRecovery(state, ask, {
+      ...record,
+      preDispatchRetryAllowance: { proposalSignature, remaining: 0 },
+    });
   }
 
   clearBindRecovery(sessionId: string | undefined, ask: string): boolean {

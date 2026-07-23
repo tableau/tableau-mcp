@@ -15,10 +15,11 @@ describe('proposalSchema — strict object contract', () => {
   };
 
   it('tells callers to copy the immediately preceding proposal contract exactly', () => {
-    expect(proposalSchema.description).toContain('Omit on FIRST call');
-    expect(proposalSchema.description).toContain('exact returned `template` + slot IDs');
-    expect(proposalSchema.description).toContain('never invent aliases (`waterfall`)');
-    expect(proposalSchema.description).toContain('slots (`steps`/`measure`/`color`)');
+    expect(proposalSchema.description).toContain('Omit Call 1');
+    expect(proposalSchema.description).toContain('exact returned template/slots');
+    expect(proposalSchema.description).toContain('same ask/target');
+    expect(proposalSchema.description).toContain('top-level auto_apply:true');
+    expect(bindingSchema.shape.field.description).toMatch(/exact llm_input\.fields\[\]\.name/i);
   });
 
   it('accepts a well-formed proposal', () => {

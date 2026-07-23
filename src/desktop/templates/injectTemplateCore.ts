@@ -166,7 +166,11 @@ export function removeSameNamedWorksheet(workbookXml: string, title: string): st
   if (hasZoneNamed(workbook, title)) {
     return workbookXml;
   }
-  container.worksheet = kept.length === 1 ? kept[0] : kept;
+  if (kept.length === 0) {
+    delete container.worksheet;
+  } else {
+    container.worksheet = kept.length === 1 ? kept[0] : kept;
+  }
   const windows = normalizeArray<ParsedWindow>(wb.windows?.window);
   const keptWindows = windows.filter(
     (w) => !(w?.['@_class'] === 'worksheet' && w?.['@_name'] === title),

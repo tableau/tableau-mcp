@@ -876,6 +876,21 @@ describe('binder/bindTemplate — Call 1 miss (propose)', () => {
       throw new Error(`expected propose, got ${res.status}`);
     }
   });
+
+  it('keeps an under-specified goal-language bullet ask on the safe propose path', async () => {
+    const res = await bindTemplate({
+      ask: 'Build a bullet chart showing performance against the goal',
+      workbookXml: WORKBOOK_XML,
+      manifests: withForcedEligible(['quota-attainment-bullet']),
+    });
+
+    expect(res.status).toBe('propose');
+    if (res.status === 'propose') {
+      expect(res.llm_input.candidate_templates.map((candidate) => candidate.template)).toContain(
+        'quota-attainment-bullet',
+      );
+    }
+  });
 });
 
 describe('binder/bindTemplate — Call 2 (agent proposal)', () => {

@@ -535,7 +535,7 @@ export const getBuildAndApplyWorksheetTool = (
               `Invalid template format: "${template}". Template must contain a <worksheet> element.`,
             ).toErr();
           }
-          const worksheetXml = worksheetMatch[0];
+          const worksheetXml = ensureUserNamespace(worksheetMatch[0]);
 
           // Apply to Tableau
           executor ??= await extra.getExecutor(resolvedSession);

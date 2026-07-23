@@ -43,6 +43,7 @@ const NON_TOOL_VOCABULARY = [
   'higher-confidence',
   'ignored-redundant-aggregation',
   'in-dashboard',
+  'invalid-xml',
   'kind-mismatch',
   'kpi-text',
   // m7 declarative-filter XML vocabulary emitted into the context-filter node (not tool names):
@@ -65,6 +66,9 @@ const NON_TOOL_VOCABULARY = [
   'part-to-whole-pie-chart',
   'part-to-whole-waterfall',
   'per-viz',
+  // Internal auto-apply failure dispositions, not emitted tool references.
+  'post-dispatch',
+  'pre-dispatch',
   'pre-edit',
   'promise-check',
   'ranking-ordered-bar',

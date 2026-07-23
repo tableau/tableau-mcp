@@ -344,6 +344,42 @@ describe('SessionRouteStateStore', () => {
       expect(record.attempts.map((a) => a.consumesRetryBudget)).toEqual([false, false, true]);
     });
 
+    it('stores and consumes one pre-dispatch retry allowance for the last proposal signature', () => {
+      const store = new SessionRouteStateStore();
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'bound',
+        proposalSignature: 'signature-1',
+      });
+
+      expect(store.grantPreDispatchRetryAllowance('S1', 'ask A', 'different-signature')).toBe(
+        false,
+      );
+      expect(store.grantPreDispatchRetryAllowance('S1', 'ask A', 'signature-1')).toBe(true);
+      expect(store.consumePreDispatchRetryAllowance('S1', 'ask A', 'signature-1')).toBe(true);
+      expect(store.consumePreDispatchRetryAllowance('S1', 'ask A', 'signature-1')).toBe(false);
+      expect(store.grantPreDispatchRetryAllowance('S1', 'ask A', 'signature-1')).toBe(false);
+      expect(store.getBindRecovery('S1', 'ask A')?.preDispatchRetryAllowance).toEqual({
+        proposalSignature: 'signature-1',
+        remaining: 0,
+      });
+    });
+
+    it('drops a stale pre-dispatch allowance when the proposal signature changes', () => {
+      const store = new SessionRouteStateStore();
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'bound',
+        proposalSignature: 'signature-1',
+      });
+      store.grantPreDispatchRetryAllowance('S1', 'ask A', 'signature-1');
+
+      store.reserveBindRecoveryAdmission('S1', 'ask A', {
+        proposalSignature: 'signature-2',
+      });
+
+      expect(store.getBindRecovery('S1', 'ask A')?.preDispatchRetryAllowance).toBeUndefined();
+    });
+
     it('clears a recovery entry when the bind reaches terminal done', () => {
       const store = new SessionRouteStateStore();
       store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });

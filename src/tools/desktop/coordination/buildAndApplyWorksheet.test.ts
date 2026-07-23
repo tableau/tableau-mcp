@@ -34,6 +34,7 @@ import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenc
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import type { ReadbackFinding } from '../../../desktop/validation/readback-verify.js';
+import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 
 const SESSION = 'session-1';
@@ -206,6 +207,25 @@ describe('buildAndApplyWorksheetTool', () => {
     expect(extra.getExecutor).toHaveBeenCalledTimes(1);
     expect(readFileSync).not.toHaveBeenCalled();
     expect(loadWorksheetXml).toHaveBeenCalledTimes(1);
+  });
+
+  it('carries the user namespace onto the extracted worksheet fragment', async () => {
+    const extra = makeExtra();
+    const rewritten = [
+      "<workbook xmlns:user='http://www.tableausoftware.com/xml/user'>",
+      '<worksheets><worksheet name="TEMPLATE">',
+      "<table><filter user:ui-enumeration='all'/></table>",
+      '</worksheet></worksheets></workbook>',
+    ].join('');
+    vi.mocked(rewriteFieldReferences).mockReturnValue(rewritten);
+
+    const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
+
+    expect(result.isError).toBeFalsy();
+    expect(loadWorksheetXml).toHaveBeenCalledTimes(1);
+    const worksheetXml = vi.mocked(loadWorksheetXml).mock.calls[0]?.[0].xml;
+    expect(worksheetXml).toContain("xmlns:user='http://www.tableausoftware.com/xml/user'");
+    expect(wellFormedXmlRule.validate(worksheetXml)).toEqual([]);
   });
 
   it('applies the waterfall anchor filter for P&L subtotal and total rows', async () => {

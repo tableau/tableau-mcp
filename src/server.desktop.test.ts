@@ -98,11 +98,9 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
     expect(DESKTOP_INSTRUCTIONS).toBe(
       `You control Tableau Desktop. Use Tableau terms: workbook/viz/sheet/field, Columns/Rows.
 
-Load tableau-desktop-authoring; repeat failures -> tableau-agent-debug.
-
 Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gradients. State plan, build.
 
-For any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.), FIRST bind-template(auto_apply:true): deterministic, ~0.3s. A named chart takes this bind-template path first even when the ask sounds calc-heavy or asks "how <X> changes"; template-owned calculations (including a waterfall's running total) must not be authored before binding. On propose, resubmit; proposals may carry sort and top_n. author-parameter/author-set/author-action before charts; else search-commands.
+For any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.), FIRST complete the bind-template two-call sequence: Call 1 is bind-template(auto_apply:true), deterministic, ~0.3s. If Call 1 proposes, Call 2 resubmits bind-template with the same ask/target, the selected proposal, and auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. A named chart takes this path first even when the ask sounds calc-heavy or asks "how <X> changes"; template-owned calculations (including a waterfall's running total) must not be authored before binding. author-parameter/author-set/author-action before charts; else search-commands.
 
 For an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult, FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.
 
@@ -241,11 +239,11 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // DO NOT GROW these: trim them down and lower/remove the entry. Never raise a
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
-    ['bind-template', 2245], // ratcheted down while funding exact Call-2 template/slot copy guidance; aggregate 30k/52k surface caps stay green
+    ['bind-template', 2186], // ratcheted down after compacting the exact Call-2 proposal contract; aggregate surface caps stay green
     ['refine-worksheet', 1583], // raised for omitted-targetField axis detection; funded by a ~500-byte same-tool describe trim
     ['plan-dashboard-creation', 1509], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1558], // ratcheted down in the CODA funding trim; do not grow
-    ['validate-proposal', 1758], // raised for the same shared sort/top_n/filters proposal schema (m7); 46k stays green
+    ['validate-proposal', 1754], // ratcheted down with compact shared proposal descriptions; 46k stays green
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {

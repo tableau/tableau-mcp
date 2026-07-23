@@ -40,11 +40,6 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'prose',
-    id: 'authoring-skill',
-    text: 'Load tableau-desktop-authoring; repeat failures -> tableau-agent-debug.',
-  },
-  {
-    kind: 'prose',
     id: 'plan-before-build',
     text: 'Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gradients. State plan, build.',
   },
@@ -54,7 +49,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.)',
     action:
-      'FIRST bind-template(auto_apply:true): deterministic, ~0.3s. A named chart takes this bind-template path first even when the ask sounds calc-heavy or asks "how <X> changes"; template-owned calculations (including a waterfall\'s running total) must not be authored before binding. On propose, resubmit; proposals may carry sort and top_n. author-parameter/author-set/author-action before charts; else search-commands.',
+      'FIRST complete the bind-template two-call sequence: Call 1 is bind-template(auto_apply:true), deterministic, ~0.3s. If Call 1 proposes, Call 2 resubmits bind-template with the same ask/target, the selected proposal, and auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. A named chart takes this path first even when the ask sounds calc-heavy or asks "how <X> changes"; template-owned calculations (including a waterfall\'s running total) must not be authored before binding. author-parameter/author-set/author-action before charts; else search-commands.',
     toolSequence: [
       'bind-template',
       'author-parameter',
@@ -62,7 +57,10 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'author-action',
       'search-commands',
     ],
-    stopConditions: ['deterministic, ~0.3s'],
+    stopConditions: [
+      'deterministic, ~0.3s',
+      'Do not use manual authoring tools between Call 1 and Call 2',
+    ],
     requiredEvidence: ['bind-template applied result (auto-apply receipt)'],
   },
   {

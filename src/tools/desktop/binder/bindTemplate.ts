@@ -93,6 +93,7 @@ const paramsSchema = {
  */
 type BindTemplateToolResultBase = BinderResult & {
   guidance: string;
+  call_2_contract?: Call2Contract;
   authored_calcs?: string[];
   warnings?: string[];
   applied?: boolean;
@@ -134,6 +135,29 @@ type BindTemplateToolResult =
   | AppliedFastPathResult
   | BlockedBindTemplateResult;
 type StructuredBindTemplateToolResult = StructuredResult<BindTemplateToolResult>;
+
+type Call2Contract = {
+  tool: 'bind-template';
+  arguments: {
+    session: string;
+    ask: string;
+    target_worksheet?: string;
+    auto_apply: true;
+  };
+  proposal_choices: Array<{
+    template: string;
+    slots: Array<{
+      slot_id: string;
+      required: boolean;
+      compatible_field_names: string[];
+    }>;
+  }>;
+  proposal_requirements: {
+    title: string;
+    confidence: string;
+    field_selection: string;
+  };
+};
 
 /** Escalation reasons that route back to the general (non-fast-path) authoring flow. */
 const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
@@ -180,6 +204,8 @@ function blockedResult(
 function recoveryGateBlock(
   record: ReturnType<typeof sessionRouteState.getBindRecovery>,
   currentProposalSignature: string | undefined,
+  session: string,
+  askKey: string,
 ): StructuredBindTemplateToolResult | undefined {
   if (!record) {
     return undefined;
@@ -199,6 +225,16 @@ function recoveryGateBlock(
       'Blocked: bind-template already returned a proposal request for this ask. Choose one proposal from the previous llm_input and call bind-template with {session, ask, proposal}; otherwise ask-user or use build-and-apply-worksheet.',
       'Pick a proposal or ask user',
     );
+  }
+
+  if (
+    currentProposalSignature !== undefined &&
+    record.lastProposalSignature === currentProposalSignature &&
+    record.preDispatchRetryAllowance?.proposalSignature === currentProposalSignature &&
+    record.preDispatchRetryAllowance.remaining === 1 &&
+    sessionRouteState.consumePreDispatchRetryAllowance(session, askKey, currentProposalSignature)
+  ) {
+    return undefined;
   }
 
   if (record.phase === RETRY_USED_PHASE) {
@@ -386,18 +422,67 @@ function appendWaterfallDiscoveryGuidance(
   return additions.length > 0 ? `${guidance} ${additions.join(' ')}` : guidance;
 }
 
-function renderProposalCopyContract(res: Extract<BinderResult, { status: 'propose' }>): string {
-  const contracts = res.llm_input.candidate_templates.map((candidate) => {
-    const slotIds = candidate.slots.map((slot) => JSON.stringify(slot.slot_id)).join(', ');
-    return `template ${JSON.stringify(candidate.template)} uses slot IDs [${slotIds}]`;
-  });
-  if (contracts.length === 0) {
-    return 'No candidate contract was returned; do not invent a template or slot IDs.';
+function fieldFitsProposedSlot(
+  field: Extract<BinderResult, { status: 'propose' }>['llm_input']['fields'][number],
+  slot: Extract<
+    BinderResult,
+    { status: 'propose' }
+  >['llm_input']['candidate_templates'][number]['slots'][number],
+): boolean {
+  switch (slot.kind) {
+    case 'quantitative':
+      return field.role === 'measure';
+    case 'categorical':
+      return field.role === 'dimension' && (field.type === 'nominal' || field.type === 'ordinal');
+    case 'temporal':
+      return (
+        field.datatype === 'date' ||
+        field.datatype === 'datetime' ||
+        (slot.temporal_from_string === true && field.datatype === 'string')
+      );
+    case 'geo':
+      return field.role === 'dimension';
+    default:
+      return false;
   }
-  return (
-    `Call-2 copy contract: ${contracts.join('; ')}. ` +
-    'Choose one returned candidate and copy those exact identifiers into proposal; never invent aliases or slot names.'
-  );
+}
+
+function buildCall2Contract({
+  res,
+  session,
+  ask,
+  targetWorksheet,
+}: {
+  res: Extract<BinderResult, { status: 'propose' }>;
+  session: string;
+  ask: string;
+  targetWorksheet?: string;
+}): Call2Contract {
+  return {
+    tool: 'bind-template',
+    arguments: {
+      session,
+      ask,
+      ...(targetWorksheet !== undefined ? { target_worksheet: targetWorksheet } : {}),
+      auto_apply: true,
+    },
+    proposal_choices: res.llm_input.candidate_templates.map((candidate) => ({
+      template: candidate.template,
+      slots: candidate.slots.map((slot) => ({
+        slot_id: slot.slot_id,
+        required: slot.required,
+        compatible_field_names: res.llm_input.fields
+          .filter((field) => fieldFitsProposedSlot(field, slot))
+          .map((field) => field.name),
+      })),
+    })),
+    proposal_requirements: {
+      title: 'Choose a worksheet title.',
+      confidence: 'Set a confidence from 0 to 1.',
+      field_selection:
+        'For each binding, choose one exact compatible_field_names value; do not rename or infer a field.',
+    },
+  };
 }
 
 /**
@@ -431,27 +516,17 @@ function buildGuidance(
       break;
     case 'propose':
       guidance =
-        'No deterministic (no-LLM) match. Choose exactly one template from llm_input.candidate_templates, ' +
-        'bind every bindable slot to a field from llm_input.fields (match role/kind; use the exact field name), ' +
-        'then call bind-template again with { session, ask, proposal } matching output_schema. ' +
-        `${renderProposalCopyContract(res)} ` +
-        // Candidates carry fast-path-eligible templates (plus side-loaded local templates). Pie/donut
-        // is now stamped eligible, so name that honest bind route before the generic shape-miss exits.
-        "Pie/donut is available via bind-template through the eligible 'part-to-whole-pie-chart' template; " +
-        'when it appears in candidate_templates, choose it and bind its slots instead of forcing ' +
-        'a mismatched shape. If the asked viz shape is not among the candidates, do not force a mismatched ' +
-        'proposal: bind the nearest candidate and tell the user in one sentence why; if they explicitly want ' +
-        'the exact shape anyway, build it with build-and-apply-worksheet. For a pie ask where the eligible ' +
-        'candidate is unexpectedly absent, do not claim that no pie template exists: if the ' +
-        "inject-template/apply-workbook tools are available, inject-template with template_name 'part-to-whole-pie-chart' " +
-        '(field_mapping: Region -> the category dimension, Sales -> the measure) -> apply-workbook. ' +
-        `${DERIVATION_OVERRIDE_INSTRUCTION}.`;
+        'Call 1 requires a proposal. Choose one call_2_contract proposal choice, bind its exact slot IDs ' +
+        'to exact compatible field names, and make Call 2 with the same ask/target, proposal, and ' +
+        `auto_apply:true. ${DERIVATION_OVERRIDE_INSTRUCTION}. Do not call other authoring tools between calls.`;
       break;
     case 'escalate':
       guidance = renderEscalationGuidance(res.reason, res.blockers);
       break;
   }
-  return appendWaterfallDiscoveryGuidance(guidance, res, schemaSummary, proposal);
+  return res.status === 'propose'
+    ? guidance
+    : appendWaterfallDiscoveryGuidance(guidance, res, schemaSummary, proposal);
 }
 
 /** Human-readable detail for a loadWorkbookXml failure, used in the apply-error text. */
@@ -471,6 +546,22 @@ function describeApplyError(
     return 'invalid workbook content';
   }
   return `workbook load command failed: ${JSON.stringify(error.error)}`;
+}
+
+type AutoApplyFailureDisposition = 'pre-dispatch' | 'post-dispatch';
+
+function applyFailureDisposition(
+  error:
+    | { type: 'execute-command-error'; error: ExecuteCommandError }
+    | { type: 'load-workbook-xml-error'; error: LoadWorkbookXmlError },
+): AutoApplyFailureDisposition {
+  if (
+    error.type === 'load-workbook-xml-error' &&
+    (error.error.type === 'invalid-xml' || error.error.type === 'validation-failed')
+  ) {
+    return 'pre-dispatch';
+  }
+  return 'post-dispatch';
 }
 
 type BoundResult = Extract<BinderResult, { status: 'bound' }>;
@@ -938,7 +1029,10 @@ async function performAutoApply({
   schemaSummary: SchemaSummary;
   suppressActivation: boolean;
   manifest: TemplateManifest;
-}): Promise<StructuredBindTemplateToolResult> {
+}): Promise<{
+  result: StructuredBindTemplateToolResult;
+  failureDisposition?: AutoApplyFailureDisposition;
+}> {
   const { args } = res;
 
   // ── Events-clean gate (W60 blind-spot #1) ────────────────────────
@@ -951,22 +1045,25 @@ async function performAutoApply({
   if (eventsAnchor !== undefined) {
     const events = await executor.getEvents({ signal, sinceSequence: eventsAnchor });
     if (events.isOk() && events.value.count > 0) {
-      return applyFallback(
-        base,
-        `user changed the workbook during the bind (${events.value.count} event(s) since read) — ` +
-          're-run bind-template for a fresh read',
-        // Events-dirty guidance DROPS the manual-apply alternative (P1-5): the bound args
-        // were computed against the pre-edit workbook, so re-applying them would revert
-        // the user's changes — the only safe recovery is a fresh read via bind-template.
-        appendWaterfallDiscoveryGuidance(
-          'Server-side auto-apply was refused: the user changed the workbook after it was read ' +
-            `(${events.value.count} event(s) since read). Re-run bind-template so it reads the ` +
-            'current workbook — do NOT re-apply the returned args, they were computed against ' +
-            'the pre-edit workbook and would revert their changes.',
-          res,
-          schemaSummary,
+      return {
+        result: applyFallback(
+          base,
+          `user changed the workbook during the bind (${events.value.count} event(s) since read) — ` +
+            're-run bind-template for a fresh read',
+          // Events-dirty guidance DROPS the manual-apply alternative (P1-5): the bound args
+          // were computed against the pre-edit workbook, so re-applying them would revert
+          // the user's changes — the only safe recovery is a fresh read via bind-template.
+          appendWaterfallDiscoveryGuidance(
+            'Server-side auto-apply was refused: the user changed the workbook after it was read ' +
+              `(${events.value.count} event(s) since read). Re-run bind-template so it reads the ` +
+              'current workbook — do NOT re-apply the returned args, they were computed against ' +
+              'the pre-edit workbook and would revert their changes.',
+            res,
+            schemaSummary,
+          ),
         ),
-      );
+        failureDisposition: 'pre-dispatch',
+      };
     }
   }
 
@@ -995,10 +1092,16 @@ async function performAutoApply({
       dateparseAxis: args.dateparse_axis,
     });
   } catch (err) {
-    return applyFallback(base, `inject failed: ${getExceptionMessage(err)}`);
+    return {
+      result: applyFallback(base, `inject failed: ${getExceptionMessage(err)}`),
+      failureDisposition: 'pre-dispatch',
+    };
   }
   if (!injected.ok) {
-    return applyFallback(base, `inject failed: ${injected.issues.join('; ')}`);
+    return {
+      result: applyFallback(base, `inject failed: ${injected.issues.join('; ')}`),
+      failureDisposition: 'pre-dispatch',
+    };
   }
   // The window name in the injected doc is escaped to the SAME depth as {{TITLE}} in the
   // worksheet (both come from args.title through inject core), so fully-decode args.title to
@@ -1006,7 +1109,10 @@ async function performAutoApply({
   const literalTitle = fullyDecodeXmlEntities(args.title);
   const spliced = applyProposalSplices({ xml: injected.xml, args, schemaSummary, literalTitle });
   if (!spliced.ok) {
-    return applyFallback(base, spliced.reason);
+    return {
+      result: applyFallback(base, spliced.reason),
+      failureDisposition: 'pre-dispatch',
+    };
   }
   if (spliced.warnings.length > 0) {
     base.warnings = [...(base.warnings ?? []), ...spliced.warnings];
@@ -1021,7 +1127,10 @@ async function performAutoApply({
     signal,
   });
   if (applyResult.isErr()) {
-    return applyFallback(base, `apply failed: ${describeApplyError(applyResult.error)}`);
+    return {
+      result: applyFallback(base, `apply failed: ${describeApplyError(applyResult.error)}`),
+      failureDisposition: applyFailureDisposition(applyResult.error),
+    };
   }
   if (!suppressActivation) {
     await activateSheetBestEffort({
@@ -1054,7 +1163,7 @@ async function performAutoApply({
     sheet_name: literalTitle,
     phase_ms: { bind: bindMs, inject: injectMs, apply: applyMs },
   };
-  return incomplete ? applied : withNextAction(applied, doneNextAction());
+  return { result: incomplete ? applied : withNextAction(applied, doneNextAction()) };
 }
 
 function renderAuthoredCalcPrefix(
@@ -1189,6 +1298,8 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             const blocked = recoveryGateBlock(
               sessionRouteState.getBindRecovery(resolvedSession, askKey),
               currentProposalSignature,
+              resolvedSession,
+              askKey,
             );
             if (blocked) {
               return new IncompleteOperationError(blocked).toErr();
@@ -1362,7 +1473,21 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                   { ...res, guidance: buildGuidance(res, schemaSummary, proposal) },
                   nextActionForEscalation(res.reason),
                 )
-              : { ...res, guidance: buildGuidance(res, schemaSummary, proposal) },
+              : res.status === 'propose'
+                ? withNextAction(
+                    {
+                      ...res,
+                      guidance: buildGuidance(res, schemaSummary, proposal),
+                      call_2_contract: buildCall2Contract({
+                        res,
+                        session: resolvedSession,
+                        ask,
+                        targetWorksheet: target_worksheet,
+                      }),
+                    },
+                    prefillNextAction('Resubmit bind-template with proposal and auto_apply:true'),
+                  )
+                : { ...res, guidance: buildGuidance(res, schemaSummary, proposal) },
             authoredCalcCaptions,
           );
 
@@ -1395,7 +1520,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new Ok(base);
           }
 
-          const appliedResult = await performAutoApply({
+          const autoApplyResult = await performAutoApply({
             res,
             base,
             workbookXml,
@@ -1408,6 +1533,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             suppressActivation: target_worksheet !== undefined,
             manifest,
           });
+          const appliedResult = autoApplyResult.result;
           recordBoundRecoveryAfterFinalResult({
             session: resolvedSession,
             askKey,
@@ -1415,6 +1541,20 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             reservationId: bindRecoveryReservationId,
             result: appliedResult,
           });
+          if (
+            autoApplyResult.failureDisposition === 'pre-dispatch' &&
+            currentProposalSignature !== undefined
+          ) {
+            try {
+              sessionRouteState.grantPreDispatchRetryAllowance(
+                resolvedSession,
+                askKey,
+                currentProposalSignature,
+              );
+            } catch {
+              /* fail-open */
+            }
+          }
           if ('applied' in appliedResult && appliedResult.applied === false) {
             return new IncompleteOperationError(appliedResult).toErr();
           }

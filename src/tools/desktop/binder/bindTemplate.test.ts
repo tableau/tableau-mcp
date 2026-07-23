@@ -230,13 +230,28 @@ const waterfallProposeResult: BinderResult = {
         description: 'Waterfall chart',
         intent_keywords: ['waterfall'],
         slots: [
-          { slot_id: 'profit', role: ['measure'], kind: 'measure', required: true },
-          { slot_id: 'sub_category', role: ['dimension'], kind: 'category', required: true },
-          { slot_id: 'anchor_category', role: ['dimension'], kind: 'category', required: false },
+          { slot_id: 'profit', role: ['measure'], kind: 'quantitative', required: true },
+          {
+            slot_id: 'sub_category',
+            role: ['dimension'],
+            kind: 'categorical',
+            required: true,
+          },
+          {
+            slot_id: 'anchor_category',
+            role: ['dimension'],
+            kind: 'categorical',
+            required: false,
+          },
         ],
       },
     ],
-    fields: [{ name: 'category', role: 'dimension', type: 'nominal', datatype: 'string' }],
+    fields: [
+      { name: 'line_item', role: 'dimension', type: 'nominal', datatype: 'string' },
+      { name: 'category', role: 'dimension', type: 'nominal', datatype: 'string' },
+      { name: 'amount', role: 'measure', type: 'quantitative', datatype: 'real' },
+      { name: 'budget', role: 'measure', type: 'quantitative', datatype: 'real' },
+    ],
   } as unknown as Extract<BinderResult, { status: 'propose' }>['llm_input'],
   output_schema: { type: 'object' },
 };
@@ -497,14 +512,76 @@ describe('bindTemplateTool', () => {
     expect(body.status).toBe('propose');
     expect(body.decline_reason).toEqual(proposeResult.decline_reason);
     expect(body.output_schema).toEqual({ type: 'object' });
-    expect(body.guidance).toContain('output_schema');
-    expect(body.guidance).toContain(
-      "Pie/donut is available via bind-template through the eligible 'part-to-whole-pie-chart' template",
+    expect(body.guidance).toContain('Call 2');
+    expect(body.guidance).toContain('auto_apply:true');
+    expect(body.guidance).toContain('Do not call other authoring tools between calls');
+    expect(body.guidance).not.toContain('add-field');
+    expect(body.guidance).not.toContain('build-and-apply-worksheet');
+    expect(result.structuredContent).toEqual({
+      nextAction: {
+        label: 'Resubmit bind-template with proposal and auto_apply:true',
+        kind: 'prefill',
+      },
+    });
+  });
+
+  it('returns an exact Call-2 contract without choosing among compatible fields', async () => {
+    const workbookWithTarget = P_AND_L_WORKBOOK_XML.replace(
+      '</workbook>',
+      "<worksheets><worksheet name='P&amp;L'/></worksheets></workbook>",
     );
-    expect(body.guidance).not.toContain('no pie template is fast-path eligible');
-    expect(body.guidance).toContain('build it with build-and-apply-worksheet');
-    expect(body.guidance).toContain('if the inject-template/apply-workbook tools are available');
-    expect(body.guidance).not.toContain('use the manual chain');
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(workbookWithTarget));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(waterfallProposeResult);
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall',
+      target_worksheet: 'P&L',
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.call_2_contract).toEqual({
+      tool: 'bind-template',
+      arguments: {
+        session: '1',
+        ask: 'P&L waterfall',
+        target_worksheet: 'P&L',
+        auto_apply: true,
+      },
+      proposal_choices: [
+        {
+          template: 'part-to-whole-waterfall',
+          slots: [
+            {
+              slot_id: 'profit',
+              required: true,
+              compatible_field_names: ['amount', 'budget'],
+            },
+            {
+              slot_id: 'sub_category',
+              required: true,
+              compatible_field_names: ['line_item', 'category'],
+            },
+            {
+              slot_id: 'anchor_category',
+              required: false,
+              compatible_field_names: ['line_item', 'category'],
+            },
+          ],
+        },
+      ],
+      proposal_requirements: {
+        title: 'Choose a worksheet title.',
+        confidence: 'Set a confidence from 0 to 1.',
+        field_selection:
+          'For each binding, choose one exact compatible_field_names value; do not rename or infer a field.',
+      },
+    });
+    expect(body.call_2_contract.proposal_choices[0].slots[0].compatible_field_names).toHaveLength(
+      2,
+    );
+    expect(body.call_2_contract.proposal_choices[0].slots[0]).not.toHaveProperty('field');
   });
 
   it.each([
@@ -562,10 +639,10 @@ describe('bindTemplateTool', () => {
       const call1 = await getToolResult({ session: '1', ask: 'P&L waterfall' });
       invariant(call1.content[0].type === 'text');
       const call1Body = JSON.parse(call1.content[0].text);
-      expect(call1Body.guidance).toContain(
-        'template "part-to-whole-waterfall" uses slot IDs ["profit", "sub_category", "anchor_category"]',
-      );
-      expect(call1Body.guidance).toContain('copy those exact identifiers');
+      expect(call1Body.call_2_contract.proposal_choices[0]).toMatchObject({
+        template: 'part-to-whole-waterfall',
+        slots: [{ slot_id: 'profit' }, { slot_id: 'sub_category' }, { slot_id: 'anchor_category' }],
+      });
 
       const call2 = await getToolResult({
         session: '1',
@@ -1462,6 +1539,58 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
   });
 
+  it('completes the P&L propose to valid Call 2 to applied sequence', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallResult,
+      inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(waterfallProposeResult)
+      .mockResolvedValueOnce(boundWaterfallResult);
+    const proposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'amount' },
+        { slot_id: 'sub_category', field: 'line_item' },
+        { slot_id: 'anchor_category', field: 'category' },
+      ],
+      confidence: 0.95,
+      sort: { by: 'display_order', direction: 'asc' },
+    };
+
+    const call1 = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall',
+      auto_apply: true,
+      getExecutor,
+    });
+    const call2 = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall',
+      proposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(call1.content[0].type === 'text');
+    invariant(call2.content[0].type === 'text');
+    expect(JSON.parse(call1.content[0].text).status).toBe('propose');
+    expect(call1.structuredContent).toEqual({
+      nextAction: {
+        label: 'Resubmit bind-template with proposal and auto_apply:true',
+        kind: 'prefill',
+      },
+    });
+    expect(JSON.parse(call2.content[0].text)).toMatchObject({
+      status: 'bound',
+      applied: true,
+      sheet_name: 'P&L Waterfall',
+    });
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
   it('returns literal sheet_name and guidance after auto-applying an XML-escaped title', async () => {
     const escapedTitleResult: BinderResult = {
       ...boundResult,
@@ -1675,7 +1804,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(result.structuredContent).toBeUndefined();
   });
 
-  it('adds waterfall discovery guidance to propose results', async () => {
+  it('keeps waterfall propose guidance exclusive to the structured Call-2 contract', async () => {
     const { getExecutor } = setupAutoApplyMocks({
       bind: waterfallProposeResult,
       workbookReads: [P_AND_L_WORKBOOK_XML],
@@ -1691,14 +1820,16 @@ describe('bindTemplateTool auto_apply gate', () => {
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.status).toBe('propose');
-    expect(body.guidance).toContain('{slot_id:"anchor_category",field:"category"}');
-    // Schema has display_order → the sort hint NAMES it and routes to the bind (not refine).
-    expect(body.guidance).toContain('Waterfall step order: schema has display_order');
-    expect(body.guidance).toContain('proposal.sort:{by:"display_order",direction:"asc"}');
-    expect(body.guidance).toContain('Do NOT use refine-worksheet');
+    const anchorSlot = body.call_2_contract.proposal_choices[0].slots.find(
+      (slot: { slot_id: string }) => slot.slot_id === 'anchor_category',
+    );
+    expect(anchorSlot.compatible_field_names).toEqual(['line_item', 'category']);
+    expect(anchorSlot).not.toHaveProperty('field');
+    expect(body.guidance).not.toContain('Waterfall step order');
+    expect(body.guidance).not.toContain('refine-worksheet');
   });
 
-  it('falls back to the generic sort hint when the waterfall schema has no order column', async () => {
+  it('does not append fallback sort guidance to a propose result', async () => {
     const { getExecutor } = setupAutoApplyMocks({
       bind: waterfallProposeResult,
       workbookReads: [P_AND_L_WORKBOOK_XML_WITHOUT_DISPLAY_ORDER],
@@ -1713,7 +1844,8 @@ describe('bindTemplateTool auto_apply gate', () => {
 
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.guidance).toContain('proposal.sort:{by:<field>,direction:"asc"|"desc"}');
+    expect(body.guidance).toContain('Call 2');
+    expect(body.guidance).not.toContain('proposal.sort:{by:<field>');
     expect(body.guidance).not.toContain('Waterfall step order: schema has');
   });
 
@@ -2220,6 +2352,88 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
     expect(body.apply_error).toContain('preflight validation failed');
     // Preflight gates the dispatch — the invalid XML is never sent.
     expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('admits one same-signature retry after a pre-dispatch apply failure', async () => {
+    const { getExecutor } = setupAutoApplyMocks({ bind: boundViaProposalResult });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(boundViaProposalResult)
+      .mockResolvedValueOnce(boundViaProposalResult);
+    vi.mocked(buildInjectedWorkbookXml)
+      .mockReturnValueOnce({ ok: false, issues: ['broken fragment'] })
+      .mockReturnValueOnce({ ok: false, issues: ['still broken'] });
+    const ask = 'bar chart of Revenue by Region';
+
+    await getToolResult({ session: '1', ask, auto_apply: true, getExecutor });
+    const failed = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+    const admittedRetry = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposalTitleOnlyChange,
+      auto_apply: true,
+      getExecutor,
+    });
+    const blockedRepeat = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(failed.isError).toBe(true);
+    expect(admittedRetry.isError).toBe(true);
+    invariant(admittedRetry.content[0].type === 'text');
+    expect(JSON.parse(admittedRetry.content[0].text).apply_error).toContain('still broken');
+    invariant(blockedRepeat.content[0].type === 'text');
+    expect(JSON.parse(blockedRepeat.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'unchanged_proposal',
+    });
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(3);
+    expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not admit a same-signature retry after post-dispatch timeout', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: boundViaProposalResult,
+      dispatch: Err({ type: 'command-timed-out', error: 'Timeout' }),
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(boundViaProposalResult);
+    const ask = 'bar chart of Revenue by Region';
+
+    await getToolResult({ session: '1', ask, auto_apply: true, getExecutor });
+    const failed = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+    const blockedRetry = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposalTitleOnlyChange,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(failed.isError).toBe(true);
+    invariant(blockedRetry.content[0].type === 'text');
+    expect(JSON.parse(blockedRetry.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'unchanged_proposal',
+    });
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
   });
 });
 

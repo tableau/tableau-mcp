@@ -164,6 +164,35 @@ describe('buildInjectedWorkbookXml — pre-existing duplicates converge in ONE a
     expect(result.xml).toMatch(/<worksheet name="Keep">/);
     expect(result.xml).toMatch(/<window class="dashboard" name="Sales">/);
   });
+
+  it('replaces the only worksheet without serializing an empty worksheet array', () => {
+    const workbookXml = [
+      "<?xml version='1.0'?><workbook>",
+      "<worksheets><worksheet name='Sales'><table>OLD</table></worksheet></worksheets>",
+      "<windows><window class='worksheet' name='Sales'/></windows>",
+      '</workbook>',
+    ].join('');
+    const templateXml = [
+      "<?xml version='1.0'?><workbook>",
+      "<worksheets><worksheet name='{{TITLE}}'><table>NEW</table></worksheet></worksheets>",
+      "<windows><window class='worksheet' name='{{TITLE}}'/></windows>",
+      '</workbook>',
+    ].join('');
+
+    const result = buildInjectedWorkbookXml({
+      workbookXml,
+      templateXml,
+      title: 'Sales',
+      sheetType: 'worksheet',
+      applyNonce: 'replace-only-sheet',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).not.toContain('OLD');
+    expect(result.xml).toContain('NEW');
+    expect(result.xml.match(/<worksheet name="Sales">/g) ?? []).toHaveLength(1);
+  });
 });
 
 describe('injectTemplate — appended window focus flags', () => {
@@ -186,6 +215,21 @@ describe('injectTemplate — appended window focus flags', () => {
     expect(result).toMatch(/<window active="true" class="worksheet" maximized="true" name="Keep">/);
     expect(result).toMatch(/<window class="worksheet" name="Injected">/);
     expect(result).not.toMatch(/<window[^>]*name="Injected"[^>]*(active|maximized)=/);
+  });
+
+  it('normalizes a whitespace-only worksheets container before appending', () => {
+    const workbookXml =
+      "<?xml version='1.0'?><workbook><worksheets> \n </worksheets><windows/></workbook>";
+    const templateXml = [
+      "<?xml version='1.0'?><workbook>",
+      "<worksheets><worksheet name='Injected'><table/></worksheet></worksheets>",
+      "<windows><window class='worksheet' name='Injected'/></windows>",
+      '</workbook>',
+    ].join('');
+
+    const result = injectTemplate(workbookXml, templateXml, 'worksheet');
+
+    expect(result).toContain('<worksheet name="Injected">');
   });
 });
 
