@@ -694,7 +694,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     await getToolResult({ session: '1', ask: 'something weird' });
     const blocked = await getToolResult({ session: '1', ask: 'something weird' });
 
-    expect(blocked.isError).toBe(false);
+    expect(blocked.isError).toBe(true);
     invariant(blocked.content[0].type === 'text');
     const body = JSON.parse(blocked.content[0].text);
     expect(body.status).toBe('blocked');
@@ -725,7 +725,7 @@ describe('bindTemplateTool bind recovery gate', () => {
       proposal: sampleProposalTitleOnlyChange,
     });
 
-    expect(blocked.isError).toBe(false);
+    expect(blocked.isError).toBe(true);
     invariant(blocked.content[0].type === 'text');
     const body = JSON.parse(blocked.content[0].text);
     expect(body.status).toBe('blocked');
@@ -766,7 +766,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     });
 
     expect(failed.isError).toBe(true);
-    expect(blocked.isError).toBe(false);
+    expect(blocked.isError).toBe(true);
     invariant(blocked.content[0].type === 'text');
     const body = JSON.parse(blocked.content[0].text);
     expect(body.status).toBe('blocked');
@@ -811,6 +811,7 @@ describe('bindTemplateTool bind recovery gate', () => {
       getExecutor,
     });
 
+    expect(blocked.isError).toBe(true);
     invariant(blocked.content[0].type === 'text');
     const blockedBody = JSON.parse(blocked.content[0].text);
     expect(blockedBody.status).toBe('blocked');
@@ -915,6 +916,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     expect(changedRetry.isError).toBe(false);
     invariant(changedRetry.content[0].type === 'text');
     expect(JSON.parse(changedRetry.content[0].text).status).toBe('escalate');
+    expect(exhausted.isError).toBe(true);
     invariant(exhausted.content[0].type === 'text');
     const body = JSON.parse(exhausted.content[0].text);
     expect(body.status).toBe('blocked');
@@ -961,6 +963,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     expect(tier2Body.guidance).toContain('No fast-path template fits this ask/data');
     expect(tier2Body.guidance).toContain('build-and-apply-worksheet');
     expect(tier2Body.guidance).not.toContain('corrected proposal');
+    expect(blocked.isError).toBe(true);
     invariant(blocked.content[0].type === 'text');
     const blockedBody = JSON.parse(blocked.content[0].text);
     expect(blockedBody.status).toBe('blocked');
@@ -2046,7 +2049,7 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
       getExecutor,
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
@@ -2078,7 +2081,7 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
       getExecutor,
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
@@ -2096,7 +2099,7 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
       getExecutor,
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
@@ -2332,6 +2335,7 @@ describe('bindTemplateTool auto_apply — events-clean gate (W60 blind-spot #1)'
       auto_apply: true,
       getExecutor,
     });
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
     expect(body.applied).toBe(false);

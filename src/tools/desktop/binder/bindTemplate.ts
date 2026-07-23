@@ -48,6 +48,7 @@ import {
   type AuthorCalcInput,
   authorCalculationsInWorkbook,
 } from '../data-source/authorCalcCore.js';
+import { IncompleteOperationError } from '../incompleteOperationError.js';
 import {
   doneNextAction,
   jsonToolResult,
@@ -1171,7 +1172,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               currentProposalSignature,
             );
             if (blocked) {
-              return new Ok(blocked);
+              return new IncompleteOperationError(blocked).toErr();
             }
             bindRecoveryReservationId = sessionRouteState.reserveBindRecoveryAdmission(
               resolvedSession,
@@ -1393,6 +1394,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             reservationId: bindRecoveryReservationId,
             result: appliedResult,
           });
+          if ('applied' in appliedResult && appliedResult.applied === false) {
+            return new IncompleteOperationError(appliedResult).toErr();
+          }
           return new Ok(appliedResult);
         },
         // Keep the standard MCP content-block envelope while lifting nextAction metadata

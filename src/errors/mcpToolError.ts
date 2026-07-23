@@ -8,6 +8,10 @@ import type { LoadDashboardXmlError } from '../desktop/commands/workbook/loadDas
 import type { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWorkbookXml.js';
 import type { LoadWorksheetXmlError } from '../desktop/commands/workbook/loadWorksheetXml.js';
 import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor.js';
+import {
+  type StructuredContent,
+  type StructuredResult,
+} from '../tools/desktop/structuredContent.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
 // The load-*-xml error union carries Desktop's own rejection text on its message-bearing
@@ -59,6 +63,30 @@ export class McpToolError extends Error {
 
   toErr(): Err<this> {
     return new Err(this);
+  }
+}
+
+/**
+ * Signals that a multi-step operation did not fully complete while preserving
+ * the complete machine-readable recovery payload in the MCP error body.
+ */
+export class IncompleteOperationError<T extends object> extends McpToolError {
+  readonly structuredContent?: StructuredContent;
+  private readonly recoveryPayload: StructuredResult<T>;
+
+  constructor(recoveryPayload: StructuredResult<T>) {
+    super({
+      type: 'incomplete-operation',
+      message: 'The requested operation did not complete.',
+      statusCode: 409,
+    });
+    this.recoveryPayload = recoveryPayload;
+    this.structuredContent = recoveryPayload.structuredContent;
+  }
+
+  override getErrorText(): string {
+    const { structuredContent: _, ...body } = this.recoveryPayload;
+    return JSON.stringify(body);
   }
 }
 
