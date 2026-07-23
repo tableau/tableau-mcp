@@ -1,5 +1,4 @@
 import { getConfig } from '../../config.js';
-import { Logger } from '../../logging/logger.js';
 import { OverridableConfig } from '../../overridableConfig.js';
 import { WebMcpServer } from '../../server.web.js';
 import { TableauWebRequestHandlerExtra } from './toolContext.js';
@@ -28,12 +27,6 @@ export function getMockRequestHandlerExtra(): TableauWebRequestHandlerExtra {
     sendNotification: vi.fn(),
     sendRequest: vi.fn(),
   };
-
-  // Create bound logger directly (not via logger.child) to avoid issues with mocked logger module
-  extra.logger = new Logger({
-    getSiteLuid: () => extra.getSiteLuid(),
-    getUserLuid: () => extra.getUserLuid(),
-  });
 
   return extra;
 }

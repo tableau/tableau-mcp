@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
+import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
@@ -118,12 +119,15 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                   configWithOverrides.boundedContext.datasourceIds,
                 )[0];
               } catch (error) {
-                extra.logger.log({
-                  message: `Failed to enrich workbook ${workbook.id} with lineage metadata`,
-                  level: 'warning',
-                  logger: 'lineage',
-                  data: getExceptionMessage(error),
-                });
+                log(
+                  {
+                    message: `Failed to enrich workbook ${workbook.id} with lineage metadata`,
+                    level: 'warning',
+                    logger: 'lineage',
+                    data: getExceptionMessage(error),
+                  },
+                  extra,
+                );
                 return workbook;
               }
             },

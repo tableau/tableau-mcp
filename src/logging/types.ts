@@ -23,7 +23,7 @@ export type LogEntry = {
   logger: string | undefined;
 };
 
-// A LogEntry as serialized to a sink, including the always-on LUID fields the Logger injects.
+// A LogEntry as serialized to a sink, including the always-on LUID fields log() injects.
 export type SerializedLogEntry = LogEntry & {
   site_luid: string;
   user_luid: string;

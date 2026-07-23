@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
@@ -121,12 +122,15 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
                     configWithOverrides.boundedContext.datasourceIds,
                   );
                 } catch (error) {
-                  extra.logger.log({
-                    message: 'Failed to enrich workbooks with lineage metadata',
-                    level: 'warning',
-                    logger: 'lineage',
-                    data: getExceptionMessage(error),
-                  });
+                  log(
+                    {
+                      message: 'Failed to enrich workbooks with lineage metadata',
+                      level: 'warning',
+                      logger: 'lineage',
+                      data: getExceptionMessage(error),
+                    },
+                    extra,
+                  );
                   return workbooks;
                 }
               },

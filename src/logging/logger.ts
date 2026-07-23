@@ -44,12 +44,11 @@ export function errorReplacer(data: unknown): unknown {
 export const AUDIT_LOGGER = 'audit';
 
 /** Lazy accessors for the request-scoped identifiers stamped onto every log line. */
-export type LuidGetters = {
+type LuidContext = {
   getSiteLuid?: () => string;
   getUserLuid?: () => string;
 };
 
-/** Emits an already-enriched entry to the configured sinks. This is the former `log()` body. */
 function emit(entry: SerializedLogEntry): void {
   const config = getBaseConfig();
   // Audit records always pass the severity gate; all other entries honor the configured level.
@@ -74,32 +73,11 @@ function emit(entry: SerializedLogEntry): void {
   }
 }
 
-/**
- * Stamps every log line with the request's site/user LUIDs. The default instance carries empty
- * getters (context-less lines emit ''); a per-request child (see server.web.ts) carries lazy
- * getters so PAT/direct-trust backfill after sign-in is reflected on later lines.
- */
-export class Logger {
-  constructor(private readonly getters: LuidGetters = {}) {}
-
-  log(entry: LogEntry): void {
-    // Injected LUID fields come AFTER the spread so a caller cannot override them, and default to ''.
-    emit({
-      ...entry,
-      site_luid: this.getters.getSiteLuid?.() || '',
-      user_luid: this.getters.getUserLuid?.() || '',
-    });
-  }
-
-  child(getters: LuidGetters): Logger {
-    return new Logger(getters);
-  }
-}
-
-/** Module-default logger for all context-less call sites; emits empty LUID fields. */
-export const logger = new Logger();
-
-/** Backward-compatible free function retained for the ~71 context-less call sites. */
-export function log(entry: LogEntry): void {
-  logger.log(entry);
+export function log(entry: LogEntry, ctx?: LuidContext): void {
+  // Injected LUID fields come AFTER the spread so a caller cannot override them, and default to ''.
+  emit({
+    ...entry,
+    site_luid: ctx?.getSiteLuid?.() || '',
+    user_luid: ctx?.getUserLuid?.() || '',
+  });
 }

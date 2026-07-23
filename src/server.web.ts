@@ -18,7 +18,6 @@ import { getConfig } from './config.js';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { getFeatureGate } from './features/init.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
-import { logger } from './logging/logger.js';
 import { registerPrompts } from './prompts/index.js';
 import { ClientInfo, Server } from './server.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
@@ -94,12 +93,6 @@ export class WebMcpServer extends Server {
           getSiteName() {
             return getTableauAuthInfo(extra.authInfo)?.siteName ?? config.siteName;
           },
-          logger: logger.child({
-            // Bind the accessors, not values — the LUIDs may be '' until restApi.signIn() backfills
-            // them, and lazy getters ensure later log lines pick up the backfilled values.
-            getSiteLuid: () => tableauRequestHandlerExtra.getSiteLuid(),
-            getUserLuid: () => tableauRequestHandlerExtra.getUserLuid(),
-          }),
           getConfigWithOverrides: async () =>
             getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra, requestOverrides }),
         };
