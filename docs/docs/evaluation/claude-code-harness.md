@@ -15,13 +15,13 @@ The primary benchmark is 30 questions from the [BIRD Mini-Dev](https://bird-benc
 ### Required
 
 - **Claude Code** installed and available on your `PATH` (`claude --version` should work)
-- **A published California Schools datasource** on your Tableau Cloud or Server site. This is a single published datasource that joins the three California Schools source tables (`schools`, `frpm`, `satscores`). You will need its LUID. A .tdsx for this data source is provided at within the project at `evals/bird_mini/data/tableau_datasources/california_schools`.
+- **A published California Schools datasource** on your Tableau Cloud or Server site. This is a single published datasource that joins the three California Schools source tables (`schools`, `frpm`, `satscores`). You will need its LUID. A .tdsx for this data source ships in the BIRD Mini-Dev snapshot (see the eval [README](https://github.com/tableau/tableau-mcp/blob/main/evals/README.md#regenerating-expected-answers) for how to obtain it) at `evals/bird_mini/data/tableau_datasources/california_schools`; note `evals/bird_mini/` is gitignored and not committed.
 - **Tableau credentials** — any supported auth method (PAT, OAuth, direct trust). See [Authentication](/docs/configuration/mcp-config/authentication) for setup.
 
 ### Optional
 
-- **LangSmith account** — for trace visualization. Without it, the harness still runs and grades locally; traces are simply not posted.
-- **OpenAI API key** — for semantic grading (LLM judge). Without it, the harness falls back to numeric-only grading.
+- **LangSmith account** — required for grading. Grading is sourced entirely from the LangSmith trace (there is no local-artifact grading path), so without a posted trace `grade.ts`/`grade-bird.ts` return `grading_error`. See [LangSmith Integration](#langsmith-integration).
+- **A grader harness** — for semantic grading (LLM judge). The judge runs headless through a coding-agent harness (`GRADER_HARNESS`, default `claude-code`), NOT the OpenAI API. Without a usable harness, the verdict falls back to numeric-only grading.
 
 ---
 
@@ -50,8 +50,8 @@ Copy `env.example.list` to `.env` at the repo root and fill in the values below.
 
 | Variable | Default | Description |
 |---|---|---|
-| `OPENAI_API_KEY` | — | OpenAI API key for the LLM judge. If not set, `semantic_match` is skipped and the verdict is based on `numeric_match` only. |
-| `BIRD_GRADE_MODEL` | `gpt-4o-mini` | Model used by the LLM judge. Override with e.g. `gpt-4o` for higher-quality grading. |
+| `GRADER_HARNESS` | `claude-code` | Coding-agent harness that runs the semantic-match LLM judge headless. One of `claude-code`, `cursor`, `codex`. If no usable harness is available, `semantic_match` is skipped and the verdict is based on `numeric_match` only. |
+| `GRADER_MODEL` | harness default | Model the judge harness uses (e.g. `claude-sonnet-4-5`). Leave unset to use the harness's own default. |
 
 ---
 
@@ -123,7 +123,7 @@ Each run is evaluated on four signals. The **verdict** is determined by the two 
 | Signal | Method | Description |
 |---|---|---|
 | `numeric_match` | Code | The expected numeric value or row count appears in Claude's final message. Integer matches are exact; float matches allow ±1% tolerance. String answers (e.g. school names) use case-insensitive substring matching. |
-| `semantic_match` | LLM judge | GPT-4o-mini (or `BIRD_GRADE_MODEL`) scores Claude's final message against the gold answer summary on a 0–1 scale. A score ≥ 0.8 passes. Requires `OPENAI_API_KEY`. |
+| `semantic_match` | LLM judge | A headless coding-agent judge (`GRADER_HARNESS`/`GRADER_MODEL`) scores Claude's final message against the gold answer summary on a 0–1 scale. A score ≥ 0.8 passes. Skipped if no grader harness is available. |
 
 ### Structural signals (informational)
 
@@ -140,25 +140,25 @@ Each run is evaluated on four signals. The **verdict** is determined by the two 
 | `partial` | One of the two outcome signals passed (or one was unavailable) |
 | `fail` | Both outcome signals failed |
 | `error` | Claude Code exited with a non-zero code |
-| `skip` | Both outcome signals were unavailable (e.g. no `OPENAI_API_KEY` and no numeric result to match) |
+| `skip` | Both outcome signals were unavailable (e.g. no grader harness and no numeric result to match) |
 
 ---
 
 ## Metrics Captured Per Run
 
-Each case run records the following, available in `bird-result.json` (individual) or `suite-grade.json` (aggregated):
+Each case run records the following, available in `bird-result.json` (individual) or `suite-grade.json` (aggregated). All metrics are sourced from the LangSmith trace (the single source of truth for grading); the local `agent-output.jsonl` stream is kept for human debugging only.
 
 | Metric | Source | Notes |
 |---|---|---|
-| `wall_s` | Process timing | Seconds from `claude -p` invocation to process exit |
-| `tool_calls` | `hook.jsonl` | Total number of tool calls made |
-| `tools_used` | `hook.jsonl` | Deduplicated list of tool names called |
-| `model` | Claude stream | Model name reported by the Claude stream |
-| `tokens.input_tokens` | Claude stream | Summed across all assistant messages |
-| `tokens.output_tokens` | Claude stream | Summed across all assistant messages |
-| `tokens.cache_creation_tokens` | Claude stream | Prompt cache write tokens |
-| `tokens.cache_read_tokens` | Claude stream | Prompt cache read tokens |
-| `tokens.total_context_tokens` | Computed | `input + cache_creation + cache_read` |
+| `wall_s` | Trace | Wall time of the run, from the trace's root span |
+| `tool_calls` | Trace | Total number of tool calls made |
+| `tools_used` | Trace | Deduplicated list of tool names called |
+| `model` | Trace | Model name reported in the trace |
+| `tokens.input_tokens` | Trace | Summed across all LLM runs |
+| `tokens.output_tokens` | Trace | Summed across all LLM runs |
+| `tokens.cache_creation_tokens` | Trace | Prompt cache write tokens |
+| `tokens.cache_read_tokens` | Trace | Prompt cache read tokens |
+| `tokens.total_tokens` | Trace | Total tokens across all LLM runs |
 
 ---
 
@@ -172,10 +172,8 @@ evals/
     YYYY-MM-DD/
       <run-id>/              one folder per case run
         run.json             metadata, timing, exit code
-        agent-output.jsonl   full Claude Code stream
-        hook.jsonl           one record per tool call
-        pre-tool-times.jsonl tool dispatch timestamps
-        stop.json            stop hook data
+        agent-output.jsonl   full agent stream (human debugging only — never a grading input)
+        mcp-config.json      MCP server config handed to the agent
         logs/                MCP server logs
 
   suite-runs/
@@ -195,14 +193,11 @@ evals/
 
 ## LangSmith Integration
 
-When `LANGSMITH_API_KEY` is set, each case run posts a full trace to LangSmith in real time via Claude Code hooks. Each trace contains:
+Grading reads tool coverage, metrics, and the agent's final message **from the LangSmith trace** — it is the single source of truth. If no trace is posted for a run, `grade.ts`/`grade-bird.ts` return `grading_error`, so a working LangSmith setup is required to grade.
 
-- One parent span covering the full Claude Code process (wall time)
-- A synthetic `initialization` span for Claude startup and MCP server negotiation
-- One `assistant-message-N` span per LLM turn (timing inferred from the Claude stream)
-- One tool span per tool call with accurate start/end times from `PreToolUse` and `PostToolUse` hooks
+The trace is posted by the coding-agent's LangSmith tracing plugin, not by this harness directly. For Claude Code, install the [langsmith-tracing plugin](https://github.com/langchain-ai/langsmith-claude-code-plugins); the adapter sets the `LANGSMITH_*`/`CC_LANGSMITH_*` environment for the agent subprocess, but the plugin must be installed for a trace to actually be posted. Setting `LANGSMITH_API_KEY` alone is not sufficient.
 
-Traces are posted to the project set by `LANGSMITH_PROJECT` (default: `tableau-mcp-evals`).
+Traces are posted to the project set by `LANGSMITH_PROJECT` (default: `tableau-mcp-evals`). Each run is matched to its trace by `eval_run_id`.
 
 ---
 
