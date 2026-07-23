@@ -6,7 +6,6 @@ sidebar_position: 4
 
 Retrieves a list of custom views for a specified Tableau workbook.
 
-
 ## APIs called
 
 - [Get Workbook](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook)
@@ -49,10 +48,9 @@ ignored.
 The maximum number of custom views to return. Must be less than or equal to `1000`. Use this to
 return fewer than all matching custom views.
 
-For the server-side cap, see
-[`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit).
-
 Example: `600`
+
+- See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
 
 ## Example result
 
