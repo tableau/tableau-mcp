@@ -481,7 +481,13 @@ export const pulseInsightBriefResponseSchema = z.object({
 export type PulseBundleResponse = z.infer<typeof pulseBundleResponseSchema>;
 export type PulseInsightBriefResponse = z.infer<typeof pulseInsightBriefResponseSchema>;
 
-export const pulseInsightBundleTypeEnum = ['ban', 'springboard', 'basic', 'detail'] as const;
+export const pulseInsightBundleTypeEnum = [
+  'ban',
+  'springboard',
+  'basic',
+  'detail',
+  'exploration',
+] as const;
 export type PulseInsightBundleType = (typeof pulseInsightBundleTypeEnum)[number];
 
 export const pulseMetricDefinitionViewEnum = [

@@ -176,12 +176,13 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
   };
 
   /**
-   * Returns the generated bundle of the current aggregate value for the Pulse metric.
+   * Generates the requested insight bundle for a Pulse metric.
    *
    * Required scopes: `tableau:insights:read`
    *
    * @param bundleRequest - The request to generate a bundle for.
-   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#PulseInsightsService_GenerateInsightBundleBasic
+   * @param bundleType - The type of insight bundle to generate.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm
    */
   generatePulseMetricValueInsightBundle = async (
     bundleRequest: z.infer<typeof pulseBundleRequestSchema>,

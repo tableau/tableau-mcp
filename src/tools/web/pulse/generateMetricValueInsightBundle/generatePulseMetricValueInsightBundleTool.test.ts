@@ -202,7 +202,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(parsedValue).toEqual(mockBundleRequestResponse);
   });
 
-  it.each(['ban', 'springboard', 'basic', 'detail'] as const)(
+  it.each(['ban', 'springboard', 'basic', 'detail', 'exploration'] as const)(
     'should call generatePulseMetricValueInsightBundle with bundleType "%s" and return Ok result',
     async (bundleType) => {
       mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
