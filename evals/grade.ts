@@ -34,7 +34,14 @@ type RunMeta = {
   model?: string | null;
   langsmith_project?: string;
   expected_tools?: Array<string>;
-  budget: { max_tool_calls: number; max_wall_ms: number };
+  // run-case.ts writes these camelCase (maxToolCalls/maxWallMs). Snake_case is
+  // accepted only for backward-compat with older run.json artifacts.
+  budget: {
+    maxToolCalls?: number;
+    maxWallMs?: number;
+    max_tool_calls?: number;
+    max_wall_ms?: number;
+  };
   wall_ms?: number;
   agent_exit_code?: number;
   timed_out?: boolean;
@@ -89,11 +96,13 @@ async function main(): Promise<void> {
       ]
     : [];
 
+  const maxToolCalls = runMeta.budget.maxToolCalls ?? runMeta.budget.max_tool_calls;
+
   const outcome: Outcome = (() => {
     if (!summary) return 'grading_error';
     if (runMeta.timed_out) return 'timeout';
     if (runMeta.agent_exit_code != null && runMeta.agent_exit_code !== 0) return 'error';
-    if (toolCalls > runMeta.budget.max_tool_calls) return 'budget_exceeded';
+    if (maxToolCalls != null && toolCalls > maxToolCalls) return 'budget_exceeded';
     if (missingTools.length > 0) return 'fail';
     if (erroredExpectedTools.length > 0) return 'tool_error';
     return 'pass';
@@ -128,7 +137,7 @@ async function main(): Promise<void> {
   console.log(`\nGrade: ${runMeta.run_id}`);
   console.log(`Outcome:      ${result.outcome.toUpperCase()}`);
   console.log(`Harness:      ${result.harness ?? 'n/a'} / ${result.model ?? 'n/a'}`);
-  console.log(`Tool calls:   ${result.tool_calls} (budget: ${runMeta.budget.max_tool_calls})`);
+  console.log(`Tool calls:   ${result.tool_calls} (budget: ${maxToolCalls ?? 'n/a'})`);
   console.log(`Expected:     ${expectedTools.length ? expectedTools.join(', ') : 'n/a'}`);
   console.log(`Observed:     ${observedTools.length ? observedTools.join(', ') : 'none'}`);
   console.log(`Missing:      ${missingTools.length ? missingTools.join(', ') : 'none'}`);
