@@ -299,8 +299,17 @@ evals/
 
 ## Regenerating Expected Answers
 
-The suite ships with precomputed answers. To regenerate (rarely needed; requires the
-BIRD SQLite snapshot):
+The suite ships with precomputed answers, so **running and grading the suite needs no
+BIRD snapshot**. Regeneration is rarely needed and requires the snapshot, which is **not
+committed** (it is gitignored at `evals/bird_mini/`). Download the BIRD Mini-Dev dataset
+from [bird-bench.github.io](https://bird-bench.github.io/) and place it so these paths
+resolve under the repo root:
+
+- `evals/bird_mini/data/dev_databases/california_schools/california_schools.sqlite`
+- `evals/bird_mini/data/test_cases/mini_dev_sqlite.json`
+- `evals/bird_mini/data/test_cases/mini_dev_postgresql_vds.json`
+
+Then regenerate:
 
 ```bash
 python3 evals/scripts/precompute-bird-answers.py

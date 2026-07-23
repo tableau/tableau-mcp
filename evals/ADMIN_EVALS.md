@@ -11,10 +11,15 @@ covers what is different for the admin tools.
 
 ---
 
-## 1. Branch reality check (read before rebasing)
+## 1. Branch reality check (historical — already combined on this branch)
 
-The eval harness lives on **`joecon/eval`**. The mutation/admin tools live on
-**`main`**. They have diverged:
+> **Status:** This PR branch already combines the eval harness with the admin tools and
+> ships the `run-case.ts` env passthrough (§2). §§1 and 5 below are retained as history /
+> for reproducing the merge from scratch; you do **not** need to rebase or patch anything
+> to run the admin cases from this branch — skip to §3.
+
+The eval harness originated on **`joecon/eval`**. The mutation/admin tools live on
+**`main`**. They had diverged:
 
 | | `joecon/eval` | `origin/main` |
 |---|---|---|
@@ -34,24 +39,20 @@ except for `package.json` (version + scripts) and `package-lock.json`.
 
 ---
 
-## 2. The one required code patch (`run-case.ts`)
+## 2. How the admin gates reach the MCP subprocess (already wired up)
 
 The admin tools are gated behind `ADMIN_TOOLS_ENABLED=true` (and `query-admin-insights`
 + friends). The eval runner spawns the MCP server as a subprocess and only forwards a
-**hardcoded allowlist** of env vars — and `ADMIN_TOOLS_ENABLED` / `INSIGHTS_TOOLS_ENABLED`
-are **not on it**. Without this patch the admin tools never register, and every admin
-case fails with `missing_tools`.
+**hardcoded allowlist** of env vars. If `ADMIN_TOOLS_ENABLED` / `INSIGHTS_TOOLS_ENABLED`
+were missing from it, the admin tools would never register and every admin case would
+fail with `missing_tools`.
 
-In `evals/run-case.ts`, function `tableauServerEnv()`, add to the `keys` array:
-
-```ts
-    'ADMIN_TOOLS_ENABLED',
-    'INSIGHTS_TOOLS_ENABLED',
-    'FEATURE_GATE_PROVIDER_CONFIG',   // needed only for confirm-* app-only tools (mcp-apps gate)
-```
-
-`FLOW_TOOLS_ENABLED` is already forwarded; mirror it. (Same passthrough exists in
-`run-suite.ts` only via `run-case.ts`, so patching `run-case.ts` covers both.)
+**This is already handled on this branch** — `evals/run-case.ts`'s `tableauServerEnv()`
+allowlist already forwards `ADMIN_TOOLS_ENABLED`, `INSIGHTS_TOOLS_ENABLED`,
+`FLOW_TOOLS_ENABLED`, `FEATURE_GATE_PROVIDER`, and `FEATURE_GATE_PROVIDER_CONFIG`
+(the last needed only for the `confirm-*` app-only tools behind the mcp-apps gate).
+No patch to apply; just make sure the values are set in your `.env` (§6). The same
+passthrough covers `run-suite.ts`, which spawns the server via `run-case.ts`.
 
 ---
 
@@ -123,7 +124,8 @@ Sanity-check the tools are actually in the build:
 ADMIN_TOOLS_ENABLED=true node build/index.js --help 2>/dev/null | grep -E 'update-user|delete-content|query-admin-insights'
 ```
 
-Then apply the §2 `run-case.ts` patch (it may need re-applying if the rebase touched it).
+On this branch the §2 `run-case.ts` env passthrough is already in place; if you reproduce
+the merge from scratch, confirm `tableauServerEnv()` still forwards the admin gates.
 
 ---
 
