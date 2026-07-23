@@ -652,6 +652,7 @@ async function performAutoApply({
   bindMs,
   eventsAnchor,
   schemaSummary,
+  suppressActivation,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -662,6 +663,7 @@ async function performAutoApply({
   bindMs: number;
   eventsAnchor?: number;
   schemaSummary: SchemaSummary;
+  suppressActivation: boolean;
 }): Promise<StructuredBindTemplateToolResult> {
   const { args } = res;
 
@@ -743,14 +745,13 @@ async function performAutoApply({
   if (applyResult.isErr()) {
     return applyFallback(base, `apply failed: ${describeApplyError(applyResult.error)}`);
   }
-  // Activation policy signal: this is the public standalone plain-chart auto-apply
-  // boundary. Dashboard composition binds/injects its intermediate sheets internally
-  // and never enters this path, so only the requested standalone chart navigates.
-  await activateSheetBestEffort({
-    sheetName: literalTitle,
-    executor,
-    signal,
-  });
+  if (!suppressActivation) {
+    await activateSheetBestEffort({
+      sheetName: literalTitle,
+      executor,
+      signal,
+    });
+  }
   const applyMs = Date.now() - applyStart;
 
   // W60 response-shape trim (P4): on success, return ONLY the trimmed fast-path shape —
@@ -1127,6 +1128,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             bindMs,
             eventsAnchor,
             schemaSummary,
+            suppressActivation: target_worksheet !== undefined,
           });
           recordBoundRecoveryAfterFinalResult({
             session: resolvedSession,
