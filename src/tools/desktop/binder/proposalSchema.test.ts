@@ -39,6 +39,28 @@ describe('proposalSchema — strict object contract', () => {
     ).toBe(false);
     expect(proposalSchema.safeParse({ ...valid, top_n: 0 }).success).toBe(false);
   });
+
+  it('accepts declarative filters — values optional, context optional (m7)', () => {
+    // The m7 case: a context filter with no member list (interactive enumerate-all control).
+    expect(
+      proposalSchema.safeParse({ ...valid, filters: [{ field: 'Region', context: true }] }).success,
+    ).toBe(true);
+    // A fully-specified filter (explicit members) also parses.
+    expect(
+      proposalSchema.safeParse({
+        ...valid,
+        filters: [{ field: 'Region', values: ['East'], context: true }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('REJECTS an unknown key inside a filter instead of stripping it', () => {
+    const result = proposalSchema.safeParse({
+      ...valid,
+      filters: [{ field: 'Region', sneaky: 'x' }],
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('proposalSchema — title control-char rejection (M10 Finding 2)', () => {

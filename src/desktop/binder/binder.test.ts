@@ -970,6 +970,79 @@ describe('binder/bindTemplate — Call 2 (agent proposal)', () => {
     }
   });
 
+  it('threads a declarative context filter into bound args (m7 — values optional)', async () => {
+    const proposal: BindingProposal = {
+      template: 'ranking-ordered-bar',
+      title: 'Top 10 Products in Region',
+      bindings: [
+        { slot_id: 'region', field: 'Category' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+      top_n: 10,
+      filters: [{ field: 'Region', context: true }],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'top 10 products by sales, let me filter down to one region',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.top_n).toBe(10);
+      expect(res.args.filters).toEqual([{ field: 'Region', context: true }]);
+    }
+  });
+
+  it('drops an unresolvable filter field fail-open with a warning, keeping the bind', async () => {
+    const proposal: BindingProposal = {
+      template: 'ranking-ordered-bar',
+      title: 'Products',
+      bindings: [
+        { slot_id: 'region', field: 'Category' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+      filters: [{ field: 'Definitely Not A Field', context: true }],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'top products by sales filtered by a phantom field',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.filters).toBeUndefined();
+      expect(res.warnings?.join(' ')).toContain('Definitely Not A Field');
+    }
+  });
+
+  it('drops a measure filter (interactive dimension filters only) with a warning', async () => {
+    const proposal: BindingProposal = {
+      template: 'ranking-ordered-bar',
+      title: 'Products',
+      bindings: [
+        { slot_id: 'region', field: 'Category' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+      filters: [{ field: 'Profit', context: true }],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'top products by sales filtered by profit',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.filters).toBeUndefined();
+      expect(res.warnings?.join(' ')).toContain('is a measure');
+    }
+  });
+
   it('bad sort.by binds fail-open with a warning and no sort arg', async () => {
     const proposal: BindingProposal = {
       template: 'ranking-ordered-bar',

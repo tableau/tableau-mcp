@@ -4,6 +4,12 @@ export interface ProposalSignatureBinding {
   derivation?: string;
 }
 
+export interface ProposalSignatureFilter {
+  field: string;
+  values?: string[];
+  context?: boolean;
+}
+
 export interface ProposalSignatureInput {
   template: string;
   bindings: ProposalSignatureBinding[];
@@ -12,6 +18,7 @@ export interface ProposalSignatureInput {
     direction: string;
   };
   top_n?: number;
+  filters?: ProposalSignatureFilter[];
 }
 
 function compareText(a: string | undefined, b: string | undefined): number {
@@ -33,6 +40,14 @@ export function proposalSignature(proposal: ProposalSignatureInput): string {
       return compareText(a.derivation, b.derivation);
     });
 
+  const filters = proposal.filters
+    ?.map((filter) => ({
+      field: filter.field,
+      ...(filter.values !== undefined ? { values: [...filter.values].sort(compareText) } : {}),
+      ...(filter.context !== undefined ? { context: filter.context } : {}),
+    }))
+    .sort((a, b) => compareText(a.field, b.field));
+
   return JSON.stringify({
     template: proposal.template,
     bindings,
@@ -40,5 +55,6 @@ export function proposalSignature(proposal: ProposalSignatureInput): string {
       ? { sort: { by: proposal.sort.by, direction: proposal.sort.direction } }
       : {}),
     ...(proposal.top_n !== undefined ? { top_n: proposal.top_n } : {}),
+    ...(filters !== undefined && filters.length > 0 ? { filters } : {}),
   });
 }
