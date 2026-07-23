@@ -154,6 +154,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'preflight-rejection',
     text: 'If preflight rejects apply, fix per FIX lines. Prefer file mode',
   },
+  {
+    kind: 'prose',
+    id: 'no-native-tool-escape',
+    text: 'If NO native tool covers the asked shape, say so plainly — never invent or hand-author XML. Retrieving worksheet XML to feed the field tools (get-worksheet-xml -> add-field/apply-worksheet) is a sanctioned path, not hand-authoring. Whole-workbook XML surgery (get/apply workbook XML) lives behind TOOL_PROFILE=full, an operator opt-in the user can enable.',
+  },
 ];
 
 export function renderInstructionEntry(entry: DesktopInstructionEntry): string {
