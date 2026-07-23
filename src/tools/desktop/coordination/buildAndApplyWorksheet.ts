@@ -25,11 +25,11 @@ import {
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { spliceBoundFacet } from '../../../desktop/templates/facetSplice.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
-import { spliceWaterfallAnchorFilter } from '../../../desktop/templates/waterfallAnchorFilter.js';
 import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
 import { pruneUnboundOptionalFields } from '../../../desktop/templates/optionalFieldPrune.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
+import { spliceWaterfallAnchorFilter } from '../../../desktop/templates/waterfallAnchorFilter.js';
 import {
   classifyWorksheetPromiseOutcome,
   formatWorksheetPromiseCheck,

@@ -51,9 +51,10 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'route',
     id: 'plain-chart',
-    trigger: 'a plain viz ask (bar/line/map/KPI/etc.)',
+    trigger:
+      'any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.)',
     action:
-      'FIRST bind-template(auto_apply:true): deterministic, ~0.3s. On propose, resubmit; proposals may carry sort and top_n. author-parameter/author-set/author-action before charts; else search-commands.',
+      'FIRST bind-template(auto_apply:true): deterministic, ~0.3s. A named chart takes this bind-template path first even when the ask sounds calc-heavy or asks "how <X> changes"; template-owned calculations (including a waterfall\'s running total) must not be authored before binding. On propose, resubmit; proposals may carry sort and top_n. author-parameter/author-set/author-action before charts; else search-commands.',
     toolSequence: [
       'bind-template',
       'author-parameter',

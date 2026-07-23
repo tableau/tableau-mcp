@@ -500,6 +500,10 @@ describe('bindTemplateTool', () => {
     expect(body.decline_reason).toEqual(proposeResult.decline_reason);
     expect(body.output_schema).toEqual({ type: 'object' });
     expect(body.guidance).toContain('output_schema');
+    expect(body.guidance).toContain(
+      "Pie/donut is available via bind-template through the eligible 'part-to-whole-pie-chart' template",
+    );
+    expect(body.guidance).not.toContain('no pie template is fast-path eligible');
     expect(body.guidance).toContain('build it with build-and-apply-worksheet');
     expect(body.guidance).toContain('if the inject-template/apply-workbook tools are available');
     expect(body.guidance).not.toContain('use the manual chain');

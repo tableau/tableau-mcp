@@ -1,8 +1,8 @@
-# Advanced Chart Build Recipes
+# Advanced Chart Fallback Mechanics
 
-How to build the advanced/"hacked" chart types Show Me won't make for you — mark type, shelf setup, key calculations, and the addressing that makes or breaks each one.
+Fallback-only mechanics for advanced/"hacked" chart types after the validated template path cannot apply — mark type, shelf setup, key calculations, and the addressing that makes or breaks each one.
 
-The build-mechanics layer beneath chart choice: chart-selection decides *which* chart; this is *how to construct* the hard ones.
+The fallback build-mechanics layer beneath chart choice: chart-selection decides *which* chart; `bind-template` gets the first chance to construct it, and these recipes apply only after bind proposes or escalates.
 
 ## Scope Check
 
@@ -15,7 +15,9 @@ The build-mechanics layer beneath chart choice: chart-selection decides *which* 
 
 ## When to Use
 
-Use this when a user wants a specific advanced chart built and you need the mechanic — mark type, shelf layout, the calcs, and the table-calc addressing. For *which* chart the question calls for (and whether to push back on a poor choice), see [Chart Type Selection](data/knowledge/strategy/viz-design/chart-selection.md); for the calc formulas behind these (running total, rank, LOD, sigmoid), see [LOD & Table-Calc Pattern Cookbook](data/knowledge/tactics/data/lod-and-table-calc-patterns.md); charts needing reshaped/densified input cross-reference data-modeling (a `data/knowledge/data-modeling/` follow-up).
+For any named chart type, call `bind-template` with `auto_apply: true` **FIRST**. The shelf/XML recipes below are **FALLBACK-ONLY**, after bind returns propose or escalate; do not pre-author a chart's template-owned calculations (including a waterfall's running total) before binding.
+
+Use this fallback when bind cannot apply the requested advanced chart and you need the mechanic — mark type, shelf layout, calculations, and table-calc addressing. For *which* chart the question calls for (and whether to push back on a poor choice), see [Chart Type Selection](data/knowledge/strategy/viz-design/chart-selection.md); for the calc formulas behind these (running total, rank, LOD, sigmoid), see [LOD & Table-Calc Pattern Cookbook](data/knowledge/tactics/data/lod-and-table-calc-patterns.md); charts needing reshaped/densified input cross-reference data-modeling (a `data/knowledge/data-modeling/` follow-up).
 
 ## Best Practices
 
@@ -71,7 +73,7 @@ These need densification (a size-1 **bin** Tableau interpolates across) or resha
 
 ## Implementation
 
-Build the chart with the recipe above, then set the table-calc **Compute Using** explicitly (this is where most advanced charts fail), apply via `apply-worksheet` / `apply-workbook(mode=file)`, and open in Tableau to confirm the geometry/addressing rendered as intended. For reshape/densification charts (sankey, radial, network), keep the scaffold as the source of truth and verify the curve interpolation didn't break. Defer chart *choice* to chart-selection and the perceptual *why* (bars over pies, shared over dual axis, color for secondary encoding) to the design-principles guidance.
+Call `bind-template(auto_apply:true)` first for the named chart. Only after bind returns propose or escalate should you use the matching fallback recipe above; then set table-calc **Compute Using** explicitly (this is where most advanced charts fail), apply via `apply-worksheet` / `apply-workbook(mode=file)`, and open in Tableau to confirm the geometry/addressing rendered as intended. For reshape/densification charts (sankey, radial, network), keep the scaffold as the source of truth and verify the curve interpolation didn't break. Defer chart *choice* to chart-selection and the perceptual *why* (bars over pies, shared over dual axis, color for secondary encoding) to the design-principles guidance.
 
 ## Related Knowledge
 

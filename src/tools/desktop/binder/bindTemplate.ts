@@ -421,12 +421,14 @@ function buildGuidance(
         'No deterministic (no-LLM) match. Choose exactly one template from llm_input.candidate_templates, ' +
         'bind every bindable slot to a field from llm_input.fields (match role/kind; use the exact field name), ' +
         'then call bind-template again with { session, ask, proposal } matching output_schema. ' +
-        // W60 pie-anyway gap: candidates carry ONLY fast-path-eligible templates, so an ask naming an
-        // unstamped shape (canonically pie) dead-ended here with no honest route — name both exits.
-        'If the asked viz shape is not among the candidates (e.g. pie/donut — no pie template is ' +
-        'fast-path eligible), do not force a mismatched proposal: bind the nearest candidate and tell the ' +
-        'user in one sentence why (for a pie ask, a sorted bar or treemap compares shares more precisely); ' +
-        'if they explicitly want the exact shape anyway, build it with build-and-apply-worksheet; or, if the ' +
+        // Candidates carry fast-path-eligible templates (plus side-loaded local templates). Pie/donut
+        // is now stamped eligible, so name that honest bind route before the generic shape-miss exits.
+        "Pie/donut is available via bind-template through the eligible 'part-to-whole-pie-chart' template; " +
+        'when it appears in candidate_templates, choose it and bind its slots instead of forcing ' +
+        'a mismatched shape. If the asked viz shape is not among the candidates, do not force a mismatched ' +
+        'proposal: bind the nearest candidate and tell the user in one sentence why; if they explicitly want ' +
+        'the exact shape anyway, build it with build-and-apply-worksheet. For a pie ask where the eligible ' +
+        'candidate is unexpectedly absent, do not claim that no pie template exists: if the ' +
         "inject-template/apply-workbook tools are available, inject-template with template_name 'part-to-whole-pie-chart' " +
         '(field_mapping: Region -> the category dimension, Sales -> the measure) -> apply-workbook. ' +
         `${DERIVATION_OVERRIDE_INSTRUCTION}.`;
