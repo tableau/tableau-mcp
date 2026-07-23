@@ -40,7 +40,14 @@ type RunMeta = {
   timed_out?: boolean;
 };
 
-type Outcome = 'pass' | 'fail' | 'timeout' | 'budget_exceeded' | 'error' | 'grading_error';
+type Outcome =
+  | 'pass'
+  | 'fail'
+  | 'timeout'
+  | 'budget_exceeded'
+  | 'error'
+  | 'tool_error'
+  | 'grading_error';
 
 const absRunDir = path.resolve(runDir);
 const runMeta = JSON.parse(fs.readFileSync(path.join(absRunDir, 'run.json'), 'utf-8')) as RunMeta;
@@ -65,12 +72,30 @@ async function main(): Promise<void> {
     (tool) => !observedTools.includes(normalizeToolName(tool)),
   );
 
+  // A tool that was invoked but returned an error must not count as coverage: an
+  // expected call that the admin gate (or any API error) rejected would otherwise
+  // still satisfy `observed ⊇ expected` and pass. Flag any errored call whose
+  // normalized name is an expected tool.
+  const expectedNormalized = new Set(expectedTools.map((t) => normalizeToolName(t)));
+  const erroredExpectedTools = summary
+    ? [
+        ...new Set(
+          summary.toolCalls
+            .filter(
+              (t) => t.error != null && t.error !== '' && expectedNormalized.has(t.normalizedName),
+            )
+            .map((t) => t.normalizedName),
+        ),
+      ]
+    : [];
+
   const outcome: Outcome = (() => {
     if (!summary) return 'grading_error';
     if (runMeta.timed_out) return 'timeout';
     if (runMeta.agent_exit_code != null && runMeta.agent_exit_code !== 0) return 'error';
     if (toolCalls > runMeta.budget.max_tool_calls) return 'budget_exceeded';
     if (missingTools.length > 0) return 'fail';
+    if (erroredExpectedTools.length > 0) return 'tool_error';
     return 'pass';
   })();
 

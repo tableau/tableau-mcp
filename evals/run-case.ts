@@ -149,6 +149,10 @@ const startMs = Date.now();
 let exitCode = 0;
 let stdout = '';
 let errorMessage: string | undefined;
+// Only a process the runner actually killed on timeout is a timeout. A run that
+// merely finishes over budget is NOT — the adapter's kill fires at maxWallMs +
+// 10s, and Node sets `killed`/`signal` on the error when the timeout kills it.
+let timedOut = false;
 
 try {
   stdout = execFileSync(invocation.command, invocation.args, {
@@ -158,10 +162,18 @@ try {
     maxBuffer: 25 * 1024 * 1024,
   }).toString();
 } catch (error: unknown) {
-  const e = error as { status?: number; stdout?: Buffer; stderr?: Buffer; message?: string };
+  const e = error as {
+    status?: number;
+    stdout?: Buffer;
+    stderr?: Buffer;
+    message?: string;
+    killed?: boolean;
+    signal?: string | null;
+  };
   exitCode = e.status ?? 1;
   stdout = e.stdout?.toString() ?? '';
   errorMessage = [e.message, e.stderr?.toString()].filter(Boolean).join('\n');
+  timedOut = e.killed === true || e.signal === 'SIGTERM';
   console.error(`${invocation.command} exited with code ${exitCode}`);
   if (errorMessage) console.error(errorMessage);
 }
@@ -177,7 +189,7 @@ const finishedMeta = {
   finished_at: finishedAt,
   wall_ms: wallMs,
   agent_exit_code: exitCode,
-  timed_out: wallMs >= budget.maxWallMs,
+  timed_out: timedOut,
   error: errorMessage ?? null,
 };
 fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify(finishedMeta, null, 2));
