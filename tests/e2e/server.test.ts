@@ -44,14 +44,20 @@ describe('server', () => {
         'delete-content',
       ];
       // These tools are gated by the mcp-apps feature (disabled by default in features.json):
-      // get-embed-token, plus the app-only confirm-* tools.
+      // get-embed-token and render-interactive-viz, plus the app-only confirm-* tools.
       const mcpAppsTools: ReadonlyArray<WebToolName> = [
         'get-embed-token',
+        'render-interactive-viz',
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
       // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
-      const flowTools: ReadonlyArray<WebToolName> = ['list-flows', 'get-flow'];
+      const flowTools: ReadonlyArray<WebToolName> = [
+        'list-flows',
+        'get-flow',
+        'list-flow-runs',
+        'list-flow-tasks',
+      ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = [
         'generate-insight-cards',
@@ -149,14 +155,20 @@ describe('server', () => {
         'delete-content',
       ];
       // These tools are gated by the mcp-apps feature (disabled by default in features.json):
-      // get-embed-token, plus the app-only confirm-* tools.
+      // get-embed-token and render-interactive-viz, plus the app-only confirm-* tools.
       const mcpAppsTools: ReadonlyArray<WebToolName> = [
         'get-embed-token',
+        'render-interactive-viz',
         'confirm-delete-content',
         'confirm-update-cloud-extract-refresh-task',
       ];
       // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
-      const flowTools: ReadonlyArray<WebToolName> = ['list-flows', 'get-flow'];
+      const flowTools: ReadonlyArray<WebToolName> = [
+        'list-flows',
+        'get-flow',
+        'list-flow-runs',
+        'list-flow-tasks',
+      ];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = [
         'generate-insight-cards',
