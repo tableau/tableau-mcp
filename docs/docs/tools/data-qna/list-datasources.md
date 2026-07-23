@@ -12,6 +12,9 @@ flat object of the shape `{ data, totalAvailable }` (see
 and increment `pageNumber` on each subsequent call until you have collected
 `totalAvailable` items.
 
+To get the **count** of data sources matching the request, read `totalAvailable` from a single
+call (for example, `pageNumber: 1`) without paging through every item.
+
 ## APIs called
 
 - [Query Data Sources](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources)

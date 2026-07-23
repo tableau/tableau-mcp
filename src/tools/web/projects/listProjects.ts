@@ -63,7 +63,9 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
       filter: "updatedAt:gt:2023-01-01T00:00:00Z"
 
   **Pagination**
-  This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1-based page to fetch (default 1). The response is a flat object \`{ data, totalAvailable }\`; to collect every project, keep incrementing \`pageNumber\` until you have gathered \`totalAvailable\` items.`,
+  This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1-based page to fetch (default 1).
+  The response is a flat object \`{ data, totalAvailable }\`; to collect every project, keep incrementing \`pageNumber\` until you have gathered \`totalAvailable\` items.
+  To get just the count of projects matching the request, read \`totalAvailable\` from a single call (e.g. \`pageNumber: 1\`) without paging through every item.`,
     paramsSchema,
     annotations: {
       title: 'List Projects',

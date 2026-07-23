@@ -27,6 +27,9 @@ This tool returns a single page of up to 1000 projects per call. The response is
 The **client** drives pagination: increment [`pageNumber`](#pagenumber) (starting at 1) on
 successive calls until you have collected `totalAvailable` items.
 
+To get the **count** of projects matching the request, read `totalAvailable` from a single call
+(for example, `pageNumber: 1`) without paging through every item.
+
 ## APIs called
 
 - [Query Projects](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_projects.htm#query_projects)

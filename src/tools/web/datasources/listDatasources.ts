@@ -85,7 +85,9 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
       filter: "name:eq:Project Views,projectName:eq:Finance,createdAt:gt:2023-01-01T00:00:00Z"
 
   **Pagination**
-  This tool returns a single page of up to 1000 data sources per call. Use \`pageNumber\` to select which 1000-item page to fetch (1-based, default 1). The response is a flat object \`{ data, totalAvailable }\`. To collect all data sources, increment \`pageNumber\` (starting at 1) until you have collected \`totalAvailable\` items.
+  This tool returns a single page of up to 1000 data sources per call. Use \`pageNumber\` to select which 1000-item page to fetch (1-based, default 1).
+  The response is a flat object \`{ data, totalAvailable }\`. To collect all data sources, increment \`pageNumber\` (starting at 1) until you have collected \`totalAvailable\` items.
+  To get just the count of data sources matching the request, read \`totalAvailable\` from a single call (e.g. \`pageNumber: 1\`) without paging through every item.
   `,
     paramsSchema,
     annotations: {

@@ -20,6 +20,8 @@ This tool returns a single page of up to 1000 views per call. The response is a 
 
 To retrieve all views, the client paginates by incrementing `pageNumber` (starting at 1) until it has collected `totalAvailable` items.
 
+To get the **count** of views matching the request, read `totalAvailable` from a single call (for example, `pageNumber: 1`) without paging through every item.
+
 ## APIs called
 
 - [Query Views for Site](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_views_for_site)

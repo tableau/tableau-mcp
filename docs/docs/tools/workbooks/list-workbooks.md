@@ -25,6 +25,9 @@ select which page to fetch. The response is a flat object:
 To collect the full result set, the **client** paginates by incrementing `pageNumber` (starting at
 1) until it has collected `totalAvailable` items.
 
+To get the **count** of workbooks matching the request, read `totalAvailable` from a single
+call (for example, `pageNumber: 1`) without paging through every item.
+
 ## APIs called
 
 - [Query Workbooks for Site](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbooks_for_site)

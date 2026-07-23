@@ -18,6 +18,9 @@ the shape `{ data, totalAvailable }`:
 To collect all custom views, the client drives pagination by incrementing
 [`pageNumber`](#pagenumber) until it has gathered `totalAvailable` items.
 
+To get the **count** of custom views matching the request, read `totalAvailable` from a single
+call (for example, `pageNumber: 1`) without paging through every item.
+
 ## APIs called
 
 - [Get Workbook](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook)

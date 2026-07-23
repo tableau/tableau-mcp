@@ -42,7 +42,9 @@ export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof par
     description: `
   Retrieves a list of custom views for a Tableau workbook including their metadata such as name, owner, and the view they are found in. Supports optional filtering via field:operator:value expressions (e.g., viewId:eq:<view_id>) for precise and flexible custom view discovery. The tool always includes the workbookId in the final filter expression based on the required workbookId argument. Including the workbookId field in the filter will be ignored. Use this tool when a user requests to list, search, or filter Tableau custom views for a workbook.
 
-  This tool returns a single page of results (up to 1000 items) as a JSON object of the shape { data, totalAvailable }. Use the pageNumber argument to select which 1000-item page to fetch (1-based, default 1). To collect all results, keep incrementing pageNumber until you have gathered totalAvailable items.
+  This tool returns a single page of results (up to 1000 items) as a JSON object of the shape { data, totalAvailable }. Use the pageNumber argument to select which 1000-item page to fetch (1-based, default 1).
+  To collect all results, keep incrementing pageNumber until you have gathered totalAvailable items.
+  To get just the count of custom views matching the request, read totalAvailable from a single call (e.g. pageNumber: 1) without paging through every item.
 
   **Supported Filter Fields and Operators**
   | Field               | Operators            |
