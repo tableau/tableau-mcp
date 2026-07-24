@@ -23,7 +23,7 @@ export class DesktopCache {
   }: {
     prefix: string;
     id?: string;
-    extension?: 'xml' | 'json';
+    extension?: 'xml' | 'json' | 'png' | 'svg';
   }): string {
     extension = extension || 'xml';
     id = id || this._id || `${Date.now()}-${Math.random().toString(36).substring(7)}`;

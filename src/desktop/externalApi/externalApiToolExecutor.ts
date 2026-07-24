@@ -13,6 +13,7 @@ import {
 import {
   ExternalApiClient,
   ExternalApiClientOptions,
+  ImageExportQuery,
   WorkbookDocument,
   WorksheetSummaryDataQuery,
 } from './externalApiClient.js';
@@ -24,6 +25,7 @@ import {
   DatasourceList,
   ExternalApiError,
   ExternalApiInstance,
+  ImageResult,
   OperationEnvelope,
   OperationError,
   OperationWarning,
@@ -328,6 +330,26 @@ export class ExternalApiToolExecutor extends ToolExecutor {
   ): Promise<Result<SummaryData, ExecuteCommandError>> {
     return this.readExternalApi((client) =>
       client.getWorksheetSummaryData(worksheetId, query, signal),
+    );
+  }
+
+  async exportWorksheetImage(
+    worksheetId: string,
+    query: ImageExportQuery,
+    signal: AbortSignal,
+  ): Promise<Result<ImageResult, ExecuteCommandError>> {
+    return this.readExternalApi((client) =>
+      client.exportWorksheetImage(worksheetId, query, signal),
+    );
+  }
+
+  async exportDashboardImage(
+    dashboardId: string,
+    query: ImageExportQuery,
+    signal: AbortSignal,
+  ): Promise<Result<ImageResult, ExecuteCommandError>> {
+    return this.readExternalApi((client) =>
+      client.exportDashboardImage(dashboardId, query, signal),
     );
   }
 

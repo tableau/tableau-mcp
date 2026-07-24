@@ -24,10 +24,12 @@ export const EXTERNAL_API_ROUTES = {
   workbookWorksheets: '/v0/workbook/worksheets',
   dashboardById: '/v0/workbook/dashboards/{id}',
   dashboardDocument: '/v0/workbook/dashboards/{id}/document',
+  dashboardImage: '/v0/workbook/dashboards/{id}/image',
   storyboardById: '/v0/workbook/storyboards/{id}',
   storyboardDocument: '/v0/workbook/storyboards/{id}/document',
   worksheetById: '/v0/workbook/worksheets/{id}',
   worksheetDocument: '/v0/workbook/worksheets/{id}/document',
+  worksheetImage: '/v0/workbook/worksheets/{id}/image',
   worksheetSummaryData: '/v0/workbook/worksheets/{id}/summaryData',
   site: '/v0/site',
   siteDatasources: '/v0/site/datasources',
@@ -345,6 +347,24 @@ export const validationResultSchema = z
   })
   .passthrough();
 export type ValidationResult = z.infer<typeof validationResultSchema>;
+
+/**
+ * Image export result returned by `GET /v0/workbook/worksheets/{id}/image` and
+ * `GET /v0/workbook/dashboards/{id}/image`. Always includes `width`/`height`, plus
+ * `imageBase64` XOR `filePath`: base64 bytes when no server-side output path was
+ * requested, otherwise the absolute path written (bytes omitted). Both bytes/path
+ * fields stay optional so a partial or evolved envelope still parses; callers pick
+ * the branch to render.
+ */
+export const imageResultSchema = z
+  .object({
+    imageBase64: z.string().optional(),
+    filePath: z.string().optional(),
+    width: z.number().optional(),
+    height: z.number().optional(),
+  })
+  .passthrough();
+export type ImageResult = z.infer<typeof imageResultSchema>;
 
 /** Running Desktop application info returned by `GET /v0/app`. */
 export const appInfoSchema = z

@@ -181,6 +181,32 @@ const sendProblem = (res: ServerResponse, status: number, code: string, detail: 
   );
 };
 
+// A 1x1 PNG, base64-encoded — enough to exercise the inline-image decode path.
+const SAMPLE_IMAGE_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+
+// Models the image export contract: a relative or `..`-bearing filePath is a 400 before
+// dispatch; an absolute filePath returns the path (no bytes); otherwise the base64 bytes
+// ride in the envelope. width/height are always present.
+const sendImageExport = (
+  res: ServerResponse,
+  searchParams: Record<string, string>,
+  width: number,
+  height: number,
+): void => {
+  const filePath = searchParams['filePath'];
+  if (filePath !== undefined && filePath.length > 0) {
+    const isAbsolute = filePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(filePath);
+    if (!isAbsolute || filePath.split(/[\\/]/).includes('..')) {
+      sendProblem(res, 400, 'invalid-query-parameter', `Invalid filePath: ${filePath}`);
+      return;
+    }
+    sendJson(res, 200, { filePath, width, height });
+    return;
+  }
+  sendJson(res, 200, { imageBase64: SAMPLE_IMAGE_BASE64, width, height });
+};
+
 export async function startMockExternalApiServer(
   options: { token?: string; workbookXml?: string } = {},
 ): Promise<MockExternalApiServer> {
@@ -362,6 +388,28 @@ export async function startMockExternalApiServer(
         return;
       }
       sendJson(res, 200, DEFAULT_SUMMARY_DATA);
+      return;
+    }
+
+    const worksheetImageMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)\/image$/);
+    if (method === 'GET' && worksheetImageMatch) {
+      const worksheetId = decodeURIComponent(worksheetImageMatch[1]);
+      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      sendImageExport(res, searchParams, 640, 480);
+      return;
+    }
+
+    const dashboardImageMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+)\/image$/);
+    if (method === 'GET' && dashboardImageMatch) {
+      const dashboardId = decodeURIComponent(dashboardImageMatch[1]);
+      if (!DEFAULT_DASHBOARDS.some((dashboard) => dashboard.id === dashboardId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Dashboard not found: ${dashboardId}`);
+        return;
+      }
+      sendImageExport(res, searchParams, 1280, 720);
       return;
     }
 

@@ -192,6 +192,18 @@ describe('external client API contract (captured openapi fixture)', () => {
     it('invokeCommand stays deliberately undocumented (hidden route, owned separately)', () => {
       expect(Object.keys(spec.paths)).not.toContain(EXTERNAL_API_ROUTES.invokeCommand);
     });
+
+    // The image export routes ship in a Desktop build newer than this captured 0.1.0 fixture,
+    // so the export-image tools are wired and tested against the mock but "dead" against a real
+    // 0.1.0 Desktop — they surface an honest too-new-endpoint 404. Once the fixture is re-captured
+    // from a build that serves these, MOVE these two into the documented-routes it.each above and
+    // delete this assertion.
+    it.each([EXTERNAL_API_ROUTES.worksheetImage, EXTERNAL_API_ROUTES.dashboardImage])(
+      'image route %s is absent from the captured 0.1.0 fixture (dead-but-tested until re-capture)',
+      (route) => {
+        expect(Object.keys(spec.paths)).not.toContain(route);
+      },
+    );
   });
 
   describe('envelope wire acceptance', () => {
