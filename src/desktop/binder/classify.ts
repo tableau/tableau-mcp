@@ -1799,6 +1799,8 @@ const MEASURE_BY_DIMENSION_RESIDUAL_TOKENS: ReadonlySet<string> = new Set([
   'of',
   'please',
   'by',
+  'with',
+  'filter',
   'total',
   'sum',
   'average',
@@ -1854,6 +1856,104 @@ function resolveMeasureByDimensionBar(
   return bound.bindings;
 }
 
+interface NoLlmClassification {
+  template: string;
+  bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>;
+  top_n?: number;
+  filters?: Array<{ field: string; context?: boolean }>;
+  /** Advisory provenance (e.g. a required geo slot auto-completed from the schema, W60). Present only when non-empty. */
+  notes?: string[];
+}
+
+/**
+ * A clear "top N" phrase; zero and non-integers deliberately do not match.
+ * The current proposal contract carries only `top_n: integer` and the apply path
+ * therefore defaults to the top end. A clear bottom-N request is recognized but
+ * fails closed instead of being silently applied as the opposite ranking.
+ */
+function topNFromAsk(ask: string): number | undefined {
+  const match = /\b(top|bottom)\s+([1-9]\d*)\b/i.exec(ask);
+  return match?.[1].toLowerCase() === 'top' ? Number(match[2]) : undefined;
+}
+
+/**
+ * Dimensions explicitly paired with a filter cue. A field may follow the cue
+ * ("filter down to one Region", "filter by Region") or immediately precede it
+ * ("with a Region filter"). Returning every candidate lets the caller fail closed
+ * when an either/or phrase names more than one dimension.
+ */
+function filterDimensionsFromAsk(ask: string, summary: SchemaSummary): SchemaField[] {
+  const dimensions = summary.fields.filter((field) => field.role === 'dimension');
+  if (dimensions.length === 0) return [];
+  const dimensionSummary: SchemaSummary = { datasource: summary.datasource, fields: dimensions };
+  const exactNames = fieldExactNames(dimensions);
+  const found = new Set<SchemaField>();
+  const filterCue = /\bfilter(?:s|ed|ing)?\b/gi;
+
+  for (const cue of ask.matchAll(filterCue)) {
+    const cueIndex = cue.index;
+    const afterStart = cueIndex + cue[0].length;
+    const sentenceEndOffset = ask.slice(afterStart).search(/[.;]/);
+    const afterEnd =
+      sentenceEndOffset >= 0 ? afterStart + sentenceEndOffset : ask.length;
+    for (const field of matchFieldsInAsk(ask.slice(afterStart, afterEnd), dimensionSummary)) {
+      found.add(field);
+    }
+
+    const before = ask.slice(0, cueIndex);
+    for (const field of dimensions) {
+      const names = [bareName(field.columnName), field.caption, field.name].filter(
+        (name): name is string => !!name && name.length > 0,
+      );
+      if (
+        names.some((name) => {
+          const lower = name.toLowerCase();
+          const pluralSuffix =
+            !lower.endsWith('s') && !exactNames.has(`${lower}s`) ? 's?' : '';
+          const body = escapeRegex(lower).replace(/-/g, '[\\s-]+');
+          return new RegExp(
+            `(?:^|[^a-z0-9])(?:a|an|the|one)?\\s*${body}${pluralSuffix}\\s*$`,
+            'i',
+          ).test(before);
+        })
+      ) {
+        found.add(field);
+      }
+    }
+  }
+
+  return [...found];
+}
+
+/** Add ask modifiers only after template selection and required-slot binding succeeded. */
+function attachAskModifiers(
+  ask: string,
+  classification: NoLlmClassification,
+  filterCandidates: SchemaField[],
+): NoLlmClassification {
+  const topN = topNFromAsk(ask);
+  const boundFields = new Set(classification.bindings.map((binding) => binding.field));
+  const filter =
+    filterCandidates.length === 1 && !boundFields.has(filterCandidates[0].name)
+      ? filterCandidates[0]
+      : undefined;
+
+  return {
+    ...classification,
+    ...(topN !== undefined ? { top_n: topN } : {}),
+    ...(filter
+      ? {
+          filters: [
+            {
+              field: filter.name,
+              ...(topN !== undefined ? { context: true } : {}),
+            },
+          ],
+        }
+      : {}),
+  };
+}
+
 /**
  * No-LLM classification (design §3.5 + stage 2b within-family disambiguation).
  * Keyword-scores the eligible fast-path templates, selects a single template via
@@ -1870,12 +1970,7 @@ export function classifyNoLlm(
   ask: string,
   manifests: Map<string, TemplateManifest>,
   summary: SchemaSummary,
-): {
-  template: string;
-  bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>;
-  /** Advisory provenance (e.g. a required geo slot auto-completed from the schema, W60). Present only when non-empty. */
-  notes?: string[];
-} | null {
+): NoLlmClassification | null {
   // FAIL-CLOSED cost guard (M10 Finding 3): over the field cap, do NOT run the per-field
   // hot loop (maskFieldNames / matchFieldsInAsk) and do NOT classify a truncated subset —
   // return null so the orchestrator escalates rather than risk a silent wrong bind on a
@@ -1887,6 +1982,7 @@ export function classifyNoLlm(
   const maskedAsk = maskFieldNames(ask, summary);
   const aggOverride = detectAggregationOverride(maskedAsk);
   const matched = matchFieldsInAsk(ask, summary);
+  const filterCandidates = filterDimensionsFromAsk(ask, summary);
   // The full dimension pool a required geo slot widens into when the ask names no
   // affine candidate for it (W60 geo-slot completion).
   const schemaDims = summary.fields.filter((f) => f.role === 'dimension');
@@ -1900,7 +1996,11 @@ export function classifyNoLlm(
   if (latlon && latlon.fast_path_eligible) {
     const latlonBindings = resolveLatLonSymbolMap(latlon, ask, maskedAsk, summary);
     if (latlonBindings) {
-      return { template: latlon.template, bindings: latlonBindings };
+      return attachAskModifiers(
+        ask,
+        { template: latlon.template, bindings: latlonBindings },
+        filterCandidates,
+      );
     }
   }
 
@@ -1918,11 +2018,19 @@ export function classifyNoLlm(
       const bindings = resolveMeasureByDimensionBar(
         magnitudeBar,
         maskedAsk,
-        matched,
+        filterCandidates.length === 1
+          ? matched.filter((field) => field !== filterCandidates[0])
+          : matched,
         aggOverride,
         schemaDims,
       );
-      if (bindings) return { template: magnitudeBar.template, bindings };
+      if (bindings) {
+        return attachAskModifiers(
+          ask,
+          { template: magnitudeBar.template, bindings },
+          filterCandidates,
+        );
+      }
     }
     return null;
   }
@@ -2018,9 +2126,13 @@ export function classifyNoLlm(
   if (facet) bindings.push(facet);
   // Attach provenance (e.g. W60 geo auto-completion) only when non-empty, so a
   // non-geo / no-auto-complete ask returns the exact same {template, bindings} shape.
-  return rgb.provenance.length > 0
-    ? { template: chosen.template, bindings, notes: rgb.provenance }
-    : { template: chosen.template, bindings };
+  return attachAskModifiers(
+    ask,
+    rgb.provenance.length > 0
+      ? { template: chosen.template, bindings, notes: rgb.provenance }
+      : { template: chosen.template, bindings },
+    filterCandidates,
+  );
 }
 
 /**

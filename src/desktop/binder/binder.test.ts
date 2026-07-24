@@ -1621,6 +1621,135 @@ describe('binder/roleGreedyBind — single-candidate-per-slot schema fallback', 
   });
 });
 
+describe('binder/classifyNoLlm — m7 ask modifiers', () => {
+  const M7_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='M7'>
+      <column name='[product]' caption='Product' role='dimension' type='nominal' datatype='string' />
+      <column name='[category]' caption='Category' role='dimension' type='nominal' datatype='string' />
+      <column name='[region]' caption='Region' role='dimension' type='nominal' datatype='string' />
+      <column name='[sales]' caption='Sales' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+  it('binds m7 with top-N and an interactive context filter in one confident call', async () => {
+    const result = await bindTemplate({
+      ask: 'Show me the top 10 products by sales, and let me filter down to one region.',
+      workbookXml: M7_WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') throw new Error(`expected bound, got ${result.status}`);
+    expect(result.used_llm).toBe(false);
+    expect(result.args.template_name).toBe('ranking-ordered-bar');
+    expect(result.args.top_n).toBe(10);
+    expect(result.args.filters).toEqual([{ field: 'Region', context: true }]);
+  });
+
+  it('extracts top-N without inventing a filter', async () => {
+    const result = await bindTemplate({
+      ask: 'top 5 products by sales',
+      workbookXml: M7_WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') throw new Error(`expected bound, got ${result.status}`);
+    expect(result.args.top_n).toBe(5);
+    expect(result.args.filters).toBeUndefined();
+  });
+
+  it('extracts a bare interactive filter without making it a context filter', async () => {
+    const result = await bindTemplate({
+      ask: 'sales by product with a region filter',
+      workbookXml: M7_WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') throw new Error(`expected bound, got ${result.status}`);
+    expect(result.args.top_n).toBeUndefined();
+    expect(result.args.filters).toEqual([{ field: 'Region' }]);
+  });
+
+  it('leaves a plain confident bind free of top-N and filters', async () => {
+    const result = await bindTemplate({
+      ask: 'sales by product',
+      workbookXml: M7_WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') throw new Error(`expected bound, got ${result.status}`);
+    expect(result.args.top_n).toBeUndefined();
+    expect(result.args.filters).toBeUndefined();
+  });
+
+  it('keeps top-N but omits an ambiguous either-or filter', async () => {
+    const result = await bindTemplate({
+      ask: 'top 10 by sales, filter by category or region',
+      workbookXml: M7_WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') throw new Error(`expected bound, got ${result.status}`);
+    expect(result.args.top_n).toBe(10);
+    expect(result.args.filters).toBeUndefined();
+  });
+
+  it('preserves e1, m1, s7, and a known one-shot without ask modifiers', async () => {
+    const [e1, m1, s7, oneShot] = await Promise.all([
+      bindTemplate({
+        ask: 'Show me Sales by Region.',
+        workbookXml: WORKBOOK_XML,
+        manifests,
+      }),
+      bindTemplate({
+        ask: 'waterfall of Profit by Sub-Category',
+        workbookXml: WORKBOOK_XML,
+        manifests,
+      }),
+      bindTemplate({
+        ask: 'symbol map of Goals For by Country',
+        workbookXml: COUNTRY_ONLY_WORKBOOK_XML,
+        manifests,
+      }),
+      bindTemplate({
+        ask: 'bar chart of Sales by Region',
+        workbookXml: WORKBOOK_XML,
+        manifests,
+      }),
+    ]);
+
+    expect([e1.status, m1.status, s7.status, oneShot.status]).toEqual([
+      'bound',
+      'bound',
+      'bound',
+      'bound',
+    ]);
+    if (
+      e1.status !== 'bound' ||
+      m1.status !== 'bound' ||
+      s7.status !== 'bound' ||
+      oneShot.status !== 'bound'
+    ) {
+      throw new Error('expected all regression cases to bind');
+    }
+    expect(e1.args.template_name).toBe('magnitude-simple-bar');
+    expect(m1.args.template_name).toBe('part-to-whole-waterfall');
+    expect(s7.args.template_name).toBe('spatial-symbol-map');
+    expect(oneShot.args.template_name).toBe('ranking-ordered-bar');
+    for (const result of [e1, m1, s7, oneShot]) {
+      expect(result.args.top_n).toBeUndefined();
+      expect(result.args.filters).toBeUndefined();
+    }
+  });
+});
+
 // Betting-shaped workbook whose measure name ('O/U Line') contains the token
 // 'line' — a trap for the trend-line-chart intent keyword. The no-LLM path must
 // pick kpi-text on 'kpi' regardless of the field name.

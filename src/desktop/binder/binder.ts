@@ -595,6 +595,8 @@ export async function bindTemplate(args: {
       template: cls.template,
       title: makeTitle(args.ask),
       bindings: cls.bindings,
+      ...(cls.top_n !== undefined ? { top_n: cls.top_n } : {}),
+      ...(cls.filters ? { filters: cls.filters } : {}),
     };
     const res = validateAndBuild(proposal, args.manifests, summary, minConfidence, false, args.ask);
     if (res.status === 'bound') {
