@@ -59,7 +59,10 @@ vi.mock('../../../desktop/templates/injectTemplateCore.js', () => ({
   classifyWorksheetReplaceTarget: vi.fn(),
 }));
 vi.mock('../../../desktop/templates/templatePath.js');
-vi.mock('../../../desktop/validation/registry.js');
+vi.mock('../../../desktop/validation/registry.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../desktop/validation/registry.js')>();
+  return { ...actual, runValidation: vi.fn() };
+});
 // Partial fs mock: the bound template is read via the mocked SEA-aware
 // `readTemplate` seam (templatePath.js above), so fs reads stay live for the real
 // manifest/content loads (manifest.ts / provider.ts via the assets seam); only
@@ -227,13 +230,28 @@ const waterfallProposeResult: BinderResult = {
         description: 'Waterfall chart',
         intent_keywords: ['waterfall'],
         slots: [
-          { slot_id: 'profit', role: ['measure'], kind: 'measure', required: true },
-          { slot_id: 'sub_category', role: ['dimension'], kind: 'category', required: true },
-          { slot_id: 'anchor_category', role: ['dimension'], kind: 'category', required: false },
+          { slot_id: 'profit', role: ['measure'], kind: 'quantitative', required: true },
+          {
+            slot_id: 'sub_category',
+            role: ['dimension'],
+            kind: 'categorical',
+            required: true,
+          },
+          {
+            slot_id: 'anchor_category',
+            role: ['dimension'],
+            kind: 'categorical',
+            required: false,
+          },
         ],
       },
     ],
-    fields: [{ name: 'category', role: 'dimension', type: 'nominal', datatype: 'string' }],
+    fields: [
+      { name: 'line_item', role: 'dimension', type: 'nominal', datatype: 'string' },
+      { name: 'category', role: 'dimension', type: 'nominal', datatype: 'string' },
+      { name: 'amount', role: 'measure', type: 'quantitative', datatype: 'real' },
+      { name: 'budget', role: 'measure', type: 'quantitative', datatype: 'real' },
+    ],
   } as unknown as Extract<BinderResult, { status: 'propose' }>['llm_input'],
   output_schema: { type: 'object' },
 };
@@ -307,6 +325,71 @@ const boundWithSortAndTopNResult: BinderResult = {
     top_n: 10,
   },
 };
+// m7 declarative-filter (order-of-operations) fixtures. READ workbook carries product/region/sales
+// so the filter splice can resolve "Region" → its CI; the injected sheet ranks PRODUCT (top-10),
+// with a worksheet window so the shown filter card has a home.
+const M7_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='M7'>
+      <column caption='Product' name='[product]' role='dimension' type='nominal' datatype='string' />
+      <column caption='Region' name='[region]' role='dimension' type='nominal' datatype='string' />
+      <column caption='Sales' name='[sales]' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>`;
+const INJECTED_M7_RANKING_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <worksheets>
+    <worksheet name='Top 10 Products' xmlns:user='http://www.tableausoftware.com/xml/user'>
+      <table>
+        <view>
+          <datasources>
+            <datasource caption='M7' name='M7' />
+          </datasources>
+          <datasource-dependencies datasource='M7'>
+            <column caption='Product' datatype='string' name='[product]' role='dimension' type='nominal' />
+            <column caption='Sales' datatype='integer' name='[sales]' role='measure' type='quantitative' />
+            <column-instance column='[product]' derivation='None' name='[none:product:nk]' pivot='key' type='nominal' />
+            <column-instance column='[sales]' derivation='Sum' name='[sum:sales:qk]' pivot='key' type='quantitative' />
+          </datasource-dependencies>
+          <aggregation value='true' />
+        </view>
+        <style />
+        <panes>
+          <pane>
+            <view><breakdown value='auto' /></view>
+            <mark class='Bar' />
+          </pane>
+        </panes>
+        <rows>[M7].[none:product:nk]</rows>
+        <cols>[M7].[sum:sales:qk]</cols>
+      </table>
+      <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+    </worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' name='Top 10 Products'>
+      <cards />
+      <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+    </window>
+  </windows>
+</workbook>`;
+const boundM7TopNContextFilterResult: BinderResult = {
+  ...boundViaProposalResult,
+  args: {
+    template_name: 'ranking-ordered-bar',
+    title: 'Top 10 Products',
+    sheet_type: 'worksheet',
+    template_parameters: { DATASOURCE: 'M7' },
+    field_mapping: {
+      Region: '[M7].[none:product:nk]',
+      Sales: '[M7].[sum:sales:qk]',
+    },
+    top_n: 10,
+    filters: [{ field: 'Region', context: true }],
+  },
+};
 const boundWaterfallResult: BinderResult = {
   ...boundViaProposalResult,
   args: {
@@ -368,9 +451,7 @@ describe('bindTemplateTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getBindTemplateTool(new DesktopMcpServer());
     expect(tool.name).toBe('bind-template');
-    expect(tool.description).toBe(
-      'Reads workbook + resolves fields itself; binds/applies. Plain chart: FIRST auto_apply:true, no discovery.',
-    );
+    expect(tool.description).toContain('Bind and apply a chart in ONE call');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       ask: expect.any(Object),
@@ -431,11 +512,151 @@ describe('bindTemplateTool', () => {
     expect(body.status).toBe('propose');
     expect(body.decline_reason).toEqual(proposeResult.decline_reason);
     expect(body.output_schema).toEqual({ type: 'object' });
-    expect(body.guidance).toContain('output_schema');
-    expect(body.guidance).toContain('build it with build-and-apply-worksheet');
-    expect(body.guidance).toContain('if the inject-template/apply-workbook tools are available');
-    expect(body.guidance).not.toContain('use the manual chain');
+    expect(body.guidance).toContain('Call 2');
+    expect(body.guidance).toContain('auto_apply:true');
+    expect(body.guidance).toContain('Do not call other authoring tools between calls');
+    expect(body.guidance).not.toContain('add-field');
+    expect(body.guidance).not.toContain('build-and-apply-worksheet');
+    expect(result.structuredContent).toEqual({
+      nextAction: {
+        label: 'Resubmit bind-template with proposal and auto_apply:true',
+        kind: 'prefill',
+      },
+    });
   });
+
+  it('returns an exact Call-2 contract without choosing among compatible fields', async () => {
+    const workbookWithTarget = P_AND_L_WORKBOOK_XML.replace(
+      '</workbook>',
+      "<worksheets><worksheet name='P&amp;L'/></worksheets></workbook>",
+    );
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(workbookWithTarget));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(waterfallProposeResult);
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall',
+      target_worksheet: 'P&L',
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.call_2_contract).toEqual({
+      tool: 'bind-template',
+      arguments: {
+        session: '1',
+        ask: 'P&L waterfall',
+        target_worksheet: 'P&L',
+        auto_apply: true,
+      },
+      proposal_choices: [
+        {
+          template: 'part-to-whole-waterfall',
+          slots: [
+            {
+              slot_id: 'profit',
+              required: true,
+              compatible_field_names: ['amount', 'budget'],
+            },
+            {
+              slot_id: 'sub_category',
+              required: true,
+              compatible_field_names: ['line_item', 'category'],
+            },
+            {
+              slot_id: 'anchor_category',
+              required: false,
+              compatible_field_names: ['line_item', 'category'],
+            },
+          ],
+        },
+      ],
+      proposal_requirements: {
+        title: 'Choose a worksheet title.',
+        confidence: 'Set a confidence from 0 to 1.',
+        field_selection:
+          'For each binding, choose one exact compatible_field_names value; do not rename or infer a field.',
+      },
+    });
+    expect(body.call_2_contract.proposal_choices[0].slots[0].compatible_field_names).toHaveLength(
+      2,
+    );
+    expect(body.call_2_contract.proposal_choices[0].slots[0]).not.toHaveProperty('field');
+  });
+
+  it.each([
+    {
+      label: 'fabricated template alias',
+      proposal: {
+        template: 'waterfall',
+        title: 'P&L waterfall',
+        bindings: [],
+        confidence: 0.9,
+      },
+      escalation: {
+        status: 'escalate',
+        reason: 'template-not-found',
+        blockers: [
+          {
+            code: 'template-not-found',
+            detail: "template 'waterfall' was not found",
+          },
+        ],
+      } satisfies BinderResult,
+    },
+    {
+      label: 'fabricated slot names',
+      proposal: {
+        template: 'part-to-whole-waterfall',
+        title: 'P&L waterfall',
+        bindings: [
+          { slot_id: 'steps', field: 'line_item' },
+          { slot_id: 'measure', field: 'amount' },
+          { slot_id: 'color', field: 'category' },
+        ],
+        confidence: 0.9,
+      },
+      escalation: {
+        status: 'escalate',
+        reason: 'kind-mismatch',
+        blockers: [
+          {
+            code: 'kind-mismatch',
+            slot_id: 'steps',
+            detail: "binding names unknown slot_id 'steps'",
+          },
+        ],
+      } satisfies BinderResult,
+    },
+  ])(
+    'names the exact returned contract and cleanly escalates a Call-2 $label',
+    async ({ proposal, escalation }) => {
+      vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(P_AND_L_WORKBOOK_XML));
+      vi.mocked(binderModule.bindTemplate)
+        .mockResolvedValueOnce(waterfallProposeResult)
+        .mockResolvedValueOnce(escalation);
+
+      const call1 = await getToolResult({ session: '1', ask: 'P&L waterfall' });
+      invariant(call1.content[0].type === 'text');
+      const call1Body = JSON.parse(call1.content[0].text);
+      expect(call1Body.call_2_contract.proposal_choices[0]).toMatchObject({
+        template: 'part-to-whole-waterfall',
+        slots: [{ slot_id: 'profit' }, { slot_id: 'sub_category' }, { slot_id: 'anchor_category' }],
+      });
+
+      const call2 = await getToolResult({
+        session: '1',
+        ask: 'P&L waterfall',
+        proposal,
+      });
+      expect(call2.isError).toBe(false);
+      invariant(call2.content[0].type === 'text');
+      const call2Body = JSON.parse(call2.content[0].text);
+      expect(call2Body.status).toBe('escalate');
+      expect(call2Body.reason).toBe(escalation.reason);
+      expect(call2Body.guidance).toContain(`Escalated (${escalation.reason})`);
+    },
+  );
 
   it('returns status "escalate" as a normal outcome (isError false) with routed guidance (Call 2)', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
@@ -629,7 +850,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     await getToolResult({ session: '1', ask: 'something weird' });
     const blocked = await getToolResult({ session: '1', ask: 'something weird' });
 
-    expect(blocked.isError).toBe(false);
+    expect(blocked.isError).toBe(true);
     invariant(blocked.content[0].type === 'text');
     const body = JSON.parse(blocked.content[0].text);
     expect(body.status).toBe('blocked');
@@ -660,7 +881,7 @@ describe('bindTemplateTool bind recovery gate', () => {
       proposal: sampleProposalTitleOnlyChange,
     });
 
-    expect(blocked.isError).toBe(false);
+    expect(blocked.isError).toBe(true);
     invariant(blocked.content[0].type === 'text');
     const body = JSON.parse(blocked.content[0].text);
     expect(body.status).toBe('blocked');
@@ -701,7 +922,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     });
 
     expect(failed.isError).toBe(true);
-    expect(blocked.isError).toBe(false);
+    expect(blocked.isError).toBe(true);
     invariant(blocked.content[0].type === 'text');
     const body = JSON.parse(blocked.content[0].text);
     expect(body.status).toBe('blocked');
@@ -746,6 +967,7 @@ describe('bindTemplateTool bind recovery gate', () => {
       getExecutor,
     });
 
+    expect(blocked.isError).toBe(true);
     invariant(blocked.content[0].type === 'text');
     const blockedBody = JSON.parse(blocked.content[0].text);
     expect(blockedBody.status).toBe('blocked');
@@ -850,6 +1072,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     expect(changedRetry.isError).toBe(false);
     invariant(changedRetry.content[0].type === 'text');
     expect(JSON.parse(changedRetry.content[0].text).status).toBe('escalate');
+    expect(exhausted.isError).toBe(true);
     invariant(exhausted.content[0].type === 'text');
     const body = JSON.parse(exhausted.content[0].text);
     expect(body.status).toBe('blocked');
@@ -896,6 +1119,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     expect(tier2Body.guidance).toContain('No fast-path template fits this ask/data');
     expect(tier2Body.guidance).toContain('build-and-apply-worksheet');
     expect(tier2Body.guidance).not.toContain('corrected proposal');
+    expect(blocked.isError).toBe(true);
     invariant(blocked.content[0].type === 'text');
     const blockedBody = JSON.parse(blocked.content[0].text);
     expect(blockedBody.status).toBe('blocked');
@@ -1180,7 +1404,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(4);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     expect(executeCommand).toHaveBeenCalledTimes(2);
     expect(executeCommand).toHaveBeenCalledWith(
@@ -1313,6 +1537,58 @@ describe('bindTemplateTool auto_apply gate', () => {
       signal: expect.any(AbortSignal),
       sinceSequence: 41,
     });
+  });
+
+  it('completes the P&L propose to valid Call 2 to applied sequence', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundWaterfallResult,
+      inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(waterfallProposeResult)
+      .mockResolvedValueOnce(boundWaterfallResult);
+    const proposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
+      bindings: [
+        { slot_id: 'profit', field: 'amount' },
+        { slot_id: 'sub_category', field: 'line_item' },
+        { slot_id: 'anchor_category', field: 'category' },
+      ],
+      confidence: 0.95,
+      sort: { by: 'display_order', direction: 'asc' },
+    };
+
+    const call1 = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall',
+      auto_apply: true,
+      getExecutor,
+    });
+    const call2 = await getToolResult({
+      session: '1',
+      ask: 'P&L waterfall',
+      proposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(call1.content[0].type === 'text');
+    invariant(call2.content[0].type === 'text');
+    expect(JSON.parse(call1.content[0].text).status).toBe('propose');
+    expect(call1.structuredContent).toEqual({
+      nextAction: {
+        label: 'Resubmit bind-template with proposal and auto_apply:true',
+        kind: 'prefill',
+      },
+    });
+    expect(JSON.parse(call2.content[0].text)).toMatchObject({
+      status: 'bound',
+      applied: true,
+      sheet_name: 'P&L Waterfall',
+    });
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
   it('returns literal sheet_name and guidance after auto-applying an XML-escaped title', async () => {
@@ -1528,7 +1804,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(result.structuredContent).toBeUndefined();
   });
 
-  it('adds waterfall discovery guidance to propose results', async () => {
+  it('keeps waterfall propose guidance exclusive to the structured Call-2 contract', async () => {
     const { getExecutor } = setupAutoApplyMocks({
       bind: waterfallProposeResult,
       workbookReads: [P_AND_L_WORKBOOK_XML],
@@ -1544,14 +1820,16 @@ describe('bindTemplateTool auto_apply gate', () => {
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.status).toBe('propose');
-    expect(body.guidance).toContain('{slot_id:"anchor_category",field:"category"}');
-    // Schema has display_order → the sort hint NAMES it and routes to the bind (not refine).
-    expect(body.guidance).toContain('Waterfall step order: schema has display_order');
-    expect(body.guidance).toContain('proposal.sort:{by:"display_order",direction:"asc"}');
-    expect(body.guidance).toContain('Do NOT use refine-worksheet');
+    const anchorSlot = body.call_2_contract.proposal_choices[0].slots.find(
+      (slot: { slot_id: string }) => slot.slot_id === 'anchor_category',
+    );
+    expect(anchorSlot.compatible_field_names).toEqual(['line_item', 'category']);
+    expect(anchorSlot).not.toHaveProperty('field');
+    expect(body.guidance).not.toContain('Waterfall step order');
+    expect(body.guidance).not.toContain('refine-worksheet');
   });
 
-  it('falls back to the generic sort hint when the waterfall schema has no order column', async () => {
+  it('does not append fallback sort guidance to a propose result', async () => {
     const { getExecutor } = setupAutoApplyMocks({
       bind: waterfallProposeResult,
       workbookReads: [P_AND_L_WORKBOOK_XML_WITHOUT_DISPLAY_ORDER],
@@ -1566,7 +1844,8 @@ describe('bindTemplateTool auto_apply gate', () => {
 
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.guidance).toContain('proposal.sort:{by:<field>,direction:"asc"|"desc"}');
+    expect(body.guidance).toContain('Call 2');
+    expect(body.guidance).not.toContain('proposal.sort:{by:<field>');
     expect(body.guidance).not.toContain('Waterfall step order: schema has');
   });
 
@@ -1695,6 +1974,92 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(xml).toContain(
       "<computed-sort column='[Superstore].[none:Region:nk]' direction='DESC' using='[Superstore].[sum:Sales:qk]' />",
     );
+    expect(xml).toMatch(/function='end'\s+end='top'\s+count='10'/);
+  });
+
+  it('m7: splices a context Region filter AFTER top_n, declares its CI, adds it to <slices>, and shows a filter card', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: boundM7TopNContextFilterResult,
+      inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Show me the top 10 products by sales, and let me filter down to one region.',
+      proposal: {
+        ...sampleProposal,
+        top_n: 10,
+        filters: [{ field: 'Region', context: true }],
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const xml = appliedXml(applyWorkbookDocument);
+
+    // (a) context='true' on the Region filter, enumerate-all interactive control (no member list).
+    expect(xml).toContain(
+      "<filter class='categorical' column='[M7].[none:region:nk]' context='true'>",
+    );
+    expect(xml).toMatch(
+      /<filter class='categorical' column='\[M7\]\.\[none:region:nk\]' context='true'><groupfilter function='level-members' level='\[none:region:nk\]' user:ui-enumeration='all' \/><\/filter>/,
+    );
+
+    // (b) the Region CI declared in <datasource-dependencies> (column + column-instance).
+    expect(xml).toContain(
+      "<column datatype='string' name='[region]' role='dimension' type='nominal' />",
+    );
+    expect(xml).toContain(
+      "<column-instance column='[region]' derivation='None' name='[none:region:nk]' pivot='key' type='nominal' />",
+    );
+    // ... and added to <slices> alongside the top-N product CI.
+    expect(xml).toContain('<column>[M7].[none:region:nk]</column>');
+
+    // (c) the shown <card type='filter'> in the sheet's window (filter_action_wired gate).
+    expect(xml).toContain("<card mode='dropdown' param='[M7].[none:region:nk]' type='filter' />");
+
+    // (d) planTopN still emits the top-N groupfilter on PRODUCT, unaffected by the region CI
+    // (splice-after means planTopN never saw a second dimension → no ambiguity refusal).
+    expect(xml).toMatch(/function='end'\s+end='top'\s+count='10'/);
+    expect(xml).toContain("<filter class='categorical' column='[M7].[none:product:nk]'>");
+  });
+
+  it('m7: a context filter with explicit member values emits an inclusive member union', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      bind: {
+        ...boundM7TopNContextFilterResult,
+        args: {
+          ...boundM7TopNContextFilterResult.args,
+          filters: [{ field: 'Region', values: ['East'], context: true }],
+        },
+      } as BinderResult,
+      inject: { ok: true, xml: INJECTED_M7_RANKING_XML },
+      workbookReads: [M7_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'top 10 products by sales in the East region',
+      proposal: {
+        ...sampleProposal,
+        top_n: 10,
+        filters: [{ field: 'Region', values: ['East'], context: true }],
+      },
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const xml = appliedXml(applyWorkbookDocument);
+    expect(xml).toContain(
+      "<filter class='categorical' column='[M7].[none:region:nk]' context='true'>",
+    );
+    expect(xml).toContain(
+      "<groupfilter function='member' level='[none:region:nk]' member='East' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />",
+    );
+    // top-N unaffected.
     expect(xml).toMatch(/function='end'\s+end='top'\s+count='10'/);
   });
 
@@ -1875,6 +2240,41 @@ describe('bindTemplateTool auto_apply gate', () => {
     const dispatchOrder = applyWorkbookDocument.mock.invocationCallOrder[0];
     expect(validationOrder).toBeLessThan(dispatchOrder);
   });
+
+  it('Miller World Cup repro: auto_apply ignores telemetry-only Parameter 1/Parameter 2 findings', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks();
+    vi.mocked(validationRegistry.runValidation).mockReturnValue({
+      valid: false,
+      issues: [
+        {
+          ruleId: 'calc-field-names',
+          severity: 'warning',
+          message:
+            'Non-standard internal name detected (telemetry only): [Parameter 1]. If this field works correctly in Tableau, this warning can be ignored.',
+        },
+        {
+          ruleId: 'calc-field-names',
+          severity: 'warning',
+          message:
+            'Non-standard internal name detected (telemetry only): [Parameter 2]. If this field works correctly in Tableau, this warning can be ignored.',
+        },
+      ],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Bar chart of countries by Points, sorted descending',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.guidance).not.toContain('preflight validation failed');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('bindTemplateTool auto_apply graceful fallback', () => {
@@ -1895,7 +2295,7 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
       getExecutor,
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
@@ -1927,7 +2327,7 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
       getExecutor,
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
@@ -1945,13 +2345,95 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
       getExecutor,
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
     expect(body.apply_error).toContain('preflight validation failed');
     // Preflight gates the dispatch — the invalid XML is never sent.
     expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('admits one same-signature retry after a pre-dispatch apply failure', async () => {
+    const { getExecutor } = setupAutoApplyMocks({ bind: boundViaProposalResult });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(boundViaProposalResult)
+      .mockResolvedValueOnce(boundViaProposalResult);
+    vi.mocked(buildInjectedWorkbookXml)
+      .mockReturnValueOnce({ ok: false, issues: ['broken fragment'] })
+      .mockReturnValueOnce({ ok: false, issues: ['still broken'] });
+    const ask = 'bar chart of Revenue by Region';
+
+    await getToolResult({ session: '1', ask, auto_apply: true, getExecutor });
+    const failed = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+    const admittedRetry = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposalTitleOnlyChange,
+      auto_apply: true,
+      getExecutor,
+    });
+    const blockedRepeat = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(failed.isError).toBe(true);
+    expect(admittedRetry.isError).toBe(true);
+    invariant(admittedRetry.content[0].type === 'text');
+    expect(JSON.parse(admittedRetry.content[0].text).apply_error).toContain('still broken');
+    invariant(blockedRepeat.content[0].type === 'text');
+    expect(JSON.parse(blockedRepeat.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'unchanged_proposal',
+    });
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(3);
+    expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not admit a same-signature retry after post-dispatch timeout', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: boundViaProposalResult,
+      dispatch: Err({ type: 'command-timed-out', error: 'Timeout' }),
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(boundViaProposalResult);
+    const ask = 'bar chart of Revenue by Region';
+
+    await getToolResult({ session: '1', ask, auto_apply: true, getExecutor });
+    const failed = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+    const blockedRetry = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposalTitleOnlyChange,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(failed.isError).toBe(true);
+    invariant(blockedRetry.content[0].type === 'text');
+    expect(JSON.parse(blockedRetry.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'unchanged_proposal',
+    });
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -2053,7 +2535,7 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
-  it('applies onto the named existing sheet: inject titled with the target, sheet_name reports it', async () => {
+  it('applies onto the named existing sheet without activation for composition-neutral replacement', async () => {
     const targetWorkbookXml = INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW.replace(
       /Sales by Region/g,
       'se-eval-scratch',
@@ -2081,12 +2563,7 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
     );
     expect(vi.mocked(classifyWorksheetReplaceTarget)).toHaveBeenCalledWith(XML, 'se-eval-scratch');
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-    expect(executeCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: 'goto-sheet',
-        args: { Sheet: 'se-eval-scratch' },
-      }),
-    );
+    expect(executeCommand).not.toHaveBeenCalled();
   });
 
   it('unknown target fails closed BEFORE the bind even runs', async () => {
@@ -2181,6 +2658,7 @@ describe('bindTemplateTool auto_apply — events-clean gate (W60 blind-spot #1)'
       auto_apply: true,
       getExecutor,
     });
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
     expect(body.applied).toBe(false);

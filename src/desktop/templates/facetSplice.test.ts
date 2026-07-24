@@ -1,6 +1,8 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
+import { loadManifests } from '../binder/manifest.js';
+import type { SlotSpec } from '../binder/manifest-types.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import { spliceBoundFacet } from './facetSplice.js';
 import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
@@ -36,13 +38,55 @@ const rankingXml = read('ranking-ordered-bar');
 const boxPlotXml = read('box-plot-chart');
 
 const DS = 'Superstore';
+const manifests = loadManifests();
+
+const placeholderizePilotMapping = (
+  xml: string,
+  mapping: Record<string, string>,
+): Record<string, string> => {
+  const aliases = xml.includes('Month-Trunc')
+    ? { 'Order Date': '{{field_base_1}}', Sales: '{{field_base_2}}', Facet: '{{field_base_3}}' }
+    : xml.includes('{{field_base_1}}')
+      ? { Category: '{{field_base_1}}', Measure: '{{field_base_2}}', Facet: '{{field_base_3}}' }
+      : {};
+  return Object.fromEntries(
+    Object.entries(mapping).map(([key, value]) => [
+      aliases[key as keyof typeof aliases] ?? key,
+      value,
+    ]),
+  );
+};
+
+const slotsForPilot = (xml: string): SlotSpec[] | undefined => {
+  if (xml.includes('Month-Trunc')) return manifests.get('trend-line-chart')?.slots;
+  if (xml.includes('{{field_base_1}}')) return manifests.get('ranking-ordered-bar')?.slots;
+  return undefined;
+};
+
+const rewritePilot = (xml: string, mapping: Record<string, string>, ds: string): string => {
+  const normalized = placeholderizePilotMapping(xml, mapping);
+  return rewriteFieldReferences(xml, normalized, ds, undefined, {
+    templateSlots: slotsForPilot(xml),
+  });
+};
 
 /**
  * Reproduce the shipped apply pipeline: splice a bound facet onto the shelf, then run
  * the frozen field-reference rewrite — identical to what each chokepoint executes.
  */
-const apply = (xml: string, mapping: Record<string, string>, ds: string): string =>
-  rewriteFieldReferences(spliceBoundFacet(xml, mapping), mapping, ds);
+const apply = (xml: string, mapping: Record<string, string>, ds: string): string => {
+  const normalized = placeholderizePilotMapping(xml, mapping);
+  const slots = slotsForPilot(xml);
+  return rewriteFieldReferences(
+    spliceBoundFacet(xml, normalized, slots),
+    normalized,
+    ds,
+    undefined,
+    {
+      templateSlots: slots,
+    },
+  );
+};
 
 describe('desktop/templates/facetSplice', () => {
   // ── spliceBoundFacet (pure glue) ──────────────────────────────────────────
@@ -57,8 +101,8 @@ describe('desktop/templates/facetSplice', () => {
       expect(spliceBoundFacet(trendXml, unfaceted)).toBe(trendXml);
       expect(
         spliceBoundFacet(rankingXml, {
-          Region: `[${DS}].[none:Region:nk]`,
-          Sales: `[${DS}].[sum:Sales:qk]`,
+          Category: `[${DS}].[none:Region:nk]`,
+          Measure: `[${DS}].[sum:Sales:qk]`,
         }),
       ).toBe(rankingXml);
     });
@@ -148,8 +192,8 @@ describe('desktop/templates/facetSplice', () => {
 
   describe('faceted apply — ranking-ordered-bar facet_row (role: rows)', () => {
     const faceted = {
-      Region: `[${DS}].[none:Region:nk]`,
-      Sales: `[${DS}].[sum:Sales:qk]`,
+      Category: `[${DS}].[none:Region:nk]`,
+      Measure: `[${DS}].[sum:Sales:qk]`,
       Facet: `[${DS}].[none:Category:nk]`,
     };
     const out = apply(rankingXml, faceted, DS);
@@ -194,7 +238,7 @@ describe('desktop/templates/facetSplice', () => {
     it('ranking-ordered-bar: shelves carry exactly the two required pills, no facet', () => {
       const out = apply(
         rankingXml,
-        { Region: `[${DS}].[none:Region:nk]`, Sales: `[${DS}].[sum:Sales:qk]` },
+        { Category: `[${DS}].[none:Region:nk]`, Measure: `[${DS}].[sum:Sales:qk]` },
         DS,
       );
       expect(out).toContain(`<rows>[${DS}].[none:Region:nk]</rows>`);
@@ -244,7 +288,7 @@ describe('desktop/templates/facetSplice', () => {
       };
       // Splicing then rewriting an un-faceted apply must equal rewriting WITHOUT the
       // splice — the glue adds zero bytes when nothing is faceted.
-      expect(apply(trendXml, mapping, DS)).toBe(rewriteFieldReferences(trendXml, mapping, DS));
+      expect(apply(trendXml, mapping, DS)).toBe(rewritePilot(trendXml, mapping, DS));
     });
   });
 
@@ -288,8 +332,8 @@ describe('desktop/templates/facetSplice', () => {
 
     describe('ranking-ordered-bar apply copy — facet_row (rows shelf)', () => {
       const faceted = {
-        Region: `[${DS}].[none:Region:nk]`,
-        Sales: `[${DS}].[sum:Sales:qk]`,
+        Category: `[${DS}].[none:Region:nk]`,
+        Measure: `[${DS}].[sum:Sales:qk]`,
         Facet: `[${DS}].[none:Category:nk]`,
       };
 
@@ -314,19 +358,17 @@ describe('desktop/templates/facetSplice', () => {
           Sales: `[${DS}].[sum:Sales:qk]`,
         };
         expect(spliceBoundFacet(trendApplyXml, mapping)).toBe(trendApplyXml);
-        expect(apply(trendApplyXml, mapping, DS)).toBe(
-          rewriteFieldReferences(trendApplyXml, mapping, DS),
-        );
+        expect(apply(trendApplyXml, mapping, DS)).toBe(rewritePilot(trendApplyXml, mapping, DS));
       });
 
       it('ranking-ordered-bar: no facet → splice returns the SAME reference; apply == core alone', () => {
         const mapping = {
-          Region: `[${DS}].[none:Region:nk]`,
-          Sales: `[${DS}].[sum:Sales:qk]`,
+          Category: `[${DS}].[none:Region:nk]`,
+          Measure: `[${DS}].[sum:Sales:qk]`,
         };
         expect(spliceBoundFacet(rankingApplyXml, mapping)).toBe(rankingApplyXml);
         expect(apply(rankingApplyXml, mapping, DS)).toBe(
-          rewriteFieldReferences(rankingApplyXml, mapping, DS),
+          rewritePilot(rankingApplyXml, mapping, DS),
         );
       });
     });

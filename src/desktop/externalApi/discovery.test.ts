@@ -139,6 +139,10 @@ describe('discoverInstances', () => {
 });
 
 describe('getExternalApiDiscoveryDir', () => {
+  beforeEach(() => {
+    delete process.env.TABLEAU_EXTERNAL_API_DISCOVERY_DIR;
+  });
+
   it('honors an explicit override env var', () => {
     const dir = getExternalApiDiscoveryDir(
       { TABLEAU_EXTERNAL_API_DISCOVERY_DIR: '/custom/dir' },
@@ -151,7 +155,7 @@ describe('getExternalApiDiscoveryDir', () => {
   // `join` so these tests verify the *root selection* per platform rather than a
   // host-specific separator.
   it('uses the macOS Application Support path (doubled Tableau segment first)', () => {
-    const dir = getExternalApiDiscoveryDir({}, 'darwin');
+    const dir = getExternalApiDiscoveryDir(process.env, 'darwin');
     expect(dir).toBe(
       join('/home/testuser', 'Library', 'Application Support', 'Tableau', 'Tableau', 'ExternalApi'),
     );
@@ -178,7 +182,8 @@ describe('getExternalApiDiscoveryDir', () => {
   });
 
   it('falls back to a homedir-derived LOCALAPPDATA on Windows when unset', () => {
-    const dir = getExternalApiDiscoveryDir({}, 'win32');
+    delete process.env.LOCALAPPDATA;
+    const dir = getExternalApiDiscoveryDir(process.env, 'win32');
     expect(dir).toBe(
       join('/home/testuser', 'AppData', 'Local', 'Tableau', 'Tableau', 'ExternalApi'),
     );

@@ -17,7 +17,7 @@ import { ParsedWindow, ParsedWorkbook, ParsedWorksheet } from '../metadata/types
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import { type DateparseAxisSpec, spliceDateparseTemporalAxis } from './dateparseTemporalAxis.js';
 import { spliceBoundFacet } from './facetSplice.js';
-import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
+import { rewriteFieldReferences, type TemplateSlotReference } from './fieldReferenceRewriter.js';
 import { injectTemplate, InsertPosition, SheetType } from './injectTemplate.js';
 import { type OptionalFieldPruneSpec, pruneUnboundOptionalFields } from './optionalFieldPrune.js';
 import { spliceWaterfallAnchorFilter } from './waterfallAnchorFilter.js';
@@ -59,6 +59,8 @@ export interface InjectTemplateCoreParams {
   templateParameters?: Record<string, string>;
   /** Template field name → column-instance ref map (RAW; escaped once downstream). */
   fieldMapping?: Record<string, string>;
+  /** Manifest-declared bindable slots used to remove/guard literal template fields. */
+  templateSlots?: readonly TemplateSlotReference[];
   insertPosition?: InsertPosition;
   relativeSheetName?: string;
   /**
@@ -164,7 +166,11 @@ export function removeSameNamedWorksheet(workbookXml: string, title: string): st
   if (hasZoneNamed(workbook, title)) {
     return workbookXml;
   }
-  container.worksheet = kept.length === 1 ? kept[0] : kept;
+  if (kept.length === 0) {
+    delete container.worksheet;
+  } else {
+    container.worksheet = kept.length === 1 ? kept[0] : kept;
+  }
   const windows = normalizeArray<ParsedWindow>(wb.windows?.window);
   const keptWindows = windows.filter(
     (w) => !(w?.['@_class'] === 'worksheet' && w?.['@_name'] === title),
@@ -187,6 +193,7 @@ export function buildInjectedWorkbookXml({
   sheetType,
   templateParameters,
   fieldMapping,
+  templateSlots,
   insertPosition,
   relativeSheetName,
   applyNonce,
@@ -202,9 +209,21 @@ export function buildInjectedWorkbookXml({
 
   if (templateParameters) {
     for (const [key, value] of Object.entries(templateParameters)) {
-      if (key === 'DATASOURCE') continue;
+      // Field placeholders are resolved only through manifest-backed
+      // field_mapping. Generic parameter replacement would bypass derivation,
+      // metadata, optional-prune, and survivor guards.
+      if (key === 'DATASOURCE' || /^field_base_[1-9]\d*$/.test(key)) continue;
       processed = processed.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), escapeXml(value));
     }
+  }
+
+  if (
+    !templateParameters?.['DATASOURCE'] &&
+    templateSlots?.some((slot) => slot.bindable !== false && slot.required)
+  ) {
+    throw new Error(
+      'Template binding is incomplete: provide a datasource and choose every required chart field, then retry. No worksheet was produced.',
+    );
   }
 
   if (templateParameters?.['DATASOURCE']) {
@@ -218,13 +237,13 @@ export function buildInjectedWorkbookXml({
     // this slot's field_mapping key, so the rewrite leaves the (now-calc) column and its
     // Month-Trunc CI alone — the axis truncates a parsed date instead of a raw string.
     processed = spliceDateparseTemporalAxis(processed, dateparseAxis ?? null);
-    processed = spliceBoundFacet(processed, fieldMapping ?? {});
+    processed = spliceBoundFacet(processed, fieldMapping ?? {}, templateSlots);
     processed = rewriteFieldReferences(
       processed,
       fieldMapping ?? {},
       templateParameters['DATASOURCE'],
       undefined,
-      { namespaceCalcs: true, applyNonce },
+      { namespaceCalcs: true, applyNonce, templateSlots },
     );
     processed = spliceWaterfallAnchorFilter(processed, fieldMapping ?? {});
   }

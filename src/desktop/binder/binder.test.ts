@@ -195,6 +195,168 @@ describe('binder/classifyNoLlm — temporal_from_string (e4 string month)', () =
   });
 });
 
+describe('binder/classifyNoLlm — e4 acronym expansion field matching', () => {
+  const ACTIVE_USERS_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Active Users'>
+      <column name='[month]' role='dimension' type='nominal' datatype='string' />
+      <column name='[product]' role='dimension' type='nominal' datatype='string' />
+      <column name='[mau]' role='measure' type='quantitative' datatype='integer' />
+      <column name='[dau]' role='measure' type='quantitative' datatype='integer' />
+      <column name='[new_users]' role='measure' type='quantitative' datatype='integer' />
+      <column name='[churned_users]' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+  it('binds monthly active users to mau, never dau', () => {
+    const cls = classifyNoLlm(
+      'Show me monthly active users over the last 12 months.',
+      manifests,
+      summarizeSchema(ACTIVE_USERS_XML),
+    );
+
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('trend-line-chart');
+    expect(cls!.bindings).toEqual([
+      { slot_id: 'order_date', field: 'month' },
+      { slot_id: 'sales', field: 'mau' },
+      { slot_id: 'color_series', field: 'product' },
+    ]);
+    expect(cls!.bindings.some((binding) => binding.field === 'dau')).toBe(false);
+  });
+
+  it('binds daily active users to dau, never mau', () => {
+    const cls = classifyNoLlm(
+      'line chart of daily active users over the last 12 months',
+      manifests,
+      summarizeSchema(ACTIVE_USERS_XML),
+    );
+
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('trend-line-chart');
+    expect(cls!.bindings).toEqual([
+      { slot_id: 'order_date', field: 'month' },
+      { slot_id: 'sales', field: 'dau' },
+      { slot_id: 'color_series', field: 'product' },
+    ]);
+    expect(cls!.bindings.some((binding) => binding.field === 'mau')).toBe(false);
+  });
+
+  it('preserves literal mau matching', () => {
+    const cls = classifyNoLlm(
+      'line chart of mau by month',
+      manifests,
+      summarizeSchema(ACTIVE_USERS_XML),
+    );
+
+    expect(cls).not.toBeNull();
+    expect(cls!.bindings).toEqual([
+      { slot_id: 'order_date', field: 'month' },
+      { slot_id: 'sales', field: 'mau' },
+      { slot_id: 'color_series', field: 'product' },
+    ]);
+  });
+
+  it('does not infer an expansion for an unknown acronym', () => {
+    const unknownAcronymXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Unknown Acronym'>
+      <column name='[month]' role='dimension' type='nominal' datatype='string' />
+      <column name='[XYZ]' role='measure' type='quantitative' datatype='integer' />
+      <column name='[Other]' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+    expect(
+      classifyNoLlm(
+        'line chart of extra yield zone by month',
+        manifests,
+        summarizeSchema(unknownAcronymXml),
+      ),
+    ).toBeNull();
+  });
+
+  it('preserves literal matching for non-acronym fields', () => {
+    const revenueXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Revenue'>
+      <column name='[Region]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Revenue]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const cls = classifyNoLlm(
+      'bar chart of Revenue by Region',
+      manifests,
+      summarizeSchema(revenueXml),
+    );
+
+    expect(cls).not.toBeNull();
+    expect(cls!.bindings).toEqual([
+      { slot_id: 'region', field: 'Region' },
+      { slot_id: 'sales', field: 'Revenue' },
+    ]);
+  });
+
+  it('preserves the e1, m1, s7, and m7 confident binds', async () => {
+    const m7Xml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='M7'>
+      <column name='[product]' caption='Product' role='dimension' type='nominal' datatype='string' />
+      <column name='[region]' caption='Region' role='dimension' type='nominal' datatype='string' />
+      <column name='[sales]' caption='Sales' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const [e1, m1, s7, m7] = await Promise.all([
+      bindTemplate({ ask: 'Show me Sales by Region.', workbookXml: WORKBOOK_XML, manifests }),
+      bindTemplate({
+        ask: 'waterfall of Profit by Sub-Category',
+        workbookXml: WORKBOOK_XML,
+        manifests,
+      }),
+      bindTemplate({
+        ask: 'symbol map of Goals For by Country',
+        workbookXml: COUNTRY_ONLY_WORKBOOK_XML,
+        manifests,
+      }),
+      bindTemplate({ ask: 'top 10 products by sales', workbookXml: m7Xml, manifests }),
+    ]);
+
+    expect([e1.status, m1.status, s7.status, m7.status]).toEqual([
+      'bound',
+      'bound',
+      'bound',
+      'bound',
+    ]);
+    if (
+      e1.status !== 'bound' ||
+      m1.status !== 'bound' ||
+      s7.status !== 'bound' ||
+      m7.status !== 'bound'
+    ) {
+      throw new Error('expected all acronym-expansion regression cases to bind');
+    }
+    expect([
+      e1.args.template_name,
+      m1.args.template_name,
+      s7.args.template_name,
+      m7.args.template_name,
+    ]).toEqual([
+      'magnitude-simple-bar',
+      'part-to-whole-waterfall',
+      'spatial-symbol-map',
+      'ranking-ordered-bar',
+    ]);
+  });
+});
+
 // ── Blake wall #2: confident measure-free lat/long symbol map ─────────────────
 // A plain "map of office locations" ask (pm_name, city, latitude, longitude — NO
 // measure) must be able to bind CONFIDENTLY (used_llm=false) to spatial-symbol-map-
@@ -791,15 +953,36 @@ describe('binder/bindTemplate — Call 1 no-LLM (bound)', () => {
       expect(res.args.sheet_type).toBe('worksheet');
       expect(res.args.template_parameters.DATASOURCE).toBe('Superstore');
       expect(res.args.field_mapping).toEqual({
-        Region: '[Superstore].[none:Region:nk]',
-        Sales: '[Superstore].[sum:Sales:qk]',
+        '{{field_base_1}}': '[Superstore].[none:Region:nk]',
+        '{{field_base_2}}': '[Superstore].[sum:Sales:qk]',
       });
+      expect(res.args.field_mapping).not.toHaveProperty('Region');
+      expect(res.args.field_mapping).not.toHaveProperty('Sales');
       // IMPORTANT NEW FACT: bound result exposes the worksheet-path apply hint so a
       // caller can run the worksheet-level chain (tabdoc:new-worksheet → substitute →
       // apply-worksheet) OR the inject-template + apply-workbook chain from one result.
       expect(res.apply_hint).toBe('worksheet-path');
       expect(res.apply_instruction).toMatch(/tabdoc:new-worksheet/);
       expect(res.apply_instruction).toMatch(/apply-worksheet/);
+    }
+  });
+
+  it("'column chart of Sales by Region' → ranking-ordered-column with neutral field_mapping keys", async () => {
+    const res = await bindTemplate({
+      ask: 'column chart of Sales by Region',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.used_llm).toBe(false);
+      expect(res.args.template_name).toBe('ranking-ordered-column');
+      expect(res.args.field_mapping).toEqual({
+        Category: '[Superstore].[none:Region:nk]',
+        Measure: '[Superstore].[sum:Sales:qk]',
+      });
+      expect(res.args.field_mapping).not.toHaveProperty('Region');
+      expect(res.args.field_mapping).not.toHaveProperty('Sales');
     }
   });
 });
@@ -853,6 +1036,21 @@ describe('binder/bindTemplate — Call 1 miss (propose)', () => {
       }
     } else {
       throw new Error(`expected propose, got ${res.status}`);
+    }
+  });
+
+  it('keeps an under-specified goal-language bullet ask on the safe propose path', async () => {
+    const res = await bindTemplate({
+      ask: 'Build a bullet chart showing performance against the goal',
+      workbookXml: WORKBOOK_XML,
+      manifests: withForcedEligible(['quota-attainment-bullet']),
+    });
+
+    expect(res.status).toBe('propose');
+    if (res.status === 'propose') {
+      expect(res.llm_input.candidate_templates.map((candidate) => candidate.template)).toContain(
+        'quota-attainment-bullet',
+      );
     }
   });
 });
@@ -970,6 +1168,79 @@ describe('binder/bindTemplate — Call 2 (agent proposal)', () => {
     }
   });
 
+  it('threads a declarative context filter into bound args (m7 — values optional)', async () => {
+    const proposal: BindingProposal = {
+      template: 'ranking-ordered-bar',
+      title: 'Top 10 Products in Region',
+      bindings: [
+        { slot_id: 'region', field: 'Category' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+      top_n: 10,
+      filters: [{ field: 'Region', context: true }],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'top 10 products by sales, let me filter down to one region',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.top_n).toBe(10);
+      expect(res.args.filters).toEqual([{ field: 'Region', context: true }]);
+    }
+  });
+
+  it('drops an unresolvable filter field fail-open with a warning, keeping the bind', async () => {
+    const proposal: BindingProposal = {
+      template: 'ranking-ordered-bar',
+      title: 'Products',
+      bindings: [
+        { slot_id: 'region', field: 'Category' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+      filters: [{ field: 'Definitely Not A Field', context: true }],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'top products by sales filtered by a phantom field',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.filters).toBeUndefined();
+      expect(res.warnings?.join(' ')).toContain('Definitely Not A Field');
+    }
+  });
+
+  it('drops a measure filter (interactive dimension filters only) with a warning', async () => {
+    const proposal: BindingProposal = {
+      template: 'ranking-ordered-bar',
+      title: 'Products',
+      bindings: [
+        { slot_id: 'region', field: 'Category' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+      filters: [{ field: 'Profit', context: true }],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'top products by sales filtered by profit',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.filters).toBeUndefined();
+      expect(res.warnings?.join(' ')).toContain('is a measure');
+    }
+  });
+
   it('bad sort.by binds fail-open with a warning and no sort arg', async () => {
     const proposal: BindingProposal = {
       template: 'ranking-ordered-bar',
@@ -1052,6 +1323,103 @@ describe('binder/bindTemplate — Call 2 (agent proposal)', () => {
     </datasource>
   </datasources>
 </workbook>`;
+
+  const LIVE_PL_ORDER_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='PL'>
+      <column name='[amount]' role='measure' type='quantitative' datatype='real' />
+      <column name='[category]' role='dimension' type='nominal' datatype='string' />
+      <column name='[display_order]' role='measure' type='quantitative' datatype='integer' />
+      <column name='[Fiscal Period]' role='dimension' type='nominal' datatype='string' />
+      <column name='[line_item]' role='dimension' type='nominal' datatype='string' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+  it('confidently binds the full live P&L schema despite its nominal fiscal period', async () => {
+    const res = await bindTemplate({
+      ask: 'Build a waterfall chart showing how we get from revenue to net income',
+      workbookXml: LIVE_PL_ORDER_WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.field_mapping.Profit).toBe('[PL].[sum:amount:qk]');
+      expect(res.args.field_mapping['Sub-Category']).toBe('[PL].[none:line_item:nk]');
+      expect(res.args.field_mapping['Anchor Category']).toBe('[PL].[none:category:nk]');
+      expect(res.args.sort).toEqual({ by: 'display_order', direction: 'asc' });
+    }
+  });
+
+  it('demotes when two genuine waterfall axis dimensions remain ambiguous', async () => {
+    const ambiguousAxisXml = PL_ORDER_WORKBOOK_XML.replace(
+      "<column name='[line_item]' role='dimension' type='nominal' datatype='string' />",
+      [
+        "<column name='[line_item]' role='dimension' type='nominal' datatype='string' />",
+        "<column name='[product_line]' role='dimension' type='nominal' datatype='string' />",
+      ].join('\n      '),
+    );
+    const res = await bindTemplate({
+      ask: 'Build a waterfall chart showing how we get from revenue to net income',
+      workbookXml: ambiguousAxisXml,
+      manifests,
+    });
+
+    expect(res.status).toBe('propose');
+  });
+
+  it('demotes a goal-phrased waterfall when no sequence column exists', async () => {
+    const noOrderXml = PL_ORDER_WORKBOOK_XML.replace(
+      /\n\s*<column name='\[display_order\]'[^>]*\/>/,
+      '',
+    );
+    const res = await bindTemplate({
+      ask: 'Build a waterfall chart showing how we get from revenue to net income',
+      workbookXml: noOrderXml,
+      manifests,
+    });
+
+    expect(res.status).not.toBe('bound');
+  });
+
+  it('does not bind a categorical sequence field as the waterfall category', async () => {
+    const categoricalOrderXml = PL_ORDER_WORKBOOK_XML.replace(
+      "role='measure' type='quantitative' datatype='integer'",
+      "role='dimension' type='nominal' datatype='string'",
+    );
+    const res = await bindTemplate({
+      ask: 'waterfall showing how we get from revenue to net income, ordered by display_order',
+      workbookXml: categoricalOrderXml,
+      manifests,
+    });
+
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.field_mapping['Sub-Category']).toBe('[PL].[none:line_item:nk]');
+      expect(res.args.sort).toEqual({ by: 'display_order', direction: 'asc' });
+    }
+  });
+
+  it('never substitutes amount for an ask-named rank measure', async () => {
+    const rankMeasureXml = PL_ORDER_WORKBOOK_XML.replace(
+      "<column name='[display_order]' role='measure' type='quantitative' datatype='integer' />",
+      [
+        "<column name='[display_order]' role='measure' type='quantitative' datatype='integer' />",
+        "<column name='[rank]' role='measure' type='quantitative' datatype='real' />",
+      ].join('\n      '),
+    );
+    const res = await bindTemplate({
+      ask: 'waterfall of rank by line_item',
+      workbookXml: rankMeasureXml,
+      manifests,
+    });
+
+    if (res.status === 'bound') {
+      expect(res.args.field_mapping.Profit).toBe('[PL].[sum:rank:qk]');
+    }
+  });
 
   it('waterfall DEFAULTS the step order to a sequence column when no sort is proposed', async () => {
     // m1 fix: the running total is order-dependent; without this the confident bind keeps the
@@ -1176,6 +1544,370 @@ describe('binder/bindTemplate — Call 2 (agent proposal)', () => {
     expect(res.status).toBe('bound');
     if (res.status === 'bound') {
       expect('Anchor Category' in res.args.field_mapping).toBe(false);
+    }
+  });
+});
+
+describe('binder/bindTemplate — e1 measure-by-dimension confident bind', () => {
+  const E1_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='E1'>
+      <column name='[region]' caption='Region' role='dimension' type='nominal' datatype='string' />
+      <column name='[product_line]' caption='Product Line' role='dimension' type='nominal' datatype='string' />
+      <column name='[revenue]' caption='Revenue' role='measure' type='quantitative' datatype='real' />
+      <column name='[currency_code]' caption='Currency Code' role='dimension' type='nominal' datatype='string' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+  it('binds a noun-less measure-by-dimension ask to magnitude-simple-bar', async () => {
+    const summary = summarizeSchema(E1_WORKBOOK_XML);
+    const classified = classifyNoLlm('Show me revenue by region.', manifests, summary);
+    expect(classified).not.toBeNull();
+    expect(classified!.template).toBe('magnitude-simple-bar');
+    expect(classified!.bindings).toEqual([
+      { slot_id: 'category', field: 'Region' },
+      { slot_id: 'measure', field: 'Revenue' },
+    ]);
+
+    const res = await bindTemplate({
+      ask: 'Show me revenue by region.',
+      workbookXml: E1_WORKBOOK_XML,
+      manifests,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status !== 'bound') throw new Error(`expected bound, got ${res.status}`);
+    expect(res.args.template_name).toBe('magnitude-simple-bar');
+  });
+
+  it('fails closed when an unsupported chart noun remains in the ask', async () => {
+    const res = await bindTemplate({
+      ask: 'sankey of revenue by region',
+      workbookXml: E1_WORKBOOK_XML,
+      manifests,
+    });
+    expect(res.status).not.toBe('bound');
+  });
+
+  it('fails closed when the ask matches two measures', async () => {
+    const twoMeasureXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='E1'>
+      <column name='[region]' caption='Region' role='dimension' type='nominal' datatype='string' />
+      <column name='[revenue]' caption='Revenue' role='measure' type='quantitative' datatype='real' />
+      <column name='[profit]' caption='Profit' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const res = await bindTemplate({
+      ask: 'revenue and profit by region',
+      workbookXml: twoMeasureXml,
+      manifests,
+    });
+    expect(res.status).not.toBe('bound');
+  });
+
+  it('fails closed when the matched dimension is string-temporal', async () => {
+    const temporalXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='E1'>
+      <column name='[month]' caption='Month' role='dimension' type='nominal' datatype='string' />
+      <column name='[revenue]' caption='Revenue' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const res = await bindTemplate({
+      ask: 'revenue by month',
+      workbookXml: temporalXml,
+      manifests,
+    });
+    expect(res.status).not.toBe('bound');
+  });
+
+  it('preserves waterfall and lat/long map confident binds', async () => {
+    const latLonXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Locations'>
+      <column name='[office]' caption='Office' role='dimension' type='nominal' datatype='string' />
+      <column name='[latitude]' caption='Latitude' role='measure' type='quantitative' datatype='real' />
+      <column name='[longitude]' caption='Longitude' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const [waterfall, map] = await Promise.all([
+      bindTemplate({
+        ask: 'waterfall of Profit by Sub-Category',
+        workbookXml: WORKBOOK_XML,
+        manifests,
+      }),
+      bindTemplate({
+        ask: 'map of locations',
+        workbookXml: latLonXml,
+        manifests,
+      }),
+    ]);
+
+    expect(waterfall.status).toBe('bound');
+    if (waterfall.status !== 'bound')
+      throw new Error(`expected waterfall bound, got ${waterfall.status}`);
+    expect(waterfall.args.template_name).toBe('part-to-whole-waterfall');
+    expect(map.status).toBe('bound');
+    if (map.status !== 'bound') throw new Error(`expected map bound, got ${map.status}`);
+    expect(map.args.template_name).toBe('spatial-symbol-map-latlon');
+  });
+});
+
+describe('binder/roleGreedyBind — single-candidate-per-slot schema fallback', () => {
+  it('binds e2 quota attainment from unique slot-affine schema candidates', async () => {
+    const workbookXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='E2'>
+      <column name='[rep_name]' caption='Rep Name' role='dimension' type='nominal' datatype='string' />
+      <column name='[region]' caption='Region' role='dimension' type='nominal' datatype='string' />
+      <column name='[segment]' caption='Segment' role='dimension' type='nominal' datatype='string' />
+      <column name='[quota_amount]' caption='Quota Amount' role='measure' type='quantitative' datatype='real' />
+      <column name='[actual_amount]' caption='Actual Amount' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const ask = 'Which reps are closest to hitting quota?';
+    const classified = classifyNoLlm(ask, manifests, summarizeSchema(workbookXml));
+    expect(classified).not.toBeNull();
+    expect(classified!.template).toBe('quota-attainment-bullet');
+    expect(Object.fromEntries(classified!.bindings.map((b) => [b.slot_id, b.field]))).toEqual({
+      entity: 'Rep Name',
+      actual: 'Actual Amount',
+      quota: 'Quota Amount',
+    });
+
+    const result = await bindTemplate({ ask, workbookXml, manifests });
+    expect(result.status).toBe('bound');
+  });
+
+  it('keeps e3 on propose when one quantitative slot has two schema candidates', async () => {
+    const workbookXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='E3'>
+      <column name='[metric_name]' caption='Metric Name' role='dimension' type='nominal' datatype='string' />
+      <column name='[current_period]' caption='Current Period' role='measure' type='quantitative' datatype='real' />
+      <column name='[prior_period]' caption='Prior Period' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const result = await bindTemplate({
+      ask: "What's our total ARR this quarter vs. last?",
+      workbookXml,
+      manifests,
+    });
+    expect(result.status).not.toBe('bound');
+  });
+
+  it('fails closed when a categorical slot has two unused schema candidates', async () => {
+    const workbookXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Ambiguous'>
+      <column name='[department]' caption='Department' role='dimension' type='nominal' datatype='string' />
+      <column name='[segment]' caption='Segment' role='dimension' type='nominal' datatype='string' />
+      <column name='[revenue]' caption='Revenue' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const result = await bindTemplate({
+      ask: 'bar chart of revenue',
+      workbookXml,
+      manifests,
+    });
+    expect(result.status).not.toBe('bound');
+  });
+
+  it('does not schema-order-fallback geo slots without name affinity', async () => {
+    const workbookXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='NoGeo'>
+      <column name='[region]' caption='Region' role='dimension' type='nominal' datatype='string' />
+      <column name='[segment]' caption='Segment' role='dimension' type='nominal' datatype='string' />
+      <column name='[sales]' caption='Sales' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const result = await bindTemplate({
+      ask: 'map of sales by region',
+      workbookXml,
+      manifests,
+    });
+    expect(result.status).not.toBe('bound');
+  });
+
+  it('preserves M1 waterfall, e1 measure-by-dimension, and a known one-shot', async () => {
+    const e1Xml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='E1'>
+      <column name='[region]' caption='Region' role='dimension' type='nominal' datatype='string' />
+      <column name='[revenue]' caption='Revenue' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const [waterfall, e1, oneShot] = await Promise.all([
+      bindTemplate({
+        ask: 'waterfall of Profit by Sub-Category',
+        workbookXml: WORKBOOK_XML,
+        manifests,
+      }),
+      bindTemplate({ ask: 'Show me revenue by region.', workbookXml: e1Xml, manifests }),
+      bindTemplate({
+        ask: 'bar chart of Sales by Region',
+        workbookXml: WORKBOOK_XML,
+        manifests,
+      }),
+    ]);
+
+    expect(waterfall.status).toBe('bound');
+    if (waterfall.status === 'bound') {
+      expect(waterfall.args.template_name).toBe('part-to-whole-waterfall');
+    }
+    expect(e1.status).toBe('bound');
+    if (e1.status === 'bound') expect(e1.args.template_name).toBe('magnitude-simple-bar');
+    expect(oneShot.status).toBe('bound');
+    if (oneShot.status === 'bound') {
+      expect(oneShot.args.template_name).toBe('ranking-ordered-bar');
+    }
+  });
+});
+
+describe('binder/classifyNoLlm — m7 ask modifiers', () => {
+  const M7_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='M7'>
+      <column name='[product]' caption='Product' role='dimension' type='nominal' datatype='string' />
+      <column name='[category]' caption='Category' role='dimension' type='nominal' datatype='string' />
+      <column name='[region]' caption='Region' role='dimension' type='nominal' datatype='string' />
+      <column name='[sales]' caption='Sales' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+  it('binds m7 with top-N and an interactive context filter in one confident call', async () => {
+    const result = await bindTemplate({
+      ask: 'Show me the top 10 products by sales, and let me filter down to one region.',
+      workbookXml: M7_WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') throw new Error(`expected bound, got ${result.status}`);
+    expect(result.used_llm).toBe(false);
+    expect(result.args.template_name).toBe('ranking-ordered-bar');
+    expect(result.args.top_n).toBe(10);
+    expect(result.args.filters).toEqual([{ field: 'Region', context: true }]);
+  });
+
+  it('extracts top-N without inventing a filter', async () => {
+    const result = await bindTemplate({
+      ask: 'top 5 products by sales',
+      workbookXml: M7_WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') throw new Error(`expected bound, got ${result.status}`);
+    expect(result.args.top_n).toBe(5);
+    expect(result.args.filters).toBeUndefined();
+  });
+
+  it('extracts a bare interactive filter without making it a context filter', async () => {
+    const result = await bindTemplate({
+      ask: 'sales by product with a region filter',
+      workbookXml: M7_WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') throw new Error(`expected bound, got ${result.status}`);
+    expect(result.args.top_n).toBeUndefined();
+    expect(result.args.filters).toEqual([{ field: 'Region' }]);
+  });
+
+  it('leaves a plain confident bind free of top-N and filters', async () => {
+    const result = await bindTemplate({
+      ask: 'sales by product',
+      workbookXml: M7_WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') throw new Error(`expected bound, got ${result.status}`);
+    expect(result.args.top_n).toBeUndefined();
+    expect(result.args.filters).toBeUndefined();
+  });
+
+  it('keeps top-N but omits an ambiguous either-or filter', async () => {
+    const result = await bindTemplate({
+      ask: 'top 10 by sales, filter by category or region',
+      workbookXml: M7_WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') throw new Error(`expected bound, got ${result.status}`);
+    expect(result.args.top_n).toBe(10);
+    expect(result.args.filters).toBeUndefined();
+  });
+
+  it('preserves e1, m1, s7, and a known one-shot without ask modifiers', async () => {
+    const [e1, m1, s7, oneShot] = await Promise.all([
+      bindTemplate({
+        ask: 'Show me Sales by Region.',
+        workbookXml: WORKBOOK_XML,
+        manifests,
+      }),
+      bindTemplate({
+        ask: 'waterfall of Profit by Sub-Category',
+        workbookXml: WORKBOOK_XML,
+        manifests,
+      }),
+      bindTemplate({
+        ask: 'symbol map of Goals For by Country',
+        workbookXml: COUNTRY_ONLY_WORKBOOK_XML,
+        manifests,
+      }),
+      bindTemplate({
+        ask: 'bar chart of Sales by Region',
+        workbookXml: WORKBOOK_XML,
+        manifests,
+      }),
+    ]);
+
+    expect([e1.status, m1.status, s7.status, oneShot.status]).toEqual([
+      'bound',
+      'bound',
+      'bound',
+      'bound',
+    ]);
+    if (
+      e1.status !== 'bound' ||
+      m1.status !== 'bound' ||
+      s7.status !== 'bound' ||
+      oneShot.status !== 'bound'
+    ) {
+      throw new Error('expected all regression cases to bind');
+    }
+    expect(e1.args.template_name).toBe('magnitude-simple-bar');
+    expect(m1.args.template_name).toBe('part-to-whole-waterfall');
+    expect(s7.args.template_name).toBe('spatial-symbol-map');
+    expect(oneShot.args.template_name).toBe('ranking-ordered-bar');
+    for (const result of [e1, m1, s7, oneShot]) {
+      expect(result.args.top_n).toBeUndefined();
+      expect(result.args.filters).toBeUndefined();
     }
   });
 });
@@ -1437,6 +2169,8 @@ describe('binder/bindTemplate — country-only spatial maps', () => {
 });
 
 describe('binder/buildLlmInput — family-aware truncation (attack 2)', () => {
+  const EXAMPLES_PAYLOAD_BYTE_BUDGET = 768;
+
   function synth(template: string, family: Family, keyword: string): TemplateManifest {
     return {
       template,
@@ -1497,6 +2231,71 @@ describe('binder/buildLlmInput — family-aware truncation (attack 2)', () => {
     const ask = 'kwa kwb kwc1 kwc2 kwc3';
     const input = buildLlmInput(ask, m, summarizeSchema(WORKBOOK_XML));
     expect(input.candidate_templates.length).toBe(5);
+  });
+
+  it('keeps serialized examples contribution bounded for the worst-case bundled manifest', () => {
+    const encoder = new TextEncoder();
+    const serializedBytes = (value: unknown): number =>
+      encoder.encode(JSON.stringify(value)).length;
+    const withoutExamples = (
+      input: ReturnType<typeof buildLlmInput>,
+    ): ReturnType<typeof buildLlmInput> => ({
+      ...input,
+      candidate_templates: input.candidate_templates.map((candidate) => ({
+        ...candidate,
+        slots: candidate.slots.map((slot) => {
+          const withoutExample = { ...slot };
+          delete withoutExample.examples;
+          return withoutExample;
+        }),
+      })),
+    });
+
+    let worst = { template: '', bytes: 0 };
+    for (const manifest of manifests.values()) {
+      const routedManifest: TemplateManifest = { ...manifest, source: 'local' };
+      const input = buildLlmInput(
+        manifest.intent_keywords.join(' ') || manifest.template,
+        new Map([[manifest.template, routedManifest]]),
+        summarizeSchema(WORKBOOK_XML),
+      );
+      const examplesBytes = serializedBytes(input) - serializedBytes(withoutExamples(input));
+      if (examplesBytes > worst.bytes)
+        worst = { template: manifest.template, bytes: examplesBytes };
+    }
+
+    expect(worst.bytes).toBeGreaterThan(0);
+    expect(
+      worst.bytes,
+      `${worst.template} examples serialized byte contribution`,
+    ).toBeLessThanOrEqual(EXAMPLES_PAYLOAD_BYTE_BUDGET);
+  });
+
+  it('exposes slot purpose and examples together in propose candidates', () => {
+    const input = buildLlmInput(
+      'rank Goals For by Country as a bar chart',
+      manifests,
+      summarizeSchema(COUNTRY_ONLY_WORKBOOK_XML),
+    );
+    const ranking = input.candidate_templates.find(
+      (candidate) => candidate.template === 'ranking-ordered-bar',
+    );
+
+    expect(ranking).toBeDefined();
+    expect(ranking!.slots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slot_id: 'region',
+          purpose: expect.stringContaining('ranked horizontal bar'),
+          examples: expect.arrayContaining(['Country', 'Product Line']),
+        }),
+        expect.objectContaining({
+          slot_id: 'sales',
+          purpose: expect.stringContaining('bar length'),
+          examples: expect.arrayContaining(['Points', 'Revenue']),
+        }),
+      ]),
+    );
   });
 });
 

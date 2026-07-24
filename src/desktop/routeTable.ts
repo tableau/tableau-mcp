@@ -40,20 +40,16 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'prose',
-    id: 'authoring-skill',
-    text: 'Load tableau-desktop-authoring; repeat failures -> tableau-agent-debug.',
-  },
-  {
-    kind: 'prose',
     id: 'plan-before-build',
     text: 'Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gradients. State plan, build.',
   },
   {
     kind: 'route',
     id: 'plain-chart',
-    trigger: 'a plain viz ask (bar/line/map/KPI/etc.)',
+    trigger:
+      'any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.)',
     action:
-      'FIRST bind-template(auto_apply:true): deterministic, ~0.3s. On propose, resubmit; proposals may carry sort and top_n. author-parameter/author-set/author-action before charts; else search-commands.',
+      'FIRST complete the bind-template two-call sequence: Call 1 is bind-template(auto_apply:true), deterministic, ~0.3s. If Call 1 proposes, Call 2 resubmits bind-template with the same ask/target, the selected proposal, and auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. A named chart takes this path first even when the ask sounds calc-heavy or asks "how <X> changes"; template-owned calculations (including a waterfall\'s running total) must not be authored before binding. author-parameter/author-set/author-action before charts; else search-commands.',
     toolSequence: [
       'bind-template',
       'author-parameter',
@@ -61,8 +57,22 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
       'author-action',
       'search-commands',
     ],
-    stopConditions: ['deterministic, ~0.3s'],
+    stopConditions: [
+      'deterministic, ~0.3s',
+      'Do not use manual authoring tools between Call 1 and Call 2',
+    ],
     requiredEvidence: ['bind-template applied result (auto-apply receipt)'],
+  },
+  {
+    kind: 'route',
+    id: 'calc-then-bind',
+    trigger:
+      'a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %)',
+    action:
+      "author-calc the derived metric FIRST (read knowledge for the formula — gross margin excludes opex), then bind-template by the calc's caption. For gross margin %, use exactly (SUM(revenue)-SUM(cogs))/SUM(revenue): revenue and cogs only; do NOT subtract opex.",
+    toolSequence: ['author-calc', 'bind-template'],
+    stopConditions: ['revenue and cogs only; do NOT subtract opex'],
+    requiredEvidence: ['authored calculation readback before template binding'],
   },
   {
     kind: 'route',
@@ -96,10 +106,10 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'data-value-question',
     trigger: 'a data-value question',
     action:
-      'FIRST get-summary-data; answer only from returned rows. If none, say so and offer a viz.',
+      'on a populated worksheet, call get-summary-data; answer only from returned rows. A terminal/no-data result means stop; one retry on transient failure is allowed, then report the outcome.',
     toolSequence: ['get-summary-data'],
-    stopConditions: ['answer only from returned rows'],
-    requiredEvidence: ['get-summary-data returned rows or a no-suitable-worksheet explanation'],
+    stopConditions: ['A terminal/no-data result means stop'],
+    requiredEvidence: ['get-summary-data returned rows or a discriminated status'],
   },
   {
     kind: 'route',
@@ -153,6 +163,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'prose',
     id: 'preflight-rejection',
     text: 'If preflight rejects apply, fix per FIX lines. Prefer file mode',
+  },
+  {
+    kind: 'prose',
+    id: 'no-native-tool-escape',
+    text: 'If NO native tool covers the asked shape, say so plainly — never invent or hand-author XML. Retrieving worksheet XML to feed the field tools (get-worksheet-xml -> add-field/apply-worksheet) is a sanctioned path, not hand-authoring. Whole-workbook XML surgery (get/apply workbook XML) lives behind TOOL_PROFILE=full, an operator opt-in the user can enable.',
   },
 ];
 

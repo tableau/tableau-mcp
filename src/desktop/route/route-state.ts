@@ -81,6 +81,11 @@ export interface BindRecoveryRecord {
   phase: BindRecoveryPhase;
   attempts: BindAttempt[];
   lastProposalSignature?: string;
+  /** One-shot retry for an apply failure proven to have occurred before mutation dispatch. */
+  preDispatchRetryAllowance?: {
+    proposalSignature: string;
+    remaining: 0 | 1;
+  };
   /** Outcome records that could not be correlated to a live pending reservation. */
   uncorrelatedOutcomeCount?: number;
 }
@@ -127,6 +132,8 @@ export interface SessionRouteState {
   route_overrides: RouteOverride[];
   /** Bounded per-ask bind recovery records, keyed by the same normalized ask as current_ask. */
   bindRecoveryByAsk: Map<string, BindRecoveryRecord>;
+  /** Consecutive transient get-summary-data failures keyed by argument signature. */
+  summaryDataTransientFailures: Map<string, number>;
   /** Capacity-rejected bind admissions that intentionally proceeded unprotected. */
   unprotected_passthroughs: UnprotectedPassthroughs;
   /** Most recent bind-template ask classification for this session, if any. */
@@ -240,6 +247,13 @@ export class SessionRouteStateStore {
   /** Per-session LRU cap for bind recovery records. */
   static readonly MAX_BIND_RECOVERY_ASKS = 8;
 
+  /**
+   * Per-session LRU cap for get-summary-data transient-failure counters. Rotating more than
+   * this many failing signatures can evict a first failure before its retry, so the terminal
+   * guard is intentionally best-effort for that rare pattern in exchange for bounded memory.
+   */
+  static readonly MAX_SUMMARY_DATA_FAILURE_SIGNATURES = 8;
+
   /** Receipt cap for capacity-rejected asks. */
   static readonly MAX_UNPROTECTED_PASSTHROUGH_ASKS = 4;
 
@@ -251,6 +265,7 @@ export class SessionRouteStateStore {
         deflections: [],
         route_overrides: [],
         bindRecoveryByAsk: new Map(),
+        summaryDataTransientFailures: new Map(),
         unprotected_passthroughs: { count: 0, last_asks: [] },
       };
       this.bySession.set(sessionId, state);
@@ -313,6 +328,29 @@ export class SessionRouteStateStore {
     return this.bySession.get(sessionId);
   }
 
+  recordSummaryDataTransientFailure(sessionId: string | undefined, signature: string): number {
+    if (!sessionId) return 1;
+    const state = this.ensure(sessionId);
+    const count = (state.summaryDataTransientFailures.get(signature) ?? 0) + 1;
+    state.summaryDataTransientFailures.delete(signature);
+    state.summaryDataTransientFailures.set(signature, count);
+    while (
+      state.summaryDataTransientFailures.size >
+      SessionRouteStateStore.MAX_SUMMARY_DATA_FAILURE_SIGNATURES
+    ) {
+      const oldest = state.summaryDataTransientFailures.keys().next().value;
+      if (oldest === undefined) break;
+      state.summaryDataTransientFailures.delete(oldest);
+    }
+    return count;
+  }
+
+  clearSummaryDataTransientFailure(sessionId: string | undefined, signature: string): boolean {
+    const state = this.get(sessionId);
+    if (!state) return false;
+    return state.summaryDataTransientFailures.delete(signature);
+  }
+
   /**
    * Whether a deflection was already issued for this (session, ask). The one-shot invariant:
    * once true, the gate overrides (executes) instead of deflecting again.
@@ -368,6 +406,16 @@ export class SessionRouteStateStore {
       return { lastProposalSignature: previous.lastProposalSignature };
     }
     return {};
+  }
+
+  private withPreDispatchRetryAllowance(
+    previous: BindRecoveryRecord | undefined,
+    nextProposalSignature: string | undefined,
+  ): Pick<BindRecoveryRecord, 'preDispatchRetryAllowance'> {
+    const allowance = previous?.preDispatchRetryAllowance;
+    return allowance?.proposalSignature === nextProposalSignature
+      ? { preDispatchRetryAllowance: allowance }
+      : {};
   }
 
   private upgradesLastReservation(
@@ -459,10 +507,12 @@ export class SessionRouteStateStore {
       consumesRetryBudget,
     };
     const reservationId = this.nextBindRecoveryReservationId++;
+    const nextProposalSignature = admission.proposalSignature ?? previous?.lastProposalSignature;
     const record: BindRecoveryRecord = {
       phase,
       attempts: [...(previous?.attempts ?? []), { ...bindAttempt, reservationId }],
       ...this.withLastProposalSignature(previous, admission.proposalSignature),
+      ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
       ...this.withUncorrelatedOutcomeCount(previous, false),
     };
 
@@ -512,6 +562,10 @@ export class SessionRouteStateStore {
             uncorrelated: false,
           }
         : this.upgradeReservedAttempt(previous, attempt.reservationId, bindAttempt);
+    const nextProposalSignature =
+      attempt.reservationId === undefined
+        ? (attempt.proposalSignature ?? previous?.lastProposalSignature)
+        : previous?.lastProposalSignature;
     const record: BindRecoveryRecord = {
       phase: upgraded.uncorrelated && previous ? previous.phase : phase,
       attempts: upgraded.attempts,
@@ -519,6 +573,7 @@ export class SessionRouteStateStore {
         previous,
         attempt.reservationId === undefined ? attempt.proposalSignature : undefined,
       ),
+      ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
       ...this.withUncorrelatedOutcomeCount(previous, upgraded.uncorrelated),
     };
 
@@ -558,6 +613,10 @@ export class SessionRouteStateStore {
             uncorrelated: false,
           }
         : this.upgradeReservedAttempt(previous, attempt.reservationId, bindAttempt);
+    const nextProposalSignature =
+      attempt.reservationId === undefined
+        ? (attempt.proposalSignature ?? previous?.lastProposalSignature)
+        : previous?.lastProposalSignature;
     const record: BindRecoveryRecord = {
       phase: upgraded.uncorrelated && previous ? previous.phase : 'terminal',
       attempts: upgraded.attempts,
@@ -565,11 +624,49 @@ export class SessionRouteStateStore {
         previous,
         attempt.reservationId === undefined ? attempt.proposalSignature : undefined,
       ),
+      ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
       ...this.withUncorrelatedOutcomeCount(previous, upgraded.uncorrelated),
     };
 
     this.touchBindRecovery(state, ask, record);
     return state;
+  }
+
+  grantPreDispatchRetryAllowance(
+    sessionId: string | undefined,
+    ask: string,
+    proposalSignature: string,
+  ): boolean {
+    const state = this.get(sessionId);
+    const record = state?.bindRecoveryByAsk.get(ask);
+    if (!state || !record || record.lastProposalSignature !== proposalSignature) return false;
+    if (record.preDispatchRetryAllowance?.proposalSignature === proposalSignature) return false;
+    return this.touchBindRecovery(state, ask, {
+      ...record,
+      preDispatchRetryAllowance: { proposalSignature, remaining: 1 },
+    });
+  }
+
+  consumePreDispatchRetryAllowance(
+    sessionId: string | undefined,
+    ask: string,
+    proposalSignature: string,
+  ): boolean {
+    const state = this.get(sessionId);
+    const record = state?.bindRecoveryByAsk.get(ask);
+    const allowance = record?.preDispatchRetryAllowance;
+    if (
+      !state ||
+      !record ||
+      allowance?.proposalSignature !== proposalSignature ||
+      allowance.remaining !== 1
+    ) {
+      return false;
+    }
+    return this.touchBindRecovery(state, ask, {
+      ...record,
+      preDispatchRetryAllowance: { proposalSignature, remaining: 0 },
+    });
   }
 
   clearBindRecovery(sessionId: string | undefined, ask: string): boolean {

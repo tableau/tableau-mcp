@@ -20,6 +20,7 @@ import {
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
+import { fetchAndCacheWorksheet } from './worksheetCache.js';
 
 /** Encoding channels a field can be removed from. */
 const ENCODING_TYPES = [
@@ -36,11 +37,18 @@ const ENCODING_TYPES = [
 const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
 const paramsSchema = {
-  session: z.string().optional(),
-  worksheetFile: z.string(),
-  target: z.enum(FIELD_TARGETS),
-  columnRef: z.string(),
-  encodingType: z.enum(ENCODING_TYPES).optional(),
+  session: z.string().optional().describe('Desktop session; omit if one.'),
+  worksheetName: z
+    .string()
+    .optional()
+    .describe('Sheet to edit (fetched fresh); or pass worksheetFile to stack edits.'),
+  worksheetFile: z
+    .string()
+    .optional()
+    .describe('Cached sheet path from a prior edit; stacks edits.'),
+  target: z.enum(FIELD_TARGETS).describe('Placement shelf.'),
+  columnRef: z.string().describe('Field to remove.'),
+  encodingType: z.enum(ENCODING_TYPES).optional().describe('Required when target=encoding.'),
 };
 
 const title = 'Remove Field';
@@ -59,18 +67,38 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
       idempotentHint: false,
     },
     callback: async (
-      { session, worksheetFile, target, columnRef, encodingType },
+      { session, worksheetName, worksheetFile, target, columnRef, encodingType },
       extra,
     ): Promise<CallToolResult> => {
       return await removeFieldTool.logAndExecute({
         extra,
-        args: { session, worksheetFile, target, columnRef, encodingType },
+        args: { session, worksheetName, worksheetFile, target, columnRef, encodingType },
         callback: async () => {
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();
           }
           const resolvedSession = sessionResult.value;
+
+          if (!worksheetFile?.trim() && !worksheetName?.trim()) {
+            return new ArgsValidationError(
+              'Provide either worksheetName (to edit an existing sheet) or worksheetFile (a cached path).',
+            ).toErr();
+          }
+
+          // Name-based path: always fetch fresh and mint a new cache file. Follow-up
+          // add-field/remove-field calls should pass the returned worksheetFile to stack edits.
+          if (!worksheetFile?.trim()) {
+            const minted = await fetchAndCacheWorksheet({
+              worksheetName: worksheetName!.trim(),
+              resolvedSession,
+              extra,
+            });
+            if (minted.isErr()) {
+              return minted.error.toErr();
+            }
+            worksheetFile = minted.value;
+          }
 
           if (!existsSync(worksheetFile)) {
             return new FileNotFoundError(worksheetFile).toErr();

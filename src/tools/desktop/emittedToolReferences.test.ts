@@ -43,8 +43,14 @@ const NON_TOOL_VOCABULARY = [
   'higher-confidence',
   'ignored-redundant-aggregation',
   'in-dashboard',
+  'invalid-xml',
   'kind-mismatch',
   'kpi-text',
+  // m7 declarative-filter XML vocabulary emitted into the context-filter node (not tool names):
+  // the filter groupfilter functions/attributes, same class as 'column-instance' / 'level-members'.
+  'level-members',
+  'ui-enumeration',
+  'ui-marker',
   'load-dashboard-xml-error',
   'load-rejected',
   'load-workbook',
@@ -60,6 +66,9 @@ const NON_TOOL_VOCABULARY = [
   'part-to-whole-pie-chart',
   'part-to-whole-waterfall',
   'per-viz',
+  // Internal auto-apply failure dispositions, not emitted tool references.
+  'post-dispatch',
+  'pre-dispatch',
   'pre-edit',
   'promise-check',
   'ranking-ordered-bar',

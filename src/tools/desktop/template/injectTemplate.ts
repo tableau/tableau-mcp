@@ -11,6 +11,7 @@ import {
 } from '../../../desktop/binder/explicit-bind.js';
 import { summarizeSchema } from '../../../desktop/binder/schema-summary.js';
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
+import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import { parseDatasourceQualifiedColumnRef } from '../../../desktop/metadata/field-resolver.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
@@ -176,6 +177,7 @@ export const getInjectTemplateTool = (
               sheetType,
               templateParameters: appliedTemplateParameters,
               fieldMapping: appliedFieldMapping,
+              templateSlots: bundledIntelligenceProvider.getTemplateManifest(templateName)?.slots,
               insertPosition,
               relativeSheetName,
               applyNonce,

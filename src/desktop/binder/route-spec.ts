@@ -23,7 +23,7 @@
 import { selectEligible } from './ask-router.js';
 import type { TemplateManifest } from './manifest-types.js';
 
-/** The four route classes an ask-shape maps to. */
+/** The route classes an ask-shape maps to. */
 export type RouteClass = 'bind-first' | 'scratch-pipeline' | 'refine-op' | 'free';
 
 /**
@@ -40,6 +40,7 @@ export type AskShape =
   | 'refine-sort'
   | 'refine-period'
   | 'refine-encoding'
+  | 'calc-then-bind'
   | 'bind-first-template'
   | 'unmatched';
 
@@ -56,6 +57,7 @@ export const SHAPE_ROUTE: Record<AskShape, RouteClass> = {
   'refine-sort': 'refine-op',
   'refine-period': 'free',
   'refine-encoding': 'free',
+  'calc-then-bind': 'free',
   'bind-first-template': 'bind-first',
   unmatched: 'free',
 };
@@ -119,6 +121,27 @@ const TOP_N_RE = new RegExp(
  */
 const NEW_VIZ_RE =
   /\b(?:bars?|columns?|line|lines|pie|donut|treemap|maps?|scatter|histogram|bullet|gantt|funnel|waterfall|heat-?map|box-?plot|area|bubble|slope|charts?|graphs?|plots?|viz|visuali[sz]ations?|dashboards?)\b/i;
+
+const CALC_FIRST_DERIVED_METRIC_RES = [
+  /\b(?:gross|operating|net|profit)\s+margin(?:\s*%)?/i,
+  /\bmargin\s*%/i,
+  /\b(?:ratio|rate)\s+(?:of|between)\b/i,
+  /\b[\w-]+\s+(?:ratio|rate)\b/i,
+  /\b[\w-]+\s+per\s+[\w-]+\b/i,
+  /\b(?:growth|change)\s*(?:%|rate|percent|percentage)\b/i,
+  /\b(?:percent|percentage)\s+(?:growth|change)\b/i,
+  /\b(?:year[- ]over[- ]year|month[- ]over[- ]month|quarter[- ]over[- ]quarter|yoy|mom|qoq)\s+(?:growth|change)\b/i,
+];
+
+/**
+ * Detect a noun-less ask for a derived metric that must be authored before template binding.
+ * Named chart/viz asks deliberately stay on the existing plain-chart route, even when their
+ * measure is derived.
+ */
+export function detectCalcFirst(text: string): boolean {
+  if (NEW_VIZ_RE.test(text)) return false;
+  return CALC_FIRST_DERIVED_METRIC_RES.some((pattern) => pattern.test(text));
+}
 
 /**
  * EDIT signals — the evidence that an ask REFINES an already-built viz. Either an anaphora
@@ -208,8 +231,9 @@ export function normalizeAskForMatch(text: string): string {
  *   3. refine      — top-N / period / sort / filter / re-encode WITH edit context ⇒ taxonomy
  *                    label, route per SHAPE_ROUTE. Bare refine vocabulary inside a NEW-VIZ ask
  *                    (no edit signal) does NOT match here — it falls through to bind-first.
- *   4. bind-first  — `selectEligible` selects a DECISIVE, STAMPED template ⇒ bind-first.
- *   5. unmatched   — nothing selected ⇒ free.
+ *   4. calc-first  — a noun-less derived metric ⇒ author the calc, then bind by its caption.
+ *   5. bind-first  — `selectEligible` selects a DECISIVE, STAMPED template ⇒ bind-first.
+ *   6. unmatched   — nothing selected ⇒ free.
  */
 export function classifyAskRoute(
   ask: string | null | undefined,
@@ -230,6 +254,10 @@ export function classifyAskRoute(
   const refine = detectRefine(text);
   if (refine) {
     return decide(refine, null, 'refine shape (edit-context gated) — route per refine-op taxonomy');
+  }
+
+  if (detectCalcFirst(text)) {
+    return decide('calc-then-bind', null, 'calc-first ask (author-calc before bind)');
   }
 
   // Wrap (never fork) selectEligible's input with a light normalization pass so a reworded,

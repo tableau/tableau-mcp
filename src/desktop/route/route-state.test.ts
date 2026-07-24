@@ -127,6 +127,46 @@ describe('SessionRouteStateStore', () => {
     expect(store.hasDeflection('S1', `ask-${cap + 2}`)).toBe(true);
   });
 
+  describe('summary-data transient failure state', () => {
+    it('counts transient failures by session and signature without storing payloads', () => {
+      const store = new SessionRouteStateStore();
+
+      expect(store.recordSummaryDataTransientFailure('S1', 'signature-a')).toBe(1);
+      expect(store.recordSummaryDataTransientFailure('S1', 'signature-a')).toBe(2);
+      expect(store.recordSummaryDataTransientFailure('S1', 'signature-b')).toBe(1);
+      expect(store.recordSummaryDataTransientFailure('S2', 'signature-a')).toBe(1);
+      expect(store.recordSummaryDataTransientFailure(undefined, 'signature-a')).toBe(1);
+
+      expect(store.get('S1')?.summaryDataTransientFailures.get('signature-a')).toBe(2);
+      expect(store.get('S1')?.summaryDataTransientFailures.get('signature-b')).toBe(1);
+      expect(store.get('S2')?.summaryDataTransientFailures.get('signature-a')).toBe(1);
+    });
+
+    it('clears a signature after a success or genuine no-data outcome', () => {
+      const store = new SessionRouteStateStore();
+
+      store.recordSummaryDataTransientFailure('S1', 'signature-a');
+      store.recordSummaryDataTransientFailure('S1', 'signature-a');
+      expect(store.clearSummaryDataTransientFailure('S1', 'signature-a')).toBe(true);
+      expect(store.get('S1')?.summaryDataTransientFailures.has('signature-a')).toBe(false);
+      expect(store.clearSummaryDataTransientFailure('S1', 'signature-a')).toBe(false);
+      expect(store.clearSummaryDataTransientFailure(undefined, 'signature-a')).toBe(false);
+    });
+
+    it('keeps transient signatures LRU-bounded', () => {
+      const store = new SessionRouteStateStore();
+      const cap = SessionRouteStateStore.MAX_SUMMARY_DATA_FAILURE_SIGNATURES;
+
+      for (let i = 0; i < cap + 1; i++) {
+        store.recordSummaryDataTransientFailure('S1', `signature-${i}`);
+      }
+
+      expect(store.get('S1')?.summaryDataTransientFailures.size).toBe(cap);
+      expect(store.get('S1')?.summaryDataTransientFailures.has('signature-0')).toBe(false);
+      expect(store.get('S1')?.summaryDataTransientFailures.has(`signature-${cap}`)).toBe(true);
+    });
+  });
+
   describe('current ask classification state', () => {
     it('recordAskClassification lazy-inits state and sets current_ask with a pending outcome', () => {
       const store = new SessionRouteStateStore();
@@ -302,6 +342,42 @@ describe('SessionRouteStateStore', () => {
       expect(record.phase).toBe('retry-used');
       expect(record.lastProposalSignature).toBe('signature-2');
       expect(record.attempts.map((a) => a.consumesRetryBudget)).toEqual([false, false, true]);
+    });
+
+    it('stores and consumes one pre-dispatch retry allowance for the last proposal signature', () => {
+      const store = new SessionRouteStateStore();
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'bound',
+        proposalSignature: 'signature-1',
+      });
+
+      expect(store.grantPreDispatchRetryAllowance('S1', 'ask A', 'different-signature')).toBe(
+        false,
+      );
+      expect(store.grantPreDispatchRetryAllowance('S1', 'ask A', 'signature-1')).toBe(true);
+      expect(store.consumePreDispatchRetryAllowance('S1', 'ask A', 'signature-1')).toBe(true);
+      expect(store.consumePreDispatchRetryAllowance('S1', 'ask A', 'signature-1')).toBe(false);
+      expect(store.grantPreDispatchRetryAllowance('S1', 'ask A', 'signature-1')).toBe(false);
+      expect(store.getBindRecovery('S1', 'ask A')?.preDispatchRetryAllowance).toEqual({
+        proposalSignature: 'signature-1',
+        remaining: 0,
+      });
+    });
+
+    it('drops a stale pre-dispatch allowance when the proposal signature changes', () => {
+      const store = new SessionRouteStateStore();
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'bound',
+        proposalSignature: 'signature-1',
+      });
+      store.grantPreDispatchRetryAllowance('S1', 'ask A', 'signature-1');
+
+      store.reserveBindRecoveryAdmission('S1', 'ask A', {
+        proposalSignature: 'signature-2',
+      });
+
+      expect(store.getBindRecovery('S1', 'ask A')?.preDispatchRetryAllowance).toBeUndefined();
     });
 
     it('clears a recovery entry when the bind reaches terminal done', () => {

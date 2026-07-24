@@ -1370,9 +1370,7 @@
       "family": "deviation",
       "readiness": "YELLOW",
       "fast_path_eligible": false,
-      "fast_path_blockers": [
-        "HARDCODED_FILTER_MEMBERS"
-      ],
+      "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "none"
@@ -1380,7 +1378,10 @@
       "datasource_placeholder": true,
       "placeholders": [
         "TITLE",
-        "DATASOURCE"
+        "DATASOURCE",
+        "field_base_1",
+        "field_base_2",
+        "field_base_3"
       ],
       "intent_keywords": [
         "diverging-bar",
@@ -1389,11 +1390,11 @@
         "above-below",
         "positive-negative"
       ],
-      "description": "A diverging bar chart: one Automatic bar per category (Sub-Category on rows) whose length is a signed Profit-Ratio template calc (SUM([Profit])/SUM([Sales])) on cols, so bars extend left/right of zero and are colored on a diverging orange-blue ramp; sorted DESC by the ratio. Shows deviation above/below a zero baseline. Structurally compiled, not render-verified; the source Region='Central' filter rides along verbatim (HARDCODED_FILTER_MEMBERS).",
+      "description": "A diverging bar chart: one bar per category whose length is a signed numerator-to-denominator template ratio, so bars extend left/right of zero and use a diverging orange-blue ramp; sorted descending by the ratio. The donor member filter was removed for data portability. Structurally compiled and not render-verified.",
       "slots": [
         {
           "slot_id": "sub_category",
-          "template_field": "Sub-Category",
+          "template_field": "{{field_base_1}}",
           "derivation": "none",
           "role": [
             "rows",
@@ -1402,11 +1403,17 @@
           "kind": "categorical",
           "bindable": true,
           "required": true,
-          "notes": "One bar per member on rows; computed-sort orders these DESC by the Profit-Ratio calc."
+          "purpose": "Categorical dimension that defines one diverging bar per member.",
+          "examples": [
+            "Product Line",
+            "Team",
+            "Cost Center"
+          ],
+          "notes": "One bar per member on rows; computed-sort orders these descending by the signed ratio calc."
         },
         {
           "slot_id": "profit",
-          "template_field": "Profit",
+          "template_field": "{{field_base_2}}",
           "derivation": "sum",
           "role": [
             "calc-input"
@@ -1414,11 +1421,17 @@
           "kind": "quantitative",
           "bindable": true,
           "required": true,
-          "notes": "Not on a shelf directly — feeds the Profit-Ratio template calc (numerator). replaceFieldReferences rewrites [Profit] inside the formula on bind."
+          "purpose": "Continuous measure used as the signed ratio numerator.",
+          "examples": [
+            "Goal Difference",
+            "Margin Change",
+            "Budget Variance"
+          ],
+          "notes": "Not on a shelf directly; feeds the template ratio numerator and is rewritten inside the formula on bind."
         },
         {
           "slot_id": "sales",
-          "template_field": "Sales",
+          "template_field": "{{field_base_3}}",
           "derivation": "sum",
           "role": [
             "calc-input"
@@ -1426,7 +1439,13 @@
           "kind": "quantitative",
           "bindable": true,
           "required": true,
-          "notes": "Not on a shelf directly — feeds the Profit-Ratio template calc (denominator). replaceFieldReferences rewrites [Sales] inside the formula on bind."
+          "purpose": "Continuous measure used as the signed ratio denominator.",
+          "examples": [
+            "Revenue",
+            "Target",
+            "Total Spend"
+          ],
+          "notes": "Not on a shelf directly; feeds the template ratio denominator and is rewritten inside the formula on bind."
         }
       ],
       "calcs": [
@@ -1442,10 +1461,10 @@
           "kind": "calc",
           "bindable": false,
           "required": true,
-          "formula": "SUM([Profit])/SUM([Sales])",
+          "formula": "SUM([{{field_base_2}}])/SUM([{{field_base_3}}])",
           "formula_refs": [
-            "Profit",
-            "Sales"
+            "{{field_base_2}}",
+            "{{field_base_3}}"
           ],
           "depends_on_slots": [
             "profit",
@@ -1454,14 +1473,14 @@
           "result_role": "measure",
           "inputs": [
             {
-              "ref": "Profit",
+              "ref": "{{field_base_2}}",
               "slot_id": "profit",
               "slot_kind": "quantitative",
               "required": true,
               "template_internal": false
             },
             {
-              "ref": "Sales",
+              "ref": "{{field_base_3}}",
               "slot_id": "sales",
               "slot_kind": "quantitative",
               "required": true,
@@ -1471,7 +1490,7 @@
           "prereqs": [
             "raw-formula-refs"
           ],
-          "notes": "The signed diverging measure: SUM([Profit])/SUM([Sales]) drives the bar length (cols), the diverging color, AND the computed-sort. A self-closing <calculation>, so parseTemplateCalcs sees it — a declared calc slot; both bare refs rewrite on bind."
+          "notes": "The signed numerator/denominator ratio drives bar length, diverging color, and computed-sort. Both placeholder refs rewrite on bind."
         }
       ],
       "hazards": [
@@ -1481,18 +1500,8 @@
           "xml": "deviation-diverging-bar.xml:68"
         },
         {
-          "code": "hardcoded-filter-blocking",
-          "detail": "The source workbook pins Region to a single INCLUSION member (function='member' Region='\"Central\"') kept on the Filters shelf (<slices>). This lane does NOT run the compile-time filter neutralizer (no XML edits), so the member rides along VERBATIM and is flagged HARDCODED_FILTER_MEMBERS: a bound dataset without a 'Central' region member renders empty. A follow-up can PARAMETERIZE it to unblock.",
-          "xml": "deviation-diverging-bar.xml:30-32"
-        },
-        {
-          "code": "hardcoded-member-inclusion",
-          "detail": "STRUCTURED hazard class read by the bind-time period guard (src/binder/period-guard.ts, W36-D-v1). The load-bearing filter here is a categorical MEMBER INCLUSION (Region='Central'), NOT a date-part period exclusion — so the incomplete-period guard deliberately DECLINES to veto this template on period grounds (it would be wrong to call a Region pin an 'incomplete period'). It stays ineligible via its HARDCODED_FILTER_MEMBERS blocker; its v2 path is member parameterization (collapse to level-members), not a period trim. Classified explicitly so the period guard's non-fire is auditable rather than incidental.",
-          "xml": "deviation-diverging-bar.xml:30-32"
-        },
-        {
           "code": "raw-formula-refs",
-          "detail": "The Profit-Ratio calc references the bare bindable [Profit]/[Sales]; templates.ts rewriteFormulaFieldRefs repairs them on bind ONLY because both are bindable bare-key slots (same pattern as correlation-scatter-plot-chart). Gate #6 asserts both are bound.",
+          "detail": "The signed-ratio calc references two bindable base placeholders; rewriteFormulaFieldRefs resolves both on bind, and Gate #6 asserts both slots are bound.",
           "xml": "deviation-diverging-bar.xml:19-20"
         }
       ]
@@ -3726,9 +3735,9 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-04",
-        "xml_sha256": "f28c59df89a6c63ecb37e3715a3db37f50429c7b4d94574777211e0b7ff34f28",
+        "xml_sha256": "1492b037d695ccfa5de7e41881c5b273dfcb0ef598beffd88810955d4df021f4",
         "render_evidence": {
-          "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
+          "basis": "hand-stamp: live render + structural parity + human review; the placeholder-only source migration preserves byte-identical post-bind XML versus the stamped literal-token form, proven by templatePlaceholderPilots.test.ts",
           "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
           "structural": null,
           "critical_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
@@ -3740,7 +3749,10 @@
       "datasource_placeholder": true,
       "placeholders": [
         "TITLE",
-        "DATASOURCE"
+        "DATASOURCE",
+        "field_base_1",
+        "field_base_2",
+        "field_base_3"
       ],
       "intent_keywords": [
         "ranking",
@@ -3758,7 +3770,7 @@
       "slots": [
         {
           "slot_id": "region",
-          "template_field": "Region",
+          "template_field": "{{field_base_1}}",
           "derivation": "none",
           "role": [
             "rows",
@@ -3766,11 +3778,17 @@
           ],
           "kind": "categorical",
           "bindable": true,
-          "required": true
+          "required": true,
+          "purpose": "Categorical dimension that defines one ranked horizontal bar per member.",
+          "examples": [
+            "Country",
+            "Product Line",
+            "Team"
+          ]
         },
         {
           "slot_id": "sales",
-          "template_field": "Sales",
+          "template_field": "{{field_base_2}}",
           "derivation": "sum",
           "role": [
             "cols",
@@ -3778,11 +3796,17 @@
           ],
           "kind": "quantitative",
           "bindable": true,
-          "required": true
+          "required": true,
+          "purpose": "Continuous measure that controls bar length and descending rank order.",
+          "examples": [
+            "Points",
+            "Revenue",
+            "Goal Difference"
+          ]
         },
         {
           "slot_id": "facet_row",
-          "template_field": "Facet",
+          "template_field": "{{field_base_3}}",
           "derivation": "none",
           "role": [
             "rows"
@@ -3790,7 +3814,13 @@
           "kind": "categorical",
           "bindable": true,
           "required": false,
-          "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on rows AHEAD of the ranked category pill, trellising the ranking into stacked panes (one ranked bar set per member). Optional → EXCLUDED from the required-bindable fixture_bind set (only {region, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots — it never steals the ranked (region) dim, and a bare 'by <dim>' never facets (fail-closed). XML declares [Facet] as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the default sorted-bar render is byte-unchanged). Modeled on box-plot-chart's required:false facet."
+          "purpose": "Optional categorical dimension that partitions the ranking into row-oriented small multiples.",
+          "examples": [
+            "Season",
+            "Business Unit",
+            "League"
+          ],
+          "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on rows AHEAD of the ranked category pill, trellising the ranking into stacked panes (one ranked bar set per member). Optional → EXCLUDED from the required-bindable fixture_bind set (only {region, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots — it never steals the ranked (region) dim, and a bare 'by <dim>' never facets (fail-closed). XML declares {{field_base_3}} as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the default sorted-bar render is byte-unchanged). Modeled on box-plot-chart's required:false facet."
         }
       ],
       "calcs": [],
@@ -3811,7 +3841,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-05",
-        "xml_sha256": "d02eb152091e7594c27b1cc46a596c2ffd6fd6e8772f64bc1186e12e1197ac02",
+        "xml_sha256": "a0a23ffcf5fb34263b4e1a46a107590200a03d3f02fdc5efcf8622cc9e4a9235",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review",
           "lane": "W2-R008 live-verify 2026-07-05",
@@ -3841,7 +3871,7 @@
       "slots": [
         {
           "slot_id": "region",
-          "template_field": "Region",
+          "template_field": "Category",
           "derivation": "none",
           "role": [
             "cols",
@@ -3853,7 +3883,7 @@
         },
         {
           "slot_id": "sales",
-          "template_field": "Sales",
+          "template_field": "Measure",
           "derivation": "sum",
           "role": [
             "rows",
@@ -3868,7 +3898,7 @@
       "hazards": [
         {
           "code": "computed-sort-pill-coupling",
-          "detail": "computed-sort sorts [none:Region:nk] using [sum:Sales:qk]; both slots must bind or the sort dangles (both are required, so coverage satisfies this). [Region] has NO aggregate-role-from here, so GREEN stands (verification: AGREE).",
+          "detail": "computed-sort sorts [none:Category:nk] using [sum:Measure:qk]; both slots must bind or the sort dangles (both are required, so coverage satisfies this). [Category] has NO aggregate-role-from here, so GREEN stands (verification: AGREE).",
           "xml": "ranking-ordered-column.xml:24"
         }
       ]
@@ -4286,9 +4316,8 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-04",
-        "xml_sha256": "724d015fcaf3c49a954ac9c0a2a2b777b735da5f6256bec32c61954f4b39c273",
         "render_evidence": {
-          "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
+          "basis": "hand-stamp: live render + structural parity + human review; the normal real-date placeholder migration preserves byte-identical post-bind XML versus the stamped literal-token form, proven by templatePlaceholderPilots.test.ts",
           "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
           "structural": null,
           "critical_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
@@ -4300,7 +4329,11 @@
       "datasource_placeholder": true,
       "placeholders": [
         "TITLE",
-        "DATASOURCE"
+        "DATASOURCE",
+        "field_base_1",
+        "field_base_2",
+        "field_base_3",
+        "field_base_4"
       ],
       "intent_keywords": [
         "trend",
@@ -4343,7 +4376,7 @@
       "slots": [
         {
           "slot_id": "order_date",
-          "template_field": "Order Date",
+          "template_field": "{{field_base_1}}",
           "derivation": "tmn",
           "role": [
             "cols"
@@ -4352,22 +4385,34 @@
           "bindable": true,
           "required": true,
           "temporal_from_string": true,
-          "notes": "XML instance is [tmn:Order Date:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim (no normalization). templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'. temporal_from_string:true — a date-like STRING (e.g. a 'YYYY-MM' month) is accepted here; the apply path injects a DATEPARSE calc and truncates it to a continuous month axis (dateparseTemporalAxis.ts)."
+          "purpose": "Temporal dimension that defines the continuous Month-Trunc x-axis.",
+          "examples": [
+            "Match Date",
+            "Invoice Month",
+            "Snapshot Time"
+          ],
+          "notes": "XML instance is [tmn:{{field_base_1}}:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim (no normalization). templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'. temporal_from_string:true — a date-like STRING (e.g. a 'YYYY-MM' month) is accepted here; the apply path injects a DATEPARSE calc and truncates it to a continuous month axis (dateparseTemporalAxis.ts)."
         },
         {
           "slot_id": "sales",
-          "template_field": "Sales",
+          "template_field": "{{field_base_2}}",
           "derivation": "sum",
           "role": [
             "rows"
           ],
           "kind": "quantitative",
           "bindable": true,
-          "required": true
+          "required": true,
+          "purpose": "Continuous measure plotted over time on the y-axis.",
+          "examples": [
+            "Active Users",
+            "Revenue",
+            "Points"
+          ]
         },
         {
           "slot_id": "facet_col",
-          "template_field": "Facet",
+          "template_field": "{{field_base_3}}",
           "derivation": "none",
           "role": [
             "cols"
@@ -4375,14 +4420,38 @@
           "kind": "categorical",
           "bindable": true,
           "required": false,
-          "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on cols AHEAD of the truncated date pill, trellising the trend into side-by-side panes (one line per member). Optional → EXCLUDED from the required-bindable fixture_bind set (only {order_date, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots — a bare 'by <dim>' never facets (fail-closed), and it never steals a slot-bound dim. XML declares [Facet] as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the un-faceted default render is byte-unchanged). Modeled on box-plot-chart's required:false facet."
+          "purpose": "Optional categorical dimension that partitions the trend into column-oriented small multiples.",
+          "examples": [
+            "Country",
+            "Product Line",
+            "Team"
+          ],
+          "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on cols AHEAD of the truncated date pill, trellising the trend into side-by-side panes (one line per member). Optional → EXCLUDED from the required-bindable fixture_bind set (only {order_date, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots — a bare 'by <dim>' never facets (fail-closed), and it never steals a slot-bound dim. XML declares {{field_base_3}} as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the un-faceted default render is byte-unchanged). Modeled on box-plot-chart's required:false facet."
+        },
+        {
+          "slot_id": "color_series",
+          "template_field": "{{field_base_4}}",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": false,
+          "purpose": "Optional categorical dimension that splits the trend into one colored line per member.",
+          "examples": [
+            "Team",
+            "Plan Tier",
+            "Channel"
+          ],
+          "notes": "OPTIONAL series split: when no facet is requested, the binder fills this slot only if exactly one spare categorical remains after required bindings. Zero or multiple candidates leave it unbound. The optional-field injector removes both its datasource declaration and color encoding when unbound, preserving the pre-series-split render byte-for-byte."
         }
       ],
       "calcs": [],
       "hazards": [
         {
           "code": "month-trunc-short-form-ruling",
-          "detail": "RULING (H3.2 tmn/tmo reconciliation): 'tmn' is the REAL Month-Trunc short-form live Tableau writes — confirmed in this template XML (derivation='Month-Trunc' name='[tmn:Order Date:qk]'), in real Tableau Public workbooks (data/twb-example-index.json: [sqlserver…].[tmn:Order Date:qk], [dataengine…].[tmn:DateTime (Days):ok]), in src/metadata/fields.ts:434, and in tactics/tree/column-instance-prefixes.md. The binder/manifests standardize on canonical 'tmn'; templates.ts derivationMap accepts BOTH 'tmn' and legacy 'tmo' as aliases → 'Month-Trunc'. XML is ground truth; no derivation normalization is applied.",
+          "detail": "RULING (H3.2 tmn/tmo reconciliation): 'tmn' is the REAL Month-Trunc short-form live Tableau writes — confirmed in this template XML (derivation='Month-Trunc' name='[tmn:{{field_base_1}}:qk]'), in real Tableau Public workbooks, in src/metadata/fields.ts, and in tactics/tree/column-instance-prefixes.md. The binder/manifests standardize on canonical 'tmn'; templates.ts derivationMap accepts BOTH 'tmn' and legacy 'tmo' as aliases → 'Month-Trunc'. XML is ground truth; no derivation normalization is applied.",
           "xml": "trend-line-chart.xml:13"
         },
         {

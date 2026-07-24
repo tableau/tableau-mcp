@@ -12,6 +12,7 @@ import { loadManifests } from './manifest.js';
 import type { TemplateManifest } from './manifest-types.js';
 import {
   classifyAskRoute,
+  detectCalcFirst,
   normalizeAskForMatch,
   REFINE_SHAPES,
   SHAPE_ROUTE,
@@ -52,7 +53,40 @@ describe('SHAPE_ROUTE — the typed ask-shape → route table', () => {
     expect(SHAPE_ROUTE['refine-filter']).toBe('free');
     expect(SHAPE_ROUTE['refine-period']).toBe('free');
     expect(SHAPE_ROUTE['refine-encoding']).toBe('free');
+    expect(SHAPE_ROUTE['calc-then-bind']).toBe('free');
     expect(SHAPE_ROUTE['bind-first-template']).toBe('bind-first');
+  });
+});
+
+describe('detectCalcFirst — noun-less derived metrics only', () => {
+  it.each(['Show me gross margin %', 'gross margin', 'sales per employee'])(
+    'detects "%s" as calc-first',
+    (ask) => {
+      expect(detectCalcFirst(ask)).toBe(true);
+    },
+  );
+
+  it.each(['bar chart of sales', 'bar chart of margin', 'revenue by region'])(
+    'does not detect "%s" as calc-first',
+    (ask) => {
+      expect(detectCalcFirst(ask)).toBe(false);
+    },
+  );
+});
+
+describe('classifyAskRoute — calc-first derived metrics', () => {
+  it('routes a noun-less gross-margin ask to calc-then-bind', () => {
+    const d = classifyAskRoute('Show me gross margin %', manifests);
+    expect(d).toMatchObject({
+      route: 'free',
+      shape: 'calc-then-bind',
+      template: null,
+      reason: 'calc-first ask (author-calc before bind)',
+    });
+  });
+
+  it('does not route a plain measure-by-dimension ask calc-first', () => {
+    expect(classifyAskRoute('revenue by region', manifests).shape).not.toBe('calc-then-bind');
   });
 });
 

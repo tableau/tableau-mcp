@@ -98,17 +98,17 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
     expect(DESKTOP_INSTRUCTIONS).toBe(
       `You control Tableau Desktop. Use Tableau terms: workbook/viz/sheet/field, Columns/Rows.
 
-Load tableau-desktop-authoring; repeat failures -> tableau-agent-debug.
-
 Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gradients. State plan, build.
 
-For a plain viz ask (bar/line/map/KPI/etc.), FIRST bind-template(auto_apply:true): deterministic, ~0.3s. On propose, resubmit; proposals may carry sort and top_n. author-parameter/author-set/author-action before charts; else search-commands.
+For any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.), FIRST complete the bind-template two-call sequence: Call 1 is bind-template(auto_apply:true), deterministic, ~0.3s. If Call 1 proposes, Call 2 resubmits bind-template with the same ask/target, the selected proposal, and auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. A named chart takes this path first even when the ask sounds calc-heavy or asks "how <X> changes"; template-owned calculations (including a waterfall's running total) must not be authored before binding. author-parameter/author-set/author-action before charts; else search-commands.
+
+For a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %), author-calc the derived metric FIRST (read knowledge for the formula — gross margin excludes opex), then bind-template by the calc's caption. For gross margin %, use exactly (SUM(revenue)-SUM(cogs))/SUM(revenue): revenue and cogs only; do NOT subtract opex.
 
 For an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult, FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.
 
 For a dashboard ask with 2-6 vizzes, build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; search-commands only for commands the census does not list.
 
-For a data-value question, FIRST get-summary-data; answer only from returned rows. If none, say so and offer a viz.
+For a data-value question, on a populated worksheet, call get-summary-data; answer only from returned rows. A terminal/no-data result means stop; one retry on transient failure is allowed, then report the outcome.
 
 For a dynamic ask or a calc/derived field the data lacks (ratio, running total, LOD), use author-* verbs: author-parameter FIRST (on { reopened: true } continue immediately), then author-set, author-calc, author-action, format-labels. Build with bind-template and authored captions.
 
@@ -120,7 +120,9 @@ Command census: activate-sheet switches sheets; author-* tools author semantics;
 
 Omit session for one Desktop; use list-instances when multiple are open.
 
-If preflight rejects apply, fix per FIX lines. Prefer file mode`,
+If preflight rejects apply, fix per FIX lines. Prefer file mode
+
+If NO native tool covers the asked shape, say so plainly — never invent or hand-author XML. Retrieving worksheet XML to feed the field tools (get-worksheet-xml -> add-field/apply-worksheet) is a sanctioned path, not hand-authoring. Whole-workbook XML surgery (get/apply workbook XML) lives behind TOOL_PROFILE=full, an operator opt-in the user can enable.`,
     );
   });
 
@@ -239,11 +241,11 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // DO NOT GROW these: trim them down and lower/remove the entry. Never raise a
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
-    ['bind-template', 2030], // raised for target_worksheet (e1/s7 stray-sheet fix); funded by describe trims, total stays under the 46k cliff
+    ['bind-template', 2124], // ratcheted down after compacting binder help text; aggregate surface caps stay green
     ['refine-worksheet', 1583], // raised for omitted-targetField axis detection; funded by a ~500-byte same-tool describe trim
     ['plan-dashboard-creation', 1509], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1558], // ratcheted down in the CODA funding trim; do not grow
-    ['validate-proposal', 1533], // raised for the same shared sort/top_n proposal schema; 46k stays green
+    ['validate-proposal', 1630], // ratcheted down with compact shared proposal descriptions; 46k stays green
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {

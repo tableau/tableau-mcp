@@ -55,9 +55,22 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).not.toMatch(/tabui:.*document/i);
   });
 
-  it('directs the agent to load the authoring skill before building', () => {
+  it('tells the singer to author noun-less gross margin before binding', () => {
+    const calcThenBind = routes.find((route) => route.id === 'calc-then-bind');
+
+    expect(calcThenBind?.trigger).toContain('no named chart type');
+    expect(calcThenBind?.action).toContain(
+      "author-calc the derived metric FIRST (read knowledge for the formula — gross margin excludes opex), then bind-template by the calc's caption",
+    );
+    expect(calcThenBind?.action).toContain('(SUM(revenue)-SUM(cogs))/SUM(revenue)');
+    expect(calcThenBind?.action).toContain('revenue and cogs only; do NOT subtract opex');
+    expect(calcThenBind?.toolSequence).toEqual(['author-calc', 'bind-template']);
+  });
+
+  it('is self-contained and does not require skill loading', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
-    expect(rendered).toContain('tableau-desktop-authoring');
+    expect(rendered).not.toContain('tableau-desktop-authoring');
+    expect(rendered).not.toContain('tableau-agent-debug');
   });
 
   it('caps targeted knowledge consultation at one read before authoring proceeds', () => {
@@ -77,14 +90,27 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(routeIds.indexOf('plain-chart')).toBeLessThan(routeIds.indexOf('knowledge-consult'));
   });
 
-  it('teaches plain-chart proposals may carry sort and top_n', () => {
+  it('names the full two-call bind sequence without manual authoring between calls', () => {
     const plainChart = routes.find((route) => route.id === 'plain-chart');
+    expect(plainChart?.action).toContain('Call 1');
+    expect(plainChart?.action).toContain('Call 2');
+    expect(plainChart?.action).toContain('same ask/target');
+    expect(plainChart?.action).toContain('auto_apply:true');
+    expect(plainChart?.action).toContain(
+      'Do not use manual authoring tools between Call 1 and Call 2',
+    );
     expect(plainChart?.action).toContain('proposals may carry sort and top_n.');
   });
 
-  it('names the debug skill by its exact slug so recovery does not rely on description-matching', () => {
-    const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
-    expect(rendered).toContain('tableau-agent-debug');
+  it('stops on terminal summary outcomes but permits one transient retry', () => {
+    const dataValueQuestion = routes.find((route) => route.id === 'data-value-question');
+
+    expect(dataValueQuestion).toMatchObject({
+      action:
+        'on a populated worksheet, call get-summary-data; answer only from returned rows. A terminal/no-data result means stop; one retry on transient failure is allowed, then report the outcome.',
+      stopConditions: ['A terminal/no-data result means stop'],
+      requiredEvidence: ['get-summary-data returned rows or a discriminated status'],
+    });
   });
 
   it('states a plan-before-build gate with the MAGNITUDE/MEMBERSHIP classification', () => {

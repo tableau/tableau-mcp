@@ -27,8 +27,8 @@ export function prefillNextAction(label: string): NextAction {
   return { label: nextActionLabel(label), kind: 'prefill' };
 }
 
-export function doneNextAction(): NextAction {
-  return { label: nextActionLabel('Chart complete — no further calls needed'), kind: 'done' };
+export function doneNextAction(label = 'Chart complete — no further calls needed'): NextAction {
+  return { label: nextActionLabel(label), kind: 'done' };
 }
 
 function nextActionLabel(label: string): NextActionLabel {
