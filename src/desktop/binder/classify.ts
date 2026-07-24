@@ -1722,6 +1722,80 @@ function facetBinding(
   return { slot_id: facetSlot.slot_id, field: spare.name };
 }
 
+const MEASURE_BY_DIMENSION_TEMPLATE = 'magnitude-simple-bar';
+
+const MEASURE_BY_DIMENSION_RESIDUAL_TOKENS: ReadonlySet<string> = new Set([
+  'show',
+  'display',
+  'plot',
+  'visualize',
+  'give',
+  'make',
+  'create',
+  'me',
+  'us',
+  'our',
+  'the',
+  'a',
+  'an',
+  'of',
+  'please',
+  'by',
+  'total',
+  'sum',
+  'average',
+  'avg',
+  'mean',
+  'minimum',
+  'min',
+  'maximum',
+  'max',
+  'count',
+  'distinct',
+]);
+
+function resolveMeasureByDimensionBar(
+  manifest: TemplateManifest,
+  maskedAsk: string,
+  matched: SchemaField[],
+  aggOverride: Derivation | null,
+  schemaDims: SchemaField[],
+): Array<{ slot_id: string; field: string; derivation?: Derivation }> | null {
+  if (
+    manifest.template !== MEASURE_BY_DIMENSION_TEMPLATE ||
+    manifest.family !== 'magnitude'
+  ) {
+    return null;
+  }
+  const residual = nameTokens(maskedAsk);
+  if (
+    !residual.includes('by') ||
+    residual.some((token) => !MEASURE_BY_DIMENSION_RESIDUAL_TOKENS.has(token))
+  ) {
+    return null;
+  }
+  if (
+    askHasExplicitTimeIntent(maskedAsk) ||
+    [...CHART_NOUN_KEYWORDS].some((cue) => phraseIndexInAsk(maskedAsk, cue) >= 0)
+  ) {
+    return null;
+  }
+  if (matched.length !== 2) return null;
+  const measures = matched.filter(isMeasure);
+  const dimensions = matched.filter(isCategorical);
+  if (measures.length !== 1 || dimensions.length !== 1) return null;
+  if (isTemporal(dimensions[0]) || inferStringTemporal(dimensions[0]) !== null) return null;
+  if (
+    matchAvoidWhen(maskedAsk, manifest.avoid_when, manifest.intent_keywords).length > 0 ||
+    hasDeterministicPathBlockingHazard(manifest)
+  ) {
+    return null;
+  }
+  const bound = roleGreedyBind(manifest, matched, aggOverride, schemaDims);
+  if (!bound || bound.bindings.length !== 2 || bound.provenance.length !== 0) return null;
+  return bound.bindings;
+}
+
 /**
  * No-LLM classification (design §3.5 + stage 2b within-family disambiguation).
  * Keyword-scores the eligible fast-path templates, selects a single template via
@@ -1780,7 +1854,20 @@ export function classifyNoLlm(
     const score = keywordScore(maskedAsk, m.intent_keywords);
     if (score > 0) scored.push({ m, score });
   }
-  if (scored.length === 0) return null;
+  if (scored.length === 0) {
+    const magnitudeBar = manifests.get(MEASURE_BY_DIMENSION_TEMPLATE);
+    if (magnitudeBar?.fast_path_eligible) {
+      const bindings = resolveMeasureByDimensionBar(
+        magnitudeBar,
+        maskedAsk,
+        matched,
+        aggOverride,
+        schemaDims,
+      );
+      if (bindings) return { template: magnitudeBar.template, bindings };
+    }
+    return null;
+  }
 
   const maxScore = scored.reduce((mx, s) => Math.max(mx, s.score), 0);
   const top = scored.filter((s) => s.score === maxScore);
