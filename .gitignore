@@ -8,6 +8,13 @@ node_modules/
 junit/
 coverage/
 test-logs/
+evals/suite-runs/
+evals/runs/
+evals/grades/
+evals/reports/
+# Locally-downloaded BIRD Mini-Dev snapshot (data + .tdsx). Not committed — see
+# evals/README.md "Regenerating Expected Answers"; the precomputed suite is what ships.
+evals/bird_mini/
 config.json
 env.list
 manifest.json
