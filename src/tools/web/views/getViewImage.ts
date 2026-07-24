@@ -10,10 +10,14 @@ import {
 import { useRestApi } from '../../../restApiInstance.js';
 import { ProductVersion } from '../../../sdks/tableau/types/serverInfo.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { convertViewImageToToolResult } from '../convertViewImageToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 import { getImageFormatForVersion } from './getImageFormatForVersion.js';
+import {
+  buildImageToolResult,
+  ImageToolResult,
+  imageToolResultToCallToolResult,
+} from './imageToolResult.js';
 
 const paramsSchema = {
   viewId: z.string(),
@@ -56,7 +60,7 @@ export const getGetViewImageTool = (
       { viewId, width, height, format, viewFilters },
       extra,
     ): Promise<CallToolResult> => {
-      return await getViewImageTool.logAndExecute<string>({
+      return await getViewImageTool.logAndExecute<ImageToolResult>({
         extra,
         args: { viewId, width, height, format, viewFilters },
         callback: async () => {
@@ -74,7 +78,7 @@ export const getGetViewImageTool = (
             return new ViewNotAllowedError(isViewAllowedResult.message).toErr();
           }
 
-          return await useRestApi({
+          const imageResult = await useRestApi({
             ...extra,
             jwtScopes: getViewImageTool.requiredApiScopes,
             callback: async (restApi) => {
@@ -100,14 +104,31 @@ export const getGetViewImageTool = (
               return new Ok(result.value);
             },
           });
+
+          if (imageResult.isErr()) {
+            return imageResult;
+          }
+
+          // Offload to S3 (returning a presigned URL) when configured, otherwise
+          // carry the raw bytes for inline base64. Falls back to inline on any
+          // S3 failure.
+          return new Ok(
+            await buildImageToolResult({
+              imageData: imageResult.value,
+              format,
+              resourceId: viewId,
+              config: extra.config,
+              toolName: getViewImageTool.name,
+            }),
+          );
         },
-        constrainSuccessResult: (viewImage) => {
+        constrainSuccessResult: (imageToolResult) => {
           return {
             type: 'success',
-            result: viewImage,
+            result: imageToolResult,
           };
         },
-        getSuccessResult: (imageData) => convertViewImageToToolResult(imageData, format),
+        getSuccessResult: (imageToolResult) => imageToolResultToCallToolResult(imageToolResult),
       });
     },
   });

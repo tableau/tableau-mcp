@@ -78,6 +78,13 @@ export class Config extends BaseConfig {
   flowToolsEnabled: boolean;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
+  imageS3: {
+    enabled: boolean;
+    bucket: string;
+    region: string;
+    keyPrefix: string;
+    presignTtlSeconds: number;
+  };
 
   constructor() {
     super();
@@ -145,6 +152,11 @@ export class Config extends BaseConfig {
       FLOW_TOOLS_ENABLED: flowToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
+      IMAGE_S3_BUCKET: imageS3Bucket,
+      IMAGE_S3_REGION: imageS3Region,
+      IMAGE_S3_KEY_PREFIX: imageS3KeyPrefix,
+      IMAGE_S3_PRESIGN_TTL_SECONDS: imageS3PresignTtlSeconds,
+      AWS_REGION: awsRegion,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -310,6 +322,25 @@ export class Config extends BaseConfig {
     // gated off by default while the insights rollout is staged (keeps hosts
     // like Slackbot stable); set INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
+
+    // Image S3 offload: when IMAGE_S3_BUCKET is set, view-image tools upload the
+    // rendered image to S3 and return a short-lived presigned URL instead of
+    // inlining base64. AWS credentials are resolved via the default AWS SDK
+    // credential chain (IAM role / instance profile / standard AWS_* env vars),
+    // so no credentials are read here. When unset, the tools fall back to
+    // returning inline base64 (unchanged behavior).
+    const imageS3BucketValue = imageS3Bucket?.trim() ?? '';
+    this.imageS3 = {
+      enabled: !!imageS3BucketValue,
+      bucket: imageS3BucketValue,
+      region: imageS3Region?.trim() || awsRegion?.trim() || '',
+      keyPrefix: imageS3KeyPrefix?.trim() || 'view-images/',
+      presignTtlSeconds: parseNumber(imageS3PresignTtlSeconds, {
+        defaultValue: 300,
+        minValue: 60,
+        maxValue: 900,
+      }),
+    };
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';

@@ -621,3 +621,76 @@ CSP_ALLOWED_DOMAINS=https://*.mycompany.tableau.com,https://*.online.tableau.com
 ```
 
 This allows embedding Tableau visualizations from custom Tableau Server domains in addition to the default Tableau Cloud domains.
+
+<hr />
+
+## `IMAGE_S3_BUCKET`
+
+Enables offloading rendered view images to Amazon S3. When set, the `get-view-image` and
+`get-custom-view-image` tools upload the rendered image to this bucket and return a short-lived
+presigned URL (as a `resource_link` content block) instead of inlining the image as base64. The
+client fetches the image bytes directly from S3, so the image never streams back through the MCP
+server on read.
+
+- Default: unset (feature disabled — tools return inline base64, the original behavior).
+- When set, must be a valid S3 bucket name (lowercase letters, numbers, dots, and hyphens only).
+- AWS credentials are resolved via the default AWS SDK credential chain (IAM role / instance
+  profile / standard `AWS_*` environment variables); no credentials are read from the MCP config.
+- If an upload fails, the tool falls back to returning inline base64 and logs a warning, so image
+  retrieval never hard-fails.
+
+**Example:**
+
+```bash
+IMAGE_S3_BUCKET=tableau-images
+```
+
+<hr />
+
+## `IMAGE_S3_REGION`
+
+The AWS region of the S3 bucket used for image offload.
+
+- Default: falls back to the standard `AWS_REGION` environment variable; if neither is set, the AWS
+  SDK resolves the region from the environment.
+- Only relevant when [`IMAGE_S3_BUCKET`](#image_s3_bucket) is set.
+
+**Example:**
+
+```bash
+IMAGE_S3_REGION=us-east-1
+```
+
+<hr />
+
+## `IMAGE_S3_KEY_PREFIX`
+
+The key prefix (folder path) under which uploaded images are stored in the bucket. A trailing slash
+is added automatically.
+
+- Default: `view-images/`
+- Objects are keyed as `<prefix><resourceId>/<uuid>.<ext>`.
+- Only relevant when [`IMAGE_S3_BUCKET`](#image_s3_bucket) is set.
+
+**Example:**
+
+```bash
+IMAGE_S3_KEY_PREFIX=view-images/
+```
+
+<hr />
+
+## `IMAGE_S3_PRESIGN_TTL_SECONDS`
+
+The lifetime, in seconds, of the presigned GET URL returned to the client. The link should be
+fetched promptly rather than stored.
+
+- Default: `300` (5 minutes)
+- Clamped to the range `60`–`900` (1–15 minutes).
+- Only relevant when [`IMAGE_S3_BUCKET`](#image_s3_bucket) is set.
+
+**Example:**
+
+```bash
+IMAGE_S3_PRESIGN_TTL_SECONDS=300
+```
