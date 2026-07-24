@@ -43,6 +43,25 @@ const generatedGeoXml = workbookXml(
   ].join('\n'),
 );
 
+const cueNamedFieldXml = workbookXml(
+  'Points',
+  [
+    column('Country', 'dimension', 'nominal', 'string', '[Country].[Name]'),
+    column('Warm', 'measure', 'quantitative', 'integer'),
+    column('Hover', 'measure', 'quantitative', 'integer'),
+  ].join('\n'),
+);
+
+const liveShapedWorldCupXml = `<workbook><datasources><datasource name='federated.wc' caption='teams+'>
+  <connection><relation name='players' /></connection>
+  <column name='[country_code]' caption='Country Code' role='dimension' type='nominal' datatype='string' semantic-role='[Country].[ISO3166_2]' />
+  <column name='[goals]' caption='Goals' role='measure' type='quantitative' datatype='integer' />
+  <column name='[goals_for]' caption='Goals For' role='measure' type='quantitative' datatype='integer' />
+  <column name='[goals_against]' caption='Goals Against' role='measure' type='quantitative' datatype='integer' />
+  <column name='[latitude]' caption='Latitude' role='measure' type='quantitative' datatype='real' semantic-role='[Geographical].[Latitude]' aggregation='Avg' />
+  <column name='[longitude]' caption='Longitude' role='measure' type='quantitative' datatype='real' semantic-role='[Geographical].[Longitude]' aggregation='Avg' />
+</datasource></datasources><worksheets><worksheet name='se-eval-scratch' /></worksheets></workbook>`;
+
 const PRE_ENCODING_LATLON_TEMPLATE = `<workbook>
   <worksheets>
     <worksheet name='{{TITLE}}'>
@@ -149,6 +168,76 @@ describe('classifyNoLlm — optional symbol-map encodings', () => {
       { slot_id: 'tooltip', field: 'Points' },
     ]);
   });
+
+  it('reuses the size measure for natural color and hover cues in one symbol-map bind', () => {
+    const result = classifyNoLlm(
+      'Map the countries by goals scored — bigger, warmer dots for the teams that scored more, and show me each country and its goals when I hover over a dot.',
+      manifests,
+      summarizeSchema(liveShapedWorldCupXml),
+    );
+
+    expect(result).toEqual({
+      template: 'spatial-symbol-map',
+      bindings: [
+        { slot_id: 'country', field: 'Country Code' },
+        { slot_id: 'sales', field: 'Goals' },
+        { slot_id: 'color', field: 'Goals' },
+        { slot_id: 'tooltip', field: 'Goals' },
+      ],
+    });
+  });
+
+  it('leaves generated-geo color and tooltip unbound without natural encoding cues', () => {
+    const result = classifyNoLlm(
+      'map of countries by Goals For with dots',
+      manifests,
+      summarizeSchema(liveShapedWorldCupXml),
+    );
+
+    expect(result).toEqual({
+      template: 'spatial-symbol-map',
+      bindings: [
+        { slot_id: 'country', field: 'Country Code' },
+        { slot_id: 'sales', field: 'Goals' },
+      ],
+    });
+  });
+
+  it('keeps an explicit color measure distinct from the size measure', () => {
+    const result = classifyNoLlm(
+      'Symbol map of countries by Goals. Put Goals Against on color.',
+      manifests,
+      summarizeSchema(liveShapedWorldCupXml),
+    );
+
+    expect(result).toEqual({
+      template: 'spatial-symbol-map',
+      bindings: [
+        { slot_id: 'country', field: 'Country Code' },
+        { slot_id: 'sales', field: 'Goals' },
+        { slot_id: 'color', field: 'Goals Against' },
+      ],
+    });
+  });
+
+  it.each(['Warm', 'Hover'])(
+    'does not treat the matched %s field name as a natural encoding cue',
+    (field) => {
+      const result = classifyNoLlm(
+        `Symbol map of ${field} by Country`,
+        manifests,
+        summarizeSchema(cueNamedFieldXml),
+      );
+
+      expect(result).toEqual({
+        template: 'spatial-symbol-map',
+        bindings: [
+          { slot_id: 'country', field: 'Country' },
+          { slot_id: 'sales', field },
+        ],
+      });
+    },
+  );
 
   it('leaves optional encodings unbound when the ask gives no shelf instruction', () => {
     const result = classifyNoLlm(

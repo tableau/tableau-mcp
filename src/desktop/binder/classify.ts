@@ -1975,6 +1975,36 @@ function fieldFitsSymbolMapEncoding(role: SymbolMapEncodingRole, field: SchemaFi
   return role === 'size' ? isMeasure(field) : isMeasure(field) || isCategorical(field);
 }
 
+function mostSpecificDirectedField(
+  clause: string,
+  summary: SchemaSummary,
+  candidates: SchemaField[],
+): SchemaField | null {
+  if (candidates.length < 2) return candidates[0] ?? null;
+  const exactNames = fieldExactNames(summary.fields);
+  const ranked = candidates.map((field) => {
+    const matchedNameLengths = [bareName(field.columnName), field.caption, field.name]
+      .filter((name): name is string => !!name && name.length > 0)
+      .filter((name) => fieldNameMatchInAsk(clause, name, exactNames) >= 0)
+      .map((name) => name.length);
+    return { field, length: Math.max(...matchedNameLengths, 0) };
+  });
+  const longest = Math.max(...ranked.map(({ length }) => length));
+  const mostSpecific = ranked.filter(({ length }) => length === longest);
+  if (longest === 0 || mostSpecific.length !== 1) return null;
+
+  const [winner] = mostSpecific;
+  const remainder = maskFieldNames(clause, {
+    datasource: summary.datasource,
+    fields: [winner.field],
+  });
+  const remainingSummary = {
+    datasource: summary.datasource,
+    fields: candidates.filter((candidate) => candidate !== winner.field),
+  };
+  return matchFieldsInAsk(remainder, remainingSummary).length === 0 ? winner.field : null;
+}
+
 /**
  * Extract one field from an explicit "<field> on <encoding>" clause. This is
  * intentionally narrower than free-form shelf parsing: no cue or more than one
@@ -1999,8 +2029,13 @@ function fieldDirectedToSymbolMapEncoding(
     const candidates = matchFieldsInAsk(beforeCue.slice(clauseStart), summary).filter((field) =>
       fieldFitsSymbolMapEncoding(role, field),
     );
-    if (candidates.length === 1) {
-      directed.add(candidates[0]);
+    const directedField = mostSpecificDirectedField(
+      beforeCue.slice(clauseStart),
+      summary,
+      candidates,
+    );
+    if (directedField) {
+      directed.add(directedField);
       continue;
     }
     // One tooltip slot can carry only one field. If a tooltip list names one
@@ -2021,8 +2056,66 @@ function fieldDirectedToSymbolMapEncoding(
   return field ?? null;
 }
 
+function hasNaturalSymbolMapEncodingCue(
+  ask: string,
+  role: Exclude<SymbolMapEncodingRole, 'size'>,
+  summary: SchemaSummary,
+): boolean {
+  const cue =
+    role === 'color'
+      ? /\b(?:warm(?:er)?|hot(?:ter)?|heat|intensity)\b|\b(?:colou?r(?:ed)?|shad(?:e|ed))\b(?=\s+by\b)/gi
+      : /\b(?:hover|reveal|tooltip)\b|\bshow\b(?=[^.!?;]*\bwhen\b)/gi;
+  const fieldMaskedAsk = maskFieldNames(ask, summary);
+  return [...ask.matchAll(cue)].some((match) => {
+    const index = match.index ?? 0;
+    return fieldMaskedAsk.slice(index, index + match[0].length) === match[0];
+  });
+}
+
+function naturallyDirectedColorField(
+  ask: string,
+  summary: SchemaSummary,
+): { namesField: boolean; field: SchemaField | null } {
+  const directed = new Set<SchemaField>();
+  let namesField = false;
+  for (const match of ask.matchAll(/\b(?:colou?r(?:ed)?|shad(?:e|ed))\s+by\b/gi)) {
+    const clauseStart = (match.index ?? 0) + match[0].length;
+    const clauseEndOffset = ask.slice(clauseStart).search(/[.;]/);
+    const clause =
+      clauseEndOffset < 0
+        ? ask.slice(clauseStart)
+        : ask.slice(clauseStart, clauseStart + clauseEndOffset);
+    const candidates = matchFieldsInAsk(clause, summary).filter((field) =>
+      fieldFitsSymbolMapEncoding('color', field),
+    );
+    if (candidates.length === 0) continue;
+    namesField = true;
+    const field = mostSpecificDirectedField(clause, summary, candidates);
+    if (!field || !isMeasure(field)) return { namesField, field: null };
+    directed.add(field);
+  }
+  if (directed.size !== 1) return { namesField, field: null };
+  const [field] = directed;
+  return { namesField, field: field ?? null };
+}
+
+function sizeMeasureFromSymbolMapBindings(
+  manifest: TemplateManifest,
+  summary: SchemaSummary,
+  bindings: ClassifiedBinding[],
+): SchemaField | null {
+  const sizeSlotIds = new Set(
+    manifest.slots.filter((slot) => slot.role.includes('size')).map((slot) => slot.slot_id),
+  );
+  const sizeBindings = bindings.filter((binding) => sizeSlotIds.has(binding.slot_id));
+  if (sizeBindings.length !== 1) return null;
+  const field = summary.fields.find((candidate) => candidate.name === sizeBindings[0].field);
+  return field && isMeasure(field) ? field : null;
+}
+
 /**
- * Add optional symbol-map encoding bindings only for explicit shelf directives.
+ * Add optional symbol-map encoding bindings from explicit shelf directives or
+ * tightly-scoped natural color/hover cues.
  * Existing required geo/coordinate bindings are inputs and are never modified.
  * A field may intentionally be reused across size, color, and tooltip.
  */
@@ -2055,7 +2148,21 @@ function symbolMapEncodingBindings(
         !boundIds.has(candidate.slot_id),
     );
     if (!slot) continue;
-    const field = fieldDirectedToSymbolMapEncoding(ask, role, summary, detailFields);
+    const explicitField = fieldDirectedToSymbolMapEncoding(ask, role, summary, detailFields);
+    const sizeMeasure = sizeMeasureFromSymbolMapBindings(manifest, summary, [
+      ...bound,
+      ...additions,
+    ]);
+    const naturalColor = role === 'color' ? naturallyDirectedColorField(ask, summary) : null;
+    const naturalCue =
+      role !== 'size' && hasNaturalSymbolMapEncodingCue(ask, role, summary)
+        ? role === 'color'
+          ? naturalColor?.namesField
+            ? naturalColor.field
+            : sizeMeasure
+          : sizeMeasure
+        : null;
+    const field = explicitField ?? naturalCue;
     if (!field) continue;
     additions.push({
       slot_id: slot.slot_id,
