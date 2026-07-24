@@ -195,6 +195,165 @@ describe('binder/classifyNoLlm — temporal_from_string (e4 string month)', () =
   });
 });
 
+describe('binder/classifyNoLlm — e4 acronym expansion field matching', () => {
+  const ACTIVE_USERS_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Active Users'>
+      <column name='[month]' role='dimension' type='nominal' datatype='string' />
+      <column name='[product]' role='dimension' type='nominal' datatype='string' />
+      <column name='[mau]' role='measure' type='quantitative' datatype='integer' />
+      <column name='[dau]' role='measure' type='quantitative' datatype='integer' />
+      <column name='[new_users]' role='measure' type='quantitative' datatype='integer' />
+      <column name='[churned_users]' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+  it('binds monthly active users to mau, never dau', () => {
+    const cls = classifyNoLlm(
+      'Show me monthly active users over the last 12 months.',
+      manifests,
+      summarizeSchema(ACTIVE_USERS_XML),
+    );
+
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('trend-line-chart');
+    expect(cls!.bindings).toEqual([
+      { slot_id: 'order_date', field: 'month' },
+      { slot_id: 'sales', field: 'mau' },
+    ]);
+    expect(cls!.bindings.some((binding) => binding.field === 'dau')).toBe(false);
+  });
+
+  it('binds daily active users to dau, never mau', () => {
+    const cls = classifyNoLlm(
+      'line chart of daily active users over the last 12 months',
+      manifests,
+      summarizeSchema(ACTIVE_USERS_XML),
+    );
+
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('trend-line-chart');
+    expect(cls!.bindings).toEqual([
+      { slot_id: 'order_date', field: 'month' },
+      { slot_id: 'sales', field: 'dau' },
+    ]);
+    expect(cls!.bindings.some((binding) => binding.field === 'mau')).toBe(false);
+  });
+
+  it('preserves literal mau matching', () => {
+    const cls = classifyNoLlm(
+      'line chart of mau by month',
+      manifests,
+      summarizeSchema(ACTIVE_USERS_XML),
+    );
+
+    expect(cls).not.toBeNull();
+    expect(cls!.bindings).toEqual([
+      { slot_id: 'order_date', field: 'month' },
+      { slot_id: 'sales', field: 'mau' },
+    ]);
+  });
+
+  it('does not infer an expansion for an unknown acronym', () => {
+    const unknownAcronymXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Unknown Acronym'>
+      <column name='[month]' role='dimension' type='nominal' datatype='string' />
+      <column name='[XYZ]' role='measure' type='quantitative' datatype='integer' />
+      <column name='[Other]' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+    expect(
+      classifyNoLlm(
+        'line chart of extra yield zone by month',
+        manifests,
+        summarizeSchema(unknownAcronymXml),
+      ),
+    ).toBeNull();
+  });
+
+  it('preserves literal matching for non-acronym fields', () => {
+    const revenueXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Revenue'>
+      <column name='[Region]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Revenue]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const cls = classifyNoLlm(
+      'bar chart of Revenue by Region',
+      manifests,
+      summarizeSchema(revenueXml),
+    );
+
+    expect(cls).not.toBeNull();
+    expect(cls!.bindings).toEqual([
+      { slot_id: 'region', field: 'Region' },
+      { slot_id: 'sales', field: 'Revenue' },
+    ]);
+  });
+
+  it('preserves the e1, m1, s7, and m7 confident binds', async () => {
+    const m7Xml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='M7'>
+      <column name='[product]' caption='Product' role='dimension' type='nominal' datatype='string' />
+      <column name='[region]' caption='Region' role='dimension' type='nominal' datatype='string' />
+      <column name='[sales]' caption='Sales' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const [e1, m1, s7, m7] = await Promise.all([
+      bindTemplate({ ask: 'Show me Sales by Region.', workbookXml: WORKBOOK_XML, manifests }),
+      bindTemplate({
+        ask: 'waterfall of Profit by Sub-Category',
+        workbookXml: WORKBOOK_XML,
+        manifests,
+      }),
+      bindTemplate({
+        ask: 'symbol map of Goals For by Country',
+        workbookXml: COUNTRY_ONLY_WORKBOOK_XML,
+        manifests,
+      }),
+      bindTemplate({ ask: 'top 10 products by sales', workbookXml: m7Xml, manifests }),
+    ]);
+
+    expect([e1.status, m1.status, s7.status, m7.status]).toEqual([
+      'bound',
+      'bound',
+      'bound',
+      'bound',
+    ]);
+    if (
+      e1.status !== 'bound' ||
+      m1.status !== 'bound' ||
+      s7.status !== 'bound' ||
+      m7.status !== 'bound'
+    ) {
+      throw new Error('expected all acronym-expansion regression cases to bind');
+    }
+    expect([
+      e1.args.template_name,
+      m1.args.template_name,
+      s7.args.template_name,
+      m7.args.template_name,
+    ]).toEqual([
+      'magnitude-simple-bar',
+      'part-to-whole-waterfall',
+      'spatial-symbol-map',
+      'ranking-ordered-bar',
+    ]);
+  });
+});
+
 // ── Blake wall #2: confident measure-free lat/long symbol map ─────────────────
 // A plain "map of office locations" ask (pm_name, city, latitude, longitude — NO
 // measure) must be able to bind CONFIDENTLY (used_llm=false) to spatial-symbol-map-

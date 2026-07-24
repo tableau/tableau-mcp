@@ -929,6 +929,44 @@ function fieldNameMatchInAsk(ask: string, name: string, exactNames: ReadonlySet<
 }
 
 /**
+ * Known business-acronym expansions. Deliberately closed: an acronym-shaped field
+ * that is absent here gets no inferred expansion.
+ */
+const ACRONYM_EXPANSIONS: Readonly<Record<string, readonly string[]>> = {
+  mau: ['monthly', 'active', 'users'],
+  dau: ['daily', 'active', 'users'],
+  arr: ['annual', 'recurring', 'revenue'],
+  mrr: ['monthly', 'recurring', 'revenue'],
+};
+
+/**
+ * Return the earliest token index of a known acronym's full expansion, or -1.
+ * Expansion tokens may appear in any order and punctuation (including hyphens)
+ * is treated as a token boundary. Every token is required, preserving the
+ * monthly/daily and annual/monthly discriminators.
+ */
+function acronymExpansionMatch(ask: string, field: SchemaField): number {
+  let best = -1;
+  const names = [bareName(field.columnName), field.caption, field.name].filter(
+    (name): name is string => !!name && name.length > 0,
+  );
+  for (const name of names) {
+    const candidate = name.trim();
+    // Accept the casings Tableau commonly emits for acronym fields, including
+    // lowercase physical names such as `[mau]`; reject mixed-case words.
+    if (!/^(?:[A-Z]{2,5}|[A-Z][a-z]{1,4}|[a-z]{2,5})$/.test(candidate)) continue;
+    const expansion = ACRONYM_EXPANSIONS[candidate.toLowerCase()];
+    if (!expansion) continue;
+
+    const indices = expansion.map((token) => phraseIndexInAsk(ask, token));
+    if (indices.some((index) => index < 0)) continue;
+    const index = Math.min(...indices);
+    if (best < 0 || index < best) best = index;
+  }
+  return best;
+}
+
+/**
  * Blank out whole-token occurrences of every field name/caption/bare column name
  * in the ask (replaced by spaces so token boundaries are preserved). Used for
  * TEMPLATE SELECTION and aggregation-word detection so a field NAME can never
@@ -988,6 +1026,7 @@ function matchFieldsInAsk(ask: string, s: SchemaSummary): SchemaField[] {
       const idx = fieldNameMatchInAsk(ask, n, exactNames);
       if (idx >= 0 && (best < 0 || idx < best)) best = idx;
     }
+    if (best < 0) best = acronymExpansionMatch(ask, f);
     if (best >= 0) hits.push({ field: f, index: best });
   }
   hits.sort((a, b) => a.index - b.index);
@@ -1682,6 +1721,12 @@ function selectWithinFamily(
     const decisive =
       won.some((kw) => native.has(kw.toLowerCase())) ||
       wonChartNoun(maskedAsk, m.intent_keywords) ||
+      // A full known metric expansion carries both the measure identity and its
+      // discriminator (for example MONTHLY active users). That conjunction is
+      // decisive for the trend template even when "monthly" alone is no longer
+      // family-native after additional time-series templates become eligible.
+      (m.template === 'trend-line-chart' &&
+        matched.some((field) => acronymExpansionMatch(maskedAsk, field) >= 0)) ||
       // `quota` has one eligible carrier, but stopped being family-native when
       // deviation gained a second eligible template. Keep this exact domain cue
       // decisive without misclassifying it as a chart noun in ask-router parity.
