@@ -16,18 +16,18 @@
         <datasource caption='{{DATASOURCE}}' name='{{DATASOURCE}}' />
       </datasources>
       <datasource-dependencies datasource='{{DATASOURCE}}'>
-        <column datatype='string' name='[Region]' role='dimension' type='nominal' />
-        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
-        <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />
-        <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+        <column datatype='string' name='[Category]' role='dimension' type='nominal' />
+        <column datatype='real' name='[Measure]' role='measure' type='quantitative' />
+        <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Measure]' derivation='Sum' name='[sum:Measure:qk]' pivot='key' type='quantitative' />
       </datasource-dependencies>
-      <computed-sort column='[{{DATASOURCE}}].[none:Region:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:Sales:qk]' />
+      <computed-sort column='[{{DATASOURCE}}].[none:Category:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:Measure:qk]' />
       <aggregation value='true' />
     </view>
     <style>
       <style-rule element='axis'>
         <format attr='line-visibility' value='off' />
-        <format attr='title' class='0' field='[{{DATASOURCE}}].[sum:Sales:qk]' scope='rows' value='' />
+        <format attr='title' class='0' field='[{{DATASOURCE}}].[sum:Measure:qk]' scope='rows' value='' />
       </style-rule>
       <style-rule element='worksheet'>
         <format attr='display-field-labels' scope='rows' value='false' />
@@ -49,8 +49,8 @@
         </style>
       </pane>
     </panes>
-    <rows>[{{DATASOURCE}}].[sum:Sales:qk]</rows>
-    <cols>[{{DATASOURCE}}].[none:Region:nk]</cols>
+    <rows>[{{DATASOURCE}}].[sum:Measure:qk]</rows>
+    <cols>[{{DATASOURCE}}].[none:Category:nk]</cols>
   </table>
   <simple-id uuid='00000000-0000-0000-0000-000000000001' />
 </worksheet>

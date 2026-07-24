@@ -74,7 +74,29 @@ export const getCheckForUserChangesTool = (
             });
           }
 
-          if (count === 0 || events.length === 0) {
+          if (count === 0 && events.length > 0) {
+            log({
+              message: 'User changes detected despite zero event count',
+              level: 'warning',
+              logger: 'checkForUserChangesTool',
+              data: {
+                sinceSequence,
+                latestSequence,
+                count,
+                eventDetailsCount: events.length,
+              },
+            });
+
+            return new Ok({
+              message: `User changes detected! Desktop returned ${events.length} ${events.length === 1 ? 'event detail' : 'event details'} since sequence ${sinceSequence} with count=0 (inconsistent-response).`,
+              events: events.map((e) => `[${e.sequence}] ${e.timestamp}: ${e.type}`),
+              instructions:
+                'Treat the workbook as changed. Desktop returned an inconsistent-response; refresh the workbook state before making further changes.',
+              currentSequence: latestSequence,
+            });
+          }
+
+          if (count === 0) {
             log({
               message: 'No user changes detected',
               level: 'info',
@@ -87,6 +109,27 @@ export const getCheckForUserChangesTool = (
 
             return new Ok({
               message: `No user changes detected since sequence ${sinceSequence}.`,
+              currentSequence: latestSequence,
+            });
+          }
+
+          if (events.length === 0) {
+            log({
+              message: 'User changes detected without event details',
+              level: 'warning',
+              logger: 'checkForUserChangesTool',
+              data: {
+                sinceSequence,
+                latestSequence,
+                count,
+              },
+            });
+
+            return new Ok({
+              message: `User changes detected! ${count} ${count === 1 ? 'event' : 'events'} occurred since sequence ${sinceSequence}, but event details were not returned.`,
+              events: [],
+              instructions:
+                'Treat the workbook as changed. event details were not returned by Desktop; refresh the workbook state before making further changes.',
               currentSequence: latestSequence,
             });
           }

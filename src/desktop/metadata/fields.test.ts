@@ -6,6 +6,7 @@ import {
   moveFieldInCols,
   moveFieldInEncoding,
   moveFieldInRows,
+  parseShelfValue,
   removeFieldFromCols,
   removeFieldFromEncoding,
   removeFieldFromRows,
@@ -22,9 +23,11 @@ const WORKSHEET_XML = `<?xml version="1.0" encoding="UTF-8"?>
       <datasource-dependencies datasource="Sample">
         <column name="[Sales]" datatype="real" role="measure" type="quantitative"/>
         <column name="[Profit]" datatype="real" role="measure" type="quantitative"/>
+        <column name="[Revenue/Cost]" datatype="real" role="measure" type="quantitative"/>
         <column name="[Category]" datatype="string" role="dimension" type="nominal"/>
         <column-instance name="[sum:Sales:qk]" column="[Sales]" derivation="Sum" pivot="key" type="quantitative"/>
         <column-instance name="[sum:Profit:qk]" column="[Profit]" derivation="Sum" pivot="key" type="quantitative"/>
+        <column-instance name="[sum:Revenue/Cost:qk]" column="[Revenue/Cost]" derivation="Sum" pivot="key" type="quantitative"/>
         <column-instance name="[none:Category:nk]" column="[Category]" derivation="None" pivot="key" type="nominal"/>
       </datasource-dependencies>
     </view>
@@ -74,6 +77,28 @@ describe('listFields', () => {
   });
 });
 
+describe('parseShelfValue', () => {
+  it('does not split on a slash after an escaped closing bracket inside a pill name', () => {
+    expect(parseShelfValue('[Sample].[sum:Revenue]]/Cost:qk]')).toEqual([
+      '[Sample].[sum:Revenue]]/Cost:qk]',
+    ]);
+  });
+
+  it('splits adjacent pills after an escaped closing bracket in the first pill name', () => {
+    expect(parseShelfValue('[Sample].[sum:Revenue]]/Cost:qk] / [Sample].[sum:Profit:qk]')).toEqual([
+      '[Sample].[sum:Revenue]]/Cost:qk]',
+      '[Sample].[sum:Profit:qk]',
+    ]);
+  });
+
+  it('keeps plain slash-containing pill names together', () => {
+    expect(parseShelfValue('[Sample].[sum:Revenue/Cost:qk] / [Sample].[sum:Profit:qk]')).toEqual([
+      '[Sample].[sum:Revenue/Cost:qk]',
+      '[Sample].[sum:Profit:qk]',
+    ]);
+  });
+});
+
 describe('addFieldToRows / removeFieldFromRows', () => {
   it('should add a field to rows', () => {
     const modified = addFieldToRows(WORKSHEET_XML, '[Sample].[sum:Profit:qk]');
@@ -120,6 +145,35 @@ describe('addFieldToRows / removeFieldFromRows', () => {
       /Invalid column-instance name format: \[Profit\]/,
     );
   });
+
+  it('does not split a shelf field name that contains slash characters', () => {
+    const slashFieldXml = WORKSHEET_XML.replace(
+      '<rows>[Sample].[sum:Sales:qk]</rows>',
+      '<rows>[Sample].[sum:Revenue/Cost:qk]</rows>',
+    );
+
+    const modified = addFieldToRows(slashFieldXml, '[Sample].[sum:Profit:qk]', 1);
+    const rowFields = listFields(modified).filter((f) => f.location === 'rows');
+
+    expect(rowFields.map((f) => f.column)).toEqual([
+      '[Sample].[sum:Revenue/Cost:qk]',
+      '[Sample].[sum:Profit:qk]',
+    ]);
+  });
+
+  it('treats index 0 as append-equivalent on an empty shelf', () => {
+    const emptyRowsXml = WORKSHEET_XML.replace(
+      '<rows>[Sample].[sum:Sales:qk]</rows>',
+      '<rows></rows>',
+    );
+
+    const explicitZero = addFieldToRows(emptyRowsXml, '[Sample].[sum:Profit:qk]', 0);
+    const omittedIndex = addFieldToRows(emptyRowsXml, '[Sample].[sum:Profit:qk]');
+
+    expect(listFields(explicitZero).filter((f) => f.location === 'rows')).toEqual(
+      listFields(omittedIndex).filter((f) => f.location === 'rows'),
+    );
+  });
 });
 
 describe('addFieldToRows dotted and colon refs', () => {
@@ -147,6 +201,17 @@ describe('addFieldToRows dotted and colon refs', () => {
     expect(modified).toContain(
       '<column-instance name="[sum:Profit:Ratio:qk]" column="[Profit:Ratio]"',
     );
+  });
+});
+
+describe('addFieldToRows user derivations', () => {
+  it('emits derivation="User" for a usr-prefixed calculated field instance', () => {
+    const modified = addFieldToRows(WORKSHEET_XML, '[Sample].[usr:Calculation_1:qk]');
+
+    expect(modified).toContain(
+      '<column-instance name="[usr:Calculation_1:qk]" column="[Calculation_1]" derivation="User"',
+    );
+    expect(modified).not.toContain('derivation="usr"');
   });
 });
 

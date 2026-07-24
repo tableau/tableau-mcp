@@ -33,6 +33,8 @@ import {
   FAMILY_VALUES,
   type FixtureField,
   isRenderVerifiedLive,
+  MAX_SLOT_EXAMPLE_CHARS,
+  MAX_SLOT_EXAMPLES,
   validateManifest,
 } from './manifest-validation.js';
 
@@ -47,6 +49,8 @@ export {
   FAMILY_VALUES,
   type FixtureField,
   isRenderVerifiedLive,
+  MAX_SLOT_EXAMPLE_CHARS,
+  MAX_SLOT_EXAMPLES,
   validateManifest,
 };
 

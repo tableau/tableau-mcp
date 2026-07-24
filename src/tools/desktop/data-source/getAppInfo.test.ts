@@ -75,6 +75,26 @@ describe('getAppInfoTool', () => {
       await server.close();
     }
   });
+
+  it('returns unavailable status when the app endpoint returns no source fields', async () => {
+    const tool = getAppInfoTool(new DesktopMcpServer());
+    const callback = await Provider.from(tool.callback);
+    const extra = {
+      ...getMockRequestHandlerExtra(),
+      getExecutor: vi.fn().mockResolvedValue({
+        getApp: vi.fn().mockResolvedValue(Ok({})),
+      }),
+    };
+
+    const result = await callback({ session: undefined }, extra);
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      status: 'unavailable',
+      message: 'Desktop app info endpoint returned no application metadata fields.',
+    });
+  });
 });
 
 function instanceFor(server: MockExternalApiServer): ExternalApiInstance {

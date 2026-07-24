@@ -33,9 +33,15 @@ import {
   type BindingProposal,
   type Blocker,
   type EscalateReason,
+  type FilterSpec,
   resolveInSummary,
   validateBinding,
 } from './validate.js';
+import {
+  WATERFALL_ANCHOR_FIELD_RE,
+  WATERFALL_ORDER_FIELD_RE,
+  WATERFALL_TEMPLATE_NAME,
+} from './waterfall.js';
 
 // Re-exported as the binder's public surface. Bare (source-less) re-exports of the
 // locally-imported bindings — a single `export ... from './x.js'` alongside the
@@ -46,8 +52,10 @@ export {
   resolveInSummary,
   summarizeSchema,
   validateBinding,
+  WATERFALL_ANCHOR_FIELD_RE,
+  WATERFALL_ORDER_FIELD_RE,
 };
-export type { BindingProposal, Blocker, EscalateReason, SchemaField, SchemaSummary };
+export type { BindingProposal, Blocker, EscalateReason, FilterSpec, SchemaField, SchemaSummary };
 
 type ProposeField = CoreLlmProposeInput['fields'][number] & { semanticRole?: string };
 type FieldIdentity = Pick<ProposeField, 'name' | 'role' | 'type' | 'datatype'>;
@@ -58,13 +66,8 @@ type FieldIdentity = Pick<ProposeField, 'name' | 'role' | 'type' | 'datatype'>;
 // ADD the sort in a later step is fragile (live m1 receipts: it lands the sort only ~1/3 of
 // runs, otherwise settling for magnitude order). So the confident bind DEFAULTS the sort to
 // that column ascending when one exists and no sort was proposed — one coherent bind, no
-// fragile follow-up. Kept in sync with WATERFALL_ORDER_FIELD_RE in bindTemplate.ts (the hint
-// side); this is the deterministic apply side.
-const WATERFALL_TEMPLATE_NAME = 'part-to-whole-waterfall';
-// EXPORTED — one definition shared with bindTemplate.ts's discovery hint (the apply side is
-// here, the hint side imports this) so the two can never drift.
-export const WATERFALL_ORDER_FIELD_RE =
-  /(display|sort|step|row|item|line)[_\s-]?(order|no|num|number|index|rank|seq)|^(order|sequence|seq|ordinal|rank|step[_\s-]?order)$/i;
+// fragile follow-up. The shared constants live in waterfall.ts so classification and apply
+// use one definition without creating a classify ↔ binder cycle.
 // A P&L/bridge waterfall's running total double-counts subtotal/total rows unless they're
 // excluded via the anchor_category filter. Live m1 receipts: the singer lands the anchor only
 // ~half the runs (hedges or skips it), so — exactly like the sort default above — the confident
@@ -73,7 +76,6 @@ export const WATERFALL_ORDER_FIELD_RE =
 // it through the normal resolve/escape path into field_mapping['Anchor Category'], which drives
 // spliceWaterfallAnchorFilter. Same field-name heuristic as bindTemplate.ts's discovery hint.
 export const WATERFALL_ANCHOR_SLOT_ID = 'anchor_category';
-export const WATERFALL_ANCHOR_FIELD_RE = /categor|type|kind|class|flag|marker/i;
 
 export type LlmProposeInput = Omit<CoreLlmProposeInput, 'fields'> & {
   fields: ProposeField[];
@@ -132,6 +134,9 @@ export interface InjectTemplateArgs {
   field_mapping: Record<string, string>;
   sort?: { by: string; direction: 'asc' | 'desc' };
   top_n?: number;
+  /** Declarative interactive dimension filters (m7). A context:true filter is emitted at
+   * Tableau OoO step 3 so a Top-N within that dimension ranks within the selection. */
+  filters?: FilterSpec[];
   /** temporal_axis_from_string: when a temporal slot bound a date-like STRING, the
    * apply path injects a DATEPARSE calc for that slot (see dateparseTemporalAxis.ts). */
   dateparse_axis?: DateparseAxisSpec;
@@ -261,6 +266,31 @@ export const PROPOSAL_OUTPUT_SCHEMA: Record<string, unknown> = {
       },
     },
     top_n: { type: 'integer', minimum: 1, description: 'Top N.' },
+    // Declarative interactive dimension filters (m7 order-of-operations). Set context:true to
+    // make a filter a CONTEXT filter (Tableau OoO step 3) so a Top-N within that dimension
+    // ranks WITHIN the selected member, not globally-then-filtered. Omit `values` for an
+    // interactive enumerate-all control (the m7 case: "let me filter down to one region").
+    filters: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['field'],
+        additionalProperties: false,
+        properties: {
+          field: { type: 'string', description: 'Field name to filter (from fields).' },
+          values: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional member values; omit for an interactive all-members control.',
+          },
+          context: {
+            type: 'boolean',
+            description:
+              'true = context filter (OoO step 3, before Top-N) so a Top-N within this dimension is scoped to the selection.',
+          },
+        },
+      },
+    },
   },
 };
 
@@ -439,6 +469,39 @@ function validateAndBuild(
     };
   }
 
+  // Declarative interactive filters (m7). Resolve each filter.field the same way sort.by is
+  // resolved: keep only filters whose field is a real dimension in the schema, dropping the
+  // rest with a warning rather than escalating (a bad filter must never sink an otherwise-good
+  // bind). The apply-side splice (bindTemplate.applyProposalSplices) re-resolves the field to
+  // its CI, declares the dependency, and emits the context filter + shown card.
+  let filters = proposal.filters;
+  if (proposal.filters && proposal.filters.length > 0) {
+    const kept: FilterSpec[] = [];
+    for (const filter of proposal.filters) {
+      const r = resolveInSummary(summary, filter.field);
+      if (r.kind === 'ambiguous') {
+        warnings.push(
+          `filter field "${filter.field}" matches ${r.candidates?.length ?? 0} fields; ignoring this filter`,
+        );
+        continue;
+      }
+      if (r.kind === 'not_found' || !r.field) {
+        warnings.push(
+          `no filter field named "${filter.field}" in datasource(s); ignoring this filter`,
+        );
+        continue;
+      }
+      if (r.field.role !== 'dimension') {
+        warnings.push(
+          `filter field "${filter.field}" is a measure, not a dimension; ignoring this filter (interactive dimension filters only)`,
+        );
+        continue;
+      }
+      kept.push(filter);
+    }
+    filters = kept.length > 0 ? kept : undefined;
+  }
+
   if (proposal.confidence !== undefined && proposal.confidence < minConfidence) {
     return {
       status: 'escalate',
@@ -465,6 +528,7 @@ function validateAndBuild(
     field_mapping: v.field_mapping,
     ...(sort ? { sort } : {}),
     ...(proposal.top_n !== undefined ? { top_n: proposal.top_n } : {}),
+    ...(filters && filters.length > 0 ? { filters } : {}),
     ...(v.dateparse_axis ? { dateparse_axis: v.dateparse_axis } : {}),
     ...(v.optional_field_prunes ? { optional_field_prunes: v.optional_field_prunes } : {}),
   };
@@ -531,6 +595,8 @@ export async function bindTemplate(args: {
       template: cls.template,
       title: makeTitle(args.ask),
       bindings: cls.bindings,
+      ...(cls.top_n !== undefined ? { top_n: cls.top_n } : {}),
+      ...(cls.filters ? { filters: cls.filters } : {}),
     };
     const res = validateAndBuild(proposal, args.manifests, summary, minConfidence, false, args.ask);
     if (res.status === 'bound') {

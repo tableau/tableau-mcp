@@ -58,6 +58,7 @@ export function isRenderVerifiedLive(rv: string): boolean {
 const SLOT_KINDS: ReadonlySet<SlotKind> = new Set<SlotKind>([
   'quantitative',
   'categorical',
+  'quantitative-or-categorical',
   'temporal',
   'geo',
   'calc',
@@ -108,6 +109,10 @@ const NON_BINDABLE_KINDS: ReadonlySet<SlotKind> = new Set<SlotKind>([
   'parameter',
 ]);
 
+const FIELD_BASE_PLACEHOLDER_RE = /^\{\{field_base_[1-9]\d*\}\}$/;
+export const MAX_SLOT_EXAMPLES = 3;
+export const MAX_SLOT_EXAMPLE_CHARS = 40;
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
@@ -138,6 +143,11 @@ function fixtureFieldFitsKind(kind: SlotKind, f: FixtureField): boolean {
       return f.role === 'measure';
     case 'categorical':
       return f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal');
+    case 'quantitative-or-categorical':
+      return (
+        f.role === 'measure' ||
+        (f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal'))
+      );
     case 'temporal':
       return f.datatype === 'date' || f.datatype === 'datetime';
     case 'geo':
@@ -219,6 +229,13 @@ function validateSlot(
   if (!slotId) errors.push(`${where}: slot_id must be a non-empty string`);
   if (typeof slot.template_field !== 'string' || slot.template_field.length === 0) {
     errors.push(`${where} (${slotId ?? '?'}): template_field must be a non-empty string`);
+  } else if (
+    slot.template_field.includes('{{') &&
+    !FIELD_BASE_PLACEHOLDER_RE.test(slot.template_field)
+  ) {
+    errors.push(
+      `${where} (${slotId ?? '?'}): template_field placeholder '${slot.template_field}' must match {{field_base_N}} with N >= 1`,
+    );
   }
   if (typeof slot.derivation !== 'string' || !DERIVATIONS.has(slot.derivation as Derivation)) {
     errors.push(
@@ -235,6 +252,30 @@ function validateSlot(
     errors.push(`${where} (${slotId ?? '?'}): bindable must be boolean`);
   if (typeof slot.required !== 'boolean')
     errors.push(`${where} (${slotId ?? '?'}): required must be boolean`);
+  if (
+    slot.purpose !== undefined &&
+    (typeof slot.purpose !== 'string' || slot.purpose.trim().length === 0)
+  ) {
+    errors.push(`${where} (${slotId ?? '?'}): purpose must be a non-empty string when present`);
+  }
+  if (
+    slot.examples !== undefined &&
+    (!isStringArray(slot.examples) ||
+      slot.examples.length === 0 ||
+      slot.examples.length > MAX_SLOT_EXAMPLES ||
+      slot.examples.some((s) => s.trim().length === 0) ||
+      slot.examples.some((s) => [...s].length > MAX_SLOT_EXAMPLE_CHARS))
+  ) {
+    errors.push(
+      `${where} (${slotId ?? '?'}): examples must be a non-empty string[] of 1-${MAX_SLOT_EXAMPLES} non-empty strings, each <= ${MAX_SLOT_EXAMPLE_CHARS} chars, when present`,
+    );
+  }
+  if (
+    slot.examples !== undefined &&
+    (typeof slot.purpose !== 'string' || slot.purpose.trim().length === 0)
+  ) {
+    errors.push(`${where} (${slotId ?? '?'}): examples require purpose on the same slot`);
+  }
   if (
     slot.qualified_key_required !== undefined &&
     typeof slot.qualified_key_required !== 'boolean'

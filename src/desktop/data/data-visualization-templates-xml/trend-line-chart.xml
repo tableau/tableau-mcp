@@ -7,19 +7,20 @@
         <datasource name='{{DATASOURCE}}' />
       </datasources>
       <datasource-dependencies datasource='{{DATASOURCE}}'>
-        <column datatype='date' name='[Order Date]' role='dimension' type='ordinal' />
-        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
-        <column datatype='string' name='[Facet]' role='dimension' type='nominal' />
-        <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
-        <column-instance column='[Order Date]' derivation='Month-Trunc' name='[tmn:Order Date:qk]' pivot='key' type='quantitative' />
+        <column datatype='date' name='[{{field_base_1}}]' role='dimension' type='ordinal' />
+        <column datatype='real' name='[{{field_base_2}}]' role='measure' type='quantitative' />
+        <column datatype='string' name='[{{field_base_3}}]' role='dimension' type='nominal' />
+        <column datatype='string' name='[{{field_base_4}}]' role='dimension' type='nominal' />
+        <column-instance column='[{{field_base_2}}]' derivation='Sum' name='[sum:{{field_base_2}}:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[{{field_base_1}}]' derivation='Month-Trunc' name='[tmn:{{field_base_1}}:qk]' pivot='key' type='quantitative' />
       </datasource-dependencies>
       <aggregation value='true' />
     </view>
     <style>
       <style-rule element='axis'>
-        <format attr='title' class='0' field='[{{DATASOURCE}}].[tmn:Order Date:qk]' scope='cols' value='' />
-        <format attr='subtitle' class='0' field='[{{DATASOURCE}}].[tmn:Order Date:qk]' scope='cols' value='' />
-        <format attr='auto-subtitle' class='0' field='[{{DATASOURCE}}].[tmn:Order Date:qk]' scope='cols' value='true' />
+        <format attr='title' class='0' field='[{{DATASOURCE}}].[tmn:{{field_base_1}}:qk]' scope='cols' value='' />
+        <format attr='subtitle' class='0' field='[{{DATASOURCE}}].[tmn:{{field_base_1}}:qk]' scope='cols' value='' />
+        <format attr='auto-subtitle' class='0' field='[{{DATASOURCE}}].[tmn:{{field_base_1}}:qk]' scope='cols' value='true' />
       </style-rule>
     </style>
     <panes>
@@ -29,6 +30,9 @@
         </view>
         <mark class='Automatic' />
         <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[none:{{field_base_4}}:nk]' />
+        </encodings>
         <style>
           <style-rule element='mark'>
             <format attr='size' value='1.3733149766921997' />
@@ -36,8 +40,8 @@
         </style>
       </pane>
     </panes>
-    <rows>[{{DATASOURCE}}].[sum:Sales:qk]</rows>
-    <cols>[{{DATASOURCE}}].[tmn:Order Date:qk]</cols>
+    <rows>[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]</rows>
+    <cols>[{{DATASOURCE}}].[tmn:{{field_base_1}}:qk]</cols>
   </table>
   <simple-id uuid='00000000-0000-0000-0000-000000000001' />
 </worksheet>

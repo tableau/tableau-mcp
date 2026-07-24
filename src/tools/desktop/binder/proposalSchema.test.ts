@@ -14,6 +14,14 @@ describe('proposalSchema — strict object contract', () => {
     confidence: 0.9,
   };
 
+  it('tells callers to copy the immediately preceding proposal contract exactly', () => {
+    expect(proposalSchema.description).toContain('Omit Call 1');
+    expect(proposalSchema.description).toContain('exact returned template/slots');
+    expect(proposalSchema.description).toContain('same ask/target');
+    expect(proposalSchema.description).toContain('top-level auto_apply:true');
+    expect(bindingSchema.shape.field.description).toMatch(/exact llm_input\.fields\[\]\.name/i);
+  });
+
   it('accepts a well-formed proposal', () => {
     expect(proposalSchema.safeParse(valid).success).toBe(true);
   });
@@ -38,6 +46,28 @@ describe('proposalSchema — strict object contract', () => {
       proposalSchema.safeParse({ ...valid, sort: { by: 'Sales', direction: 'down' } }).success,
     ).toBe(false);
     expect(proposalSchema.safeParse({ ...valid, top_n: 0 }).success).toBe(false);
+  });
+
+  it('accepts declarative filters — values optional, context optional (m7)', () => {
+    // The m7 case: a context filter with no member list (interactive enumerate-all control).
+    expect(
+      proposalSchema.safeParse({ ...valid, filters: [{ field: 'Region', context: true }] }).success,
+    ).toBe(true);
+    // A fully-specified filter (explicit members) also parses.
+    expect(
+      proposalSchema.safeParse({
+        ...valid,
+        filters: [{ field: 'Region', values: ['East'], context: true }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('REJECTS an unknown key inside a filter instead of stripping it', () => {
+    const result = proposalSchema.safeParse({
+      ...valid,
+      filters: [{ field: 'Region', sneaky: 'x' }],
+    });
+    expect(result.success).toBe(false);
   });
 });
 

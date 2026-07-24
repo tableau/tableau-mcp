@@ -74,6 +74,22 @@ describe('knowledge/search', { timeout: 30_000 }, () => {
     }
   });
 
+  it('ranks bind-first templates ahead of fallback mechanics for named composed charts', () => {
+    const queries = [
+      'build a waterfall chart',
+      'make a funnel chart',
+      'build a gantt chart',
+      'make a bullet chart',
+      'build a box plot',
+      'make a slope chart',
+      'build a bump chart',
+    ];
+
+    for (const query of queries) {
+      expect(searchKnowledge(query, 2)[0]?.slug, query).toBe('tactics/workflow/templates');
+    }
+  });
+
   it('singularizes only conservative trailing-s plural query tokens before ranking', () => {
     const slugs = (query: string): string[] => searchKnowledge(query, 5).map((hit) => hit.slug);
 

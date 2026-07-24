@@ -37,6 +37,7 @@ import { ExecuteCommandError } from '../../../desktop/toolExecutor/toolExecutor.
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { IncompleteOperationError } from '../incompleteOperationError.js';
 import {
   jsonToolResult,
   type NextAction,
@@ -45,7 +46,7 @@ import {
   withNextAction,
 } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
-import { buildDashboardXml, computeZones } from './dashboardZones.js';
+import { buildDashboardXml, computeZones, type Zone } from './dashboardZones.js';
 
 /**
  * Whether a fully zone-populated `<dashboard>` node injected as part of a single
@@ -106,6 +107,9 @@ type DashboardAutoApplyPartialResult = {
   applied: 'partial';
   dashboard: string;
   sheets: Array<{ title: string; template_name: string }>;
+  zones:
+    | { state: 'unknown'; attempted: Zone[] }
+    | { state: 'failed'; attempted: Zone[]; landed: []; failed: Zone[] };
   apply_error: string;
   guidance: string;
   replaced?: Replaced;
@@ -141,14 +145,16 @@ function refusal(
   guidance: string,
   apply_error?: string,
   nextAction?: NextAction,
-): Ok<StructuredDashboardAutoApplyToolResult> {
+): ReturnType<IncompleteOperationError<DashboardAutoApplyRefusalResult>['toErr']> {
   const result: DashboardAutoApplyRefusalResult = {
     applied: false,
     results,
     guidance,
     ...(apply_error ? { apply_error } : {}),
   };
-  return new Ok(nextAction ? withNextAction(result, nextAction) : result);
+  return new IncompleteOperationError(
+    nextAction ? withNextAction(result, nextAction) : result,
+  ).toErr();
 }
 
 /** Quote-agnostic (matches injectTemplateCore.ts's own conventions): true when `title`
@@ -170,6 +176,7 @@ const title = 'Build Dashboard From Viz Asks (Fast Path)';
 
 export const getDashboardAutoApplyTool = (
   server: DesktopMcpServer,
+  zonesViaWorkbook = DASHBOARD_ZONES_VIA_WORKBOOK,
 ): DesktopTool<typeof paramsSchema> => {
   const dashboardAutoApplyTool = new DesktopTool({
     server,
@@ -364,6 +371,7 @@ export const getDashboardAutoApplyTool = (
                 sheetType: 'worksheet',
                 templateParameters: bound.args.template_parameters,
                 fieldMapping: bound.args.field_mapping,
+                templateSlots: manifests.get(bound.args.template_name)?.slots,
                 applyNonce,
                 optionalFieldPrunes: bound.args.optional_field_prunes,
               });
@@ -390,7 +398,7 @@ export const getDashboardAutoApplyTool = (
           // ── Dashboard node injection with zones already populated (primary mode) or
           // a minimal layout-basic placeholder (fallback mode) — the "one live unknown"
           // the probe decided (§2). Either way ONE wrapper inject + ONE viewpoints call.
-          const zones = DASHBOARD_ZONES_VIA_WORKBOOK
+          const zones = zonesViaWorkbook
             ? computeZones(titleText, {
                 kpis: [],
                 charts: resolvedTitles,
@@ -451,7 +459,7 @@ export const getDashboardAutoApplyTool = (
               prefillNextAction('Fall back to per-viz auto-apply'),
             );
           }
-          if (!DASHBOARD_ZONES_VIA_WORKBOOK) {
+          if (!zonesViaWorkbook) {
             // Fallback mode (§2 "Probe fails"): the workbook (worksheets + minimal empty
             // dashboard) is already live; a second dispatch lays in the real zones. A
             // failure here is a REAL partial window (Q3) — the dashboard exists with a
@@ -475,12 +483,22 @@ export const getDashboardAutoApplyTool = (
                 err.type === 'load-dashboard-xml-error'
                   ? JSON.stringify(err.error)
                   : `workbook load command failed: ${JSON.stringify(err.error)}`;
-              return new Ok(
+              const zonesState =
+                err.type === 'execute-command-error'
+                  ? { state: 'unknown' as const, attempted: realZones }
+                  : {
+                      state: 'failed' as const,
+                      attempted: realZones,
+                      landed: [],
+                      failed: realZones,
+                    };
+              return new IncompleteOperationError(
                 withNextAction(
                   {
                     applied: 'partial',
                     dashboard: dashboardName,
                     sheets,
+                    zones: zonesState,
                     apply_error: message,
                     guidance:
                       `The workbook (sheets + an empty "${dashboardName}" dashboard) was applied, but laying ` +
@@ -490,7 +508,7 @@ export const getDashboardAutoApplyTool = (
                   },
                   prefillNextAction('Re-issue the zones'),
                 ),
-              );
+              ).toErr();
             }
           }
 

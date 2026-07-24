@@ -83,6 +83,30 @@ describe('connections-not-authorable rule', () => {
     expect(connectionsNotAuthorableRule.validate(xml)).toEqual([]);
   });
 
+  it('ignores connection-shaped metadata below a worksheet view', () => {
+    const xml = `<?xml version="1.0"?>
+<workbook>
+  <worksheets>
+    <worksheet name="World Cup Countries">
+      <table>
+        <view>
+          <datasources>
+            <datasource name="federated.0mkveh20xfko2115afimd1odnzrh">
+              <connection class="textscan" />
+            </datasource>
+          </datasources>
+          <datasource-dependencies datasource="federated.0mkveh20xfko2115afimd1odnzrh">
+            <named-connection name="worksheet-reference" />
+          </datasource-dependencies>
+        </view>
+      </table>
+    </worksheet>
+  </worksheets>
+</workbook>`;
+
+    expect(connectionsNotAuthorableRule.validate(xml)).toEqual([]);
+  });
+
   it('the real live-readback fixture (genuine Desktop connection shape) is never rejected', () => {
     const xml = fs.readFileSync(LIVE_READBACK_FIXTURE, 'utf8');
     const issues = connectionsNotAuthorableRule.validate(xml);

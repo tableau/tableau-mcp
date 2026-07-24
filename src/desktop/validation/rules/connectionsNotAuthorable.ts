@@ -82,10 +82,15 @@ export const connectionsNotAuthorableRule: ValidationRule = {
 
     const issues: ValidationIssue[] = [];
 
-    // 1. A bare/legacy connection directly under <datasource> that is NOT the modern
-    // federated wrapper — exactly the hand-authored-from-.tds shape (known-bad).
+    // Only workbook-level datasource definitions (or a standalone datasource document)
+    // are authorable connection stanzas. Worksheet <view> datasource references and
+    // datasource-dependencies are usage metadata, not connection rewrites.
+    //
+    // 1. A bare/legacy top-level connection that is NOT the modern federated wrapper —
+    // exactly the hand-authored-from-.tds shape (known-bad).
     const bareConnections = xpath.select(
-      "//datasource/connection[not(@class='federated')]",
+      "/workbook/datasources/datasource/connection[not(@class='federated')] | " +
+        "/datasource/connection[not(@class='federated')]",
       doc as unknown as Node,
     ) as Element[];
     for (const conn of bareConnections) {
@@ -93,10 +98,11 @@ export const connectionsNotAuthorableRule: ValidationRule = {
       issues.push(issueFor(`//datasource/connection[@class='${cls}']`));
     }
 
-    // 2. A federated wrapper is present, but a named-connection's `name` was NOT minted
-    // by Desktop (fabricated, guessed, or otherwise hand-edited).
+    // 2. A top-level federated wrapper is present, but a named-connection's `name` was
+    // NOT minted by Desktop (fabricated, guessed, or otherwise hand-edited).
     const namedConnections = xpath.select(
-      '//named-connection[@name]',
+      '/workbook/datasources/datasource/connection/named-connections/named-connection[@name] | ' +
+        '/datasource/connection/named-connections/named-connection[@name]',
       doc as unknown as Node,
     ) as Element[];
     for (const nc of namedConnections) {

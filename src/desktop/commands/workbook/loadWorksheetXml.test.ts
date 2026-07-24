@@ -180,6 +180,33 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(applyCall?.xml).toContain('name="Some Other Sheet"');
   });
 
+  it('continues worksheet apply when both preflight stages contain only telemetry findings', async () => {
+    const telemetryIssue = {
+      ruleId: 'calc-field-names',
+      severity: 'warning' as const,
+      message:
+        'Non-standard internal name detected (telemetry only): [Parameter 1]. If this field works correctly in Tableau, this warning can be ignored.',
+    };
+    vi.mocked(validationRegistry.runValidation).mockReturnValue({
+      valid: false,
+      issues: [telemetryIssue],
+    });
+    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Sheet 1']));
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(calls.filter((call) => call.kind === 'apply')).toHaveLength(1);
+    if (result.isOk()) {
+      expect(result.value.validationWarnings).toEqual([telemetryIssue]);
+    }
+  });
+
   it('rejects a constructed workbook document missing the worksheet window before POST', async () => {
     vi.mocked(validationRegistry.runValidation).mockRestore();
     sheetUpsertMock.upsertSheetIntoWorkbook = () => `<?xml version='1.0'?>

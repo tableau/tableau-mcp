@@ -19,10 +19,14 @@ vi.mock('../../../desktop/templates/injectTemplate.js');
 vi.mock('../../../desktop/templates/fieldReferenceRewriter.js');
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('../../../desktop/commands/workbook/cacheFingerprint.js');
+vi.mock('../../../desktop/intelligence/provider.js', () => ({
+  bundledIntelligenceProvider: { getTemplateManifest: vi.fn() },
+}));
 vi.mock('fs');
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 
+import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
 import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
@@ -59,6 +63,7 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(writeFileSync).mockImplementation(() => {});
   vi.mocked(readTemplate).mockReturnValue(TEMPLATE_XML);
   vi.mocked(listTemplateNames).mockReturnValue(['kpi-text', 'ranking-ordered-bar']);
+  vi.mocked(bundledIntelligenceProvider.getTemplateManifest).mockReturnValue(undefined);
   // Echo the (already placeholder-substituted) template so injectTemplate receives
   // a valid <worksheets>/<window> structure.
   vi.mocked(rewriteFieldReferences).mockImplementation((xml) => xml);
@@ -85,7 +90,11 @@ describe('injectTemplateTool — consumer glue characterization', () => {
       {},
       'Sales Data',
       undefined,
-      { namespaceCalcs: true, applyNonce: expect.any(String) },
+      {
+        namespaceCalcs: true,
+        applyNonce: expect.any(String),
+        templateSlots: undefined,
+      },
     );
   });
 
@@ -138,23 +147,33 @@ describe('injectTemplateTool — consumer glue characterization', () => {
     expect(capturedTemplate).not.toContain('A < B & C');
   });
 
-  it('CHARACTERIZATION: without a DATASOURCE param, C is never called and {{DATASOURCE}} survives into the injected XML', async () => {
-    // CHARACTERIZATION: current behavior — {{DATASOURCE}} is filled ONLY by C, and C
-    // runs ONLY when templateParameters.DATASOURCE is set. So a template with field
-    // refs but no DATASOURCE param is injected with literal {{DATASOURCE}} still in
-    // it (and no field remapping). The wellFormedXml check does not catch this.
+  it('blocks a manifest-backed template when DATASOURCE is missing', async () => {
     const extra = makeExtra();
-    let injectedTemplate = '';
-    vi.mocked(injectTemplate).mockImplementation((_wb, tmpl) => {
-      injectedTemplate = tmpl;
-      return INJECTED_XML;
-    });
+    vi.mocked(bundledIntelligenceProvider.getTemplateManifest).mockReturnValue({
+      slots: [
+        {
+          template_field: 'Sales',
+          required: true,
+          bindable: true,
+          kind: 'quantitative',
+          role: ['cols'],
+        },
+      ],
+    } as any);
+    const result = await getResult(
+      { ...BASE_PARAMS, fieldMapping: { Sales: '[DS].[sum:Sales:qk]' } },
+      extra,
+    );
 
-    await getResult({ ...BASE_PARAMS, fieldMapping: { Sales: '[DS].[sum:Sales:qk]' } }, extra);
-
+    expect(result.isError).toBe(true);
     expect(rewriteFieldReferences).not.toHaveBeenCalled();
-    expect(injectedTemplate).toContain('{{DATASOURCE}}');
-    expect(injectedTemplate).toContain('sum:Sales:qk');
+    expect(injectTemplate).not.toHaveBeenCalled();
+    expect(result.content[0]).toEqual(
+      expect.objectContaining({
+        type: 'text',
+        text: expect.stringContaining('provide a datasource and choose every required chart field'),
+      }),
+    );
   });
 
   it('CONVERGENCE: wires per-apply calc namespacing ON with a DISTINCT nonce per apply', async () => {

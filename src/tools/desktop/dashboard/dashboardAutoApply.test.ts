@@ -7,6 +7,7 @@ import * as binderModule from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as injectViewpointsModule from '../../../desktop/commands/workbook/injectViewpoints.js';
+import * as loadDashboardXmlModule from '../../../desktop/commands/workbook/loadDashboardXml.js';
 import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
@@ -29,6 +30,7 @@ import { DASHBOARD_ZONES_VIA_WORKBOOK, getDashboardAutoApplyTool } from './dashb
 // while only the impure/heavy entry points are stubbed — mirrors bindTemplate.test.ts.
 vi.mock('../../../desktop/commands/workbook/getWorkbookXml.js');
 vi.mock('../../../desktop/commands/workbook/injectViewpoints.js');
+vi.mock('../../../desktop/commands/workbook/loadDashboardXml.js');
 vi.mock('../../../desktop/templates/injectTemplate.js');
 vi.mock('../../../desktop/binder/binder.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../desktop/binder/binder.js')>();
@@ -42,7 +44,10 @@ vi.mock('../../../desktop/templates/injectTemplateCore.js', async (importOrigina
 vi.mock('../../../desktop/externalApi/discovery.js');
 vi.mock('../../../desktop/libraries/workbook-serialization-converter/index.js');
 vi.mock('../../../desktop/templates/templatePath.js');
-vi.mock('../../../desktop/validation/registry.js');
+vi.mock('../../../desktop/validation/registry.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../desktop/validation/registry.js')>();
+  return { ...actual, runValidation: vi.fn() };
+});
 // Partial fs mock: templates come from the mocked SEA-aware `readTemplate` seam
 // (templatePath.js above); fs reads stay live for the real manifest/content loads
 // and only writes are stubbed so no test touches disk.
@@ -206,6 +211,9 @@ function setupMocks({
     (wb: string) => wb, // pass currentXml through unchanged; the wrapper content is asserted via the spy call args
   );
   vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockImplementation((wb: string) => wb);
+  vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
+    Ok({ validationWarnings: [] }),
+  );
 
   vi.mocked(xmlToJsonModule.xmlToJson).mockImplementation(() => {
     throw new Error('force text path');
@@ -252,14 +260,16 @@ async function getToolResult({
   dashboardName = 'Sales Dashboard',
   title,
   getExecutor,
+  zonesViaWorkbook = true,
 }: {
   session?: string;
   asks: Array<{ ask: string; title?: string }>;
   dashboardName?: string;
   title?: string;
   getExecutor?: TableauDesktopToolContext['getExecutor'];
+  zonesViaWorkbook?: boolean;
 }): Promise<CallToolResult> {
-  const tool = getDashboardAutoApplyTool(new DesktopMcpServer());
+  const tool = getDashboardAutoApplyTool(new DesktopMcpServer(), zonesViaWorkbook);
   const callback = await Provider.from(tool.callback);
   const mockExecutor: TableauDesktopToolContext['getExecutor'] =
     getExecutor ?? vi.fn().mockResolvedValue({});
@@ -303,9 +313,9 @@ describe('dashboardAutoApplyTool happy path', () => {
       'sheets',
     ]);
 
-    // The public dashboard boundary performs the one primary read plus a fresh
-    // best-effort activation read; internal worksheets never activate independently.
-    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(2);
+    // The public dashboard boundary performs the one primary read plus the bounded
+    // not-found activation revalidation; internal worksheets never activate independently.
+    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(3);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
@@ -464,7 +474,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       getExecutor,
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
@@ -483,6 +493,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       getExecutor,
     });
 
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const expectedBody = {
       applied: false,
@@ -520,6 +531,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       getExecutor,
     });
 
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
@@ -535,6 +547,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       getExecutor,
     });
 
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
@@ -550,6 +563,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       getExecutor,
     });
 
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
@@ -572,6 +586,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       getExecutor,
     });
 
+    expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(true);
@@ -589,6 +604,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       getExecutor,
     });
 
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
@@ -607,11 +623,133 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       getExecutor,
     });
 
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
     expect(String(body.apply_error)).toContain('preflight validation failed');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('failed workbook apply is an error with every ask outcome preserved', async () => {
+    const { getExecutor } = setupMocks({
+      dispatch: Err({ type: 'command-timed-out', error: 'Timeout' }),
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(false);
+    expect(body.results).toEqual([
+      { index: 0, ask: 'bar chart of Sales by Region', result: boundA },
+      { index: 1, ask: 'line chart of Profit by Month', result: boundB },
+    ]);
+    expect(String(body.apply_error)).toContain('command-timed-out');
+  });
+
+  it('zone apply failure reports an error naming failed zones and landed artifacts', async () => {
+    const { getExecutor } = setupMocks();
+    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
+      Err({
+        type: 'load-dashboard-xml-error',
+        error: { type: 'load-rejected', message: 'zone load failed' },
+      }),
+    );
+
+    const result = await getToolResult({
+      session: '1',
+      asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+      getExecutor,
+      zonesViaWorkbook: false,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe('partial');
+    expect(body.dashboard).toBe('Sales Dashboard');
+    expect(body.sheets).toEqual([
+      { title: 'Sales by Region', template_name: 'bar-basic' },
+      { title: 'Profit by Month', template_name: 'line-basic' },
+    ]);
+    const expectedZones = [
+      { kind: 'worksheet', h: 100000, id: 10, name: 'Sales by Region', w: 50000, x: 0, y: 0 },
+      {
+        kind: 'worksheet',
+        h: 100000,
+        id: 11,
+        name: 'Profit by Month',
+        w: 50000,
+        x: 50000,
+        y: 0,
+      },
+    ];
+    expect(body.zones).toEqual({
+      state: 'failed',
+      attempted: expectedZones,
+      landed: [],
+      failed: expectedZones,
+    });
+    expect(String(body.apply_error)).toContain('zone load failed');
+  });
+
+  it('zone transport timeout reports unknown zone state with complete attempted specs', async () => {
+    const { getExecutor } = setupMocks();
+    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
+      Err({
+        type: 'execute-command-error',
+        error: { type: 'command-timed-out', error: 'Timeout' },
+      }),
+    );
+
+    const result = await getToolResult({
+      session: '1',
+      asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+      title: 'Executive Overview',
+      getExecutor,
+      zonesViaWorkbook: false,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe('partial');
+    expect(body.zones).toEqual({
+      state: 'unknown',
+      attempted: [
+        {
+          kind: 'text',
+          h: 8000,
+          id: 10,
+          w: 100000,
+          x: 0,
+          y: 0,
+          text: 'Executive Overview',
+          bold: 'true',
+          fontAlignment: '1',
+          fontColor: '#1f77b4',
+          fontName: 'Tableau Semibold',
+          fontSize: '16',
+        },
+        { kind: 'worksheet', h: 92000, id: 11, name: 'Sales by Region', w: 50000, x: 0, y: 8000 },
+        {
+          kind: 'worksheet',
+          h: 92000,
+          id: 12,
+          name: 'Profit by Month',
+          w: 50000,
+          x: 50000,
+          y: 8000,
+        },
+      ],
+    });
+    expect(String(body.apply_error)).toContain('command-timed-out');
   });
 
   it('duplicate resolved titles within the batch refuse — zero dispatches, indices named', async () => {
@@ -625,6 +763,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       getExecutor,
     });
 
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
@@ -648,6 +787,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       getExecutor,
     });
 
+    expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);

@@ -12,6 +12,11 @@ type ContextAwareValidationRule = ValidationRule & {
   validate(xml: string, context?: ValidationContext): ValidationIssue[];
 };
 
+/** Error-severity findings are the only findings allowed to block an apply. */
+export function blockingValidationIssues(issues: ValidationIssue[]): ValidationIssue[] {
+  return issues.filter((issue) => issue.severity === 'error');
+}
+
 export function runValidation(
   xml: string,
   context: ValidationContext,
@@ -33,7 +38,7 @@ export function runValidation(
     }
   }
   return {
-    valid: issues.every((i) => i.severity !== 'error'),
+    valid: blockingValidationIssues(issues).length === 0,
     issues,
   };
 }

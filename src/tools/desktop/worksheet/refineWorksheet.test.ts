@@ -102,6 +102,12 @@ interface MockOpts {
    *    onward returns the applied XML.
    */
   readback?: 'echo' | 'source' | number;
+  /**
+   * When set, EVERY readback poll returns this fixed XML instead of the applied/source XML.
+   * Models Desktop landing the node but with a different direction than requested (the sort
+   * node is present, so it is not an async-settle miss — the confirm just never matches).
+   */
+  readbackXml?: string;
 }
 
 const getMock = (): ReturnType<
@@ -124,6 +130,7 @@ function setupMocks(opts: MockOpts = {}): { applied: () => string | null } {
     }
     // A readback poll.
     readbackCalls += 1;
+    if (opts.readbackXml !== undefined) return Ok(opts.readbackXml) as GetResult;
     if (opts.readback === 'source') return Ok(source) as GetResult;
     if (typeof opts.readback === 'number') {
       return (readbackCalls < opts.readback ? Ok(source) : Ok(lastApplied ?? source)) as GetResult;
@@ -324,6 +331,80 @@ describe('refineWorksheetTool — sort_by_field happy path', () => {
     expect(applied()!).toContain(
       "<computed-sort column='[Superstore].[none:line_item:nk]' direction='DESC' using='[Superstore].[sum:display_order:qk]' />",
     );
+  });
+
+  it('honors nested sortDirection.direction=DESC on sort_by_field (not a silent ASC default)', async () => {
+    // e5 defect 1: the model's natural shape passes sortDirection:{direction:"DESC"} with no
+    // flat `direction`. Before the fix, that nested direction was dropped, the sort defaulted
+    // to ASC, and the tool FALSELY confirmed success on the wrong direction. It must now apply
+    // DESC and confirm DESC.
+    const { applied } = setupMocks({ source: SORT_BY_FIELD_SOURCE });
+    const result = await getToolResult({
+      worksheetName: 'Waterfall',
+      operation: 'sort_by_field',
+      sortByField: 'display_order',
+      sortDirection: { direction: 'DESC' },
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = successSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.refined).toBe(true);
+    expect(applied()!).toContain(
+      "<computed-sort column='[Superstore].[none:line_item:nk]' direction='DESC' using='[Superstore].[sum:display_order:qk]' />",
+    );
+    expect(applied()!).not.toContain("direction='ASC'");
+  });
+
+  it('the flat direction wins when both flat direction and nested sortDirection are passed', async () => {
+    const { applied } = setupMocks({ source: SORT_BY_FIELD_SOURCE });
+    const result = await getToolResult({
+      worksheetName: 'Waterfall',
+      operation: 'sort_by_field',
+      sortByField: 'display_order',
+      direction: 'asc',
+      sortDirection: { direction: 'DESC' },
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    successSchema.parse(JSON.parse(result.content[0].text));
+    expect(applied()!).toContain("direction='ASC'");
+  });
+});
+
+describe('refineWorksheetTool — sort_by_field wrong-direction (no false success)', () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.useRealTimers());
+
+  it('reports refined:false with a precise reason when the sort lands but the direction is wrong', async () => {
+    // e5 defect 2: the sort node lands (right column + using) but with ASC, not the requested
+    // DESC — Desktop did not honor the direction. This must NOT confirm success; it must
+    // refuse with a reason that names both the applied and the requested direction.
+    vi.useFakeTimers();
+    // Every readback returns the sheet with the sort node present but direction ASC.
+    const wrongDirectionReadback = SORT_BY_FIELD_SOURCE.replace(
+      '</datasource-dependencies>',
+      "</datasource-dependencies>\n      <computed-sort column='[Superstore].[none:line_item:nk]' direction='ASC' using='[Superstore].[sum:display_order:qk]' />",
+    );
+    setupMocks({ source: SORT_BY_FIELD_SOURCE, readbackXml: wrongDirectionReadback });
+    const resultPromise = getToolResult({
+      worksheetName: 'Waterfall',
+      operation: 'sort_by_field',
+      sortByField: 'display_order',
+      sortDirection: { direction: 'DESC' },
+    });
+    await vi.advanceTimersByTimeAsync(8 * 250);
+    const result = await resultPromise;
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = refusalSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.refined).toBe(false);
+    expect(parsed.reason).toMatch(/direction is ASC/);
+    expect(parsed.reason).toMatch(/requested DESC/);
+    // Applied exactly once — a wrong-direction readback never triggers a re-apply.
+    expect(loadMock()).toHaveBeenCalledTimes(1);
   });
 });
 

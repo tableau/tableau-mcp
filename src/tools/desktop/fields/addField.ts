@@ -1,35 +1,28 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { Err, Ok, Result } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { DesktopCache } from '../../../desktop/cache.js';
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
-import {
-  getWorksheetFragment,
-  isRouteMissing,
-} from '../../../desktop/commands/workbook/getWorksheetXml.js';
+import { parseShelfValue } from '../../../desktop/metadata/fields.js';
 import {
   addFieldToCols,
   addFieldToEncoding,
   addFieldToRows,
 } from '../../../desktop/metadata/index.js';
+import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
 import {
   ArgsValidationError,
-  DesktopCommandExecutionError,
   FileNotFoundError,
   FileReadError,
-  GetWorksheetXmlFailedError,
-  McpToolError,
-  UnknownError,
   XmlModificationError,
   XmlValidationError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
-import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
+import { fetchAndCacheWorksheet } from './worksheetCache.js';
 
 /** Encoding channels a field can be placed on. */
 const ENCODING_TYPES = [
@@ -45,70 +38,15 @@ const ENCODING_TYPES = [
 /** Shelf / encoding a field can be added to. */
 const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
-/**
- * Fetch an existing worksheet by display name and write it to a cache file, returning that
- * path — the same mint get-worksheet-xml performs. Lets add-field/remove-field be used with
- * a plain worksheet name (no prior get-worksheet-xml call) while preserving the
- * get-once/edit-many/apply-once contract: the returned path is reused across edits.
- */
-async function fetchAndCacheWorksheet({
-  worksheetName,
-  resolvedSession,
-  extra,
-}: {
-  worksheetName: string;
-  resolvedSession: string;
-  extra: TableauDesktopRequestHandlerExtra;
-}): Promise<Result<string, McpToolError>> {
-  const executor = await extra.getExecutor(resolvedSession);
-  const fetched = await getWorksheetFragment({ worksheetName, executor, signal: extra.signal });
-  if (fetched.isErr()) {
-    const { type, error } = fetched.error;
-    switch (type) {
-      case 'get-worksheet-xml-error':
-        return Err(new GetWorksheetXmlFailedError(error));
-      case 'execute-command-error':
-        if (isRouteMissing(error)) {
-          return Err(
-            new McpToolError({
-              type: 'endpoint-not-in-this-build',
-              message:
-                'This Tableau Desktop build does not serve the worksheet document endpoint yet. ' +
-                'Use get-app-info to identify the build; this read lights up on a newer Desktop update. Do not retry.',
-              statusCode: 404,
-            }),
-          );
-        }
-        return Err(new DesktopCommandExecutionError(error));
-      default: {
-        const _: never = type;
-        return Err(new UnknownError(error));
-      }
-    }
-  }
-
-  const safeName = worksheetName.replace(/[^a-zA-Z0-9]/g, '_');
-  const cacheFile = new DesktopCache().getCacheFilePath({ prefix: `worksheet-${safeName}` });
-  writeFileSync(cacheFile, fetched.value, 'utf-8');
-  writeSidecar(cacheFile, resolvedSession);
-  return Ok(cacheFile);
-}
-
 const paramsSchema = {
-  session: z.string().optional().describe('Desktop session; omit if one.'),
-  worksheetName: z
-    .string()
-    .optional()
-    .describe('Sheet to edit; cached on first use. Give this or worksheetFile.'),
-  worksheetFile: z
-    .string()
-    .optional()
-    .describe('Cached sheet path from a prior edit; stacks edits.'),
-  target: z.enum(FIELD_TARGETS).describe('Placement shelf.'),
-  columnRef: z.string().describe('Field to add.'),
-  encodingType: z.enum(ENCODING_TYPES).optional().describe('Required when target=encoding.'),
-  index: z.number().optional().describe('Optional position.'),
-  workbookFile: z.string().optional().describe('Optional workbook.'),
+  session: z.string().optional().describe('Session.'),
+  worksheetName: z.string().optional().describe('Fetched fresh.'),
+  worksheetFile: z.string().optional().describe('Cache path; stacks edits.'),
+  target: z.enum(FIELD_TARGETS).describe('Shelf.'),
+  columnRef: z.string().describe('Field.'),
+  encodingType: z.enum(ENCODING_TYPES).optional().describe('For encoding target.'),
+  index: z.number().optional().describe('Position.'),
+  workbookFile: z.string().optional().describe('Workbook.'),
 };
 
 const title = 'Add Field';
@@ -208,6 +146,23 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             }
           }
 
+          if (index !== undefined) {
+            let existingLength: number;
+            try {
+              existingLength = getCurrentPlacementLength(worksheetXml, target, encodingType);
+            } catch (error) {
+              return new XmlModificationError(
+                error instanceof Error ? error.message : String(error),
+              ).toErr();
+            }
+
+            if (!Number.isInteger(index) || index < 0 || index > existingLength) {
+              return new ArgsValidationError(
+                `index must be an integer in the range 0..${existingLength} for ${target}.`,
+              ).toErr();
+            }
+          }
+
           let modifiedXml: string;
           let placement: string;
           try {
@@ -265,3 +220,39 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
 
   return addFieldTool;
 };
+
+function getCurrentPlacementLength(
+  worksheetXml: string,
+  target: (typeof FIELD_TARGETS)[number],
+  encodingType?: (typeof ENCODING_TYPES)[number],
+): number {
+  const parsed = parseXML(worksheetXml);
+  const worksheet = getWorksheet(parsed);
+  if (!worksheet) {
+    throw new Error('No worksheet found in XML');
+  }
+
+  if (target === 'rows' || target === 'cols') {
+    return parseShelfValue(worksheet.table?.[target]).length;
+  }
+
+  const canonicalEncodingType = encodingType === 'detail' ? 'lod' : encodingType;
+  if (canonicalEncodingType === undefined) {
+    throw new Error('encodingType is required when target=encoding');
+  }
+  const firstPane = normalizeArray(worksheet.table?.panes?.pane)[0];
+  return normalizeArray(firstPane?.encodings?.[canonicalEncodingType]).length;
+}
+
+function getWorksheet(parsed: any): any | undefined {
+  if (parsed.workbook?.worksheets) {
+    return normalizeArray(parsed.workbook.worksheets.worksheet)[0];
+  }
+  if (parsed.workbook?.worksheet) {
+    return normalizeArray(parsed.workbook.worksheet)[0];
+  }
+  if (parsed.worksheet) {
+    return normalizeArray(parsed.worksheet)[0];
+  }
+  return undefined;
+}

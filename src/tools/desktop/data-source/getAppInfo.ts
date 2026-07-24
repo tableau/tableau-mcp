@@ -10,6 +10,18 @@ const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
 };
 
+type GetAppInfoResult =
+  | {
+      applicationVersion?: string;
+      build?: string;
+      edition?: string;
+      os?: string;
+    }
+  | {
+      status: 'unavailable';
+      message: string;
+    };
+
 const title = 'Get App Info';
 export const getAppInfoTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const getAppInfo = new DesktopTool({
@@ -26,7 +38,7 @@ export const getAppInfoTool = (server: DesktopMcpServer): DesktopTool<typeof par
       openWorldHint: false,
     },
     callback: async ({ session }, extra): Promise<CallToolResult> => {
-      return await getAppInfo.logAndExecute({
+      return await getAppInfo.logAndExecute<GetAppInfoResult>({
         extra,
         args: { session },
         callback: async () => {
@@ -40,14 +52,23 @@ export const getAppInfoTool = (server: DesktopMcpServer): DesktopTool<typeof par
             return result;
           }
 
-          return new Ok({
+          const appInfo = {
             ...(result.value.applicationVersion !== undefined
               ? { applicationVersion: result.value.applicationVersion }
               : {}),
             ...(result.value.build !== undefined ? { build: result.value.build } : {}),
             ...(result.value.edition !== undefined ? { edition: result.value.edition } : {}),
             ...(result.value.os !== undefined ? { os: result.value.os } : {}),
-          });
+          };
+
+          if (Object.keys(appInfo).length === 0) {
+            return new Ok({
+              status: 'unavailable' as const,
+              message: 'Desktop app info endpoint returned no application metadata fields.',
+            });
+          }
+
+          return new Ok(appInfo);
         },
       });
     },

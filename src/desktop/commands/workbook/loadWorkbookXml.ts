@@ -5,7 +5,7 @@ import {
   ExecuteCommandError,
   WithExecutorAndAbortSignal,
 } from '../../toolExecutor/toolExecutor.js';
-import { runValidation } from '../../validation/registry.js';
+import { blockingValidationIssues, runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { withApplyLock } from './applyMutex.js';
 
@@ -43,17 +43,18 @@ export async function loadWorkbookXml({
   // Preflight semantic validation — catches known failure patterns before
   // sending XML to Tableau. Rules are extensible via src/validation/rules/.
   const validation = runValidation(xml, 'workbook');
-  if (!validation.valid) {
+  const blockingIssues = blockingValidationIssues(validation.issues);
+  if (blockingIssues.length > 0) {
     log({
       level: 'error',
       message: 'Preflight validation failed — XML not sent to Tableau',
       logger: 'workbookCommands',
-      data: validation.issues,
+      data: blockingIssues,
     });
 
     return Err({
       type: 'load-workbook-xml-error',
-      error: { type: 'validation-failed', issues: validation.issues },
+      error: { type: 'validation-failed', issues: blockingIssues },
     });
   }
 

@@ -38,4 +38,11 @@ describe('structuredContent helpers', () => {
       kind: 'done',
     });
   });
+
+  it('doneNextAction accepts tool-specific terminal guidance', () => {
+    expect(doneNextAction('Stop — report no data')).toEqual({
+      label: 'Stop — report no data',
+      kind: 'done',
+    });
+  });
 });

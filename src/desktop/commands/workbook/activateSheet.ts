@@ -33,6 +33,7 @@ type FocusVerificationResult =
 
 const APPLY_SETTLE_MS = 500;
 const ACTIVATION_VERIFY_MS = 700;
+const POST_APPLY_NOT_FOUND_REVALIDATE_MS = 700;
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values));
@@ -228,7 +229,11 @@ export async function activateSheetBestEffort({
   try {
     await waitForDesktopSettle(APPLY_SETTLE_MS, signal);
 
-    const activation = await activateSheetWithValidatedGoto({ sheetName, executor, signal });
+    let activation = await activateSheetWithValidatedGoto({ sheetName, executor, signal });
+    if (activation.status === 'not-found') {
+      await waitForDesktopSettle(POST_APPLY_NOT_FOUND_REVALIDATE_MS, signal);
+      activation = await activateSheetWithValidatedGoto({ sheetName, executor, signal });
+    }
     switch (activation.status) {
       case 'activated':
         break;
@@ -279,22 +284,49 @@ export async function activateSheetBestEffort({
         );
         return;
       case 'not-focused': {
-        const reissue = await executeGotoSheet({ sheetName, executor, signal });
-        if (reissue.isErr()) {
-          logBestEffortActivationEvent(
-            sheetName,
-            'warning',
-            'Best-effort goto-sheet reissue failed after Desktop settle; primary apply remains successful',
-            { activeSheet: verification.activeSheet, error: reissue.error },
-          );
-          return;
+        const reissue = await activateSheetWithValidatedGoto({ sheetName, executor, signal });
+        switch (reissue.status) {
+          case 'activated':
+            logBestEffortActivationEvent(
+              sheetName,
+              'info',
+              'Best-effort goto-sheet reissued once after Desktop settle verification',
+              { activeSheet: verification.activeSheet },
+            );
+            return;
+          case 'not-found':
+            logBestEffortActivationEvent(
+              sheetName,
+              'warning',
+              'Best-effort goto-sheet reissue skipped after Desktop settle; target disappeared before revalidation',
+              { activeSheet: verification.activeSheet, availableSheets: reissue.availableSheets },
+            );
+            return;
+          case 'parse-failed':
+            logBestEffortActivationEvent(
+              sheetName,
+              'warning',
+              'Best-effort goto-sheet reissue skipped after Desktop settle; could not parse the fresh workbook read',
+              { activeSheet: verification.activeSheet, message: reissue.message },
+            );
+            return;
+          case 'read-failed':
+            logBestEffortActivationEvent(
+              sheetName,
+              'warning',
+              'Best-effort goto-sheet reissue skipped after Desktop settle; could not re-read the workbook',
+              { activeSheet: verification.activeSheet, error: reissue.error },
+            );
+            return;
+          case 'command-failed':
+            logBestEffortActivationEvent(
+              sheetName,
+              'warning',
+              'Best-effort goto-sheet reissue failed after Desktop settle; primary apply remains successful',
+              { activeSheet: verification.activeSheet, error: reissue.error },
+            );
+            return;
         }
-        logBestEffortActivationEvent(
-          sheetName,
-          'info',
-          'Best-effort goto-sheet reissued once after Desktop settle verification',
-          { activeSheet: verification.activeSheet },
-        );
         return;
       }
       case 'not-found':

@@ -180,7 +180,7 @@ describe('activateSheetBestEffort', () => {
   });
 
   it('does not navigate when validation cannot find the target', async () => {
-    const { executor, executeCommand } = makeExecutor({
+    const { executor, getWorkbookDocument, executeCommand } = makeExecutor({
       xml: buildWorkbook({ worksheetNames: ['Alpha'] }),
     });
 
@@ -190,10 +190,46 @@ describe('activateSheetBestEffort', () => {
       signal,
     });
 
-    await vi.advanceTimersByTimeAsync(500);
+    await vi.advanceTimersByTimeAsync(1200);
 
     await expect(activation).resolves.toBeUndefined();
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(2);
     expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('revalidates once after a post-apply not-found read before navigating', async () => {
+    const { executor, getWorkbookDocument, executeCommand } = makeExecutor({
+      xmlSequence: [
+        buildWorkbook({ worksheetNames: ['Alpha'] }),
+        buildWorkbook({ activeSheetName: 'Beta' }),
+      ],
+    });
+
+    const activation = activateSheetBestEffort({
+      sheetName: 'Beta',
+      executor,
+      signal,
+    });
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executeCommand).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(699);
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executeCommand).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(2);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenLastCalledWith(
+      expect.objectContaining({ command: 'goto-sheet', args: { Sheet: 'Beta' } }),
+    );
+
+    await vi.advanceTimersByTimeAsync(700);
+    await expect(activation).resolves.toBeUndefined();
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(3);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
   });
 
   it('waits for settle, verifies focus, and reissues goto-sheet once after snap-back', async () => {
@@ -226,11 +262,33 @@ describe('activateSheetBestEffort', () => {
 
     await vi.advanceTimersByTimeAsync(1);
     await expect(activation).resolves.toBeUndefined();
-    expect(getWorkbookDocument).toHaveBeenCalledTimes(2);
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(3);
     expect(executeCommand).toHaveBeenCalledTimes(2);
     expect(executeCommand).toHaveBeenLastCalledWith(
       expect.objectContaining({ command: 'goto-sheet', args: { Sheet: 'Beta' } }),
     );
+  });
+
+  it('revalidates before a snap-back reissue and suppresses it if the target disappeared', async () => {
+    const { executor, getWorkbookDocument, executeCommand } = makeExecutor({
+      xmlSequence: [
+        buildWorkbook({ activeSheetName: 'Alpha' }),
+        buildWorkbook({ activeSheetName: 'Alpha' }),
+        buildWorkbook({ worksheetNames: ['Alpha'], activeSheetName: 'Alpha' }),
+      ],
+    });
+
+    const activation = activateSheetBestEffort({
+      sheetName: 'Beta',
+      executor,
+      signal,
+    });
+
+    await vi.advanceTimersByTimeAsync(1200);
+
+    await expect(activation).resolves.toBeUndefined();
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(3);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
   });
 
   it('does not reissue goto-sheet when the verification read shows the target is focused', async () => {

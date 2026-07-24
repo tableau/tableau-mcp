@@ -79,43 +79,44 @@ describe('rewriteFieldReferences — kpi-text (aggregated measure)', () => {
 
 describe('rewriteFieldReferences — ranking-ordered-bar (computed sort)', () => {
   const mapping = {
-    Region: '[DS].[none:Category:nk]',
-    Sales: '[DS].[sum:Profit:qk]',
+    '{{field_base_1}}': '[DS].[none:Segment:nk]',
+    '{{field_base_2}}': '[DS].[sum:Profit:qk]',
+    '{{field_base_3}}': '[DS].[none:Group:nk]',
   };
   const datasource = 'Superstore';
 
   it('renames both base <column>s to the mapped field names', () => {
     const out = rewriteFieldReferences(rankingOrderedBar, mapping, datasource);
-    expect(out).toContain('[Category]');
+    expect(out).toContain('[Segment]');
     expect(out).toContain('[Profit]');
-    expect(out).not.toContain('[Region]');
-    expect(out).not.toContain('[Sales]');
+    expect(out).not.toContain('[Category]');
+    expect(out).not.toContain('[Measure]');
   });
 
   it('rewrites the <computed-sort> column= and using= refs (dimension + measure)', () => {
     const out = rewriteFieldReferences(rankingOrderedBar, mapping, datasource);
     // CONVERGENCE: refs now carry the lowercase short code (none/sum), not the old
     // capitalized None/Sum.
-    // computed-sort column='[{{DATASOURCE}}].[none:Region:nk]'
-    expect(out).toContain('[Superstore].[none:Category:nk]');
-    // computed-sort using='[{{DATASOURCE}}].[sum:Sales:qk]'
+    // computed-sort column='[{{DATASOURCE}}].[none:Category:nk]'
+    expect(out).toContain('[Superstore].[none:Segment:nk]');
+    // computed-sort using='[{{DATASOURCE}}].[sum:Measure:qk]'
     expect(out).toContain('[Superstore].[sum:Profit:qk]');
   });
 
   it('rewrites the rows/cols text-node refs and leaves no {{DATASOURCE}} or old field tokens', () => {
     const out = rewriteFieldReferences(rankingOrderedBar, mapping, datasource);
     expect(out).not.toContain('{{DATASOURCE}}');
-    expect(out).not.toContain(':Region:');
-    expect(out).not.toContain(':Sales:');
+    expect(out).not.toContain(':Category:');
+    expect(out).not.toContain(':Measure:');
   });
 
   it('CONVERGENCE: keeps the lowercase short code for the dimension instance too (none, not None)', () => {
-    // CONVERGENCE: same lowercase-short-code fix as kpi-text — `[none:Region:nk]`
-    // becomes `[none:Category:nk]` (not the old `[None:Category:nk]`) in every
+    // CONVERGENCE: same lowercase-short-code fix as kpi-text — `[none:Category:nk]`
+    // becomes `[none:Segment:nk]` (not the old `[None:Segment:nk]`) in every
     // rewritten ref.
     const out = rewriteFieldReferences(rankingOrderedBar, mapping, datasource);
-    expect(out).toContain('[none:Category:nk]');
-    expect(out).not.toContain('[None:Category:nk]');
+    expect(out).toContain('[none:Segment:nk]');
+    expect(out).not.toContain('[None:Segment:nk]');
   });
 });
 

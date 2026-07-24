@@ -7,7 +7,7 @@
   "portability_evidence": {
     "fixture_bind": true,
     "render_verified": "live-2026-07-05",
-    "xml_sha256": "d02eb152091e7594c27b1cc46a596c2ffd6fd6e8772f64bc1186e12e1197ac02",
+    "xml_sha256": "a0a23ffcf5fb34263b4e1a46a107590200a03d3f02fdc5efcf8622cc9e4a9235",
     "render_evidence": {
       "basis": "hand-stamp: live render + structural parity + human review",
       "lane": "W2-R008 live-verify 2026-07-05",
@@ -37,7 +37,7 @@
   "slots": [
     {
       "slot_id": "region",
-      "template_field": "Region",
+      "template_field": "Category",
       "derivation": "none",
       "role": [
         "cols",
@@ -49,7 +49,7 @@
     },
     {
       "slot_id": "sales",
-      "template_field": "Sales",
+      "template_field": "Measure",
       "derivation": "sum",
       "role": [
         "rows",
@@ -64,7 +64,7 @@
   "hazards": [
     {
       "code": "computed-sort-pill-coupling",
-      "detail": "computed-sort sorts [none:Region:nk] using [sum:Sales:qk]; both slots must bind or the sort dangles (both are required, so coverage satisfies this). [Region] has NO aggregate-role-from here, so GREEN stands (verification: AGREE).",
+      "detail": "computed-sort sorts [none:Category:nk] using [sum:Measure:qk]; both slots must bind or the sort dangles (both are required, so coverage satisfies this). [Category] has NO aggregate-role-from here, so GREEN stands (verification: AGREE).",
       "xml": "ranking-ordered-column.xml:24"
     }
   ]
