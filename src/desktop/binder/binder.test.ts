@@ -173,6 +173,29 @@ describe('binder/classifyNoLlm', () => {
     expect(cls!.template).toBe('spatial-symbol-map');
     expect(cls!.bindings).toContainEqual({ slot_id: 'country', field: 'Country Code' });
   });
+
+  it('uses a bare dot cue to disambiguate a generated-geo symbol map while bare map stays fail-closed', () => {
+    const WC = `<workbook><datasources><datasource name='federated.wc' caption='teams+'>
+  <connection><relation name='players' /></connection>
+  <column name='[country_code]' caption='Country Code' role='dimension' type='nominal' datatype='string' semantic-role='[Country].[ISO3166_2]' />
+  <column name='[goals_for]' caption='Goals For' role='measure' type='quantitative' datatype='integer' />
+  <column name='[goals_against]' caption='Goals Against' role='measure' type='quantitative' datatype='integer' />
+  <column name='[latitude]' caption='Latitude' role='measure' type='quantitative' datatype='real' semantic-role='[Geographical].[Latitude]' aggregation='Avg' />
+  <column name='[longitude]' caption='Longitude' role='measure' type='quantitative' datatype='real' semantic-role='[Geographical].[Longitude]' aggregation='Avg' />
+</datasource></datasources><worksheets><worksheet name='se-eval-scratch' /></worksheets></workbook>`;
+    const s = summarizeSchema(WC);
+
+    const cls = classifyNoLlm(
+      'Map the countries by Goals For — bigger, warmer dots for each country',
+      manifests,
+      s,
+    );
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('spatial-symbol-map');
+    expect(cls!.bindings).toContainEqual({ slot_id: 'country', field: 'Country Code' });
+
+    expect(classifyNoLlm('Map the countries by Goals For', manifests, s)).toBeNull();
+  });
 });
 
 // ── e4: string-month temporal slot (temporal_from_string) ─────────────────────

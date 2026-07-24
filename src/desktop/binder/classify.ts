@@ -578,6 +578,33 @@ const SPATIAL_INTENT_ALIASES: ReadonlySet<string> = new Set([
   'lat-lon',
 ]);
 
+const NON_COORDINATE_SPATIAL_ALIASES: ReadonlySet<string> = new Set([
+  'geo',
+  'geographic',
+  'geographical',
+  'geographically',
+]);
+
+/**
+ * Bare point-mark words that disambiguate a generic spatial "map" tie toward a
+ * symbol map. Keep singulars/plurals explicit so matching remains whole-token
+ * and does not broaden phraseIndexInAsk's chart-noun plural tolerance.
+ */
+const SYMBOL_MAP_MARK_CUES: readonly string[] = [
+  'dot',
+  'dots',
+  'bubble',
+  'bubbles',
+  'pin',
+  'pins',
+  'point',
+  'points',
+];
+
+function askHasSymbolMapMarkCue(maskedAsk: string): boolean {
+  return SYMBOL_MAP_MARK_CUES.some((cue) => phraseIndexInAsk(maskedAsk, cue) >= 0);
+}
+
 function spatialIntentPhrases(manifests: Map<string, TemplateManifest>): Set<string> {
   const phrases = new Set<string>(SPATIAL_INTENT_ALIASES);
   for (const m of manifests.values()) {
@@ -596,6 +623,14 @@ function hasCoordinatePairIntent(rawAsk: string): boolean {
     phraseIndexInAsk(rawAsk, 'lng') >= 0 ||
     phraseIndexInAsk(rawAsk, 'long') >= 0;
   return hasLat && hasLon;
+}
+
+function askHasExplicitCoordinateIntent(rawAsk: string): boolean {
+  for (const alias of SPATIAL_INTENT_ALIASES) {
+    if (NON_COORDINATE_SPATIAL_ALIASES.has(alias)) continue;
+    if (phraseIndexInAsk(rawAsk, alias) >= 0) return true;
+  }
+  return hasCoordinatePairIntent(rawAsk);
 }
 
 function askCarriesSpatialIntent(
@@ -624,6 +659,7 @@ function askCarriesSpatialIntent(
  * slot shape (longitude→cols, latitude→rows, one categorical→detail, no measure).
  */
 const LATLON_SYMBOL_MAP_TEMPLATE = 'spatial-symbol-map-latlon';
+const GENERATED_SYMBOL_MAP_TEMPLATE = 'spatial-symbol-map';
 
 /**
  * POINT-LOCATION CUES (Blake wall #2). Coordinate/point-location intent a user types when
@@ -1809,6 +1845,19 @@ function selectWithinFamily(
     if (byNoun.length === 0) return null;
     if (byNoun.length > 1 && byNoun[0].spec === byNoun[1].spec) return null;
     return byNoun[0].m;
+  }
+
+  // SAME-family spatial "map" tie: a bare point-mark word is the missing
+  // discriminator between filled regions and symbols. Prefer generated geocoding
+  // unless coordinate language has already selected (or should propose for) the
+  // dedicated lat/lon resolver. Explicit choropleth phrases win keyword scoring
+  // before this tie-break, and a bare "map" without a mark cue remains ambiguous.
+  if (
+    top[0].m.family === 'spatial' &&
+    askHasSymbolMapMarkCue(maskedAsk) &&
+    !askHasExplicitCoordinateIntent(maskedAsk)
+  ) {
+    return top.find((candidate) => candidate.m.template === GENERATED_SYMBOL_MAP_TEMPLATE)?.m ?? null;
   }
 
   const bindable = top
