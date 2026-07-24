@@ -123,8 +123,29 @@ describe('listFlowTasksTool', () => {
     expect(payload.flowTasks).toHaveLength(2);
   });
 
-  it('rejects an unsupported filter field', async () => {
-    await expect(getToolResult({ filter: 'bogus:eq:x' })).rejects.toThrow();
+  it('returns a friendly tool error for an unsupported filter field before calling the API', async () => {
+    const result = await getToolResult({ filter: 'bogus:eq:x' });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Invalid enum value');
+    expect(mocks.mockGetFlowRunTasks).not.toHaveBeenCalled();
+  });
+
+  it('validates and normalizes schedule date filters before calling the API', async () => {
+    mocks.mockGetFlowRunTasks.mockResolvedValue(mockFlowRunTasks);
+    const result = await getToolResult({ filter: 'schedule.nextRunAt:lt:2026-05-25' });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.flowTasks).toHaveLength(2);
+  });
+
+  it('returns a friendly tool error for malformed schedule date filters before calling the API', async () => {
+    const result = await getToolResult({ filter: 'schedule.nextRunAt:lt:05/25/2026' });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('must be either a full ISO 8601');
+    expect(mocks.mockGetFlowRunTasks).not.toHaveBeenCalled();
   });
 
   it('respects the limit parameter and reports requested-limit truncation', async () => {

@@ -644,7 +644,7 @@ const envVars = {
     type: 'boolean',
     title: 'Enable Tableau Prep flow MCP tools',
     description:
-      'Registers the Tableau Prep flow tools (list-flows, get-flow). Disabled by default; set to "true" to enable them.',
+      'Registers the read-only Tableau Prep flow tools (list-flows, get-flow, list-flow-runs, list-flow-tasks, get-flow-task). This is also the base gate required by FLOW_WRITE_TOOLS_ENABLED. Disabled by default; set to "true" to enable the flow tool family.',
     required: false,
     sensitive: false,
   },
@@ -654,6 +654,15 @@ const envVars = {
     title: 'Enable insight-cards MCP tools',
     description:
       'Registers the datasource-context insight tools (generate-insight-cards, resolve-datasource-luid). Disabled by default; set to "true" to enable them.',
+    required: false,
+    sensitive: false,
+  },
+  FLOW_WRITE_TOOLS_ENABLED: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable content-mutating flow MCP tools',
+    description:
+      'When "true" and FLOW_TOOLS_ENABLED is also "true", registers the content-MUTATING flow run tools (run-flow, run-flow-task, cancel-flow-run). Defaults to "false".',
     required: false,
     sensitive: false,
   },

@@ -7,10 +7,14 @@ import { getResolveDatasourceLuidTool } from './datasources/resolveDatasourceLui
 import { getConfirmUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/confirmUpdateCloudExtractRefreshTask.js';
 import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/updateCloudExtractRefreshTask.js';
+import { getCancelFlowRunTool } from './flows/cancelFlowRun/cancelFlowRun.js';
 import { getGetFlowTool } from './flows/getFlow/getFlow.js';
+import { getGetFlowTaskTool } from './flows/getFlowTask/getFlowTask.js';
 import { getListFlowRunsTool } from './flows/listFlowRuns/listFlowRuns.js';
 import { getListFlowsTool } from './flows/listFlows/listFlows.js';
 import { getListFlowTasksTool } from './flows/listFlowTasks/listFlowTasks.js';
+import { getRunFlowTool } from './flows/runFlow/runFlow.js';
+import { getRunFlowTaskTool } from './flows/runFlowTask/runFlowTask.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getEmbedTokenTool } from './getEmbedToken/getEmbedToken.js';
 import { getListJobsTool } from './jobs/listJobs.js';
@@ -56,6 +60,10 @@ export const webToolFactories = [
   getGetFlowTool,
   getListFlowRunsTool,
   getListFlowTasksTool,
+  getGetFlowTaskTool,
+  getRunFlowTool,
+  getRunFlowTaskTool,
+  getCancelFlowRunTool,
   getListAllPulseMetricDefinitionsTool,
   getListPulseMetricDefinitionsFromDefinitionIdsTool,
   getListPulseMetricsFromMetricDefinitionIdTool,

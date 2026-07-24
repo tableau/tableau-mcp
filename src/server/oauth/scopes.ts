@@ -22,6 +22,14 @@ export type McpScope =
   | 'tableau:mcp:view:read'
   | 'tableau:mcp:view:download'
   | 'tableau:mcp:flow:read'
+  // Run a flow on demand (run-flow, run-flow-task). Executing a flow consumes
+  // Prep Conductor capacity but does not alter a schedule definition.
+  | 'tableau:mcp:flow:run'
+  // Cancel a queued or in-progress flow run (cancel-flow-run). Kept separate from
+  // `flow:run` because interrupting a run mid-write can leave an output
+  // database partially updated (no rollback) — it is the destructive member of
+  // the flow-run lifecycle, so a deployment can grant "run" without "cancel".
+  | 'tableau:mcp:flow:cancel'
   | 'tableau:mcp:pulse:read'
   | 'tableau:mcp:insight:create'
   | 'tableau:mcp:tasks:read'
@@ -37,8 +45,11 @@ export type TableauApiScope =
   | 'tableau:views:download'
   | 'tableau:views:embed'
   | 'tableau:flows:read'
+  | 'tableau:flows:run'
   | 'tableau:flow_connections:read'
   | 'tableau:flow_runs:read'
+  | 'tableau:flow_runs:update'
+  | 'tableau:flow_tasks:run'
   | 'tableau:insight_definitions_metrics:read'
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
@@ -218,6 +229,33 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:flow:read'],
     api: new Set(['tableau:flow_tasks:read', 'tableau:mcp_site_settings:read']),
   },
+  // Read a single flow run task by id (not gated by FLOW_WRITE_TOOLS_ENABLED).
+  'get-flow-task': {
+    mcp: ['tableau:mcp:flow:read'],
+    api: new Set(['tableau:flow_tasks:read', 'tableau:mcp_site_settings:read']),
+  },
+  // Mutating flow tools (gated by FLOW_WRITE_TOOLS_ENABLED). `flows:read` is
+  // included alongside the write scope so the bounded-context flow check
+  // (resourceAccessChecker.isFlowAllowed) can fetch the flow when a PROJECT_IDS
+  // / TAGS context is active.
+  'run-flow': {
+    mcp: ['tableau:mcp:flow:run'],
+    api: new Set(['tableau:flows:run', 'tableau:flows:read', 'tableau:mcp_site_settings:read']),
+  },
+  'run-flow-task': {
+    // Task-id only — no flow fetch, so no flows:read. Fails closed under a
+    // bounded context (cannot prove the task's flow is in the allowed set).
+    mcp: ['tableau:mcp:flow:run'],
+    api: new Set(['tableau:flow_tasks:run', 'tableau:mcp_site_settings:read']),
+  },
+  'cancel-flow-run': {
+    // Dedicated cancel scope (not flow:run): cancel is the destructive member of
+    // the flow-run lifecycle, so it is granted separately. Run-id only — no flow
+    // fetch, so no flows:read. Fails closed under a bounded context (cannot
+    // prove the run's flow is in the allowed set).
+    mcp: ['tableau:mcp:flow:cancel'],
+    api: new Set(['tableau:flow_runs:update', 'tableau:mcp_site_settings:read']),
+  },
   'query-datasource': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set(['tableau:viz_data_service:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
@@ -396,14 +434,25 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
     enabledTools.delete('confirm-delete-content');
   }
 
-  // Flow tools are gated off by default (FLOW_TOOLS_ENABLED). When disabled they are not registered,
-  // so their scopes must not be advertised or enforced either — otherwise a client could be asked to
-  // hold scopes for tools that don't exist. Mirrors the adminToolsEnabled gating above.
+  // FLOW_TOOLS_ENABLED is the base gate for the entire flow tool family. When
+  // it is disabled, no flow tool is registered and no flow scope may be
+  // advertised or enforced for a tool that does not exist.
   if (!config.flowToolsEnabled) {
     enabledTools.delete('list-flows');
     enabledTools.delete('get-flow');
     enabledTools.delete('list-flow-runs');
     enabledTools.delete('list-flow-tasks');
+    enabledTools.delete('get-flow-task');
+  }
+
+  // The content-mutating flow tools need both gates: FLOW_TOOLS_ENABLED keeps
+  // the base flow family on, while FLOW_WRITE_TOOLS_ENABLED is the explicit
+  // second opt-in. This keeps the invalid "write on, read-only off" state from
+  // advertising or enforcing mutation scopes.
+  if (!config.flowToolsEnabled || !config.flowWriteToolsEnabled) {
+    enabledTools.delete('run-flow');
+    enabledTools.delete('run-flow-task');
+    enabledTools.delete('cancel-flow-run');
   }
 
   return enabledTools;

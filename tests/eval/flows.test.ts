@@ -5,6 +5,8 @@ import invariant from '../../src/utils/invariant.js';
 import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
 import { getAgent, getMcpServer, getModel, getToolExecutions } from './base.js';
 
+dotenv.config({ path: 'tests/eval/.env' });
+
 /**
  * Description-quality evals for the flows tools.
  *
@@ -24,6 +26,8 @@ import { getAgent, getMcpServer, getModel, getToolExecutions } from './base.js';
 const agentSystemPrompt = `
   You are an assistant responsible for evaluating the results of calling various tools.
   Given the user's query, use the tools available to you to answer the question.`;
+
+const mutatingFlowEvalIt = process.env.ALLOW_MUTATING_FLOW_EVALS === 'true' ? it : it.skip;
 
 async function runAgentWithTools(
   mcpServer: MCPServerStdio,
@@ -48,10 +52,6 @@ describe('flows tool descriptions (eval)', () => {
 
   beforeAll(setEnv);
   afterAll(resetEnv);
-
-  beforeAll(async () => {
-    dotenv.config({ path: 'tests/eval/.env' });
-  });
 
   beforeEach(async () => {
     // Flow tools are gated off by default (FLOW_TOOLS_ENABLED); opt in for this eval.
@@ -135,4 +135,67 @@ describe('flows tool descriptions (eval)', () => {
     );
     invariant(listFlowTasks, 'list_flow_tasks tool execution not found');
   });
+
+  // The two tests below exercise content-MUTATING flow run tools. They are skipped
+  // by default because this eval harness invokes real MCP tools against the
+  // configured Tableau site. To run them, use a disposable site and explicitly
+  // set BOTH ALLOW_MUTATING_FLOW_EVALS=true and FLOW_WRITE_TOOLS_ENABLED=true.
+  async function getToolExecutionsWithWriteTools(
+    prompt: string,
+  ): Promise<Awaited<ReturnType<typeof getToolExecutions>>> {
+    if (process.env.FLOW_WRITE_TOOLS_ENABLED !== 'true') {
+      throw new Error(
+        'Mutating flow evals require FLOW_WRITE_TOOLS_ENABLED=true in addition to ALLOW_MUTATING_FLOW_EVALS=true.',
+      );
+    }
+
+    const writeServer = await getMcpServer({
+      ...getDefaultEnv(),
+      // The write gate is subordinate to the base flow gate. Set both here so
+      // the eval's product configuration matches the supported runtime state.
+      FLOW_TOOLS_ENABLED: 'true',
+      FLOW_WRITE_TOOLS_ENABLED: process.env.FLOW_WRITE_TOOLS_ENABLED,
+    });
+    try {
+      const stream = await runAgentWithTools(writeServer, getModel(), prompt);
+      return await getToolExecutions(stream);
+    } finally {
+      await writeServer.close();
+    }
+  }
+
+  mutatingFlowEvalIt(
+    'run-flow: selects run-flow (by flow id) for an ad-hoc "run this flow now" request',
+    async () => {
+      const flowId = 'd00700fe-28a0-4ece-a7af-5543ddf38a82';
+      const prompt = `Run the Tableau Prep flow with id ${flowId} right now. Just trigger it.`;
+
+      const toolExecutions = await getToolExecutionsWithWriteTools(prompt);
+
+      // An ad-hoc "run this flow now" with a FLOW id is run-flow, not
+      // run-flow-task (which takes a task id) and not the read tools.
+      const runFlow = toolExecutions.find(
+        (toolExecution) =>
+          toolExecution.name === 'run_flow' && toolExecution.arguments.flowId === flowId,
+      );
+      invariant(runFlow, 'run_flow tool execution not found');
+    },
+  );
+
+  mutatingFlowEvalIt(
+    'run-flow-task: selects run-flow-task (by task id) when asked to trigger an existing schedule',
+    async () => {
+      const taskId = '1bff10bb-57ae-43df-8774-a86d14aef432';
+      const prompt = `Trigger the existing scheduled flow task ${taskId} now.`;
+
+      const toolExecutions = await getToolExecutionsWithWriteTools(prompt);
+
+      // A request naming a TASK id and an existing schedule is run-flow-task,
+      // which is disambiguated from run-flow (flow id) by its description.
+      const runFlowTask = toolExecutions.find(
+        (toolExecution) => toolExecution.name === 'run_flow_task',
+      );
+      invariant(runFlowTask, 'run_flow_task tool execution not found');
+    },
+  );
 });

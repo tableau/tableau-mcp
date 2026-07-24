@@ -260,6 +260,71 @@ describe('scopes', () => {
     });
   });
 
+  describe('flowWriteToolsEnabled gating', () => {
+    it('includes the flow run mcp + api scopes when flowWriteToolsEnabled is true', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+        flowToolsEnabled: true,
+        flowWriteToolsEnabled: true,
+      } as any);
+
+      const mcp = await getSupportedMcpScopes();
+      expect(mcp).toContain('tableau:mcp:flow:run');
+      expect(mcp).toContain('tableau:mcp:flow:cancel');
+
+      const api = await getSupportedApiScopes();
+      expect(api).toContain('tableau:flows:run');
+      expect(api).toContain('tableau:flow_tasks:run');
+      expect(api).toContain('tableau:flow_runs:update');
+    });
+
+    it('does not advertise flow run scopes when FLOW_TOOLS_ENABLED is false even if flowWriteToolsEnabled is true', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+        flowToolsEnabled: false,
+        flowWriteToolsEnabled: true,
+      } as any);
+
+      const mcp = await getSupportedMcpScopes();
+      expect(mcp).not.toContain('tableau:mcp:flow:run');
+      expect(mcp).not.toContain('tableau:mcp:flow:cancel');
+
+      const api = await getSupportedApiScopes();
+      expect(api).not.toContain('tableau:flows:run');
+      expect(api).not.toContain('tableau:flow_tasks:run');
+      expect(api).not.toContain('tableau:flow_runs:update');
+    });
+
+    it('excludes (does not advertise) the flow run scopes when flowWriteToolsEnabled is false', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+        flowToolsEnabled: true,
+        flowWriteToolsEnabled: false,
+      } as any);
+
+      const mcp = await getSupportedMcpScopes();
+      expect(mcp).not.toContain('tableau:mcp:flow:run');
+      expect(mcp).not.toContain('tableau:mcp:flow:cancel');
+      // The read flow scope is unaffected when the read tools remain enabled.
+      expect(mcp).toContain('tableau:mcp:flow:read');
+
+      const api = await getSupportedApiScopes();
+      expect(api).not.toContain('tableau:flows:run');
+      expect(api).not.toContain('tableau:flow_tasks:run');
+      expect(api).not.toContain('tableau:flow_runs:update');
+    });
+
+    it('treats the flow run scope as invalid when flowWriteToolsEnabled is false', async () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+        flowWriteToolsEnabled: false,
+      } as any);
+
+      expect(await isValidScope('tableau:mcp:flow:run')).toBe(false);
+      expect(await isValidScope('tableau:mcp:flow:cancel')).toBe(false);
+    });
+  });
+
   describe('getSupportedScopes', () => {
     it('should return only MCP scopes when includeApiScopes is false', async () => {
       mockGetConfig.mockReturnValue({

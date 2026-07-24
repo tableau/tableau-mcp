@@ -15,6 +15,7 @@ import {
   UpdateCloudExtractRefreshSchedule,
 } from '../types/extractRefreshTask.js';
 import { FlowRunTask } from '../types/flowRunTask.js';
+import { RunFlowJob } from '../types/job.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 /**
@@ -154,5 +155,59 @@ export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis>
     });
     const response = parseGetFlowRunTasksResponse(raw);
     return response.tasks.task.map((t) => t.flowRun);
+  };
+
+  /**
+   * Returns a single scheduled flow run task by id ("Get Flow Run Task").
+   *
+   * Required scopes (Tableau Cloud): `tableau:flow_tasks:read`
+   *
+   * Permissions: non-administrators can only access flow run tasks for flows
+   * they own.
+   *
+   * @param siteId - The Tableau site ID
+   * @param taskId - The flow run task id
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#get_flow_run_task
+   */
+  getFlowRunTask = async ({
+    siteId,
+    taskId,
+  }: {
+    siteId: string;
+    taskId: string;
+  }): Promise<FlowRunTask> => {
+    const raw = await this._apiClient.getFlowRunTask({
+      params: { siteId, taskId },
+      ...this.authHeader,
+    });
+    return raw.task.flowRun;
+  };
+
+  /**
+   * Runs an EXISTING scheduled flow run task now ("Run Flow Task"), using the
+   * task's configured output steps / parameters, and returns the async job. A
+   * suspended task is resumed.
+   *
+   * Required scopes (Tableau Cloud): `tableau:flow_tasks:run`
+   * Requires Data Management + Tableau Prep Conductor; Run Now must be enabled.
+   *
+   * Permissions: non-administrators can only run flow run tasks they own.
+   *
+   * @param siteId - The Tableau site ID
+   * @param taskId - The flow run task id (from `getFlowRunTasks`)
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#run_flow_task
+   */
+  runFlowTask = async ({
+    siteId,
+    taskId,
+  }: {
+    siteId: string;
+    taskId: string;
+  }): Promise<RunFlowJob> => {
+    const raw = await this._apiClient.runFlowTask(undefined, {
+      params: { siteId, taskId },
+      ...this.authHeader,
+    });
+    return raw.job;
   };
 }

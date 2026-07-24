@@ -78,6 +78,13 @@ export class Config extends BaseConfig {
   flowToolsEnabled: boolean;
   insightsToolsEnabled: boolean;
   cspAllowedDomains: string[];
+  // Second opt-in for the content-MUTATING flow run tools (run-flow,
+  // run-flow-task, cancel-flow-run). FLOW_TOOLS_ENABLED is the base gate, so
+  // this flag has no effect while the flow tool family is disabled.
+  // Default off: these tools change site state for other users because a run
+  // consumes Prep Conductor capacity and can overwrite outputs, so operators
+  // must opt in.
+  flowWriteToolsEnabled: boolean;
 
   constructor() {
     super();
@@ -145,6 +152,7 @@ export class Config extends BaseConfig {
       FLOW_TOOLS_ENABLED: flowToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
+      FLOW_WRITE_TOOLS_ENABLED: flowWriteToolsEnabled,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -310,6 +318,7 @@ export class Config extends BaseConfig {
     // gated off by default while the insights rollout is staged (keeps hosts
     // like Slackbot stable); set INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
+    this.flowWriteToolsEnabled = flowWriteToolsEnabled === 'true';
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';

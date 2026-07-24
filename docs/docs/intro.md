@@ -46,6 +46,10 @@ Slack channel in the Tableau #DataDev workspace.
 | [get-flow](tools/flows/get-flow.md)                                                                                   | Retrieves information on a Tableau Prep flow including output steps and recent runs ([REST API][get-flow])                          | All SKUs     |
 | [list-flow-runs](tools/flows/list-flow-runs.md)                                                                       | Retrieves the run history (executions) of Tableau Prep flows on a site ([REST API][list-flow-runs])                                 | All SKUs     |
 | [list-flow-tasks](tools/flows/list-flow-tasks.md)                                                                     | Retrieves the scheduled flow run tasks (schedules) for Tableau Prep flows on a site ([REST API][list-flow-tasks])                   | All SKUs     |
+| [get-flow-task](tools/flows/get-flow-task.md)                                                                         | Retrieves a single scheduled flow run task by id ([REST API][get-flow-task])                                        | All SKUs     |
+| [run-flow](tools/flows/run-flow.md)                                                                                   | Opt-in mutating tool. Runs a Tableau Prep flow on demand, returning the async job ([REST API][run-flow-now])        | All SKUs     |
+| [run-flow-task](tools/flows/run-flow-task.md)                                                                         | Opt-in mutating tool. Runs an existing scheduled flow run task now, returning the async job ([REST API][run-flow-task]) | All SKUs     |
+| [cancel-flow-run](tools/flows/cancel-flow-run.md)                                                                     | Opt-in mutating tool. Requests cancellation of a queued or in-progress flow run by flow run id; poll for the final status ([REST API][cancel-flow-run]) | All SKUs     |
 | [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
 | [get-view-data](tools/views/get-view-data.md)                                                                         | Retrieves data in CSV format for the specified view in a Tableau workbook. *Note: the get-view-data api currently has a limitation that when used on a dashboard sheet type, it will only return data for the first worksheet in the dashboard. This will be fixed in the 26.3 fall release.* ([REST API][get-view-data])               | All SKUs     |
 | [get-view-image](tools/views/get-view-image.md)                                                                       | Retrieves an image for the specified view in a Tableau workbook ([REST API][get-view-image])                        | All SKUs     |
@@ -93,6 +97,14 @@ Slack channel in the Tableau #DataDev workspace.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#delete_workbook
 [delete-datasource]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#delete_data_source
+[get-flow-task]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#get_flow_run_task
+[run-flow-now]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#run_flow_now
+[run-flow-task]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#run_flow_task
+[cancel-flow-run]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#cancel_flow_run
 [get-view-data]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_view_data
 [get-view-image]:
