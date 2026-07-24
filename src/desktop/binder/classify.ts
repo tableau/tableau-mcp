@@ -1441,14 +1441,63 @@ function roleGreedyBind(
     if (pick.kind === 'ok') optionalAskNamedGeoSlots.add(slot.slot_id);
   }
 
-  const take = (pred: (f: SchemaField) => boolean): SchemaField | null => {
+  const fieldTokens = (f: SchemaField): Set<string> => {
+    const tokens = new Set<string>();
+    for (const name of [f.name, f.caption ?? '', bareName(f.columnName)]) {
+      for (const token of nameTokens(name)) tokens.add(token);
+    }
+    return tokens;
+  };
+  const schemaFallback = (
+    slot: TemplateManifest['slots'][number],
+    pred: (f: SchemaField) => boolean,
+  ): SchemaField | null => {
+    if (!temporalCompletion) return null;
+    const candidates = temporalCompletion.schemaFields.filter((f) => !used.has(f) && pred(f));
+    if (candidates.length === 0) return null;
+
+    // Prefer a unique field whose name is affine to the slot itself. This is what
+    // distinguishes Actual Amount from Quota Amount when both are quantitative.
+    const slotTokenGroups = [nameTokens(slot.slot_id)];
+    if (!slot.template_field.includes('{{')) {
+      slotTokenGroups.push(nameTokens(slot.template_field));
+    }
+    const slotAffine = candidates.filter((f) => {
+      const tokens = fieldTokens(f);
+      return slotTokenGroups.some(
+        (group) => group.length > 0 && group.every((token) => tokens.has(token)),
+      );
+    });
+    if (slotAffine.length > 0) return slotAffine.length === 1 ? slotAffine[0] : null;
+
+    // If the manifest uses a generic slot name (for example `entity`), allow the
+    // ask to narrow the schema pool by a field-name token. Whole-token matching
+    // includes the existing one-way plural alias, so "reps" identifies Rep Name.
+    const askAffine = candidates.filter((f) =>
+      [...fieldTokens(f)].some(
+        (token) => fieldNameMatchInAsk(temporalCompletion.maskedAsk, token, new Set()) >= 0,
+      ),
+    );
+    if (askAffine.length > 0) return askAffine.length === 1 ? askAffine[0] : null;
+
+    // No affinity signal: bind only a single remaining candidate of this kind.
+    return candidates.length === 1 ? candidates[0] : null;
+  };
+  const take = (
+    slot: TemplateManifest['slots'][number],
+    pred: (f: SchemaField) => boolean,
+    allowSchemaFallback = true,
+  ): SchemaField | null => {
     for (const f of matched) {
       if (!used.has(f) && pred(f)) {
         used.add(f);
         return f;
       }
     }
-    return null;
+    if (!allowSchemaFallback) return null;
+    const fallback = schemaFallback(slot, pred);
+    if (fallback) used.add(fallback);
+    return fallback;
   };
 
   const isActive = (slot: TemplateManifest['slots'][number]): boolean =>
@@ -1494,10 +1543,10 @@ function roleGreedyBind(
     let chosen: SchemaField | null = null;
     switch (slot.kind) {
       case 'quantitative':
-        chosen = take(isMeasure);
+        chosen = take(slot, isMeasure);
         break;
       case 'categorical':
-        chosen = take(isCategorical);
+        chosen = take(slot, isCategorical);
         break;
       case 'temporal':
         // A real date/datetime field always fits. When the slot opts in via
@@ -1506,9 +1555,12 @@ function roleGreedyBind(
         // (validate.ts + dateparseTemporalAxis) turns it into a continuous truncated axis.
         // Without this the string month never fills the temporal slot, the required-slot
         // gate fails, and the singer thrashes into a bar-over-strings (e4: 310s, judge 40).
-        chosen = take((f) =>
-          isTemporal(f) ||
-          (slot.temporal_from_string === true && inferStringTemporal(f) !== null),
+        chosen = take(
+          slot,
+          (f) =>
+            isTemporal(f) ||
+            (slot.temporal_from_string === true && inferStringTemporal(f) !== null),
+          false,
         );
         // UNIQUE-DATE TEMPORAL COMPLETION (final bind pass only; mirrors W60 geo): a
         // lone required temporal slot the ask did not name is completed with the
@@ -1628,7 +1680,13 @@ function selectWithinFamily(
     const native = familyNativeKeywords(m.family, manifests);
     const won = matchedKeywords(maskedAsk, m.intent_keywords);
     const decisive =
-      won.some((kw) => native.has(kw.toLowerCase())) || wonChartNoun(maskedAsk, m.intent_keywords);
+      won.some((kw) => native.has(kw.toLowerCase())) ||
+      wonChartNoun(maskedAsk, m.intent_keywords) ||
+      // `quota` has one eligible carrier, but stopped being family-native when
+      // deviation gained a second eligible template. Keep this exact domain cue
+      // decisive without misclassifying it as a chart noun in ask-router parity.
+      (m.template === 'quota-attainment-bullet' &&
+        won.some((kw) => kw.toLowerCase() === 'quota'));
     return decisive ? m : null;
   }
 

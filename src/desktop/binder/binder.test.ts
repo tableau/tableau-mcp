@@ -1499,6 +1499,128 @@ describe('binder/bindTemplate — e1 measure-by-dimension confident bind', () =>
   });
 });
 
+describe('binder/roleGreedyBind — single-candidate-per-slot schema fallback', () => {
+  it('binds e2 quota attainment from unique slot-affine schema candidates', async () => {
+    const workbookXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='E2'>
+      <column name='[rep_name]' caption='Rep Name' role='dimension' type='nominal' datatype='string' />
+      <column name='[region]' caption='Region' role='dimension' type='nominal' datatype='string' />
+      <column name='[segment]' caption='Segment' role='dimension' type='nominal' datatype='string' />
+      <column name='[quota_amount]' caption='Quota Amount' role='measure' type='quantitative' datatype='real' />
+      <column name='[actual_amount]' caption='Actual Amount' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const ask = 'Which reps are closest to hitting quota?';
+    const classified = classifyNoLlm(ask, manifests, summarizeSchema(workbookXml));
+    expect(classified).not.toBeNull();
+    expect(classified!.template).toBe('quota-attainment-bullet');
+    expect(Object.fromEntries(classified!.bindings.map((b) => [b.slot_id, b.field]))).toEqual({
+      entity: 'Rep Name',
+      actual: 'Actual Amount',
+      quota: 'Quota Amount',
+    });
+
+    const result = await bindTemplate({ ask, workbookXml, manifests });
+    expect(result.status).toBe('bound');
+  });
+
+  it('keeps e3 on propose when one quantitative slot has two schema candidates', async () => {
+    const workbookXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='E3'>
+      <column name='[metric_name]' caption='Metric Name' role='dimension' type='nominal' datatype='string' />
+      <column name='[current_period]' caption='Current Period' role='measure' type='quantitative' datatype='real' />
+      <column name='[prior_period]' caption='Prior Period' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const result = await bindTemplate({
+      ask: "What's our total ARR this quarter vs. last?",
+      workbookXml,
+      manifests,
+    });
+    expect(result.status).not.toBe('bound');
+  });
+
+  it('fails closed when a categorical slot has two unused schema candidates', async () => {
+    const workbookXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Ambiguous'>
+      <column name='[department]' caption='Department' role='dimension' type='nominal' datatype='string' />
+      <column name='[segment]' caption='Segment' role='dimension' type='nominal' datatype='string' />
+      <column name='[revenue]' caption='Revenue' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const result = await bindTemplate({
+      ask: 'bar chart of revenue',
+      workbookXml,
+      manifests,
+    });
+    expect(result.status).not.toBe('bound');
+  });
+
+  it('does not schema-order-fallback geo slots without name affinity', async () => {
+    const workbookXml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='NoGeo'>
+      <column name='[region]' caption='Region' role='dimension' type='nominal' datatype='string' />
+      <column name='[segment]' caption='Segment' role='dimension' type='nominal' datatype='string' />
+      <column name='[sales]' caption='Sales' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const result = await bindTemplate({
+      ask: 'map of sales by region',
+      workbookXml,
+      manifests,
+    });
+    expect(result.status).not.toBe('bound');
+  });
+
+  it('preserves M1 waterfall, e1 measure-by-dimension, and a known one-shot', async () => {
+    const e1Xml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='E1'>
+      <column name='[region]' caption='Region' role='dimension' type='nominal' datatype='string' />
+      <column name='[revenue]' caption='Revenue' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const [waterfall, e1, oneShot] = await Promise.all([
+      bindTemplate({
+        ask: 'waterfall of Profit by Sub-Category',
+        workbookXml: WORKBOOK_XML,
+        manifests,
+      }),
+      bindTemplate({ ask: 'Show me revenue by region.', workbookXml: e1Xml, manifests }),
+      bindTemplate({
+        ask: 'bar chart of Sales by Region',
+        workbookXml: WORKBOOK_XML,
+        manifests,
+      }),
+    ]);
+
+    expect(waterfall.status).toBe('bound');
+    if (waterfall.status === 'bound') {
+      expect(waterfall.args.template_name).toBe('part-to-whole-waterfall');
+    }
+    expect(e1.status).toBe('bound');
+    if (e1.status === 'bound') expect(e1.args.template_name).toBe('magnitude-simple-bar');
+    expect(oneShot.status).toBe('bound');
+    if (oneShot.status === 'bound') {
+      expect(oneShot.args.template_name).toBe('ranking-ordered-bar');
+    }
+  });
+});
+
 // Betting-shaped workbook whose measure name ('O/U Line') contains the token
 // 'line' — a trap for the trend-line-chart intent keyword. The no-LLM path must
 // pick kpi-text on 'kpi' regardless of the field name.
