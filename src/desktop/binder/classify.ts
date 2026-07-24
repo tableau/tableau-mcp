@@ -881,6 +881,21 @@ function resolveLatLonSymbolMap(
 }
 
 /**
+ * The naive English plural of a lowercased field-name token, or null when the name
+ * already ends in `s` (an `s`-final name gains no alias) or is empty. Covers the two
+ * regular rules a user's ask hits on a singular field name: a consonant + `y` → `ies`
+ * ("country" → "countries", "category" → "categories"), otherwise trailing `s`
+ * ("region" → "regions"). A `y` after a vowel keeps the `s` rule ("day" → "days").
+ * Deliberately NOT a full stemmer — no `es`/`ves`/irregulars — so the alias stays a
+ * single deterministic form per name and never broadens into fuzzy matching.
+ */
+function naivePlural(lower: string): string | null {
+  if (!lower || lower.endsWith('s')) return null;
+  if (/[^aeiou]y$/.test(lower)) return `${lower.slice(0, -1)}ies`;
+  return `${lower}s`;
+}
+
+/**
  * Every field name / caption / bare column name in the schema, lowercased. Feeds
  * fieldNameMatchInAsk's EXACT-FIRST tie-break: a field's plural alias is suppressed
  * at any token another field claims by its exact name (so with both "Region" and
@@ -906,13 +921,11 @@ function fieldExactNames(fields: SchemaField[]): Set<string> {
  * matcher), which is UNCHANGED so keyword scoring is unaffected.
  *
  *   - EXACT FIRST: an exact whole-token occurrence always wins and is returned as-is.
- *   - ONE-WAY PLURAL ALIAS: if `name` does NOT already end in `s`, its naive plural
- *     `name + "s"` also matches — field "Region" matches ask token "Regions". A name
- *     that already ends in `s` gains NO singular alias, so "Sales" never matches
- *     "Sale", and "Species" / "Address" / "Tickets" / "Resolution Hours" stay
- *     exact-only.
- *   - NAIVE TRAILING-`s` ONLY: no ies / es / stemmer, so "Category" does NOT match
- *     "Categories" (deliberately out of scope for this MR).
+ *   - ONE-WAY PLURAL ALIAS: if `name` does NOT already end in `s`, its naive English
+ *     plural also matches — field "Region" matches ask token "Regions", and field
+ *     "Country" matches "Countries" (consonant + `y` → `ies`). A name that already
+ *     ends in `s` gains NO singular alias, so "Sales" never matches "Sale", and
+ *     "Species" / "Address" / "Tickets" / "Resolution Hours" stay exact-only.
  *   - EXACT-FIRST TIE-BREAK ACROSS FIELDS: the plural alias is suppressed whenever the
  *     pluralized token is another field's EXACT name (`exactNames`), so "Region"'s
  *     alias never claims a "Regions" span that a field literally named "Regions" owns
@@ -921,9 +934,8 @@ function fieldExactNames(fields: SchemaField[]): Set<string> {
 function fieldNameMatchInAsk(ask: string, name: string, exactNames: ReadonlySet<string>): number {
   const exact = phraseIndexInAsk(ask, name);
   if (exact >= 0) return exact;
-  const n = name.toLowerCase().trim();
-  if (!n || n.endsWith('s')) return -1; // one-way: an `s`-final name gains no alias
-  const plural = `${n}s`;
+  const plural = naivePlural(name.toLowerCase().trim());
+  if (!plural) return -1; // one-way: an `s`-final (or empty) name gains no alias
   if (exactNames.has(plural)) return -1; // exact-first: another field owns this token
   return phraseIndexInAsk(ask, plural);
 }
@@ -992,18 +1004,22 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
     for (const n of names) {
       const lower = n.toLowerCase();
       // ONE-WAY plural alias, in lockstep with fieldNameMatchInAsk: a name not already
-      // ending in `s` also masks its naive plural token, so "Regions" is blanked WHOLE
-      // for a field "Region" — no partial "region"+leftover-"s" residue that could then
-      // keyword-match. Suppressed when the plural is another field's exact name (that
-      // field masks the token itself), preserving exact-first tie-breaking.
-      const pluralSuffix = !lower.endsWith('s') && !exactNames.has(`${lower}s`) ? 's?' : '';
+      // ending in `s` also masks its naive English plural token, so "Regions" is blanked
+      // WHOLE for a field "Region" and "Countries" for a field "Country" — no partial
+      // residue that could then keyword-match. Suppressed when the plural is another
+      // field's exact name (that field masks the token itself), preserving exact-first
+      // tie-breaking. naivePlural handles the consonant+`y`→`ies` rule ("category"→
+      // "categories") as well as the trailing-`s` case.
+      const plural = naivePlural(lower);
+      const pluralToken = plural && !exactNames.has(plural) ? plural : null;
       // HYPHEN↔SPACE LOCKSTEP WITH MATCHING (RT finding CLS-002): phraseIndexInAsk
       // matches a hyphenated field name against its spaced form ("Waterfall-Chart"
       // matches "waterfall chart"), so masking must blank that same span — a literal
       // regex would leave "waterfall" alive in the masked ask and let the FIELD NAME
       // select the waterfall family.
-      const body = escapeRegex(lower).replace(/-/g, '[\\s-]+');
-      const re = new RegExp(`(^|[^a-z0-9])(${body}${pluralSuffix})([^a-z0-9]|$)`, 'gi');
+      const toBody = (t: string): string => escapeRegex(t).replace(/-/g, '[\\s-]+');
+      const body = pluralToken ? `(?:${toBody(pluralToken)}|${toBody(lower)})` : toBody(lower);
+      const re = new RegExp(`(^|[^a-z0-9])(${body})([^a-z0-9]|$)`, 'gi');
       masked = masked.replace(
         re,
         (_whole, pre: string, mid: string, post: string) => pre + ' '.repeat(mid.length) + post,
