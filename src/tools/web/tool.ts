@@ -153,6 +153,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
       message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(args)}`,
       level: 'debug',
       logger: 'tool',
+      data: { oauthClientId },
     });
 
     const productTelemetryForwarder = getProductTelemetry(

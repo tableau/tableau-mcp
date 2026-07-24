@@ -4,6 +4,7 @@ import { Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
 import { DatasourceNotAllowedError, ZodiosValidationError } from '../../errors/mcpToolError.js';
+import * as logger from '../../logging/logger.js';
 import { notifier } from '../../logging/notification.js';
 import { WebMcpServer } from '../../server.web.js';
 import { TableauAuthInfo } from '../../server/oauth/schemas.js';
@@ -451,6 +452,84 @@ describe('Tool', () => {
           oauth_client_display_name: 'Claude',
         }),
       );
+    });
+  });
+
+  describe('invocation log', () => {
+    let logSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      logSpy = vi.spyOn(logger, 'log').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      logSpy.mockRestore();
+    });
+
+    function loggedClientId(): unknown {
+      const entry = vi
+        .mocked(logger.log)
+        .mock.calls.map((call) => call[0])
+        .find((entry) => entry.logger === 'tool' && entry.message.includes('invoked'));
+      invariant(entry);
+      return (entry.data as { oauthClientId?: unknown }).oauthClientId;
+    }
+
+    async function invoke(extra: typeof mockExtra): Promise<void> {
+      const tool = new WebTool(mockParams);
+      await tool.logAndExecute({
+        extra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+    }
+
+    it('logs the Bearer clientId', async () => {
+      const clientId = 'https://claude.ai/.well-known/oauth/client-metadata.json';
+      await invoke({
+        ...mockExtra,
+        tableauAuthInfo: {
+          type: 'Bearer',
+          username: 'user@example.com',
+          server: 'https://my-tableau.example.com',
+          siteId: 'abc123',
+          siteName: 'my-site',
+          userId: 'uid-1',
+          raw: 'fake-token',
+          clientId,
+        },
+      });
+
+      expect(loggedClientId()).toBe(clientId);
+    });
+
+    it('falls back to authInfo.clientId on the embedded-OAuth path', async () => {
+      const clientId = 'https://claude.ai/.well-known/oauth/client-metadata.json';
+      const embeddedTableauAuthInfo: TableauAuthInfo = {
+        type: 'X-Tableau-Auth',
+        username: 'user@example.com',
+        server: 'https://my-tableau.example.com',
+        siteName: 'my-site',
+        userId: 'uid-1',
+      };
+      await invoke({
+        ...mockExtra,
+        tableauAuthInfo: embeddedTableauAuthInfo,
+        authInfo: {
+          token: 'fake-mcp-access-token',
+          clientId,
+          scopes: [],
+          extra: embeddedTableauAuthInfo,
+        },
+      });
+
+      expect(loggedClientId()).toBe(clientId);
+    });
+
+    it('logs undefined when no client id is present', async () => {
+      await invoke(mockExtra);
+      expect(loggedClientId()).toBeUndefined();
     });
   });
 
