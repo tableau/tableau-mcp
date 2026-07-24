@@ -217,13 +217,13 @@
     },
     {
       "path": "data-visualization-templates-xml/spatial-symbol-map-latlon.xml",
-      "sha256": "6fe0b950629fa10291152f40ad634a580e1f07ed47c01c2177adc0aeded8f90b",
-      "bytes": 2637
+      "sha256": "c0d72dd456cba1760afb3ee003e6197a165e1663ab0ea5803bd99690ead55459",
+      "bytes": 3142
     },
     {
       "path": "data-visualization-templates-xml/spatial-symbol-map.xml",
-      "sha256": "62243687240b11563ac5cea5a6ef31a6faf6a2320068999abe4dd31481fff3da",
-      "bytes": 2835
+      "sha256": "3354a9e5317a59e91462b27157cdba88e05af0c16ea6f2637fa8ccfbc7a236d1",
+      "bytes": 3173
     },
     {
       "path": "data-visualization-templates-xml/trend-line-chart.xml",
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "39263a134909614154768061ea50e51dcc91a25c54046b31570cf50a5b9028cb",
-      "bytes": 277526
+      "sha256": "ea5a0aeb7693ee86b64ada566405e7b0e529b8c76824aa5ae7d3b2203381bda0",
+      "bytes": 280808
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -447,13 +447,13 @@
     },
     {
       "path": "template-manifests/spatial-symbol-map-latlon.manifest.json",
-      "sha256": "d281f050c88116c641248ecc416b956c0289cb5b9eb106764b23dd6b5f04be3b",
-      "bytes": 4088
+      "sha256": "10167adfa8c691b43fc46e51af741b9694faa1942c9c8f926e0b470f9a1c9418",
+      "bytes": 5784
     },
     {
       "path": "template-manifests/spatial-symbol-map.manifest.json",
-      "sha256": "2dbac5c9d163780840c7079280dfe7a3ec1e5c4139ab8a94dc36f38b002e21d4",
-      "bytes": 4659
+      "sha256": "2b82774cb6da6f6c17c8932963ffe237a75ca3dd41b64a0605d7ced2eab0baf7",
+      "bytes": 5862
     },
     {
       "path": "template-manifests/trend-line-chart.manifest.json",

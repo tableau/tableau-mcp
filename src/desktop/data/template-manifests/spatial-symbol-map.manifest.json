@@ -7,7 +7,7 @@
   "portability_evidence": {
     "fixture_bind": true,
     "render_verified": "live-2026-07-11",
-    "xml_sha256": "62243687240b11563ac5cea5a6ef31a6faf6a2320068999abe4dd31481fff3da",
+    "xml_sha256": "3354a9e5317a59e91462b27157cdba88e05af0c16ea6f2637fa8ccfbc7a236d1",
     "render_evidence": {
       "method": "gate-composite",
       "date": "2026-07-11",
@@ -31,7 +31,9 @@
   "datasource_placeholder": true,
   "placeholders": [
     "TITLE",
-    "DATASOURCE"
+    "DATASOURCE",
+    "field_base_1",
+    "field_base_2"
   ],
   "intent_keywords": [
     "symbol-map",
@@ -93,6 +95,42 @@
       "bindable": true,
       "required": true,
       "notes": "aggregated measure driving symbol size (proportional-symbol encoding)."
+    },
+    {
+      "slot_id": "color",
+      "template_field": "{{field_base_1}}",
+      "derivation": "sum",
+      "role": [
+        "color"
+      ],
+      "kind": "quantitative-or-categorical",
+      "bindable": true,
+      "required": false,
+      "purpose": "Optional measure or dimension that controls mark color.",
+      "examples": [
+        "Points",
+        "Region",
+        "Status"
+      ],
+      "notes": "OPTIONAL: binds only from an explicit color shelf instruction. Categorical fields use derivation none; measures use the requested or default sum aggregation."
+    },
+    {
+      "slot_id": "tooltip",
+      "template_field": "{{field_base_2}}",
+      "derivation": "sum",
+      "role": [
+        "tooltip"
+      ],
+      "kind": "quantitative-or-categorical",
+      "bindable": true,
+      "required": false,
+      "purpose": "Optional measure or dimension added to the mark tooltip.",
+      "examples": [
+        "Points",
+        "Country",
+        "Owner"
+      ],
+      "notes": "OPTIONAL: binds only from an explicit tooltip shelf instruction. Categorical fields use derivation none; measures use the requested or default sum aggregation."
     }
   ],
   "calcs": [],

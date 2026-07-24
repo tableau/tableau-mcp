@@ -14,6 +14,9 @@
         <column datatype='real' name='[Longitude]' role='measure' type='quantitative' />
         <column datatype='string' name='[Detail1]' role='dimension' type='nominal' />
         <column datatype='string' name='[Detail2]' role='dimension' type='nominal' />
+        <column datatype='real' name='[{{field_base_1}}]' role='measure' type='quantitative' />
+        <column datatype='real' name='[{{field_base_2}}]' role='measure' type='quantitative' />
+        <column datatype='real' name='[{{field_base_3}}]' role='measure' type='quantitative' />
         <column-instance column='[Latitude]' derivation='Avg' name='[avg:Latitude:qk]' pivot='key' type='quantitative' />
         <column-instance column='[Longitude]' derivation='Avg' name='[avg:Longitude:qk]' pivot='key' type='quantitative' />
         <column-instance column='[Detail1]' derivation='None' name='[none:Detail1:nk]' pivot='key' type='nominal' />
@@ -35,6 +38,9 @@
         <mark class='Circle' />
         <mark-sizing mark-sizing-setting='marks-scaling-off' />
         <encodings>
+          <size column='[{{DATASOURCE}}].[sum:{{field_base_1}}:qk]' />
+          <color column='[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]' />
+          <tooltip column='[{{DATASOURCE}}].[sum:{{field_base_3}}:qk]' />
           <lod column='[{{DATASOURCE}}].[none:Detail1:nk]' />
           <lod column='[{{DATASOURCE}}].[none:Detail2:nk]' />
         </encodings>

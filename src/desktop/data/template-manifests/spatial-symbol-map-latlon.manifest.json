@@ -11,7 +11,10 @@
   "datasource_placeholder": true,
   "placeholders": [
     "TITLE",
-    "DATASOURCE"
+    "DATASOURCE",
+    "field_base_1",
+    "field_base_2",
+    "field_base_3"
   ],
   "intent_keywords": [
     "latlon-symbol-map",
@@ -26,7 +29,7 @@
     "spatial",
     "map"
   ],
-  "description": "A real latitude/longitude point symbol map: Longitude and Latitude measure columns are placed on Cols/Rows as AVG continuous axes, one fixed-size, single-color Circle mark per detail dimension member. Measure-free (a static symbol map \u2014 no size/color encoding). Use for datasets that already carry real coordinate columns rather than Tableau-generated geocoding fields, when you just want to plot WHERE things are (e.g. office locations) without encoding a magnitude.",
+  "description": "A real latitude/longitude point symbol map: Longitude and Latitude measure columns are placed on Cols/Rows as AVG continuous axes, one Circle mark per detail dimension member. Size, color, and tooltip are optional and remain absent unless the ask explicitly assigns fields to those encodings. Use for datasets that already carry real coordinate columns rather than Tableau-generated geocoding fields.",
   "slots": [
     {
       "slot_id": "longitude",
@@ -75,6 +78,60 @@
       "bindable": true,
       "required": false,
       "notes": "Second grain dimension as [none:Detail2:nk]. OPTIONAL: bound when the data has a second non-coordinate dimension so no marks collapse (e.g. pm_name AND city \u2014 26 offices stay 26 marks, not per-city AVG-centroids). When the data has only ONE dimension this slot is UNBOUND and pruned (bindable && !required && kind:'geo' && role:['lod'] \u2014 the exact optionalFieldPrunesFor predicate). Data with 3+ non-coordinate dims exceeds this template's capacity and fails closed to propose (dropping a dim would re-collapse marks)."
+    },
+    {
+      "slot_id": "size",
+      "template_field": "{{field_base_1}}",
+      "derivation": "sum",
+      "role": [
+        "size"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": false,
+      "purpose": "Optional measure that controls symbol size.",
+      "examples": [
+        "Points",
+        "Sales",
+        "Population"
+      ],
+      "notes": "OPTIONAL: binds only from an explicit size shelf instruction. When unbound, its datasource declaration and size encoding are removed byte-identically."
+    },
+    {
+      "slot_id": "color",
+      "template_field": "{{field_base_2}}",
+      "derivation": "sum",
+      "role": [
+        "color"
+      ],
+      "kind": "quantitative-or-categorical",
+      "bindable": true,
+      "required": false,
+      "purpose": "Optional measure or dimension that controls mark color.",
+      "examples": [
+        "Points",
+        "Region",
+        "Status"
+      ],
+      "notes": "OPTIONAL: binds only from an explicit color shelf instruction. Categorical fields use derivation none; measures use the requested or default sum aggregation."
+    },
+    {
+      "slot_id": "tooltip",
+      "template_field": "{{field_base_3}}",
+      "derivation": "sum",
+      "role": [
+        "tooltip"
+      ],
+      "kind": "quantitative-or-categorical",
+      "bindable": true,
+      "required": false,
+      "purpose": "Optional measure or dimension added to the mark tooltip.",
+      "examples": [
+        "Points",
+        "Country",
+        "Owner"
+      ],
+      "notes": "OPTIONAL: binds only from an explicit tooltip shelf instruction. Categorical fields use derivation none; measures use the requested or default sum aggregation."
     }
   ],
   "calcs": [],

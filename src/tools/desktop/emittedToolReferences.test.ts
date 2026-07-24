@@ -71,6 +71,8 @@ const NON_TOOL_VOCABULARY = [
   'pre-dispatch',
   'pre-edit',
   'promise-check',
+  // Manifest slot-kind vocabulary, not an emitted tool reference.
+  'quantitative-or-categorical',
   'ranking-ordered-bar',
   're-apply',
   're-call',

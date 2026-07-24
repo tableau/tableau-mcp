@@ -382,6 +382,12 @@ function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
       return f.role === 'measure' || f.isAggregated;
     case 'categorical':
       return f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal');
+    case 'quantitative-or-categorical':
+      return (
+        f.role === 'measure' ||
+        f.isAggregated ||
+        (f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal'))
+      );
     case 'temporal':
       return TEMPORAL_DATATYPES.has(f.datatype);
     case 'geo':
@@ -391,6 +397,16 @@ function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
     default:
       return false;
   }
+}
+
+function effectiveSlotDerivation(
+  slot: SlotSpec,
+  field: SchemaField,
+  override?: Derivation,
+): Derivation {
+  if (override !== undefined) return override;
+  if (slot.kind === 'quantitative-or-categorical' && field.role === 'dimension') return 'none';
+  return slot.derivation;
 }
 
 function optionalFieldPrunesFor(
@@ -554,7 +570,7 @@ export function validateBinding(
     // entirely. An illegal override yields a teaching blocker so the caller
     // knows why the requested aggregation/grain cannot apply.
     const override = overrideBySlot.get(slotId);
-    const effDeriv = override ?? slot.derivation;
+    const effDeriv = effectiveSlotDerivation(slot, f, override);
     const src = override !== undefined ? 'requested override' : 'template derivation';
     if (!f.isAggregated) {
       if (TEMPORAL_DERIVATIONS.has(effDeriv) && !TEMPORAL_DATATYPES.has(f.datatype)) {
@@ -689,7 +705,7 @@ export function validateBinding(
     // so the injector still matches the template instance it identifies — the
     // override changes the resolved value, not which instance is targeted.
     const override = overrideBySlot.get(slot.slot_id);
-    const deriv = f.isAggregated ? 'usr' : (override ?? slot.derivation);
+    const deriv = f.isAggregated ? 'usr' : effectiveSlotDerivation(slot, f, override);
     // Suffix follows the EFFECTIVE derivation, not the field type alone: a date
     // truncation is continuous (':qk') even on an ordinal date field (P1-3).
     const suffix = suffixFor(deriv, f.type);

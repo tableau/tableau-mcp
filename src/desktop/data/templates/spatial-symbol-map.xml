@@ -14,6 +14,8 @@
         <column datatype='string' name='[Country/Region]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
         <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
         <column datatype='string' name='[State/Province]' role='dimension' semantic-role='[State].[Name]' type='nominal' />
+        <column datatype='real' name='[{{field_base_1}}]' role='measure' type='quantitative' />
+        <column datatype='real' name='[{{field_base_2}}]' role='measure' type='quantitative' />
         <column-instance column='[City]' derivation='None' name='[none:City:nk]' pivot='key' type='nominal' />
         <column-instance column='[Country/Region]' derivation='None' name='[none:Country/Region:nk]' pivot='key' type='nominal' />
         <column-instance column='[State/Province]' derivation='None' name='[none:State/Province:nk]' pivot='key' type='nominal' />
@@ -36,6 +38,8 @@
         <mark-sizing mark-sizing-setting='marks-scaling-off' />
         <encodings>
           <size column='[{{DATASOURCE}}].[sum:Sales:qk]' />
+          <color column='[{{DATASOURCE}}].[sum:{{field_base_1}}:qk]' />
+          <tooltip column='[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]' />
           <lod column='[{{DATASOURCE}}].[none:Country/Region:nk]' />
           <lod column='[{{DATASOURCE}}].[none:State/Province:nk]' />
           <lod column='[{{DATASOURCE}}].[none:City:nk]' />

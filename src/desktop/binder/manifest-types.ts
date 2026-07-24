@@ -88,6 +88,7 @@ export interface RenderEvidence {
 export type SlotKind =
   | 'quantitative' // role=measure, type=quantitative
   | 'categorical' // role=dimension, nominal/ordinal
+  | 'quantitative-or-categorical' // encoding shelf accepts either a measure or dimension
   | 'temporal' // dimension over datatype date|datetime
   | 'geo' // dimension, geocodable — bind with care
   // ── never user-bindable: template owns these fully ──
