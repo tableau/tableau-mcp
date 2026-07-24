@@ -34,6 +34,8 @@ const testProductVersionWithoutSvg: ProductVersion = testProductVersion; // 2026
 const mocks = vi.hoisted(() => ({
   mockGetView: vi.fn(),
   mockQueryViewImage: vi.fn(),
+  mockUploadImageToS3: vi.fn(),
+  mockLog: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -46,6 +48,15 @@ vi.mock('../../../restApiInstance.js', () => ({
       siteId: 'test-site-id',
     }),
   ),
+}));
+
+vi.mock('../uploadImageToS3.js', () => ({
+  uploadImageToS3: mocks.mockUploadImageToS3,
+}));
+
+vi.mock('../../../logging/logger.js', async (importActual) => ({
+  ...(await importActual<typeof import('../../../logging/logger.js')>()),
+  log: mocks.mockLog,
 }));
 
 describe('getViewImageTool', () => {
@@ -281,6 +292,68 @@ describe('getViewImageTool', () => {
     expect(result.content[0].text).toContain(
       'The image format feature is disabled on this Tableau Server',
     );
+  });
+
+  describe('S3 image offload', () => {
+    it('should return a resource_link (no base64) when IMAGE_S3_BUCKET is configured', async () => {
+      vi.stubEnv('IMAGE_S3_BUCKET', 'tableau-images');
+      mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
+      mocks.mockUploadImageToS3.mockResolvedValue('https://s3.example.com/signed-url');
+
+      const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
+
+      expect(result.isError).toBe(false);
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0]).toMatchObject({
+        type: 'resource_link',
+        uri: 'https://s3.example.com/signed-url',
+        name: 'view-image.png',
+        mimeType: 'image/png',
+      });
+      // No base64 image block is inlined when offloading to S3.
+      expect(result.content.some((c) => c.type === 'image')).toBe(false);
+
+      expect(mocks.mockUploadImageToS3).toHaveBeenCalledWith(mockPngData, {
+        format: 'PNG',
+        resourceId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+        config: expect.objectContaining({ bucket: 'tableau-images' }),
+      });
+    });
+
+    it('should return inline base64 when IMAGE_S3_BUCKET is not configured', async () => {
+      mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
+
+      const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
+
+      expect(result.isError).toBe(false);
+      expect(result.content[0]).toMatchObject({
+        type: 'image',
+        data: base64PngData,
+        mimeType: 'image/png',
+      });
+      expect(mocks.mockUploadImageToS3).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to inline base64 and warn when the S3 upload fails', async () => {
+      vi.stubEnv('IMAGE_S3_BUCKET', 'tableau-images');
+      mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
+      mocks.mockUploadImageToS3.mockRejectedValue(new Error('access denied'));
+
+      const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
+
+      expect(result.isError).toBe(false);
+      expect(result.content[0]).toMatchObject({
+        type: 'image',
+        data: base64PngData,
+        mimeType: 'image/png',
+      });
+      expect(mocks.mockLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: 'warning',
+          message: expect.stringContaining('access denied'),
+        }),
+      );
+    });
   });
 });
 
