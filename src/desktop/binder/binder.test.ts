@@ -149,6 +149,26 @@ describe('binder/classifyNoLlm', () => {
     const s = summarizeSchema(WORKBOOK_XML);
     expect(classifyNoLlm('top share of Sales by Region', manifests, s)).toBeNull();
   });
+
+  // ── geo-concept match on a QUALIFIED field name (live WorldCup regression) ──────
+  // The ask says "countries"; the geo field is named "Country Code", not "Country".
+  // Before the geo-concept augment this returned null → the required geo slot never
+  // filled → the singer thrashed and hand-built a SUM(Lat)×SUM(Lon) scatter (Kyler's
+  // live symbol-map failure). The concept token must match the qualified geo field —
+  // geo-slot-only, unique-candidate, fail-closed.
+  it('binds spatial-symbol-map when the ask names the geo CONCEPT ("countries") for a qualified field ("Country Code")', () => {
+    const WC = `<?xml version='1.0' encoding='utf-8'?>
+<workbook><datasources><datasource name='federated.wc' caption='WorldCup'>
+  <connection><relation name='players' /></connection>
+  <column name='[country_code]' caption='Country Code' role='dimension' type='nominal' datatype='string' semantic-role='[Country].[ISO3166_2]' />
+  <column name='[goals_for]' caption='Goals For' role='measure' type='quantitative' datatype='integer' />
+  <column name='[player_name]' caption='Player Name' role='dimension' type='nominal' datatype='string' />
+</datasource></datasources><worksheets><worksheet name='se-eval-scratch' /></worksheets></workbook>`;
+    const cls = classifyNoLlm('symbol map of countries by Goals For', manifests, summarizeSchema(WC));
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('spatial-symbol-map');
+    expect(cls!.bindings).toContainEqual({ slot_id: 'country', field: 'Country Code' });
+  });
 });
 
 // ── e4: string-month temporal slot (temporal_from_string) ─────────────────────

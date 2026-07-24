@@ -1331,6 +1331,45 @@ function pickGeoField(pool: SchemaField[], slotId: string): GeoPick {
 }
 
 /**
+ * Add a uniquely compatible geo field when the ask names the slot's natural geo
+ * concept rather than the field's full caption (for example, "countries" for
+ * "Country Code"). This is deliberately geo-slot-only: ordinary field matching
+ * remains exact-first and never gains generic substring behavior.
+ *
+ * Existing ask-named geo matches always win. Otherwise the masked ask must contain
+ * one of the slot's whole-token concept aliases, and the full schema must produce
+ * exactly one semantic-role/name-affine field. Zero or multiple candidates add
+ * nothing, preserving the existing fail-closed behavior.
+ */
+function augmentGeoConceptMatches(
+  maskedAsk: string,
+  manifest: TemplateManifest,
+  matched: SchemaField[],
+  schemaDims: SchemaField[],
+): SchemaField[] {
+  const augmented = [...matched];
+  const geoSlots = manifest.slots.filter(
+    (slot) => slot.bindable && slot.required && slot.kind === 'geo',
+  );
+
+  for (const slot of geoSlots) {
+    const askNamedPool = augmented.filter((field) => field.role === 'dimension');
+    if (pickGeoField(askNamedPool, slot.slot_id).kind !== 'none') continue;
+    const conceptNamed = [...geoAffinityTokens(slot.slot_id)].some(
+      (token) => fieldNameMatchInAsk(maskedAsk, token, new Set()) >= 0,
+    );
+    if (!conceptNamed) continue;
+
+    const schemaPick = pickGeoField(schemaDims, slot.slot_id);
+    if (schemaPick.kind === 'ok' && !augmented.includes(schemaPick.field)) {
+      augmented.push(schemaPick.field);
+    }
+  }
+
+  return augmented;
+}
+
+/**
  * Resolve every required geo slot to a distinct field by SEMANTIC ROLE, then NAME
  * AFFINITY. Fail-closed
  * (returns null → the caller proposes) when a geo slot is not UNAMBIGUOUS: each binds
@@ -2283,7 +2322,12 @@ export function classifyNoLlm(
   // the masked ask + full schema so a lone required date slot the ask did not name
   // can complete with the schema's single date field). selectWithinFamily's earlier
   // slot-fit probes deliberately omit this context (no completion during tie-break).
-  let matchedForBinding = matched;
+  let matchedForBinding = augmentGeoConceptMatches(
+    maskedAsk,
+    chosen,
+    matched,
+    schemaDims,
+  );
   if (waterfallCanOrderDeterministically) {
     // The selected sequence field is sort metadata; other sequence-like names may still be
     // ask-named contribution measures. Goal-language P&L asks may name neither "amount" nor
