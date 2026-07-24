@@ -28,7 +28,8 @@ export const getRenderInteractiveVizTool = (server: WebMcpServer): WebTool<typeo
   const renderInteractiveVizTool = new WebTool({
     server,
     name: 'render-interactive-viz',
-    description: 'Renders the specified workbook or view as an interactive embedded Tableau viz.',
+    description:
+      'Use when the user wants to see or view an interactive Tableau view, workbook, or viz — e.g. "show me the view", "show me the workbook", "open this dashboard interactively". Renders the workbook or view identified by luid (objectType "workbook" or "view") as an interactive, embedded Tableau visualization the user can explore.',
     paramsSchema,
     annotations: {
       title: 'Render Interactive Viz',
