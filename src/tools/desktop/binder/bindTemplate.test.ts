@@ -1045,10 +1045,11 @@ describe('bindTemplateTool bind recovery gate', () => {
     });
   });
 
-  it('allows one semantically changed retry and then blocks further proposal-bearing calls', async () => {
+  it('allows genuinely new corrected proposals and then blocks repeated signatures', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate)
       .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(escalateResult)
       .mockResolvedValueOnce(escalateResult)
       .mockResolvedValueOnce(escalateResult);
 
@@ -1063,7 +1064,17 @@ describe('bindTemplateTool bind recovery gate', () => {
       ask: 'bar chart of Revenue by Region',
       proposal: changedProposal,
     });
-    const exhausted = await getToolResult({
+    const changedAgainRetry = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Revenue by Region',
+      proposal: changedProposalAgain,
+    });
+    const repeated = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Revenue by Region',
+      proposal: changedProposalAgain,
+    });
+    const repeatedAgain = await getToolResult({
       session: '1',
       ask: 'bar chart of Revenue by Region',
       proposal: changedProposalAgain,
@@ -1072,17 +1083,21 @@ describe('bindTemplateTool bind recovery gate', () => {
     expect(changedRetry.isError).toBe(false);
     invariant(changedRetry.content[0].type === 'text');
     expect(JSON.parse(changedRetry.content[0].text).status).toBe('escalate');
-    expect(exhausted.isError).toBe(true);
-    invariant(exhausted.content[0].type === 'text');
-    const body = JSON.parse(exhausted.content[0].text);
+    expect(changedAgainRetry.isError).toBe(false);
+    invariant(changedAgainRetry.content[0].type === 'text');
+    expect(JSON.parse(changedAgainRetry.content[0].text).status).toBe('escalate');
+    expect(repeated.isError).toBe(true);
+    expect(repeatedAgain.isError).toBe(true);
+    invariant(repeated.content[0].type === 'text');
+    const body = JSON.parse(repeated.content[0].text);
     expect(body.status).toBe('blocked');
     expect(body.reason).toBe('retry_budget_exhausted');
-    expect(body.guidance).toContain('single changed proposal retry');
-    expect(exhausted.structuredContent).toEqual({
+    expect(body.guidance).toContain('repeats an attempted signature');
+    expect(repeated.structuredContent).toEqual({
       nextAction: { label: 'Use fallback path or ask user', kind: 'prefill' },
     });
-    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(3);
-    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(3);
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(4);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(4);
     const record = sessionRouteState.getBindRecovery(
       '1',
       normalizeAskForMatch('bar chart of Revenue by Region'),
@@ -1091,6 +1106,7 @@ describe('bindTemplateTool bind recovery gate', () => {
     expect(record?.attempts.map((attempt) => attempt.consumesRetryBudget)).toEqual([
       false,
       false,
+      true,
       true,
     ]);
   });

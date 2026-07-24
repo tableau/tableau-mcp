@@ -69,9 +69,9 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %)',
     action:
-      "author-calc the derived metric FIRST (read knowledge for the formula — gross margin excludes opex), then bind-template by the calc's caption. For gross margin %, use exactly (SUM(revenue)-SUM(cogs))/SUM(revenue): revenue and cogs only; do NOT subtract opex.",
+      "author-calc the derived metric FIRST (read knowledge for the formula), then bind-template by the calc's caption.",
     toolSequence: ['author-calc', 'bind-template'],
-    stopConditions: ['revenue and cogs only; do NOT subtract opex'],
+    stopConditions: ['read knowledge for the formula'],
     requiredEvidence: ['authored calculation readback before template binding'],
   },
   {

@@ -64,6 +64,9 @@ export type BindRecoveryPhase =
   | 'retry-used'
   | 'terminal';
 
+/** Maximum genuinely distinct proposal corrections retained for one normalized ask. */
+export const MAX_BIND_RECOVERY_PROPOSAL_SIGNATURES = 8;
+
 export interface BindAttempt {
   /** ISO timestamp the bind recovery observation was recorded. */
   ts: string;
@@ -73,7 +76,7 @@ export interface BindAttempt {
   outcome?: BindOutcome;
   /** Canonical semantic signature for proposal-bearing calls. */
   proposalSignature?: string;
-  /** True only for the single changed-proposal retry after the first proposal-bearing call. */
+  /** True for each genuinely new changed proposal after the first proposal-bearing call. */
   consumesRetryBudget: boolean;
 }
 
@@ -100,6 +103,25 @@ export interface BindRecoveryAttemptInput {
 
 export interface BindRecoveryAdmissionInput {
   proposalSignature?: string;
+}
+
+export type BindProposalProgress = 'new' | 'repeat' | 'limit';
+
+/**
+ * Classify whether a proposal signature advances recovery or cycles prior work. Distinct
+ * corrections fail open until the bounded cap; any previously seen signature is loop evidence.
+ */
+export function classifyBindProposalProgress(
+  record: BindRecoveryRecord | undefined,
+  proposalSignature: string,
+): BindProposalProgress {
+  const distinctSignatures = new Set(
+    (record?.attempts ?? []).flatMap((attempt) =>
+      attempt.proposalSignature === undefined ? [] : [attempt.proposalSignature],
+    ),
+  );
+  if (distinctSignatures.has(proposalSignature)) return 'repeat';
+  return distinctSignatures.size >= MAX_BIND_RECOVERY_PROPOSAL_SIGNATURES ? 'limit' : 'new';
 }
 
 export interface UnprotectedPassthroughs {
@@ -387,7 +409,10 @@ export class SessionRouteStateStore {
       priorProposalSignature !== undefined &&
       priorProposalSignature !== proposalSignature;
 
-    const consumesRetryBudget = previous?.phase === 'proposal-attempted' && changedProposal;
+    const consumesRetryBudget =
+      changedProposal &&
+      proposalSignature !== undefined &&
+      classifyBindProposalProgress(previous, proposalSignature) === 'new';
     const phase: BindRecoveryPhase = !hasProposal
       ? 'awaiting-proposal'
       : consumesRetryBudget || previous?.phase === 'retry-used'

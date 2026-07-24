@@ -32,7 +32,10 @@ import {
   planTopN,
   type SortDirection,
 } from '../../../desktop/refine/refineWorksheet.js';
-import { sessionRouteState } from '../../../desktop/route/route-state.js';
+import {
+  classifyBindProposalProgress,
+  sessionRouteState,
+} from '../../../desktop/route/route-state.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   buildInjectedWorkbookXml,
@@ -244,10 +247,14 @@ function recoveryGateBlock(
     return undefined;
   }
 
-  if (record.phase === RETRY_USED_PHASE) {
+  const proposalProgress = classifyBindProposalProgress(record, currentProposalSignature);
+  if (
+    proposalProgress === 'limit' ||
+    (proposalProgress === 'repeat' && record.phase === RETRY_USED_PHASE)
+  ) {
     return blockedResult(
       'retry_budget_exhausted',
-      'Blocked: the single changed proposal retry for this ask is already consumed. Stop retrying bind-template; ask-user if more information is needed, or use build-and-apply-worksheet.',
+      'Blocked: this proposal repeats an attempted signature or the bounded distinct correction limit is exhausted. Stop cycling bind-template; ask-user if more information is needed, or use build-and-apply-worksheet.',
       'Use fallback path or ask user',
     );
   }
@@ -260,6 +267,14 @@ function recoveryGateBlock(
       'unchanged_proposal',
       'Blocked: this proposal is semantically unchanged from the failed bind attempt. Title/confidence only changes do not count; change a binding, derivation, sort, or top_n based on evidence, otherwise ask-user or use build-and-apply-worksheet.',
       'Change proposal or ask user',
+    );
+  }
+
+  if (proposalProgress === 'repeat') {
+    return blockedResult(
+      'retry_budget_exhausted',
+      'Blocked: this proposal repeats an earlier attempted signature. Stop cycling bind-template; ask-user if more information is needed, or use build-and-apply-worksheet.',
+      'Use fallback path or ask user',
     );
   }
 

@@ -60,10 +60,11 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(calcThenBind?.trigger).toContain('no named chart type');
     expect(calcThenBind?.action).toContain(
-      "author-calc the derived metric FIRST (read knowledge for the formula — gross margin excludes opex), then bind-template by the calc's caption",
+      "author-calc the derived metric FIRST (read knowledge for the formula), then bind-template by the calc's caption",
     );
-    expect(calcThenBind?.action).toContain('(SUM(revenue)-SUM(cogs))/SUM(revenue)');
-    expect(calcThenBind?.action).toContain('revenue and cogs only; do NOT subtract opex');
+    expect(calcThenBind?.action).not.toContain('(SUM(revenue)-SUM(cogs))/SUM(revenue)');
+    expect(calcThenBind?.action).not.toContain('opex');
+    expect(calcThenBind?.stopConditions).toEqual(['read knowledge for the formula']);
     expect(calcThenBind?.toolSequence).toEqual(['author-calc', 'bind-template']);
   });
 

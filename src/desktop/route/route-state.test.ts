@@ -7,6 +7,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  classifyBindProposalProgress,
+  MAX_BIND_RECOVERY_PROPOSAL_SIGNATURES,
   type RouteDeflection,
   serializeRouteReceipt,
   sessionRouteState,
@@ -342,6 +344,55 @@ describe('SessionRouteStateStore', () => {
       expect(record.phase).toBe('retry-used');
       expect(record.lastProposalSignature).toBe('signature-2');
       expect(record.attempts.map((a) => a.consumesRetryBudget)).toEqual([false, false, true]);
+    });
+
+    it('allows each genuinely new corrected proposal but classifies repeated signatures as thrash', () => {
+      const store = new SessionRouteStateStore();
+
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+      for (const proposalSignature of ['signature-1', 'signature-2']) {
+        store.recordBindRecoveryAttempt('S1', 'ask A', {
+          outcome: 'escalate',
+          proposalSignature,
+        });
+      }
+
+      const afterFirstCorrection = store.getBindRecovery('S1', 'ask A')!;
+      expect(classifyBindProposalProgress(afterFirstCorrection, 'signature-3')).toBe('new');
+
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'escalate',
+        proposalSignature: 'signature-3',
+      });
+
+      const afterSecondCorrection = store.getBindRecovery('S1', 'ask A')!;
+      expect(afterSecondCorrection.phase).not.toBe('terminal');
+      expect(afterSecondCorrection.attempts.map((a) => a.consumesRetryBudget)).toEqual([
+        false,
+        false,
+        true,
+        true,
+      ]);
+      expect(classifyBindProposalProgress(afterSecondCorrection, 'signature-2')).toBe('repeat');
+      expect(classifyBindProposalProgress(afterSecondCorrection, 'signature-3')).toBe('repeat');
+    });
+
+    it('bounds genuinely new corrected proposals by distinct signature count', () => {
+      const store = new SessionRouteStateStore();
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+      for (let index = 0; index < MAX_BIND_RECOVERY_PROPOSAL_SIGNATURES; index++) {
+        store.recordBindRecoveryAttempt('S1', 'ask A', {
+          outcome: 'escalate',
+          proposalSignature: `signature-${index}`,
+        });
+      }
+
+      expect(
+        classifyBindProposalProgress(
+          store.getBindRecovery('S1', 'ask A')!,
+          'one-more-distinct-signature',
+        ),
+      ).toBe('limit');
     });
 
     it('stores and consumes one pre-dispatch retry allowance for the last proposal signature', () => {
