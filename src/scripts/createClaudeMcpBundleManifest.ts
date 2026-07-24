@@ -679,7 +679,7 @@ const envVars = {
     type: 'boolean',
     title: 'Enable insight-cards MCP tools',
     description:
-      'Registers the datasource-context insight tools (generate-insight-cards, resolve-datasource-luid). Disabled by default; set to "true" to enable them.',
+      'Registers insight-card tooling (generate-insight-cards plus datasource resolver paths including list-datasources resolveContentUrl and resolve-datasource-luid). Disabled by default; set to "true" to enable.',
     required: false,
     sensitive: false,
   },

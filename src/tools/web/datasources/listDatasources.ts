@@ -2,17 +2,20 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { DataSource } from '../../../sdks/tableau/types/dataSource.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { paginate } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
+import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateDatasourcesFilterString } from './datasourcesFilterUtils.js';
 
 const paramsSchema = {
   filter: z.string().optional(),
+  resolveContentUrl: z.string().nonempty().optional(),
   pageSize: z.number().gt(0).optional(),
   limit: z.number().gt(0).optional(),
 };
@@ -23,6 +26,8 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
     name: 'list-datasources',
     description: `
   Retrieves a list of published data sources from a specified Tableau site using the Tableau REST API. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Views) for precise and flexible data source discovery. Use this tool when a user requests to list, search, or filter Tableau data sources on a site.
+
+  Resolver mode: pass "resolveContentUrl" to deterministically resolve one datasource by exact, case-sensitive contentUrl and return a single-entry array containing the canonical datasource LUID.
 
   **Supported Filter Fields and Operators**
   | Field                  | Operators                                 |
@@ -70,6 +75,8 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
       filter: "createdAt:gt:2023-01-01T00:00:00Z"
   - List data sources with the name "Project Views" in the "Finance" project and created after January 1, 2023:
       filter: "name:eq:Project Views,projectName:eq:Finance,createdAt:gt:2023-01-01T00:00:00Z"
+  - Resolve a datasource LUID from exact contentUrl (single-tool mode):
+      resolveContentUrl: "GUS-Work"
   `,
     paramsSchema,
     annotations: {
@@ -79,17 +86,57 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { filter, resolveContentUrl, pageSize, limit },
+      extra,
+    ): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
-      const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
       return await listDatasourcesTool.logAndExecute({
         extra,
-        args: { filter, pageSize, limit },
+        args: { filter, resolveContentUrl, pageSize, limit },
         callback: async () => {
+          if (filter && resolveContentUrl) {
+            return new ArgsValidationError(
+              'Pass either "filter" or "resolveContentUrl", not both in the same request.',
+            ).toErr();
+          }
+
+          const validatedFilter = filter
+            ? parseAndValidateDatasourcesFilterString(filter)
+            : undefined;
+
+          if (
+            resolveContentUrl &&
+            (typeof pageSize !== 'undefined' || typeof limit !== 'undefined')
+          ) {
+            return new ArgsValidationError(
+              'Resolver mode does not accept "pageSize" or "limit". Remove those arguments.',
+            ).toErr();
+          }
+
+          if (resolveContentUrl && !extra.config.insightsToolsEnabled) {
+            return new ArgsValidationError(
+              'Resolver mode is disabled. Set INSIGHTS_TOOLS_ENABLED=true to use "resolveContentUrl".',
+            ).toErr();
+          }
+
           const datasources = await useRestApi({
             ...extra,
             jwtScopes: listDatasourcesTool.requiredApiScopes,
             callback: async (restApi) => {
+              if (resolveContentUrl) {
+                const resolverFilter = parseAndValidateDatasourcesFilterString(
+                  `contentUrl:eq:${resolveContentUrl}`,
+                );
+                const response = await restApi.datasourcesMethods.listDatasources({
+                  siteId: restApi.siteId,
+                  filter: resolverFilter,
+                  pageSize: 100,
+                  pageNumber: 1,
+                });
+                return response.datasources;
+              }
+
               const maxResultLimit = configWithOverrides.getMaxResultLimit(
                 listDatasourcesTool.name,
               );
@@ -118,10 +165,53 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
             },
           });
 
+          if (resolveContentUrl) {
+            const exact = datasources.filter(
+              (datasource) => datasource.contentUrl === resolveContentUrl,
+            );
+
+            const allowedExact: Array<DataSource> = [];
+            await Promise.all(
+              exact.map(async (candidate) => {
+                const allowed = (
+                  await resourceAccessChecker.isDatasourceAllowed({
+                    datasourceLuid: candidate.id,
+                    extra,
+                  })
+                ).allowed;
+                if (allowed) {
+                  allowedExact.push(candidate);
+                }
+              }),
+            );
+
+            if (allowedExact.length === 0) {
+              return new ArgsValidationError(
+                `No datasource matched contentUrl "${resolveContentUrl}"`,
+              ).toErr();
+            }
+
+            if (allowedExact.length > 1) {
+              return new ArgsValidationError(
+                `Multiple datasources matched contentUrl "${resolveContentUrl}" in allowed scope.`,
+              ).toErr();
+            }
+
+            return new Ok(allowedExact);
+          }
+
           return new Ok(datasources);
         },
-        constrainSuccessResult: (datasources) =>
-          constrainDatasources({ datasources, boundedContext: configWithOverrides.boundedContext }),
+        constrainSuccessResult: (datasources) => {
+          if (resolveContentUrl) {
+            return { type: 'success', result: datasources };
+          }
+
+          return constrainDatasources({
+            datasources,
+            boundedContext: configWithOverrides.boundedContext,
+          });
+        },
       });
     },
   });

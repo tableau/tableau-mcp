@@ -8,6 +8,7 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
+import { parseAndValidateDatasourcesFilterString } from './datasourcesFilterUtils.js';
 
 const paramsSchema = {
   contentUrl: z.string().nonempty(),
@@ -21,7 +22,7 @@ export const getResolveDatasourceLuidTool = (
     server,
     name: 'resolve-datasource-luid',
     description:
-      'Resolve a published datasource LUID by exact, case-sensitive datasource contentUrl match.',
+      'Resolve a published datasource LUID by exact, case-sensitive datasource contentUrl match. Prefer list-datasources with resolveContentUrl for new callers.',
     // Gated off by default (INSIGHTS_TOOLS_ENABLED) alongside generate-insight-cards.
     disabled: !config.insightsToolsEnabled,
     paramsSchema,
@@ -41,9 +42,12 @@ export const getResolveDatasourceLuidTool = (
             ...extra,
             jwtScopes: tool.requiredApiScopes,
             callback: async (restApi) => {
+              const resolverFilter = parseAndValidateDatasourcesFilterString(
+                `contentUrl:eq:${contentUrl}`,
+              );
               const response = await restApi.datasourcesMethods.listDatasources({
                 siteId: restApi.siteId,
-                filter: `contentUrl:eq:${contentUrl}`,
+                filter: resolverFilter,
                 pageSize: 100,
                 pageNumber: 1,
               });
