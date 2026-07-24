@@ -55,6 +55,18 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).not.toMatch(/tabui:.*document/i);
   });
 
+  it('tells the singer to author noun-less gross margin before binding', () => {
+    const calcThenBind = routes.find((route) => route.id === 'calc-then-bind');
+
+    expect(calcThenBind?.trigger).toContain('no named chart type');
+    expect(calcThenBind?.action).toContain(
+      "author-calc the derived metric FIRST (read knowledge for the formula — gross margin excludes opex), then bind-template by the calc's caption",
+    );
+    expect(calcThenBind?.action).toContain('(SUM(revenue)-SUM(cogs))/SUM(revenue)');
+    expect(calcThenBind?.action).toContain('revenue and cogs only; do NOT subtract opex');
+    expect(calcThenBind?.toolSequence).toEqual(['author-calc', 'bind-template']);
+  });
+
   it('is self-contained and does not require skill loading', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
     expect(rendered).not.toContain('tableau-desktop-authoring');

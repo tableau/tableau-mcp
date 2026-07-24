@@ -65,6 +65,17 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'route',
+    id: 'calc-then-bind',
+    trigger:
+      'a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %)',
+    action:
+      "author-calc the derived metric FIRST (read knowledge for the formula — gross margin excludes opex), then bind-template by the calc's caption. For gross margin %, use exactly (SUM(revenue)-SUM(cogs))/SUM(revenue): revenue and cogs only; do NOT subtract opex.",
+    toolSequence: ['author-calc', 'bind-template'],
+    stopConditions: ['revenue and cogs only; do NOT subtract opex'],
+    requiredEvidence: ['authored calculation readback before template binding'],
+  },
+  {
+    kind: 'route',
     id: 'knowledge-consult',
     trigger:
       'an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult',
