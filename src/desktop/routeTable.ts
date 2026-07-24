@@ -49,7 +49,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.)',
     action:
-      'FIRST complete the bind-template two-call sequence: Call 1 is bind-template(auto_apply:true), deterministic, ~0.3s. If Call 1 proposes, Call 2 resubmits bind-template with the same ask/target, the selected proposal, and auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. A named chart takes this path first even when the ask sounds calc-heavy or asks "how <X> changes"; template-owned calculations (including a waterfall\'s running total) must not be authored before binding. author-parameter/author-set/author-action before charts; else search-commands.',
+      "FIRST complete the bind-template two-call sequence: Call 1 is bind-template(auto_apply:true), deterministic, ~0.3s — pass the user's message verbatim as `ask` (do not paraphrase, reword, or expand it; binding keys on the user's own words). If Call 1 proposes, Call 2 resubmits bind-template with the same ask/target, the selected proposal, and auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. A named chart takes this path first even when the ask sounds calc-heavy or asks \"how <X> changes\"; template-owned calculations (including a waterfall's running total) must not be authored before binding. author-parameter/author-set/author-action before charts; else search-commands.",
     toolSequence: [
       'bind-template',
       'author-parameter',

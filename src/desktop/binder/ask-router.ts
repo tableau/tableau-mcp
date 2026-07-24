@@ -181,6 +181,60 @@ function askCarriesSpatialIntent(
 }
 
 /**
+ * Bare point-mark words that disambiguate a generic spatial "map" tie toward a
+ * symbol map — hand-mirrored from classify.ts's SYMBOL_MAP_MARK_CUES (this file
+ * must not import the classifier); a parity test enforces set equality.
+ */
+const SYMBOL_MAP_MARK_CUES: readonly string[] = [
+  'dot',
+  'dots',
+  'bubble',
+  'bubbles',
+  'pin',
+  'pins',
+  'point',
+  'points',
+  'circle',
+  'circles',
+  'marker',
+  'markers',
+];
+
+function askHasSymbolMapMarkCue(maskedAsk: string): boolean {
+  return SYMBOL_MAP_MARK_CUES.some((cue) => phraseIndexInAsk(maskedAsk, cue) >= 0);
+}
+
+/**
+ * Subset of SPATIAL_INTENT_ALIASES that name a coordinate map WITHOUT naming actual
+ * coordinates ("geographic" describes intent, not a lat/lon pair) — mirrors
+ * classify.ts's NON_COORDINATE_SPATIAL_ALIASES so the mark-cue tie-break below stays
+ * in lockstep with selectWithinFamily's ordering fix.
+ */
+const NON_COORDINATE_SPATIAL_ALIASES: ReadonlySet<string> = new Set([
+  'geo',
+  'geographic',
+  'geographical',
+  'geographically',
+]);
+
+// Coordinate-pair half runs on the RAW ask deliberately (parity with classify.ts):
+// this file has no schema to mask against here either, but callers that DO carry a
+// live ask (route-spec.ts, etc.) may pass a masked ask as `maskedAsk` while the raw
+// ask is available separately — keep the same two-string contract as classify.ts so
+// a future caller with real field masking can't silently reintroduce the bug where
+// masking blanks literal "latitude"/"longitude" field names and kills this brake.
+function askHasExplicitCoordinateIntent(rawAsk: string, maskedAsk: string): boolean {
+  for (const alias of SPATIAL_INTENT_ALIASES) {
+    if (NON_COORDINATE_SPATIAL_ALIASES.has(alias)) continue;
+    if (phraseIndexInAsk(maskedAsk, alias) >= 0) return true;
+  }
+  return hasCoordinatePairIntent(rawAsk);
+}
+
+const GENERATED_SYMBOL_MAP_TEMPLATE = 'spatial-symbol-map';
+const LATLON_SYMBOL_MAP_TEMPLATE = 'spatial-symbol-map-latlon';
+
+/**
  * BIND-path template selection over the ELIGIBLE pool. Fail-closed: bind only on a UNIQUE
  * keyword-argmax winner that is DECISIVE (won a family-native keyword OR a distinctive chart
  * noun). Any keyword-score tie ⇒ null. `selectEligible` enforces the `fast_path_eligible`
@@ -195,13 +249,33 @@ export function selectEligible(
   rawAsk = maskedAsk,
 ): TemplateManifest | null {
   const scored = manifests
-    .filter((m) => m.fast_path_eligible)
+    .filter((m) => m.fast_path_eligible && m.template !== LATLON_SYMBOL_MAP_TEMPLATE)
     .map((m) => ({ m, score: keywordScore(maskedAsk, m.intent_keywords) }))
     .filter((x) => x.score > 0);
   if (scored.length === 0) return null;
   const maxScore = scored.reduce((mx, s) => Math.max(mx, s.score), 0);
   const top = scored.filter((s) => s.score === maxScore);
-  if (top.length !== 1) return null; // fail-closed on any tie
+  if (top.length !== 1) {
+    // SPATIAL mark-cue tie-break, mirroring classify.ts's selectWithinFamily ordering
+    // fix: a bare point-mark word ("dots", "bubbles", ...) is the missing
+    // discriminator between filled regions and symbols even when another eligible
+    // template's borrowed keyword ties the score. Any other tie still fails closed
+    // exactly as before, so this can only ADD an accept, never a wrong bind. This
+    // layer is schema-free (never touches fields), so it has no equivalent of
+    // classify.ts's "ask matched a measure" guard — that guard exists to stop
+    // classify.ts from filling a required slot from thin air, which this selector
+    // never does in the first place (it names a template, nothing more).
+    const symbolMap = top.find((t) => t.m.template === GENERATED_SYMBOL_MAP_TEMPLATE);
+    if (
+      symbolMap &&
+      top.some((t) => t.m.family === 'spatial') &&
+      askHasSymbolMapMarkCue(maskedAsk) &&
+      !askHasExplicitCoordinateIntent(rawAsk, maskedAsk)
+    ) {
+      return symbolMap.m;
+    }
+    return null; // fail-closed on any other tie
+  }
   const m = top[0].m;
   // Family guard (W-23447710): a spatial-intent ask never binds a non-spatial winner.
   if (m.family !== 'spatial' && askCarriesSpatialIntent(rawAsk, maskedAsk, manifests)) return null;

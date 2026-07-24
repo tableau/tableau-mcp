@@ -2564,3 +2564,261 @@ describe('binder — deterministic-path hazard demotion (W59)', () => {
     }
   });
 });
+
+// ── W-635: spatial mark-cue tie-break ordering + lat/lon preempt gate + cue
+// reconcile (grows the 85a6e82f "bare dot cue" fix) ────────────────────────
+//
+// Fixture is the exact 85a6e82f WC schema (Country Code, Goals For, Goals
+// Against, Latitude, Longitude): a bare "map ... dots" ask ties THREE spatial
+// templates (symbol-map, choropleth-map, symbol-map-latlon is excluded from
+// scoring) and, once a poison word from an unrelated template's vocabulary
+// ("total"/"trend"/"rate") also ties, LOOKS cross-family — the exact shape
+// that made the mark-cue tie-break unreachable before the ordering fix.
+describe('binder/classifyNoLlm — spatial mark-cue tie-break ordering (W-635)', () => {
+  const GOALS_MAP_WORKBOOK_XML = `<workbook><datasources><datasource name='federated.wc' caption='teams+'>
+  <connection><relation name='players' /></connection>
+  <column name='[country_code]' caption='Country Code' role='dimension' type='nominal' datatype='string' semantic-role='[Country].[ISO3166_2]' />
+  <column name='[goals_for]' caption='Goals For' role='measure' type='quantitative' datatype='integer' />
+  <column name='[goals_against]' caption='Goals Against' role='measure' type='quantitative' datatype='integer' />
+  <column name='[latitude]' caption='Latitude' role='measure' type='quantitative' datatype='real' semantic-role='[Geographical].[Latitude]' aggregation='Avg' />
+  <column name='[longitude]' caption='Longitude' role='measure' type='quantitative' datatype='real' semantic-role='[Geographical].[Longitude]' aggregation='Avg' />
+</datasource></datasources><worksheets><worksheet name='se-eval-scratch' /></worksheets></workbook>`;
+
+  // Same schema minus Latitude/Longitude — proves the mark-cue+measure bind does
+  // not depend on the schema HAVING coordinate fields (the generated-geo symbol
+  // map never touches them either way).
+  const GOALS_MAP_NO_LATLON_WORKBOOK_XML = `<workbook><datasources><datasource name='federated.wc' caption='teams+'>
+  <connection><relation name='players' /></connection>
+  <column name='[country_code]' caption='Country Code' role='dimension' type='nominal' datatype='string' semantic-role='[Country].[ISO3166_2]' />
+  <column name='[goals_for]' caption='Goals For' role='measure' type='quantitative' datatype='integer' />
+  <column name='[goals_against]' caption='Goals Against' role='measure' type='quantitative' datatype='integer' />
+</datasource></datasources><worksheets><worksheet name='se-eval-scratch' /></worksheets></workbook>`;
+
+  // No dimension at all — the required 'country' (geo) slot can never fill, so
+  // even a mark-cue ask must still fail closed (non-geo schema guard).
+  const NO_DIMENSION_WORKBOOK_XML = `<workbook><datasources><datasource name='metrics'>
+  <column name='[sales]' caption='Sales' role='measure' type='quantitative' datatype='real' />
+  <column name='[profit]' caption='Profit' role='measure' type='quantitative' datatype='real' />
+</datasource></datasources></workbook>`;
+
+  it('binds the generated symbol map with size+color from the named measure', () => {
+    const cls = classifyNoLlm(
+      'Map the countries by Goals For — bigger, warmer dots',
+      manifests,
+      summarizeSchema(GOALS_MAP_WORKBOOK_XML),
+    );
+    expect(cls).toEqual({
+      template: 'spatial-symbol-map',
+      bindings: [
+        { slot_id: 'country', field: 'Country Code' },
+        { slot_id: 'sales', field: 'Goals For' },
+        { slot_id: 'color', field: 'Goals For' },
+      ],
+    });
+  });
+
+  it.each(['total', 'trend', 'rate'])(
+    'still binds the symbol map when a %s-family poison word ties the score',
+    (poisonWord) => {
+      const cls = classifyNoLlm(
+        `Map the countries by Goals For with bigger warmer dots ${poisonWord}`,
+        manifests,
+        summarizeSchema(GOALS_MAP_WORKBOOK_XML),
+      );
+      expect(cls).not.toBeNull();
+      expect(cls!.template).toBe('spatial-symbol-map');
+      expect(cls!.bindings).toContainEqual({ slot_id: 'sales', field: 'Goals For' });
+    },
+  );
+
+  it('"geographic map" with a mark cue binds lat/lon WITH the measure (schema has Latitude/Longitude)', () => {
+    // "geographic" carries explicit coordinate intent (SPATIAL_INTENT_ALIASES), so the
+    // lat/lon resolver runs first and wins on a schema that actually has unique
+    // Latitude/Longitude fields — and now fills its optional size/color slots from the
+    // ask's own matched measure instead of silently dropping it.
+    const cls = classifyNoLlm(
+      'geographic map of Goals For by country with bigger warmer dots',
+      manifests,
+      summarizeSchema(GOALS_MAP_WORKBOOK_XML),
+    );
+    expect(cls).toEqual({
+      template: 'spatial-symbol-map-latlon',
+      bindings: [
+        { slot_id: 'longitude', field: 'Longitude' },
+        { slot_id: 'latitude', field: 'Latitude' },
+        { slot_id: 'detail1', field: 'Country Code' },
+        { slot_id: 'size', field: 'Goals For' },
+        { slot_id: 'color', field: 'Goals For' },
+      ],
+    });
+  });
+
+  it('"geographic map" with a mark cue stays NULL on a schema with no Latitude/Longitude (documented known gap)', () => {
+    const cls = classifyNoLlm(
+      'geographic map of Goals For by country with bigger warmer dots',
+      manifests,
+      summarizeSchema(GOALS_MAP_NO_LATLON_WORKBOOK_XML),
+    );
+    // KNOWN GAP (documented, outside the ordering/gate/cue-reconcile scope): with no
+    // lat/lon fields the coordinate resolver can't fire, so this falls to generic
+    // scoring — "geographic map" also matches spatial-choropleth-map's compound
+    // "geographic-map" keyword, making it the sole DECISIVE keyword-score winner (no
+    // tie for the mark-cue tie-break to arbitrate) — and choropleth's own avoid_when
+    // text happens to share the token "country" with this ask, demoting it to
+    // propose. Fails SAFELY closed (never a wrong bind), just not a one-shot bind.
+    expect(cls).toBeNull();
+  });
+
+  it('"points" cue with a named measure binds lat/lon WITH the measure (schema has Latitude/Longitude)', () => {
+    // "points" is a POINT_LOCATION_CUE (overlaps SYMBOL_MAP_MARK_CUES by design — see
+    // the cue-list comment) — on a schema with real coordinate fields the lat/lon
+    // resolver wins and fills size/color from the matched measure.
+    const cls = classifyNoLlm(
+      'Map the countries by Goals For with bigger, warmer points',
+      manifests,
+      summarizeSchema(GOALS_MAP_WORKBOOK_XML),
+    );
+    expect(cls).toEqual({
+      template: 'spatial-symbol-map-latlon',
+      bindings: [
+        { slot_id: 'longitude', field: 'Longitude' },
+        { slot_id: 'latitude', field: 'Latitude' },
+        { slot_id: 'detail1', field: 'Country Code' },
+        { slot_id: 'size', field: 'Goals For' },
+        { slot_id: 'color', field: 'Goals For' },
+      ],
+    });
+  });
+
+  it('"points" cue with a named measure binds the generated symbol map on a schema with no Latitude/Longitude', () => {
+    const cls = classifyNoLlm(
+      'Map the countries by Goals For with bigger, warmer points',
+      manifests,
+      summarizeSchema(GOALS_MAP_NO_LATLON_WORKBOOK_XML),
+    );
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('spatial-symbol-map');
+    expect(cls!.bindings).toContainEqual({ slot_id: 'sales', field: 'Goals For' });
+  });
+
+  it('binds on the new "circles" mark cue', () => {
+    const cls = classifyNoLlm(
+      'Map the countries by Goals For with bigger, warmer circles',
+      manifests,
+      summarizeSchema(GOALS_MAP_WORKBOOK_XML),
+    );
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('spatial-symbol-map');
+    expect(cls!.bindings).toContainEqual({ slot_id: 'sales', field: 'Goals For' });
+  });
+
+  it('binds on the new "markers" mark cue', () => {
+    const cls = classifyNoLlm(
+      'Map the countries by Goals For using larger, warmer markers',
+      manifests,
+      summarizeSchema(GOALS_MAP_WORKBOOK_XML),
+    );
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('spatial-symbol-map');
+    expect(cls!.bindings).toContainEqual({ slot_id: 'sales', field: 'Goals For' });
+  });
+
+  it('fills color from a "color = <measure>" directive form', () => {
+    const cls = classifyNoLlm(
+      'Plot each country on a map, dot size = Goals For, color = Goals For',
+      manifests,
+      summarizeSchema(GOALS_MAP_WORKBOOK_XML),
+    );
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('spatial-symbol-map');
+    expect(cls!.bindings).toContainEqual({ slot_id: 'sales', field: 'Goals For' });
+    expect(cls!.bindings).toContainEqual({ slot_id: 'color', field: 'Goals For' });
+  });
+
+  it('KNOWN MISS (documented): a caption-synonym ask ("goals scored") still fails closed', () => {
+    // "goals scored" names no field the schema carries a literal name/caption
+    // match for ("Goals For" is the only measure) — the caption-synonym layer is
+    // future work. Asserted NULL so a future fix flips this test consciously
+    // rather than silently.
+    const cls = classifyNoLlm(
+      'Map the countries by goals scored with bigger warmer dots',
+      manifests,
+      summarizeSchema(GOALS_MAP_WORKBOOK_XML),
+    );
+    expect(cls).toBeNull();
+  });
+
+  it('fail-closed: a cue-less bare "map" ask stays NULL', () => {
+    const cls = classifyNoLlm(
+      'map of countries',
+      manifests,
+      summarizeSchema(GOALS_MAP_WORKBOOK_XML),
+    );
+    expect(cls).toBeNull();
+  });
+
+  it('fail-closed: a mark-cue ask against a schema with no dimension (no geo slot) stays NULL', () => {
+    const cls = classifyNoLlm(
+      'Map the countries by Sales with bigger warmer dots',
+      manifests,
+      summarizeSchema(NO_DIMENSION_WORKBOOK_XML),
+    );
+    expect(cls).toBeNull();
+  });
+
+  // ── Adversarial-review follow-up: lat/lon-with-measure probes + invented-measure
+  // guard (the mark-cue tie-break must never fill a required 'sales' slot from thin
+  // air when the ask names no measure) ──────────────────────────────────────────
+  it.each([
+    'Plot each country as a dot sized by Goals For at its latitude and longitude',
+    'Show the coordinates of each country as points sized by Goals For',
+    'Map the countries by Goals For with dots at their latitude and longitude',
+  ])('binds lat/lon WITH the measure filled into size: %s', (ask) => {
+    const cls = classifyNoLlm(ask, manifests, summarizeSchema(GOALS_MAP_WORKBOOK_XML));
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('spatial-symbol-map-latlon');
+    expect(cls!.bindings).toContainEqual({ slot_id: 'size', field: 'Goals For' });
+  });
+
+  it('"Map the pins for each country" (no measure named) binds lat/lon, NOT the symbol map with an invented measure', () => {
+    const cls = classifyNoLlm(
+      'Map the pins for each country',
+      manifests,
+      summarizeSchema(GOALS_MAP_WORKBOOK_XML),
+    );
+    expect(cls).toEqual({
+      template: 'spatial-symbol-map-latlon',
+      bindings: [
+        { slot_id: 'longitude', field: 'Longitude' },
+        { slot_id: 'latitude', field: 'Latitude' },
+        { slot_id: 'detail1', field: 'Country Code' },
+      ],
+    });
+    // Never a 'sales'/size binding invented from an unnamed measure.
+    expect(cls!.bindings.some((b) => b.slot_id === 'sales' || b.slot_id === 'size')).toBe(false);
+  });
+
+  it('"Plot the points for each country" (no measure named) binds lat/lon', () => {
+    const cls = classifyNoLlm(
+      'Plot the points for each country',
+      manifests,
+      summarizeSchema(GOALS_MAP_WORKBOOK_XML),
+    );
+    expect(cls).toEqual({
+      template: 'spatial-symbol-map-latlon',
+      bindings: [
+        { slot_id: 'longitude', field: 'Longitude' },
+        { slot_id: 'latitude', field: 'Latitude' },
+        { slot_id: 'detail1', field: 'Country Code' },
+      ],
+    });
+  });
+
+  it.each(['Map the countries with dots total', 'Map the countries with bubbles rate'])(
+    'NEGATIVE: a cross-family tie with a mark cue but NO matched measure stays NULL (never invents a size measure): %s',
+    (ask) => {
+      const cls = classifyNoLlm(ask, manifests, summarizeSchema(GOALS_MAP_WORKBOOK_XML));
+      expect(cls).toBeNull();
+    },
+  );
+});

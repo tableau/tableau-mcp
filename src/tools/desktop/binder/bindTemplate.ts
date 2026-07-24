@@ -73,7 +73,7 @@ import { proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
   session: z.string().optional(),
-  ask: z.string(),
+  ask: z.string().describe("The user's request, verbatim — do not paraphrase."),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
   auto_apply: z.boolean().optional(),

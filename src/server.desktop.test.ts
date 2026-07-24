@@ -100,7 +100,7 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
 
 Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gradients. State plan, build.
 
-For any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.), FIRST complete the bind-template two-call sequence: Call 1 is bind-template(auto_apply:true), deterministic, ~0.3s. If Call 1 proposes, Call 2 resubmits bind-template with the same ask/target, the selected proposal, and auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. A named chart takes this path first even when the ask sounds calc-heavy or asks "how <X> changes"; template-owned calculations (including a waterfall's running total) must not be authored before binding. author-parameter/author-set/author-action before charts; else search-commands.
+For any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.), FIRST complete the bind-template two-call sequence: Call 1 is bind-template(auto_apply:true), deterministic, ~0.3s — pass the user's message verbatim as \`ask\` (do not paraphrase, reword, or expand it; binding keys on the user's own words). If Call 1 proposes, Call 2 resubmits bind-template with the same ask/target, the selected proposal, and auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. A named chart takes this path first even when the ask sounds calc-heavy or asks "how <X> changes"; template-owned calculations (including a waterfall's running total) must not be authored before binding. author-parameter/author-set/author-action before charts; else search-commands.
 
 For a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %), author-calc the derived metric FIRST (read knowledge for the formula), then bind-template by the calc's caption.
 
@@ -241,7 +241,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // DO NOT GROW these: trim them down and lower/remove the entry. Never raise a
   // cap, and never add a new entry to dodge the budget without explicit sign-off.
   const GRANDFATHERED: ReadonlyMap<string, number> = new Map([
-    ['bind-template', 2124], // ratcheted down after compacting binder help text; aggregate surface caps stay green
+    ['bind-template', 2190], // raised for the verbatim-ask describe (binding keys on the user's own words); no further slack
     ['refine-worksheet', 1583], // raised for omitted-targetField axis detection; funded by a ~500-byte same-tool describe trim
     ['plan-dashboard-creation', 1509], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1558], // ratcheted down in the CODA funding trim; do not grow

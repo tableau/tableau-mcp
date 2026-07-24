@@ -588,7 +588,11 @@ const NON_COORDINATE_SPATIAL_ALIASES: ReadonlySet<string> = new Set([
 /**
  * Bare point-mark words that disambiguate a generic spatial "map" tie toward a
  * symbol map. Keep singulars/plurals explicit so matching remains whole-token
- * and does not broaden phraseIndexInAsk's chart-noun plural tolerance.
+ * and does not broaden phraseIndexInAsk's chart-noun plural tolerance. Hand-mirrored
+ * into ask-router.ts (this file's classifier must stay the sole source of truth,
+ * but the route layer needs the same vocabulary); a parity test enforces set
+ * equality. "circle"/"marker" added because Circle is the literal Tableau mark name
+ * the generated symbol map renders.
  */
 const SYMBOL_MAP_MARK_CUES: readonly string[] = [
   'dot',
@@ -599,6 +603,10 @@ const SYMBOL_MAP_MARK_CUES: readonly string[] = [
   'pins',
   'point',
   'points',
+  'circle',
+  'circles',
+  'marker',
+  'markers',
 ];
 
 function askHasSymbolMapMarkCue(maskedAsk: string): boolean {
@@ -625,10 +633,15 @@ function hasCoordinatePairIntent(rawAsk: string): boolean {
   return hasLat && hasLon;
 }
 
-function askHasExplicitCoordinateIntent(rawAsk: string): boolean {
+// Alias half runs on the MASKED ask (aliases like "coordinate"/"gps" are generic
+// phrase words, not field names, so masking is harmless). The coordinate-PAIR half
+// runs on the RAW ask deliberately: maskFieldNames blanks a schema's literal
+// Latitude/Longitude field-name occurrences, which would otherwise silently kill
+// this brake on exactly the lat/lon schemas it exists to protect.
+function askHasExplicitCoordinateIntent(rawAsk: string, maskedAsk: string): boolean {
   for (const alias of SPATIAL_INTENT_ALIASES) {
     if (NON_COORDINATE_SPATIAL_ALIASES.has(alias)) continue;
-    if (phraseIndexInAsk(rawAsk, alias) >= 0) return true;
+    if (phraseIndexInAsk(maskedAsk, alias) >= 0) return true;
   }
   return hasCoordinatePairIntent(rawAsk);
 }
@@ -668,6 +681,14 @@ const GENERATED_SYMBOL_MAP_TEMPLATE = 'spatial-symbol-map';
  * named "Location"/"Office" can't arm the resolver — intent is a phrasing decision, never a
  * field-name accident. Paired with the coordinate keywords already recognized by
  * SPATIAL_INTENT_ALIASES / hasCoordinatePairIntent for the explicit lat/lon case.
+ *
+ * "point"/"points"/"pins" DELIBERATELY OVERLAP SYMBOL_MAP_MARK_CUES: the same words carry
+ * opposite intent depending on the rest of the ask ("map the pins for each country" with no
+ * measure named is a raw coordinate plot; "bigger, warmer points" naming a measure is the
+ * generated symbol map's marks). Resolving which one wins is NOT this list's job — the
+ * lat/lon resolver below tries first and is itself fail-closed (needs unique lat+lon fields
+ * and a categorical), and selectWithinFamily's mark-cue tie-break only fires when the ask
+ * matched a measure — so removing them here would wrongly starve the lat/lon path instead.
  */
 const POINT_LOCATION_CUES: readonly string[] = [
   'office location',
@@ -678,6 +699,7 @@ const POINT_LOCATION_CUES: readonly string[] = [
   'offices',
   'pins',
   'points',
+  'point',
 ];
 
 /** True when the (masked) ask carries a coordinate keyword OR an explicit point-location cue. */
@@ -1805,6 +1827,7 @@ function roleGreedyBind(
  */
 function selectWithinFamily(
   top: Array<{ m: TemplateManifest }>,
+  rawAsk: string,
   maskedAsk: string,
   matched: SchemaField[],
   aggOverride: Derivation | null,
@@ -1832,6 +1855,33 @@ function selectWithinFamily(
     return decisive ? m : null;
   }
 
+  // SPATIAL mark-cue tie-break (one merged check covering both the cross-family
+  // and same-family cases — a poison word from an unrelated template, "total",
+  // "trend", ..., can tie the keyword score and make an otherwise-clean
+  // spatial+mark-cue ask LOOK cross-family, and without checking this BEFORE the
+  // cross-family fail-closed return below, the mark-cue discriminator is never
+  // reached). A bare point-mark word ("dots", "bubbles", "pins", ...) is the
+  // missing discriminator between filled regions and symbols.
+  //
+  // Fires only when: the ask MATCHED a measure (never fill the required
+  // sales/size slot from thin air — a mark-cue-only ask naming no measure, e.g.
+  // "map the pins for each country", must stay off this path so the dedicated
+  // lat/lon resolver or an honest propose handles it instead); the ask does NOT
+  // carry explicit coordinate intent (checked against the RAW ask for the
+  // coordinate-pair half, since maskFieldNames blanks literal Latitude/Longitude
+  // field names and would otherwise silently kill this brake on exactly the
+  // schemas it exists to protect); and the ask carries a mark cue. Finding
+  // GENERATED_SYMBOL_MAP_TEMPLATE in `top` already proves a spatial candidate is
+  // present, so no separate family check is needed.
+  const spatialMarkCueApplies =
+    askHasSymbolMapMarkCue(maskedAsk) &&
+    matched.some((field) => isMeasure(field)) &&
+    !askHasExplicitCoordinateIntent(rawAsk, maskedAsk);
+  const symbolMapCandidate = top.find((t) => t.m.template === GENERATED_SYMBOL_MAP_TEMPLATE);
+  if (spatialMarkCueApplies && symbolMapCandidate) {
+    return symbolMapCandidate.m;
+  }
+
   const families = new Set(top.map((t) => t.m.family));
   if (families.size > 1) {
     // CROSS-family tie: fail closed UNLESS one candidate's most-specific matched
@@ -1847,17 +1897,12 @@ function selectWithinFamily(
     return byNoun[0].m;
   }
 
-  // SAME-family spatial "map" tie: a bare point-mark word is the missing
-  // discriminator between filled regions and symbols. Prefer generated geocoding
-  // unless coordinate language has already selected (or should propose for) the
-  // dedicated lat/lon resolver. Explicit choropleth phrases win keyword scoring
-  // before this tie-break, and a bare "map" without a mark cue remains ambiguous.
-  if (
-    top[0].m.family === 'spatial' &&
-    askHasSymbolMapMarkCue(maskedAsk) &&
-    !askHasExplicitCoordinateIntent(maskedAsk)
-  ) {
-    return top.find((candidate) => candidate.m.template === GENERATED_SYMBOL_MAP_TEMPLATE)?.m ?? null;
+  // SAME-family spatial "map" tie without a generated-symbol-map candidate in
+  // `top` to pick (e.g. tied only between choropleth and the lat/lon resolver):
+  // the mark cue named an unambiguous MARK preference the tied set can't satisfy,
+  // so stay fail-closed rather than silently choosing a different spatial chart.
+  if (spatialMarkCueApplies) {
+    return null;
   }
 
   const bindable = top
@@ -2061,9 +2106,13 @@ function hasNaturalSymbolMapEncodingCue(
   role: Exclude<SymbolMapEncodingRole, 'size'>,
   summary: SchemaSummary,
 ): boolean {
+  // Color cue also matches `color(ed)? = ...` / `color(ed)? : ...` directive forms in
+  // addition to `color(ed)? by ...`, so "color = <measure>" fills the color encoding
+  // instead of silently dropping (matched cue then falls back to reusing the size
+  // measure below when no explicit "colored by <field>" clause names one).
   const cue =
     role === 'color'
-      ? /\b(?:warm(?:er)?|hot(?:ter)?|heat|intensity)\b|\b(?:colou?r(?:ed)?|shad(?:e|ed))\b(?=\s+by\b)/gi
+      ? /\b(?:warm(?:er)?|hot(?:ter)?|heat|intensity)\b|\b(?:colou?r(?:ed)?|shad(?:e|ed))\b(?=\s*(?:=|:)|\s+by\b)/gi
       : /\b(?:hover|reveal|tooltip)\b|\bshow\b(?=[^.!?;]*\bwhen\b)/gi;
   const fieldMaskedAsk = maskFieldNames(ask, summary);
   return [...ask.matchAll(cue)].some((match) => {
@@ -2114,8 +2163,29 @@ function sizeMeasureFromSymbolMapBindings(
 }
 
 /**
+ * The ask's uniquely-matched measure, for filling an OPTIONAL symbol-map size slot
+ * when no explicit "on/for/as size" directive names one — e.g. "sized by Goals For",
+ * or a plain "...at their latitude and longitude, by Goals For" naming the metric
+ * directly rather than through a shelf directive. This is how the lat/lon resolver
+ * (which has no required measure slot of its own) still fills size from a measure
+ * the ask names. Fields already consumed by a REQUIRED slot (the lat/lon resolver's
+ * Latitude/Longitude coordinate fields are themselves measures) are excluded first,
+ * so "sized by Goals For at its latitude and longitude" sees exactly one candidate,
+ * not three. Exactly one remaining matched measure only — two or more stays unbound
+ * rather than guessing (never invent a size measure the ask did not clearly name;
+ * see the "map the pins for each country" no-measure regression).
+ */
+function naturallyMatchedSizeMeasure(
+  matched: SchemaField[],
+  boundFieldNames: ReadonlySet<string>,
+): SchemaField | null {
+  const measures = matched.filter((f) => isMeasure(f) && !boundFieldNames.has(f.name));
+  return measures.length === 1 ? measures[0] : null;
+}
+
+/**
  * Add optional symbol-map encoding bindings from explicit shelf directives or
- * tightly-scoped natural color/hover cues.
+ * tightly-scoped natural color/hover/size cues.
  * Existing required geo/coordinate bindings are inputs and are never modified.
  * A field may intentionally be reused across size, color, and tooltip.
  */
@@ -2125,9 +2195,11 @@ function symbolMapEncodingBindings(
   summary: SchemaSummary,
   bound: ClassifiedBinding[],
   aggOverride: Derivation | null,
+  matched: SchemaField[],
 ): ClassifiedBinding[] {
   if (!SYMBOL_MAP_TEMPLATES.has(manifest.template)) return [];
   const boundIds = new Set(bound.map((binding) => binding.slot_id));
+  const boundFieldNames = new Set(bound.map((binding) => binding.field));
   const detailFields = new Set(
     bound
       .filter((binding) =>
@@ -2162,7 +2234,9 @@ function symbolMapEncodingBindings(
             : sizeMeasure
           : sizeMeasure
         : null;
-    const field = explicitField ?? naturalCue;
+    const naturalSize =
+      role === 'size' ? naturallyMatchedSizeMeasure(matched, boundFieldNames) : null;
+    const field = explicitField ?? naturalCue ?? naturalSize;
     if (!field) continue;
     additions.push({
       slot_id: slot.slot_id,
@@ -2387,12 +2461,15 @@ export function classifyNoLlm(
   // carries no measure and role-greedy binding cannot fill the coordinate axes by name.
   // It only fires for the eligible spatial-symbol-map-latlon template and is fail-closed
   // (returns null on any ambiguity), so a non-coordinate ask falls through to the generic path.
+  // Optional size/color/tooltip encodings (symbolMapEncodingBindings below) fill from the
+  // ask's own matched measure when present, so a coordinate ask that also names a measure
+  // ("...sized by Goals For") does not silently drop it — no separate skip-gate needed here.
   const latlon = manifests.get(LATLON_SYMBOL_MAP_TEMPLATE);
   if (latlon && latlon.fast_path_eligible) {
     const latlonBindings = resolveLatLonSymbolMap(latlon, ask, maskedAsk, summary);
     if (latlonBindings) {
       latlonBindings.push(
-        ...symbolMapEncodingBindings(latlon, ask, summary, latlonBindings, aggOverride),
+        ...symbolMapEncodingBindings(latlon, ask, summary, latlonBindings, aggOverride, matched),
       );
       return attachAskModifiers(
         ask,
@@ -2436,7 +2513,15 @@ export function classifyNoLlm(
   const maxScore = scored.reduce((mx, s) => Math.max(mx, s.score), 0);
   const top = scored.filter((s) => s.score === maxScore);
 
-  const chosen = selectWithinFamily(top, maskedAsk, matched, aggOverride, manifests, schemaDims);
+  const chosen = selectWithinFamily(
+    top,
+    ask,
+    maskedAsk,
+    matched,
+    aggOverride,
+    manifests,
+    schemaDims,
+  );
   if (!chosen) return null;
 
   // DEMOTE (family guard, W-23447710): a spatial-intent ask must never bind a
@@ -2520,7 +2605,7 @@ export function classifyNoLlm(
   });
   if (!rgb) return null; // required slot unfilled → fail closed
   const bindings = rgb.bindings;
-  bindings.push(...symbolMapEncodingBindings(chosen, ask, summary, bindings, aggOverride));
+  bindings.push(...symbolMapEncodingBindings(chosen, ask, summary, bindings, aggOverride, matched));
   // OPTIONAL small-multiples facet (W23-SM1): additively bind a simple-trellis facet
   // dim (a spare categorical placed AHEAD of the existing pill) ONLY when the ask
   // names/implies a by-<dim> facet AND a spare categorical remains. This never flips
