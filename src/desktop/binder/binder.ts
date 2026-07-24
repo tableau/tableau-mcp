@@ -37,6 +37,11 @@ import {
   resolveInSummary,
   validateBinding,
 } from './validate.js';
+import {
+  WATERFALL_ANCHOR_FIELD_RE,
+  WATERFALL_ORDER_FIELD_RE,
+  WATERFALL_TEMPLATE_NAME,
+} from './waterfall.js';
 
 // Re-exported as the binder's public surface. Bare (source-less) re-exports of the
 // locally-imported bindings — a single `export ... from './x.js'` alongside the
@@ -47,6 +52,8 @@ export {
   resolveInSummary,
   summarizeSchema,
   validateBinding,
+  WATERFALL_ANCHOR_FIELD_RE,
+  WATERFALL_ORDER_FIELD_RE,
 };
 export type { BindingProposal, Blocker, EscalateReason, FilterSpec, SchemaField, SchemaSummary };
 
@@ -59,13 +66,8 @@ type FieldIdentity = Pick<ProposeField, 'name' | 'role' | 'type' | 'datatype'>;
 // ADD the sort in a later step is fragile (live m1 receipts: it lands the sort only ~1/3 of
 // runs, otherwise settling for magnitude order). So the confident bind DEFAULTS the sort to
 // that column ascending when one exists and no sort was proposed — one coherent bind, no
-// fragile follow-up. Kept in sync with WATERFALL_ORDER_FIELD_RE in bindTemplate.ts (the hint
-// side); this is the deterministic apply side.
-const WATERFALL_TEMPLATE_NAME = 'part-to-whole-waterfall';
-// EXPORTED — one definition shared with bindTemplate.ts's discovery hint (the apply side is
-// here, the hint side imports this) so the two can never drift.
-export const WATERFALL_ORDER_FIELD_RE =
-  /(display|sort|step|row|item|line)[_\s-]?(order|no|num|number|index|rank|seq)|^(order|sequence|seq|ordinal|rank|step[_\s-]?order)$/i;
+// fragile follow-up. The shared constants live in waterfall.ts so classification and apply
+// use one definition without creating a classify ↔ binder cycle.
 // A P&L/bridge waterfall's running total double-counts subtotal/total rows unless they're
 // excluded via the anchor_category filter. Live m1 receipts: the singer lands the anchor only
 // ~half the runs (hedges or skips it), so — exactly like the sort default above — the confident
@@ -74,7 +76,6 @@ export const WATERFALL_ORDER_FIELD_RE =
 // it through the normal resolve/escape path into field_mapping['Anchor Category'], which drives
 // spliceWaterfallAnchorFilter. Same field-name heuristic as bindTemplate.ts's discovery hint.
 export const WATERFALL_ANCHOR_SLOT_ID = 'anchor_category';
-export const WATERFALL_ANCHOR_FIELD_RE = /categor|type|kind|class|flag|marker/i;
 
 export type LlmProposeInput = Omit<CoreLlmProposeInput, 'fields'> & {
   fields: ProposeField[];

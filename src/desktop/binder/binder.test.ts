@@ -1162,6 +1162,103 @@ describe('binder/bindTemplate — Call 2 (agent proposal)', () => {
   </datasources>
 </workbook>`;
 
+  const LIVE_PL_ORDER_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='PL'>
+      <column name='[amount]' role='measure' type='quantitative' datatype='real' />
+      <column name='[category]' role='dimension' type='nominal' datatype='string' />
+      <column name='[display_order]' role='measure' type='quantitative' datatype='integer' />
+      <column name='[Fiscal Period]' role='dimension' type='nominal' datatype='string' />
+      <column name='[line_item]' role='dimension' type='nominal' datatype='string' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+  it('confidently binds the full live P&L schema despite its nominal fiscal period', async () => {
+    const res = await bindTemplate({
+      ask: 'Build a waterfall chart showing how we get from revenue to net income',
+      workbookXml: LIVE_PL_ORDER_WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.field_mapping.Profit).toBe('[PL].[sum:amount:qk]');
+      expect(res.args.field_mapping['Sub-Category']).toBe('[PL].[none:line_item:nk]');
+      expect(res.args.field_mapping['Anchor Category']).toBe('[PL].[none:category:nk]');
+      expect(res.args.sort).toEqual({ by: 'display_order', direction: 'asc' });
+    }
+  });
+
+  it('demotes when two genuine waterfall axis dimensions remain ambiguous', async () => {
+    const ambiguousAxisXml = PL_ORDER_WORKBOOK_XML.replace(
+      "<column name='[line_item]' role='dimension' type='nominal' datatype='string' />",
+      [
+        "<column name='[line_item]' role='dimension' type='nominal' datatype='string' />",
+        "<column name='[product_line]' role='dimension' type='nominal' datatype='string' />",
+      ].join('\n      '),
+    );
+    const res = await bindTemplate({
+      ask: 'Build a waterfall chart showing how we get from revenue to net income',
+      workbookXml: ambiguousAxisXml,
+      manifests,
+    });
+
+    expect(res.status).toBe('propose');
+  });
+
+  it('demotes a goal-phrased waterfall when no sequence column exists', async () => {
+    const noOrderXml = PL_ORDER_WORKBOOK_XML.replace(
+      /\n\s*<column name='\[display_order\]'[^>]*\/>/,
+      '',
+    );
+    const res = await bindTemplate({
+      ask: 'Build a waterfall chart showing how we get from revenue to net income',
+      workbookXml: noOrderXml,
+      manifests,
+    });
+
+    expect(res.status).not.toBe('bound');
+  });
+
+  it('does not bind a categorical sequence field as the waterfall category', async () => {
+    const categoricalOrderXml = PL_ORDER_WORKBOOK_XML.replace(
+      "role='measure' type='quantitative' datatype='integer'",
+      "role='dimension' type='nominal' datatype='string'",
+    );
+    const res = await bindTemplate({
+      ask: 'waterfall showing how we get from revenue to net income, ordered by display_order',
+      workbookXml: categoricalOrderXml,
+      manifests,
+    });
+
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.field_mapping['Sub-Category']).toBe('[PL].[none:line_item:nk]');
+      expect(res.args.sort).toEqual({ by: 'display_order', direction: 'asc' });
+    }
+  });
+
+  it('never substitutes amount for an ask-named rank measure', async () => {
+    const rankMeasureXml = PL_ORDER_WORKBOOK_XML.replace(
+      "<column name='[display_order]' role='measure' type='quantitative' datatype='integer' />",
+      [
+        "<column name='[display_order]' role='measure' type='quantitative' datatype='integer' />",
+        "<column name='[rank]' role='measure' type='quantitative' datatype='real' />",
+      ].join('\n      '),
+    );
+    const res = await bindTemplate({
+      ask: 'waterfall of rank by line_item',
+      workbookXml: rankMeasureXml,
+      manifests,
+    });
+
+    if (res.status === 'bound') {
+      expect(res.args.field_mapping.Profit).toBe('[PL].[sum:rank:qk]');
+    }
+  });
+
   it('waterfall DEFAULTS the step order to a sequence column when no sort is proposed', async () => {
     // m1 fix: the running total is order-dependent; without this the confident bind keeps the
     // template DESC-by-measure default and the singer's later sort attempt lands only ~1/3 of runs.

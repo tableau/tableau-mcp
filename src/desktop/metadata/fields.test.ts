@@ -204,6 +204,17 @@ describe('addFieldToRows dotted and colon refs', () => {
   });
 });
 
+describe('addFieldToRows user derivations', () => {
+  it('emits derivation="User" for a usr-prefixed calculated field instance', () => {
+    const modified = addFieldToRows(WORKSHEET_XML, '[Sample].[usr:Calculation_1:qk]');
+
+    expect(modified).toContain(
+      '<column-instance name="[usr:Calculation_1:qk]" column="[Calculation_1]" derivation="User"',
+    );
+    expect(modified).not.toContain('derivation="usr"');
+  });
+});
+
 describe('addFieldToRows date-part derivations', () => {
   // Regression: mapDerivationToProperCase dropped the date-part keys, so a
   // [mn:...] ref was written with derivation="mn" (invalid) and Tableau

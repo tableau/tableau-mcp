@@ -467,6 +467,7 @@ function mapDerivationToProperCase(abbrev: string): string {
     count: 'Count',
     ctd: 'CountD', // Count Distinct
     countd: 'CountD',
+    usr: 'User',
     user: 'User',
     median: 'Median',
     stdev: 'Stdev',

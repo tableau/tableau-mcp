@@ -21,6 +21,11 @@ import Fuse from 'fuse.js';
 import { calcForcedSlotIds } from './calc-derivation.js';
 import type { Derivation, SlotKind, TemplateManifest } from './manifest-types.js';
 import { inferStringTemporal } from './stringTemporal.js';
+import {
+  WATERFALL_ANCHOR_FIELD_RE,
+  WATERFALL_ORDER_FIELD_RE,
+  WATERFALL_TEMPLATE_NAME,
+} from './waterfall.js';
 
 /**
  * SCHEMA SHAPES + `bareName`, inlined so this file stays import-pure — it severs the
@@ -278,6 +283,11 @@ const AVOID_WHEN_STOPWORDS: ReadonlySet<string> = new Set([
   'read',
   'render',
   'renders',
+  'build',
+  'show',
+  'shows',
+  'shown',
+  'showing',
   'become',
   'becomes',
 ]);
@@ -1084,6 +1094,11 @@ function narrowFields(
 function isTemporal(f: SchemaField): boolean {
   return f.role === 'dimension' && TEMPORAL_DATATYPES.has(f.datatype);
 }
+const WATERFALL_PERIOD_FIELD_RE =
+  /period|quarter|month|year|fiscal|fy|fq|date|week|day/i;
+function isWaterfallPeriodField(f: SchemaField): boolean {
+  return isTemporal(f) || WATERFALL_PERIOD_FIELD_RE.test(f.name);
+}
 function isMeasure(f: SchemaField): boolean {
   return f.role === 'measure' || f.isAggregated;
 }
@@ -1785,7 +1800,18 @@ export function classifyNoLlm(
   // the model can WEIGH the caution rather than the zero-latency path committing
   // silently (the retrieval-without-adherence failure). Field names are masked
   // so a field literally named after a caution term can't force the demotion.
-  if (matchAvoidWhen(maskedAsk, chosen.avoid_when, chosen.intent_keywords).length > 0) return null;
+  const avoidMatches = matchAvoidWhen(maskedAsk, chosen.avoid_when, chosen.intent_keywords);
+  const sequenceField = summary.fields.find((field) =>
+    WATERFALL_ORDER_FIELD_RE.test(field.name),
+  );
+  const hasSequenceField = sequenceField !== undefined;
+  const waterfallCanOrderDeterministically =
+    chosen.template === WATERFALL_TEMPLATE_NAME && hasSequenceField;
+  const unresolvedAvoidMatches = avoidMatches.filter(
+    (entry) =>
+      !(waterfallCanOrderDeterministically && entry.toLowerCase().includes('order-dependent')),
+  );
+  if (unresolvedAvoidMatches.length > 0) return null;
 
   // DEMOTE on data-shape-parse hazards (W59): avoid_when only fires when the ASK
   // reveals the risk, but a data-shape hazard lives in the DATA, which no natural
@@ -1801,7 +1827,38 @@ export function classifyNoLlm(
   // the masked ask + full schema so a lone required date slot the ask did not name
   // can complete with the schema's single date field). selectWithinFamily's earlier
   // slot-fit probes deliberately omit this context (no completion during tie-break).
-  const rgb = roleGreedyBind(chosen, matched, aggOverride, schemaDims, {
+  let matchedForBinding = matched;
+  if (waterfallCanOrderDeterministically) {
+    // The selected sequence field is sort metadata; other sequence-like names may still be
+    // ask-named contribution measures. Goal-language P&L asks may name neither "amount" nor
+    // "line_item", so complete each missing required role only when the schema leaves exactly
+    // one eligible candidate. Period/time dimensions are context, not bridge-axis members;
+    // ambiguity among two or more genuine axis dimensions stays fail-closed.
+    matchedForBinding = matched.filter((field) => field !== sequenceField);
+    if (!matchedForBinding.some(isMeasure)) {
+      const measureCandidates = summary.fields.filter(
+        (field) =>
+          isMeasure(field) &&
+          field !== sequenceField &&
+          !WATERFALL_ANCHOR_FIELD_RE.test(field.name) &&
+          (!WATERFALL_ORDER_FIELD_RE.test(field.name) || matched.includes(field)),
+      );
+      if (measureCandidates.length !== 1) return null;
+      matchedForBinding.push(measureCandidates[0]);
+    }
+    if (!matchedForBinding.some(isCategorical)) {
+      const categoricalCandidates = summary.fields.filter(
+        (field) =>
+          isCategorical(field) &&
+          !WATERFALL_ORDER_FIELD_RE.test(field.name) &&
+          !WATERFALL_ANCHOR_FIELD_RE.test(field.name) &&
+          !isWaterfallPeriodField(field),
+      );
+      if (categoricalCandidates.length !== 1) return null;
+      matchedForBinding.push(categoricalCandidates[0]);
+    }
+  }
+  const rgb = roleGreedyBind(chosen, matchedForBinding, aggOverride, schemaDims, {
     maskedAsk,
     schemaFields: summary.fields,
   });
