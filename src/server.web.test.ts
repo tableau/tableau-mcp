@@ -6,7 +6,7 @@ import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasou
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
-import { webToolNames } from './tools/web/toolName.js';
+import { WebToolName, webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
@@ -57,7 +57,7 @@ describe('server', () => {
 
   function createMockAppTool(): WebTool<any> {
     return {
-      name: 'get-workbook',
+      name: 'mock-app-tool' as WebToolName,
       server: {} as any,
       title: 'Test App Tool',
       description: 'Test App Tool',
@@ -293,7 +293,7 @@ describe('server', () => {
 
     expect(mocks.mockRegisterAppTool).toHaveBeenCalledWith(
       server.mcpServer,
-      'get-workbook',
+      'mock-app-tool',
       {
         title: 'Test App Tool',
         description: 'Test App Tool',
@@ -317,7 +317,7 @@ describe('server', () => {
     // Assert registerAppResource was called with correct options (no _meta in options)
     expect(mocks.mockRegisterAppResource).toHaveBeenCalledWith(
       server.mcpServer,
-      'get-workbook',
+      'mock-app-tool',
       'tableau://app/test',
       {
         mimeType: expect.any(String),
@@ -374,7 +374,7 @@ describe('server', () => {
 
     // Should register as standard tool, not app tool
     expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
-      'get-workbook',
+      'mock-app-tool',
       {
         title: 'Test App Tool',
         description: 'Test App Tool',
