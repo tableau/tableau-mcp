@@ -33,7 +33,9 @@ import {
   type SortDirection,
 } from '../../../desktop/refine/refineWorksheet.js';
 import {
+  type BindRecoveryProposalContext,
   classifyBindProposalProgress,
+  MAX_CONSECUTIVE_BIND_RECOVERY_BARE_RESUBMITS,
   sessionRouteState,
 } from '../../../desktop/route/route-state.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
@@ -131,6 +133,7 @@ type BlockedBindTemplateResult = {
     | 'retry_budget_exhausted'
     | 'fallback_required';
   guidance: string;
+  call_2_contract?: Call2Contract;
 };
 
 type BindTemplateToolResult =
@@ -139,28 +142,7 @@ type BindTemplateToolResult =
   | BlockedBindTemplateResult;
 type StructuredBindTemplateToolResult = StructuredResult<BindTemplateToolResult>;
 
-type Call2Contract = {
-  tool: 'bind-template';
-  arguments: {
-    session: string;
-    ask: string;
-    target_worksheet?: string;
-    auto_apply: true;
-  };
-  proposal_choices: Array<{
-    template: string;
-    slots: Array<{
-      slot_id: string;
-      required: boolean;
-      compatible_field_names: string[];
-    }>;
-  }>;
-  proposal_requirements: {
-    title: string;
-    confidence: string;
-    field_selection: string;
-  };
-};
+type Call2Contract = BindRecoveryProposalContext;
 
 /** Escalation reasons that route back to the general (non-fast-path) authoring flow. */
 const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
@@ -204,10 +186,27 @@ function blockedResult(
   reason: BlockedBindTemplateResult['reason'],
   guidance: string,
   nextActionLabel: string,
+  call2Contract?: Call2Contract,
 ): StructuredBindTemplateToolResult {
   return withNextAction(
-    { status: 'blocked', reason, guidance },
+    {
+      status: 'blocked',
+      reason,
+      guidance,
+      ...(call2Contract !== undefined ? { call_2_contract: call2Contract } : {}),
+    },
     prefillNextAction(nextActionLabel),
+  );
+}
+
+function bareResubmitFallbackResult(
+  proposalContext: Call2Contract | undefined,
+): StructuredBindTemplateToolResult {
+  return blockedResult(
+    'fallback_required',
+    'Blocked: bind-template received two consecutive calls without the required proposal. Stop calling bind-template and use build-and-apply-worksheet. If a user decision is still required, use ask-user and present the retained call_2_contract choices; do not choose a measure.',
+    'Use build-and-apply-worksheet',
+    proposalContext,
   );
 }
 
@@ -222,6 +221,11 @@ function recoveryGateBlock(
   }
 
   if (record.phase === 'terminal') {
+    if (
+      (record.consecutiveBareResubmitCount ?? 0) >= MAX_CONSECUTIVE_BIND_RECOVERY_BARE_RESUBMITS
+    ) {
+      return bareResubmitFallbackResult(record.proposalContext);
+    }
     return blockedResult(
       'fallback_required',
       'Blocked: bind-template already determined this ask is not recoverable in the fast path. Use build-and-apply-worksheet, or place fields stepwise with add-field then apply-worksheet; ask-user only if the fallback path needs a user decision.',
@@ -230,12 +234,19 @@ function recoveryGateBlock(
   }
 
   if (currentProposalSignature === undefined) {
+    const updatedRecord = sessionRouteState.recordBindRecoveryBareResubmit(session, askKey);
+    if (updatedRecord?.phase === 'terminal') {
+      return bareResubmitFallbackResult(updatedRecord.proposalContext);
+    }
     return blockedResult(
       'awaiting_proposal',
-      'Blocked: bind-template already returned a proposal request for this ask. Choose one proposal from the previous llm_input and call bind-template with {session, ask, proposal}; otherwise ask-user or use build-and-apply-worksheet.',
+      'Blocked: bind-template already returned a proposal request for this ask. The same choices from the previous llm_input are repeated in call_2_contract below. Choose an exact compatible field for every required slot, then call bind-template with the listed arguments plus proposal:{template,title,bindings:[{slot_id,field}],confidence}. Do not resubmit the bare ask. If the measure remains ambiguous, use ask-user and present these choices; do not guess.',
       'Pick a proposal or ask user',
+      updatedRecord?.proposalContext ?? record.proposalContext,
     );
   }
+
+  sessionRouteState.resetBindRecoveryBareResubmitCount(session, askKey);
 
   if (
     currentProposalSignature !== undefined &&
@@ -1221,6 +1232,7 @@ function recordBindRecoveryAttemptFailOpen({
   askKey,
   outcome,
   currentProposalSignature,
+  proposalContext,
   reservationId,
   terminal = false,
   terminalFallback = false,
@@ -1229,6 +1241,7 @@ function recordBindRecoveryAttemptFailOpen({
   askKey: string;
   outcome: BinderResult['status'];
   currentProposalSignature?: string;
+  proposalContext?: BindRecoveryProposalContext;
   reservationId?: number;
   terminal?: boolean;
   terminalFallback?: boolean;
@@ -1239,6 +1252,7 @@ function recordBindRecoveryAttemptFailOpen({
       ...(currentProposalSignature !== undefined
         ? { proposalSignature: currentProposalSignature }
         : {}),
+      ...(proposalContext !== undefined ? { proposalContext } : {}),
       ...(reservationId !== undefined ? { reservationId } : {}),
     };
     if (outcome === 'escalate' && currentProposalSignature === undefined && !terminalFallback) {
@@ -1468,6 +1482,15 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           if (target_worksheet !== undefined && res.status === 'bound') {
             res = { ...res, args: { ...res.args, title: target_worksheet } };
           }
+          const call2Contract =
+            res.status === 'propose'
+              ? buildCall2Contract({
+                  res,
+                  session: resolvedSession,
+                  ask,
+                  targetWorksheet: target_worksheet,
+                })
+              : undefined;
           try {
             sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
             if (res.status === 'propose') {
@@ -1476,6 +1499,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 askKey,
                 outcome: res.status,
                 currentProposalSignature,
+                proposalContext: call2Contract,
                 reservationId: bindRecoveryReservationId,
               });
             } else if (res.status === 'escalate') {
@@ -1505,14 +1529,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                     {
                       ...res,
                       guidance: buildGuidance(res, schemaSummary, proposal),
-                      call_2_contract: buildCall2Contract({
-                        res,
-                        session: resolvedSession,
-                        ask,
-                        targetWorksheet: target_worksheet,
-                      }),
+                      call_2_contract: call2Contract,
                     },
-                    prefillNextAction('Resubmit bind-template with proposal and auto_apply:true'),
+                    prefillNextAction('Supply proposal from call_2_contract to bind-template'),
                   )
                 : { ...res, guidance: buildGuidance(res, schemaSummary, proposal) },
             authoredCalcCaptions,

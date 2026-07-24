@@ -67,6 +67,33 @@ export type BindRecoveryPhase =
 /** Maximum genuinely distinct proposal corrections retained for one normalized ask. */
 export const MAX_BIND_RECOVERY_PROPOSAL_SIGNATURES = 8;
 
+/** One reminder is allowed; a second consecutive bare resubmit terminates bind recovery. */
+export const MAX_CONSECUTIVE_BIND_RECOVERY_BARE_RESUBMITS = 2;
+
+/** Actionable Call-2 choices retained so a repeated bare ask does not lose the proposal payload. */
+export interface BindRecoveryProposalContext {
+  tool: 'bind-template';
+  arguments: {
+    session: string;
+    ask: string;
+    target_worksheet?: string;
+    auto_apply: true;
+  };
+  proposal_choices: Array<{
+    template: string;
+    slots: Array<{
+      slot_id: string;
+      required: boolean;
+      compatible_field_names: string[];
+    }>;
+  }>;
+  proposal_requirements: {
+    title: string;
+    confidence: string;
+    field_selection: string;
+  };
+}
+
 export interface BindAttempt {
   /** ISO timestamp the bind recovery observation was recorded. */
   ts: string;
@@ -84,6 +111,8 @@ export interface BindRecoveryRecord {
   phase: BindRecoveryPhase;
   attempts: BindAttempt[];
   lastProposalSignature?: string;
+  proposalContext?: BindRecoveryProposalContext;
+  consecutiveBareResubmitCount?: number;
   /** One-shot retry for an apply failure proven to have occurred before mutation dispatch. */
   preDispatchRetryAllowance?: {
     proposalSignature: string;
@@ -96,6 +125,7 @@ export interface BindRecoveryRecord {
 export interface BindRecoveryAttemptInput {
   outcome: BindOutcome;
   proposalSignature?: string;
+  proposalContext?: BindRecoveryProposalContext;
   reservationId?: number;
   /** Explicit terminal-done marker; callers use this only after final bind processing concludes. */
   terminal?: boolean;
@@ -398,6 +428,36 @@ export class SessionRouteStateStore {
     return record;
   }
 
+  recordBindRecoveryBareResubmit(
+    sessionId: string | undefined,
+    ask: string,
+  ): BindRecoveryRecord | undefined {
+    const state = this.get(sessionId);
+    const previous = state?.bindRecoveryByAsk.get(ask);
+    if (!state || !previous || previous.phase === 'terminal') return previous;
+
+    const consecutiveBareResubmitCount = (previous.consecutiveBareResubmitCount ?? 0) + 1;
+    const record: BindRecoveryRecord = {
+      ...previous,
+      phase:
+        consecutiveBareResubmitCount >= MAX_CONSECUTIVE_BIND_RECOVERY_BARE_RESUBMITS
+          ? 'terminal'
+          : previous.phase,
+      ...this.withConsecutiveBareResubmitCount(consecutiveBareResubmitCount),
+    };
+    return this.touchBindRecovery(state, ask, record) ? record : undefined;
+  }
+
+  resetBindRecoveryBareResubmitCount(sessionId: string | undefined, ask: string): boolean {
+    const state = this.get(sessionId);
+    const previous = state?.bindRecoveryByAsk.get(ask);
+    if (!state || !previous) return false;
+    return this.touchBindRecovery(state, ask, {
+      ...previous,
+      ...this.withConsecutiveBareResubmitCount(0),
+    });
+  }
+
   private classifyBindRecoveryPhase(
     previous: BindRecoveryRecord | undefined,
     proposalSignature: string | undefined,
@@ -441,6 +501,22 @@ export class SessionRouteStateStore {
     return allowance?.proposalSignature === nextProposalSignature
       ? { preDispatchRetryAllowance: allowance }
       : {};
+  }
+
+  private withProposalContext(
+    previous: BindRecoveryRecord | undefined,
+    proposalContext: BindRecoveryProposalContext | undefined,
+  ): Pick<BindRecoveryRecord, 'proposalContext'> {
+    if (proposalContext !== undefined) return { proposalContext };
+    return previous?.proposalContext !== undefined
+      ? { proposalContext: previous.proposalContext }
+      : {};
+  }
+
+  private withConsecutiveBareResubmitCount(
+    count: number | undefined,
+  ): Pick<BindRecoveryRecord, 'consecutiveBareResubmitCount'> {
+    return count === undefined ? {} : { consecutiveBareResubmitCount: count };
   }
 
   private upgradesLastReservation(
@@ -537,6 +613,10 @@ export class SessionRouteStateStore {
       phase,
       attempts: [...(previous?.attempts ?? []), { ...bindAttempt, reservationId }],
       ...this.withLastProposalSignature(previous, admission.proposalSignature),
+      ...this.withProposalContext(previous, undefined),
+      ...this.withConsecutiveBareResubmitCount(
+        admission.proposalSignature === undefined ? previous?.consecutiveBareResubmitCount : 0,
+      ),
       ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
       ...this.withUncorrelatedOutcomeCount(previous, false),
     };
@@ -598,6 +678,10 @@ export class SessionRouteStateStore {
         previous,
         attempt.reservationId === undefined ? attempt.proposalSignature : undefined,
       ),
+      ...this.withProposalContext(previous, attempt.proposalContext),
+      ...this.withConsecutiveBareResubmitCount(
+        attempt.proposalSignature === undefined ? previous?.consecutiveBareResubmitCount : 0,
+      ),
       ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
       ...this.withUncorrelatedOutcomeCount(previous, upgraded.uncorrelated),
     };
@@ -648,6 +732,10 @@ export class SessionRouteStateStore {
       ...this.withLastProposalSignature(
         previous,
         attempt.reservationId === undefined ? attempt.proposalSignature : undefined,
+      ),
+      ...this.withProposalContext(previous, attempt.proposalContext),
+      ...this.withConsecutiveBareResubmitCount(
+        attempt.proposalSignature === undefined ? previous?.consecutiveBareResubmitCount : 0,
       ),
       ...this.withPreDispatchRetryAllowance(previous, nextProposalSignature),
       ...this.withUncorrelatedOutcomeCount(previous, upgraded.uncorrelated),

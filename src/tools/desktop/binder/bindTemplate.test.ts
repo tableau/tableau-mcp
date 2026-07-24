@@ -216,6 +216,35 @@ const proposeResult: BinderResult = {
   } as unknown as Extract<BinderResult, { status: 'propose' }>['llm_input'],
   output_schema: { type: 'object' },
 };
+const ambiguousGoalsProposeResult: BinderResult = {
+  status: 'propose',
+  decline_reason: {
+    code: 'no_llm_classifier_declined',
+    detail: 'classifyNoLlm returned no deterministic template; routed to proposal candidates',
+  },
+  llm_input: {
+    ask: 'symbol map of countries by goals scored',
+    candidate_templates: [
+      {
+        template: 'spatial-symbol-map',
+        description: 'Symbol map',
+        intent_keywords: ['symbol-map'],
+        slots: [
+          { slot_id: 'country', role: ['dimension'], kind: 'geo', required: true },
+          { slot_id: 'sales', role: ['measure'], kind: 'quantitative', required: true },
+        ],
+      },
+    ],
+    fields: [
+      { name: 'Country Code', role: 'dimension', type: 'nominal', datatype: 'string' },
+      { name: 'Goals', role: 'measure', type: 'quantitative', datatype: 'integer' },
+      { name: 'Goals For', role: 'measure', type: 'quantitative', datatype: 'integer' },
+      { name: 'Goals Against', role: 'measure', type: 'quantitative', datatype: 'integer' },
+      { name: 'Goal Difference', role: 'measure', type: 'quantitative', datatype: 'integer' },
+    ],
+  } as unknown as Extract<BinderResult, { status: 'propose' }>['llm_input'],
+  output_schema: { type: 'object' },
+};
 const waterfallProposeResult: BinderResult = {
   status: 'propose',
   decline_reason: {
@@ -518,6 +547,24 @@ describe('bindTemplateTool', () => {
     expect(body.guidance).not.toContain('add-field');
     expect(body.guidance).not.toContain('build-and-apply-worksheet');
     expect(result.structuredContent).toEqual({
+      nextAction: {
+        label: 'Supply proposal from call_2_contract to bind-template',
+        kind: 'prefill',
+      },
+    });
+  });
+
+  it('requires a call_2_contract proposal in the Call 1 nextAction label', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(proposeResult);
+
+    const result = await getToolResult({ session: '1', ask: 'something weird' });
+
+    expect(result.structuredContent?.nextAction).toEqual({
+      label: 'Supply proposal from call_2_contract to bind-template',
+      kind: 'prefill',
+    });
+    expect(result.structuredContent).not.toEqual({
       nextAction: {
         label: 'Resubmit bind-template with proposal and auto_apply:true',
         kind: 'prefill',
@@ -861,6 +908,101 @@ describe('bindTemplateTool bind recovery gate', () => {
     });
     expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it('repeats actionable ambiguous-measure choices when a bare ask is resubmitted', async () => {
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(ambiguousGoalsProposeResult);
+    const ask = 'symbol map of countries by goals scored';
+
+    const proposed = await getToolResult({ session: '1', ask });
+    const repeated = await getToolResult({ session: '1', ask });
+
+    invariant(proposed.content[0].type === 'text');
+    invariant(repeated.content[0].type === 'text');
+    const proposedBody = JSON.parse(proposed.content[0].text);
+    const repeatedBody = JSON.parse(repeated.content[0].text);
+    expect(proposedBody.status).toBe('propose');
+    expect(repeatedBody).toMatchObject({
+      status: 'blocked',
+      reason: 'awaiting_proposal',
+      call_2_contract: proposedBody.call_2_contract,
+    });
+    expect(
+      repeatedBody.call_2_contract.proposal_choices[0].slots.find(
+        (slot: { slot_id: string }) => slot.slot_id === 'sales',
+      ).compatible_field_names,
+    ).toEqual(['Goals', 'Goals For', 'Goals Against', 'Goal Difference']);
+    expect(repeatedBody.guidance).toContain('Do not resubmit the bare ask');
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it('terminates on the second consecutive bare resubmit with an actionable fallback', async () => {
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(ambiguousGoalsProposeResult);
+    const ask = 'symbol map of countries by goals scored';
+
+    const proposed = await getToolResult({ session: '1', ask });
+    const firstBareResubmit = await getToolResult({ session: '1', ask, auto_apply: true });
+    const terminal = await getToolResult({ session: '1', ask, auto_apply: true });
+
+    invariant(proposed.content[0].type === 'text');
+    invariant(firstBareResubmit.content[0].type === 'text');
+    invariant(terminal.content[0].type === 'text');
+    const proposedBody = JSON.parse(proposed.content[0].text);
+    expect(JSON.parse(firstBareResubmit.content[0].text).reason).toBe('awaiting_proposal');
+    expect(JSON.parse(terminal.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'fallback_required',
+      call_2_contract: proposedBody.call_2_contract,
+    });
+    expect(JSON.parse(terminal.content[0].text).guidance).toContain('build-and-apply-worksheet');
+    expect(terminal.structuredContent).toEqual({
+      nextAction: { label: 'Use build-and-apply-worksheet', kind: 'prefill' },
+    });
+    expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toMatchObject({
+      phase: 'terminal',
+      consecutiveBareResubmitCount: 2,
+    });
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it('resets the bare-resubmit counter when a filled proposal is supplied', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(escalateResult);
+    const ask = 'bar chart of Revenue by Region';
+    const askKey = normalizeAskForMatch(ask);
+
+    await getToolResult({ session: '1', ask });
+    await getToolResult({ session: '1', ask, auto_apply: true });
+    const corrected = await getToolResult({
+      session: '1',
+      ask,
+      proposal: sampleProposal,
+    });
+
+    invariant(corrected.content[0].type === 'text');
+    expect(JSON.parse(corrected.content[0].text).status).toBe('escalate');
+    expect(sessionRouteState.getBindRecovery('1', askKey)?.consecutiveBareResubmitCount ?? 0).toBe(
+      0,
+    );
+
+    const restartedBareResubmit = await getToolResult({ session: '1', ask, auto_apply: true });
+
+    invariant(restartedBareResubmit.content[0].type === 'text');
+    expect(JSON.parse(restartedBareResubmit.content[0].text).reason).toBe('awaiting_proposal');
+    expect(sessionRouteState.getBindRecovery('1', askKey)).toMatchObject({
+      phase: 'proposal-attempted',
+      consecutiveBareResubmitCount: 1,
+    });
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
   });
 
   it('blocks a same-signature retry, including title-only and confidence-only changes', async () => {
@@ -1595,7 +1737,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(JSON.parse(call1.content[0].text).status).toBe('propose');
     expect(call1.structuredContent).toEqual({
       nextAction: {
-        label: 'Resubmit bind-template with proposal and auto_apply:true',
+        label: 'Supply proposal from call_2_contract to bind-template',
         kind: 'prefill',
       },
     });
