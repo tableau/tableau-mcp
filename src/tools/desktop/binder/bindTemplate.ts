@@ -190,6 +190,13 @@ const WATERFALL_SORT_HINT =
 // bundled skill's "adapt fields/formatting" + the ambient "search-commands available" pulls.
 // Paired with structuredContent.nextAction{kind:'done'} for a future route-gate/host.
 const TERMINAL_GUIDANCE = 'Done — no further tool calls needed.';
+// When the confident bind already applied a top-N limit and/or an interactive filter, the
+// singer must NOT hand-author another one: a second manual filter lands as a PEER filter
+// (no context marker) and overrides the context filter this bind wrote, breaking the
+// within-scope ranking (m7 live: judge 28 because the singer added a duplicate peer Region
+// filter after a correct one-shot). Say the filter is already applied as a context filter.
+const FILTER_APPLIED_GUIDANCE =
+  'The requested filter/limit is ALREADY applied (the scoping dimension as a context filter, so any top-N ranks within it). Do NOT add another filter — a second one lands as a peer filter and breaks the scoping. The interactive control may not render as a visible card; that is a display detail, not a missing filter.';
 const PROPOSAL_ATTEMPTED_PHASE = ['proposal', 'attempted'].join('-');
 const RETRY_USED_PHASE = ['retry', 'used'].join('-');
 
@@ -1154,9 +1161,14 @@ async function performAutoApply({
   // attach NO structuredContent (byte-for-byte identical to the pre-fix code). On COMPLETE we
   // append the stop-clause AND the machine-readable done marker so nothing re-asserts "keep going".
   const incomplete = waterfallReBindSlotUnfilled(res, schemaSummary);
+  const appliedFilterOrLimit =
+    args.top_n !== undefined || (args.filters !== undefined && args.filters.length > 0);
+  const terminalGuidance = appliedFilterOrLimit
+    ? `${TERMINAL_GUIDANCE} ${FILTER_APPLIED_GUIDANCE}`
+    : TERMINAL_GUIDANCE;
   const guidance = incomplete
     ? appendWaterfallDiscoveryGuidance(receipt, res, schemaSummary)
-    : `${receipt} ${TERMINAL_GUIDANCE}`;
+    : `${receipt} ${terminalGuidance}`;
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
