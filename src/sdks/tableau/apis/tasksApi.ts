@@ -7,6 +7,7 @@ import {
   updateCloudExtractRefreshTaskResponseSchema,
 } from '../types/extractRefreshTask.js';
 import { flowRunTaskSchema } from '../types/flowRunTask.js';
+import { runFlowJobResponseSchema } from '../types/job.js';
 
 const taskEntrySchema = z.object({
   extractRefresh: extractRefreshTaskSchema,
@@ -176,10 +177,74 @@ const updateCloudExtractRefreshTaskEndpoint = makeEndpoint({
   response: updateCloudExtractRefreshTaskResponseSchema,
 });
 
+/**
+ * Get Flow Run Task
+ * GET /api/api-version/sites/site-id/tasks/runFlow/task-id
+ * Returns a single scheduled flow run task by id (the schedule for a flow). A
+ * direct, cheap fetch — unlike "Get Flow Run Tasks" which has no server-side
+ * filtering and returns every task.
+ * Tableau Cloud scope: tableau:flow_tasks:read
+ * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#get_flow_run_task
+ */
+const getFlowRunTaskEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/tasks/runFlow/:taskId',
+  alias: 'getFlowRunTask',
+  description: 'Returns a single scheduled flow run task by id.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'taskId',
+      type: 'Path',
+      schema: z.string(),
+    },
+  ],
+  response: z.object({
+    task: z.object({
+      flowRun: flowRunTaskSchema,
+    }),
+  }),
+});
+
+/**
+ * Run Flow Task
+ * POST /api/api-version/sites/site-id/tasks/runFlow/task-id/runNow
+ * Runs an EXISTING scheduled flow run task now (using the task's configured
+ * output steps / parameters), resuming it if suspended. Returns the async job.
+ * Tableau Cloud scope: tableau:flow_tasks:run
+ * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_flow.htm#run_flow_task
+ */
+const runFlowTaskEndpoint = makeEndpoint({
+  method: 'post',
+  path: '/sites/:siteId/tasks/runFlow/:taskId/runNow',
+  alias: 'runFlowTask',
+  description:
+    'Runs an existing scheduled flow run task immediately and returns the async background job.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'taskId',
+      type: 'Path',
+      schema: z.string(),
+    },
+  ],
+  response: runFlowJobResponseSchema,
+});
+
 const tasksApi = makeApi([
   listExtractRefreshTasksEndpoint,
   getFlowRunTasksEndpoint,
   deleteExtractRefreshTaskEndpoint,
   updateCloudExtractRefreshTaskEndpoint,
+  getFlowRunTaskEndpoint,
+  runFlowTaskEndpoint,
 ]);
 export const tasksApis = [...tasksApi] as const satisfies ZodiosEndpointDefinitions;

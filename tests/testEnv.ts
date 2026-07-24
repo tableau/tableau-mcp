@@ -49,6 +49,7 @@ export function getDefaultEnv(): EnvValues {
     // "tool absent when admin off" tests rely on getDefaultEnv() omitting it.
     'PAT_NAME',
     'PAT_VALUE',
+    'FLOW_WRITE_TOOLS_ENABLED',
   ]);
 }
 
