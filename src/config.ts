@@ -306,9 +306,9 @@ export class Config extends BaseConfig {
     // Flow tools are gated off by default while flow rollouts are staged into
     // production; set FLOW_TOOLS_ENABLED=true to register them.
     this.flowToolsEnabled = flowToolsEnabled === 'true';
-    // Insight-cards tools (generate-insight-cards, resolve-datasource-luid) are
-    // gated off by default while the insights rollout is staged (keeps hosts
-    // like Slackbot stable); set INSIGHTS_TOOLS_ENABLED=true to register them.
+    // Insight-card tools are gated off by default while the rollout is staged
+    // (keeps hosts like Slackbot stable); set INSIGHTS_TOOLS_ENABLED=true to
+    // register generate-insight-cards and resolver paths.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';

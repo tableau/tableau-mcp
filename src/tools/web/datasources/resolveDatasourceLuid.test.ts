@@ -82,6 +82,13 @@ describe('resolveDatasourceLuid', () => {
       expect.objectContaining({ datasourceLuid: '2' }),
     );
   });
+
+  it('rejects contentUrl values that break filter grammar', async () => {
+    const result = await getToolResult('Sales,Ops');
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Invalid filter expression format');
+  });
 });
 
 async function getToolResult(contentUrl: string): Promise<CallToolResult> {
