@@ -70,7 +70,7 @@ const pilots: Pilot[] = [
   },
   {
     name: 'trend-line-chart',
-    legacyFields: ['Order Date', 'Sales', 'Facet'],
+    legacyFields: ['Order Date', 'Sales', 'Facet', 'Color Series'],
     bindings: {
       order_date: `[${DS}].[tmn:Event Date:qk]`,
       sales: `[${DS}].[sum:Revenue:qk]`,

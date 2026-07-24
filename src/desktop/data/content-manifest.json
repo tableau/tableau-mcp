@@ -2,9 +2,9 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.56.2+content.2026-07-23",
+  "content_version": "2.56.2+content.2026-07-24",
   "schema_version": "2",
-  "generated": "2026-07-23",
+  "generated": "2026-07-24",
   "engine_compat": {
     "server_min": "2.56.2",
     "node": ">=22.7.5"
@@ -227,8 +227,8 @@
     },
     {
       "path": "data-visualization-templates-xml/trend-line-chart.xml",
-      "sha256": "cf42a82bd95b0a37d8768b2aa3a11a2a703fc7a03a6822f3e15a9fb196d3cb0b",
-      "bytes": 2184
+      "sha256": "36bc38c8c53b0d2cd652843958e1ec57bc4c18bccb3f2f5f5f4a50347faae508",
+      "bytes": 2393
     },
     {
       "path": "data-visualization-templates-xml/ww-floating-bars.xml",
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "ca866d6d03df50a384618231e3ec35e798ccf7c2ade4435ff030160125d14511",
-      "bytes": 276725
+      "sha256": "39263a134909614154768061ea50e51dcc91a25c54046b31570cf50a5b9028cb",
+      "bytes": 277526
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -457,8 +457,8 @@
     },
     {
       "path": "template-manifests/trend-line-chart.manifest.json",
-      "sha256": "aca2bd1b0346c1549a583360fb9fea4cb976c67a78a0e4d5fff918b95522fff5",
-      "bytes": 6099
+      "sha256": "b783cf1e8064961538e92e59642911b9f170f947c1092bd0d08fd4769400ae34",
+      "bytes": 6736
     },
     {
       "path": "template-manifests/ww-floating-bars.manifest.json",

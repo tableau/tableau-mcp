@@ -222,6 +222,7 @@ describe('binder/classifyNoLlm — e4 acronym expansion field matching', () => {
     expect(cls!.bindings).toEqual([
       { slot_id: 'order_date', field: 'month' },
       { slot_id: 'sales', field: 'mau' },
+      { slot_id: 'color_series', field: 'product' },
     ]);
     expect(cls!.bindings.some((binding) => binding.field === 'dau')).toBe(false);
   });
@@ -238,6 +239,7 @@ describe('binder/classifyNoLlm — e4 acronym expansion field matching', () => {
     expect(cls!.bindings).toEqual([
       { slot_id: 'order_date', field: 'month' },
       { slot_id: 'sales', field: 'dau' },
+      { slot_id: 'color_series', field: 'product' },
     ]);
     expect(cls!.bindings.some((binding) => binding.field === 'mau')).toBe(false);
   });
@@ -253,6 +255,7 @@ describe('binder/classifyNoLlm — e4 acronym expansion field matching', () => {
     expect(cls!.bindings).toEqual([
       { slot_id: 'order_date', field: 'month' },
       { slot_id: 'sales', field: 'mau' },
+      { slot_id: 'color_series', field: 'product' },
     ]);
   });
 

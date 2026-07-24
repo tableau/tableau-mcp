@@ -4316,7 +4316,6 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-04",
-        "xml_sha256": "cf42a82bd95b0a37d8768b2aa3a11a2a703fc7a03a6822f3e15a9fb196d3cb0b",
         "render_evidence": {
           "basis": "hand-stamp: live render + structural parity + human review; the normal real-date placeholder migration preserves byte-identical post-bind XML versus the stamped literal-token form, proven by templatePlaceholderPilots.test.ts",
           "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
@@ -4333,7 +4332,8 @@
         "DATASOURCE",
         "field_base_1",
         "field_base_2",
-        "field_base_3"
+        "field_base_3",
+        "field_base_4"
       ],
       "intent_keywords": [
         "trend",
@@ -4427,6 +4427,24 @@
             "Team"
           ],
           "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on cols AHEAD of the truncated date pill, trellising the trend into side-by-side panes (one line per member). Optional → EXCLUDED from the required-bindable fixture_bind set (only {order_date, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots — a bare 'by <dim>' never facets (fail-closed), and it never steals a slot-bound dim. XML declares {{field_base_3}} as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the un-faceted default render is byte-unchanged). Modeled on box-plot-chart's required:false facet."
+        },
+        {
+          "slot_id": "color_series",
+          "template_field": "{{field_base_4}}",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": false,
+          "purpose": "Optional categorical dimension that splits the trend into one colored line per member.",
+          "examples": [
+            "Team",
+            "Plan Tier",
+            "Channel"
+          ],
+          "notes": "OPTIONAL series split: when no facet is requested, the binder fills this slot only if exactly one spare categorical remains after required bindings. Zero or multiple candidates leave it unbound. The optional-field injector removes both its datasource declaration and color encoding when unbound, preserving the pre-series-split render byte-for-byte."
         }
       ],
       "calcs": [],

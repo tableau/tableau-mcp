@@ -316,6 +316,14 @@ describe('buildInjectedWorkbookXml — temporal_axis_from_string end-to-end (rea
       kind: 'categorical',
       role: ['cols'],
     },
+    {
+      slot_id: 'color_series',
+      template_field: '{{field_base_4}}',
+      required: false,
+      bindable: true,
+      kind: 'categorical',
+      role: ['color'],
+    },
   ];
 
   it('injects a DATEPARSE month axis when the temporal slot bound a string month (e4 shape)', () => {

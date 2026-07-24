@@ -1278,7 +1278,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     name: 'bind-template',
     title,
     description:
-      'Bind and apply a chart in ONE call. For a plain chart ask, call this FIRST with auto_apply:true — a confident bind renders the chart with no follow-up call. Do NOT bind once to inspect and again to apply; set auto_apply:true on the first call.',
+      'Bind and apply a chart in ONE call. For a plain chart ask, call this FIRST with auto_apply:true — a confident bind renders the chart with no second call. Do NOT bind once to inspect and again to apply; set auto_apply:true on the first call.',
     paramsSchema,
     annotations: {
       title,

@@ -523,6 +523,7 @@ function selectTexts(xp: string, doc: Document): Text[] {
 const OPTIONAL_REFERENCE_ELEMENTS = new Set([
   'column',
   'column-instance',
+  'color',
   'computed-sort',
   'encoding',
   'filter',
@@ -600,6 +601,39 @@ function removeElement(element: Element): void {
   element.parentNode?.removeChild(element);
 }
 
+function isWhitespaceText(node: Node | null): node is Text {
+  return node?.nodeType === TEXT_NODE && !(node as Text).data.trim();
+}
+
+function removeOptionalReferenceElement(element: Element): void {
+  const followingWhitespace = element.nextSibling;
+  const followsAlreadyPrunedSibling =
+    element.tagName === 'column' &&
+    isWhitespaceText(element.previousSibling) &&
+    isWhitespaceText(element.previousSibling.previousSibling);
+  removeElement(element);
+  if (followsAlreadyPrunedSibling && isWhitespaceText(followingWhitespace)) {
+    followingWhitespace.parentNode?.removeChild(followingWhitespace);
+  }
+}
+
+function removeEmptyEncodingContainers(doc: Document): void {
+  for (const encodings of selectElements('//encodings', doc)) {
+    const hasEncoding = Array.from(encodings.childNodes).some(
+      (node) => node.nodeType === ELEMENT_NODE,
+    );
+    if (hasEncoding) continue;
+    // The optional color block is authored between two indented siblings. Removing
+    // its following whitespace node as well collapses the two adjacent indentation
+    // nodes back to the exact pre-injection bytes after DOM serialization.
+    const followingWhitespace = encodings.nextSibling;
+    removeElement(encodings);
+    if (isWhitespaceText(followingWhitespace)) {
+      followingWhitespace.parentNode?.removeChild(followingWhitespace);
+    }
+  }
+}
+
 function pruneShelfFieldReferences(doc: Document, templateField: string): void {
   for (const tag of ['rows', 'cols']) {
     for (const shelf of selectElements(`//${tag}`, doc)) {
@@ -622,8 +656,9 @@ function pruneOptionalTemplateField(doc: Document, templateField: string): void 
     const referencesField = Array.from(element.attributes).some((attribute) =>
       referencesTemplateField(attribute.value, templateField),
     );
-    if (referencesField) removeElement(element);
+    if (referencesField) removeOptionalReferenceElement(element);
   }
+  removeEmptyEncodingContainers(doc);
   pruneShelfFieldReferences(doc, templateField);
 }
 

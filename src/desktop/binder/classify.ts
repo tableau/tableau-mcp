@@ -1825,6 +1825,34 @@ function facetBinding(
   return { slot_id: facetSlot.slot_id, field: spare.name };
 }
 
+/**
+ * FAIL-CLOSED trend-series augmentation. A template may opt into one optional
+ * categorical color slot; bind it only when exactly one unconsumed categorical
+ * exists in the datasource. Zero candidates leaves the default single line alone,
+ * while two or more stay unbound rather than choosing a series arbitrarily.
+ */
+function colorSeriesBinding(
+  m: TemplateManifest,
+  bound: Array<{ slot_id: string; field: string; derivation?: Derivation }>,
+  candidates: SchemaField[],
+): { slot_id: string; field: string } | null {
+  const boundIds = new Set(bound.map((binding) => binding.slot_id));
+  const colorSlot = m.slots.find(
+    (slot) =>
+      slot.slot_id === 'color_series' &&
+      slot.kind === 'categorical' &&
+      !slot.required &&
+      !boundIds.has(slot.slot_id),
+  );
+  if (!colorSlot) return null;
+  const boundFields = new Set(bound.map((binding) => binding.field));
+  const spares = candidates.filter(
+    (field) => isCategorical(field) && !boundFields.has(field.name),
+  );
+  if (spares.length !== 1) return null;
+  return { slot_id: colorSlot.slot_id, field: spares[0].name };
+}
+
 const MEASURE_BY_DIMENSION_TEMPLATE = 'magnitude-simple-bar';
 
 const MEASURE_BY_DIMENSION_RESIDUAL_TOKENS: ReadonlySet<string> = new Set([
@@ -2169,6 +2197,11 @@ export function classifyNoLlm(
   // no-spare ask returns the exact same {template, bindings} as before.
   const facet = facetBinding(chosen, bindings, matched, maskedAsk);
   if (facet) bindings.push(facet);
+  // A facet cue wins over series color. Otherwise inspect the full datasource, not
+  // only `matched` (which contains ask-named fields): e4 intentionally does not name
+  // its sole spare Product dimension. Exact-one cardinality keeps this fail-closed.
+  const colorSeries = facet ? null : colorSeriesBinding(chosen, bindings, summary.fields);
+  if (colorSeries) bindings.push(colorSeries);
   // Attach provenance (e.g. W60 geo auto-completion) only when non-empty, so a
   // non-geo / no-auto-complete ask returns the exact same {template, bindings} shape.
   return attachAskModifiers(
