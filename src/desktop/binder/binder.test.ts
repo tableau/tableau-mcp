@@ -164,7 +164,11 @@ describe('binder/classifyNoLlm', () => {
   <column name='[goals_for]' caption='Goals For' role='measure' type='quantitative' datatype='integer' />
   <column name='[player_name]' caption='Player Name' role='dimension' type='nominal' datatype='string' />
 </datasource></datasources><worksheets><worksheet name='se-eval-scratch' /></worksheets></workbook>`;
-    const cls = classifyNoLlm('symbol map of countries by Goals For', manifests, summarizeSchema(WC));
+    const cls = classifyNoLlm(
+      'symbol map of countries by Goals For',
+      manifests,
+      summarizeSchema(WC),
+    );
     expect(cls).not.toBeNull();
     expect(cls!.template).toBe('spatial-symbol-map');
     expect(cls!.bindings).toContainEqual({ slot_id: 'country', field: 'Country Code' });
