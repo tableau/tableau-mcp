@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getFeatureGate } from '../../../features/init.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getProductTelemetry } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
+import { Provider } from '../../../utils/provider.js';
 import { WebTool } from '../tool.js';
 
 // Starting field set — the final app-supplied schema is expected to grow later.
@@ -52,7 +53,7 @@ export const getRecordEventTool = (server: WebMcpServer): WebTool<typeof paramsS
         visibility: ['app'], // Only visible to the app, not the model
       },
     },
-    disabled: !getFeatureGate().isFeatureEnabled('mcp-apps'),
+    disabled: new Provider(async () => !(await getFeatureGate().isFeatureEnabled('mcp-apps'))),
     callback: async (args, extra): Promise<CallToolResult> => {
       return recordEventTool.logAndExecute<{ recorded: true }>({
         extra,

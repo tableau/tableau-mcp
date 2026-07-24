@@ -17,38 +17,11 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { AppToolResult, WebTool } from '../tool.js';
-import { constructViewWebUrl } from '../utils/viewUrlUtils.js';
+import { getDefaultViewWebUrl } from '../utils/viewUrlUtils.js';
 
 const paramsSchema = {
   workbookId: z.string(),
 };
-
-function getDefaultViewWebUrl(
-  workbook: Workbook,
-  server: string,
-  siteName: string,
-): string | undefined {
-  const views = workbook.views?.view;
-  if (!views || views.length === 0) {
-    return undefined;
-  }
-
-  // Try to find the default view first
-  let targetView = workbook.defaultViewId
-    ? views.find((view) => view.id === workbook.defaultViewId)
-    : undefined;
-
-  // If default view was filtered out, fall back to the first view
-  if (!targetView) {
-    targetView = views[0];
-  }
-
-  if (!targetView?.contentUrl) {
-    return undefined;
-  }
-
-  return constructViewWebUrl(server, siteName, targetView.contentUrl);
-}
 
 export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const getWorkbookTool = new WebTool({
