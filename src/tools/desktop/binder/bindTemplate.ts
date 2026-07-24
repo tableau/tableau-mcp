@@ -71,10 +71,7 @@ const paramsSchema = {
   ask: z.string(),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
-  auto_apply: z
-    .boolean()
-    .optional()
-    .describe('Set true to render the chart on THIS call (the fast path). Omitting it returns the binding without applying, forcing a wasteful second call — set true on the first bind for a plain chart ask.'),
+  auto_apply: z.boolean().optional(),
   target_worksheet: z.string().optional(),
   calcs: z
     .array(
@@ -1277,8 +1274,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'bind-template',
     title,
-    description:
-      'Bind and apply a chart in ONE call. For a plain chart ask, call this FIRST with auto_apply:true — a confident bind renders the chart with no second call. Do NOT bind once to inspect and again to apply; set auto_apply:true on the first call.',
+    description: 'Bind and apply a chart in ONE call.',
     paramsSchema,
     annotations: {
       title,

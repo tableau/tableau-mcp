@@ -39,20 +39,14 @@ const ENCODING_TYPES = [
 const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
 const paramsSchema = {
-  session: z.string().optional().describe('Desktop session; omit if one.'),
-  worksheetName: z
-    .string()
-    .optional()
-    .describe('Sheet to edit (fetched fresh); or pass worksheetFile to stack edits.'),
-  worksheetFile: z
-    .string()
-    .optional()
-    .describe('Cached sheet path from a prior edit; stacks edits.'),
-  target: z.enum(FIELD_TARGETS).describe('Placement shelf.'),
-  columnRef: z.string().describe('Field to add.'),
-  encodingType: z.enum(ENCODING_TYPES).optional().describe('Required when target=encoding.'),
-  index: z.number().optional().describe('Optional position.'),
-  workbookFile: z.string().optional().describe('Optional workbook.'),
+  session: z.string().optional().describe('Session.'),
+  worksheetName: z.string().optional().describe('Fetched fresh.'),
+  worksheetFile: z.string().optional().describe('Cache path; stacks edits.'),
+  target: z.enum(FIELD_TARGETS).describe('Shelf.'),
+  columnRef: z.string().describe('Field.'),
+  encodingType: z.enum(ENCODING_TYPES).optional().describe('For encoding target.'),
+  index: z.number().optional().describe('Position.'),
+  workbookFile: z.string().optional().describe('Workbook.'),
 };
 
 const title = 'Add Field';

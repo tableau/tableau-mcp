@@ -27,13 +27,13 @@ export const bindingSchema = z
   .object({
     slot_id: z.string().describe(''),
     field: z.string().describe('Exact llm_input.fields[].name'),
-    derivation: z.enum(DERIVATION_SHORT_FORMS).optional().describe('Derivation.'),
+    derivation: z.enum(DERIVATION_SHORT_FORMS).optional(),
   })
   .strict();
 
 export const proposalSchema = z
   .object({
-    template: z.string().describe('Template.'),
+    template: z.string(),
     // WATCH-CLASS (length): the library copies proposal.title VERBATIM on the validate path
     // (validateAndBuild -> InjectTemplateArgs.title, escaped-only) with NO truncation — only
     // the no-LLM Call-1 title is capped (makeTitle). The library's own declared contract
@@ -46,14 +46,13 @@ export const proposalSchema = z
     title: z
       .string()
       .max(80)
-      .refine((t) => !TITLE_CONTROL_CHAR_RE.test(t), { message: TITLE_CONTROL_CHAR_MESSAGE })
-      .describe('Title.'),
-    bindings: z.array(bindingSchema).describe('Bindings.'),
+      .refine((t) => !TITLE_CONTROL_CHAR_RE.test(t), { message: TITLE_CONTROL_CHAR_MESSAGE }),
+    bindings: z.array(bindingSchema),
     // WATCH-CLASS (required): required, matching PROPOSAL_OUTPUT_SCHEMA. The binder's floor
     // check SKIPS an undefined confidence, so an optional field here would let a proposal
     // bypass the low-confidence escalation entirely (fail-open). The source implementation's own tool schema left
     // this optional; the repo hardens it to required.
-    confidence: z.number().min(0).max(1).describe('0-1.'),
+    confidence: z.number().min(0).max(1),
     sort: z
       .object({
         by: z.string(),
@@ -81,5 +80,5 @@ export const proposalSchema = z
   })
   .strict()
   .describe(
-    'Omit Call 1. Call 2: same ask/target, top-level auto_apply:true; exact returned template/slots.',
+    'Omit Call 1. Call 2: same ask/target, top-level auto_apply:true; exact returned template/slots. top_n ranks; filters interactive; context=true scopes rank; applied=terminal.',
   );
