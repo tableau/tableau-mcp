@@ -8,6 +8,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
+import { loadManifests } from '../binder/manifest.js';
 import { injectTemplate } from './injectTemplate.js';
 import {
   buildInjectedWorkbookXml,
@@ -416,6 +417,7 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
     join(__dirname, '../data/templates/spatial-symbol-map.xml'),
     'utf-8',
   );
+  const SYMBOL_SLOTS = loadManifests().get('spatial-symbol-map')!.slots;
 
   it('removes an unbound optional state LOD from a country-only choropleth', () => {
     const result = buildInjectedWorkbookXml({
@@ -456,6 +458,7 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
         { templateField: 'State/Province', derivation: 'none', role: 'nk' },
         { templateField: 'City', derivation: 'none', role: 'nk' },
       ],
+      templateSlots: SYMBOL_SLOTS,
       applyNonce: 'country-symbol',
     });
 
@@ -482,6 +485,7 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
         City: '[Football].[none:City:nk]',
         Sales: '[Football].[sum:Goals For:qk]',
       },
+      templateSlots: SYMBOL_SLOTS,
       applyNonce: 'full-symbol',
     });
 

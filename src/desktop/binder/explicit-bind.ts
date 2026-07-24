@@ -373,6 +373,12 @@ function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
       return f.role === 'measure' || f.isAggregated;
     case 'categorical':
       return f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal');
+    case 'quantitative-or-categorical':
+      return (
+        f.role === 'measure' ||
+        f.isAggregated ||
+        (f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal'))
+      );
     case 'temporal':
       return TEMPORAL_DATATYPES.has(f.datatype);
     case 'geo':
@@ -398,7 +404,11 @@ function emitRawFieldMapping(
     if (!slot.bindable) continue;
     const field = fieldBySlot.get(slot.slot_id);
     if (!field) continue;
-    const deriv = field.isAggregated ? 'usr' : slot.derivation;
+    const deriv = field.isAggregated
+      ? 'usr'
+      : slot.kind === 'quantitative-or-categorical' && field.role === 'dimension'
+        ? 'none'
+        : slot.derivation;
     const key = slot.qualified_key_required
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;

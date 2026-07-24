@@ -1078,8 +1078,11 @@ function fieldFitsSlotKind(kind: SlotKind, f: SchemaField): boolean {
     case 'temporal':
       return TEMPORAL_DATATYPES.has(f.datatype);
     case 'categorical':
+    case 'quantitative-or-categorical':
     case 'geo':
-      return f.role === 'dimension';
+      return kind === 'quantitative-or-categorical'
+        ? isMeasure(f) || isCategorical(f)
+        : f.role === 'dimension';
     default:
       return false; // calc/generated/pseudo/parameter are never user-bindable
   }
@@ -1587,6 +1590,9 @@ function roleGreedyBind(
       case 'categorical':
         chosen = take(slot, isCategorical);
         break;
+      case 'quantitative-or-categorical':
+        chosen = take(slot, (field) => isMeasure(field) || isCategorical(field));
+        break;
       case 'temporal':
         // A real date/datetime field always fits. When the slot opts in via
         // `temporal_from_string` (e.g. trend-line-chart's order_date), a date-like STRING
@@ -1853,6 +1859,111 @@ function colorSeriesBinding(
   return { slot_id: colorSlot.slot_id, field: spares[0].name };
 }
 
+type SymbolMapEncodingRole = 'size' | 'color' | 'tooltip';
+type ClassifiedBinding = { slot_id: string; field: string; derivation?: Derivation };
+
+const SYMBOL_MAP_TEMPLATES: ReadonlySet<string> = new Set([
+  LATLON_SYMBOL_MAP_TEMPLATE,
+  'spatial-symbol-map',
+]);
+
+function fieldFitsSymbolMapEncoding(role: SymbolMapEncodingRole, field: SchemaField): boolean {
+  return role === 'size' ? isMeasure(field) : isMeasure(field) || isCategorical(field);
+}
+
+/**
+ * Extract one field from an explicit "<field> on <encoding>" clause. This is
+ * intentionally narrower than free-form shelf parsing: no cue or more than one
+ * compatible field leaves the slot unbound.
+ */
+function fieldDirectedToSymbolMapEncoding(
+  ask: string,
+  role: SymbolMapEncodingRole,
+  summary: SchemaSummary,
+  detailFields: ReadonlySet<string>,
+): SchemaField | null {
+  const cue = new RegExp(`\\b(?:on|for|as)\\s+(?:the\\s+)?${role}\\b`, 'gi');
+  const directed = new Set<SchemaField>();
+
+  for (const match of ask.matchAll(cue)) {
+    const beforeCue = ask.slice(0, match.index);
+    const boundaries = [
+      ...beforeCue.matchAll(/(?:^|[.;]|\b(?:put|place|use|using)\b)/gi),
+    ];
+    const boundary = boundaries.at(-1);
+    const clauseStart = boundary ? (boundary.index ?? 0) + boundary[0].length : 0;
+    const candidates = matchFieldsInAsk(beforeCue.slice(clauseStart), summary).filter((field) =>
+      fieldFitsSymbolMapEncoding(role, field),
+    );
+    if (candidates.length === 1) {
+      directed.add(candidates[0]);
+      continue;
+    }
+    // One tooltip slot can carry only one field. If a tooltip list names one
+    // measure plus dimensions already represented by map detail, the measure is
+    // the unique extra value; any other multi-field shape remains ambiguous.
+    const measures = role === 'tooltip' ? candidates.filter(isMeasure) : [];
+    if (
+      measures.length !== 1 ||
+      candidates.some((candidate) => !isMeasure(candidate) && !detailFields.has(candidate.name))
+    ) {
+      return null;
+    }
+    directed.add(measures[0]);
+  }
+
+  if (directed.size !== 1) return null;
+  const [field] = directed;
+  return field ?? null;
+}
+
+/**
+ * Add optional symbol-map encoding bindings only for explicit shelf directives.
+ * Existing required geo/coordinate bindings are inputs and are never modified.
+ * A field may intentionally be reused across size, color, and tooltip.
+ */
+function symbolMapEncodingBindings(
+  manifest: TemplateManifest,
+  ask: string,
+  summary: SchemaSummary,
+  bound: ClassifiedBinding[],
+  aggOverride: Derivation | null,
+): ClassifiedBinding[] {
+  if (!SYMBOL_MAP_TEMPLATES.has(manifest.template)) return [];
+  const boundIds = new Set(bound.map((binding) => binding.slot_id));
+  const detailFields = new Set(
+    bound
+      .filter((binding) =>
+        manifest.slots
+          .find((slot) => slot.slot_id === binding.slot_id)
+          ?.role.includes('lod'),
+      )
+      .map((binding) => binding.field),
+  );
+  const additions: ClassifiedBinding[] = [];
+
+  for (const role of ['size', 'color', 'tooltip'] as const) {
+    const slot = manifest.slots.find(
+      (candidate) =>
+        candidate.bindable &&
+        !candidate.required &&
+        candidate.role.includes(role) &&
+        !boundIds.has(candidate.slot_id),
+    );
+    if (!slot) continue;
+    const field = fieldDirectedToSymbolMapEncoding(ask, role, summary, detailFields);
+    if (!field) continue;
+    additions.push({
+      slot_id: slot.slot_id,
+      field: field.name,
+      ...(aggOverride && isMeasure(field) ? { derivation: aggOverride } : {}),
+    });
+    boundIds.add(slot.slot_id);
+  }
+
+  return additions;
+}
+
 const MEASURE_BY_DIMENSION_TEMPLATE = 'magnitude-simple-bar';
 
 const MEASURE_BY_DIMENSION_RESIDUAL_TOKENS: ReadonlySet<string> = new Set([
@@ -2069,6 +2180,9 @@ export function classifyNoLlm(
   if (latlon && latlon.fast_path_eligible) {
     const latlonBindings = resolveLatLonSymbolMap(latlon, ask, maskedAsk, summary);
     if (latlonBindings) {
+      latlonBindings.push(
+        ...symbolMapEncodingBindings(latlon, ask, summary, latlonBindings, aggOverride),
+      );
       return attachAskModifiers(
         ask,
         { template: latlon.template, bindings: latlonBindings },
@@ -2190,6 +2304,7 @@ export function classifyNoLlm(
   });
   if (!rgb) return null; // required slot unfilled → fail closed
   const bindings = rgb.bindings;
+  bindings.push(...symbolMapEncodingBindings(chosen, ask, summary, bindings, aggOverride));
   // OPTIONAL small-multiples facet (W23-SM1): additively bind a simple-trellis facet
   // dim (a spare categorical placed AHEAD of the existing pill) ONLY when the ask
   // names/implies a by-<dim> facet AND a spare categorical remains. This never flips

@@ -58,6 +58,7 @@ export function isRenderVerifiedLive(rv: string): boolean {
 const SLOT_KINDS: ReadonlySet<SlotKind> = new Set<SlotKind>([
   'quantitative',
   'categorical',
+  'quantitative-or-categorical',
   'temporal',
   'geo',
   'calc',
@@ -142,6 +143,11 @@ function fixtureFieldFitsKind(kind: SlotKind, f: FixtureField): boolean {
       return f.role === 'measure';
     case 'categorical':
       return f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal');
+    case 'quantitative-or-categorical':
+      return (
+        f.role === 'measure' ||
+        (f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal'))
+      );
     case 'temporal':
       return f.datatype === 'date' || f.datatype === 'datetime';
     case 'geo':

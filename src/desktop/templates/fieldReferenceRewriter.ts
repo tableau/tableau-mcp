@@ -280,6 +280,20 @@ export function rewriteFieldReferences(
       const templateFieldName = simpleMatch[1];
       col.setAttribute('name', `[${baseTarget[templateFieldName]}]`);
 
+      const slot = options?.templateSlots?.find(
+        (candidate) => candidate.template_field === templateFieldName,
+      );
+      const mappedInfo = resolveFieldInfo(templateFieldName);
+      if (slot?.kind === 'quantitative-or-categorical' && mappedInfo) {
+        const isDimension = mappedInfo.role === 'nk' || mappedInfo.role === 'ok';
+        col.setAttribute('role', isDimension ? 'dimension' : 'measure');
+        col.setAttribute(
+          'type',
+          isDimension ? (mappedInfo.role === 'ok' ? 'ordinal' : 'nominal') : 'quantitative',
+        );
+        col.setAttribute('datatype', isDimension ? 'string' : 'real');
+      }
+
       if (fieldMetadata && fieldMetadata[templateFieldName]) {
         const meta = fieldMetadata[templateFieldName];
         if (col.hasAttribute('datatype')) col.setAttribute('datatype', meta.datatype);
@@ -530,6 +544,8 @@ const OPTIONAL_REFERENCE_ELEMENTS = new Set([
   'format',
   'groupfilter',
   'lod',
+  'size',
+  'tooltip',
 ]);
 
 function splitMappingKey(key: string): { base: string; derivation?: string } {
@@ -607,12 +623,8 @@ function isWhitespaceText(node: Node | null): node is Text {
 
 function removeOptionalReferenceElement(element: Element): void {
   const followingWhitespace = element.nextSibling;
-  const followsAlreadyPrunedSibling =
-    element.tagName === 'column' &&
-    isWhitespaceText(element.previousSibling) &&
-    isWhitespaceText(element.previousSibling.previousSibling);
   removeElement(element);
-  if (followsAlreadyPrunedSibling && isWhitespaceText(followingWhitespace)) {
+  if (isWhitespaceText(followingWhitespace)) {
     followingWhitespace.parentNode?.removeChild(followingWhitespace);
   }
 }
@@ -707,6 +719,8 @@ function userFacingFieldDescription(slot: TemplateSlotReference): string {
       return 'a quantitative value field';
     case 'categorical':
       return 'a categorical field';
+    case 'quantitative-or-categorical':
+      return 'a quantitative or categorical field';
     case 'temporal':
       return 'a date field';
     case 'geo':
