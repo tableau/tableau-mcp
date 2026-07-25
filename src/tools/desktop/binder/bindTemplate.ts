@@ -10,6 +10,7 @@ import {
   bindTemplate,
   type Blocker,
   DERIVATION_OVERRIDE_INSTRUCTION,
+  type EncodingReport,
   type EscalateReason,
   resolveInSummary,
   type SchemaSummary,
@@ -125,6 +126,11 @@ type AppliedFastPathResult = {
   sheet_name: string;
   phase_ms: { bind: number; inject: number; apply: number };
   guidance: string;
+  /**
+   * What the ask asked for vs what this bind built. Present ONLY when something the ask
+   * asked for is missing from the sheet — a complete bind still returns the trimmed shape.
+   */
+  encodings?: EncodingReport;
 };
 
 /**
@@ -460,6 +466,38 @@ function buildWaterfallDiscoveryGuidance(
     }
   }
   return sentences;
+}
+
+/**
+ * The ask named an encoding this bind could not fill. Name it, say the sheet is missing it,
+ * and name the ONE call that finishes it on the sheet that already exists. It must point
+ * AWAY from bind-template: the measured failure mode is the model asking again in other
+ * words (55% of production bind traces rebind the same worksheet), rebuilding the same chart.
+ */
+function appendUnfilledEncodingGuidance(
+  receipt: string,
+  sheetName: string,
+  encodings: EncodingReport,
+): string {
+  const missing = encodings.unfilled.join(' and ');
+  const calls = encodings.unfilled
+    .map(
+      (role) =>
+        `add-field{worksheetName:'${sheetName}',target:'encoding',encodingType:'${role}',columnRef:<field>}`,
+    )
+    .join(', then ');
+  const filled = encodings.filled.length > 0 ? encodings.filled.join(', ') : 'none';
+  return (
+    `${receipt} INCOMPLETE — the ask asked for ${missing}, and this bind did NOT fill it: ` +
+    `the sheet is on screen without ${missing}. Encodings filled: ${filled}. ` +
+    `To finish, call ${calls}. ` +
+    'Do NOT call bind-template again for this sheet; asking again in other words rebuilds the same chart.'
+  );
+}
+
+/** Label for the same steer, short enough for the 60-char nextAction label bound. */
+function unfilledEncodingNextActionLabel(encodings: EncodingReport): string {
+  return `Add missing ${encodings.unfilled.join(', ')} with add-field`;
 }
 
 function appendWaterfallDiscoveryGuidance(
@@ -1200,15 +1238,24 @@ async function performAutoApply({
   // slot is still unfilled (the m1 waterfall case). On INCOMPLETE we keep today's steer and
   // attach NO structuredContent (byte-for-byte identical to the pre-fix code). On COMPLETE we
   // append the stop-clause AND the machine-readable done marker so nothing re-asserts "keep going".
-  const incomplete = waterfallReBindSlotUnfilled(res, schemaSummary);
+  // A tool that cannot verify what it wrote must not report success. The binder is the only
+  // layer that knows the ask named an encoding it could not bind (a post-apply readback is
+  // blind here — the XML it would read back never contained the node), so its own
+  // filled/unfilled split is what gates "done".
+  const unfilledEncodings =
+    res.encodings && res.encodings.unfilled.length > 0 ? res.encodings : undefined;
+  const incomplete =
+    waterfallReBindSlotUnfilled(res, schemaSummary) || unfilledEncodings !== undefined;
   const appliedFilterOrLimit =
     args.top_n !== undefined || (args.filters !== undefined && args.filters.length > 0);
   const terminalGuidance = appliedFilterOrLimit
     ? `${TERMINAL_GUIDANCE} ${FILTER_APPLIED_GUIDANCE}`
     : TERMINAL_GUIDANCE;
-  const guidance = incomplete
-    ? appendWaterfallDiscoveryGuidance(receipt, res, schemaSummary)
-    : `${receipt} ${terminalGuidance}`;
+  const guidance = unfilledEncodings
+    ? appendUnfilledEncodingGuidance(receipt, literalTitle, unfilledEncodings)
+    : incomplete
+      ? appendWaterfallDiscoveryGuidance(receipt, res, schemaSummary)
+      : `${receipt} ${terminalGuidance}`;
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
@@ -1217,7 +1264,16 @@ async function performAutoApply({
     applied: true,
     sheet_name: literalTitle,
     phase_ms: { bind: bindMs, inject: injectMs, apply: applyMs },
+    ...(unfilledEncodings ? { encodings: unfilledEncodings } : {}),
   };
+  if (unfilledEncodings) {
+    return {
+      result: withNextAction(
+        applied,
+        prefillNextAction(unfilledEncodingNextActionLabel(unfilledEncodings)),
+      ),
+    };
+  }
   return { result: incomplete ? applied : withNextAction(applied, doneNextAction()) };
 }
 
