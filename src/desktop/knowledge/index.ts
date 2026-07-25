@@ -141,9 +141,16 @@ interface KnowledgeDoc {
 
 let _knowledgeDocs: KnowledgeDoc[] | null = null;
 let _knowledgeKeywordFuse: Fuse<KnowledgeDoc> | null = null;
-let _knowledgeFallbackFuse: Fuse<KnowledgeDoc> | null = null;
 let _knowledgeBroadNearestFuse: Fuse<KnowledgeDoc> | null = null;
 
+// Weights are raw exponents here, not normalized ratios — but unlike the command index, this
+// path never ranks on the fuse score directly. Every query is an extended-search include
+// (`'token`), so each per-key score is 0 and the record score collapses to EPSILON^(sum of
+// matched key weights / sqrt(field length)); the composite ranker below consumes it only as the
+// sub-1 tiebreaker `1 - avgFuseScore`. Scaling these weights UP therefore destroys the ranking
+// rather than sharpening it: measured over the 31 recovered agent queries, the tiebreaker holds
+// 121 distinct values of 142 at the weights below, 89 at 4x, 40 at 10x, and exactly 1 with
+// ignoreFieldNorm on. Leave them small.
 const knowledgeSearchKeys = [
   { name: 'searchTerms', weight: 0.3 },
   { name: 'tags', weight: 0.22 },
@@ -317,18 +324,6 @@ function requireTopHitRead(hits: KnowledgeHit[]): KnowledgeHit[] {
   ];
 }
 
-function ensureKnowledgeFallbackFuse(): Fuse<KnowledgeDoc> {
-  if (_knowledgeFallbackFuse) return _knowledgeFallbackFuse;
-  _knowledgeFallbackFuse = new Fuse(buildKnowledgeIndex(), {
-    keys: knowledgeSearchKeys,
-    threshold: 0.4,
-    ignoreLocation: true,
-    includeScore: true,
-    useExtendedSearch: true,
-  });
-  return _knowledgeFallbackFuse;
-}
-
 function ensureKnowledgeBroadNearestFuse(): Fuse<KnowledgeDoc> {
   if (_knowledgeBroadNearestFuse) return _knowledgeBroadNearestFuse;
   _knowledgeBroadNearestFuse = new Fuse(buildKnowledgeIndex(), {
@@ -444,7 +439,7 @@ function searchKnowledgeByWholeString(query: string, limit: number): KnowledgeHi
   const q = query.trim();
   if (!q) return [];
 
-  return ensureKnowledgeFallbackFuse()
+  return ensureKnowledgeKeywordFuse()
     .search(q)
     .slice(0, Math.max(1, limit))
     .map((r) =>
@@ -460,7 +455,7 @@ function nearestKeywordMatches(query: string, limit: number, broaden = false): K
   const fallbackQuery = keywordFallbackQuery(query);
   if (!fallbackQuery) return [];
 
-  const nearestMatches = ensureKnowledgeFallbackFuse()
+  const nearestMatches = ensureKnowledgeKeywordFuse()
     .search(fallbackQuery)
     .slice(0, Math.min(5, Math.max(3, limit)))
     .map((r) =>
@@ -514,6 +509,5 @@ export function searchKnowledgeWithFallback(query: string, limit = 5): Knowledge
 export function _resetKnowledgeSearchCache(): void {
   _knowledgeDocs = null;
   _knowledgeKeywordFuse = null;
-  _knowledgeFallbackFuse = null;
   _knowledgeBroadNearestFuse = null;
 }
