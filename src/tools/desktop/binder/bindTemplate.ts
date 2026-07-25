@@ -35,6 +35,7 @@ import {
 } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { resolveDerivation } from '../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
+import type { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import { extractSheetXml } from '../../../desktop/metadata/sheets.js';
 import {
@@ -55,7 +56,7 @@ import {
   classifyWorksheetReplaceTarget,
 } from '../../../desktop/templates/injectTemplateCore.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
-import { ExecuteCommandError, ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
+import { ExecuteCommandError } from '../../../desktop/toolExecutor/toolExecutor.js';
 import {
   classifyWorksheetPromiseOutcome,
   formatWorksheetPromiseCheck,
@@ -72,6 +73,7 @@ import {
   type AuthorCalcInput,
   authorCalculationsInWorkbook,
 } from '../data-source/authorCalcCore.js';
+import { fetchWorksheetSummaryData, type SummaryDataRead } from '../data-source/summaryDataCore.js';
 import { IncompleteOperationError } from '../incompleteOperationError.js';
 import {
   doneNextAction,
@@ -94,18 +96,15 @@ import { proposalSchema } from './proposalSchema.js';
 import { proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('Desktop process ID; omit for pinned/only instance.'),
-  ask: z.string().describe('User request, verbatim.'),
+  session: z.string().optional().describe('PID; omit if pinned/only.'),
+  ask: z.string().describe('Verbatim request.'),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
   auto_apply: z.boolean().optional(),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
-  target_worksheet: z
-    .string()
-    .optional()
-    .describe('A named worksheet to rebuild; omit to create one.'),
+  target_worksheet: z.string().optional().describe('Rebuild sheet; omit to create.'),
   calcs: z
     .array(
       z.object({
@@ -151,6 +150,9 @@ type AppliedFastPathResult = {
   sheet_name: string;
   phase_ms: { bind: number; inject: number; apply: number };
   guidance: string;
+  summary_rows?: { columns: unknown[]; rows: unknown[][] };
+  summary_rows_error?: string;
+  truncated?: true;
   /**
    * What the ask asked for vs what this bind built. Present ONLY when something the ask
    * asked for is missing from the sheet — a complete bind still returns the trimmed shape.
@@ -230,6 +232,120 @@ const TOP_N_APPLIED_GUIDANCE =
   'The requested top-N limit is ALREADY applied. Do NOT add another limit.';
 const PROPOSAL_ATTEMPTED_PHASE = ['proposal', 'attempted'].join('-');
 const RETRY_USED_PHASE = ['retry', 'used'].join('-');
+const SUMMARY_ROWS_MAX_ROWS = 20;
+const SUMMARY_ROWS_MAX_BYTES = 2048;
+const SUMMARY_ROWS_MAX_CELL_CHARS = 256;
+const SUMMARY_ROWS_TIMEOUT_MS = 2000;
+const SUMMARY_ROWS_ERROR_MAX_CHARS = 512;
+
+type SummaryRowsEnrichment = Pick<
+  AppliedFastPathResult,
+  'summary_rows' | 'summary_rows_error' | 'truncated'
+>;
+
+function capSummaryRows(columns: unknown[], rows: unknown[][]): SummaryRowsEnrichment {
+  if (rows.length === 0) {
+    return { summary_rows_error: 'empty readback — verify with get-summary-data' };
+  }
+
+  const cappedColumns = [...columns];
+  let cellTruncated = false;
+  const candidateRows = rows.slice(0, SUMMARY_ROWS_MAX_ROWS).map((row) =>
+    row.map((cell) => {
+      if (typeof cell !== 'string' || cell.length <= SUMMARY_ROWS_MAX_CELL_CHARS) {
+        return cell;
+      }
+      cellTruncated = true;
+      return cell.slice(0, SUMMARY_ROWS_MAX_CELL_CHARS);
+    }),
+  );
+  const prefix = `{"columns":${JSON.stringify(cappedColumns)},"rows":[`;
+  const suffix = ']}';
+  let payloadBytes =
+    Buffer.byteLength(prefix, 'utf8') + Buffer.byteLength(suffix, 'utf8');
+  const cappedRows: unknown[][] = [];
+
+  for (const row of candidateRows) {
+    const serializedRow = JSON.stringify(row);
+    const nextRowBytes =
+      Buffer.byteLength(serializedRow, 'utf8') + (cappedRows.length === 0 ? 0 : 1);
+    if (payloadBytes + nextRowBytes > SUMMARY_ROWS_MAX_BYTES) {
+      break;
+    }
+    cappedRows.push(row);
+    payloadBytes += nextRowBytes;
+  }
+
+  if (cappedRows.length === 0) {
+    return { summary_rows_error: 'oversize readback' };
+  }
+
+  return {
+    summary_rows: { columns: cappedColumns, rows: cappedRows },
+    ...(cellTruncated || rows.length > cappedRows.length ? { truncated: true } : {}),
+  };
+}
+
+function boundedSummaryRowsError(reason: string): string {
+  return reason.length <= SUMMARY_ROWS_ERROR_MAX_CHARS
+    ? reason
+    : `${reason.slice(0, SUMMARY_ROWS_ERROR_MAX_CHARS - 1)}…`;
+}
+
+async function readAppliedSummaryRows({
+  executor,
+  signal,
+  worksheetName,
+}: {
+  executor: ExternalApiToolExecutor;
+  signal: AbortSignal;
+  worksheetName: string;
+}): Promise<SummaryRowsEnrichment> {
+  const timeoutController = new AbortController();
+  const onAbort = (): void => timeoutController.abort(signal.reason);
+  if (signal.aborted) {
+    onAbort();
+  } else {
+    signal.addEventListener('abort', onAbort, { once: true });
+  }
+
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutFailure = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      const reason = `summary rows readback timed out after ${SUMMARY_ROWS_TIMEOUT_MS}ms`;
+      timeoutController.abort(new Error(reason));
+      reject(new Error(reason));
+    }, SUMMARY_ROWS_TIMEOUT_MS);
+  });
+  const read: SummaryDataRead = async (_endpoint, readEndpoint) => {
+    const result = await readEndpoint(executor, timeoutController.signal);
+    return result.isErr() ? new DesktopCommandExecutionError(result.error).toErr() : result;
+  };
+
+  try {
+    const result = await Promise.race([
+      fetchWorksheetSummaryData({
+        read,
+        worksheet: worksheetName,
+        maxRows: SUMMARY_ROWS_MAX_ROWS,
+      }),
+      timeoutFailure,
+    ]);
+    if (result.isErr()) {
+      return {
+        summary_rows_error: boundedSummaryRowsError(result.error.error.getErrorText()),
+      };
+    }
+    return capSummaryRows(result.value.columns, result.value.rows);
+  } catch (error) {
+    return { summary_rows_error: boundedSummaryRowsError(getExceptionMessage(error)) };
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+    signal.removeEventListener('abort', onAbort);
+  }
+}
 
 function blockedResult(
   reason: BlockedBindTemplateResult['reason'],
@@ -1162,7 +1278,7 @@ async function performAutoApply({
   workbookXml: string;
   session: string;
   config: TableauDesktopRequestHandlerExtra['config'];
-  executor: ToolExecutor;
+  executor: ExternalApiToolExecutor;
   signal: AbortSignal;
   bindMs: number;
   eventsAnchor?: number;
@@ -1363,6 +1479,11 @@ async function performAutoApply({
         ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
         : `${receiptText} ${terminalGuidance}`
   }${readbackEvidence}${promiseCheck}`;
+  const summaryRows = await readAppliedSummaryRows({
+    executor,
+    signal,
+    worksheetName: literalTitle,
+  });
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
@@ -1371,6 +1492,7 @@ async function performAutoApply({
     applied: true,
     sheet_name: literalTitle,
     phase_ms: { bind: bindMs, inject: injectMs, apply: applyMs },
+    ...summaryRows,
     ...(unfilledEncodings ? { encodings: unfilledEncodings } : {}),
   };
   if (unfilledEncodings) {
@@ -1587,7 +1709,8 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'bind-template',
     title,
-    description: 'Bind and apply a chart in ONE call.',
+    description:
+      'Bind chart. Quote summary_rows; get-summary-data if truncated, absent or errored.',
     paramsSchema,
     annotations: {
       title,
