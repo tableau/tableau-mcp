@@ -6,7 +6,7 @@ import { dateLikeStringOnTimeAxisRule } from './dateLikeStringOnTimeAxis.js';
 const DS = 'federated.1vwr59x1oco9q01gp1gt11f4ntnv';
 const MONTH = `[${DS}].[none:month:nk]`;
 const MONTH_DATE_CALC = `[${DS}].[none:Month Date:nk]`;
-const MONTH_TRUNC = `[${DS}].[tmn:month:qk]`;
+const MONTH_TRUNC = `[${DS}].[tmn:order date:qk]`;
 const PRODUCT = `[${DS}].[none:product:nk]`;
 const MAU = `[${DS}].[sum:mau:qk]`;
 
@@ -28,6 +28,7 @@ function anchoredWorksheet({
       <column caption="Month" datatype="string" name="[month]" role="dimension" type="nominal" />
       <column caption="Product" datatype="string" name="[product]" role="dimension" type="nominal" />
       <column caption="Mau" datatype="integer" name="[mau]" role="measure" type="quantitative" />
+      <column caption="Order Date" datatype="date" name="[order date]" role="dimension" type="ordinal" />
     </datasource>
   </datasources>
   <worksheets>
@@ -38,9 +39,10 @@ function anchoredWorksheet({
             <column caption="Month" datatype="string" name="[month]" role="dimension" type="nominal" />
             <column caption="Product" datatype="string" name="[product]" role="dimension" type="nominal" />
             <column caption="Mau" datatype="integer" name="[mau]" role="measure" type="quantitative" />
+            <column caption="Order Date" datatype="date" name="[order date]" role="dimension" type="ordinal" />
             <column-instance column="[month]" derivation="None" name="[none:month:nk]" pivot="key" type="nominal" />
             <column-instance column="[Month Date]" derivation="None" name="[none:Month Date:nk]" pivot="key" type="nominal" />
-            <column-instance column="[month]" derivation="Month-Trunc" name="[tmn:month:qk]" pivot="key" type="quantitative" />
+            <column-instance column="[order date]" derivation="Month-Trunc" name="[tmn:order date:qk]" pivot="key" type="quantitative" />
             <column-instance column="[product]" derivation="None" name="[none:product:nk]" pivot="key" type="nominal" />
             <column-instance column="[mau]" derivation="Sum" name="[sum:mau:qk]" pivot="key" type="quantitative" />
           </datasource-dependencies>

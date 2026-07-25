@@ -11,6 +11,7 @@ import { dateFieldBoundAsStringRule } from './dateFieldBoundAsString.js';
 import { dateLikeStringOnTimeAxisRule } from './dateLikeStringOnTimeAxis.js';
 import { duplicateEmptyParameterRule } from './duplicateEmptyParameter.js';
 import { duplicateParameterActionRule } from './duplicateParameterAction.js';
+import { fabricatedDependencyColumnRule } from './fabricatedDependencyColumn.js';
 import { filterAllInListRule } from './filterAllInList.js';
 import { hardcodedDateFilterRule } from './hardcodedDateFilter.js';
 import { invalidColumnInstancePivotRule } from './invalidColumnInstancePivot.js';
@@ -68,4 +69,5 @@ export const validationRules = [
   parameterFieldOnShelfRule,
   dateFieldBoundAsStringRule,
   dateLikeStringOnTimeAxisRule,
+  fabricatedDependencyColumnRule,
 ];
