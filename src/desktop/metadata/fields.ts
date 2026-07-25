@@ -3,6 +3,11 @@
  * Note: Ordering matters for all field operations
  */
 
+import {
+  forEachRelationColumn,
+  inferFieldTypeFromType,
+  inferRoleFromType,
+} from './field-builder.js';
 import { parseColumnInstanceRef, parseDatasourceQualifiedColumnRef } from './field-resolver.js';
 import { emitFieldRewrite } from './field-rewrite-listener.js';
 import { normalizeArray, parseXML, serializeXML } from './parser.js';
@@ -572,6 +577,102 @@ function getDatasourceCaption(
   }
 }
 
+/** A source declared this column; `datatype` is absent when it named no type. */
+type ColumnMatch = { datatype: string | undefined };
+
+/** Only a non-empty string is a type. An empty element parses to `{}`, not text. */
+function usableDatatype(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+/** First relation column with this name, at any nesting depth. */
+function matchRelationColumn(relations: any[], columnName: string): ColumnMatch | undefined {
+  let match: ColumnMatch | undefined;
+  forEachRelationColumn(relations, (col) => {
+    if (match) return;
+    const name = col['@_name'];
+    if (!name) return;
+    const bracketed = String(name).startsWith('[') ? String(name) : `[${String(name)}]`;
+    if (bracketed !== columnName) return;
+    match = { datatype: usableDatatype(col['@_datatype']) };
+  });
+  return match;
+}
+
+/** First `<metadata-record class="column">` with this local-name. */
+function matchMetadataRecord(connection: any, columnName: string): ColumnMatch | undefined {
+  for (const record of normalizeArray(connection['metadata-records']?.['metadata-record'])) {
+    if (record['@_class'] !== 'column') continue;
+    const localName = record['local-name'];
+    if (!localName) continue;
+    const bracketed = String(localName).startsWith('[')
+      ? String(localName)
+      : `[${String(localName)}]`;
+    if (bracketed !== columnName) continue;
+    return { datatype: usableDatatype(record['local-type']) };
+  }
+  return undefined;
+}
+
+function buildColumnFromDatatype(name: string, datatype: string | undefined): any {
+  return {
+    '@_name': name,
+    '@_datatype': datatype ?? 'string',
+    '@_role': inferRoleFromType(datatype),
+    '@_type': inferFieldTypeFromType(datatype),
+  };
+}
+
+/**
+ * Recover a column definition that exists only under <connection> — either in a
+ * relation's <columns> or in <metadata-records>. Mirrors the sources
+ * listAvailableFields reads, IN THE SAME ORDER: the reader keeps the first
+ * source that names a column and it reads relations before metadata-records, so
+ * a writer that read metadata-records first injected `date` for a field the
+ * reader had advertised as `datetime`.
+ */
+function getColumnFromConnection(ds: any, columnName: string): any {
+  const connection = ds.connection;
+  if (!connection) {
+    return undefined;
+  }
+
+  const fromRelation = matchRelationColumn(normalizeArray(connection.relation), columnName);
+  const fromMetadata = matchMetadataRecord(connection, columnName);
+
+  if (!fromRelation && !fromMetadata) {
+    return undefined;
+  }
+
+  // A source that names the column but no type must not shadow one that carries
+  // the real type — defaulting to `string` there is how a Month derivation
+  // landed on a date column. `string` stays only when no source names a type.
+  return buildColumnFromDatatype(columnName, fromRelation?.datatype ?? fromMetadata?.datatype);
+}
+
+/**
+ * True when the workbook declares this datasource. A miss means the caller keyed
+ * the datasource differently, not that the column is absent — so it must not be
+ * treated as proof the field does not exist.
+ */
+function workbookDeclaresDatasource(
+  workbookXml: string | undefined,
+  datasourceName: string,
+): boolean {
+  if (!workbookXml) {
+    return false;
+  }
+  try {
+    const workbook = parseXML(workbookXml).workbook;
+    if (!workbook) return false;
+    return normalizeArray(workbook.datasources?.datasource).some(
+      (d: any) => d['@_name'] === datasourceName,
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Look up column definition from workbook datasource
  * Returns the full column definition including calculation elements
@@ -602,7 +703,15 @@ function getColumnFromWorkbook(
     // Look for column in datasource
     const columns = normalizeArray(ds.column);
     const column = columns.find((col: any) => col['@_name'] === columnName);
-    return column;
+    if (column) {
+      return column;
+    }
+
+    // A field Tableau has never customized carries NO <column> element — it exists
+    // only under <connection>. listAvailableFields advertises those refs, so this
+    // lookup must read the same sources or a real field reads as missing and gets
+    // fabricated with a datatype guessed from the derivation prefix.
+    return getColumnFromConnection(ds, columnName);
   } catch {
     // If parsing fails, return undefined
     return undefined;
@@ -781,6 +890,15 @@ function ensureColumnInstanceInDependencies(
             }
           }
         }
+      } else if (workbookDeclaresDatasource(workbookXml, datasource)) {
+        // The workbook was available, the datasource matched, and the column is in
+        // none of its definitions. A fabricated column paints a blank or wrong view
+        // and Tableau reports no load error, so refuse rather than invent one.
+        throw new Error(
+          `Column ${parsedCorrected.column} does not exist in datasource "${datasource}". ` +
+            'Call list-available-fields for a valid columnRef. If the workbook changed ' +
+            'in Desktop, re-run get-workbook-xml first — the cached copy may be stale.',
+        );
       } else {
         // Fallback: create a basic column definition if not found in workbook
         // Infer type from derivation: Sum/Avg/Min/Max/Count/CountD/User → quantitative, None → nominal
