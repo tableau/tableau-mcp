@@ -61,7 +61,7 @@ describe('SessionManager executor selection', () => {
     ] as never);
 
     await expect(new SessionManager().getExecutor('12345')).rejects.toThrow(
-      'The requested Tableau Desktop session is no longer running — it was closed. Call list-instances and retry with a current session.',
+      'No Desktop instance found with PID 12345. Session 12345 is stale: that Tableau Desktop process is no longer reachable or was restarted. Call list-instances and retry with the current session.',
     );
   });
 
@@ -77,7 +77,7 @@ describe('SessionManager executor selection', () => {
     ] as never);
 
     await expect(new SessionManager().getExecutor('12345')).rejects.toThrow(
-      'The requested Tableau Desktop session is no longer running — it was closed. Call list-instances and retry with a current session.',
+      'No Desktop instance found with PID 12345. Session 12345 is stale: that Tableau Desktop process is no longer reachable or was restarted. Call list-instances and retry with the current session.',
     );
   });
 });

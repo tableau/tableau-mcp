@@ -10,6 +10,7 @@ import {
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
 import { DATA_ROOT, readResourceAsset, RESOURCES_ROOT } from './desktop/assets.js';
+import { createCallDeadline } from './desktop/callDeadline.js';
 import {
   getKnowledgeCorpusEntryCount,
   getKnowledgeDir,
@@ -240,16 +241,28 @@ export class DesktopMcpServer extends Server {
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
       ) => {
         const tableauToolCallback = await Provider.from(callback);
-        const tableauRequestHandlerExtra: TableauDesktopRequestHandlerExtra = {
-          ...extra,
-          config,
-          getExecutor: async (sessionId: string) => {
-            return await this.sessionManager.getExecutor(sessionId);
-          },
-          server: this,
-        };
+        // One clock per tool call, composed into extra.signal so the socket really aborts.
+        const deadline = createCallDeadline({
+          clientSignal: extra.signal,
+          budgetMs: config.desktopCallTimeoutMs,
+        });
 
-        return tableauToolCallback(args, tableauRequestHandlerExtra);
+        try {
+          const tableauRequestHandlerExtra: TableauDesktopRequestHandlerExtra = {
+            ...extra,
+            signal: deadline.signal,
+            deadline,
+            config,
+            getExecutor: async (sessionId: string) => {
+              return await this.sessionManager.getExecutor(sessionId);
+            },
+            server: this,
+          };
+
+          return await tableauToolCallback(args, tableauRequestHandlerExtra);
+        } finally {
+          deadline.dispose();
+        }
       };
 
       this.mcpServer.registerTool(

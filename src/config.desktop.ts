@@ -1,4 +1,8 @@
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
+import {
+  DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
+  MIN_DESKTOP_CALL_TIMEOUT_MS,
+} from './desktop/callDeadline.js';
 import { DEFAULT_INLINE_XML_MAX_BYTES } from './desktop/inlineXmlCap.js';
 import { parseNumber } from './utils/parseNumber.js';
 
@@ -23,6 +27,13 @@ export class Config extends BaseConfig {
    */
   desktopSessionId: string | undefined;
 
+  /**
+   * Wall-clock ceiling (ms) on a single desktop tool call. Past it the call aborts and the
+   * agent is told Desktop stopped answering. Env-overridable via TABLEAU_DESKTOP_CALL_TIMEOUT_MS;
+   * values under MIN_DESKTOP_CALL_TIMEOUT_MS are ignored because they would cut real work.
+   */
+  desktopCallTimeoutMs: number;
+
   constructor() {
     super();
 
@@ -31,6 +42,7 @@ export class Config extends BaseConfig {
       INLINE_XML_MAX_BYTES: inlineXmlMaxBytes,
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
       TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
+      TABLEAU_DESKTOP_CALL_TIMEOUT_MS: desktopCallTimeoutMs,
     } = cleansedVars;
 
     if (this.transport !== 'stdio') {
@@ -44,6 +56,11 @@ export class Config extends BaseConfig {
     this.inlineXmlMaxBytes = parseNumber(inlineXmlMaxBytes, {
       defaultValue: DEFAULT_INLINE_XML_MAX_BYTES,
       minValue: 1,
+    });
+
+    this.desktopCallTimeoutMs = parseNumber(desktopCallTimeoutMs, {
+      defaultValue: DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
+      minValue: MIN_DESKTOP_CALL_TIMEOUT_MS,
     });
   }
 }
