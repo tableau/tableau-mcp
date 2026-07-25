@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { classifyNoLlm, summarizeSchema } from './binder.js';
+import { bindTemplate, classifyNoLlm, summarizeSchema } from './binder.js';
 import { hasDeterministicPathBlockingHazard } from './classify.js';
 import { loadManifests } from './manifest.js';
 import type { SlotSpec, TemplateManifest } from './manifest-types.js';
@@ -77,6 +77,32 @@ const NARROW = `<?xml version='1.0'?>
   <column name='[Region]' role='dimension' type='nominal' datatype='string' />
   <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
 </datasource></datasources></workbook>`;
+
+const SINGLE_DATE = `<?xml version='1.0'?>
+<workbook><datasources><datasource name='SingleDate'>
+  <column name='[Order Date]' role='dimension' type='quantitative' datatype='date' />
+  <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+</datasource></datasources></workbook>`;
+
+const TWO_DATES = `<?xml version='1.0'?>
+<workbook><datasources><datasource name='TwoDates'>
+  <column name='[Order Date]' role='dimension' type='quantitative' datatype='date' />
+  <column name='[Ship Date]' role='dimension' type='quantitative' datatype='datetime' />
+  <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+</datasource></datasources></workbook>`;
+
+function businessSynonymSchema(measures: readonly string[], dimension = 'Region'): string {
+  const columns = [
+    `<column name='[${dimension}]' role='dimension' type='nominal' datatype='string' />`,
+    ...measures.map(
+      (measure) =>
+        `<column name='[${measure}]' role='measure' type='quantitative' datatype='real' />`,
+    ),
+  ];
+  return `<?xml version='1.0'?><workbook><datasources><datasource name='BusinessSynonyms'>
+  ${columns.join('\n  ')}
+</datasource></datasources></workbook>`;
+}
 
 /**
  * One geo level (country) plus a NON-geographic spare dimension. This is the schema in which
@@ -1048,6 +1074,83 @@ beforeEach(() => {
   expect.hasAssertions();
 });
 
+describe('binder/manifest-encoding-corpus — temporal-slot fallback', () => {
+  const expectedExplicitDateClassification = {
+    template: 'trend-line-chart',
+    bindings: [
+      { slot_id: 'order_date', field: 'Order Date' },
+      { slot_id: 'sales', field: 'Sales' },
+    ],
+    encodings: { filled: [], unfilled: [] },
+  };
+
+  it('binds the only date field when a trend ask names no date field', () => {
+    const result = classifyNoLlm('sales over time', manifests, summarizeSchema(SINGLE_DATE));
+
+    expect(result).toEqual({
+      ...expectedExplicitDateClassification,
+      notes: [
+        "Using 'Order Date' for required temporal slot 'order_date' because it is the only date field in the datasource.",
+      ],
+    });
+  });
+
+  it.each([
+    'line chart of Sales by date',
+    'line chart of Sales by month',
+    'line chart of Sales by quarter',
+    'line chart of Sales by year',
+    'line chart of Sales monthly',
+    'line chart of Sales quarterly',
+    'line chart of Sales yearly',
+    'line chart of Sales daily',
+    'line chart of Sales over the last 6 months',
+    'line chart of Sales for the last 2 quarters',
+    'line chart of Sales across the last 3 years',
+  ])('recognizes the temporal cue in "%s"', (ask) => {
+    const trend = manifests.get('trend-line-chart')!;
+    const result = classifyNoLlm(
+      ask,
+      new Map([[trend.template, trend]]),
+      summarizeSchema(SINGLE_DATE),
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.bindings).toContainEqual({ slot_id: 'order_date', field: 'Order Date' });
+  });
+
+  it('proposes both date candidates instead of binding either when the choice is material', async () => {
+    const result = await bindTemplate({
+      ask: 'sales over time',
+      workbookXml: TWO_DATES,
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+    if (result.status !== 'propose') return;
+    expect(
+      result.llm_input.candidate_templates
+        .find((candidate) => candidate.template === 'trend-line-chart')
+        ?.slots.find((slot) => slot.slot_id === 'order_date'),
+    ).toMatchObject({ kind: 'temporal', required: true });
+    expect(
+      result.llm_input.fields
+        .filter((field) => field.datatype === 'date' || field.datatype === 'datetime')
+        .map((field) => field.name),
+    ).toEqual(['Order Date', 'Ship Date']);
+  });
+
+  it('keeps an explicitly named date-field classification byte-identical', () => {
+    const result = classifyNoLlm(
+      'line chart of Sales by Order Date',
+      manifests,
+      summarizeSchema(SINGLE_DATE),
+    );
+
+    expect(JSON.stringify(result)).toBe(JSON.stringify(expectedExplicitDateClassification));
+  });
+});
+
 function bindableSlots(m: TemplateManifest): SlotSpec[] {
   return m.slots.filter((s) => s.bindable);
 }
@@ -1072,6 +1175,112 @@ function slotIds(result: NonNullable<ReturnType<typeof classifyNoLlm>>): string[
 const MATRIX = CORPUS.flatMap((row) =>
   INTENTS.map(([intent, suffix]) => ({ row, intent, ask: row.ask + suffix })),
 );
+
+describe('binder/manifest-encoding-corpus — business-synonym field resolution', () => {
+  it('"revenue by region" uniquely resolves to the full-name Sales match', () => {
+    const summary = summarizeSchema(businessSynonymSchema(['Sales']));
+
+    const result = classifyNoLlm('revenue by region', manifests, summary);
+
+    expect(result).not.toBeNull();
+    expect(result!.bindings).toEqual([
+      { slot_id: 'category', field: 'Region' },
+      { slot_id: 'measure', field: 'Sales' },
+    ]);
+  });
+
+  it('a lone partial-caption revenue candidate proposes instead of auto-binding', async () => {
+    const result = await bindTemplate({
+      ask: 'revenue by region',
+      workbookXml: businessSynonymSchema(['Sales Tax']),
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+    if (result.status !== 'propose') throw new Error(`expected propose, got ${result.status}`);
+    expect(result.llm_input.fields.map((field) => field.name)).toContain('Sales Tax');
+  });
+
+  it('a compound literal field suppresses synonym ambiguity for a noun inside its span', () => {
+    const summary = summarizeSchema(businessSynonymSchema(['Net Revenue', 'Sales']));
+
+    const result = classifyNoLlm('show Net Revenue by Region', manifests, summary);
+
+    expect(result).not.toBeNull();
+    expect(result!.bindings).toEqual([
+      { slot_id: 'category', field: 'Region' },
+      { slot_id: 'measure', field: 'Net Revenue' },
+    ]);
+  });
+
+  it('literal Revenue wins over the Sales synonym candidate', () => {
+    const summary = summarizeSchema(businessSynonymSchema(['Sales', 'Revenue']));
+
+    const result = classifyNoLlm('Show me revenue by region', manifests, summary);
+
+    expect(result).not.toBeNull();
+    expect(result!.bindings).toEqual([
+      { slot_id: 'category', field: 'Region' },
+      { slot_id: 'measure', field: 'Revenue' },
+    ]);
+  });
+
+  it('ambiguous revenue candidates propose both Sales and Amount without binding', async () => {
+    const distractors = Array.from({ length: 25 }, (_, index) => `Metric ${index + 1}`);
+    const workbookXml = businessSynonymSchema(['Sales', 'Amount', ...distractors]);
+
+    const result = await bindTemplate({
+      ask: 'Show me revenue by region',
+      workbookXml,
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+    if (result.status !== 'propose') throw new Error(`expected propose, got ${result.status}`);
+    expect(result.llm_input.fields.map((field) => field.name)).toEqual(
+      expect.arrayContaining(['Sales', 'Amount']),
+    );
+  });
+
+  it('"customers" uniquely resolves to Customer Name', () => {
+    const summary = summarizeSchema(businessSynonymSchema(['Sales'], 'Customer Name'));
+
+    const result = classifyNoLlm('top 10 customers by sales', manifests, summary);
+
+    expect(result).not.toBeNull();
+    expect(result!.template).toBe('ranking-ordered-bar');
+    expect(result!.bindings).toEqual([
+      { slot_id: 'region', field: 'Customer Name' },
+      { slot_id: 'sales', field: 'Sales' },
+    ]);
+    expect(result!.top_n).toBe(10);
+  });
+
+  it.each([
+    ['products', 'Product Name'],
+    ['orders', 'Order ID'],
+    ['reps', 'Sales Rep'],
+    ['salespeople', 'Sales Person'],
+    ['deals', 'Opportunity Name'],
+  ])('"%s" uniquely resolves to %s', (noun, dimension) => {
+    const summary = summarizeSchema(businessSynonymSchema(['Sales'], dimension));
+
+    const result = classifyNoLlm(`Show me Sales by ${noun}`, manifests, summary);
+
+    expect(result).not.toBeNull();
+    expect(result!.template).toBe('magnitude-simple-bar');
+    expect(result!.bindings).toEqual([
+      { slot_id: 'category', field: dimension },
+      { slot_id: 'measure', field: 'Sales' },
+    ]);
+  });
+
+  it('falls through when a business noun has no caption-pattern match', () => {
+    const summary = summarizeSchema(businessSynonymSchema(['Profit']));
+
+    expect(classifyNoLlm('Show me revenue by region', manifests, summary)).toBeNull();
+  });
+});
 
 describe('binder/manifest-encoding-corpus — census tripwires', () => {
   it('covers every manifest on disk exactly once', () => {
