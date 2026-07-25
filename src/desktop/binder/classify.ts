@@ -1010,6 +1010,23 @@ const ACRONYM_EXPANSIONS: Readonly<Record<string, readonly string[]>> = {
 };
 
 /**
+ * Precision-first business nouns whose schema captions commonly use a different term.
+ * Candidate patterns are whole-token caption fragments, not fuzzy stems. A noun contributes
+ * a field match only when exactly one schema field contains any candidate pattern.
+ */
+const BUSINESS_FIELD_SYNONYMS: ReadonlyArray<{
+  nouns: readonly string[];
+  captionPatterns: readonly string[];
+}> = [
+  { nouns: ['revenue'], captionPatterns: ['sales', 'revenue', 'amount'] },
+  { nouns: ['customers'], captionPatterns: ['customer'] },
+  { nouns: ['products'], captionPatterns: ['product'] },
+  { nouns: ['orders'], captionPatterns: ['order'] },
+  { nouns: ['reps', 'salespeople'], captionPatterns: ['rep', 'sales person', 'owner'] },
+  { nouns: ['deals'], captionPatterns: ['deal', 'opportunity'] },
+];
+
+/**
  * Return the earliest token index of a known acronym's full expansion, or -1.
  * Expansion tokens may appear in any order and punctuation (including hyphens)
  * is treated as a token boundary. Every token is required, preserving the
@@ -1036,6 +1053,96 @@ function acronymExpansionMatch(ask: string, field: SchemaField): number {
   return best;
 }
 
+interface FieldMatch {
+  field: SchemaField;
+  index: number;
+}
+
+/** Existing literal/plural/acronym field matches, before business synonyms are considered. */
+function literalFieldMatchesInAsk(ask: string, s: SchemaSummary): FieldMatch[] {
+  const exactNames = fieldExactNames(s.fields);
+  const hits: FieldMatch[] = [];
+  for (const field of s.fields) {
+    const names = [bareName(field.columnName), field.caption, field.name].filter(
+      (name): name is string => !!name && name.length > 0,
+    );
+    let best = -1;
+    for (const name of names) {
+      const index = fieldNameMatchInAsk(ask, name, exactNames);
+      if (index >= 0 && (best < 0 || index < best)) best = index;
+    }
+    if (best < 0) best = acronymExpansionMatch(ask, field);
+    if (best >= 0) hits.push({ field, index: best });
+  }
+  hits.sort((a, b) => a.index - b.index);
+  return hits;
+}
+
+function fieldMatchesCaptionPattern(field: SchemaField, pattern: string): boolean {
+  return [field.name, field.caption, bareName(field.columnName)].some(
+    (name) => !!name && phraseIndexInAsk(name, pattern) >= 0,
+  );
+}
+
+/**
+ * Candidate fields for business nouns that the literal pass did not already resolve.
+ * Literal/plural caption matches at the same ask position win, as do existing acronym
+ * expansions that claim that noun.
+ */
+function businessSynonymCandidatesInAsk(
+  ask: string,
+  s: SchemaSummary,
+  literalHits: readonly FieldMatch[],
+): Array<{ noun: string; index: number; candidates: SchemaField[] }> {
+  const exactNames = fieldExactNames(s.fields);
+  const matches: Array<{ noun: string; index: number; candidates: SchemaField[] }> = [];
+
+  for (const entry of BUSINESS_FIELD_SYNONYMS) {
+    for (const noun of entry.nouns) {
+      const nounIndex = phraseIndexInAsk(ask, noun);
+      if (nounIndex < 0) continue;
+
+      const literalClaimsNoun = literalHits.some(({ field }) => {
+        const names = [bareName(field.columnName), field.caption, field.name].filter(
+          (name): name is string => !!name && name.length > 0,
+        );
+        if (names.some((name) => fieldNameMatchInAsk(ask, name, exactNames) === nounIndex)) {
+          return true;
+        }
+        return names.some((name) => {
+          const expansion = ACRONYM_EXPANSIONS[name.trim().toLowerCase()];
+          return expansion?.includes(noun) && acronymExpansionMatch(ask, field) >= 0;
+        });
+      });
+      if (literalClaimsNoun) continue;
+
+      const candidates = s.fields.filter((field) =>
+        entry.captionPatterns.some((pattern) => fieldMatchesCaptionPattern(field, pattern)),
+      );
+      matches.push({ noun, index: nounIndex, candidates });
+    }
+  }
+
+  return matches;
+}
+
+/**
+ * Unambiguous business-synonym field matches. Zero candidates fall through; multiple
+ * candidates are withheld so classifyNoLlm can fail closed and expose them in proposal fields.
+ */
+function businessSynonymMatchesInAsk(
+  ask: string,
+  s: SchemaSummary,
+  literalHits: readonly FieldMatch[],
+): Array<FieldMatch & { noun: string }> {
+  return businessSynonymCandidatesInAsk(ask, s, literalHits)
+    .filter(
+      (match): match is typeof match & { candidates: [SchemaField] } =>
+        match.candidates.length === 1,
+    )
+    .map(({ noun, index, candidates }) => ({ noun, index, field: candidates[0] }));
+}
+
 /**
  * Blank out whole-token occurrences of every field name/caption/bare column name
  * in the ask (replaced by spaces so token boundaries are preserved). Used for
@@ -1048,6 +1155,7 @@ function acronymExpansionMatch(ask: string, field: SchemaField): number {
 function maskFieldNames(ask: string, s: SchemaSummary): string {
   let masked = ask;
   const exactNames = fieldExactNames(s.fields);
+  const literalHits = literalFieldMatchesInAsk(ask, s);
   // LONGEST FIELD NAME FIRST. Schema-order masking fragments a compound field:
   // masking "Region" before "Country/Region" turns it into "Country/      " so the
   // compound's own regex no longer matches, and the surviving "Country" token trips
@@ -1084,27 +1192,33 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
       );
     }
   }
+  // A uniquely resolved business noun is a field mention too: mask it before chart-family
+  // and aggregation scoring. Ambiguous/unknown nouns remain untouched and follow today's path.
+  for (const { noun } of businessSynonymMatchesInAsk(ask, s, literalHits)) {
+    const body = escapeRegex(noun).replace(/-/g, '[\\s-]+');
+    const re = new RegExp(`(^|[^a-z0-9])(${body})([^a-z0-9]|$)`, 'gi');
+    masked = masked.replace(
+      re,
+      (_whole, pre: string, mid: string, post: string) => pre + ' '.repeat(mid.length) + post,
+    );
+  }
   return masked;
 }
 
 /** Fields whose name/caption/bare column name appear in the ask, earliest-first. */
 function matchFieldsInAsk(ask: string, s: SchemaSummary): SchemaField[] {
-  const exactNames = fieldExactNames(s.fields);
-  const hits: Array<{ field: SchemaField; index: number }> = [];
-  for (const f of s.fields) {
-    const names = [bareName(f.columnName), f.caption, f.name].filter(
-      (n): n is string => !!n && n.length > 0,
-    );
-    let best = -1;
-    for (const n of names) {
-      const idx = fieldNameMatchInAsk(ask, n, exactNames);
-      if (idx >= 0 && (best < 0 || idx < best)) best = idx;
-    }
-    if (best < 0) best = acronymExpansionMatch(ask, f);
-    if (best >= 0) hits.push({ field: f, index: best });
-  }
+  const literalHits = literalFieldMatchesInAsk(ask, s);
+  const hits: FieldMatch[] = [
+    ...literalHits,
+    ...businessSynonymMatchesInAsk(ask, s, literalHits),
+  ];
   hits.sort((a, b) => a.index - b.index);
-  return hits.map((h) => h.field);
+  const seen = new Set<SchemaField>();
+  return hits.flatMap(({ field }) => {
+    if (seen.has(field)) return [];
+    seen.add(field);
+    return [field];
+  });
 }
 
 /** Whole-phrase test: does the ask NAME this field (by name, caption, or bare column)? */
@@ -1165,6 +1279,7 @@ function fieldFitsSlotKind(kind: SlotKind, f: SchemaField): boolean {
 /**
  * Field-narrowing for the propose prompt (stage 2B, adjudicated attack 1). A wide
  * schema (300–1000 fields) would blow the prompt, so rank and cap:
+ *   rank 0 — business-synonym candidates when that noun was not literally resolved;
  *   rank 1 — fields whose name/caption tokens overlap the ask (a field the ask
  *            NAMES is guaranteed rank-1, so it survives the cap);
  *   rank 2 — fields kind-compatible with any required slot of any candidate;
@@ -1182,6 +1297,16 @@ function narrowFields(
 
   const askTokens = contentTokens(ask);
   const exactNames = fieldExactNames(fields);
+  const synonymSummary: SchemaSummary = {
+    datasource: fields[0]?.datasource ?? '',
+    fields,
+  };
+  const literalHits = literalFieldMatchesInAsk(ask, synonymSummary);
+  const synonymCandidates = new Set(
+    businessSynonymCandidatesInAsk(ask, synonymSummary, literalHits).flatMap(
+      (match) => match.candidates,
+    ),
+  );
   const ranked = fields.map((f, index) => {
     const named = askNamesField(ask, f, exactNames);
     let overlap = 0;
@@ -1190,7 +1315,8 @@ function narrowFields(
     }
     const relevant = named || overlap > 0;
     const compatible = !relevant && [...kinds].some((k) => fieldFitsSlotKind(k, f));
-    const tier = relevant ? 2 : compatible ? 1 : 0;
+    const synonymCandidate = synonymCandidates.has(f);
+    const tier = synonymCandidate ? 3 : relevant ? 2 : compatible ? 1 : 0;
     return { f, index, tier, named, overlap };
   });
 
@@ -2522,6 +2648,18 @@ export function classifyNoLlm(
   // return null so the orchestrator escalates rather than risk a silent wrong bind on a
   // partial view. Checked at the TOP, before any field is touched, so cost stays bounded.
   if (summary.fields.length > MAX_CLASSIFIABLE_FIELDS) return null;
+
+  // A business noun with multiple caption-pattern candidates is materially ambiguous:
+  // deterministic binding could change the numbers. Fail closed before template selection;
+  // buildLlmInput ranks every candidate into the existing proposal field list.
+  const literalHits = literalFieldMatchesInAsk(ask, summary);
+  if (
+    businessSynonymCandidatesInAsk(ask, summary, literalHits).some(
+      ({ candidates }) => candidates.length > 1,
+    )
+  ) {
+    return null;
+  }
 
   // Mask field names before scoring so a field NAME can't select a template or
   // read as an aggregation word; field↔slot matching still uses the raw ask.

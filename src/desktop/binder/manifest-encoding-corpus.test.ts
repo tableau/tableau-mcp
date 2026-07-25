@@ -91,6 +91,19 @@ const TWO_DATES = `<?xml version='1.0'?>
   <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
 </datasource></datasources></workbook>`;
 
+function businessSynonymSchema(measures: readonly string[], dimension = 'Region'): string {
+  const columns = [
+    `<column name='[${dimension}]' role='dimension' type='nominal' datatype='string' />`,
+    ...measures.map(
+      (measure) =>
+        `<column name='[${measure}]' role='measure' type='quantitative' datatype='real' />`,
+    ),
+  ];
+  return `<?xml version='1.0'?><workbook><datasources><datasource name='BusinessSynonyms'>
+  ${columns.join('\n  ')}
+</datasource></datasources></workbook>`;
+}
+
 /**
  * One geo level (country) plus a NON-geographic spare dimension. This is the schema in which
  * the optional geo slots (`state`, `city`) can honestly be shown to stay unbound: Superstore
@@ -1162,6 +1175,88 @@ function slotIds(result: NonNullable<ReturnType<typeof classifyNoLlm>>): string[
 const MATRIX = CORPUS.flatMap((row) =>
   INTENTS.map(([intent, suffix]) => ({ row, intent, ask: row.ask + suffix })),
 );
+
+describe('binder/manifest-encoding-corpus — business-synonym field resolution', () => {
+  it('"revenue" uniquely resolves to Sales', () => {
+    const summary = summarizeSchema(businessSynonymSchema(['Sales']));
+
+    const result = classifyNoLlm('Show me revenue by region', manifests, summary);
+
+    expect(result).not.toBeNull();
+    expect(result!.bindings).toEqual([
+      { slot_id: 'category', field: 'Region' },
+      { slot_id: 'measure', field: 'Sales' },
+    ]);
+  });
+
+  it('literal Revenue wins over the Sales synonym candidate', () => {
+    const summary = summarizeSchema(businessSynonymSchema(['Sales', 'Revenue']));
+
+    const result = classifyNoLlm('Show me revenue by region', manifests, summary);
+
+    expect(result).not.toBeNull();
+    expect(result!.bindings).toEqual([
+      { slot_id: 'category', field: 'Region' },
+      { slot_id: 'measure', field: 'Revenue' },
+    ]);
+  });
+
+  it('ambiguous revenue candidates propose both Sales and Amount without binding', async () => {
+    const distractors = Array.from({ length: 25 }, (_, index) => `Metric ${index + 1}`);
+    const workbookXml = businessSynonymSchema(['Sales', 'Amount', ...distractors]);
+
+    const result = await bindTemplate({
+      ask: 'Show me revenue by region',
+      workbookXml,
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+    if (result.status !== 'propose') throw new Error(`expected propose, got ${result.status}`);
+    expect(result.llm_input.fields.map((field) => field.name)).toEqual(
+      expect.arrayContaining(['Sales', 'Amount']),
+    );
+  });
+
+  it('"customers" uniquely resolves to Customer Name', () => {
+    const summary = summarizeSchema(businessSynonymSchema(['Sales'], 'Customer Name'));
+
+    const result = classifyNoLlm('top 10 customers by sales', manifests, summary);
+
+    expect(result).not.toBeNull();
+    expect(result!.template).toBe('ranking-ordered-bar');
+    expect(result!.bindings).toEqual([
+      { slot_id: 'region', field: 'Customer Name' },
+      { slot_id: 'sales', field: 'Sales' },
+    ]);
+    expect(result!.top_n).toBe(10);
+  });
+
+  it.each([
+    ['products', 'Product Name'],
+    ['orders', 'Order ID'],
+    ['reps', 'Sales Rep'],
+    ['salespeople', 'Sales Person'],
+    ['deals', 'Opportunity Name'],
+  ])('"%s" uniquely resolves to %s', (noun, dimension) => {
+    const summary = summarizeSchema(businessSynonymSchema(['Sales'], dimension));
+
+    const result = classifyNoLlm(`Show me Sales by ${noun}`, manifests, summary);
+
+    expect(result).not.toBeNull();
+    expect(result!.template).toBe('magnitude-simple-bar');
+    expect(result!.bindings).toEqual([
+      { slot_id: 'category', field: dimension },
+      { slot_id: 'measure', field: 'Sales' },
+    ]);
+  });
+
+  it('falls through when a business noun has no caption-pattern match', () => {
+    const summary = summarizeSchema(businessSynonymSchema(['Profit']));
+
+    expect(classifyNoLlm('Show me revenue by region', manifests, summary)).toBeNull();
+  });
+});
 
 describe('binder/manifest-encoding-corpus — census tripwires', () => {
   it('covers every manifest on disk exactly once', () => {
