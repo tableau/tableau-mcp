@@ -3407,3 +3407,100 @@ describe('bind-template — reports what it actually built', () => {
     expect(label).toContain('color');
   });
 });
+
+// ── An incomplete bind must not be remembered as an applied sheet ─────────────
+// Two behaviours that are each correct alone combine into a wrong answer. An
+// incomplete bind returns applied:true with a non-empty encodings.unfilled, and the
+// duplicate-sheet reuse path remembers every applied:true bind and replays it as a
+// terminal "already built" on the next reworded ask. Together they tell the agent a
+// chart the binder itself called incomplete is finished, and the missing encoding is
+// never filled.
+describe('bindTemplateTool incomplete bind is not remembered as applied', () => {
+  function body(result: CallToolResult): Record<string, unknown> {
+    invariant(result.content[0].type === 'text');
+    return JSON.parse(result.content[0].text);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
+  });
+
+  it('a reworded re-bind after an incomplete bind is not reported as already built', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: boundWithUnfilledColorResult,
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+    });
+
+    const first = body(
+      await getToolResult({
+        session: '1',
+        ask: 'symbol map of Sales by State, warmer dots for more sales',
+        auto_apply: true,
+        getExecutor,
+      }),
+    );
+    expect(first.applied).toBe(true);
+    expect((first.encodings as { unfilled: string[] }).unfilled).toEqual(['color']);
+
+    // The same chart in new words with no target_worksheet: the exact re-bind the
+    // duplicate-sheet reuse path is built to collapse.
+    invariant(boundWithUnfilledColorResult.status === 'bound');
+    const rewordedAsk = 'color the Sales by State dots by how much they sold';
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue({
+      ...boundWithUnfilledColorResult,
+      args: { ...boundWithUnfilledColorResult.args, title: rewordedAsk },
+    });
+
+    const secondResult = await getToolResult({
+      session: '1',
+      ask: rewordedAsk,
+      auto_apply: true,
+      getExecutor,
+    });
+    const second = body(secondResult);
+
+    // Call 1 declared the chart incomplete, so nothing may now declare it finished.
+    expect(second.reused).toBeUndefined();
+    expect(second.guidance).not.toContain('already built');
+    expect(second.guidance).not.toContain('no further tool calls needed');
+    expect(
+      (secondResult.structuredContent as { nextAction: { kind: string } } | undefined)?.nextAction
+        .kind,
+    ).not.toBe('done');
+    // ...and the unfilled encoding is still named, so the steer survives the reword.
+    expect(second.guidance).toContain('color');
+  });
+
+  it('a complete bind is still remembered — the reuse path is untouched', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+    });
+
+    await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(boundResult.status === 'bound');
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue({
+      ...boundResult,
+      args: { ...boundResult.args, title: 'Sales by Region, bars' },
+    });
+    const second = body(
+      await getToolResult({
+        session: '1',
+        ask: 'Sales by Region, bars',
+        auto_apply: true,
+        getExecutor,
+      }),
+    );
+
+    expect(second.reused).toBe(true);
+    expect(second.guidance).toContain('already built');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+});

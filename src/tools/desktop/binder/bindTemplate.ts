@@ -1120,6 +1120,10 @@ async function performAutoApply({
 }): Promise<{
   result: StructuredBindTemplateToolResult;
   failureDisposition?: AutoApplyFailureDisposition;
+  // An applied:true receipt the binder itself could not call finished. The result body
+  // cannot carry this: `withNextAction` spreads, so an incomplete receipt still looks
+  // applied:true with a sheet_name to every downstream reader.
+  incomplete?: boolean;
 }> {
   const { args } = res;
 
@@ -1268,13 +1272,16 @@ async function performAutoApply({
   };
   if (unfilledEncodings) {
     return {
+      incomplete: true,
       result: withNextAction(
         applied,
         prefillNextAction(unfilledEncodingNextActionLabel(unfilledEncodings)),
       ),
     };
   }
-  return { result: incomplete ? applied : withNextAction(applied, doneNextAction()) };
+  return incomplete
+    ? { incomplete: true, result: applied }
+    : { result: withNextAction(applied, doneNextAction()) };
 }
 
 function renderAuthoredCalcPrefix(
@@ -1725,7 +1732,12 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             manifest,
           });
           const appliedResult = autoApplyResult.result;
+          // Only a bind the binder called FINISHED may be replayed as "already built" on
+          // the next reworded ask. An incomplete bind still reports applied:true with a
+          // sheet_name, so remembering it would answer a later re-bind with a terminal
+          // "no further tool calls needed" for a chart missing a requested encoding.
           if (
+            !autoApplyResult.incomplete &&
             'applied' in appliedResult &&
             appliedResult.applied === true &&
             typeof appliedResult.sheet_name === 'string'
