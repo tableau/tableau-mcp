@@ -143,7 +143,7 @@ const DIALOG_DENIED = /\bwithout\s+(launching|opening|showing)\b/i;
  * `command_names_opening_blocking_dialog` (18 names) has zero intersection with
  * `command_names_agent_can_invoke` (267), and `opens_blocking_dialog` is true for 0 of those 267,
  * so those two checks alone could never fire for an indexed command. The evidence that does exist
- * is the reference's own description: 30 of the 211 indexed commands say they open or launch a
+ * is the reference's own description: 28 of the 209 indexed commands say they open or launch a
  * dialog or an editor, and every one of the 16 still named `*Dialog`/`*Editor` is among them — so
  * this reads the vendor's claim rather than pattern-matching our own guess onto a name.
  */
