@@ -3008,3 +3008,274 @@ function appliedXmlAt(applyWorkbookDocument: ReturnType<typeof vi.fn>, index: nu
   invariant(typeof xml === 'string');
   return xml;
 }
+
+// ── Duplicate-sheet reuse: the re-bind loop ───────────────────────────────────
+// Measured on the full LangSmith census: 55.1% of production traces that call
+// bind-template call it more than once, and across 105 consecutive pairs the target
+// sheet differs in 3. The agent re-states ONE chart in new words rather than building
+// different sheets — and because the binder titles a Call-1 sheet with the ask text
+// itself, each rewording used to land as a duplicate sheet under a paraphrased name.
+describe('bindTemplateTool duplicate-sheet reuse', () => {
+  // Verbatim rewordings from eval trace 1010e827 (one MAU chart, six rewordings).
+  const REWORDED_TITLES = [
+    'line chart of monthly active users (mau) over the last 12 months, month on the x-axis',
+    'line chart showing mau by month, one point per month value',
+    'mau by month, ordered chronologically',
+  ];
+
+  function bindReturning(bind: BinderResult): void {
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(bind);
+  }
+
+  function retitled(title: string): BinderResult {
+    invariant(boundResult.status === 'bound');
+    return { ...boundResult, args: { ...boundResult.args, title } };
+  }
+
+  function body(result: CallToolResult): Record<string, unknown> {
+    invariant(result.content[0].type === 'text');
+    return JSON.parse(result.content[0].text);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
+  });
+
+  it('a reworded ask that binds the same chart reuses the sheet instead of building a second one', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+    });
+
+    const first = body(
+      await getToolResult({
+        session: '1',
+        ask: REWORDED_TITLES[0],
+        auto_apply: true,
+        getExecutor,
+      }),
+    );
+    expect(first.applied).toBe(true);
+    expect(first.sheet_name).toBe('Sales by Region');
+
+    // Same chart, new words: identical bound args, only the ask-derived title differs.
+    bindReturning(retitled(REWORDED_TITLES[1]));
+    const second = body(
+      await getToolResult({
+        session: '1',
+        ask: REWORDED_TITLES[1],
+        auto_apply: true,
+        getExecutor,
+      }),
+    );
+
+    expect(second.reused).toBe(true);
+    expect(second.applied).toBe(true);
+    expect(second.sheet_name).toBe('Sales by Region');
+    expect(second.guidance).toContain('already built');
+    // The loop cost is the extra call, so the reuse must be terminal.
+    expect(second.guidance).toContain('no further tool calls needed');
+
+    // No second sheet was injected and no second apply reached Desktop.
+    expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(1);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds across a run of rewordings — the third and fourth restatement reuse too', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+    });
+
+    await getToolResult({ session: '1', ask: REWORDED_TITLES[0], auto_apply: true, getExecutor });
+    for (const title of REWORDED_TITLES.slice(1)) {
+      bindReturning(retitled(title));
+      const result = body(
+        await getToolResult({ session: '1', ask: title, auto_apply: true, getExecutor }),
+      );
+      expect(result.reused).toBe(true);
+    }
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('a second bind for a DIFFERENT chart is not reused — it applies normally', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+    });
+
+    await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(boundResult.status === 'bound');
+    bindReturning({
+      ...boundResult,
+      args: {
+        ...boundResult.args,
+        title: 'Profit by Category',
+        field_mapping: { cat: '[Category]', val: '[Profit]' },
+      },
+    });
+    const second = body(
+      await getToolResult({
+        session: '1',
+        ask: 'bar chart of Profit by Category',
+        auto_apply: true,
+        getExecutor,
+      }),
+    );
+
+    expect(second.reused).toBeUndefined();
+    expect(second.applied).toBe(true);
+    expect(second.sheet_name).toBe('Profit by Category');
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it('a real refinement of the same chart still applies — adding a sort is not a repeat', async () => {
+    // The ranking fixture carries the rows/cols the sort and top-N splices need.
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+
+    await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    bindReturning(boundWithSortResult);
+    const second = body(
+      await getToolResult({
+        session: '1',
+        ask: 'bar chart of Sales by Region sorted descending',
+        auto_apply: true,
+        getExecutor,
+      }),
+    );
+
+    expect(second.reused).toBeUndefined();
+    expect(second.applied).toBe(true);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
+
+    // And a top-N refinement on top of that is a third distinct sheet state.
+    bindReturning(boundWithSortAndTopNResult);
+    const third = body(
+      await getToolResult({
+        session: '1',
+        ask: 'top 10 regions by Sales, sorted descending',
+        auto_apply: true,
+        getExecutor,
+      }),
+    );
+    expect(third.reused).toBeUndefined();
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(3);
+  });
+
+  it('an explicit target_worksheet always applies, even for byte-identical args', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+    });
+
+    await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    const second = body(
+      await getToolResult({
+        session: '1',
+        ask: 'bar chart of Sales by Region',
+        auto_apply: true,
+        target_worksheet: 'Sales by Region',
+        getExecutor,
+      }),
+    );
+
+    expect(second.reused).toBeUndefined();
+    expect(second.applied).toBe(true);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it('rebuilds when the remembered sheet is no longer in the workbook', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+    });
+
+    await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    // The user deleted the sheet in Desktop between the two calls.
+    vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('not-found');
+    const second = body(
+      await getToolResult({
+        session: '1',
+        ask: 'bar chart of Sales by Region',
+        auto_apply: true,
+        getExecutor,
+      }),
+    );
+
+    expect(second.reused).toBeUndefined();
+    expect(second.applied).toBe(true);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not leak across sessions', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+    });
+
+    await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+    const otherSession = body(
+      await getToolResult({
+        session: '2',
+        ask: 'bar chart of Sales by Region',
+        auto_apply: true,
+        getExecutor,
+      }),
+    );
+
+    expect(otherSession.reused).toBeUndefined();
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it('remembers nothing when auto_apply did not apply', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+    });
+
+    await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: false,
+      getExecutor,
+    });
+    const second = body(
+      await getToolResult({
+        session: '1',
+        ask: 'bar chart of Sales by Region',
+        auto_apply: true,
+        getExecutor,
+      }),
+    );
+
+    expect(second.reused).toBeUndefined();
+    expect(second.applied).toBe(true);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+});
