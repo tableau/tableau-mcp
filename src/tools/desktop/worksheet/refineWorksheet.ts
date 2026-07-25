@@ -11,7 +11,6 @@
 // under src/desktop/refine/refineWorksheet.ts; this file is the I/O wrapper + registration.
 
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { setTimeout as setTimeoutPromise } from 'timers/promises';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -58,6 +57,31 @@ type RefineWorksheetToolResult =
 // elsewhere (list-worksheets/list-dashboards polling after new-worksheet/new-dashboard).
 const READBACK_POLL_MAX_ATTEMPTS = 8;
 const READBACK_POLL_INTERVAL_MS = 250;
+
+/**
+ * The readback poll sleep, on the GLOBAL timer. This used to be `timers/promises`, which vitest's
+ * fake timers do not fake — so the four tests that call `vi.useFakeTimers()` and advance the clock
+ * over this poll were sleeping for real and proving nothing about the timing they claim to drive
+ * (measured: `timers/promises` 804ms under fake timers, global `setTimeout` 1ms). Abort semantics
+ * are kept: an aborted signal rejects, before or during the wait.
+ */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason as Error);
+      return;
+    }
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(signal?.reason as Error);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
 
 /** A hand-back-to-the-standard-path refusal — not an error, so isError stays false. */
 function refusal(
@@ -341,9 +365,7 @@ export const getRefineWorksheetTool = (
               });
             }
             if (attempt < READBACK_POLL_MAX_ATTEMPTS) {
-              await setTimeoutPromise(READBACK_POLL_INTERVAL_MS, undefined, {
-                signal: extra.signal,
-              });
+              await sleep(READBACK_POLL_INTERVAL_MS, extra.signal);
             }
           }
 
