@@ -4,7 +4,7 @@
 .vscode/
 build/
 /cache/
-node_modules/
+node_modules
 junit/
 coverage/
 test-logs/
