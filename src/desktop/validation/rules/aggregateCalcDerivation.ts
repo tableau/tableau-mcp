@@ -1,7 +1,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
-import { parseXml } from './parseXml.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 const AGG_FUNCS = [
   'SUM',
@@ -90,8 +90,9 @@ export const aggregateCalcDerivationRule: ValidationRule = {
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    const doc = parseXml(xml);
-    if (!doc) return [];
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('aggregate-calc-derivation', parsed.message)];
+    const doc = parsed.doc;
 
     const aggregateCalcNames = new Set<string>();
     const calcColumns = xpath.select('//column[calculation]', doc as unknown as Node) as Element[];

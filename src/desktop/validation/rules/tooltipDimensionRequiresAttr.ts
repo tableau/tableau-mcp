@@ -24,7 +24,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
-import { parseXml } from './parseXml.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 const FIELD_REF = /\[[^\]]+\]\.\[[^\]]+\]/g;
 
@@ -110,8 +110,9 @@ export const tooltipDimensionRequiresAttrRule: ValidationRule = {
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    const doc = parseXml(xml);
-    if (!doc || !doc.documentElement) return [];
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('tooltip-dimension-requires-attr', parsed.message)];
+    const doc = parsed.doc;
 
     const issues: ValidationIssue[] = [];
     const worksheets = xpath.select('//worksheet', doc as unknown as Node) as Element[];

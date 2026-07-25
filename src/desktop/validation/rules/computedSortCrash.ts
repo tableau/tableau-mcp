@@ -1,7 +1,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
-import { parseXml } from './parseXml.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 export const computedSortCrashRule: ValidationRule = {
   id: 'computed-sort-crash',
@@ -11,8 +11,9 @@ export const computedSortCrashRule: ValidationRule = {
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    const doc = parseXml(xml);
-    if (!doc) return [];
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('computed-sort-crash', parsed.message)];
+    const doc = parsed.doc;
 
     const crashing = xpath.select(
       "//sort[(@class='computed-sort' or @class='computed')][.//sort-computation or .//sort-expression]",

@@ -66,9 +66,13 @@ describe('duplicate-empty-parameter rule', () => {
     expect(duplicateEmptyParameterRule.validate(xml)).toHaveLength(0);
   });
 
-  it('does not flag malformed or empty XML', () => {
+  it('does not flag empty XML, and errors rather than passing unparseable XML', () => {
     expect(duplicateEmptyParameterRule.validate('')).toHaveLength(0);
-    expect(duplicateEmptyParameterRule.validate('<not-xml')).toHaveLength(0);
+
+    const issues = duplicateEmptyParameterRule.validate('<not-xml');
+    expect(issues).toHaveLength(1);
+    expect(issues[0].severity).toBe('error');
+    expect(issues[0].message).toMatch(/not well-formed/);
   });
 
   it('blocks workbook validation when registered', () => {

@@ -18,7 +18,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
-import { parseXml } from './parseXml.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 interface ShelfRef {
   datasource?: string;
@@ -120,8 +120,9 @@ export const dateFieldBoundAsStringRule: ValidationRule = {
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    const doc = parseXml(xml);
-    if (!doc?.documentElement) return [];
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('date-field-bound-as-string', parsed.message)];
+    const doc = parsed.doc;
 
     const dateFieldsByDatasource = collectDateFieldsByDatasource(doc);
     const allDateFields = new Set<string>();

@@ -1,7 +1,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
-import { parseXml } from './parseXml.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 const MAX_CATEGORICAL_FILTERS = 5;
 
@@ -15,8 +15,10 @@ export const categoricalFilterProliferationRule: ValidationRule = {
   validate(xml: string): ValidationIssue[] {
     if (!process.env.ENABLE_FILTER_GUARDRAIL) return [];
 
-    const doc = parseXml(xml);
-    if (!doc) return [];
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok)
+      return [unparseableXmlIssue('categorical-filter-proliferation', parsed.message)];
+    const doc = parsed.doc;
 
     const categorical = xpath.select(
       "//filter[@class='categorical']",

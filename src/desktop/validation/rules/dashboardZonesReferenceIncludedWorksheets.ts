@@ -10,10 +10,10 @@
  * documents that omit worksheets by design; those live worksheets are preserved by the
  * upsert-only path and must not be rejected by this whole-workbook consistency check.
  */
-import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 function issueFor(dashboardName: string, worksheetName: string): ValidationIssue {
   return {
@@ -37,14 +37,10 @@ export const dashboardZonesReferenceIncludedWorksheetsRule: ValidationRule = {
   contexts: ['workbook'],
 
   validate(xml: string): ValidationIssue[] {
-    let doc: Document;
-    try {
-      const parser = new DOMParser({ errorHandler: () => {} });
-      doc = parser.parseFromString(xml.trim() || '<empty/>', 'text/xml') as unknown as Document;
-    } catch {
-      // Malformed XML is reported by well-formed-xml; this rule has nothing to say.
-      return [];
-    }
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok)
+      return [unparseableXmlIssue('dashboard-zones-reference-included-worksheets', parsed.message)];
+    const doc = parsed.doc;
 
     const worksheetNames = new Set(
       (xpath.select('//worksheets/worksheet[@name]', doc as unknown as Node) as Element[])

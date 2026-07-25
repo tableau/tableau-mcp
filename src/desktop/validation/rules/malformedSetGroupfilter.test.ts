@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { runValidation } from '../registry.js';
 import { malformedSetGroupfilterRule } from './malformedSetGroupfilter.js';
 
-const rejected = `<workbook><datasources><datasource name="Sample - Superstore">
+// Declares xmlns:user because the `user:ui-*` attributes below need it — a real workbook root
+// always carries the declaration, and an undeclared prefix is a namespace parse error.
+const rejected = `<workbook xmlns:user="http://www.tableausoftware.com/xml/user"><datasources><datasource name="Sample - Superstore">
   <group caption="Top N Set" field="[Sub-Category]" name="[Set_TopN]" name-style="unqualified" user:ui-domain="relevant">
     <groupfilter count="[Parameters].[Parameter 1]" count-type="count" direction="top" expression="sum" field="[Profit]" function="filter" user:ui-enumeration="inclusive" user:ui-marker="filter-top" />
   </group>

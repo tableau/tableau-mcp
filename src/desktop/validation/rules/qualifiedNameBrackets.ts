@@ -23,10 +23,10 @@
  * brackets inside string literals — are deliberately skipped so this rule never
  * false-rejects valid content (e.g. a bundled template).
  */
-import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 const TEXT_NODE = 3;
 const ATTRIBUTE_NODE = 2;
@@ -126,14 +126,9 @@ export const qualifiedNameBracketsRule: ValidationRule = {
   contexts: ['workbook', 'worksheet', 'dashboard', 'datasource'],
 
   validate(xml: string): ValidationIssue[] {
-    // Suppress parser error output; malformed XML is reported by well-formed-xml.
-    let doc: Document;
-    try {
-      const parser = new DOMParser({ errorHandler: () => {} });
-      doc = parser.parseFromString(xml.trim() || '<empty/>', 'text/xml') as unknown as Document;
-    } catch {
-      return [];
-    }
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('qualified-name-brackets', parsed.message)];
+    const doc = parsed.doc;
 
     const nodes = xpath.select('//@* | //text()', doc as unknown as Node) as Node[];
     const issues: ValidationIssue[] = [];

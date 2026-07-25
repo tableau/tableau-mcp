@@ -1,7 +1,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
-import { parseXml } from './parseXml.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 function localFieldName(columnRef: string): string {
   const lastBracket = [...columnRef.matchAll(/\[([^\]]+)\]/g)].map((m) => m[1]).pop() ?? columnRef;
@@ -23,8 +23,9 @@ export const categoricalFilterSlicesRule: ValidationRule = {
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    const doc = parseXml(xml);
-    if (!doc) return [];
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('categorical-filter-slices', parsed.message)];
+    const doc = parsed.doc;
 
     const sliceColumns = [
       ...(

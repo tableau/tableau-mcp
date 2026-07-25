@@ -1,7 +1,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
-import { parseXml } from './parseXml.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 function norm(ref: string): string {
   return String(ref ?? '').trim();
@@ -15,8 +15,9 @@ export const redundantColorEncodingRule: ValidationRule = {
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    const doc = parseXml(xml);
-    if (!doc) return [];
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('redundant-color-encoding', parsed.message)];
+    const doc = parsed.doc;
 
     const issues: ValidationIssue[] = [];
     const worksheets = xpath.select('//worksheet', doc as unknown as Node) as Element[];

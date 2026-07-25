@@ -1,7 +1,7 @@
-import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
 import type { ValidationContext, ValidationIssue, ValidationRule } from '../types.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 export const setCountMalformedParameterRule = {
   id: 'set-count-malformed-parameter',
@@ -14,8 +14,9 @@ export const setCountMalformedParameterRule = {
 
   validate(xml: string, context?: ValidationContext): ValidationIssue[] {
     const s = String(xml ?? '');
-    const doc = parseXml(s);
-    if (!doc?.documentElement) return [];
+    const parsed = parseXmlResult(s);
+    if (!parsed.ok) return [unparseableXmlIssue('set-count-malformed-parameter', parsed.message)];
+    const doc = parsed.doc;
 
     const countRefs = new Set<string>();
     for (const match of s.matchAll(
@@ -102,15 +103,4 @@ function malformedIssue(
     xpath: `//groupfilter[contains(@count,'${paramName}')]`,
     suggestion,
   };
-}
-
-function parseXml(xml: string): Document | null {
-  try {
-    return new DOMParser({ errorHandler: () => {} }).parseFromString(
-      String(xml ?? '').trim() || '<empty/>',
-      'text/xml',
-    ) as unknown as Document;
-  } catch {
-    return null;
-  }
 }

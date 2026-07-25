@@ -1,7 +1,7 @@
-import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 export const duplicateEmptyParameterRule: ValidationRule = {
   id: 'duplicate-empty-parameter',
@@ -11,8 +11,9 @@ export const duplicateEmptyParameterRule: ValidationRule = {
   contexts: ['workbook'],
 
   validate(xml: string): ValidationIssue[] {
-    const doc = parseXml(xml);
-    if (!doc?.documentElement) return [];
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('duplicate-empty-parameter', parsed.message)];
+    const doc = parsed.doc;
 
     const paramCols = xpath.select(
       '//column[@param-domain-type]',
@@ -56,14 +57,3 @@ export const duplicateEmptyParameterRule: ValidationRule = {
     return issues;
   },
 };
-
-function parseXml(xml: string): Document | null {
-  try {
-    return new DOMParser({ errorHandler: () => {} }).parseFromString(
-      String(xml ?? '').trim() || '<empty/>',
-      'text/xml',
-    ) as unknown as Document;
-  } catch {
-    return null;
-  }
-}

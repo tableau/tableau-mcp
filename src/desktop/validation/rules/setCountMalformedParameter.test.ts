@@ -68,9 +68,13 @@ describe('set-count-malformed-parameter rule', () => {
     expect(setCountMalformedParameterRule.validate(workbook(calcOnly, set('HN')))).toHaveLength(0);
   });
 
-  it('fails open on malformed or empty XML', () => {
+  it('passes empty XML, and errors rather than passing unparseable XML', () => {
     expect(setCountMalformedParameterRule.validate('')).toHaveLength(0);
-    expect(setCountMalformedParameterRule.validate('<not-xml')).toHaveLength(0);
+
+    const issues = setCountMalformedParameterRule.validate('<not-xml');
+    expect(issues).toHaveLength(1);
+    expect(issues[0].severity).toBe('error');
+    expect(issues[0].message).toMatch(/not well-formed/);
   });
 
   describe('worksheet context', () => {

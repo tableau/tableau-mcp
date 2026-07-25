@@ -8,7 +8,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
-import { parseXml } from './parseXml.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 function hasCalculationChild(col: Element): boolean {
   for (let i = 0; i < col.childNodes.length; i += 1) {
@@ -26,8 +26,9 @@ export const calcNameFieldCollisionRule: ValidationRule = {
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    const doc = parseXml(xml);
-    if (!doc) return [];
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('calc-name-field-collision', parsed.message)];
+    const doc = parsed.doc;
 
     const columns = xpath.select('//column', doc as unknown as Node) as Element[];
     const groups = new Map<Node, Element[]>();

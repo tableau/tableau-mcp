@@ -1,7 +1,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
-import { parseXml } from './parseXml.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 const PARAMETERS_FIELD = /\[Parameters\]\.\[[^\]]+\]/;
 
@@ -14,8 +14,9 @@ export const parameterFieldOnShelfRule: ValidationRule = {
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    const doc = parseXml(xml);
-    if (!doc) return [];
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('parameter-field-on-shelf', parsed.message)];
+    const doc = parsed.doc;
 
     const issues: ValidationIssue[] = [];
     const seen = new Set<string>();

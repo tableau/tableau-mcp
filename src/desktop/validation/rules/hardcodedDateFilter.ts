@@ -1,7 +1,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
-import { parseXml } from './parseXml.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 const DATE_LITERAL = /#\s*\d{4}-\d{2}-\d{2}/;
 
@@ -13,8 +13,9 @@ export const hardcodedDateFilterRule: ValidationRule = {
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    const doc = parseXml(xml);
-    if (!doc) return [];
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('hardcoded-date-filter', parsed.message)];
+    const doc = parsed.doc;
 
     const filters = xpath.select('//filter[min or max]', doc as unknown as Node) as Element[];
     const issues: ValidationIssue[] = [];

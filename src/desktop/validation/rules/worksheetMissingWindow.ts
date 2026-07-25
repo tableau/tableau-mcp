@@ -1,7 +1,7 @@
-import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 export const worksheetMissingWindowRule: ValidationRule = {
   id: 'worksheet-missing-window',
@@ -11,8 +11,9 @@ export const worksheetMissingWindowRule: ValidationRule = {
   contexts: ['workbook'],
 
   validate(xml: string): ValidationIssue[] {
-    const doc = parseXml(xml);
-    if (!doc?.documentElement) return [];
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('worksheet-missing-window', parsed.message)];
+    const doc = parsed.doc;
 
     const worksheets = xpath.select(
       '//worksheets/worksheet[@name]',
@@ -54,14 +55,3 @@ export const worksheetMissingWindowRule: ValidationRule = {
     return issues;
   },
 };
-
-function parseXml(xml: string): Document | null {
-  try {
-    return new DOMParser({ errorHandler: () => {} }).parseFromString(
-      String(xml ?? '').trim() || '<empty/>',
-      'text/xml',
-    ) as unknown as Document;
-  } catch {
-    return null;
-  }
-}

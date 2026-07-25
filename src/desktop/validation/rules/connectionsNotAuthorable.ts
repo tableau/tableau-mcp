@@ -30,10 +30,10 @@
  * NEVER rejected, and a hand-authored/copied-from-.tds connection (which cannot
  * reproduce Desktop's opaque id-minting scheme) IS rejected.
  */
-import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 /**
  * Desktop mints `named-connection` names as `<protocol>.<opaque-lowercase-id>`, e.g.
@@ -71,14 +71,9 @@ export const connectionsNotAuthorableRule: ValidationRule = {
   contexts: ['workbook', 'datasource'],
 
   validate(xml: string): ValidationIssue[] {
-    let doc: Document;
-    try {
-      const parser = new DOMParser({ errorHandler: () => {} });
-      doc = parser.parseFromString(xml.trim() || '<empty/>', 'text/xml') as unknown as Document;
-    } catch {
-      // Malformed XML is reported by well-formed-xml; this rule has nothing to say.
-      return [];
-    }
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('connections-not-authorable', parsed.message)];
+    const doc = parsed.doc;
 
     const issues: ValidationIssue[] = [];
 

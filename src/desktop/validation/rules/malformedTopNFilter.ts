@@ -11,7 +11,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
-import { parseXml } from './parseXml.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 const TOP_N_FILTER_XPATH =
   "//filter[not(ancestor::group) and groupfilter[@function='filter' and " +
@@ -27,8 +27,9 @@ export const malformedTopNFilterRule: ValidationRule = {
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    const doc = parseXml(xml);
-    if (!doc) return [];
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('malformed-top-n-filter', parsed.message)];
+    const doc = parsed.doc;
 
     const filters = xpath.select(TOP_N_FILTER_XPATH, doc as unknown as Node) as Element[];
 

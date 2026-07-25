@@ -1,7 +1,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
-import { parseXml } from './parseXml.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 const HAS_ALL_ENUMERATION = ".//groupfilter[@*[local-name()='ui-enumeration']='all']";
 const HAS_MEMBER_ENUMERATION = ".//groupfilter[@function='member']";
@@ -14,8 +14,9 @@ export const filterAllInListRule: ValidationRule = {
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    const doc = parseXml(xml);
-    if (!doc) return [];
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('filter-all-in-list', parsed.message)];
+    const doc = parsed.doc;
 
     const offenders = xpath.select(
       `//filter[@class='categorical'][${HAS_ALL_ENUMERATION}][${HAS_MEMBER_ENUMERATION}]`,

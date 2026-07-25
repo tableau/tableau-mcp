@@ -1,4 +1,6 @@
+import { parseXmlResult, unparseableXmlIssue } from './rules/parseXml.js';
 import { validationRules } from './rules/rules.js';
+import { wellFormedXmlRule } from './rules/wellFormedXml.js';
 import type {
   ValidationContext,
   ValidationIssue,
@@ -22,6 +24,19 @@ export function runValidation(
   context: ValidationContext,
   rules = allRules,
 ): ValidationResult {
+  // Fail closed on a document that will not parse. Every parse-based rule reads an
+  // unparseable document as "nothing to report", so without this a single unclosed tag
+  // turned the whole rule set off and returned valid:true.
+  const parsed = parseXmlResult(xml);
+  if (!parsed.ok) {
+    const issues = wellFormedXmlRule.validate(xml);
+    return {
+      valid: false,
+      issues:
+        issues.length > 0 ? issues : [unparseableXmlIssue(wellFormedXmlRule.id, parsed.message)],
+    };
+  }
+
   const issues: ValidationIssue[] = [];
   for (const rule of rules) {
     if (rule.contexts.includes(context)) {

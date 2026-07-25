@@ -71,7 +71,10 @@ describe('computed-sort-crash rule', () => {
     expect(computedSortCrashRule.validate(manual)).toHaveLength(0);
   });
 
-  it('returns [] on unparseable XML rather than throwing', () => {
-    expect(computedSortCrashRule.validate('<not-xml')).toEqual([]);
+  it('reports unparseable XML as an error instead of silently passing it', () => {
+    const issues = computedSortCrashRule.validate('<not-xml');
+    expect(issues).toHaveLength(1);
+    expect(issues[0].severity).toBe('error');
+    expect(issues[0].message).toMatch(/not well-formed/);
   });
 });

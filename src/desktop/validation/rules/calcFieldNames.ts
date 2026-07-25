@@ -23,10 +23,10 @@
  * Do not treat this as a formally verified Tableau constraint.
  */
 
-import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 /**
  * Initial heuristic for valid datasource-level calc field names.
@@ -71,16 +71,9 @@ export const calcFieldNamesRule: ValidationRule = {
   validate(xml: string): ValidationIssue[] {
     const issues: ValidationIssue[] = [];
 
-    // Suppress parser error output; malformed XML is reported upstream.
-    let doc: Document;
-    try {
-      const parser = new DOMParser({
-        errorHandler: (_level, _msg, _context) => {},
-      });
-      doc = parser.parseFromString(xml.trim(), 'text/xml') as unknown as Document;
-    } catch {
-      return [];
-    }
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('calc-field-names', parsed.message)];
+    const doc = parsed.doc;
 
     // Find all <column> elements that contain a <calculation> child
     const columns = xpath.select('//column[calculation]', doc as unknown as Node) as Element[];

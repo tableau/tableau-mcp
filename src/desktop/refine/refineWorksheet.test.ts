@@ -5,7 +5,7 @@ import { rewriteFieldReferences } from '../templates/fieldReferenceRewriter.js';
 import { ensureUserNamespace } from '../templates/injectTemplateCore.js';
 import { spliceWaterfallAnchorFilter } from '../templates/waterfallAnchorFilter.js';
 import { runValidation } from '../validation/registry.js';
-import { parseXml } from '../validation/rules/parseXml.js';
+import { parseXmlResult } from '../validation/rules/parseXml.js';
 import {
   appliedSortByFieldDirection,
   confirmSortByFieldApplied,
@@ -601,7 +601,7 @@ describe('planSortDirection — INSERT a sort on an unsorted simple bar', () => 
     );
     // Exactly one sort node (no accidental duplicate) and the XML still parses.
     expect([...r.xml.matchAll(/<computed-sort\b/g)]).toHaveLength(1);
-    expect(parseXml(r.xml)?.documentElement).toBeTruthy();
+    expect(parseXmlResult(r.xml).ok).toBe(true);
 
     // Placed after the dependencies anchor and before <aggregation> (template ordering).
     const sortIdx = r.xml.indexOf('<computed-sort');

@@ -25,7 +25,7 @@
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
-import { parseXml } from './parseXml.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 export const DATE_LIKE_FIELD_NAME_TERMS = [
   'month',
@@ -354,8 +354,9 @@ export const dateLikeStringOnTimeAxisRule: ValidationRule = {
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    const doc = parseXml(xml);
-    if (!doc?.documentElement) return [];
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('date-like-string-on-time-axis', parsed.message)];
+    const doc = parsed.doc;
 
     const metadata = collectMetadata(doc);
     const worksheets = xpath.select('//worksheet', doc as unknown as Node) as Element[];

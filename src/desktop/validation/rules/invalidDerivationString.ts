@@ -18,10 +18,10 @@
  * xmldom + xpath (matching calcFieldNames), plain `validate(xml)` signature, no
  * a2td-specific trigger/context/doc plumbing.
  */
-import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
 import type { ValidationIssue, ValidationRule } from '../types.js';
+import { parseXmlResult, unparseableXmlIssue } from './parseXml.js';
 
 /**
  * Canonical `derivation` attribute values, case-sensitive and exact. Any
@@ -98,16 +98,9 @@ export const invalidDerivationStringRule: ValidationRule = {
   contexts: ['workbook', 'worksheet'],
 
   validate(xml: string): ValidationIssue[] {
-    // Suppress parser error output; malformed XML is reported by well-formed-xml.
-    let doc: Document;
-    try {
-      const parser = new DOMParser({
-        errorHandler: () => {},
-      });
-      doc = parser.parseFromString(xml.trim() || '<empty/>', 'text/xml') as unknown as Document;
-    } catch {
-      return [];
-    }
+    const parsed = parseXmlResult(xml);
+    if (!parsed.ok) return [unparseableXmlIssue('invalid-derivation-string', parsed.message)];
+    const doc = parsed.doc;
 
     const cis = xpath.select('//column-instance[@derivation]', doc as unknown as Node) as Element[];
 

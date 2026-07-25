@@ -74,9 +74,12 @@ describe('qualified-name-brackets rule', () => {
     expect(qualifiedNameBracketsRule.validate(xml)).toHaveLength(0);
   });
 
-  it('returns no issues for malformed XML (well-formed-xml owns that)', () => {
+  it('errors on malformed XML instead of passing it through silently', () => {
     const xml = '<workbook><unclosed column="[[bad]]"';
-    expect(qualifiedNameBracketsRule.validate(xml)).toHaveLength(0);
+    const issues = qualifiedNameBracketsRule.validate(xml);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].severity).toBe('error');
+    expect(issues[0].message).toMatch(/not well-formed/);
   });
 
   it('does not flag an object NAME that looks like a malformed field ref (sheet named [[Q3]])', () => {
