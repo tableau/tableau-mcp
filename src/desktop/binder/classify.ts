@@ -1504,10 +1504,15 @@ const TIME_INTENT_CUES: readonly string[] = [
   'timeline',
   'time-series',
   'over-time',
+  'by-date',
   'by-month',
   'by-week',
   'by-quarter',
   'by-year',
+  'daily',
+  'monthly',
+  'quarterly',
+  'yearly',
   'calendar',
   'period',
   'change-over-time',
@@ -1516,9 +1521,19 @@ const TIME_INTENT_CUES: readonly string[] = [
   'yoy',
 ];
 
+/**
+ * A bounded relative window also names a time axis even when it does not repeat a
+ * static cue above. Keep the unit set narrow: these are the material calendar
+ * grains the temporal fallback contract admits.
+ */
+const LAST_N_TIME_WINDOW_RE = /\blast\s+[1-9]\d*\s+(?:months?|quarters?|years?)\b/i;
+
 /** True when the (masked) ask carries an explicit time-axis cue from the allowlist. */
 function askHasExplicitTimeIntent(maskedAsk: string): boolean {
-  return TIME_INTENT_CUES.some((cue) => phraseIndexInAsk(maskedAsk, cue) >= 0);
+  return (
+    TIME_INTENT_CUES.some((cue) => phraseIndexInAsk(maskedAsk, cue) >= 0) ||
+    LAST_N_TIME_WINDOW_RE.test(maskedAsk)
+  );
 }
 
 /**

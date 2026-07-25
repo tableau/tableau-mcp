@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { classifyNoLlm, summarizeSchema } from './binder.js';
+import { bindTemplate, classifyNoLlm, summarizeSchema } from './binder.js';
 import { hasDeterministicPathBlockingHazard } from './classify.js';
 import { loadManifests } from './manifest.js';
 import type { SlotSpec, TemplateManifest } from './manifest-types.js';
@@ -75,6 +75,19 @@ const NARROW = `<?xml version='1.0'?>
 <workbook><datasources><datasource name='Narrow'>
   <column name='[Order Date]' role='dimension' type='quantitative' datatype='date' />
   <column name='[Region]' role='dimension' type='nominal' datatype='string' />
+  <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+</datasource></datasources></workbook>`;
+
+const SINGLE_DATE = `<?xml version='1.0'?>
+<workbook><datasources><datasource name='SingleDate'>
+  <column name='[Order Date]' role='dimension' type='quantitative' datatype='date' />
+  <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+</datasource></datasources></workbook>`;
+
+const TWO_DATES = `<?xml version='1.0'?>
+<workbook><datasources><datasource name='TwoDates'>
+  <column name='[Order Date]' role='dimension' type='quantitative' datatype='date' />
+  <column name='[Ship Date]' role='dimension' type='quantitative' datatype='datetime' />
   <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
 </datasource></datasources></workbook>`;
 
@@ -1046,6 +1059,83 @@ beforeAll(() => {
 beforeEach(() => {
   // A future early return must fail instead of manufacturing another green, assertion-free row.
   expect.hasAssertions();
+});
+
+describe('binder/manifest-encoding-corpus — temporal-slot fallback', () => {
+  const expectedExplicitDateClassification = {
+    template: 'trend-line-chart',
+    bindings: [
+      { slot_id: 'order_date', field: 'Order Date' },
+      { slot_id: 'sales', field: 'Sales' },
+    ],
+    encodings: { filled: [], unfilled: [] },
+  };
+
+  it('binds the only date field when a trend ask names no date field', () => {
+    const result = classifyNoLlm('sales over time', manifests, summarizeSchema(SINGLE_DATE));
+
+    expect(result).toEqual({
+      ...expectedExplicitDateClassification,
+      notes: [
+        "Using 'Order Date' for required temporal slot 'order_date' because it is the only date field in the datasource.",
+      ],
+    });
+  });
+
+  it.each([
+    'line chart of Sales by date',
+    'line chart of Sales by month',
+    'line chart of Sales by quarter',
+    'line chart of Sales by year',
+    'line chart of Sales monthly',
+    'line chart of Sales quarterly',
+    'line chart of Sales yearly',
+    'line chart of Sales daily',
+    'line chart of Sales over the last 6 months',
+    'line chart of Sales for the last 2 quarters',
+    'line chart of Sales across the last 3 years',
+  ])('recognizes the temporal cue in "%s"', (ask) => {
+    const trend = manifests.get('trend-line-chart')!;
+    const result = classifyNoLlm(
+      ask,
+      new Map([[trend.template, trend]]),
+      summarizeSchema(SINGLE_DATE),
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.bindings).toContainEqual({ slot_id: 'order_date', field: 'Order Date' });
+  });
+
+  it('proposes both date candidates instead of binding either when the choice is material', async () => {
+    const result = await bindTemplate({
+      ask: 'sales over time',
+      workbookXml: TWO_DATES,
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+    if (result.status !== 'propose') return;
+    expect(
+      result.llm_input.candidate_templates
+        .find((candidate) => candidate.template === 'trend-line-chart')
+        ?.slots.find((slot) => slot.slot_id === 'order_date'),
+    ).toMatchObject({ kind: 'temporal', required: true });
+    expect(
+      result.llm_input.fields
+        .filter((field) => field.datatype === 'date' || field.datatype === 'datetime')
+        .map((field) => field.name),
+    ).toEqual(['Order Date', 'Ship Date']);
+  });
+
+  it('keeps an explicitly named date-field classification byte-identical', () => {
+    const result = classifyNoLlm(
+      'line chart of Sales by Order Date',
+      manifests,
+      summarizeSchema(SINGLE_DATE),
+    );
+
+    expect(JSON.stringify(result)).toBe(JSON.stringify(expectedExplicitDateClassification));
+  });
 });
 
 function bindableSlots(m: TemplateManifest): SlotSpec[] {
