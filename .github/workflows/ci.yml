@@ -34,6 +34,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Byte-locked engine files shared with agent-to-tableau-desktop. This gate was
+      # only in scripts/agent-check, so drift rode through eight merged PRs.
+      - name: Lockstep-core hash gate
+        run: node scripts/check-lockstep.mjs
+
       - name: Build
         run: npm run build
 
