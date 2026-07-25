@@ -868,8 +868,9 @@ function ensureColumnInstanceInDependencies(
         // and Tableau reports no load error, so refuse rather than invent one.
         throw new Error(
           `Column ${parsedCorrected.column} does not exist in datasource "${datasource}". ` +
-            'Call list-available-fields for a valid columnRef. If the workbook changed ' +
-            'in Desktop, re-run get-workbook-xml first — the cached copy may be stale.',
+            'Call list-available-fields with the session for a valid columnRef — it re-reads ' +
+            'the live workbook, so a field you just added in Desktop cannot be hidden by a ' +
+            'stale cache.',
         );
       } else {
         // Fallback: create a basic column definition if not found in workbook
