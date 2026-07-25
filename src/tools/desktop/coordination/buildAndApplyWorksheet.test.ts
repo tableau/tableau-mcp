@@ -32,7 +32,7 @@ import { deflectionText } from '../../../desktop/route/route-gate.js';
 import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
-import { readTemplate } from '../../../desktop/templates/templatePath.js';
+import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import type { ReadbackFinding } from '../../../desktop/validation/readback-verify.js';
 import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
@@ -864,6 +864,44 @@ describe('buildAndApplyWorksheetTool', () => {
     vi.mocked(readTemplate).mockReturnValue(null);
 
     const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Template not found');
+  });
+
+  // The enum closes this at the schema layer, but the SEA/empty fallback leaves
+  // template a free string — so the runtime error has to do the teaching there.
+  it('names the nearest real templates when the id does not resolve', async () => {
+    const extra = makeExtra();
+    vi.mocked(readTemplate).mockReturnValue(null);
+    vi.mocked(listTemplateNames).mockReturnValue([
+      'kpi-text',
+      'ranking-ordered-bar',
+      'spatial-symbol-map',
+    ]);
+
+    const result = await getResult(
+      { session: SESSION, taskSpec: { ...TASK_SPEC_BASE, template: 'symbol_map' } },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Did you mean');
+    expect(result.content[0].text).toContain('spatial-symbol-map');
+  });
+
+  it('does not throw when the template name is outside readTemplate’s charset', async () => {
+    const extra = makeExtra();
+    vi.mocked(readTemplate).mockImplementation(() => {
+      throw new Error('Invalid template name');
+    });
+
+    const result = await getResult(
+      { session: SESSION, taskSpec: { ...TASK_SPEC_BASE, template: 'symbol map' } },
+      extra,
+    );
+
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Template not found');

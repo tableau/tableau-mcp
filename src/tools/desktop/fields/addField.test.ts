@@ -676,3 +676,88 @@ async function getResult(params: {
     getMockRequestHandlerExtra(),
   );
 }
+
+// The schema described columnRef as "Field." for a value the metadata layer requires to
+// be [Datasource].[column-instance]. 23 of add-field's 38 production errors were this
+// class, and the old message only restated the grammar.
+describe('add-field columnRef contract', () => {
+  const WORKBOOK_XML = '<workbook/>';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPinnedSession(undefined);
+    vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockImplementation((path) =>
+      String(path) === WORKBOOK_FILE ? (WORKBOOK_XML as never) : ('<worksheet/>' as never),
+    );
+  });
+
+  it('documents the format and a worked example on the parameter itself', async () => {
+    const tool = getAddFieldTool(new DesktopMcpServer());
+    const paramsSchema = (await Provider.from(tool.paramsSchema)) as Record<string, z.ZodTypeAny>;
+    const description = paramsSchema['columnRef']!.description ?? '';
+
+    expect(description).toContain('[Datasource].[derivation:Column:type]');
+    expect(description).toContain('[Sample - Superstore].[sum:Sales:qk]');
+    expect(description).toContain('resolve-field');
+  });
+
+  it('rejects a bare field name before touching the XML, and names the real refs', async () => {
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue([
+      {
+        column_ref: '[Sample - Superstore].[sum:Sales:qk]',
+        columnName: '[Sales]',
+        datasource: 'Sample - Superstore',
+      },
+      {
+        column_ref: '[Sample - Superstore].[sum:Profit:qk]',
+        columnName: '[Profit]',
+        datasource: 'Sample - Superstore',
+      },
+    ] as never);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      workbookFile: WORKBOOK_FILE,
+      target: 'rows',
+      columnRef: 'Sales',
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Did you mean');
+    expect(result.content[0].text).toContain('[Sample - Superstore].[sum:Sales:qk]');
+    expect(metadataModule.addFieldToRows).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it('points at resolve-field when no workbook is available to suggest from', async () => {
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'cols',
+      columnRef: 'SUM(Sales)',
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('is not a column reference');
+    expect(result.content[0].text).toContain('[Sample - Superstore].[sum:Sales:qk]');
+    expect(result.content[0].text).toContain('resolve-field');
+    expect(metadataModule.addFieldToCols).not.toHaveBeenCalled();
+  });
+
+  it('still accepts a well-formed ref', async () => {
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(metadataModule.addFieldToRows).toHaveBeenCalled();
+  });
+});
