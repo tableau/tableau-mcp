@@ -58,7 +58,11 @@ export class SessionManager {
       const config = getDesktopConfig();
       const discover = (): ReturnType<typeof discoverInstances> =>
         discoverInstances({ discoveryDir: config.externalApiDiscoveryDir });
-      const executor = new ExternalApiToolExecutor({ pid, discover });
+      const executor = new ExternalApiToolExecutor({
+        pid,
+        discover,
+        clientOptions: { timeoutMs: config.desktopCallTimeoutMs },
+      });
       await executor.start();
       if (!executor.isAvailable()) {
         throw new ExternalClientApiUnavailableError(

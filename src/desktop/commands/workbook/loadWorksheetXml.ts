@@ -267,6 +267,8 @@ export async function loadWorksheetXml({
     return Err({ type: 'load-worksheet-xml-error', error: canonicalNameResult.error });
   }
   const canonicalName = canonicalNameResult.value;
+  const canonicalFocus: ApplyFocus =
+    focus.navigate === 'artifact' ? { ...focus, sheetName: canonicalName } : focus;
 
   // External Client API ("Athena V0") exposes no per-sheet apply route, so applying a single sheet
   // re-posts the whole live workbook with just this sheet swapped in (the POST replaces the open
@@ -274,7 +276,7 @@ export async function loadWorksheetXml({
   const result = await loadWorksheetXmlViaExternalApi({
     worksheetName: canonicalName,
     xml,
-    focus,
+    focus: canonicalFocus,
     executor,
     signal,
     readbackVerificationOut,

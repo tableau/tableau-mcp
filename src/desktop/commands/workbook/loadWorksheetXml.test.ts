@@ -199,6 +199,28 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     ).toEqual([worksheetName]);
   });
 
+  it('navigates with the decoded canonical worksheet name', async () => {
+    const callerName = 'Sales &amp; Profit';
+    const canonicalName = 'Sales & Profit';
+    const { executor, calls } = dispatchingExecutor(liveWorkbook([callerName, 'Other']));
+
+    const result = await loadWorksheetXml({
+      worksheetName: callerName,
+      xml: `<worksheet name='${callerName}'><table><rows /></table></worksheet>`,
+      focus: { navigate: 'artifact', sheetName: callerName },
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    const gotoTargets = calls
+      .filter((call) => call.command === 'goto-sheet')
+      .map((call) => call.args?.Sheet);
+    expect(gotoTargets.length).toBeGreaterThan(0);
+    expect(gotoTargets).not.toContain(callerName);
+    expect(gotoTargets.every((target) => target === canonicalName)).toBe(true);
+  });
+
   it('appends a brand-new sheet while preserving the existing one', async () => {
     const { executor, calls } = dispatchingExecutor(liveWorkbook(['Some Other Sheet']));
 
