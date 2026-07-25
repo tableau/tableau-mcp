@@ -106,7 +106,12 @@ describe('add-field — an absent column comes back as a tool error, not a crash
     invariant(failure.content[0].type === 'text');
     expect(failure.content[0].text).toContain('does not exist in datasource "Sample - Superstore"');
     expect(failure.content[0].text).toContain('list-available-fields');
-    expect(failure.content[0].text).toContain('get-workbook-xml');
+    // Still tells the agent how to beat a stale cache, but via a tool the served
+    // profile actually has. Naming an off-profile tool here is a dead end — the
+    // model cannot call it, so its retry cannot differ. See
+    // src/desktop/recoveryTextNamesReachableTools.test.ts for the general rule.
+    expect(failure.content[0].text).toContain('stale cache');
+    expect(failure.content[0].text).not.toContain('get-workbook-xml');
     // The refusal must not have written a half-built worksheet.
     expect(readFileSync(worksheetFile, 'utf-8')).toBe(WORKSHEET);
 
