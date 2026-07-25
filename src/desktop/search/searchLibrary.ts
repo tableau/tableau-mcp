@@ -3,6 +3,7 @@ import Fuse from 'fuse.js';
 import { join } from 'path';
 
 import { listDataAssetNames, readDataAsset } from '../assets.js';
+import { checkCommandPolicy } from '../commandPolicy.js';
 
 // --- Commands reference ---
 
@@ -32,6 +33,24 @@ function loadCommandsReference(): any {
   return ref;
 }
 
+/**
+ * An "in" parameter whose value can never come from MCP — either explicitly flagged
+ * `cannot_provide_from_mcp` or typed as one of the reference's non-MCP-friendly types
+ * (DPI_VisualIDPM, DPI_ShelfSelectionModel, ...). REQUIRED and OPTIONAL both count: the
+ * three color dialogs declare their VizID optional, and Desktop still cannot run them
+ * without it, so offering them only costs the agent a round trip (~8.6s in production).
+ */
+function hasUnprovidableInParam(cmd: any, nonMcpTypes: Set<string>): boolean {
+  const params = Array.isArray(cmd.parameters) ? cmd.parameters : [];
+  return params.some(
+    (p: any) =>
+      p &&
+      typeof p === 'object' &&
+      p.direction === 'in' &&
+      ((p.type_id && nonMcpTypes.has(p.type_id)) || p.cannot_provide_from_mcp === true),
+  );
+}
+
 function ensureCommandsSearchIndex(): any {
   if (_commandsSearchIndex && _commandsFuse) return _commandsSearchIndex;
   const ref = loadCommandsReference();
@@ -40,8 +59,8 @@ function ensureCommandsSearchIndex(): any {
   const agentAllow = new Set<string>(ref.command_names_agent_can_invoke || []);
   const blockingNames = new Set<string>(ref.command_names_opening_blocking_dialog || []);
   const recommendation: string =
-    ref.recommendation_when_no_invocable_match ||
-    'No simple MCP-invocable command found. For chart/viz asks use bind-template (or refine-worksheet to edit in place); for calcs/parameters/sets/actions use the author-* verbs; fall back to the workbook-document round-trip, then workbook XML editing, only when neither covers the ask.';
+    ref.routing_recommendation ||
+    'If no command above does the job: for a chart or viz, call bind-template. To change an existing sheet — put a field on color, size or detail, or on rows/cols — call add-field (target=encoding, encodingType=color) then apply-worksheet; refine-worksheet only does top-N and sort. For calculated fields, parameters, sets and actions, call author-calc, author-parameter, author-set or author-action. Edit workbook XML only when none of these covers the ask.';
 
   const invocable = allCommands.filter((cmd: any) => {
     if (!cmd || typeof cmd !== 'object') return false;
@@ -57,15 +76,10 @@ function ensureCommandsSearchIndex(): any {
       agentOk = true;
     }
     if (!agentOk) return false;
-    const params = Array.isArray(cmd.parameters) ? cmd.parameters : [];
-    for (const p of params) {
-      if (!p || typeof p !== 'object') continue;
-      if (p.direction === 'in' && p.required) {
-        if ((p.type_id && nonMcpTypes.has(p.type_id)) || p.cannot_provide_from_mcp) {
-          return false;
-        }
-      }
-    }
+    if (hasUnprovidableInParam(cmd, nonMcpTypes)) return false;
+    // The execute path refuses these outright (crash-prone, dialog-driving, or
+    // unvalidatable target), so listing them can only produce a refused call.
+    if (checkCommandPolicy(cmd.fully_qualified_serialized_name)?.action === 'refuse') return false;
     return true;
   });
 
@@ -137,11 +151,10 @@ export function searchCommandsByKeywords(keywords: string[]): any {
   }
 
   const annotated = hits.map((cmd: any) => formatCommandSearchResult(cmd, blockingNames));
-  const nonDialog = annotated.filter((c: any) => !c.warning);
-  if (annotated.length === 0 || nonDialog.length === 0) {
-    return { commands: annotated, recommendation };
-  }
-  return { commands: annotated };
+  // Always returned. It used to be suppressed whenever ANY non-dialog command ranked, which
+  // is exactly when a keyword search returns plausible-looking junk (a "color" search ranks
+  // toggle-variable-column-widths) and the agent most needs to be told the real route.
+  return { commands: annotated, recommendation };
 }
 
 // --- Workbook schema search ---

@@ -46,6 +46,33 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('Use search-commands ONLY for unlisted commands.');
   });
 
+  // Live incident (v11 bundle): asked to move "warmer" onto color, the agent had no route
+  // for an encoding edit. refine-worksheet does top-N and sort only, so the edit-in-place
+  // route has to name the tool pair that can re-encode a sheet.
+  it('names add-field then apply-worksheet as the encoding edit path', () => {
+    const editInPlace = routes.find((route) => route.id === 'edit-in-place');
+
+    expect(editInPlace?.action).toContain('add-field');
+    expect(editInPlace?.action).toContain('apply-worksheet');
+    expect(editInPlace?.action).toContain('color');
+    expect(editInPlace?.toolSequence).toEqual([
+      'list-worksheets',
+      'list-dashboards',
+      'ask-user',
+      'refine-worksheet',
+      'add-field',
+      'apply-worksheet',
+      'bind-template',
+    ]);
+  });
+
+  it('census scopes refine-worksheet to top-N/sort and names the encoding pair', () => {
+    const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
+
+    expect(rendered).toContain('refine-worksheet edits top-N/sort');
+    expect(rendered).toContain('add-field + apply-worksheet change encodings.');
+  });
+
   it('routes calc-derived-field asks through the dynamic-authoring verbs', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
     expect(rendered).toContain(

@@ -60,8 +60,12 @@ describe('addFieldTool', () => {
     const tool = getAddFieldTool(new DesktopMcpServer());
     expect(tool.name).toBe('add-field');
     expect(tool.description).toBe(
-      'Place a field on a shelf (rows/cols/encoding); the manual path when no template binds.',
+      'Put a field on rows, cols, or a color/size/detail encoding; then apply-worksheet.',
     );
+    // Live incident (v11 bundle): the old wording ("the manual path when no template binds")
+    // ruled this tool out of the exact case it is for — changing the encoding of a sheet a
+    // template already built.
+    expect(tool.description).not.toContain('when no template binds');
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),

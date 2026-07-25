@@ -138,12 +138,14 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'edit-in-place',
     trigger: 'current/existing sheet/chart/view/dashboard',
     action:
-      'edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort or author-* tool; a NEW chart on the current sheet = bind-template with target_worksheet. Never create new sheets unless asked.',
+      'edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort ONLY, add-field + apply-worksheet for a color/size/detail or rows/cols field, or an author-* tool; a NEW chart here = bind-template with target_worksheet. Never create new sheets unless asked.',
     toolSequence: [
       'list-worksheets',
       'list-dashboards',
       'ask-user',
       'refine-worksheet',
+      'add-field',
+      'apply-worksheet',
       'bind-template',
     ],
     stopConditions: ['Never create new sheets unless asked'],
@@ -152,7 +154,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'command-census',
-    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort. Use search-commands ONLY for unlisted commands.',
+    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
   },
   {
     kind: 'prose',
@@ -167,7 +169,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'no-native-tool-escape',
-    text: 'If NO native tool covers the asked shape, say so plainly — never invent or hand-author XML. Retrieving worksheet XML to feed the field tools (get-worksheet-xml -> add-field/apply-worksheet) is a sanctioned path, not hand-authoring. Whole-workbook XML surgery (get/apply workbook XML) lives behind TOOL_PROFILE=full, an operator opt-in the user can enable.',
+    text: 'If NO native tool covers the asked shape, say so plainly — never invent or hand-author XML. get-worksheet-xml -> add-field -> apply-worksheet is sanctioned. Whole-workbook XML surgery is behind TOOL_PROFILE=full, which the user can enable.',
   },
 ];
 
