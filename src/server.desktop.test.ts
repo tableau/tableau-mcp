@@ -100,19 +100,19 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
 
 Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gradients. State plan, build.
 
-For any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.), FIRST use bind-template's two-call sequence. Call 1: bind-template(auto_apply:true), deterministic, ~0.3s; pass the user's message verbatim as \`ask\` (never paraphrase, reword, or expand it). If it proposes, Call 2: bind-template with the same ask/target, selected proposal, auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. Never call list-available-fields or get-worksheet-xml before bind-template: it reads schema; failed binds propose relevant candidate fields. Named charts use this first, even calc-heavy or asking "how <X> changes"; do not author template-owned calcs (including waterfall running totals) before binding. author-parameter/author-set/author-action before charts; else search-commands.
+For any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.), FIRST use bind-template's two-call sequence. Call 1: bind-template(auto_apply:true), deterministic, ~0.3s; pass the user's message verbatim as \`ask\` (never paraphrase, reword, or expand it). If it proposes, Call 2: bind-template with the same ask/target, selected proposal, auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. Never call list-available-fields or get-worksheet-xml to orient before bind-template: it reads schema; failed binds propose candidate fields (author-parameter/author-set may list fields first). Named charts use this first, even calc-heavy or asking "how <X> changes"; do not author template-owned calcs (including waterfall running totals) before binding. author-parameter/author-set/author-action before charts; else search-commands.
 
-For a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %), pass the calc in bind-template's calcs[] and bind its caption in ONE call; search-knowledge when unsure of the formula.
+For a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %), pass the calc in bind-template's calcs[] and bind its caption in ONE call (a proposal still resolves via Call 2); search-knowledge first when unsure of the formula.
 
 For an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult, FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.
 
 For a dashboard ask with 2-6 vizzes, build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; search-commands only for commands the census does not list.
 
-For a data-value question, on a populated worksheet, call get-summary-data; answer only from returned rows. A terminal/no-data result means stop; one retry on transient failure is allowed, then report the outcome.
+For a data-value question, on a populated worksheet, call get-summary-data; answer only from returned rows.
 
 For a dynamic ask or a calc/derived field the data lacks (ratio, running total, LOD), use author-* verbs: author-parameter FIRST (on { reopened: true } continue immediately), then author-set, author-calc, author-action, format-labels. Build with bind-template and authored captions.
 
-Call ask-user(urgency=blocking); stop only if ambiguity changes what gets WRITTEN to the workbook, not labels or titles. If proceeding with a defensible default, state it in the reply instead of asking.
+Call ask-user(urgency=blocking); stop when ambiguity changes what data gets written or which target is edited. Cosmetic choices take a stated default instead of asking.
 
 For current/existing sheet/chart/view/dashboard, edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort ONLY, add-field + apply-worksheet for a color/size/detail or rows/cols field, or an author-* tool; a NEW chart here = bind-template with target_worksheet. Never create new sheets unless asked.
 

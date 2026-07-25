@@ -91,11 +91,10 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(calcThenBind?.action).not.toContain('(SUM(revenue)-SUM(cogs))/SUM(revenue)');
     expect(calcThenBind?.action).not.toContain('opex');
     expect(calcThenBind?.stopConditions).toEqual(['ONE call']);
-    expect(calcThenBind?.action).toContain('search-knowledge when unsure of the formula');
+    expect(calcThenBind?.action).toContain('search-knowledge first when unsure of the formula');
+    expect(calcThenBind?.action).toContain('a proposal still resolves via Call 2');
     expect(calcThenBind?.toolSequence).toEqual(['bind-template', 'search-knowledge']);
-    expect(calcThenBind?.requiredEvidence).toEqual([
-      'authored_calcs returned by bind-template',
-    ]);
+    expect(calcThenBind?.requiredEvidence).toEqual(['authored_calcs returned by bind-template']);
   });
 
   it('is self-contained and does not require skill loading', () => {
@@ -137,11 +136,14 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     const plainChart = routes.find((route) => route.id === 'plain-chart');
 
     expect(plainChart?.action).toContain(
-      'Never call list-available-fields or get-worksheet-xml before bind-template',
+      'Never call list-available-fields or get-worksheet-xml to orient before bind-template',
     );
     expect(plainChart?.action).toContain('reads schema');
-    expect(plainChart?.action).toContain('failed binds propose relevant candidate fields');
-    expect(plainChart?.action).toContain('Never call list-available-fields or get-worksheet-xml before bind-template');
+    expect(plainChart?.action).toContain('failed binds propose candidate fields');
+    expect(plainChart?.action).toContain(
+      'Never call list-available-fields or get-worksheet-xml to orient before bind-template',
+    );
+    expect(plainChart?.action).toContain('author-parameter/author-set may list fields first');
   });
 
   it('asks only when ambiguity changes written workbook content', () => {
@@ -149,23 +151,19 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(ambiguity).toMatchObject({
       kind: 'prose',
-      text: expect.stringContaining('what gets WRITTEN to the workbook'),
+      text: expect.stringContaining('what data gets written or which target is edited'),
     });
     expect(ambiguity?.kind === 'prose' ? ambiguity.text : '').toContain(
-      'not labels or titles',
-    );
-    expect(ambiguity?.kind === 'prose' ? ambiguity.text : '').toContain(
-      'state it in the reply instead of asking',
+      'Cosmetic choices take a stated default instead of asking.',
     );
   });
 
-  it('stops on terminal summary outcomes but permits one transient retry', () => {
+  it('answers only from returned rows; terminal/retry policy lives in the tool description', () => {
     const dataValueQuestion = routes.find((route) => route.id === 'data-value-question');
 
     expect(dataValueQuestion).toMatchObject({
-      action:
-        'on a populated worksheet, call get-summary-data; answer only from returned rows. A terminal/no-data result means stop; one retry on transient failure is allowed, then report the outcome.',
-      stopConditions: ['A terminal/no-data result means stop'],
+      action: 'on a populated worksheet, call get-summary-data; answer only from returned rows.',
+      stopConditions: ['answer only from returned rows'],
       requiredEvidence: ['get-summary-data returned rows or a discriminated status'],
     });
   });
