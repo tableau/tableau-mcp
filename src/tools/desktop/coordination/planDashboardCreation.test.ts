@@ -132,7 +132,11 @@ describe('planDashboardCreationTool', () => {
         '  • Use ask-user to surface the choice to the user.',
       ].join('\n'),
     );
+    // The structured block repeats the blocked text: a client that prefers structuredContent
+    // never reads content[0], and "disambiguate each field" is useless without the list of
+    // which fields were ambiguous.
     expect(result.structuredContent).toEqual({
+      message: result.content[0].text,
       nextAction: { label: 'Disambiguate each field before re-planning', kind: 'prefill' },
     });
   });

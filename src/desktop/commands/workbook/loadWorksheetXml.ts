@@ -48,7 +48,7 @@ export interface LoadWorksheetXmlOk {
   validationWarnings?: ValidationIssue[];
 }
 
-interface PostApplyWorksheetReadbackVerification extends ReadbackVerificationResult {
+export interface PostApplyWorksheetReadbackVerification extends ReadbackVerificationResult {
   findings: ReadbackFinding[];
 }
 
@@ -64,7 +64,7 @@ type LoadWorksheetXmlResult = Result<
  * apply on a re-read miss: if the worksheet cannot be re-read, verification is skipped
  * (returns no findings) so telemetry can never mask a real apply.
  */
-function publicReadbackVerificationResult(
+export function publicReadbackVerificationResult(
   result: PostApplyWorksheetReadbackVerification,
 ): ReadbackVerificationResult {
   return result.message
@@ -72,7 +72,13 @@ function publicReadbackVerificationResult(
     : { ok: result.ok, status: result.status };
 }
 
-async function verifyPostApplyWorksheetReadback(
+/**
+ * Exported so the whole-workbook apply paths can run the SAME verification. bind-template
+ * applies through loadWorkbookXml, which has no readback: when Tableau stripped a requested
+ * encoding out of a bind, the response looked exactly like a bind it kept whole, because
+ * "Applied" only ever meant "Desktop accepted a document". One helper, both paths.
+ */
+export async function verifyPostApplyWorksheetReadback(
   worksheetName: string,
   intendedXml: string,
   executor: WithExecutorAndAbortSignal['executor'],

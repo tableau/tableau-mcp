@@ -511,7 +511,10 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
         'bind-template(auto_apply:true) flow using each already-bound ask.',
     };
     expect(result.content[0].text).toBe(JSON.stringify(expectedBody));
+    // The refusal body rides in the structured block too — a client that prefers
+    // structuredContent would otherwise be told to "resolve each ask" with no per-ask outcome.
     expect(result.structuredContent).toEqual({
+      ...expectedBody,
       nextAction: { label: 'Resolve each ask before retrying', kind: 'prefill' },
     });
     const body = JSON.parse(result.content[0].text);
@@ -572,6 +575,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(String(body.apply_error)).toMatch(/user changed the workbook.*3 event/);
     expect(String(body.guidance)).toMatch(/re-run dashboard-auto-apply/i);
     expect(result.structuredContent).toEqual({
+      ...body,
       nextAction: { label: 'Re-run dashboard-auto-apply', kind: 'prefill' },
     });
     expect(applyWorkbookDocument).not.toHaveBeenCalled();

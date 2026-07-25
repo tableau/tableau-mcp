@@ -15,8 +15,10 @@ import {
   jsonToolResult,
   NextAction,
   prefillNextAction,
-  StructuredContent,
+  receipt,
   StructuredResult,
+  WireStructuredContent,
+  wireStructuredContent,
   withNextAction,
 } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
@@ -176,7 +178,23 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
                         summaryData: { columns: dataColumns, rows: dataRows },
                         guidance: NO_ROWS_GUIDANCE,
                       },
-                      doneNextAction(SUMMARY_DATA_DONE_LABEL),
+                      doneNextAction(
+                        receipt({
+                          did: [
+                            `queried summary data for worksheet "${resolvedWorksheet.name}" (maxRows ${resolvedMaxRows})`,
+                            `the sheet returned ${dataColumns.length} column(s) and 0 rows`,
+                          ],
+                          didNot: ['return any data values — there were none to return'],
+                          // The endpoint answers with the sheet's own summary table. An empty
+                          // one is indistinguishable here from a filter that excludes
+                          // everything or a source with no matching data, so do not let the
+                          // agent read "no rows" as "no such data exists".
+                          unverified: [
+                            'why the result is empty — a filter, the data source, or the sheet itself are indistinguishable from here',
+                          ],
+                        }),
+                        SUMMARY_DATA_DONE_LABEL,
+                      ),
                     ),
                   );
                 }
@@ -231,7 +249,7 @@ type SummaryDataErrorReason =
   | 'endpoint-unavailable';
 
 class SummaryDataResponseError extends McpToolError {
-  readonly structuredContent: StructuredContent;
+  readonly structuredContent: WireStructuredContent;
   readonly summaryStatus: SummaryDataErrorStatus;
   readonly summaryReason: SummaryDataErrorReason;
   private readonly errorBody: { type: string; message: string };
@@ -266,9 +284,12 @@ class SummaryDataResponseError extends McpToolError {
       guidance,
       error: this.errorBody,
     };
-    this.structuredContent = {
+    // getErrorText() below is the `content` copy, which a structuredContent-preferring
+    // client never reads. Fold the same body in so the agent keeps the reason and the
+    // guidance instead of a bare "what to do next".
+    this.structuredContent = wireStructuredContent(this.body, {
       nextAction: nextActionForSummaryError(status, reason),
-    };
+    });
   }
 
   override getErrorText(): string {
@@ -356,7 +377,17 @@ function nextActionForSummaryError(
   reason: SummaryDataErrorReason,
 ): NextAction {
   if (status === 'terminal') {
-    return doneNextAction(SUMMARY_DATA_FAILURE_DONE_LABEL);
+    return doneNextAction(
+      receipt({
+        did: [`stopped get-summary-data on a terminal "${reason}" failure`],
+        didNot: ['retrieve any summary data'],
+        // "Terminal" is this tool's retry policy, not a statement about Desktop: a
+        // worksheet-not-found or an exhausted transient budget says nothing about whether
+        // the condition would clear on a later ask.
+        unverified: ['whether the underlying condition is permanent'],
+      }),
+      SUMMARY_DATA_FAILURE_DONE_LABEL,
+    );
   }
   if (status === 'retryable') {
     return prefillNextAction('Retry get-summary-data once');

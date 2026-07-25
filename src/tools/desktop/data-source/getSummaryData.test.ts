@@ -30,6 +30,18 @@ const resultSchema = z.object({
   }),
 });
 
+// Every terminal failure mints the same marker: the tool stopped, it retrieved nothing,
+// and "terminal" is its own retry policy rather than a claim about Desktop.
+const TERMINAL_FAILURE_NEXT_ACTION = {
+  label: 'Data retrieval failed — report outcome',
+  kind: 'done',
+  receipt: {
+    did: [expect.stringContaining('stopped get-summary-data on a terminal')],
+    didNot: ['retrieve any summary data'],
+    unverified: ['whether the underlying condition is permanent'],
+  },
+};
+
 type SummaryDataArgs = {
   session?: string;
   worksheet?: string;
@@ -124,11 +136,9 @@ describe('getSummaryDataTool', () => {
         guidance:
           'This sheet has no marks to summarize. Do NOT call get-summary-data again for this ask — bind a chart first (bind-template) or name a populated sheet.',
       });
-      expect(result.structuredContent).toEqual({
-        nextAction: {
-          label: 'Build the requested chart with bind-template',
-          kind: 'prefill',
-        },
+      expectStructuredBlock(result, {
+        label: 'Build the requested chart with bind-template',
+        kind: 'prefill',
       });
       expect(harness.server.requests.some((request) => request.path.endsWith('/summaryData'))).toBe(
         false,
@@ -191,10 +201,16 @@ describe('getSummaryDataTool', () => {
         guidance:
           "The summary query returned no rows. Do NOT call get-summary-data again for this ask — the answer is 'no data'; say so.",
       });
-      expect(result.structuredContent).toEqual({
-        nextAction: {
-          label: 'Data retrieval complete — no further calls needed',
-          kind: 'done',
+      expectStructuredBlock(result, {
+        label: 'Data retrieval complete — no further calls needed',
+        kind: 'done',
+        receipt: {
+          did: [
+            'queried summary data for worksheet "Sales by Region" (maxRows 200)',
+            'the sheet returned 1 column(s) and 0 rows',
+          ],
+          didNot: ['return any data values — there were none to return'],
+          unverified: [expect.stringContaining('why the result is empty')],
         },
       });
     } finally {
@@ -299,9 +315,7 @@ describe('getSummaryDataTool', () => {
         guidance: expect.stringContaining('transient — one retry is reasonable'),
         error: { type: 'desktop-command-execution-error' },
       });
-      expect(result.structuredContent).toEqual({
-        nextAction: { label: 'Retry get-summary-data once', kind: 'prefill' },
-      });
+      expectStructuredBlock(result, { label: 'Retry get-summary-data once', kind: 'prefill' });
 
       harness.server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', undefined);
       const retry = await harness.callTool({ worksheet: 'Sales by Region' });
@@ -342,9 +356,7 @@ describe('getSummaryDataTool', () => {
         reason: 'request-failed',
         guidance: expect.stringContaining('still failing — report the outcome; do not call again'),
       });
-      expect(second.structuredContent).toEqual({
-        nextAction: { label: 'Data retrieval failed — report outcome', kind: 'done' },
-      });
+      expectStructuredBlock(second, TERMINAL_FAILURE_NEXT_ACTION);
     } finally {
       await harness.close();
     }
@@ -409,8 +421,9 @@ describe('getSummaryDataTool', () => {
         reason: 'session-resolution-failed',
         guidance: expect.stringContaining('transient — one retry is reasonable'),
       });
-      expect(nextFailure.structuredContent).toEqual({
-        nextAction: { label: 'Retry get-summary-data once', kind: 'prefill' },
+      expectStructuredBlock(nextFailure, {
+        label: 'Retry get-summary-data once',
+        kind: 'prefill',
       });
     } finally {
       await harness.close();
@@ -437,9 +450,7 @@ describe('getSummaryDataTool', () => {
         reason: 'session-resolution-failed',
         guidance: expect.stringContaining('still failing — report the outcome; do not call again'),
       });
-      expect(second.structuredContent).toEqual({
-        nextAction: { label: 'Data retrieval failed — report outcome', kind: 'done' },
-      });
+      expectStructuredBlock(second, TERMINAL_FAILURE_NEXT_ACTION);
     } finally {
       await harness.close();
     }
@@ -473,9 +484,7 @@ describe('getSummaryDataTool', () => {
         reason: 'session-resolution-failed',
         guidance: expect.stringContaining('transient — one retry is reasonable'),
       });
-      expect(sessionB.structuredContent).toEqual({
-        nextAction: { label: 'Retry get-summary-data once', kind: 'prefill' },
-      });
+      expectStructuredBlock(sessionB, { label: 'Retry get-summary-data once', kind: 'prefill' });
     } finally {
       await harness.close();
     }
@@ -502,9 +511,7 @@ describe('getSummaryDataTool', () => {
         reason: 'request-failed',
         guidance: expect.stringContaining('still failing — report the outcome; do not call again'),
       });
-      expect(second.structuredContent).toEqual({
-        nextAction: { label: 'Data retrieval failed — report outcome', kind: 'done' },
-      });
+      expectStructuredBlock(second, TERMINAL_FAILURE_NEXT_ACTION);
     } finally {
       await harness.close();
     }
@@ -660,8 +667,9 @@ describe('getSummaryDataTool', () => {
           ),
         },
       });
-      expect(result.structuredContent).toEqual({
-        nextAction: { label: 'Repair worksheet selection and retry', kind: 'prefill' },
+      expectStructuredBlock(result, {
+        label: 'Repair worksheet selection and retry',
+        kind: 'prefill',
       });
     } finally {
       await harness.close();
@@ -693,9 +701,7 @@ describe('getSummaryDataTool', () => {
         reason: 'endpoint-unavailable',
         guidance: expect.stringContaining('Desktop build'),
       });
-      expect(result.structuredContent).toEqual({
-        nextAction: { label: 'Update Desktop/API and retry', kind: 'prefill' },
-      });
+      expectStructuredBlock(result, { label: 'Update Desktop/API and retry', kind: 'prefill' });
     } finally {
       await harness.close();
     }
@@ -767,6 +773,19 @@ function parseResult(result: CallToolResult): z.infer<typeof resultSchema> {
 function parseJsonResult(result: CallToolResult): unknown {
   invariant(result.content[0].type === 'text');
   return JSON.parse(result.content[0].text);
+}
+
+/**
+ * The block a client actually receives is the JSON body PLUS the nextAction envelope. A
+ * client that prefers structuredContent drops the text block outright, so asserting the
+ * body is folded in is asserting the agent still learns the status, the reason and the
+ * guidance — not just "what to do next".
+ */
+function expectStructuredBlock(result: CallToolResult, nextAction: unknown): void {
+  expect(result.structuredContent).toEqual({
+    ...(parseJsonResult(result) as object),
+    nextAction,
+  });
 }
 
 describe('isRouteMissing', () => {

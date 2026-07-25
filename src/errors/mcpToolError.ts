@@ -9,8 +9,9 @@ import type { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWork
 import type { LoadWorksheetXmlError } from '../desktop/commands/workbook/loadWorksheetXml.js';
 import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor.js';
 import {
-  type StructuredContent,
   type StructuredResult,
+  type WireStructuredContent,
+  wireStructuredContent,
 } from '../tools/desktop/structuredContent.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
@@ -71,7 +72,7 @@ export class McpToolError extends Error {
  * the complete machine-readable recovery payload in the MCP error body.
  */
 export class IncompleteOperationError<T extends object> extends McpToolError {
-  readonly structuredContent?: StructuredContent;
+  readonly structuredContent?: WireStructuredContent;
   private readonly recoveryPayload: StructuredResult<T>;
 
   constructor(recoveryPayload: StructuredResult<T>) {
@@ -81,7 +82,13 @@ export class IncompleteOperationError<T extends object> extends McpToolError {
       statusCode: 409,
     });
     this.recoveryPayload = recoveryPayload;
-    this.structuredContent = recoveryPayload.structuredContent;
+    const { structuredContent, ...body } = recoveryPayload;
+    // A client that prefers structuredContent never reads getErrorText() below, so the
+    // recovery payload has to ride in the block too — otherwise the agent is told only
+    // "do this next" with no record of which asks failed or how far the operation got.
+    this.structuredContent = structuredContent
+      ? wireStructuredContent(body, structuredContent)
+      : undefined;
   }
 
   override getErrorText(): string {
