@@ -71,7 +71,8 @@ describe('ExternalApiToolExecutor', () => {
       const error = result.unwrapErr();
       expect(error.type).toBe('unknown');
       if (error.type === 'unknown') {
-        expect(String(error.error)).toContain('pid 12345');
+        expect(String(error.error)).toContain('PID 12345');
+        expect(String(error.error)).toContain('Call list-instances');
       }
     });
 
@@ -489,7 +490,8 @@ describe('ExternalApiToolExecutor', () => {
         const error = result.unwrapErr();
         expect(error.type).toBe('unknown');
         if (error.type === 'unknown') {
-          expect(String(error.error)).toContain('pid 999');
+          expect(String(error.error)).toContain('PID 999');
+          expect(String(error.error)).toContain('Call list-instances');
         }
         expect(other.requests).toHaveLength(0);
       } finally {

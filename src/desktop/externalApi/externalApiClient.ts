@@ -353,7 +353,9 @@ export class ExternalApiClient {
       headers['content-type'] = options.contentType;
     }
 
-    const signal = options.signal ?? AbortSignal.timeout(this.timeoutMs);
+    // A caller signal is a cancellation channel, not a clock — compose, never replace. `??` here
+    // meant the default timeout never applied, because every desktop tool passes extra.signal.
+    const signal = composeWithTimeout(options.signal, this.timeoutMs);
 
     try {
       const res = await this.fetchFn(this.url(route), {
@@ -371,6 +373,11 @@ export class ExternalApiClient {
   private url(route: string): string {
     return `${this.instance.baseUrl.replace(/\/$/, '')}${route}`;
   }
+}
+
+function composeWithTimeout(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
 function buildWorksheetByIdRoute(worksheetId: string): string {
