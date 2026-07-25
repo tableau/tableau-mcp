@@ -53,7 +53,7 @@ describe('binder encoding honesty — requested vs filled', () => {
     expect(result!.encodings).toEqual({ filled: ['size'], unfilled: ['color'] });
   });
 
-  it('reports NOTHING when every requested encoding is filled (happy path unchanged)', () => {
+  it('reports every requested encoding as filled when none are missing', () => {
     const result = classifyNoLlm(FULLY_SATISFIED_ASK, manifests, summarizeSchema(worldCupXml));
 
     expect(result).toEqual({
@@ -64,8 +64,8 @@ describe('binder encoding honesty — requested vs filled', () => {
         { slot_id: 'color', field: 'Goals' },
         { slot_id: 'tooltip', field: 'Goals' },
       ],
+      encodings: { filled: ['size', 'color', 'tooltip'], unfilled: [] },
     });
-    expect(result!.encodings).toBeUndefined();
   });
 
   it('does not read a cue out of a FIELD NAME (no false "you asked for color")', () => {
@@ -76,7 +76,9 @@ describe('binder encoding honesty — requested vs filled', () => {
     );
 
     expect(result).not.toBeNull();
-    expect(result!.encodings).toBeUndefined();
+    // The symbol map's required measure already drives size; neither cue-named field
+    // manufactures a color/tooltip request.
+    expect(result!.encodings).toEqual({ filled: ['size'], unfilled: [] });
   });
 
   it('the unfilled list matches what actually reached the workbook XML', async () => {
@@ -99,8 +101,7 @@ describe('binder encoding honesty — requested vs filled', () => {
           { templateSlots: manifest.slots },
         ),
         reportsColorUnfilled: bound.encodings?.unfilled.includes('color') === true,
-        // No report at all means every requested encoding was filled.
-        reportsColorFilled: bound.encodings?.unfilled.includes('color') !== true,
+        reportsColorFilled: bound.encodings?.filled.includes('color') === true,
       };
     };
 

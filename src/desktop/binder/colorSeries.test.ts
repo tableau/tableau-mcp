@@ -233,6 +233,7 @@ describe('classifyNoLlm — e4 trend color series', () => {
         { slot_id: 'order_date', field: 'Renewal Date' },
         { slot_id: 'sales', field: 'ARR' },
       ],
+      encodings: { filled: [], unfilled: [] },
     });
   });
 });

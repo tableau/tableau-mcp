@@ -2614,6 +2614,7 @@ describe('binder/classifyNoLlm — spatial mark-cue tie-break ordering (W-635)',
         { slot_id: 'sales', field: 'Goals For' },
         { slot_id: 'color', field: 'Goals For' },
       ],
+      encodings: { filled: ['size', 'color'], unfilled: [] },
     });
   });
 
@@ -2650,6 +2651,7 @@ describe('binder/classifyNoLlm — spatial mark-cue tie-break ordering (W-635)',
         { slot_id: 'size', field: 'Goals For' },
         { slot_id: 'color', field: 'Goals For' },
       ],
+      encodings: { filled: ['size', 'color'], unfilled: [] },
     });
   });
 
@@ -2687,6 +2689,7 @@ describe('binder/classifyNoLlm — spatial mark-cue tie-break ordering (W-635)',
         { slot_id: 'size', field: 'Goals For' },
         { slot_id: 'color', field: 'Goals For' },
       ],
+      encodings: { filled: ['size', 'color'], unfilled: [] },
     });
   });
 
@@ -2793,6 +2796,7 @@ describe('binder/classifyNoLlm — spatial mark-cue tie-break ordering (W-635)',
         { slot_id: 'latitude', field: 'Latitude' },
         { slot_id: 'detail1', field: 'Country Code' },
       ],
+      encodings: { filled: [], unfilled: [] },
     });
     // Never a 'sales'/size binding invented from an unnamed measure.
     expect(cls!.bindings.some((b) => b.slot_id === 'sales' || b.slot_id === 'size')).toBe(false);
@@ -2811,6 +2815,7 @@ describe('binder/classifyNoLlm — spatial mark-cue tie-break ordering (W-635)',
         { slot_id: 'latitude', field: 'Latitude' },
         { slot_id: 'detail1', field: 'Country Code' },
       ],
+      encodings: { filled: [], unfilled: [] },
     });
   });
 

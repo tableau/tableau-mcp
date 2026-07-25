@@ -184,6 +184,7 @@ describe('classifyNoLlm — optional symbol-map encodings', () => {
         { slot_id: 'color', field: 'Goals' },
         { slot_id: 'tooltip', field: 'Goals' },
       ],
+      encodings: { filled: ['size', 'color', 'tooltip'], unfilled: [] },
     });
   });
 
@@ -200,6 +201,7 @@ describe('classifyNoLlm — optional symbol-map encodings', () => {
         { slot_id: 'country', field: 'Country Code' },
         { slot_id: 'sales', field: 'Goals' },
       ],
+      encodings: { filled: ['size'], unfilled: [] },
     });
   });
 
@@ -217,6 +219,7 @@ describe('classifyNoLlm — optional symbol-map encodings', () => {
         { slot_id: 'sales', field: 'Goals' },
         { slot_id: 'color', field: 'Goals Against' },
       ],
+      encodings: { filled: ['size', 'color'], unfilled: [] },
     });
   });
 
@@ -235,6 +238,7 @@ describe('classifyNoLlm — optional symbol-map encodings', () => {
           { slot_id: 'country', field: 'Country' },
           { slot_id: 'sales', field },
         ],
+        encodings: { filled: ['size'], unfilled: [] },
       });
     },
   );

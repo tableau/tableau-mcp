@@ -3100,15 +3100,16 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
   });
 
-  it('a reworded ask that binds the same chart reuses the sheet instead of building a second one', async () => {
+  it('a repeated ask reuses the sheet, then its guided target rebuild applies', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
     });
+    const ask = 'bar chart of Sales by Region';
 
     const first = body(
       await getToolResult({
         session: '1',
-        ask: REWORDED_TITLES[0],
+        ask,
         auto_apply: true,
         getExecutor,
       }),
@@ -3116,35 +3117,51 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     expect(first.applied).toBe(true);
     expect(first.sheet_name).toBe('Sales by Region');
 
-    // Same chart, new words: identical bound args, only the ask-derived title differs.
-    bindReturning(retitled(REWORDED_TITLES[1]));
-    const second = body(
-      await getToolResult({
-        session: '1',
-        ask: REWORDED_TITLES[1],
-        auto_apply: true,
-        getExecutor,
-      }),
-    );
+    // The same ask is deduplicated and guides the caller to rebuild the remembered sheet.
+    const secondResult = await getToolResult({
+      session: '1',
+      ask,
+      auto_apply: true,
+      getExecutor,
+    });
+    const second = body(secondResult);
 
     expect(second.reused).toBe(true);
-    expect(second.applied).toBe(true);
+    expect(second.applied).toBe(false);
     expect(second.sheet_name).toBe('Sales by Region');
     expect(second.guidance).toContain('still present by name');
-    // The loop cost is the extra call, so the reuse must be terminal.
-    expect(second.guidance).toContain('no further tool calls needed');
+    expect(second.guidance).toContain('target_worksheet');
+    expect(second.guidance).not.toContain('no further tool calls needed');
+    expect(
+      (secondResult.structuredContent as { nextAction: { kind: string; label: string } })
+        .nextAction,
+    ).toMatchObject({ kind: 'prefill', label: expect.stringContaining('Rebuild') });
 
-    // No second sheet was injected and no second apply reached Desktop.
-    expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(1);
-    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    const thirdResult = await getToolResult({
+      session: '1',
+      ask,
+      auto_apply: true,
+      target_worksheet: 'Sales by Region',
+      getExecutor,
+    });
+    const third = body(thirdResult);
+
+    expect(thirdResult.content[0]).not.toMatchObject({
+      type: 'text',
+      text: expect.stringContaining('Blocked:'),
+    });
+    expect(third.applied).toBe(true);
+    expect(third.reused).toBeUndefined();
+    expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(2);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
   });
 
-  it('does not claim unchanged fields or settings when only the remembered sheet name still exists', async () => {
+  it('rebuilds when the events anchor advanced after the remembered sheet was built', async () => {
     const userEditedWorkbook = INJECTED_RANKING_WORKBOOK_XML.replace(
       '<rows>[Superstore].[none:Region:nk]</rows>',
       '<rows>[Superstore].[none:Category:nk]</rows>',
     );
-    const { getExecutor } = setupAutoApplyMocks({
+    const { applyWorkbookDocument, getEvents, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
       workbookReads: [XML, userEditedWorkbook],
     });
@@ -3156,6 +3173,23 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
       getExecutor,
     });
 
+    getEvents.mockImplementation(({ sinceSequence }: { sinceSequence?: number }) =>
+      sinceSequence === undefined
+        ? Promise.resolve(
+            Ok({
+              events: [
+                {
+                  sequence: 42,
+                  type: 'doc:field-added-event',
+                  timestamp: '2026-07-25T12:00:00Z',
+                },
+              ],
+              latest_sequence: 42,
+              count: 1,
+            }),
+          )
+        : Promise.resolve(Ok({ events: [], latest_sequence: 42, count: 0 })),
+    );
     bindReturning(retitled(REWORDED_TITLES[1]));
     const second = body(
       await getToolResult({
@@ -3166,9 +3200,47 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
       }),
     );
 
+    expect(second.reused).toBeUndefined();
+    expect(second.applied).toBe(true);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports calc writes honestly when the sheet itself is reused', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+      workbookReads: [CALC_BASE_XML, CALC_BASE_XML, CALC_BASE_XML, CALC_READBACK_XML],
+    });
+
+    await getToolResult({
+      session: '1',
+      ask: REWORDED_TITLES[0],
+      auto_apply: true,
+      getExecutor,
+    });
+    bindReturning(retitled(REWORDED_TITLES[1]));
+    const second = body(
+      await getToolResult({
+        session: '1',
+        ask: REWORDED_TITLES[1],
+        auto_apply: true,
+        calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+        getExecutor,
+      }),
+    );
+
+    const reuseReceipt = second.receipt as {
+      did: string[];
+      didNot: string[];
+      unverified: string[];
+    };
     expect(second.reused).toBe(true);
-    expect(second.guidance).not.toContain('fields');
-    expect(second.guidance).not.toContain('settings');
+    expect(second.applied).toBe(false);
+    expect(second.authored_calcs).toEqual(['Margin']);
+    expect(reuseReceipt.did).toContain('authored calcs: Margin');
+    expect(reuseReceipt.didNot.join(' ')).not.toContain('nothing was applied on this call');
+    // One sheet apply plus one calc-document write; no duplicate sheet apply.
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
   });
 
   it('holds across a run of rewordings — the third and fourth restatement reuse too', async () => {
@@ -3423,13 +3495,14 @@ describe('bind-template — reports what it actually built', () => {
     // ...and the concrete call that fixes it, on THIS sheet.
     expect(guidance).toContain('add-field');
     expect(guidance).toContain("encodingType:'color'");
+    expect(guidance).toContain('apply-worksheet');
     expect(guidance).toContain('Sales by Region');
     // The measured failure mode is the model re-wording the same ask at bind-template.
     expect(guidance).toContain('Do NOT call bind-template again');
     // The machine-readable half must point at the same action.
     expect(
       (result.structuredContent as { nextAction: { label: string } }).nextAction.label,
-    ).toContain('color');
+    ).toContain('apply-worksheet');
   });
 
   it('reports the filled and unfilled encodings in the body', async () => {
@@ -3749,8 +3822,26 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     });
     const receipt = terminalReceipt(result);
 
-    expect(receipt.did).not.toContain('bound every encoding the ask named (no unfilled slots)');
+    expect(receipt.did).not.toContain('bound every encoding named in the binder encoding report');
     expect(receipt.unverified.join(' ')).toContain('encoding analysis did not run');
+  });
+
+  it('a complete encoding analysis earns the positive receipt and no did-not-run warning', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: { ...boundResult, encodings: { filled: ['size', 'color'], unfilled: [] } },
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'symbol map of Sales by State, sized and colored by Sales',
+      auto_apply: true,
+      getExecutor,
+    });
+    const receipt = terminalReceipt(result);
+
+    expect(receipt.did).toContain('bound every encoding named in the binder encoding report');
+    expect(receipt.unverified.join(' ')).not.toContain('encoding analysis did not run');
   });
 
   it('names a skipped splice warning as work left undone', async () => {

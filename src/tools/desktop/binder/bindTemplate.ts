@@ -33,6 +33,7 @@ import {
   publicReadbackVerificationResult,
   verifyPostApplyWorksheetReadback,
 } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
+import { resolveDerivation } from '../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import { extractSheetXml } from '../../../desktop/metadata/sheets.js';
@@ -93,8 +94,8 @@ import { proposalSchema } from './proposalSchema.js';
 import { proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
-  session: z.string().optional(),
-  ask: z.string().describe("The user's request, verbatim — do not paraphrase."),
+  session: z.string().optional().describe('Desktop process ID; omit for pinned/only instance.'),
+  ask: z.string().describe('User request, verbatim.'),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
   auto_apply: z.boolean().optional(),
@@ -104,9 +105,7 @@ const paramsSchema = {
   target_worksheet: z
     .string()
     .optional()
-    .describe(
-      'Existing sheet to rebuild in place (see list-worksheets). Omit and a NEW sheet is created.',
-    ),
+    .describe('A named worksheet to rebuild; omit to create one.'),
   calcs: z
     .array(
       z.object({
@@ -161,16 +160,17 @@ type AppliedFastPathResult = {
 
 /**
  * Returned INSTEAD of building a second sheet identical to one this session already built.
- * Deliberately shaped as a success (`status:'bound'`, `applied:true`) and marked terminal:
- * the chart the caller asked for IS applied and on screen, so reporting anything else would
- * be untrue and would invite another call.
+ * Presence-by-name is not enough evidence to claim the remembered sheet is still complete,
+ * so reuse is non-terminal and offers an explicit rebuild.
  */
 type ReusedSheetResult = {
   status: 'bound';
-  applied: true;
+  applied: false;
   reused: true;
+  authored_calcs?: string[];
   sheet_name: string;
   guidance: string;
+  receipt: ReturnType<typeof receipt>;
 };
 
 type BlockedBindTemplateResult = {
@@ -513,7 +513,8 @@ function buildWaterfallDiscoveryGuidance(
 
 /**
  * The ask named an encoding this bind could not fill. Name it, say the sheet is missing it,
- * and name the ONE call that finishes it on the sheet that already exists. It must point
+ * and name the two-call edit/apply sequence that finishes it on the sheet that already exists.
+ * It must point
  * AWAY from bind-template: the measured failure mode is the model asking again in other
  * words (55% of production bind traces rebind the same worksheet), rebuilding the same chart.
  */
@@ -523,24 +524,25 @@ function appendUnfilledEncodingGuidance(
   encodings: EncodingReport,
 ): string {
   const missing = encodings.unfilled.join(' and ');
-  const calls = encodings.unfilled
+  const addFieldCalls = encodings.unfilled
     .map(
       (role) =>
         `add-field{worksheetName:'${sheetName}',target:'encoding',encodingType:'${role}',columnRef:<field>}`,
     )
     .join(', then ');
+  const applyCall = `apply-worksheet{worksheetName:'${sheetName}',worksheetFile:<path returned by add-field>}`;
   const filled = encodings.filled.length > 0 ? encodings.filled.join(', ') : 'none';
   return (
     `${receipt} INCOMPLETE — the ask asked for ${missing}, and this bind did NOT fill it: ` +
     `the sheet is on screen without ${missing}. Encodings filled: ${filled}. ` +
-    `To finish, call ${calls}. ` +
+    `To finish, call ${addFieldCalls}, then ${applyCall}. ` +
     'Do NOT call bind-template again for this sheet; asking again in other words rebuilds the same chart.'
   );
 }
 
 /** Label for the same steer, short enough for the 60-char nextAction label bound. */
 function unfilledEncodingNextActionLabel(encodings: EncodingReport): string {
-  return `Add missing ${encodings.unfilled.join(', ')} with add-field`;
+  return `Add ${encodings.unfilled.join(', ')}, then apply-worksheet`;
 }
 
 function appendWaterfallDiscoveryGuidance(
@@ -726,13 +728,6 @@ function parseQualifiedColumnInstance(
   };
 }
 
-function derivationAttribute(deriv: string): string {
-  if (deriv === 'sum') return 'Sum';
-  if (deriv === 'usr') return 'User';
-  if (deriv === 'none') return 'None';
-  return deriv.charAt(0).toUpperCase() + deriv.slice(1);
-}
-
 function typeForRole(role: string): string {
   if (role === 'qk') return 'quantitative';
   if (role === 'ok') return 'ordinal';
@@ -771,7 +766,7 @@ function ensureSortByColumnDependency(
   }
   if (!instanceDeclared) {
     declarations.push(
-      `<column-instance column='[${escapeXmlAttribute(columnName)}]' derivation='${derivationAttribute(
+      `<column-instance column='[${escapeXmlAttribute(columnName)}]' derivation='${resolveDerivation(
         parsed.deriv,
       )}' name='${escapeXmlAttribute(parsed.instanceName)}' pivot='key' type='${typeForRole(
         parsed.role,
@@ -841,7 +836,7 @@ function ensureFilterColumnDependency(
   }
   if (!instanceDeclared) {
     declarations.push(
-      `<column-instance column='[${escapeXmlAttribute(columnName)}]' derivation='${derivationAttribute(
+      `<column-instance column='[${escapeXmlAttribute(columnName)}]' derivation='${resolveDerivation(
         parsed.deriv,
       )}' name='${escapeXmlAttribute(parsed.instanceName)}' pivot='key' type='${typeForRole(
         parsed.role,
@@ -1393,10 +1388,6 @@ async function performAutoApply({
                   ? ['bound every encoding named in the binder encoding report']
                   : []),
               ],
-              // Splice warnings are emitted only at branches that skipped requested work.
-              // Mirroring those observed warnings prevents an empty didNot from contradicting
-              // the result body.
-              didNot: spliced.warnings,
               unverified: [
                 ...(res.encodings === undefined
                   ? [
@@ -1514,33 +1505,43 @@ function rememberedSheetStillPresent({
   }
 }
 
-function reusedSheetResult(remembered: AppliedSheetRecord): StructuredBindTemplateToolResult {
+function reusedSheetResult(
+  remembered: AppliedSheetRecord,
+  authoredCalcs: string[],
+): StructuredBindTemplateToolResult {
+  const reuseReceipt = receipt({
+    did: [
+      `matched this ask to the sheet "${remembered.sheetName}" this session already applied (template ${remembered.template})`,
+      ...(authoredCalcs.length > 0 ? [`authored calcs: ${authoredCalcs.join(', ')}`] : []),
+    ],
+    didNot:
+      authoredCalcs.length > 0
+        ? ['rebuild the remembered sheet — no second copy was created']
+        : ['touch the workbook — nothing was applied on this call'],
+    // rememberedSheetStillPresent() only confirms that a worksheet of that NAME is still in
+    // the document (classifyWorksheetReplaceTarget). Whether its fields still match the
+    // ask is never re-derived, so a user edit that emitted no observable event is invisible.
+    unverified: [
+      `whether "${remembered.sheetName}" still holds those fields — only its presence by name was confirmed`,
+    ],
+  });
   return withNextAction(
     {
       status: 'bound',
-      applied: true,
+      applied: false,
       reused: true,
+      ...(authoredCalcs.length > 0 ? { authored_calcs: authoredCalcs } : {}),
       sheet_name: remembered.sheetName,
+      receipt: reuseReceipt,
       guidance:
+        renderAuthoredCalcPrefix(authoredCalcs, 'bound') +
         // Name presence is the only live fact checked here; claiming contents would make this
         // prose contradict the receipt after a user edits the remembered sheet.
         `The remembered sheet "${remembered.sheetName}" (template ${remembered.template}) ` +
-        `is still present by name, so no second copy was created. ${TERMINAL_GUIDANCE}`,
+        'is still present by name, so no second copy was created. To rebuild it, call ' +
+        `bind-template again with target_worksheet:"${remembered.sheetName}".`,
     },
-    doneNextAction(
-      receipt({
-        did: [
-          `matched this ask to the sheet "${remembered.sheetName}" this session already applied (template ${remembered.template})`,
-        ],
-        didNot: ['touch the workbook — nothing was applied on this call'],
-        // rememberedAppliedSheet() only confirms that a worksheet of that NAME is still in
-        // the document (classifyWorksheetReplaceTarget). Whether its fields still match the
-        // ask is never re-derived, so a user edit since the apply is invisible here.
-        unverified: [
-          `whether "${remembered.sheetName}" still holds those fields — only its presence by name was confirmed`,
-        ],
-      }),
-    ),
+    prefillNextAction('Rebuild sheet with target_worksheet'),
   );
 }
 
@@ -1895,16 +1896,22 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               signature: sheetSignature,
               workbookXml,
             });
-            if (remembered !== undefined) {
-              recordBindRecoveryAttemptFailOpen({
-                session: resolvedSession,
-                askKey,
-                outcome: 'bound',
-                currentProposalSignature,
-                reservationId: bindRecoveryReservationId,
-                terminal: true,
-              });
-              return new Ok(reusedSheetResult(remembered));
+            const changedSinceBuild =
+              remembered?.eventSequence !== undefined &&
+              eventsAnchor !== undefined &&
+              eventsAnchor > remembered.eventSequence;
+            if (changedSinceBuild) {
+              sessionRouteState.forgetAppliedSheet(resolvedSession, sheetSignature);
+            }
+            if (remembered !== undefined && !changedSinceBuild) {
+              try {
+                // A dedupe hit is not a recovery outcome. Drop the admission reservation so
+                // the guided target_worksheet follow-up is admitted as a fresh bind.
+                sessionRouteState.clearBindRecovery(resolvedSession, askKey);
+              } catch {
+                /* fail-open */
+              }
+              return new Ok(reusedSheetResult(remembered, authoredCalcCaptions));
             }
           }
 
@@ -1936,6 +1943,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               sessionRouteState.recordAppliedSheet(resolvedSession, sheetSignature, {
                 sheetName: appliedResult.sheet_name,
                 template: res.args.template_name,
+                ...(eventsAnchor !== undefined ? { eventSequence: eventsAnchor } : {}),
               });
             } catch {
               /* fail-open */

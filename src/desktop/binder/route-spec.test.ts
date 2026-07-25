@@ -59,14 +59,17 @@ describe('SHAPE_ROUTE — the typed ask-shape → route table', () => {
 });
 
 describe('detectCalcFirst — noun-less derived metrics only', () => {
-  it.each(['Show me gross margin %', 'gross margin', 'sales per employee'])(
-    'detects "%s" as calc-first',
-    (ask) => {
-      expect(detectCalcFirst(ask)).toBe(true);
-    },
-  );
+  it.each([
+    'Show me gross margin %',
+    'gross margin',
+    'sales per employee',
+    'revenue growth % by quarter',
+    'growth rate by month',
+  ])('detects "%s" as calc-first', (ask) => {
+    expect(detectCalcFirst(ask)).toBe(true);
+  });
 
-  it.each(['bar chart of sales', 'bar chart of margin', 'revenue by region'])(
+  it.each(['bar chart of sales', 'bar chart of margin', 'revenue by region', 'growth spurt'])(
     'does not detect "%s" as calc-first',
     (ask) => {
       expect(detectCalcFirst(ask)).toBe(false);

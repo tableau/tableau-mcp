@@ -179,9 +179,10 @@ export type BinderResult =
       /** Advisory avoid_when cautions matching the ask; present only when non-empty. Never blocks. */
       warnings?: string[];
       /**
-       * Encodings the ask asked for, split by what this bind actually filled. Present ONLY
-       * when at least one requested encoding went unfilled. A caller that applies this bind
-       * must not report completion while `unfilled` is non-empty.
+       * Encodings the classifier analyzed, split by what this bind actually filled. The
+       * deterministic classifier always supplies this report, including empty arrays when
+       * the ask named no optional encodings. A caller that applies this bind must not report
+       * completion while `unfilled` is non-empty.
        */
       encodings?: EncodingReport;
     }

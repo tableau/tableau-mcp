@@ -2390,9 +2390,8 @@ interface NoLlmClassification {
   /** Advisory provenance (e.g. a required geo slot auto-completed from the schema, W60). Present only when non-empty. */
   notes?: string[];
   /**
-   * Encodings the ask asked for, split by what the bind filled. Present ONLY when at least
-   * one requested encoding went UNFILLED — a bind that built everything asked for returns
-   * the exact same shape as before, so "done" stays the complete report on the happy path.
+   * Encodings the classifier analyzed, split by what the bind filled. Present whenever
+   * optional-encoding analysis ran, including empty arrays when no encoding cue was found.
    */
   encodings?: EncodingReport;
 }
@@ -2545,9 +2544,7 @@ export function classifyNoLlm(
         {
           template: latlon.template,
           bindings: latlonBindings,
-          ...(latlonEncodings.encodings.unfilled.length > 0
-            ? { encodings: latlonEncodings.encodings }
-            : {}),
+          encodings: latlonEncodings.encodings,
         },
         filterCandidates,
       );
@@ -2709,9 +2706,7 @@ export function classifyNoLlm(
       template: chosen.template,
       bindings,
       ...(rgb.provenance.length > 0 ? { notes: rgb.provenance } : {}),
-      ...(symbolMapEncodings.encodings.unfilled.length > 0
-        ? { encodings: symbolMapEncodings.encodings }
-        : {}),
+      encodings: symbolMapEncodings.encodings,
     },
     filterCandidates,
   );
