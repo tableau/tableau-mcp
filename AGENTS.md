@@ -52,7 +52,7 @@ When migrating or adding a Desktop tool, conform to the structure proven by #347
 
 ## Lockstep-core files
 
-The files listed in `lockstep.hashes.json` are copied byte-for-byte into `agent-to-tableau-desktop`, so the set must stay closed: every relative import from a listed file must resolve to another listed file. Change one and you must run `node scripts/check-lockstep.mjs --update`, commit the manifest with the change, and re-sync the consumer repo. To add a dependency, promote it into the manifest or inline the shape the core file reads — never let a core file import outside the set. Enforced by `scripts/check-lockstep.mjs` (hashes, in CI and `scripts/agent-check`) and `src/desktop/binder/lockstepSelfContained.test.ts` (imports).
+The files listed in `lockstep.hashes.json` are copied byte-for-byte into `agent-to-tableau-desktop`, so the set must stay closed: every relative import from a listed file must resolve to another listed file. Change one and you must run `node scripts/check-lockstep.mjs --update`, commit the manifest with the change, and re-sync the consumer repo. To add a dependency, promote it into the manifest or inline the shape the core file reads — never let a core file import outside the set. Enforced in THIS repo by `scripts/check-lockstep.mjs` (hashes, in CI and `scripts/agent-check`) and `src/desktop/binder/lockstepSelfContained.test.ts` (imports). The gate compares this repo to its own manifest only — it cannot see the consumer repo, so the cross-repo byte match itself is a manual step: after changing a core file, re-sync agent-to-tableau-desktop and verify its gate is green too.
 
 ## Sensitive files
 
