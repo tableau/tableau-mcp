@@ -21,7 +21,9 @@ const paramsSchema = {
   verbosity: z
     .enum(['slim', 'full'])
     .optional()
-    .describe('full (default): table + column_ref. slim: grouped ref parts, no column_ref.'),
+    .describe(
+      'full (default): table + column_ref. slim: caption/localName/type/role/datatype only.',
+    ),
 };
 
 class WorkbookFileNotFoundError extends McpToolError {
@@ -47,12 +49,6 @@ const typeAbbrev = (type: string): string => {
   return type;
 };
 
-const typePivot = (type: string): string => {
-  if (type === 'quantitative') return 'qk';
-  if (type === 'ordinal') return 'ok';
-  return 'nk';
-};
-
 const tableauDatatypeLabel = (datatype?: string): string => {
   switch (datatype) {
     case 'integer':
@@ -75,10 +71,7 @@ const tableauDatatypeLabel = (datatype?: string): string => {
 interface SlimField {
   caption: string;
   localName: string;
-  columnInstanceName: string;
-  derivation: string;
   type: string;
-  typePivot: string;
   role: string;
   datatype?: string;
   isAggregated?: boolean;
@@ -174,8 +167,12 @@ export const getListAvailableFieldsTool = (
 
           const fields = listAvailableFields(workbookXml);
 
-          // Slim: no table and no full column_ref, but keep the ingredients
-          // needed to construct [datasource].[derivation:LocalName:typePivot].
+          // Slim keeps only what a field-picking caller needs: caption (display
+          // name), localName (the field identifier), type/role/datatype, and the
+          // isAggregated flag. The column-ref ingredients (columnInstanceName,
+          // derivation, typePivot) are dropped — they only serve column-ref
+          // reconstruction, which slim callers don't do, and they dominate the
+          // per-field byte count on wide datasources.
           //
           // `listAvailableFields` spans ALL datasources (one flat array, each
           // field carrying its own datasource). Slim always GROUPS by
@@ -191,10 +188,7 @@ export const getListAvailableFieldsTool = (
               return {
                 caption: f.caption || localName,
                 localName,
-                columnInstanceName: f.columnInstanceName,
-                derivation: f.derivation,
                 type: f.type,
-                typePivot: typePivot(f.type),
                 role: f.role,
                 datatype: f.datatype,
                 ...(f.isAggregated ? { isAggregated: true } : {}),

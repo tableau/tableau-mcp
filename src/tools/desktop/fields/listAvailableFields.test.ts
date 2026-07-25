@@ -287,10 +287,7 @@ describe('listAvailableFieldsTool', () => {
           z.object({
             caption: z.string(),
             localName: z.string(),
-            columnInstanceName: z.string(),
-            derivation: z.string(),
             type: z.string(),
-            typePivot: z.string(),
             role: z.string(),
             datatype: z.string().optional(),
             isAggregated: z.boolean().optional(),
@@ -327,33 +324,31 @@ describe('listAvailableFieldsTool', () => {
     expect(groupFields[0]).toMatchObject({
       caption: 'Profit',
       localName: 'Profit',
-      columnInstanceName: '[sum:Profit:qk]',
-      derivation: 'Sum',
       type: 'quantitative',
-      typePivot: 'qk',
       role: 'measure',
       datatype: 'real',
     });
     expect(groupFields[1]).toMatchObject({
       caption: 'Category',
       localName: 'Category',
-      columnInstanceName: '[none:Category:nk]',
-      derivation: 'None',
       type: 'nominal',
-      typePivot: 'nk',
       role: 'dimension',
       datatype: 'string',
     });
-    // Slim keeps enough metadata to construct [datasource].[derivation:LocalName:typePivot],
-    // while omitting the full column_ref and less common verbose metadata.
+    // Slim carries only the field-picking essentials: the full column_ref and the
+    // column-ref-reconstruction ingredients (columnInstanceName/derivation/typePivot)
+    // are omitted.
     const first = groupFields[0] as Record<string, unknown>;
     expect(first.column_ref).toBeUndefined();
+    expect(first.columnInstanceName).toBeUndefined();
+    expect(first.derivation).toBeUndefined();
+    expect(first.typePivot).toBeUndefined();
     expect(first.name).toBeUndefined();
     expect(first.datasource).toBeUndefined();
     expect(first.semanticRole).toBeUndefined();
   });
 
-  it('verbosity=slim carries usr derivation metadata for already-aggregated calc fields', async () => {
+  it('verbosity=slim flags already-aggregated calc fields with isAggregated', async () => {
     const aggregatedCalcFields = [
       {
         ...mockFields[0],
@@ -379,14 +374,15 @@ describe('listAvailableFieldsTool', () => {
     expect(calc).toMatchObject({
       caption: 'Profit Ratio',
       localName: 'Calculation_123',
-      columnInstanceName: '[usr:Calculation_123:qk]',
-      derivation: 'User',
       type: 'quantitative',
-      typePivot: 'qk',
       role: 'measure',
       datatype: 'real',
       isAggregated: true,
     });
+    // Column-ref ingredients and the raw formula/column_ref are all omitted.
+    expect(calc.columnInstanceName).toBeUndefined();
+    expect(calc.derivation).toBeUndefined();
+    expect(calc.typePivot).toBeUndefined();
     expect(calc.column_ref).toBeUndefined();
     expect(calc.formula).toBeUndefined();
   });
@@ -486,10 +482,7 @@ describe('listAvailableFieldsTool', () => {
       {
         caption: 'Sales',
         localName: 'Sales',
-        columnInstanceName: '[sum:Sales:qk]',
-        derivation: 'Sum',
         type: 'quantitative',
-        typePivot: 'qk',
         role: 'measure',
         datatype: 'real',
       },
