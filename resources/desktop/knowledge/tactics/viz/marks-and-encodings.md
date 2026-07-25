@@ -451,6 +451,12 @@ Key requirements:
 - Mark class is `Automatic`
 - No lat/lon column defs needed — Tableau generates them
 
+### Choosing the geographic field
+
+When several fields could supply the same geographic role (country, state, or city), prefer the full name field over a code or ID. Tableau geocoding recognizes names and ISO-3166 country codes, not arbitrary sport or vendor code sets. If explicit latitude and longitude columns exist, prefer those over either field because they bypass geocoding.
+
+**Does NOT work:** assuming a code field is safe because most members render. In the 48-country World Cup data, FIFA codes `POR`, `SCO`, `ENG`, and `PAR` are not ISO-3166 codes and silently disappear from the map; the corresponding country names geocode all 48.
+
 ```xml
 <view>
   <datasources>
