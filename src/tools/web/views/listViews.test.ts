@@ -154,6 +154,46 @@ describe('listViewsTool', () => {
     expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledTimes(1);
   });
 
+  it('returns a page-exceeds-limit error without fetching when the page is past the cap', async () => {
+    // Cap of 2700: page 3 (offset 2000) is reachable, page 4 (offset 3000) is not.
+    const result = await getToolResult({
+      filter: 'name:eq:Overview',
+      pageNumber: 4,
+      maxResultLimit: 2700,
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('The requested page (4) exceeds the response limit');
+    expect(result.content[0].text).toContain('the highest page you can request is 3');
+    expect(mocks.mockQueryViewsForSiteData).not.toHaveBeenCalled();
+  });
+
+  it('still fetches the last reachable page under a cap that trims it', async () => {
+    const manyViews = Array.from({ length: MAX_PAGE_SIZE }, (_, i) => ({
+      ...mockView,
+      id: `view-${i}`,
+    }));
+    mocks.mockQueryViewsForSiteData.mockResolvedValue({
+      pagination: { pageNumber: 3, pageSize: MAX_PAGE_SIZE, totalAvailable: 2800 },
+      views: manyViews,
+    });
+
+    // Page 3 starts at offset 2000; cap 2700 leaves 700 reachable items and
+    // caps the reported total (min(2800, 2700)).
+    const result = await getToolResult({
+      filter: 'name:eq:Overview',
+      pageNumber: 3,
+      maxResultLimit: 2700,
+    });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed.data.length).toBe(700);
+    expect(parsed.totalAvailable).toBe(2700);
+    expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledTimes(1);
+  });
+
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
     mocks.mockQueryViewsForSiteData.mockRejectedValue(new Error(errorMessage));

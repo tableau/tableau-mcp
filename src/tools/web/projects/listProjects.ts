@@ -2,11 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Project } from '../../../sdks/tableau/types/project.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { getPage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
+import { getPage, getPageExceedsLimitMessage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateProjectsFilterString } from './projectsFilterUtils.js';
@@ -77,18 +78,25 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
     callback: async ({ filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateProjectsFilterString(filter) : undefined;
+      const maxResultLimit = configWithOverrides.getMaxResultLimit(listProjectsTool.name);
 
       return await listProjectsTool.logAndExecute({
         extra,
         args: {},
         callback: async () => {
+          const pageExceedsLimitMessage = getPageExceedsLimitMessage({
+            pageNumber,
+            maxResultLimit,
+          });
+          if (pageExceedsLimitMessage) {
+            return new PageExceedsLimitError(pageExceedsLimitMessage).toErr();
+          }
+
           return new Ok(
             await useRestApi({
               ...extra,
               jwtScopes: listProjectsTool.requiredApiScopes,
               callback: async (restApi) => {
-                const maxResultLimit = configWithOverrides.getMaxResultLimit(listProjectsTool.name);
-
                 return await getPage({
                   pageNumber,
                   limit,

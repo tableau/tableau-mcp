@@ -166,6 +166,48 @@ describe('listWorkbooksTool', () => {
     expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledTimes(1);
   });
 
+  it('should return a page-exceeds-limit error without fetching when the page is past the cap', async () => {
+    // Cap of 2700: page 3 (offset 2000) is reachable, page 4 (offset 3000) is not.
+    const extra = getMockRequestHandlerExtra();
+    extra.getConfigWithOverrides = vi
+      .fn()
+      .mockResolvedValue(new OverridableConfig({ MAX_RESULT_LIMIT: '2700' }));
+
+    const result = await getToolResult({ filter: 'name:eq:Superstore', pageNumber: 4 }, extra);
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('The requested page (4) exceeds the response limit');
+    expect(result.content[0].text).toContain('the highest page you can request is 3');
+    expect(mocks.mockQueryWorkbooksForSite).not.toHaveBeenCalled();
+  });
+
+  it('should still fetch the last reachable page under a cap that trims it', async () => {
+    mocks.mockQueryWorkbooksForSite.mockResolvedValue({
+      pagination: {
+        pageNumber: 3,
+        pageSize: 1000,
+        totalAvailable: 2800,
+      },
+      workbooks: makePageOfWorkbooks(1000),
+    });
+
+    const extra = getMockRequestHandlerExtra();
+    extra.getConfigWithOverrides = vi
+      .fn()
+      .mockResolvedValue(new OverridableConfig({ MAX_RESULT_LIMIT: '2700' }));
+
+    // Page 3 starts at offset 2000; cap 2700 leaves 700 reachable items and
+    // caps the reported total (min(2800, 2700)).
+    const result = await getToolResult({ filter: 'name:eq:Superstore', pageNumber: 3 }, extra);
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.data).toHaveLength(700);
+    expect(parsed.totalAvailable).toBe(2700);
+    expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledTimes(1);
+  });
+
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
     mocks.mockQueryWorkbooksForSite.mockRejectedValue(new Error(errorMessage));

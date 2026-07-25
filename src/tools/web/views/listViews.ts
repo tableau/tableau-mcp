@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -13,7 +14,7 @@ import {
 import { View } from '../../../sdks/tableau/types/view.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { getPage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
+import { getPage, getPageExceedsLimitMessage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateViewsFilterString } from './viewsFilterUtils.js';
@@ -95,17 +96,25 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
     callback: async ({ filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateViewsFilterString(filter) : undefined;
+      const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
 
       return await listViewsTool.logAndExecute({
         extra,
         args: {},
         callback: async () => {
+          const pageExceedsLimitMessage = getPageExceedsLimitMessage({
+            pageNumber,
+            maxResultLimit,
+          });
+          if (pageExceedsLimitMessage) {
+            return new PageExceedsLimitError(pageExceedsLimitMessage).toErr();
+          }
+
           return new Ok(
             await useRestApi({
               ...extra,
               jwtScopes: listViewsTool.requiredApiScopes,
               callback: async (restApi) => {
-                const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
                 const page = await getPage({
                   pageNumber,
                   limit,

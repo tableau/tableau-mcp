@@ -2,11 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { DataSource } from '../../../sdks/tableau/types/dataSource.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { getPage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
+import { getPage, getPageExceedsLimitMessage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateDatasourcesFilterString } from './datasourcesFilterUtils.js';
@@ -100,19 +101,24 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
     callback: async ({ filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
+      const maxResultLimit = configWithOverrides.getMaxResultLimit(listDatasourcesTool.name);
       return await listDatasourcesTool.logAndExecute({
         extra,
         args: { filter, limit },
-        callback: async () =>
-          new Ok(
+        callback: async () => {
+          const pageExceedsLimitMessage = getPageExceedsLimitMessage({
+            pageNumber,
+            maxResultLimit,
+          });
+          if (pageExceedsLimitMessage) {
+            return new PageExceedsLimitError(pageExceedsLimitMessage).toErr();
+          }
+
+          return new Ok(
             await useRestApi({
               ...extra,
               jwtScopes: listDatasourcesTool.requiredApiScopes,
               callback: async (restApi) => {
-                const maxResultLimit = configWithOverrides.getMaxResultLimit(
-                  listDatasourcesTool.name,
-                );
-
                 const page = await getPage({
                   pageNumber,
                   limit,
@@ -133,7 +139,8 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
                 return page;
               },
             }),
-          ),
+          );
+        },
         constrainSuccessResult: (page) => {
           const constrained = constrainDatasources({
             datasources: page.data,

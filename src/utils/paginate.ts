@@ -180,6 +180,50 @@ export async function getPage<T>(args: GetPageArgs<T>): Promise<GetPageResult<T>
   return { data: trimmed, totalAvailable: cappedTotalAvailable };
 }
 
+/**
+ * Determine whether a 1-based `pageNumber` is reachable given an optional
+ * `maxResultLimit` offset ceiling. A page is reachable iff the absolute
+ * (0-based) offset of its first item — `(pageNumber - 1) * MAX_PAGE_SIZE` — is
+ * below `maxResultLimit`. When there is no cap (`null`/omitted), every page is
+ * reachable.
+ *
+ * This exists because {@link getPage} would otherwise fetch a full server page
+ * for an out-of-range request and then trim every item off (its `serverAllowed`
+ * collapses to `0`), surfacing a misleading "no results were found" message
+ * even though `totalAvailable` is non-zero. Callers should run this check
+ * first and short-circuit with a clear "page exceeds the limit" response.
+ *
+ * Example: with `maxResultLimit: 2700`, pages 1–3 are reachable (page 3 starts
+ * at offset 2000 and returns 700 items), but page 4 (offset 3000) is not.
+ *
+ * @returns `null` when the page is reachable, or a human-readable message
+ *   explaining the valid page range when it is not.
+ */
+export function getPageExceedsLimitMessage({
+  pageNumber,
+  maxResultLimit,
+}: {
+  pageNumber?: number;
+  maxResultLimit?: number | null;
+}): string | null {
+  if (maxResultLimit == null) {
+    return null;
+  }
+
+  const page = pageNumber ?? 1;
+  const pageStartOffset = (page - 1) * MAX_PAGE_SIZE;
+  if (pageStartOffset < maxResultLimit) {
+    return null;
+  }
+
+  const maxReachablePage = Math.ceil(maxResultLimit / MAX_PAGE_SIZE);
+  return (
+    `The requested page (${page}) exceeds the response limit configured for this tool. ` +
+    `A maximum of ${maxResultLimit} results can be paged through (in pages of ${MAX_PAGE_SIZE}), ` +
+    `so the highest page you can request is ${maxReachablePage}.`
+  );
+}
+
 const pulsePaginateConfigSchema = z
   .object({
     limit: z.coerce.number().gt(0).optional(),

@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -13,7 +14,7 @@ import {
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { getPage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
+import { getPage, getPageExceedsLimitMessage, MAX_PAGE_SIZE } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateWorkbooksFilterString } from './workbooksFilterUtils.js';
@@ -89,20 +90,25 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
     callback: async ({ filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateWorkbooksFilterString(filter) : undefined;
+      const maxResultLimit = configWithOverrides.getMaxResultLimit(listWorkbooksTool.name);
 
       return await listWorkbooksTool.logAndExecute({
         extra,
         args: {},
         callback: async () => {
+          const pageExceedsLimitMessage = getPageExceedsLimitMessage({
+            pageNumber,
+            maxResultLimit,
+          });
+          if (pageExceedsLimitMessage) {
+            return new PageExceedsLimitError(pageExceedsLimitMessage).toErr();
+          }
+
           return new Ok(
             await useRestApi({
               ...extra,
               jwtScopes: listWorkbooksTool.requiredApiScopes,
               callback: async (restApi) => {
-                const maxResultLimit = configWithOverrides.getMaxResultLimit(
-                  listWorkbooksTool.name,
-                );
-
                 const page = await getPage({
                   pageNumber,
                   limit,

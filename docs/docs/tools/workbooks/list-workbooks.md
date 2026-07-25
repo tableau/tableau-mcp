@@ -31,16 +31,6 @@ Example: `name:eq:Superstore`
 
 <hr />
 
-### `pageNumber`
-
-Which 1000-item page of workbooks to fetch. This is a 1-based page index (page size is fixed at
-1000); when omitted it defaults to `1`. Increment `pageNumber` across calls to page through the
-full result set.
-
-Example: `2`
-
-<hr />
-
 ### `limit`
 
 The maximum number of workbooks to return **from the requested page**. Must be a positive
@@ -51,6 +41,21 @@ Example: `500`
 
 See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit),
 the overall cap on how many results can be paginated through across all pages.
+
+<hr />
+
+### `pageNumber`
+
+Which 1000-item page of workbooks to fetch. This is a 1-based page index (page size is fixed at
+1000); when omitted it defaults to `1`. Increment `pageNumber` across calls to page through the
+full result set.
+
+When a server-side [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
+is configured, only pages that fall within that cap are reachable. For example, with a limit of
+`2700` the highest page you can request is `3` (page 3 returns the final 700 items). Requesting a
+higher page returns an error describing the valid page range rather than an empty result.
+
+Example: `2`
 
 ## Example result
 

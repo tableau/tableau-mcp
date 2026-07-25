@@ -1,7 +1,13 @@
 import { Ok } from 'ts-results-es';
 
 import type { Pagination, PulsePagination } from '../sdks/tableau/types/pagination.js';
-import { getPage, paginate, paginateWithMetadata, pulsePaginate } from './paginate.js';
+import {
+  getPage,
+  getPageExceedsLimitMessage,
+  paginate,
+  paginateWithMetadata,
+  pulsePaginate,
+} from './paginate.js';
 
 describe('paginate', () => {
   beforeEach(() => {
@@ -624,6 +630,61 @@ describe('getPage', () => {
     );
 
     expect(getDataFn).not.toHaveBeenCalled();
+  });
+});
+
+// ----------------------------------------------------------------------------
+// getPageExceedsLimitMessage — reachability guard for a requested page
+// ----------------------------------------------------------------------------
+// A page is reachable iff its first item's absolute (0-based) offset,
+// (pageNumber - 1) * 1000, is below the configured maxResultLimit. Without
+// this up-front guard, getPage would fetch the page and then trim every item
+// off, surfacing a misleading "no results were found" message even though
+// totalAvailable is non-zero. Returns null when reachable, else an explanatory
+// message.
+describe('getPageExceedsLimitMessage', () => {
+  it('returns null when there is no maxResultLimit (uncapped)', () => {
+    expect(getPageExceedsLimitMessage({ pageNumber: 9999, maxResultLimit: null })).toBeNull();
+    expect(getPageExceedsLimitMessage({ pageNumber: 9999 })).toBeNull();
+  });
+
+  it('returns null for page 1 regardless of a positive cap', () => {
+    expect(getPageExceedsLimitMessage({ pageNumber: 1, maxResultLimit: 1 })).toBeNull();
+    expect(getPageExceedsLimitMessage({ maxResultLimit: 1 })).toBeNull(); // defaults to page 1
+  });
+
+  describe('maxResultLimit=2700 (the canonical example: page 3 ok, page 4 not)', () => {
+    const maxResultLimit = 2700;
+
+    it('allows page 3 (offset 2000 < 2700 — the cap will trim it to 700 items)', () => {
+      expect(getPageExceedsLimitMessage({ pageNumber: 3, maxResultLimit })).toBeNull();
+    });
+
+    it('rejects page 4 (offset 3000 >= 2700) with a message naming the max reachable page', () => {
+      const message = getPageExceedsLimitMessage({ pageNumber: 4, maxResultLimit });
+      expect(message).not.toBeNull();
+      expect(message).toContain('The requested page (4) exceeds the response limit');
+      expect(message).toContain('2700');
+      // ceil(2700 / 1000) = 3
+      expect(message).toContain('the highest page you can request is 3');
+    });
+  });
+
+  it('rejects the page whose start offset equals the cap exactly (boundary)', () => {
+    // maxResultLimit=2000, page 3 starts at offset 2000 === cap -> unreachable.
+    const message = getPageExceedsLimitMessage({ pageNumber: 3, maxResultLimit: 2000 });
+    expect(message).not.toBeNull();
+    // ceil(2000 / 1000) = 2
+    expect(message).toContain('the highest page you can request is 2');
+  });
+
+  it('allows the last reachable page when the cap is not a multiple of the page size', () => {
+    // maxResultLimit=2500: page 3 offset 2000 < 2500 reachable; page 4 offset 3000 not.
+    expect(getPageExceedsLimitMessage({ pageNumber: 3, maxResultLimit: 2500 })).toBeNull();
+    const message = getPageExceedsLimitMessage({ pageNumber: 4, maxResultLimit: 2500 });
+    expect(message).not.toBeNull();
+    // ceil(2500 / 1000) = 3
+    expect(message).toContain('the highest page you can request is 3');
   });
 });
 
