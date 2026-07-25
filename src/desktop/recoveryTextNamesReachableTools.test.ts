@@ -90,6 +90,15 @@ function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 }
 
+/**
+ * One compiled matcher per tool name, built once. Compiling these per string literal
+ * per module per reaching tool is what put this test within 3x of the CI timeout.
+ */
+const TOOL_PATTERNS: ReadonlyArray<readonly [string, RegExp]> = desktopToolNames.map((tool) => [
+  tool,
+  new RegExp(`(?<![\\w-])(?:tableau-)?${tool}(?![\\w-])`),
+]);
+
 /** Tool names quoted inside string literals in a module's source. */
 function toolNamesNamedIn(rawSource: string): Set<string> {
   const source = stripComments(rawSource);
@@ -99,12 +108,25 @@ function toolNamesNamedIn(rawSource: string): Set<string> {
   for (const match of source.matchAll(/'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g)) {
     const literal = match[1] ?? match[2] ?? '';
     if (literal.startsWith('.') || literal.startsWith('@')) continue;
-    for (const tool of desktopToolNames) {
-      if (new RegExp(`(?<![\\w-])(?:tableau-)?${tool}(?![\\w-])`).test(literal)) {
+    for (const [tool, pattern] of TOOL_PATTERNS) {
+      if (pattern.test(literal)) {
         named.add(tool);
       }
     }
   }
+  return named;
+}
+
+/**
+ * Analyse each module once, not once per served tool that reaches it. The served tools'
+ * import graphs overlap almost entirely, so without this the same file is read and
+ * scanned ~34 times.
+ */
+function toolNamesNamedInModule(module: string, memo: Map<string, Set<string>>): Set<string> {
+  const cached = memo.get(module);
+  if (cached) return cached;
+  const named = toolNamesNamedIn(readSource(module));
+  memo.set(module, named);
   return named;
 }
 
@@ -136,6 +158,7 @@ describe('recovery text names only tools the caller actually has', () => {
   it('names no tool outside the served profile, anywhere a served tool can reach', () => {
     const modules = toolNameToModule();
     const cache = new Map<string, Set<string>>();
+    const namedMemo = new Map<string, Set<string>>();
     const served = selectToolsForProfile(
       desktopToolFactories.map((factory) => factory(new DesktopMcpServer())),
       'dynamic-authoring',
@@ -150,7 +173,7 @@ describe('recovery text names only tools the caller actually has', () => {
       for (const module of reachableModules(entry, cache)) {
         const relativePath = relative(SRC_ROOT, module);
         if (WIRING.has(relativePath) || ALLOWED[relativePath]) continue;
-        for (const named of toolNamesNamedIn(readSource(module))) {
+        for (const named of toolNamesNamedInModule(module, namedMemo)) {
           if (DYNAMIC_AUTHORING_TOOL_PROFILE.has(named as never)) continue;
           const key = `${relativePath} names off-profile "${named}"`;
           if (!violations.has(key)) violations.set(key, `${key} (reached by ${toolName})`);
