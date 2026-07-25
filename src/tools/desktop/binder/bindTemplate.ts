@@ -33,6 +33,7 @@ import {
   type SortDirection,
 } from '../../../desktop/refine/refineWorksheet.js';
 import {
+  type AppliedSheetRecord,
   type BindRecoveryProposalContext,
   classifyBindProposalProgress,
   MAX_CONSECUTIVE_BIND_RECOVERY_BARE_RESUBMITS,
@@ -68,6 +69,7 @@ import { DesktopTool } from '../tool.js';
 // round-trips into a Call-2 `proposal` unchanged. The schema (incl. the watch-class
 // confidence-required + title-max-80 tightening) is SHARED with validate-proposal so the
 // two tools cannot drift — see proposalSchema.ts.
+import { appliedSheetSignature } from './appliedSheetSignature.js';
 import { proposalSchema } from './proposalSchema.js';
 import { proposalSignature } from './proposalSignature.js';
 
@@ -125,6 +127,20 @@ type AppliedFastPathResult = {
   guidance: string;
 };
 
+/**
+ * Returned INSTEAD of building a second sheet identical to one this session already built.
+ * Deliberately shaped as a success (`status:'bound'`, `applied:true`) and marked terminal:
+ * the chart the caller asked for IS applied and on screen, so reporting anything else would
+ * be untrue and would invite another call.
+ */
+type ReusedSheetResult = {
+  status: 'bound';
+  applied: true;
+  reused: true;
+  sheet_name: string;
+  guidance: string;
+};
+
 type BlockedBindTemplateResult = {
   status: 'blocked';
   reason:
@@ -139,6 +155,7 @@ type BlockedBindTemplateResult = {
 type BindTemplateToolResult =
   | BindTemplateToolResultBase
   | AppliedFastPathResult
+  | ReusedSheetResult
   | BlockedBindTemplateResult;
 type StructuredBindTemplateToolResult = StructuredResult<BindTemplateToolResult>;
 
@@ -1272,6 +1289,51 @@ function recordBindRecoveryAttemptFailOpen({
   }
 }
 
+/**
+ * The sheet this session already applied for `signature`, but ONLY if it is still in the
+ * live workbook we just read. A sheet the user deleted in Desktop must be rebuilt, so the
+ * stale record is dropped and the bind proceeds. Fail-open: any fault means "not remembered".
+ */
+function rememberedSheetStillPresent({
+  session,
+  signature,
+  workbookXml,
+}: {
+  session: string;
+  signature: string;
+  workbookXml: string;
+}): AppliedSheetRecord | undefined {
+  try {
+    const remembered = sessionRouteState.getAppliedSheet(session, signature);
+    if (remembered === undefined) {
+      return undefined;
+    }
+    if (classifyWorksheetReplaceTarget(workbookXml, remembered.sheetName) === 'not-found') {
+      sessionRouteState.forgetAppliedSheet(session, signature);
+      return undefined;
+    }
+    return remembered;
+  } catch {
+    return undefined;
+  }
+}
+
+function reusedSheetResult(remembered: AppliedSheetRecord): StructuredBindTemplateToolResult {
+  return withNextAction(
+    {
+      status: 'bound',
+      applied: true,
+      reused: true,
+      sheet_name: remembered.sheetName,
+      guidance:
+        `This chart is already built: sheet "${remembered.sheetName}" (template ` +
+        `${remembered.template}) holds exactly these fields and settings, so no second copy ` +
+        `was created. ${TERMINAL_GUIDANCE}`,
+    },
+    doneNextAction(),
+  );
+}
+
 function recordBoundRecoveryAfterFinalResult({
   session,
   askKey,
@@ -1566,6 +1628,33 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new Ok(base);
           }
 
+          // ── Duplicate-sheet reuse (the re-bind loop) ─────────────────────
+          // The binder titles a Call-1 sheet with the ask text itself, so a reworded ask
+          // for the SAME chart binds identical args under a new title and today builds a
+          // duplicate sheet. Signature is title-free, so the paraphrase collapses onto the
+          // sheet already applied. Only when the caller did NOT name a target: an explicit
+          // target_worksheet is an explicit instruction to rewrite that sheet (a reset of
+          // hand edits is legitimate) and always applies.
+          const sheetSignature = appliedSheetSignature(res.args);
+          if (target_worksheet === undefined) {
+            const remembered = rememberedSheetStillPresent({
+              session: resolvedSession,
+              signature: sheetSignature,
+              workbookXml,
+            });
+            if (remembered !== undefined) {
+              recordBindRecoveryAttemptFailOpen({
+                session: resolvedSession,
+                askKey,
+                outcome: 'bound',
+                currentProposalSignature,
+                reservationId: bindRecoveryReservationId,
+                terminal: true,
+              });
+              return new Ok(reusedSheetResult(remembered));
+            }
+          }
+
           const autoApplyResult = await performAutoApply({
             res,
             base,
@@ -1580,6 +1669,20 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             manifest,
           });
           const appliedResult = autoApplyResult.result;
+          if (
+            'applied' in appliedResult &&
+            appliedResult.applied === true &&
+            typeof appliedResult.sheet_name === 'string'
+          ) {
+            try {
+              sessionRouteState.recordAppliedSheet(resolvedSession, sheetSignature, {
+                sheetName: appliedResult.sheet_name,
+                template: res.args.template_name,
+              });
+            } catch {
+              /* fail-open */
+            }
+          }
           recordBoundRecoveryAfterFinalResult({
             session: resolvedSession,
             askKey,
