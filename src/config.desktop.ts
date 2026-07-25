@@ -22,8 +22,9 @@ export class Config extends BaseConfig {
   /**
    * Session id (Desktop pid) the launching Tableau Desktop pinned via
    * `TABLEAU_DESKTOP_SESSION_ID`. When set, every session-scoped tool defaults to
-   * this instance and `list-instances` is not registered, so the agent never has to
-   * discover which Desktop to control. Ignored unless it is a non-blank numeric pid.
+   * this instance, so the agent never has to discover which Desktop to control. The pin
+   * is a default, not an invariant: `list-instances` stays registered and the agent may
+   * still target another open Desktop. Ignored unless it is a non-blank numeric pid.
    */
   desktopSessionId: string | undefined;
 

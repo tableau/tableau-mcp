@@ -28,7 +28,10 @@ export class ExternalClientApiUnavailableError extends Error {
 
   private static messageFor(sessionId: string | number, reason: DesktopUnavailableReason): string {
     switch (reason) {
-      // A pinned session hides list-instances, so this one must not tell the agent to call it.
+      // list-instances IS registered when pinned (server.desktop.test.ts asserts it), so
+      // this message withholds it on purpose: the pinned Desktop is the one the user
+      // launched from, and retargeting a dead pin at whatever else is open would apply
+      // their work to a stranger's workbook. Relaunching is the only safe reconnect.
       case 'pinned-unreachable':
         return `${PINNED_DESKTOP_UNREACHABLE_MESSAGE} Pinned PID: ${sessionId}. ${CACHED_XML_WARNING}`;
       case 'stale-session':
