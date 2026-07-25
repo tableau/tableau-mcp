@@ -3,6 +3,7 @@
  * Note: Ordering matters for all field operations
  */
 
+import { resolveDerivation } from '../derivations.js';
 import { parseColumnInstanceRef, parseDatasourceQualifiedColumnRef } from './field-resolver.js';
 import { emitFieldRewrite } from './field-rewrite-listener.js';
 import { normalizeArray, parseXML, serializeXML } from './parser.js';
@@ -454,43 +455,14 @@ function serializeShelfValue(fields: string[]): string {
 }
 
 /**
- * Map lowercase derivation abbreviations to proper-case derivation names
- * Column-instance names use lowercase (e.g., [ctd:Field:qk]) but derivation attributes use proper case (CountD)
+ * Map a lowercase derivation abbreviation to its canonical derivation name.
+ * Column-instance names use lowercase (e.g. [ctd:Field:qk]); derivation attributes
+ * use the canonical long form (CountD). Resolution lives in one table — see
+ * `src/desktop/derivations.ts` — and an unrecognized prefix throws rather than
+ * being echoed into the attribute.
  */
 function mapDerivationToProperCase(abbrev: string): string {
-  const derivationMap: Record<string, string> = {
-    none: 'None',
-    sum: 'Sum',
-    avg: 'Avg',
-    min: 'Min',
-    max: 'Max',
-    count: 'Count',
-    ctd: 'CountD', // Count Distinct
-    countd: 'CountD',
-    usr: 'User',
-    user: 'User',
-    median: 'Median',
-    stdev: 'Stdev',
-    stdevp: 'StdevP',
-    var: 'Var',
-    varp: 'VarP',
-    attr: 'Attr',
-    // Discrete date parts. Without these, a ref like [mn:Order Date:ok] was
-    // written with derivation="mn" (invalid), so Tableau silently coerced the
-    // pill back to a plain date — collapsing YoY/seasonal overlays into one line.
-    yr: 'Year',
-    qr: 'Quarter',
-    mn: 'Month',
-    wk: 'Week',
-    dy: 'Day',
-    // Truncated (continuous) date parts use the "<Part>-Trunc" form.
-    tyr: 'Year-Trunc',
-    tqr: 'Quarter-Trunc',
-    tmn: 'Month-Trunc',
-    twk: 'Week-Trunc',
-    tdy: 'Day-Trunc',
-  };
-  return derivationMap[abbrev.toLowerCase()] || abbrev;
+  return resolveDerivation(abbrev);
 }
 
 // Date-part derivations whose column-instance type must follow the ref's pivot

@@ -1,3 +1,4 @@
+import { invalidDerivationStringRule } from '../validation/rules/invalidDerivationString.js';
 import {
   addFieldToCols,
   addFieldToEncoding,
@@ -385,4 +386,54 @@ describe('moveFieldInEncoding', () => {
       moveFieldInEncoding(WORKSHEET_XML, 'color', '[Sample].[sum:Sales:qk]', 0),
     ).toThrow();
   });
+});
+
+describe('derivation round-trip: writer output must satisfy our own validator', () => {
+  // The closed loop this closes: the writer minted derivation="cnt" (no `cnt` key,
+  // so `|| abbrev` echoed the input), our own invalid-derivation-string rule rejected
+  // it, and the error named neither the cause nor the fix — so the agent's retry was
+  // byte-identical. The agent's [cnt:...] ref was CORRECT; we corrupted it.
+  const RT_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<worksheet name="Sheet 1">
+  <table>
+    <view>
+      <datasources>
+        <datasource name="Sample" caption="Sample Superstore"/>
+      </datasources>
+      <datasource-dependencies datasource="Sample">
+        <column name="[Sales]" datatype="real" role="measure" type="quantitative"/>
+        <column-instance name="[none:Sales:nk]" column="[Sales]" derivation="None" pivot="key" type="nominal"/>
+      </datasource-dependencies>
+    </view>
+    <rows>[Sample].[none:Sales:nk]</rows>
+  </table>
+</worksheet>`;
+
+  function derivationOf(xml: string, columnInstanceName: string): string | undefined {
+    return xml.match(
+      new RegExp(
+        `<column-instance[^>]*name="\\[${columnInstanceName}\\]"[^>]*derivation="([^"]*)"`,
+      ),
+    )?.[1];
+  }
+
+  it('maps [cnt:...] to derivation="Count" and survives invalid-derivation-string', () => {
+    const modified = addFieldToRows(RT_XML, '[Sample].[cnt:Sales:qk]');
+    expect(derivationOf(modified, 'cnt:Sales:qk')).toBe('Count');
+    expect(invalidDerivationStringRule.validate(modified)).toEqual([]);
+  });
+
+  it('maps [attr:...] to derivation="Attribute", never the look-alike "Attr"', () => {
+    const modified = addFieldToRows(RT_XML, '[Sample].[attr:Sales:qk]');
+    expect(derivationOf(modified, 'attr:Sales:qk')).toBe('Attribute');
+    expect(invalidDerivationStringRule.validate(modified)).toEqual([]);
+  });
+
+  it.each(['ctd', 'med', 'std', 'stp', 'vrp', 'wd', 'my', 'md', 'iqr', 'hr', 'mi', 'sc'])(
+    'maps the [%s:...] prefix to a canonical derivation the validator accepts',
+    (prefix) => {
+      const modified = addFieldToRows(RT_XML, `[Sample].[${prefix}:Sales:qk]`);
+      expect(invalidDerivationStringRule.validate(modified)).toEqual([]);
+    },
+  );
 });

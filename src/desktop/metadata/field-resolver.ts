@@ -24,6 +24,7 @@
  */
 import Fuse from 'fuse.js';
 
+import { DERIVATION_LONG_TO_SHORT } from '../derivations.js';
 import { listAvailableFields } from './field-builder.js';
 import { normalizeArray, parseXML } from './parser.js';
 import { AggregationType, type FieldReference } from './types.js';
@@ -179,24 +180,28 @@ function typeSuffixFor(type: string | undefined): string {
   return 'nk';
 }
 
+// Prefixes come from the one canonical table rather than being spelled out again:
+// this switch used to return 'count' and 'countdistinct', neither of which Tableau
+// writes. 'countdistinct' matched no derivation map at all, so it was echoed into
+// the derivation attribute and the pill silently lost its aggregation on load.
 function aggregationPrefix(agg: AggregationType): string {
   switch (agg) {
     case AggregationType.Sum:
-      return 'sum';
+      return DERIVATION_LONG_TO_SHORT.Sum;
     case AggregationType.Avg:
-      return 'avg';
+      return DERIVATION_LONG_TO_SHORT.Avg;
     case AggregationType.Min:
-      return 'min';
+      return DERIVATION_LONG_TO_SHORT.Min;
     case AggregationType.Max:
-      return 'max';
+      return DERIVATION_LONG_TO_SHORT.Max;
     case AggregationType.Count:
-      return 'count';
+      return DERIVATION_LONG_TO_SHORT.Count;
     case AggregationType.CountDistinct:
-      return 'countdistinct';
+      return DERIVATION_LONG_TO_SHORT.CountD;
     case AggregationType.User:
-      return 'usr';
+      return DERIVATION_LONG_TO_SHORT.User;
     default:
-      return 'none';
+      return DERIVATION_LONG_TO_SHORT.None;
   }
 }
 
