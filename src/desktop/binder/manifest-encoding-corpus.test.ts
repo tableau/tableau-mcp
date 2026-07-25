@@ -104,6 +104,30 @@ function businessSynonymSchema(measures: readonly string[], dimension = 'Region'
 </datasource></datasources></workbook>`;
 }
 
+function classifierSchema(
+  measures: readonly string[],
+  dimensions: readonly string[],
+  calculatedMeasures: readonly string[] = [],
+): string {
+  const columns = [
+    ...dimensions.map(
+      (dimension) =>
+        `<column name='[${dimension}]' role='dimension' type='nominal' datatype='string' />`,
+    ),
+    ...measures.map(
+      (measure) =>
+        `<column name='[${measure}]' role='measure' type='quantitative' datatype='real' />`,
+    ),
+    ...calculatedMeasures.map(
+      (measure, index) =>
+        `<column caption='${measure}' name='[Calculation_${index + 1}]' role='measure' type='quantitative' datatype='real'><calculation class='tableau' formula='1' /></column>`,
+    ),
+  ];
+  return `<?xml version='1.0'?><workbook><datasources><datasource name='Classifier'>
+  ${columns.join('\n  ')}
+</datasource></datasources></workbook>`;
+}
+
 /**
  * One geo level (country) plus a NON-geographic spare dimension. This is the schema in which
  * the optional geo slots (`state`, `city`) can honestly be shown to stay unbound: Superstore
@@ -1279,6 +1303,94 @@ describe('binder/manifest-encoding-corpus — business-synonym field resolution'
     const summary = summarizeSchema(businessSynonymSchema(['Profit']));
 
     expect(classifyNoLlm('Show me revenue by region', manifests, summary)).toBeNull();
+  });
+});
+
+describe('binder/manifest-encoding-corpus — deterministic replay coverage', () => {
+  it.each(['Show me revenue by customer.', 'Show me revenue by customers.'])(
+    'head noun binds the sole matching dimension in "%s"',
+    (ask) => {
+      const summary = summarizeSchema(classifierSchema(['Sales'], ['Customer Name']));
+
+      expect(classifyNoLlm(ask, manifests, summary)).toMatchObject({
+        template: 'magnitude-simple-bar',
+        bindings: [
+          { slot_id: 'category', field: 'Customer Name' },
+          { slot_id: 'measure', field: 'Sales' },
+        ],
+      });
+    },
+  );
+
+  it('explicit top-N reaches the ranking template before modifiers attach', () => {
+    const summary = summarizeSchema(classifierSchema(['Sales'], ['Customer Name']));
+
+    expect(classifyNoLlm('Show me top 10 customers by revenue.', manifests, summary)).toMatchObject({
+      template: 'ranking-ordered-bar',
+      bindings: [
+        { slot_id: 'region', field: 'Customer Name' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+      top_n: 10,
+    });
+  });
+
+  it('a lone revenue measure binds the KPI template', () => {
+    const summary = summarizeSchema(classifierSchema(['Sales'], []));
+
+    expect(classifyNoLlm('Show me revenue.', manifests, summary)).toMatchObject({
+      template: 'kpi-text',
+      bindings: [{ slot_id: 'value', field: 'Sales' }],
+    });
+  });
+
+  it('a lone calculated measure caption binds the KPI template', () => {
+    const summary = summarizeSchema(classifierSchema([], [], ['Gross Margin %']));
+
+    expect(classifyNoLlm('Show me gross margin %.', manifests, summary)).toMatchObject({
+      template: 'kpi-text',
+      bindings: [{ slot_id: 'value', field: 'Gross Margin %' }],
+    });
+  });
+
+  it('declines an ambiguous dimension head noun', () => {
+    const summary = summarizeSchema(
+      classifierSchema(['Revenue'], ['Customer Name', 'Customer Segment']),
+    );
+
+    expect(classifyNoLlm('Show me revenue by customer.', manifests, summary)).toBeNull();
+  });
+
+  it('declines plural-equivalent dimension heads that claim the same ask span', async () => {
+    const result = await bindTemplate({
+      ask: 'Show me a bar chart of sales by customers.',
+      workbookXml: classifierSchema(['Sales'], ['Customer Name', 'Customers Segment']),
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+  });
+
+  it('keeps the plural alias for a sole dimension head', async () => {
+    const result = await bindTemplate({
+      ask: 'Show me a bar chart of sales by customers.',
+      workbookXml: classifierSchema(['Sales'], ['Customer Name']),
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+  });
+
+  it('declines top products when more than one measure could supply the ranking', () => {
+    const summary = summarizeSchema(classifierSchema(['Sales', 'Profit'], ['Product Name']));
+
+    expect(classifyNoLlm('Show me top products.', manifests, summary)).toBeNull();
+  });
+
+  it('declines residual words after a resolvable measure', () => {
+    const summary = summarizeSchema(classifierSchema(['Sales'], []));
+
+    expect(classifyNoLlm('Show me revenue growth.', manifests, summary)).toBeNull();
   });
 });
 
