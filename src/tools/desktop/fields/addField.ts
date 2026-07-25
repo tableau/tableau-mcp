@@ -56,7 +56,7 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
     name: 'add-field',
     title,
     description:
-      'Place a field on a shelf (rows/cols/encoding); the manual path when no template binds.',
+      'Put a field on rows, cols, or a color/size/detail encoding; then apply-worksheet.',
     paramsSchema,
     annotations: {
       title,

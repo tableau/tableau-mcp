@@ -2,13 +2,13 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { readKnowledgeResource } from '../../../desktop/knowledge/index.js';
+import { readKnowledgeResource, readKnowledgeSections } from '../../../desktop/knowledge/index.js';
 import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
-  uri: z.string().describe('URI (expertise://tableau/{slug})'),
+  uri: z.string().describe('expertise://tableau/{slug}, +#section for a section'),
 };
 
 const toolTitle = 'Read Knowledge Resource';
@@ -19,7 +19,7 @@ export const getReadKnowledgeResourceTool = (
     server,
     name: 'read-knowledge-resource',
     title: toolTitle,
-    description: 'Read expertise by URI. Use search-knowledge to find URIs.',
+    description: 'Read expertise by URI; search-knowledge finds URIs.',
     paramsSchema,
     annotations: {
       title: toolTitle,
@@ -35,6 +35,18 @@ export const getReadKnowledgeResourceTool = (
         callback: async () => {
           const content = readKnowledgeResource(uri);
           if (content === null) {
+            // A bad #section is a different mistake from a bad module — name the sections
+            // this module actually has rather than sending the agent back to the URI list.
+            const hash = uri.indexOf('#');
+            const sections =
+              hash === -1
+                ? []
+                : readKnowledgeSections(uri.slice('expertise://tableau/'.length, hash));
+            if (sections.length > 0) {
+              return new ArgsValidationError(
+                `No section "${uri.slice(hash + 1)}" in ${uri.slice(0, hash)}.\n\nSections: ${sections.join(', ')}`,
+              ).toErr();
+            }
             return new ArgsValidationError(
               `Resource not found: ${uri}\n\nUse list-knowledge-resources to see available URIs.`,
             ).toErr();

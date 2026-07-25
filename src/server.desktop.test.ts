@@ -114,15 +114,15 @@ For a dynamic ask or a calc/derived field the data lacks (ratio, running total, 
 
 If ambiguity changes workbook content, call ask-user with urgency=blocking; stop.
 
-For current/existing sheet/chart/view/dashboard, edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort or author-* tool; a NEW chart on the current sheet = bind-template with target_worksheet. Never create new sheets unless asked.
+For current/existing sheet/chart/view/dashboard, edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort ONLY, add-field + apply-worksheet for a color/size/detail or rows/cols field, or an author-* tool; a NEW chart here = bind-template with target_worksheet. Never create new sheets unless asked.
 
-Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort. Use search-commands ONLY for unlisted commands.
+Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.
 
 Omit session for one Desktop; use list-instances when multiple are open.
 
 If preflight rejects apply, fix per FIX lines. Prefer file mode
 
-If NO native tool covers the asked shape, say so plainly — never invent or hand-author XML. Retrieving worksheet XML to feed the field tools (get-worksheet-xml -> add-field/apply-worksheet) is a sanctioned path, not hand-authoring. Whole-workbook XML surgery (get/apply workbook XML) lives behind TOOL_PROFILE=full, an operator opt-in the user can enable.`,
+If NO native tool covers the asked shape, say so plainly — never invent or hand-author XML. get-worksheet-xml -> add-field -> apply-worksheet is sanctioned. Whole-workbook XML surgery is behind TOOL_PROFILE=full, which the user can enable.`,
     );
   });
 
