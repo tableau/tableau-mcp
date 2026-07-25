@@ -43,6 +43,13 @@ describe('rewriteFieldReferences — raw-vs-escaped boundary (named contract)', 
     expect(out).not.toContain('R&D <Team>');
     expect(out).not.toContain('[Field]');
   });
+
+  it('parses a five-segment indexed table-calc instance without inventing a field name', () => {
+    const out = rewriteFieldReferences(xml, { Field: '[DS].[pcto:sum:Sales:qk:3]' }, 'DS');
+
+    expect(out).toContain('name="[Sales]"');
+    expect(out).not.toContain('name="[qk]"');
+  });
 });
 
 describe('rewriteFieldReferences — explicit base-name placeholders', () => {

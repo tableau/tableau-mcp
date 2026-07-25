@@ -131,12 +131,14 @@ export const getGetWorksheetXmlTool = (
                 bytes,
                 capBytes,
                 xml: worksheetXml,
+                applyTool: 'apply-worksheet',
+                pathParam: 'worksheetFile',
               }),
               file: cacheFile,
               instructions:
                 'This worksheet exceeds the inline cap. Use the cache read tool (with a worksheet ' +
                 'selector or startByte/endByte to read a slice), the cache write tool (same selector to ' +
-                'splice edits back), then apply-worksheet with mode=file. Do not request mode=inline.',
+                'splice edits back), then call apply-worksheet with worksheetFile set to this file path.',
             });
           }
 

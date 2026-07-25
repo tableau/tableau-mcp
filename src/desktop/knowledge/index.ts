@@ -93,7 +93,13 @@ export function readKnowledgeSections(slug: string): string[] {
 function extractSection(content: string, wanted: string): string | null {
   const lines = content.split('\n');
   const all = headings(lines);
-  const target = headingSlug(decodeURIComponent(wanted));
+  let decoded = wanted;
+  try {
+    decoded = decodeURIComponent(wanted);
+  } catch {
+    // A literal or malformed percent escape is still valid heading text.
+  }
+  const target = headingSlug(decoded);
   const index = all.findIndex((heading) => headingSlug(heading.text) === target);
   if (index === -1) return null;
 

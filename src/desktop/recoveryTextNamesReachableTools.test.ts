@@ -94,10 +94,10 @@ function stripComments(source: string): string {
  * One compiled matcher per tool name, built once. Compiling these per string literal
  * per module per reaching tool is what put this test within 3x of the CI timeout.
  */
-const TOOL_PATTERNS: ReadonlyArray<readonly [string, RegExp]> = desktopToolNames.map((tool) => [
-  tool,
-  new RegExp(`(?<![\\w-])(?:tableau-)?${tool}(?![\\w-])`),
-]);
+const TOOL_PATTERNS: ReadonlyArray<readonly [string, RegExp]> = desktopToolNames.map((tool) => {
+  const spellings = [tool, tool.replaceAll('-', '_')];
+  return [tool, new RegExp(`(?<![\\w-])(?:tableau[-_])?(?:${spellings.join('|')})(?![\\w-])`)];
+});
 
 /** Tool names quoted inside string literals in a module's source. */
 function toolNamesNamedIn(rawSource: string): Set<string> {
@@ -188,5 +188,9 @@ describe('recovery text names only tools the caller actually has', () => {
     for (const relativePath of Object.keys(ALLOWED)) {
       expect(() => readSource(resolve(SRC_ROOT, relativePath))).not.toThrow();
     }
+  });
+
+  it('recognizes underscore spellings as registered tool names', () => {
+    expect(toolNamesNamedIn("'execute_tableau_command'")).toContain('execute-tableau-command');
   });
 });

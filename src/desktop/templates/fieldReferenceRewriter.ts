@@ -139,15 +139,18 @@ export function rewriteFieldReferences(
   const normalizedFieldMapping = normalizeFieldMapping(fieldMapping, options?.templateSlots);
 
   // Parse a mapped column-instance value into the actual field info we write.
-  // Accepts [datasource].[derivation:fieldName:role] or [derivation:fieldName:role].
+  // Accepts [datasource].[derivation:fieldName:role] or [derivation:fieldName:role],
+  // with an optional trailing table-calc index after the role.
   // The first group is greedy so a table-calc chain ([pcto:cum:sum:Sales:qk], which
   // real Tableau writes) keeps its wrappers instead of being read as field "sum".
+  // Anchoring the role to Tableau's role markers prevents an optional trailing index
+  // ([pcto:sum:Sales:qk:3]) from being mistaken for the role and shifting the field to qk.
   const parseColumnInstance = (columnInstance: string): FieldInfo | null => {
     const strippedInstance = columnInstance.includes('].[')
       ? columnInstance.substring(columnInstance.indexOf('].[') + 2)
       : columnInstance;
 
-    const match = strippedInstance.match(/\[(.+):([^:]+):([^:\]]+)\]/);
+    const match = strippedInstance.match(/^\[(.+):([^:]+):(nk|ok|qk)(?::[^:\]]+)?\]$/);
     if (!match) {
       return null;
     }

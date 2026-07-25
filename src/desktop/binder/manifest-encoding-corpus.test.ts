@@ -931,6 +931,106 @@ const CUE_DEGRADATION: ReadonlyArray<{
     boundTemplate: 'spatial-choropleth-map',
     why: 'same spatial contention. The choropleth has no colour slot (colour IS the required measure), so a bind would have dropped the directive; the softer natural cue ("warmer colours") still binds and is covered in the matrix',
   },
+  {
+    base: 'connected scatterplot of Profit vs Sales by Customer Name and Region',
+    cued: 'connected scatterplot of Profit vs Sales by Customer Name and Region, top 5',
+    schema: 'superstore',
+    boundTemplate: 'connected-scatterplot',
+    why: 'the top-N cue pulls the ranking family into contention with the connected scatterplot',
+  },
+  {
+    base: 'scatter plot of Profit and Sales by Customer Name and Region',
+    cued: 'scatter plot of Profit and Sales by Customer Name and Region, top 5',
+    schema: 'superstore',
+    boundTemplate: 'correlation-scatter-plot-chart',
+    why: 'the top-N cue pulls the ranking family into contention with the scatter plot',
+  },
+  {
+    base: 'diverging bar chart of Profit and Sales by Sub-Category',
+    cued: 'diverging bar chart of Profit and Sales by Sub-Category, and show me the details when I hover over a mark',
+    schema: 'superstore',
+    boundTemplate: 'ranking-ordered-bar',
+    why: 'the long hover cue makes the existing ranking-bar fallback fail closed',
+  },
+  {
+    base: 'paired bar chart of Sales by Region over Order Date',
+    cued: 'paired bar chart of Sales by Region over Order Date, and show me the details when I hover over a mark',
+    schema: 'superstore',
+    boundTemplate: 'ranking-ordered-bar',
+    why: 'the long hover cue makes the existing ranking-bar fallback fail closed',
+  },
+  {
+    base: 'floating bar chart of Sales by Region and Sub-Category',
+    cued: 'floating bar chart of Sales by Region and Sub-Category, and show me the details when I hover over a mark',
+    schema: 'superstore',
+    boundTemplate: 'ranking-ordered-bar',
+    why: 'the long hover cue makes the existing ranking-bar fallback fail closed',
+  },
+];
+
+const REROUTED_CUES: ReadonlyArray<{
+  base: string;
+  cued: string;
+  schema: SchemaId;
+  fromTemplate: string;
+  toTemplate: string;
+  droppedFields: readonly string[];
+  why: string;
+}> = [
+  {
+    base: 'scatter plot of Profit and Sales by Customer Name and Region',
+    cued: 'scatter plot of Profit and Sales by Customer Name and Region, sized by Quantity',
+    schema: 'superstore',
+    fromTemplate: 'correlation-scatter-plot-chart',
+    toTemplate: 'correlation-bubble-chart',
+    droppedFields: ['Region'],
+    why: 'the size cue reroutes to the bubble chart and drops the requested Region field',
+  },
+  {
+    base: 'scatter plot of Profit and Sales by Customer Name and Region',
+    cued: 'scatter plot of Profit and Sales by Customer Name and Region, with warmer colours where Quantity is higher',
+    schema: 'superstore',
+    fromTemplate: 'correlation-scatter-plot-chart',
+    toTemplate: 'correlation-bubble-chart',
+    droppedFields: ['Region'],
+    why: 'the natural colour cue reroutes to the bubble chart and drops the requested Region field',
+  },
+  {
+    base: 'scatter plot of Profit and Sales by Customer Name and Region',
+    cued: 'scatter plot of Profit and Sales by Customer Name and Region. Put Quantity on Color.',
+    schema: 'superstore',
+    fromTemplate: 'correlation-scatter-plot-chart',
+    toTemplate: 'correlation-bubble-chart',
+    droppedFields: ['Region'],
+    why: 'the explicit colour cue reroutes to the bubble chart and drops the requested Region field',
+  },
+  {
+    base: 'bar code chart of Sales by Sub-Category, Country/Region and State/Province',
+    cued: 'bar code chart of Sales by Sub-Category, Country/Region and State/Province, top 5',
+    schema: 'superstore',
+    fromTemplate: 'distribution-bar-code-chart',
+    toTemplate: 'ranking-ordered-bar',
+    droppedFields: ['Country/Region', 'State/Province'],
+    why: 'the top-N cue reroutes to the ranking bar and drops both requested geo fields',
+  },
+  {
+    base: 'proportional stacked bar of Sales by Region and Category',
+    cued: 'proportional stacked bar of Sales by Region and Category, top 5',
+    schema: 'superstore',
+    fromTemplate: 'part-to-whole-stacked-bar-chart',
+    toTemplate: 'ranking-ordered-bar',
+    droppedFields: ['Category'],
+    why: 'the top-N cue reroutes to the ranking bar and drops the requested Category field',
+  },
+  {
+    base: 'stacked bar of Sales by Category and Sub-Category',
+    cued: 'stacked bar of Sales by Category and Sub-Category, top 5',
+    schema: 'superstore',
+    fromTemplate: 'part-to-whole-stacked-bar-chart',
+    toTemplate: 'ranking-ordered-bar',
+    droppedFields: ['Sub-Category'],
+    why: 'the top-N cue reroutes to the ranking bar and drops the requested Sub-Category field',
+  },
 ];
 
 let manifests: Map<string, TemplateManifest>;
@@ -1049,7 +1149,7 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
     });
   });
 
-  it('ww-ou-arrow is blocked by the compound-string-parse hazard, not by phrasing', () => {
+  it('ww-ou-arrow declares the compound-string-parse hazard that blocks deterministic binding', () => {
     // The one fails-closed verdict above whose mechanism we assert directly rather than
     // characterise, because the manifest declares it.
     expect(hasDeterministicPathBlockingHazard(manifests.get('ww-ou-arrow')!)).toBe(true);
@@ -1109,7 +1209,7 @@ describe('binder/manifest-encoding-corpus — derived invariants over the matrix
   }
 });
 
-describe('binder/manifest-encoding-corpus — a cue never removes a binding', () => {
+describe('binder/manifest-encoding-corpus — comparable same-template cue outcomes', () => {
   // THE 2.46.0 SHAPE, stated as an invariant. When a cue leaves the selected template
   // unchanged, its slot set must be a superset of the plain ask's: adding "in warmer
   // colours" may add an encoding, never drop one. A cue that re-routes to a different
@@ -1181,7 +1281,7 @@ describe('binder/manifest-encoding-corpus — the optional-slot surface', () => 
   );
 
   it.each(reachable.map((r) => [`${r.template}.${r.slot}`, r] as const))(
-    '%s fills on its cue',
+    '%s fills in its declared positive cases',
     (_label, row) => {
       for (const c of [row.fills, ...(row.alsoFills ?? [])]) {
         const result = classify(c.ask, c.schema);
@@ -1201,7 +1301,7 @@ describe('binder/manifest-encoding-corpus — the optional-slot surface', () => 
   );
 
   it.each(OPTIONAL_SLOTS.map((r) => [`${r.template}.${r.slot}`, r] as const))(
-    '%s stays unbound without its cue',
+    '%s stays unbound in its declared negative case',
     (_label, row) => {
       const result = classify(row.staysUnbound.ask, row.staysUnbound.schema);
       expect(result, row.staysUnbound.why).not.toBeNull();
@@ -1300,5 +1400,26 @@ describe('binder/manifest-encoding-corpus — cue degradation (fail-closed pins)
     // Fails closed, so the LLM propose path handles it. What must never happen is a silent
     // bind to some other template that drops the cue.
     expect(classify(row.cued, row.schema), row.why).toBeNull();
+  });
+});
+
+describe('binder/manifest-encoding-corpus — cue reroute pins', () => {
+  it.each(REROUTED_CUES.map((r) => [r.cued, r] as const))('%s', (_label, row) => {
+    const base = classify(row.base, row.schema);
+    expect(base, `the base ask must bind for this pin to mean anything: ${row.why}`).not.toBeNull();
+    expect(base!.template, row.why).toBe(row.fromTemplate);
+
+    const rerouted = classify(row.cued, row.schema);
+    expect(rerouted, row.why).not.toBeNull();
+    expect(rerouted!.template, row.why).toBe(row.toTemplate);
+
+    const baseFields = base!.bindings.map((binding) => binding.field);
+    const reroutedFields = rerouted!.bindings.map((binding) => binding.field);
+    for (const field of row.droppedFields) {
+      expect(baseFields, `${field} must be present before the reroute: ${row.why}`).toContain(
+        field,
+      );
+      expect(reroutedFields, row.why).not.toContain(field);
+    }
   });
 });

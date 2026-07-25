@@ -1,6 +1,5 @@
 import * as loggerModule from '../logging/logger.js';
 import {
-  buildApplyOverCapNote,
   buildInlineCapFileMessage,
   DEFAULT_INLINE_XML_MAX_BYTES,
   isOverInlineXmlCap,
@@ -50,6 +49,8 @@ describe('inlineXmlCap', () => {
         bytes: 40000,
         capBytes: 16384,
         xml,
+        applyTool: 'apply-workbook',
+        pathParam: 'workbookFile',
       });
       expect(message).toContain('40000');
       expect(message).toContain('16384');
@@ -64,6 +65,8 @@ describe('inlineXmlCap', () => {
         bytes: 40000,
         capBytes: 16384,
         xml,
+        applyTool: 'apply-workbook',
+        pathParam: 'workbookFile',
       });
       expect(message).toContain('bytes:');
       expect(message).toContain('Sales');
@@ -77,19 +80,14 @@ describe('inlineXmlCap', () => {
         bytes: 40000,
         capBytes: 16384,
         xml,
+        applyTool: 'apply-workbook',
+        pathParam: 'workbookFile',
       });
       expect(message).toContain('read-cached-xml');
       expect(message).toContain('write-cached-xml');
-      expect(message).toContain('mode=file');
-    });
-  });
-
-  describe('buildApplyOverCapNote', () => {
-    it('notes the size, cap, and the file-mode alternative without rejecting', () => {
-      const note = buildApplyOverCapNote(40000, 16384);
-      expect(note).toContain('40000');
-      expect(note).toContain('16384');
-      expect(note).toContain('mode=file');
+      expect(message).toContain('apply-workbook');
+      expect(message).toContain('workbookFile');
+      expect(message).not.toContain('mode=');
     });
   });
 
