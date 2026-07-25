@@ -2,6 +2,7 @@ import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/z
 import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
 import { ZodRawShape } from 'zod';
 
+import { desktopCallTimeoutMessage, isDesktopCallTimeout } from '../../desktop/callDeadline.js';
 import {
   currentEpisodeId,
   emitEpisodeEvent,
@@ -57,7 +58,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     });
 
     try {
-      const result = await callback();
+      const result = await raceDeadline(extra, callback);
       if (result.isOk()) {
         toolResult = getSuccessResult
           ? getSuccessResult(result.value)
@@ -98,14 +99,29 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       });
       return toolResult;
     } catch (error) {
+      const timedOut = isDesktopCallTimeout(error);
       log({
-        message: 'Tool execution failed',
+        message: timedOut
+          ? 'Tool execution exceeded the Desktop call deadline'
+          : 'Tool execution failed',
         level: 'error',
         logger: 'tool',
         data: error,
       });
-      await emitToolErrorEvent({ config: extra.config, sessionId, tool: this.name, error });
-      toolResult = getErrorResult(requestId, error);
+
+      if (timedOut) {
+        // Report the deadline in the agent's own words, not as a generic failure it can paper over.
+        const text = desktopCallTimeoutMessage({
+          budgetMs: error.budgetMs,
+          tool: this.name,
+          session: sessionId,
+        });
+        await emitToolErrorEvent({ config: extra.config, sessionId, tool: this.name, error: text });
+        toolResult = { isError: true, content: [{ type: 'text', text }] };
+      } else {
+        await emitToolErrorEvent({ config: extra.config, sessionId, tool: this.name, error });
+        toolResult = getErrorResult(requestId, error);
+      }
       await emitEpisodeEvent(extra.config, {
         type: 'tool_end',
         session_id: sessionId,
@@ -117,6 +133,26 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       return toolResult;
     }
   }
+}
+
+/**
+ * Runs the tool body against the per-call clock. A tool that forwards `extra.signal` aborts on
+ * its own; this race also covers a tool that awaits something the signal cannot interrupt.
+ */
+async function raceDeadline<T, Args extends undefined | ZodRawShapeCompat | AnySchema>(
+  extra: DesktopToolLogAndExecuteParams<T, Args>['extra'],
+  callback: DesktopToolLogAndExecuteParams<T, Args>['callback'],
+): ReturnType<DesktopToolLogAndExecuteParams<T, Args>['callback']> {
+  const { deadline } = extra;
+  if (!deadline) {
+    return await callback();
+  }
+
+  const work = callback();
+  // The loser keeps running; swallow its late rejection so a timeout never leaks unhandled.
+  void work.catch(() => undefined);
+
+  return await Promise.race([work, deadline.whenExpired()]);
 }
 
 function getErrorResult(requestId: RequestId, error: unknown): CallToolResult {

@@ -53,13 +53,76 @@ export function listKnowledgeResources(): KnowledgeResource[] {
   return _cache;
 }
 
+/** GitHub-style heading slug: "## Best Practices" -> "best-practices". */
+function headingSlug(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-');
+}
+
+/** Every heading in a document, as { level, text, lineIndex }. */
+function headings(lines: string[]): Array<{ level: number; text: string; line: number }> {
+  const out: Array<{ level: number; text: string; line: number }> = [];
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(/^(#{1,6})\s+(.*)$/);
+    if (match) out.push({ level: match[1].length, text: match[2].trim(), line: i });
+  }
+  return out;
+}
+
+/**
+ * The top-level section slugs of one knowledge module, in document order. Lets an agent name
+ * the section it wants (via a URI fragment) without paying for the whole file first. Only H1/H2
+ * are listed — the corpus mandates the same four H2s per module, so the list stays a few dozen
+ * bytes; a fragment can still address a deeper heading by slug.
+ */
+export function readKnowledgeSections(slug: string): string[] {
+  const content = readKnowledgeBySlug(slug);
+  if (content === null) return [];
+  return headings(content.split('\n'))
+    .filter((heading) => heading.level <= 2)
+    .map((heading) => headingSlug(heading.text));
+}
+
+/**
+ * One section of a document: its heading line through the line before the next heading of
+ * the same or a higher level. `wanted` matches either the heading slug or its literal text.
+ */
+function extractSection(content: string, wanted: string): string | null {
+  const lines = content.split('\n');
+  const all = headings(lines);
+  const target = headingSlug(decodeURIComponent(wanted));
+  const index = all.findIndex((heading) => headingSlug(heading.text) === target);
+  if (index === -1) return null;
+
+  const start = all[index];
+  const next = all.slice(index + 1).find((heading) => heading.level <= start.level);
+  return lines
+    .slice(start.line, next ? next.line : lines.length)
+    .join('\n')
+    .trimEnd();
+}
+
+/**
+ * Read a knowledge module. `expertise://tableau/<slug>` returns the whole file;
+ * `expertise://tableau/<slug>#<section>` returns just that section (the corpus's largest
+ * module is 33,543 bytes, and an agent usually needs one rule out of it). Returns null when
+ * the URI is malformed, the module is missing, or the fragment names no section.
+ */
 export function readKnowledgeResource(uri: string): string | null {
   const PREFIX = 'expertise://tableau/';
   if (!uri.startsWith(PREFIX)) return null;
-  const slug = uri.slice(PREFIX.length);
+  const rest = uri.slice(PREFIX.length);
+  const hash = rest.indexOf('#');
+  const slug = hash === -1 ? rest : rest.slice(0, hash);
+  const section = hash === -1 ? '' : rest.slice(hash + 1);
   if (!slug || slug.includes('..') || slug.includes('\\') || slug.startsWith('/')) return null;
 
-  return readKnowledgeBySlug(slug);
+  const content = readKnowledgeBySlug(slug);
+  if (content === null || !section) return content;
+  return extractSection(content, section);
 }
 
 export function clearKnowledgeCache(): void {
@@ -78,9 +141,16 @@ interface KnowledgeDoc {
 
 let _knowledgeDocs: KnowledgeDoc[] | null = null;
 let _knowledgeKeywordFuse: Fuse<KnowledgeDoc> | null = null;
-let _knowledgeFallbackFuse: Fuse<KnowledgeDoc> | null = null;
 let _knowledgeBroadNearestFuse: Fuse<KnowledgeDoc> | null = null;
 
+// Weights are raw exponents here, not normalized ratios — but unlike the command index, this
+// path never ranks on the fuse score directly. Every query is an extended-search include
+// (`'token`), so each per-key score is 0 and the record score collapses to EPSILON^(sum of
+// matched key weights / sqrt(field length)); the composite ranker below consumes it only as the
+// sub-1 tiebreaker `1 - avgFuseScore`. Scaling these weights UP therefore destroys the ranking
+// rather than sharpening it: measured over the 31 recovered agent queries, the tiebreaker holds
+// 121 distinct values of 142 at the weights below, 89 at 4x, 40 at 10x, and exactly 1 with
+// ignoreFieldNorm on. Leave them small.
 const knowledgeSearchKeys = [
   { name: 'searchTerms', weight: 0.3 },
   { name: 'tags', weight: 0.22 },
@@ -224,6 +294,7 @@ export interface KnowledgeHit {
   match: 'whole-string' | 'keyword' | 'nearest';
   mustReadUri?: string;
   instruction?: string;
+  sections?: string[];
 }
 
 export interface KnowledgeSearchResult {
@@ -235,8 +306,11 @@ export interface KnowledgeSearchResult {
 export const ZERO_HIT_NEAREST_MATCHES_NOTE =
   'hits is empty; nearestMatches contains the nearest keyword results, not exact hits.';
 
-const MUST_READ_INSTRUCTION = 'snippet is not the module — read this URI before authoring';
+const MUST_READ_INSTRUCTION =
+  'snippet is not the module — read this URI before authoring; append #<section> from sections to read one section instead of the whole module';
 
+// Only the top hit carries `sections` — it is the module the agent is told to read, and the
+// list costs a few hundred bytes against a module that can run past 30,000.
 function requireTopHitRead(hits: KnowledgeHit[]): KnowledgeHit[] {
   if (hits.length === 0) return hits;
   return [
@@ -244,21 +318,10 @@ function requireTopHitRead(hits: KnowledgeHit[]): KnowledgeHit[] {
       ...hits[0],
       mustReadUri: hits[0].uri,
       instruction: MUST_READ_INSTRUCTION,
+      sections: readKnowledgeSections(hits[0].slug),
     },
     ...hits.slice(1),
   ];
-}
-
-function ensureKnowledgeFallbackFuse(): Fuse<KnowledgeDoc> {
-  if (_knowledgeFallbackFuse) return _knowledgeFallbackFuse;
-  _knowledgeFallbackFuse = new Fuse(buildKnowledgeIndex(), {
-    keys: knowledgeSearchKeys,
-    threshold: 0.4,
-    ignoreLocation: true,
-    includeScore: true,
-    useExtendedSearch: true,
-  });
-  return _knowledgeFallbackFuse;
 }
 
 function ensureKnowledgeBroadNearestFuse(): Fuse<KnowledgeDoc> {
@@ -376,7 +439,7 @@ function searchKnowledgeByWholeString(query: string, limit: number): KnowledgeHi
   const q = query.trim();
   if (!q) return [];
 
-  return ensureKnowledgeFallbackFuse()
+  return ensureKnowledgeKeywordFuse()
     .search(q)
     .slice(0, Math.max(1, limit))
     .map((r) =>
@@ -392,7 +455,7 @@ function nearestKeywordMatches(query: string, limit: number, broaden = false): K
   const fallbackQuery = keywordFallbackQuery(query);
   if (!fallbackQuery) return [];
 
-  const nearestMatches = ensureKnowledgeFallbackFuse()
+  const nearestMatches = ensureKnowledgeKeywordFuse()
     .search(fallbackQuery)
     .slice(0, Math.min(5, Math.max(3, limit)))
     .map((r) =>
@@ -446,6 +509,5 @@ export function searchKnowledgeWithFallback(query: string, limit = 5): Knowledge
 export function _resetKnowledgeSearchCache(): void {
   _knowledgeDocs = null;
   _knowledgeKeywordFuse = null;
-  _knowledgeFallbackFuse = null;
   _knowledgeBroadNearestFuse = null;
 }

@@ -1,3 +1,4 @@
+import { resolveDerivation } from '../derivations.js';
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { createHash } from 'crypto';
 import * as xpath from 'xpath';
@@ -101,51 +102,14 @@ export interface TemplateSlotReference {
 }
 
 /**
- * CANONICAL short-form → long-form derivation map (adopted from A as the single
- * source of truth for this core). A column-instance NAME carries the lowercase
+ * Short-form → long-form derivation resolution lives in ONE table for the whole
+ * repo: `src/desktop/derivations.ts`. A column-instance NAME carries the lowercase
  * short code (`[sum:Sales:qk]`); the sibling `derivation` ATTRIBUTE carries the
- * capitalized long form (`Sum`, `Month-Trunc`). Writing a long form INTO an
- * instance name fails to bind in live Desktop (red pills / blank viz).
+ * canonical long form (`Sum`, `Month-Trunc`). Writing a long form INTO an instance
+ * name fails to bind in live Desktop (red pills / blank viz), and writing an
+ * unrecognized short code into the attribute makes Tableau silently rewrite the
+ * pill to None — so an unknown prefix throws here instead of being echoed onward.
  */
-const DERIVATION_SHORT_TO_LONG: Readonly<Record<string, string>> = {
-  // Aggregations
-  none: 'None',
-  sum: 'Sum',
-  avg: 'Avg',
-  cnt: 'Count',
-  count: 'Count',
-  cntd: 'CountD',
-  ctd: 'CountD',
-  countd: 'CountD',
-  median: 'Median',
-  attr: 'Attr',
-  min: 'Min',
-  max: 'Max',
-  stdev: 'Stdev',
-  stdevp: 'StdevP',
-  var: 'Var',
-  varp: 'VarP',
-  // Table calc / user
-  usr: 'User',
-  user: 'User',
-  // Discrete date parts
-  yr: 'Year',
-  qr: 'Quarter',
-  mn: 'Month',
-  wk: 'Week',
-  dy: 'Day',
-  hr: 'Hour',
-  mi: 'Minute',
-  sc: 'Second',
-  // Date truncations (continuous *-Trunc long forms)
-  tyr: 'Year-Trunc',
-  tqr: 'Quarter-Trunc',
-  tmn: 'Month-Trunc',
-  tmo: 'Month-Trunc',
-  twk: 'Week-Trunc',
-  tdy: 'Day-Trunc',
-};
-
 /**
  * Replace `{{DATASOURCE}}` placeholders AND template field names with actual
  * values, structurally (per reference class) over the parsed DOM.
@@ -174,23 +138,23 @@ export function rewriteFieldReferences(
   const doc = parser.parseFromString(templateXml, 'text/xml') as unknown as Document;
   const normalizedFieldMapping = normalizeFieldMapping(fieldMapping, options?.templateSlots);
 
-  const derivationMap = DERIVATION_SHORT_TO_LONG;
-
   // Parse a mapped column-instance value into the actual field info we write.
   // Accepts [datasource].[derivation:fieldName:role] or [derivation:fieldName:role].
+  // The first group is greedy so a table-calc chain ([pcto:cum:sum:Sales:qk], which
+  // real Tableau writes) keeps its wrappers instead of being read as field "sum".
   const parseColumnInstance = (columnInstance: string): FieldInfo | null => {
     const strippedInstance = columnInstance.includes('].[')
       ? columnInstance.substring(columnInstance.indexOf('].[') + 2)
       : columnInstance;
 
-    const match = strippedInstance.match(/\[([^:]+):([^:]+):([^\]]+)\]/);
+    const match = strippedInstance.match(/\[(.+):([^:]+):([^:\]]+)\]/);
     if (!match) {
       return null;
     }
 
     const [, derivShortRaw, actualFieldName, role] = match;
     const derivation = derivShortRaw.toLowerCase();
-    const derivationAttr = derivationMap[derivation] || derivShortRaw;
+    const derivationAttr = resolveDerivation(derivation);
     return { name: actualFieldName, derivation, derivationAttr, role };
   };
 

@@ -1,14 +1,17 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import levenshtein from 'fast-levenshtein';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
+import { parseDatasourceQualifiedColumnRef } from '../../../desktop/metadata/field-resolver.js';
 import { parseShelfValue } from '../../../desktop/metadata/fields.js';
 import {
   addFieldToCols,
   addFieldToEncoding,
   addFieldToRows,
+  listAvailableFields,
 } from '../../../desktop/metadata/index.js';
 import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
@@ -38,15 +41,86 @@ const ENCODING_TYPES = [
 /** Shelf / encoding a field can be added to. */
 const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
+/** One worked column ref, used in both the schema description and the rejection message. */
+const COLUMN_REF_EXAMPLE = '[Sample - Superstore].[sum:Sales:qk]';
+const MAX_COLUMN_SUGGESTIONS = 3;
+
+/**
+ * Nearest real column refs for a value that is not a column ref at all. The schema
+ * said only "Field.", so the agent sent bare names; restating the grammar back at it
+ * did not help. Name the refs that exist instead.
+ */
+function nearestColumnRefs(columnRef: string, workbookXml: string | undefined): string[] {
+  if (!workbookXml) {
+    return [];
+  }
+  let fields: ReturnType<typeof listAvailableFields>;
+  try {
+    fields = listAvailableFields(workbookXml);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(fields) || fields.length === 0) {
+    return [];
+  }
+  const normalize = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const needle = normalize(columnRef);
+  return fields
+    .map((field) => ({
+      ref: field.column_ref,
+      distance: levenshtein.get(needle, normalize(field.columnName ?? field.column_ref)),
+    }))
+    .sort((a, b) => a.distance - b.distance || a.ref.localeCompare(b.ref))
+    .slice(0, MAX_COLUMN_SUGGESTIONS)
+    .map(({ ref }) => ref);
+}
+
+function columnRefRejection(columnRef: string, workbookXml: string | undefined): string {
+  const suggestions = nearestColumnRefs(columnRef, workbookXml);
+  const next =
+    suggestions.length > 0
+      ? `Did you mean: ${suggestions.join(', ')}?`
+      : 'Call resolve-field with the field name to get the exact ref, or list-available-fields for every ref in the workbook.';
+  return `columnRef "${columnRef}" is not a column reference. Expected [Datasource].[derivation:Column:type], e.g. ${COLUMN_REF_EXAMPLE}. ${next}`;
+}
+
+// Every value here that the agent must OBTAIN somewhere else names the tool that hands it
+// over. Shipped Studio said only 'Session.' / 'Workbook.' / 'Fetched fresh.', so an agent
+// that wanted to add a colour encoding sent a WORKSHEET NAME as workbookFile, then cycled
+// session='pinned' / session omitted / session='x' against a contract no value satisfied:
+// 69 failed add-field calls, 591 seconds, one killed conversation.
 const paramsSchema = {
-  session: z.string().optional().describe('Session.'),
-  worksheetName: z.string().optional().describe('Fetched fresh.'),
-  worksheetFile: z.string().optional().describe('Cache path; stacks edits.'),
-  target: z.enum(FIELD_TARGETS).describe('Shelf.'),
-  columnRef: z.string().describe('Field.'),
-  encodingType: z.enum(ENCODING_TYPES).optional().describe('For encoding target.'),
-  index: z.number().optional().describe('Position.'),
-  workbookFile: z.string().optional().describe('Workbook.'),
+  session: z
+    .string()
+    .optional()
+    .describe(
+      'Omit — the pinned or only Desktop is used. Pass a list-instances pid to target another.',
+    ),
+  worksheetName: z
+    .string()
+    .optional()
+    .describe('Existing sheet name (see list-worksheets). Read live; returns a file path.'),
+  worksheetFile: z
+    .string()
+    .optional()
+    .describe(
+      'Path from an earlier add-field/remove-field; stack edits, then one apply-worksheet. Or omit and pass worksheetName.',
+    ),
+  target: z.enum(FIELD_TARGETS).describe('Rows shelf, cols shelf, or a mark encoding.'),
+  columnRef: z
+    .string()
+    .describe(
+      `Exact ref [Datasource].[derivation:Column:type], e.g. ${COLUMN_REF_EXAMPLE}. Not a bare name; get it from resolve-field.`,
+    ),
+  encodingType: z
+    .enum(ENCODING_TYPES)
+    .optional()
+    .describe('Mark channel when target=encoding (color, size, text...); required then.'),
+  index: z.number().optional().describe('0-based slot on the shelf; omit to append last.'),
+  workbookFile: z
+    .string()
+    .optional()
+    .describe('Workbook path from resolve-field or list-available-fields, never a sheet name.'),
 };
 
 const title = 'Add Field';
@@ -56,7 +130,7 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
     name: 'add-field',
     title,
     description:
-      'Place a field on a shelf (rows/cols/encoding); the manual path when no template binds.',
+      'Put a field on rows, cols, or a color/size/detail encoding; then apply-worksheet.',
     paramsSchema,
     annotations: {
       title,
@@ -161,6 +235,12 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
                 `index must be an integer in the range 0..${existingLength} for ${target}.`,
               ).toErr();
             }
+          }
+
+          // Checked here, not deeper down, because this is the only layer that can see
+          // the workbook and name the refs that DO exist.
+          if (!parseDatasourceQualifiedColumnRef(columnRef)) {
+            return new ArgsValidationError(columnRefRejection(columnRef, workbookXml)).toErr();
           }
 
           let modifiedXml: string;

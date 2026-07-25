@@ -9,8 +9,12 @@ import {
   type BindingProposal,
   bindTemplate,
   type Blocker,
+  buildLlmInput,
   DERIVATION_OVERRIDE_INSTRUCTION,
+  type EncodingReport,
   type EscalateReason,
+  type LlmProposeInput,
+  MAX_CLASSIFIABLE_FIELDS,
   resolveInSummary,
   type SchemaSummary,
   summarizeSchema,
@@ -20,19 +24,25 @@ import {
 } from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
-import { activateSheetBestEffort } from '../../../desktop/commands/workbook/activateSheet.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import {
   loadWorkbookXml,
   type LoadWorkbookXmlError,
 } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
+import {
+  publicReadbackVerificationResult,
+  verifyPostApplyWorksheetReadback,
+} from '../../../desktop/commands/workbook/loadWorksheetXml.js';
+import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
+import { extractSheetXml } from '../../../desktop/metadata/sheets.js';
 import {
   planSortByFieldOnCategoricalAxis,
   planTopN,
   type SortDirection,
 } from '../../../desktop/refine/refineWorksheet.js';
 import {
+  type AppliedSheetRecord,
   type BindRecoveryProposalContext,
   classifyBindProposalProgress,
   MAX_CONSECUTIVE_BIND_RECOVERY_BARE_RESUBMITS,
@@ -45,6 +55,14 @@ import {
 } from '../../../desktop/templates/injectTemplateCore.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { ExecuteCommandError, ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
+import {
+  classifyWorksheetPromiseOutcome,
+  formatWorksheetPromiseCheck,
+} from '../../../desktop/validation/promise-check.js';
+import {
+  formatReadbackVerificationError,
+  formatReadbackVerificationWarnings,
+} from '../../../desktop/validation/readback-verify.js';
 import { decodeXmlEntities } from '../../../desktop/xmlElement.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -59,15 +77,18 @@ import {
   jsonToolResult,
   type NextAction,
   prefillNextAction,
+  receipt,
   type StructuredResult,
   withNextAction,
 } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
+import type { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 // The nested `proposal` mirrors the binder library's public data contract
 // (`BindingProposal` / `PROPOSAL_OUTPUT_SCHEMA`) verbatim so a Call-1 `propose` payload
 // round-trips into a Call-2 `proposal` unchanged. The schema (incl. the watch-class
 // confidence-required + title-max-80 tightening) is SHARED with validate-proposal so the
 // two tools cannot drift — see proposalSchema.ts.
+import { appliedSheetSignature } from './appliedSheetSignature.js';
 import { proposalSchema } from './proposalSchema.js';
 import { proposalSignature } from './proposalSignature.js';
 
@@ -77,7 +98,15 @@ const paramsSchema = {
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
   auto_apply: z.boolean().optional(),
-  target_worksheet: z.string().optional(),
+  // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
+  // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
+  // bind-template created a second sheet, and the follow-up edits chased the new sheet.
+  target_worksheet: z
+    .string()
+    .optional()
+    .describe(
+      'Existing sheet to rebuild in place (see list-worksheets). Omit and a NEW sheet is created.',
+    ),
   calcs: z
     .array(
       z.object({
@@ -123,6 +152,25 @@ type AppliedFastPathResult = {
   sheet_name: string;
   phase_ms: { bind: number; inject: number; apply: number };
   guidance: string;
+  /**
+   * What the ask asked for vs what this bind built. Present ONLY when something the ask
+   * asked for is missing from the sheet — a complete bind still returns the trimmed shape.
+   */
+  encodings?: EncodingReport;
+};
+
+/**
+ * Returned INSTEAD of building a second sheet identical to one this session already built.
+ * Deliberately shaped as a success (`status:'bound'`, `applied:true`) and marked terminal:
+ * the chart the caller asked for IS applied and on screen, so reporting anything else would
+ * be untrue and would invite another call.
+ */
+type ReusedSheetResult = {
+  status: 'bound';
+  applied: true;
+  reused: true;
+  sheet_name: string;
+  guidance: string;
 };
 
 type BlockedBindTemplateResult = {
@@ -139,6 +187,7 @@ type BlockedBindTemplateResult = {
 type BindTemplateToolResult =
   | BindTemplateToolResultBase
   | AppliedFastPathResult
+  | ReusedSheetResult
   | BlockedBindTemplateResult;
 type StructuredBindTemplateToolResult = StructuredResult<BindTemplateToolResult>;
 
@@ -173,12 +222,12 @@ const WATERFALL_SORT_HINT =
 // Paired with structuredContent.nextAction{kind:'done'} for a future route-gate/host.
 const TERMINAL_GUIDANCE = 'Done — no further tool calls needed.';
 // When the confident bind already applied a top-N limit and/or an interactive filter, the
-// singer must NOT hand-author another one: a second manual filter lands as a PEER filter
-// (no context marker) and overrides the context filter this bind wrote, breaking the
-// within-scope ranking (m7 live: judge 28 because the singer added a duplicate peer Region
-// filter after a correct one-shot). Say the filter is already applied as a context filter.
+// singer must NOT hand-author another one. These clauses are appended only for splices the
+// function observed succeeding; requested-but-skipped filters are warnings, not successes.
 const FILTER_APPLIED_GUIDANCE =
-  'The requested filter/limit is ALREADY applied (the scoping dimension as a context filter, so any top-N ranks within it). Do NOT add another filter — a second one lands as a peer filter and breaks the scoping. The interactive control may not render as a visible card; that is a display detail, not a missing filter.';
+  'The requested filter is ALREADY applied. Do NOT add another filter — a second one can change the scoping. The interactive control may not render as a visible card; that is a display detail, not a missing filter.';
+const TOP_N_APPLIED_GUIDANCE =
+  'The requested top-N limit is ALREADY applied. Do NOT add another limit.';
 const PROPOSAL_ATTEMPTED_PHASE = ['proposal', 'attempted'].join('-');
 const RETRY_USED_PHASE = ['retry', 'used'].join('-');
 
@@ -319,17 +368,34 @@ function renderBlockers(blockers: Blocker[]): string {
     .join('; ');
 }
 
-function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): string {
+/**
+ * A recoverable escalation now ships the candidate shortlist, so say where it is. Without it
+ * the agent that was told to "re-propose" had nothing to propose FROM: the live transcript
+ * shows it falling through to search-commands, which answered an encoding ask with mapbox
+ * logging and device-layout removal, and then reading a whole knowledge document.
+ */
+const ESCALATE_CANDIDATES_SENTENCE =
+  'The candidate templates and the fields that fit each of their slots are in call_2_contract.proposal_choices below — bind from those; do not go hunting with search-commands or the knowledge tools.';
+
+function renderEscalationGuidance(
+  reason: EscalateReason,
+  blockers: Blocker[],
+  /** True only when this result actually carries call_2_contract — never promise a payload we dropped. */
+  hasCandidates: boolean,
+): string {
   let next: string;
   const outcome = TIER2_REASONS.has(reason)
     ? 'Fast-path template bind did not apply; direct authoring is available.'
     : 'No worksheet was produced.';
+  const candidates = hasCandidates ? ` ${ESCALATE_CANDIDATES_SENTENCE}` : '';
   if (reason === 'ambiguous-field' || reason === 'field-not-found') {
     next =
-      'Resolve the field(s) with the resolve-field tool, then call bind-template again with a corrected proposal; otherwise ask the user with ask-user (present the candidates).';
+      'Resolve the field(s) with the resolve-field tool, then call bind-template again with a corrected proposal; otherwise ask the user with ask-user (present the candidates).' +
+      candidates;
   } else if (reason === 'low-confidence') {
     next =
-      'Confidence was below the floor. Re-examine the candidate template(s), pick the best fit, and re-propose with higher confidence.';
+      'Confidence was below the floor. Re-examine the candidate template(s), pick the best fit, and re-propose with higher confidence.' +
+      candidates;
   } else if (TIER2_REASONS.has(reason)) {
     next =
       'No fast-path template fits this ask/data - build it directly: build-and-apply-worksheet ' +
@@ -445,6 +511,38 @@ function buildWaterfallDiscoveryGuidance(
   return sentences;
 }
 
+/**
+ * The ask named an encoding this bind could not fill. Name it, say the sheet is missing it,
+ * and name the ONE call that finishes it on the sheet that already exists. It must point
+ * AWAY from bind-template: the measured failure mode is the model asking again in other
+ * words (55% of production bind traces rebind the same worksheet), rebuilding the same chart.
+ */
+function appendUnfilledEncodingGuidance(
+  receipt: string,
+  sheetName: string,
+  encodings: EncodingReport,
+): string {
+  const missing = encodings.unfilled.join(' and ');
+  const calls = encodings.unfilled
+    .map(
+      (role) =>
+        `add-field{worksheetName:'${sheetName}',target:'encoding',encodingType:'${role}',columnRef:<field>}`,
+    )
+    .join(', then ');
+  const filled = encodings.filled.length > 0 ? encodings.filled.join(', ') : 'none';
+  return (
+    `${receipt} INCOMPLETE — the ask asked for ${missing}, and this bind did NOT fill it: ` +
+    `the sheet is on screen without ${missing}. Encodings filled: ${filled}. ` +
+    `To finish, call ${calls}. ` +
+    'Do NOT call bind-template again for this sheet; asking again in other words rebuilds the same chart.'
+  );
+}
+
+/** Label for the same steer, short enough for the 60-char nextAction label bound. */
+function unfilledEncodingNextActionLabel(encodings: EncodingReport): string {
+  return `Add missing ${encodings.unfilled.join(', ')} with add-field`;
+}
+
 function appendWaterfallDiscoveryGuidance(
   guidance: string,
   res: BinderResult,
@@ -456,11 +554,8 @@ function appendWaterfallDiscoveryGuidance(
 }
 
 function fieldFitsProposedSlot(
-  field: Extract<BinderResult, { status: 'propose' }>['llm_input']['fields'][number],
-  slot: Extract<
-    BinderResult,
-    { status: 'propose' }
-  >['llm_input']['candidate_templates'][number]['slots'][number],
+  field: LlmProposeInput['fields'][number],
+  slot: LlmProposeInput['candidate_templates'][number]['slots'][number],
 ): boolean {
   switch (slot.kind) {
     case 'quantitative':
@@ -481,12 +576,12 @@ function fieldFitsProposedSlot(
 }
 
 function buildCall2Contract({
-  res,
+  llmInput,
   session,
   ask,
   targetWorksheet,
 }: {
-  res: Extract<BinderResult, { status: 'propose' }>;
+  llmInput: LlmProposeInput;
   session: string;
   ask: string;
   targetWorksheet?: string;
@@ -499,12 +594,12 @@ function buildCall2Contract({
       ...(targetWorksheet !== undefined ? { target_worksheet: targetWorksheet } : {}),
       auto_apply: true,
     },
-    proposal_choices: res.llm_input.candidate_templates.map((candidate) => ({
+    proposal_choices: llmInput.candidate_templates.map((candidate) => ({
       template: candidate.template,
       slots: candidate.slots.map((slot) => ({
         slot_id: slot.slot_id,
         required: slot.required,
-        compatible_field_names: res.llm_input.fields
+        compatible_field_names: llmInput.fields
           .filter((field) => fieldFitsProposedSlot(field, slot))
           .map((field) => field.name),
       })),
@@ -541,6 +636,7 @@ function buildGuidance(
   res: BinderResult,
   schemaSummary?: SchemaSummary,
   proposal?: BindingProposal,
+  escalateHasCandidates = false,
 ): string {
   let guidance: string;
   switch (res.status) {
@@ -554,7 +650,7 @@ function buildGuidance(
         `auto_apply:true. ${DERIVATION_OVERRIDE_INSTRUCTION}. Do not call other authoring tools between calls.`;
       break;
     case 'escalate':
-      guidance = renderEscalationGuidance(res.reason, res.blockers);
+      guidance = renderEscalationGuidance(res.reason, res.blockers, escalateHasCandidates);
       break;
   }
   return res.status === 'propose'
@@ -931,9 +1027,12 @@ function applyProposalSplices({
   schemaSummary: SchemaSummary;
   /** The PLAIN (fully-decoded) sheet name — scopes the shown-filter-card edit to this sheet's window. */
   literalTitle: string;
-}): { ok: true; xml: string; warnings: string[] } | { ok: false; reason: string } {
+}):
+  | { ok: true; xml: string; warnings: string[]; appliedFilterCount: number }
+  | { ok: false; reason: string } {
   let out = xml;
   const warnings: string[] = [];
+  let appliedFilterCount = 0;
   if (args.sort) {
     const sortField = resolveInSummary(schemaSummary, args.sort.by);
     if (sortField.kind !== 'exact' && sortField.kind !== 'rewritten') {
@@ -1002,9 +1101,10 @@ function applyProposalSplices({
       // The SHOWN card is what the judge's filter_action_wired gate checks — an OoO-correct
       // context filter with no control is invisible. Best-effort (no-op if the window is absent).
       out = insertShownFilterCard(declared.xml, literalTitle, declared.columnRef);
+      appliedFilterCount += 1;
     }
   }
-  return { ok: true, xml: out, warnings };
+  return { ok: true, xml: out, warnings, appliedFilterCount };
 }
 
 /**
@@ -1043,28 +1143,32 @@ async function performAutoApply({
   base,
   workbookXml,
   session,
+  config,
   executor,
   signal,
   bindMs,
   eventsAnchor,
   schemaSummary,
-  suppressActivation,
   manifest,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
   workbookXml: string;
   session: string;
+  config: TableauDesktopRequestHandlerExtra['config'];
   executor: ToolExecutor;
   signal: AbortSignal;
   bindMs: number;
   eventsAnchor?: number;
   schemaSummary: SchemaSummary;
-  suppressActivation: boolean;
   manifest: TemplateManifest;
 }): Promise<{
   result: StructuredBindTemplateToolResult;
   failureDisposition?: AutoApplyFailureDisposition;
+  // An applied:true receipt the binder itself could not call finished. The result body
+  // cannot carry this: `withNextAction` spreads, so an incomplete receipt still looks
+  // applied:true with a sheet_name to every downstream reader.
+  incomplete?: boolean;
 }> {
   const { args } = res;
 
@@ -1156,6 +1260,7 @@ async function performAutoApply({
   const applyStart = Date.now();
   const applyResult = await loadWorkbookXml({
     xml: spliced.xml,
+    focus: { navigate: 'artifact', sheetName: literalTitle },
     executor,
     signal,
   });
@@ -1165,33 +1270,93 @@ async function performAutoApply({
       failureDisposition: applyFailureDisposition(applyResult.error),
     };
   }
-  if (!suppressActivation) {
-    await activateSheetBestEffort({
-      sheetName: literalTitle,
-      executor,
-      signal,
-    });
-  }
   const applyMs = Date.now() - applyStart;
+
+  // ── Host verification receipt on the HOT path (W-23447506) ────────
+  // apply-worksheet and build-and-apply-worksheet re-read the sheet they just wrote and
+  // report what the host actually saw. bind-template — the path nearly every chart ask
+  // takes — applied through loadWorkbookXml, which has no readback: when Tableau stripped a
+  // requested encoding out of a bind, the response read exactly like a bind it kept whole.
+  // Same two helpers as the cold path (verifyPostApplyWorksheetReadback +
+  // formatWorksheetPromiseCheck), one extra sheet read, no extra model turn.
+  //
+  // The comparison needs the sheet as WE wrote it: slice the injected worksheet back out of
+  // the document we posted. If it cannot be sliced (or the re-read fails), verification is
+  // SKIPPED, not assumed — the receipt then says "unverified" rather than claiming a check
+  // that never ran.
+  let intendedWorksheetXml: string | null = null;
+  try {
+    intendedWorksheetXml = extractSheetXml(spliced.xml, literalTitle);
+  } catch {
+    intendedWorksheetXml = null;
+  }
+  const verification = intendedWorksheetXml
+    ? await verifyPostApplyWorksheetReadback(literalTitle, intendedWorksheetXml, executor, signal)
+    : undefined;
+  const receiptInput = {
+    validationWarnings: applyResult.value.validationWarnings,
+    readback: verification ? publicReadbackVerificationResult(verification) : undefined,
+    readbackFindings: verification?.findings ?? [],
+  };
+  const promiseOutcome = classifyWorksheetPromiseOutcome(receiptInput);
+  await emitWorksheetPromiseEvents({
+    config,
+    sessionId: session,
+    tool: 'bind-template',
+    operation: 'load-workbook',
+    readback: receiptInput.readback,
+    findings: receiptInput.readbackFindings,
+    promiseOutcome,
+  });
+  const readbackRan = verification !== undefined && verification.status !== 'skipped';
+  // Only a comparison that actually RAN earns a line. When the sheet could not be re-read the
+  // response stays exactly as it is today: printing "unverified · do not claim the change is
+  // confirmed" directly after "Done — no further tool calls needed" would contradict the stop
+  // clause that closed the re-bind spiral, and the structured done-receipt already names what
+  // went unchecked. Telemetry above still records the skip.
+  const promiseCheck = readbackRan ? formatWorksheetPromiseCheck(receiptInput) : '';
+  const readbackError = formatReadbackVerificationError(receiptInput.readbackFindings);
+  const readbackWarnings = formatReadbackVerificationWarnings(receiptInput.readbackFindings);
+  const readbackEvidence = `${readbackError ? `\n\n${readbackError}` : ''}${readbackWarnings}`;
 
   // W60 response-shape trim (P4): on success, return ONLY the trimmed fast-path shape —
   // drop the args echo, apply_instruction, apply_hint, and used_llm from `base`. Those
   // enable a manual second call that never happens once the apply succeeds.
   const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, res.status);
-  const receipt = `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`;
+  const receiptText = `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`;
   // Blake's spiral fix: the applied:true receipt is TERMINAL unless a genuine, named re-bind
   // slot is still unfilled (the m1 waterfall case). On INCOMPLETE we keep today's steer and
   // attach NO structuredContent (byte-for-byte identical to the pre-fix code). On COMPLETE we
   // append the stop-clause AND the machine-readable done marker so nothing re-asserts "keep going".
-  const incomplete = waterfallReBindSlotUnfilled(res, schemaSummary);
-  const appliedFilterOrLimit =
-    args.top_n !== undefined || (args.filters !== undefined && args.filters.length > 0);
-  const terminalGuidance = appliedFilterOrLimit
-    ? `${TERMINAL_GUIDANCE} ${FILTER_APPLIED_GUIDANCE}`
+  // A tool that cannot verify what it wrote must not report success. The binder is the only
+  // layer that knows the ask named an encoding it could not bind (a post-apply readback is
+  // blind here — the XML it would read back never contained the node), so its own
+  // filled/unfilled split is what gates "done".
+  const unfilledEncodings =
+    res.encodings && res.encodings.unfilled.length > 0 ? res.encodings : undefined;
+  const encodingAnalysisComplete =
+    res.encodings !== undefined && res.encodings.unfilled.length === 0;
+  // A splice warning means requested work was skipped before readback. Include it here so a
+  // clean readback cannot mint "done" or duplicate-sheet memory for an incomplete bind.
+  const incomplete =
+    waterfallReBindSlotUnfilled(res, schemaSummary) ||
+    unfilledEncodings !== undefined ||
+    spliced.warnings.length > 0 ||
+    promiseOutcome === 'failed';
+  const appliedSpliceGuidance = [
+    ...(spliced.appliedFilterCount > 0 ? [FILTER_APPLIED_GUIDANCE] : []),
+    ...(args.top_n !== undefined ? [TOP_N_APPLIED_GUIDANCE] : []),
+  ].join(' ');
+  const terminalGuidance = appliedSpliceGuidance
+    ? `${TERMINAL_GUIDANCE} ${appliedSpliceGuidance}`
     : TERMINAL_GUIDANCE;
-  const guidance = incomplete
-    ? appendWaterfallDiscoveryGuidance(receipt, res, schemaSummary)
-    : `${receipt} ${terminalGuidance}`;
+  const guidance = `${
+    unfilledEncodings
+      ? appendUnfilledEncodingGuidance(receiptText, literalTitle, unfilledEncodings)
+      : incomplete
+        ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
+        : `${receiptText} ${terminalGuidance}`
+  }${readbackEvidence}${promiseCheck}`;
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
@@ -1200,8 +1365,56 @@ async function performAutoApply({
     applied: true,
     sheet_name: literalTitle,
     phase_ms: { bind: bindMs, inject: injectMs, apply: applyMs },
+    ...(unfilledEncodings ? { encodings: unfilledEncodings } : {}),
   };
-  return { result: incomplete ? applied : withNextAction(applied, doneNextAction()) };
+  if (unfilledEncodings) {
+    return {
+      incomplete: true,
+      result: withNextAction(
+        applied,
+        prefillNextAction(unfilledEncodingNextActionLabel(unfilledEncodings)),
+      ),
+    };
+  }
+  return incomplete
+    ? { incomplete: true, result: applied }
+    : {
+        result: withNextAction(
+          applied,
+          doneNextAction(
+            receipt({
+              did: [
+                `applied template "${args.template_name}" as sheet "${literalTitle}"; Desktop accepted the document`,
+                `phases: bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms`,
+                ...(base.authored_calcs && base.authored_calcs.length > 0
+                  ? [`authored calcs: ${base.authored_calcs.join(', ')}`]
+                  : []),
+                ...(encodingAnalysisComplete
+                  ? ['bound every encoding named in the binder encoding report']
+                  : []),
+              ],
+              // Splice warnings are emitted only at branches that skipped requested work.
+              // Mirroring those observed warnings prevents an empty didNot from contradicting
+              // the result body.
+              didNot: spliced.warnings,
+              unverified: [
+                ...(res.encodings === undefined
+                  ? [
+                      'whether every requested encoding was bound — encoding analysis did not run for this template',
+                    ]
+                  : []),
+                ...(readbackRan
+                  ? [
+                      'whether the sheet renders any marks — structural readback compared XML but did not inspect rendered output',
+                    ]
+                  : [
+                      'whether the applied sheet retained its intended structure or renders any marks — structural readback did not run',
+                    ]),
+              ],
+            }),
+          ),
+        ),
+      };
 }
 
 function renderAuthoredCalcPrefix(
@@ -1270,6 +1483,65 @@ function recordBindRecoveryAttemptFailOpen({
   } catch {
     /* fail-open */
   }
+}
+
+/**
+ * The sheet this session already applied for `signature`, but ONLY if it is still in the
+ * live workbook we just read. A sheet the user deleted in Desktop must be rebuilt, so the
+ * stale record is dropped and the bind proceeds. Fail-open: any fault means "not remembered".
+ */
+function rememberedSheetStillPresent({
+  session,
+  signature,
+  workbookXml,
+}: {
+  session: string;
+  signature: string;
+  workbookXml: string;
+}): AppliedSheetRecord | undefined {
+  try {
+    const remembered = sessionRouteState.getAppliedSheet(session, signature);
+    if (remembered === undefined) {
+      return undefined;
+    }
+    if (classifyWorksheetReplaceTarget(workbookXml, remembered.sheetName) === 'not-found') {
+      sessionRouteState.forgetAppliedSheet(session, signature);
+      return undefined;
+    }
+    return remembered;
+  } catch {
+    return undefined;
+  }
+}
+
+function reusedSheetResult(remembered: AppliedSheetRecord): StructuredBindTemplateToolResult {
+  return withNextAction(
+    {
+      status: 'bound',
+      applied: true,
+      reused: true,
+      sheet_name: remembered.sheetName,
+      guidance:
+        // Name presence is the only live fact checked here; claiming contents would make this
+        // prose contradict the receipt after a user edits the remembered sheet.
+        `The remembered sheet "${remembered.sheetName}" (template ${remembered.template}) ` +
+        `is still present by name, so no second copy was created. ${TERMINAL_GUIDANCE}`,
+    },
+    doneNextAction(
+      receipt({
+        did: [
+          `matched this ask to the sheet "${remembered.sheetName}" this session already applied (template ${remembered.template})`,
+        ],
+        didNot: ['touch the workbook — nothing was applied on this call'],
+        // rememberedAppliedSheet() only confirms that a worksheet of that NAME is still in
+        // the document (classifyWorksheetReplaceTarget). Whether its fields still match the
+        // ask is never re-derived, so a user edit since the apply is invisible here.
+        unverified: [
+          `whether "${remembered.sheetName}" still holds those fields — only its presence by name was confirmed`,
+        ],
+      }),
+    ),
+  );
 }
 
 function recordBoundRecoveryAfterFinalResult({
@@ -1482,15 +1754,48 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           if (target_worksheet !== undefined && res.status === 'bound') {
             res = { ...res, args: { ...res.args, title: target_worksheet } };
           }
-          const call2Contract =
-            res.status === 'propose'
-              ? buildCall2Contract({
-                  res,
-                  session: resolvedSession,
-                  ask,
-                  targetWorksheet: target_worksheet,
-                })
-              : undefined;
+          const bindMs = Date.now() - bindStart;
+          const schemaSummary = summarizeSchema(workbookXml);
+
+          // ── Candidate handover on a RECOVERABLE escalation ────────────────
+          // Only `propose` used to carry the candidate list, so an agent told to re-propose
+          // after an ambiguous-field / field-not-found / low-confidence escalation had nothing
+          // to propose FROM and went hunting: the live transcript shows it falling through to
+          // search-commands — which answered an encoding ask with mapbox logging and
+          // device-layout removal — and then reading an entire knowledge document.
+          //
+          // TIER-2 reasons are deliberately excluded. They are recorded as a terminal fallback,
+          // so the next bind-template call for this ask is blocked outright; handing out a
+          // Call-2 contract there would walk the agent into a refusal.
+          //
+          // The field cap is the binder's own fail-closed cost guard (buildLlmInput runs one
+          // regex PER schema field). Call-2 skips that guard, so a proposal escalating against a
+          // pathologically wide schema must not re-enter the per-field loop here.
+          //
+          // Fail-open: this is an enrichment, not the outcome. A fault while assembling the
+          // shortlist (a manifest missing its slots, say) must leave the escalation the honest
+          // business result it already is, never turn it into a tool error.
+          let escalateCandidates: LlmProposeInput | undefined;
+          if (
+            res.status === 'escalate' &&
+            !TIER2_REASONS.has(res.reason) &&
+            schemaSummary.fields.length <= MAX_CLASSIFIABLE_FIELDS
+          ) {
+            try {
+              escalateCandidates = buildLlmInput(ask, manifests, schemaSummary);
+            } catch {
+              escalateCandidates = undefined;
+            }
+          }
+          const call2ContractInput = res.status === 'propose' ? res.llm_input : escalateCandidates;
+          const call2Contract = call2ContractInput
+            ? buildCall2Contract({
+                llmInput: call2ContractInput,
+                session: resolvedSession,
+                ask,
+                targetWorksheet: target_worksheet,
+              })
+            : undefined;
           try {
             sessionRouteState.recordAskOutcome(resolvedSession, askKey, res.status);
             if (res.status === 'propose') {
@@ -1508,6 +1813,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 askKey,
                 outcome: res.status,
                 currentProposalSignature,
+                // Retained so a bare resubmit gets the SAME choices repeated back rather than a
+                // bare "supply a proposal" it has no list to satisfy.
+                ...(call2Contract !== undefined ? { proposalContext: call2Contract } : {}),
                 reservationId: bindRecoveryReservationId,
                 terminalFallback: TIER2_REASONS.has(res.reason),
               });
@@ -1515,13 +1823,20 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           } catch {
             /* fail-open */
           }
-          const bindMs = Date.now() - bindStart;
-          const schemaSummary = summarizeSchema(workbookXml);
 
           const base: StructuredBindTemplateToolResult = annotateAuthoredCalcs(
             res.status === 'escalate'
               ? withNextAction(
-                  { ...res, guidance: buildGuidance(res, schemaSummary, proposal) },
+                  {
+                    ...res,
+                    guidance: buildGuidance(
+                      res,
+                      schemaSummary,
+                      proposal,
+                      call2Contract !== undefined,
+                    ),
+                    ...(call2Contract !== undefined ? { call_2_contract: call2Contract } : {}),
+                  },
                   nextActionForEscalation(res.reason),
                 )
               : res.status === 'propose'
@@ -1566,20 +1881,66 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             return new Ok(base);
           }
 
+          // ── Duplicate-sheet reuse (the re-bind loop) ─────────────────────
+          // The binder titles a Call-1 sheet with the ask text itself, so a reworded ask
+          // for the SAME chart binds identical args under a new title and today builds a
+          // duplicate sheet. Signature is title-free, so the paraphrase collapses onto the
+          // sheet already applied. Only when the caller did NOT name a target: an explicit
+          // target_worksheet is an explicit instruction to rewrite that sheet (a reset of
+          // hand edits is legitimate) and always applies.
+          const sheetSignature = appliedSheetSignature(res.args);
+          if (target_worksheet === undefined) {
+            const remembered = rememberedSheetStillPresent({
+              session: resolvedSession,
+              signature: sheetSignature,
+              workbookXml,
+            });
+            if (remembered !== undefined) {
+              recordBindRecoveryAttemptFailOpen({
+                session: resolvedSession,
+                askKey,
+                outcome: 'bound',
+                currentProposalSignature,
+                reservationId: bindRecoveryReservationId,
+                terminal: true,
+              });
+              return new Ok(reusedSheetResult(remembered));
+            }
+          }
+
           const autoApplyResult = await performAutoApply({
             res,
             base,
             workbookXml,
             session: resolvedSession,
+            config: extra.config,
             executor,
             signal: extra.signal,
             bindMs,
             eventsAnchor,
             schemaSummary,
-            suppressActivation: target_worksheet !== undefined,
             manifest,
           });
           const appliedResult = autoApplyResult.result;
+          // Only a bind the binder called FINISHED may be replayed as "already built" on
+          // the next reworded ask. An incomplete bind still reports applied:true with a
+          // sheet_name, so remembering it would answer a later re-bind with a terminal
+          // "no further tool calls needed" for a chart missing a requested encoding.
+          if (
+            !autoApplyResult.incomplete &&
+            'applied' in appliedResult &&
+            appliedResult.applied === true &&
+            typeof appliedResult.sheet_name === 'string'
+          ) {
+            try {
+              sessionRouteState.recordAppliedSheet(resolvedSession, sheetSignature, {
+                sheetName: appliedResult.sheet_name,
+                template: res.args.template_name,
+              });
+            } catch {
+              /* fail-open */
+            }
+          }
           recordBoundRecoveryAfterFinalResult({
             session: resolvedSession,
             askKey,

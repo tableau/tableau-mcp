@@ -1,4 +1,8 @@
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
+import {
+  DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
+  MIN_DESKTOP_CALL_TIMEOUT_MS,
+} from './desktop/callDeadline.js';
 import { DEFAULT_INLINE_XML_MAX_BYTES } from './desktop/inlineXmlCap.js';
 import { parseNumber } from './utils/parseNumber.js';
 
@@ -18,10 +22,18 @@ export class Config extends BaseConfig {
   /**
    * Session id (Desktop pid) the launching Tableau Desktop pinned via
    * `TABLEAU_DESKTOP_SESSION_ID`. When set, every session-scoped tool defaults to
-   * this instance and `list-instances` is not registered, so the agent never has to
-   * discover which Desktop to control. Ignored unless it is a non-blank numeric pid.
+   * this instance, so the agent never has to discover which Desktop to control. The pin
+   * is a default, not an invariant: `list-instances` stays registered and the agent may
+   * still target another open Desktop. Ignored unless it is a non-blank numeric pid.
    */
   desktopSessionId: string | undefined;
+
+  /**
+   * Wall-clock ceiling (ms) on a single desktop tool call. Past it the call aborts and the
+   * agent is told Desktop stopped answering. Env-overridable via TABLEAU_DESKTOP_CALL_TIMEOUT_MS;
+   * values under MIN_DESKTOP_CALL_TIMEOUT_MS are ignored because they would cut real work.
+   */
+  desktopCallTimeoutMs: number;
 
   constructor() {
     super();
@@ -31,6 +43,7 @@ export class Config extends BaseConfig {
       INLINE_XML_MAX_BYTES: inlineXmlMaxBytes,
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
       TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
+      TABLEAU_DESKTOP_CALL_TIMEOUT_MS: desktopCallTimeoutMs,
     } = cleansedVars;
 
     if (this.transport !== 'stdio') {
@@ -44,6 +57,11 @@ export class Config extends BaseConfig {
     this.inlineXmlMaxBytes = parseNumber(inlineXmlMaxBytes, {
       defaultValue: DEFAULT_INLINE_XML_MAX_BYTES,
       minValue: 1,
+    });
+
+    this.desktopCallTimeoutMs = parseNumber(desktopCallTimeoutMs, {
+      defaultValue: DEFAULT_DESKTOP_CALL_TIMEOUT_MS,
+      minValue: MIN_DESKTOP_CALL_TIMEOUT_MS,
     });
   }
 }

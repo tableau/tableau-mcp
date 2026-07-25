@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'crypto';
+import levenshtein from 'fast-levenshtein';
 import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
@@ -29,7 +30,7 @@ import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenc
 import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
 import { pruneUnboundOptionalFields } from '../../../desktop/templates/optionalFieldPrune.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
-import { readTemplate } from '../../../desktop/templates/templatePath.js';
+import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import { spliceWaterfallAnchorFilter } from '../../../desktop/templates/waterfallAnchorFilter.js';
 import type { ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
 import {
@@ -222,17 +223,54 @@ function inferSingleDatasourceFromColumnRefs(
   };
 }
 
+// The template vocabulary is real and finite, so advertise it: a free string let the
+// agent invent ids (symbol_map, line-chart, bar_chart, ...) that no template answers to,
+// and the invention only surfaced after a full workbook fetch. An enum rejects it at the
+// schema layer with the valid names attached.
+//
+// SEA/manifest trap: listTemplateNames() is asset-backed and can either return nothing
+// or THROW (assets not embedded, a corrupt SEA manifest, TEMPLATES_DIR pointing at a
+// missing dir, the asset module mocked in a test). This runs at module load, where
+// z.enum([]) also throws — either failure would stop the binary from starting at all.
+// Degrade to a free string whenever the list is not usable.
+function safeListTemplateNames(): string[] {
+  try {
+    const names = listTemplateNames();
+    return Array.isArray(names) ? names : [];
+  } catch {
+    return [];
+  }
+}
+
+const TEMPLATE_NAMES = safeListTemplateNames();
+const templateSchema =
+  TEMPLATE_NAMES.length > 0 ? z.enum(TEMPLATE_NAMES as [string, ...string[]]) : z.string();
+
+const MAX_TEMPLATE_SUGGESTIONS = 3;
+
+/** Nearest real template names for an id that did not resolve (same shape as commandRegistry). */
+function suggestTemplateText(template: string): string {
+  const names = safeListTemplateNames();
+  if (names.length === 0) {
+    return '';
+  }
+  const normalized = template.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const suggestions = names
+    .map((candidate) => ({
+      candidate,
+      distance: levenshtein.get(normalized, candidate.toLowerCase().replace(/[^a-z0-9]/g, '')),
+    }))
+    .sort((a, b) => a.distance - b.distance || a.candidate.localeCompare(b.candidate))
+    .slice(0, MAX_TEMPLATE_SUGGESTIONS)
+    .map(({ candidate }) => candidate);
+  return ` Did you mean: ${suggestions.join(', ')}?`;
+}
+
 const paramsSchema = {
   session: z.string().optional(),
   taskSpec: z.object({
     worksheetName: z.string(),
-    // worksheetFile + type are DEAD (never destructured/used at the callback — the impl reads
-    // { worksheetName, workbookFile, template, fields }). They were REQUIRED in the schema, so
-    // an agent that (reasonably) omitted them hit a Zod invalid_type and fell into a retry
-    // spiral. Made optional so a minimal, correct taskSpec validates; kept for back-compat.
-    worksheetFile: z.string().optional(),
-    type: z.enum(['kpi', 'chart']).optional(),
-    template: z.string().optional(),
+    template: templateSchema.optional(),
     fields: z.array(z.string()),
     workbookFile: z.string().optional().describe('Cache path; omit to fetch current workbook.'),
   }),
@@ -274,10 +312,17 @@ export const getBuildAndApplyWorksheetTool = (
           }
 
           // SEA-aware template read (#433 seam): embedded asset in a SEA binary, disk otherwise.
-          let templateXml = readTemplate(template);
+          // readTemplate rejects names outside its charset by throwing; treat that as
+          // "not found" so a bad id returns the same actionable message either way.
+          let templateXml: string | null;
+          try {
+            templateXml = readTemplate(template);
+          } catch {
+            templateXml = null;
+          }
           if (!templateXml) {
             return new ArgsValidationError(
-              `Template not found: "${template}". Check available templates with the template list tool.`,
+              `Template not found: "${template}".${suggestTemplateText(template)} Check available templates with the template list tool.`,
             ).toErr();
           }
 
@@ -543,6 +588,7 @@ export const getBuildAndApplyWorksheetTool = (
           const applyResult = await loadWorksheetXml({
             worksheetName,
             xml: worksheetXml,
+            focus: { navigate: 'artifact', sheetName: worksheetName },
             executor,
             signal,
           });

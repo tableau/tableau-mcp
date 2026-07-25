@@ -121,7 +121,14 @@ export const getBatchCreateAndCacheSheetsTool = (
           workbookXml = addDashboard(workbookXml, dashboardName);
 
           // Apply modified workbook
-          const applyResult = await loadWorkbookXml({ xml: workbookXml, executor, signal });
+          // The sheets this creates are empty scaffolding for a later parallel build, not
+          // anything the user asked to look at, so put them back where they were.
+          const applyResult = await loadWorkbookXml({
+            xml: workbookXml,
+            focus: { navigate: 'restore' },
+            executor,
+            signal,
+          });
           if (applyResult.isErr()) {
             const { type, error } = applyResult.error;
             switch (type) {

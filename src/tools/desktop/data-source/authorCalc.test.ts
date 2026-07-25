@@ -208,7 +208,7 @@ describe('authorCalcTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('whole-document or nothing');
+    expect(result.content[0].text).toContain('at least one <datasource');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 

@@ -3,7 +3,6 @@ import { existsSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { activateSheetBestEffort } from '../../../desktop/commands/workbook/activateSheet.js';
 import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { injectViewpoints } from '../../../desktop/commands/workbook/injectViewpoints.js';
@@ -112,9 +111,12 @@ export const getBuildAndApplyDashboardTool = (
 
           // Apply the dashboard first. A newly created dashboard has no window in the
           // pre-apply workbook, so viewpoint injection must use a fresh post-apply read.
+          // Both writes in this call produce the same dashboard, and the viewpoint apply
+          // below is skipped when the viewpoints are already present, so each one names it.
           const dashboardApplyResult = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,
+            focus: { navigate: 'artifact', sheetName: dashboardName },
             executor,
             signal: extra.signal,
           });
@@ -186,6 +188,7 @@ export const getBuildAndApplyDashboardTool = (
           if (viewpointAccounting.state !== 'success-already-present') {
             const workbookApplyResult = await loadWorkbookXml({
               xml: updatedWorkbookXml,
+              focus: { navigate: 'artifact', sheetName: dashboardName },
               executor,
               signal: extra.signal,
             });
@@ -217,14 +220,6 @@ export const getBuildAndApplyDashboardTool = (
               }
             }
           }
-
-          // Composition policy: Phase-2 worksheet builds stay focus-neutral; the
-          // completed dashboard is the single terminal artifact that owns navigation.
-          await activateSheetBestEffort({
-            sheetName: dashboardName,
-            executor,
-            signal: extra.signal,
-          });
 
           return new Ok({
             message: `Successfully built and applied dashboard "${dashboardName}".`,

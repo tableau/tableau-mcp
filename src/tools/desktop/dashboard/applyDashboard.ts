@@ -6,11 +6,6 @@ import { z } from 'zod';
 import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { loadDashboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
-import {
-  buildApplyOverCapNote,
-  isOverInlineXmlCap,
-  xmlByteLength,
-} from '../../../desktop/inlineXmlCap.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { formatDashboardPromiseCheck } from '../../../desktop/validation/promise-check.js';
 import {
@@ -27,9 +22,7 @@ import { DesktopTool } from '../tool.js';
 const paramsSchema = {
   session: z.string().optional(),
   dashboardName: z.string(),
-  mode: z.enum(['file', 'inline']).optional().default('file'),
   dashboardFile: z.string().optional(),
-  dashboardXml: z.string().optional(),
 };
 
 const title = 'Apply Dashboard';
@@ -49,49 +42,39 @@ export const getApplyDashboardTool = (
       destructiveHint: true,
       idempotentHint: false,
     },
-    callback: async (
-      { session, dashboardName, mode, dashboardFile, dashboardXml },
-      extra,
-    ): Promise<CallToolResult> => {
+    callback: async ({ session, dashboardName, dashboardFile }, extra): Promise<CallToolResult> => {
       return await applyDashboardTool.logAndExecute({
         extra,
-        args: { session, dashboardName, mode, dashboardFile, dashboardXml },
+        args: { session, dashboardName, dashboardFile },
         callback: async () => {
-          switch (mode) {
-            case 'inline': {
-              if (!dashboardXml?.trim()) {
-                return new ArgsValidationError(
-                  'When mode=inline, non-empty dashboard layout content is required.',
-                ).toErr();
-              }
-              break;
-            }
-            case 'file': {
-              if (!dashboardFile?.trim()) {
-                return new ArgsValidationError(
-                  [
-                    'When mode=file, a non-empty dashboard file path is required.',
-                    'The path can be determined using the dashboard layout retrieval tool.',
-                  ].join(' '),
-                ).toErr();
-              }
+          // No inline document parameter: the cached file path IS the handle. Making the
+          // model retype a document cost ~190s of pure emission across six asks, and
+          // inline content carried no cache fingerprint, so it also skipped the
+          // cross-instance bleed guard below.
+          if (!dashboardFile?.trim()) {
+            return new ArgsValidationError(
+              [
+                'A non-empty dashboard file path is required.',
+                'Get one from the dashboard structure retrieval tool, edit it with the cache',
+                'read/write tools, then pass that path here.',
+              ].join(' '),
+            ).toErr();
+          }
 
-              if (!existsSync(dashboardFile)) {
-                return new WorkbookNotFoundError(
-                  [
-                    `Cached dashboard file not found: ${dashboardFile}`,
-                    'Provide a path determined by the dashboard layout retrieval tool.',
-                  ].join(' '),
-                ).toErr();
-              }
+          if (!existsSync(dashboardFile)) {
+            return new WorkbookNotFoundError(
+              [
+                `Cached dashboard file not found: ${dashboardFile}`,
+                'Provide a path determined by the dashboard structure retrieval tool.',
+              ].join(' '),
+            ).toErr();
+          }
 
-              try {
-                dashboardXml = readFileSync(dashboardFile, 'utf-8');
-              } catch (error) {
-                return new FileReadError(error).toErr();
-              }
-              break;
-            }
+          let dashboardXml: string;
+          try {
+            dashboardXml = readFileSync(dashboardFile, 'utf-8');
+          } catch (error) {
+            return new FileReadError(error).toErr();
           }
 
           const sessionResult = resolveSession(session);
@@ -101,19 +84,18 @@ export const getApplyDashboardTool = (
           const resolvedSession = sessionResult.value;
 
           // Cross-instance cache-bleed guard (W9): refuse a cache file produced by a
-          // different (or restarted) Desktop session before applying it — file mode only,
-          // since inline content carries no cache fingerprint.
-          if (mode === 'file' && dashboardFile) {
-            const sidecar = checkSidecar(dashboardFile, resolvedSession, 'dashboard');
-            if (!sidecar.ok) {
-              return new CacheSessionMismatchError(sidecar.message!).toErr();
-            }
+          // different (or restarted) Desktop session before applying it. Now that every
+          // apply goes through a cache file, no payload can skip this check.
+          const sidecar = checkSidecar(dashboardFile, resolvedSession, 'dashboard');
+          if (!sidecar.ok) {
+            return new CacheSessionMismatchError(sidecar.message!).toErr();
           }
 
           const executor = await extra.getExecutor(resolvedSession);
           const result = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,
+            focus: { navigate: 'artifact', sheetName: dashboardName },
             executor,
             signal: extra.signal,
           });
@@ -130,13 +112,6 @@ export const getApplyDashboardTool = (
               }
             }
           }
-
-          const capBytes = extra.config.inlineXmlMaxBytes;
-          const inlineBytes = mode === 'inline' ? xmlByteLength(dashboardXml ?? '') : 0;
-          const note =
-            mode === 'inline' && isOverInlineXmlCap(inlineBytes, capBytes)
-              ? `\n\n${buildApplyOverCapNote(inlineBytes, capBytes)}`
-              : '';
 
           // Host verification receipt (W-23447506): dashboard applies have no
           // structural readback, so say so honestly instead of implying full
@@ -156,7 +131,7 @@ export const getApplyDashboardTool = (
           }
 
           return new Ok({
-            message: `Successfully applied dashboard update for "${dashboardName}". The dashboard has been updated.${note}${receipt}`,
+            message: `Successfully applied dashboard update for "${dashboardName}". The dashboard has been updated.${receipt}`,
           });
         },
       });

@@ -11,7 +11,6 @@ import { ArgsValidationError, DesktopCommandExecutionError } from '../../../erro
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { attachNextAction, prefillNextAction } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
-import { markPlanBuildWorksheets } from './planBuildFocus.js';
 
 type PlannerField = string | { query: string; datasource?: string };
 type PlannerFieldRequest = { query: string; datasource?: string };
@@ -249,16 +248,6 @@ export const getPlanDashboardCreationTool = (
               workbookFile,
             };
           });
-
-          // Record that these worksheets belong to a multi-task plan whose FINAL dashboard
-          // apply owns focus, so each (parallel) build-and-apply-worksheet suppresses its own
-          // goto-sheet. Standalone callers of build-and-apply-worksheet are not recorded here
-          // and keep focusing as before. Recorded regardless of canParallelize: sequential
-          // plans also want the dashboard to own the final focus.
-          markPlanBuildWorksheets(
-            resolvedSession,
-            worksheetTasks.map((t) => t.worksheetName),
-          );
 
           const safeDashName = dashboardName.replace(/[^a-zA-Z0-9]/g, '_');
           const dashboardFile = cache.getCacheFilePath({ prefix: 'dashboard', id: safeDashName });

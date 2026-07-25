@@ -3,6 +3,7 @@ import Fuse from 'fuse.js';
 import { join } from 'path';
 
 import { listDataAssetNames, readDataAsset } from '../assets.js';
+import { checkCommandPolicy } from '../commandPolicy.js';
 
 // --- Commands reference ---
 
@@ -32,6 +33,70 @@ function loadCommandsReference(): any {
   return ref;
 }
 
+/**
+ * An "in" parameter whose value can never come from MCP — either explicitly flagged
+ * `cannot_provide_from_mcp` or typed as one of the reference's non-MCP-friendly types
+ * (DPI_VisualIDPM, DPI_ShelfSelectionModel, ...). REQUIRED and OPTIONAL both count: the
+ * three color dialogs declare their VizID optional, and Desktop still cannot run them
+ * without it, so offering them only costs the agent a round trip (~8.6s in production).
+ */
+function hasUnprovidableInParam(cmd: any, nonMcpTypes: Set<string>): boolean {
+  const params = Array.isArray(cmd.parameters) ? cmd.parameters : [];
+  return params.some(
+    (p: any) =>
+      p &&
+      typeof p === 'object' &&
+      p.direction === 'in' &&
+      ((p.type_id && nonMcpTypes.has(p.type_id)) || p.cannot_provide_from_mcp === true),
+  );
+}
+
+/**
+ * `command_name`, `serialized_name` and `fully_qualified_serialized_name` are the same string in
+ * three casings (fqsn ends with serialized_name in 333/333 reference records; serialized_name is
+ * the kebab of command_name in 286/333). Fuse MULTIPLIES the per-key score of every key that
+ * matched, so indexing all three cubed the machine name against a description that counted once:
+ * for query "color", ToggleVariableColumnWidths scored 0.40000 on one name key, 0.16000 on two,
+ * 0.06400 on three and 0.04048 with the description — four "matches" that were all the same three
+ * characters, "Col". One name key only.
+ *
+ * Weights are raw exponents on this code path, NOT normalized (`_myIndex.keys` is built without
+ * normalization; the `weight /= totalWeight` pass only feeds logical queries), so a weight above 1
+ * makes a key matter MORE. Measured on identical ratios: w=0.06 -> 0.787, w=1 -> 0.0186,
+ * w=10 -> 4.9e-18. The human-readable description outranks the machine name here on purpose.
+ */
+const COMMAND_SEARCH_KEYS = [
+  { name: 'description', weight: 6 },
+  { name: 'command_name', weight: 2 },
+  { name: 'parameters[].local_name', weight: 1 },
+  { name: 'parameters[].comment', weight: 1 },
+];
+
+/**
+ * `threshold` gates `errors / patternLen` in bitap, not result relevance. At 0.4 a five-character
+ * query tolerates two edits, which is why "column" and "control" matched "color" — 41 hits of
+ * which 4 contained the literal word. At 0.3 the same query returns 4 hits and loses no real one.
+ * `ignoreFieldNorm` drops fuse's 1/sqrt(wordCount) discount, which was penalising the human
+ * description ~2.7x against the kebab machine name. `useTokenSearch` runs one IDF-weighted bitap
+ * per query term instead of one bitap over the whole joined string; `tokenMatch: 'all'` was
+ * measured far worse (80.5% zero-hit vs 1.3%).
+ */
+const COMMAND_SEARCH_OPTIONS = {
+  threshold: 0.3,
+  ignoreLocation: true,
+  ignoreFieldNorm: true,
+  includeScore: true,
+  useTokenSearch: true,
+  tokenMatch: 'any' as const,
+  minMatchCharLength: 3,
+};
+
+/** Lower fuse score is better. Results more than this many orders worse than the best are noise. */
+const SCORE_CUTOFF_RATIO = 1e12;
+
+/** Enough for the agent to choose; 25 returned a mean of 17.7 fat records per query. */
+const COMMAND_RESULTS_LIMIT = 10;
+
 function ensureCommandsSearchIndex(): any {
   if (_commandsSearchIndex && _commandsFuse) return _commandsSearchIndex;
   const ref = loadCommandsReference();
@@ -40,8 +105,8 @@ function ensureCommandsSearchIndex(): any {
   const agentAllow = new Set<string>(ref.command_names_agent_can_invoke || []);
   const blockingNames = new Set<string>(ref.command_names_opening_blocking_dialog || []);
   const recommendation: string =
-    ref.recommendation_when_no_invocable_match ||
-    'No simple MCP-invocable command found. For chart/viz asks use bind-template (or refine-worksheet to edit in place); for calcs/parameters/sets/actions use the author-* verbs; fall back to the workbook-document round-trip, then workbook XML editing, only when neither covers the ask.';
+    ref.routing_recommendation ||
+    'If no command above does the job: for a chart or viz, call bind-template. To change an existing sheet — put a field on color, size or detail, or on rows/cols — call add-field (target=encoding, encodingType=color) then apply-worksheet; refine-worksheet only does top-N and sort. For calculated fields, parameters, sets and actions, call author-calc, author-parameter, author-set or author-action. Edit workbook XML only when none of these covers the ask.';
 
   const invocable = allCommands.filter((cmd: any) => {
     if (!cmd || typeof cmd !== 'object') return false;
@@ -57,47 +122,45 @@ function ensureCommandsSearchIndex(): any {
       agentOk = true;
     }
     if (!agentOk) return false;
-    const params = Array.isArray(cmd.parameters) ? cmd.parameters : [];
-    for (const p of params) {
-      if (!p || typeof p !== 'object') continue;
-      if (p.direction === 'in' && p.required) {
-        if ((p.type_id && nonMcpTypes.has(p.type_id)) || p.cannot_provide_from_mcp) {
-          return false;
-        }
-      }
-    }
+    if (hasUnprovidableInParam(cmd, nonMcpTypes)) return false;
+    // The execute path refuses these outright (crash-prone, dialog-driving, or
+    // unvalidatable target), so listing them can only produce a refused call.
+    if (checkCommandPolicy(cmd.fully_qualified_serialized_name)?.action === 'refuse') return false;
     return true;
   });
 
   _commandsSearchIndex = { commands: invocable, blockingNames, recommendation };
-  _commandsFuse = new Fuse(invocable, {
-    keys: [
-      'command_name',
-      'serialized_name',
-      'fully_qualified_serialized_name',
-      'description',
-      { name: 'parameters[].local_name', weight: 0.5 },
-      { name: 'parameters[].comment', weight: 0.5 },
-    ],
-    threshold: 0.4,
-    ignoreLocation: true,
-  });
+  _commandsFuse = new Fuse(invocable, { keys: COMMAND_SEARCH_KEYS, ...COMMAND_SEARCH_OPTIONS });
   return _commandsSearchIndex;
 }
 
-function formatCommandSearchResult(cmd: any, blockingNames: Set<string>): any {
-  const opensDialog =
-    !!(
-      blockingNames &&
-      cmd &&
-      typeof cmd.command_name === 'string' &&
-      blockingNames.has(cmd.command_name)
-    ) || !!cmd.opens_blocking_dialog;
+/** The reference's own text saying the command drives a modal surface. */
+const DIALOG_DECLARED = /\b(dialogs?|editors?)\b/i;
+/** "Create an empty set without launching a dialog" is the opposite claim. */
+const DIALOG_DENIED = /\bwithout\s+(launching|opening|showing)\b/i;
+
+/**
+ * `command_names_opening_blocking_dialog` (18 names) has zero intersection with
+ * `command_names_agent_can_invoke` (267), and `opens_blocking_dialog` is true for 0 of those 267,
+ * so those two checks alone could never fire for an indexed command. The evidence that does exist
+ * is the reference's own description: 28 of the 209 indexed commands say they open or launch a
+ * dialog or an editor, and every one of the 16 still named `*Dialog`/`*Editor` is among them — so
+ * this reads the vendor's claim rather than pattern-matching our own guess onto a name.
+ */
+function opensBlockingSurface(cmd: any, blockingNames: Set<string>): boolean {
+  if (blockingNames?.has?.(cmd?.command_name)) return true;
+  if (cmd?.opens_blocking_dialog === true) return true;
+  const declared = `${cmd?.description ?? ''} ${cmd?.value_to_users ?? ''}`;
+  return DIALOG_DECLARED.test(declared) && !DIALOG_DENIED.test(declared);
+}
+
+function formatCommandSearchResult(cmd: any, blockingNames: Set<string>, score?: number): any {
   const result: any = {
     fully_qualified_serialized_name: cmd.fully_qualified_serialized_name,
     command_name: cmd.command_name,
     description: cmd.description,
     module_and_command: cmd.fully_qualified_serialized_name,
+    modifies_workbook_state: cmd.modifies_workbook_state,
     parameters: (Array.isArray(cmd.parameters) ? cmd.parameters : []).map((p: any) => ({
       direction: p.direction,
       local_name: p.local_name,
@@ -107,9 +170,16 @@ function formatCommandSearchResult(cmd: any, blockingNames: Set<string>): any {
       cannot_provide_from_mcp: !!p.cannot_provide_from_mcp,
     })),
   };
-  if (opensDialog) {
+  if (typeof score === 'number') result.score = Number(score.toExponential(3));
+
+  // A live receipt beats a description: sort-nested is the one indexed command with a `hint`
+  // policy, and it 500s on current Desktop builds whatever it is passed.
+  const policy = checkCommandPolicy(cmd.fully_qualified_serialized_name);
+  if (policy?.action === 'hint' && policy.fix) {
+    result.warning = policy.fix;
+  } else if (opensBlockingSurface(cmd, blockingNames)) {
     result.warning =
-      'Opens a blocking UI dialog and may cause CDP socket hang when invoked via execute_tableau_command.';
+      'The reference says this command opens a dialog or editor. It blocks on a UI surface and may hang the CDP socket when invoked via execute_tableau_command — prefer the route named in recommendation.';
   }
   return result;
 }
@@ -125,23 +195,24 @@ export function searchCommandsByKeywords(keywords: string[]): any {
     ? keywords.map((k) => (typeof k === 'string' ? k.trim() : '')).filter((k) => k)
     : [];
 
-  let hits: any[];
+  let hits: Array<{ item: any; score?: number }>;
   if (cleaned.length === 0) {
-    hits = commands.slice(0, 25);
+    hits = commands.slice(0, COMMAND_RESULTS_LIMIT).map((item: any) => ({ item }));
   } else {
-    const query = cleaned.join(' ');
-    hits = fuse!
-      .search(query)
-      .slice(0, 25)
-      .map((r: any) => r.item);
+    // One pattern, not one per keyword: useTokenSearch tokenizes it and bitaps each term
+    // separately, which is what makes a two-word ask like "color encoding" return anything.
+    const ranked = fuse!.search(cleaned.join(' ')) as Array<{ item: any; score?: number }>;
+    const best = ranked.length > 0 ? Math.max(ranked[0].score ?? 1, Number.MIN_VALUE) : 0;
+    hits = ranked
+      .filter((r) => (r.score ?? 1) <= best * SCORE_CUTOFF_RATIO)
+      .slice(0, COMMAND_RESULTS_LIMIT);
   }
 
-  const annotated = hits.map((cmd: any) => formatCommandSearchResult(cmd, blockingNames));
-  const nonDialog = annotated.filter((c: any) => !c.warning);
-  if (annotated.length === 0 || nonDialog.length === 0) {
-    return { commands: annotated, recommendation };
-  }
-  return { commands: annotated };
+  const annotated = hits.map((r) => formatCommandSearchResult(r.item, blockingNames, r.score));
+  // Always returned. It used to be suppressed whenever ANY non-dialog command ranked, which
+  // is exactly when a keyword search returns plausible-looking junk (a "color" search ranks
+  // toggle-variable-column-widths) and the agent most needs to be told the real route.
+  return { commands: annotated, recommendation };
 }
 
 // --- Workbook schema search ---

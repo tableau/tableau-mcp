@@ -80,6 +80,7 @@ export const getFormatLabelsTool = (server: DesktopMcpServer): DesktopTool<typeo
 
           const loadResult = await applyWorkbookText({
             xml: editedXml,
+            focus: { navigate: 'artifact', sheetName: worksheet.trim() },
             executor,
             signal: extra.signal,
           });

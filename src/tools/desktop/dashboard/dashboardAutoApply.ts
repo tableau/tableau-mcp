@@ -16,7 +16,6 @@ import { z } from 'zod';
 
 import { type BinderResult, bindTemplate } from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
-import { activateSheetBestEffort } from '../../../desktop/commands/workbook/activateSheet.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { injectViewpoints } from '../../../desktop/commands/workbook/injectViewpoints.js';
 import { loadDashboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
@@ -444,8 +443,12 @@ export const getDashboardAutoApplyTool = (
           // ── ONE content-creation dispatch (primary mode), with the same
           // runValidation workbook preflight guarantee every apply path has.
           const applyStart = Date.now();
+          // Primary mode posts the sheets AND the finished dashboard here, so this write is
+          // usually the last one in the call; the fallback zones apply below names the same
+          // dashboard.
           const applyResult = await loadWorkbookXml({
             xml: currentXml,
+            focus: { navigate: 'artifact', sheetName: dashboardName },
             executor,
             signal: extra.signal,
           });
@@ -474,6 +477,7 @@ export const getDashboardAutoApplyTool = (
             const dashboardApply = await loadDashboardXml({
               dashboardName,
               xml: zonesXml,
+              focus: { navigate: 'artifact', sheetName: dashboardName },
               executor,
               signal: extra.signal,
             });
@@ -512,13 +516,6 @@ export const getDashboardAutoApplyTool = (
             }
           }
 
-          // Composition policy: all worksheet injects above are focus-neutral. Only the
-          // terminal dashboard artifact navigates, once, after its creating apply succeeds.
-          await activateSheetBestEffort({
-            sheetName: dashboardName,
-            executor,
-            signal: extra.signal,
-          });
           const applyMs = Date.now() - applyStart;
 
           return new Ok({

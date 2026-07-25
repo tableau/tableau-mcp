@@ -16,7 +16,7 @@ vi.mock('../../../desktop/externalApi/discovery.js');
 
 const SESSION = 'session-1';
 const SORT_NESTED_LIVE_500_FIX =
-  'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the bind-template sort proposal (preferred for template-bound sheets) or the workbook document round-trip (get-workbook-xml → edit the computed-sort → apply-workbook).';
+  'FIX: tabdoc:sort-nested is known to fail (HTTP 500) on current Desktop builds regardless of parameters — do not retry it. Sort instead via the bind-template sort proposal (preferred for template-bound sheets) or the cached-document round-trip (get-worksheet-xml → read-cached-xml/write-cached-xml to edit the computed-sort → apply-worksheet).';
 const TEST_REGISTRY_DIRS: string[] = [];
 
 function makeExtra(

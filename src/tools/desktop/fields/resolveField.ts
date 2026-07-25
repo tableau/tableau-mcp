@@ -3,11 +3,13 @@ import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { DesktopCache } from '../../../desktop/cache.js';
 import { type FieldResolution, resolveField } from '../../../desktop/metadata/index.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   FileNotFoundError,
   FileReadError,
+  UnknownError,
   XmlModificationError,
 } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
@@ -16,16 +18,34 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { DesktopTool } from '../tool.js';
 import { refreshWorkbookCache } from './refreshWorkbookCache.js';
 
+// A bare `query` / `datasource` / `session` left the agent guessing what to send here; the
+// same guessing sent a sheet name as workbookFile on the sibling tools. Each value that
+// comes from another call names that call.
 const paramsSchema = {
-  workbookFile: z.string(),
-  query: z.string(),
-  datasource: z.string().optional(),
-  session: z.string().optional(),
+  workbookFile: z
+    .string()
+    .optional()
+    .describe(
+      'Path from an earlier resolve-field or list-available-fields; omit to read the workbook live.',
+    ),
+  query: z.string().describe('Field name to resolve, as the user said it.'),
+  datasource: z
+    .string()
+    .optional()
+    .describe('Datasource name from list-available-fields when two share a field name.'),
+  session: z
+    .string()
+    .optional()
+    .describe(
+      'Omit — the pinned or only Desktop is used. Pass a list-instances pid to target another.',
+    ),
 };
 
 interface ResolveFieldResult {
   resolution: FieldResolution;
   status: 'resolved' | 'ambiguous' | 'not_found' | 'stale_not_found';
+  /** The cache file this resolve read. Pass it back as workbookFile to reuse the snapshot. */
+  workbookFile: string;
   /**
    * @deprecated Kept for existing consumers that still falsy-check the JSON body.
    * Remove after callers migrate to `status`; keep true for ambiguous/not_found/error statuses.
@@ -62,15 +82,50 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
         extra,
         args: { workbookFile, query, datasource, session },
         callback: async () => {
-          if (!existsSync(workbookFile)) {
-            return new FileNotFoundError(workbookFile).toErr();
-          }
+          // workbookFile is a CACHE PATH minted by an earlier call, not a name. Every
+          // bad value production sent was a bare worksheet/workbook name ("Sheet 1",
+          // "current", "live", "") — never a stale path — so the class disappears once
+          // the parameter can be omitted and the tool fetches the current workbook
+          // itself. Empty/whitespace counts as omitted: it is not a path by any reading.
+          const requestedWorkbookFile = workbookFile?.trim() ? workbookFile.trim() : undefined;
 
+          let resolvedWorkbookFile: string;
           let workbookXml: string;
-          try {
-            workbookXml = readFileSync(workbookFile, 'utf-8');
-          } catch (error) {
-            return new FileReadError(error).toErr();
+
+          if (requestedWorkbookFile === undefined) {
+            const sessionResult = resolveSession(session);
+            if (sessionResult.isErr()) {
+              return sessionResult.error.toErr();
+            }
+            resolvedWorkbookFile = new DesktopCache().getCacheFilePath({ prefix: 'workbook' });
+            let refresh: Awaited<ReturnType<typeof refreshWorkbookCache>>;
+            try {
+              refresh = await refreshWorkbookCache({
+                extra,
+                workbookFile: resolvedWorkbookFile,
+                resolvedSession: sessionResult.value,
+                action: 'resolving field',
+              });
+            } catch (error) {
+              return new UnknownError(
+                `Could not read the current workbook from Tableau: ${getExceptionMessage(error)}. ` +
+                  'Check the session with list-instances, then retry.',
+              ).toErr();
+            }
+            if (!refresh.ok) {
+              return refresh.error.toErr();
+            }
+            workbookXml = refresh.xml;
+          } else {
+            resolvedWorkbookFile = requestedWorkbookFile;
+            if (!existsSync(resolvedWorkbookFile)) {
+              return new FileNotFoundError(resolvedWorkbookFile).toErr();
+            }
+            try {
+              workbookXml = readFileSync(resolvedWorkbookFile, 'utf-8');
+            } catch (error) {
+              return new FileReadError(error).toErr();
+            }
           }
 
           let resolution: FieldResolution;
@@ -98,9 +153,13 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
           // parsing the resolution JSON keep working and no outcome is dropped.
           // (list-available-fields deliberately keeps its throw-on-reject behavior —
           // only THIS retry path degrades.)
-          let refreshed = false;
+          //
+          // When workbookFile was omitted the XML above IS the live workbook, so the
+          // retry is already spent: count it as refreshed (the not_found note below is
+          // then the honest "it genuinely does not exist" one) and never fetch twice.
+          let refreshed = requestedWorkbookFile === undefined;
           let refreshFailure: string | undefined;
-          if (session && resolution.kind === 'not_found') {
+          if (!refreshed && session && resolution.kind === 'not_found') {
             try {
               const sessionResult = resolveSession(session);
               if (sessionResult.isErr()) {
@@ -108,7 +167,7 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
               } else {
                 const refresh = await refreshWorkbookCache({
                   extra,
-                  workbookFile,
+                  workbookFile: resolvedWorkbookFile,
                   resolvedSession: sessionResult.value,
                   action: 'resolving field',
                 });
@@ -126,7 +185,11 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
                 message: 'resolve-field live refresh failed; degrading to cache not_found',
                 level: 'warning',
                 logger: 'resolveField',
-                data: { workbookFile, sessionId: session, error: refreshFailure },
+                data: {
+                  workbookFile: resolvedWorkbookFile,
+                  sessionId: session,
+                  error: refreshFailure,
+                },
               });
             }
           }
@@ -151,6 +214,7 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
           return new Ok<ResolveFieldResult>({
             resolution,
             status,
+            workbookFile: resolvedWorkbookFile,
             isError: isResolutionStatusError(status),
             ...(stale ? { stale } : {}),
             ...(note ? { note } : {}),

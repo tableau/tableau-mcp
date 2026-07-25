@@ -21,60 +21,17 @@
 import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
+import { CANONICAL_DERIVATIONS } from '../../derivations.js';
 import type { ValidationIssue, ValidationRule } from '../types.js';
 
 /**
  * Canonical `derivation` attribute values, case-sensitive and exact. Any
  * `column-instance` derivation outside this closed set silently rewrites to None on
- * load. Exported so other code can share the single allowlist.
+ * load. Re-exported from the single repo-wide table in `src/desktop/derivations.ts`;
+ * the writers that mint these strings resolve against that same table, so a value
+ * this rule rejects can no longer have been minted by us.
  */
-export const CANONICAL_DERIVATIONS = new Set<string>([
-  // Dimension
-  'None',
-  'Attribute',
-  // Date part (discrete/continuous)
-  'Year',
-  'Quarter',
-  'Month',
-  'Week',
-  'Weekday',
-  'Day',
-  'Hour',
-  'Minute',
-  'Second',
-  'MY',
-  'MDY',
-  'ISO-Year',
-  'ISO-Qtr',
-  'ISO-Week',
-  'ISO-Weekday',
-  // Date truncation
-  'Year-Trunc',
-  'ISO-Year-Trunc',
-  'Quarter-Trunc',
-  'ISO-Qtr-Trunc',
-  'ISO-Week-Trunc',
-  'Month-Trunc',
-  'Week-Trunc',
-  'Day-Trunc',
-  'Hour-Trunc',
-  'Minute-Trunc',
-  'Second-Trunc',
-  // Measure aggregation
-  'Sum',
-  'Avg',
-  'Count',
-  'CountD',
-  'Median',
-  'Min',
-  'Max',
-  'Stdev',
-  'StdevP',
-  'Var',
-  'VarP',
-  // Table calc
-  'User',
-]);
+export { CANONICAL_DERIVATIONS };
 
 /** Best-effort canonical suggestion for the most common invalid look-alikes. */
 const KNOWN_CORRECTIONS: Record<string, string> = {

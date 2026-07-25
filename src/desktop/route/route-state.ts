@@ -159,6 +159,16 @@ export interface UnprotectedPassthroughs {
   last_asks: string[];
 }
 
+/** One sheet bind-template already applied in this session, keyed by its render signature. */
+export interface AppliedSheetRecord {
+  /** The sheet name actually written to the workbook. */
+  sheetName: string;
+  /** The bound template, for the reuse receipt. */
+  template: string;
+  /** ISO timestamp of the apply. */
+  ts: string;
+}
+
 /**
  * The MOST RECENT ask bind-template classified for this session (most-recent-ask-wins).
  * `last_outcome` is null between classification and the concluded bind-template outcome.
@@ -188,6 +198,8 @@ export interface SessionRouteState {
   summaryDataTransientFailures: Map<string, number>;
   /** Capacity-rejected bind admissions that intentionally proceeded unprotected. */
   unprotected_passthroughs: UnprotectedPassthroughs;
+  /** Sheets applied by bind-template in this session, keyed by render signature. */
+  appliedSheets: Map<string, AppliedSheetRecord>;
   /** Most recent bind-template ask classification for this session, if any. */
   current_ask?: SessionAskClassification;
 }
@@ -309,6 +321,13 @@ export class SessionRouteStateStore {
   /** Receipt cap for capacity-rejected asks. */
   static readonly MAX_UNPROTECTED_PASSTHROUGH_ASKS = 4;
 
+  /**
+   * Per-session LRU cap for applied-sheet records. Past the cap the oldest sheet is
+   * forgotten, so a re-bind of it builds a duplicate again — the pre-fix behaviour, which
+   * is the safe direction to fail.
+   */
+  static readonly MAX_APPLIED_SHEETS = 32;
+
   private ensure(sessionId: string): SessionRouteState {
     let state = this.bySession.get(sessionId);
     if (!state) {
@@ -319,6 +338,7 @@ export class SessionRouteStateStore {
         bindRecoveryByAsk: new Map(),
         summaryDataTransientFailures: new Map(),
         unprotected_passthroughs: { count: 0, last_asks: [] },
+        appliedSheets: new Map(),
       };
       this.bySession.set(sessionId, state);
       while (this.bySession.size > SessionRouteStateStore.MAX_STATES) {
@@ -372,6 +392,46 @@ export class SessionRouteStateStore {
     ) {
       state.unprotected_passthroughs.last_asks.shift();
     }
+  }
+
+  /**
+   * The sheet this session already applied for `signature`, if still remembered. Reading
+   * refreshes LRU position so a sheet the model keeps re-asking for is not evicted first.
+   */
+  getAppliedSheet(
+    sessionId: string | undefined,
+    signature: string,
+  ): AppliedSheetRecord | undefined {
+    const state = this.get(sessionId);
+    const record = state?.appliedSheets.get(signature);
+    if (state && record) {
+      state.appliedSheets.delete(signature);
+      state.appliedSheets.set(signature, record);
+    }
+    return record;
+  }
+
+  /** Remember a sheet bind-template just applied. No-op on a missing session id (fail-open). */
+  recordAppliedSheet(
+    sessionId: string | undefined,
+    signature: string,
+    record: Omit<AppliedSheetRecord, 'ts'>,
+  ): void {
+    if (!sessionId) return;
+    const state = this.ensure(sessionId);
+    state.appliedSheets.delete(signature);
+    state.appliedSheets.set(signature, { ...record, ts: new Date().toISOString() });
+    while (state.appliedSheets.size > SessionRouteStateStore.MAX_APPLIED_SHEETS) {
+      const oldest = state.appliedSheets.keys().next().value;
+      if (oldest === undefined) break;
+      state.appliedSheets.delete(oldest);
+    }
+  }
+
+  /** Forget a remembered sheet — used when the live workbook no longer contains it. */
+  forgetAppliedSheet(sessionId: string | undefined, signature: string): boolean {
+    const state = this.get(sessionId);
+    return state ? state.appliedSheets.delete(signature) : false;
   }
 
   /** Route state for a session, if any. Undefined for an unknown/absent id (no-op). */

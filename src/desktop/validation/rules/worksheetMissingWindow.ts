@@ -42,7 +42,7 @@ export const worksheetMissingWindowRule: ValidationRule = {
         message:
           `Worksheet "${name}" has no matching <window name="${name}"> entry. Tableau silently drops ` +
           'worksheets that lack a window — the sheet will not appear at all. Submit the worksheet and its ' +
-          `<window class="worksheet" name="${name}"> together in the same tableau-apply-workbook call (unless ` +
+          `<window class="worksheet" name="${name}"> together in the same apply (unless ` +
           'the window already exists in the open workbook).',
         xpath: `//worksheets/worksheet[@name="${name}"]`,
         suggestion:

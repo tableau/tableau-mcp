@@ -34,6 +34,8 @@ const NON_TOOL_VOCABULARY = [
   'edit-the-open-sheet',
   'episode-events',
   'execute-command-error',
+  // Import specifiers, not emitted tool references (same class as 'ts-results-es').
+  'fast-levenshtein',
   'fast-path',
   'field-not-found',
   'field-resolver',
@@ -110,6 +112,11 @@ function stringLiterals(source: string): string[] {
   const literals: string[] = [];
 
   function visit(node: ts.Node): void {
+    // Module specifiers are dependency paths, not emitted guidance. Scanning them forces an
+    // allowlist entry for every hyphenated internal filename and obscures real tool references.
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      return;
+    }
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       literals.push(node.text);
     }

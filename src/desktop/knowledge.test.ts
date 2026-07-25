@@ -32,7 +32,9 @@ describe('knowledge/search', { timeout: 30_000 }, () => {
     const [top, second] = searchKnowledge('dashboard', 5);
 
     expect(top.mustReadUri).toBe(top.uri);
-    expect(top.instruction).toBe('snippet is not the module — read this URI before authoring');
+    expect(top.instruction).toBe(
+      'snippet is not the module — read this URI before authoring; append #<section> from sections to read one section instead of the whole module',
+    );
     expect(second).not.toHaveProperty('mustReadUri');
     expect(second).not.toHaveProperty('instruction');
   });

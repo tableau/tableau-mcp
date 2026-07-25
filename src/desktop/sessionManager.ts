@@ -4,6 +4,7 @@ import { getDesktopConfig } from '../config.desktop.js';
 import { log } from '../logging/logger.js';
 import { discoverInstances } from './externalApi/discovery.js';
 import { ExternalApiToolExecutor } from './externalApi/externalApiToolExecutor.js';
+import { CACHED_XML_WARNING, noInstanceFoundMessage } from './unreachableInstance.js';
 
 export type DesktopConnection = {
   sessionId: string;
@@ -17,9 +18,6 @@ export const EXTERNAL_API_UNAVAILABLE_MESSAGE =
 export const PINNED_DESKTOP_UNREACHABLE_MESSAGE =
   'The pinned Tableau Desktop is no longer reachable — it was closed or restarted. Relaunch the agent from Tableau Desktop to reconnect.';
 
-export const STALE_SESSION_MESSAGE =
-  'The requested Tableau Desktop session is no longer running — it was closed. Call list-instances and retry with a current session.';
-
 export type DesktopUnavailableReason = 'pinned-unreachable' | 'stale-session' | 'no-api';
 
 export class ExternalClientApiUnavailableError extends Error {
@@ -30,10 +28,14 @@ export class ExternalClientApiUnavailableError extends Error {
 
   private static messageFor(sessionId: string | number, reason: DesktopUnavailableReason): string {
     switch (reason) {
+      // list-instances IS registered when pinned (server.desktop.test.ts asserts it), so
+      // this message withholds it on purpose: the pinned Desktop is the one the user
+      // launched from, and retargeting a dead pin at whatever else is open would apply
+      // their work to a stranger's workbook. Relaunching is the only safe reconnect.
       case 'pinned-unreachable':
-        return `${PINNED_DESKTOP_UNREACHABLE_MESSAGE} Session: ${sessionId}.`;
+        return `${PINNED_DESKTOP_UNREACHABLE_MESSAGE} Pinned PID: ${sessionId}. ${CACHED_XML_WARNING}`;
       case 'stale-session':
-        return `${STALE_SESSION_MESSAGE} Session: ${sessionId}.`;
+        return noInstanceFoundMessage(sessionId);
       case 'no-api':
         return `${EXTERNAL_API_UNAVAILABLE_MESSAGE} Requested session: ${sessionId}.`;
     }

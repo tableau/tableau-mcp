@@ -27,15 +27,15 @@ export function validateWorkbookDocumentApply(
 ): CommandValidationResult {
   if (!WORKBOOK_ROOT_RE.test(text)) {
     return fail(
-      'apply-workbook requires a whole workbook document rooted at <workbook>.',
-      'Re-read the full document with get-workbook-xml, splice your additions into that whole text, and retry apply-workbook.',
+      'The edited workbook document is not rooted at <workbook>, so it cannot be applied.',
+      'Retry this tool — it re-reads the live workbook itself on every call, so a fresh attempt starts from the current document. You do not need to supply any XML.',
     );
   }
 
   if (!text.includes('<datasource') || !text.includes('<worksheet')) {
     return fail(
-      'apply-workbook is whole-document or nothing: the submitted workbook must contain at least one <datasource and at least one <worksheet.',
-      'Re-read with get-workbook-xml, splice your additions into that whole-document text, and retry apply-workbook.',
+      'The edited workbook document is incomplete: a whole workbook carries at least one <datasource and at least one <worksheet.',
+      'Retry this tool — it re-reads the live workbook itself on every call. If it fails again, the edit is at fault rather than anything you sent; report that instead of retrying a third time.',
     );
   }
 
@@ -49,15 +49,15 @@ export function validateWorkbookDocumentApply(
   );
   if (missingWorksheetNames.length > 0) {
     return fail(
-      'apply-workbook would remove worksheet(s) that are present in the live workbook.',
-      `this apply would DROP worksheet(s) ${missingWorksheetNames.join(', ')}. Re-read the live document with get-workbook-xml, splice your additions into THAT text, and retry apply-workbook. To intentionally remove a sheet, use the delete-worksheet tool instead.`,
+      'This edit would remove worksheet(s) that are present in the live workbook.',
+      `the edit would DROP worksheet(s) ${missingWorksheetNames.join(', ')}, so it was refused. Retry this tool — it re-reads the live workbook on every call. Removing a sheet on purpose is a separate request; say so rather than editing it out here.`,
     );
   }
 
   if (text.length < 0.5 * liveDocumentXml.length) {
     return fail(
-      'The submitted apply-workbook document is less than half the size of the live one — likely a fragment or stale copy.',
-      'Re-read the live document with get-workbook-xml, splice your additions into THAT text, and retry apply-workbook.',
+      'The edited workbook document is less than half the size of the live one — likely a fragment or a stale copy.',
+      'Retry this tool — it re-reads the live workbook itself on every call, so a fresh attempt starts from the current document.',
     );
   }
 

@@ -7,6 +7,7 @@ import {
 } from '../../toolExecutor/toolExecutor.js';
 import { blockingValidationIssues, runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
+import { type ApplyFocus, dispatchApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 
 export type LoadWorkbookXmlError =
@@ -29,10 +30,12 @@ type LoadWorkbookXmlResult = Result<
 
 export async function loadWorkbookXml({
   xml,
+  focus,
   executor,
   signal,
 }: {
   xml: string;
+  focus: ApplyFocus;
   filePath?: string;
 } & WithExecutorAndAbortSignal): Promise<LoadWorkbookXmlResult> {
   xml = xml.trim();
@@ -70,7 +73,7 @@ export async function loadWorkbookXml({
   // The External Client API whole-workbook POST is authoritative: Desktop replaces
   // the open workbook from the posted document. The apply lock serializes it against
   // the per-sheet paths' fetch-modify-apply.
-  const result = await withApplyLock(() => applyWorkbookText({ xml, executor, signal }));
+  const result = await withApplyLock(() => applyWorkbookText({ xml, focus, executor, signal }));
   if (result.isErr()) {
     return Err({ type: 'execute-command-error', error: result.error });
   }
@@ -84,9 +87,12 @@ export async function loadWorkbookXml({
 // (loadWorksheetXml / loadDashboardXml).
 export async function applyWorkbookText({
   xml,
+  focus,
   executor,
   signal,
-}: { xml: string } & WithExecutorAndAbortSignal): Promise<Result<void, ExecuteCommandError>> {
+}: { xml: string; focus: ApplyFocus } & WithExecutorAndAbortSignal): Promise<
+  Result<void, ExecuteCommandError>
+> {
   const result = await executor.applyWorkbookDocument(xml, signal);
 
   if (result.isErr()) {
@@ -108,6 +114,10 @@ export async function applyWorkbookText({
       hasResult: !!result.value.result,
     },
   });
+
+  // The POST moved the view whether we asked or not, so say where it belongs. Never
+  // fails the apply that already landed.
+  await dispatchApplyFocus({ focus, postedXml: xml, executor, signal });
 
   return Ok.EMPTY;
 }

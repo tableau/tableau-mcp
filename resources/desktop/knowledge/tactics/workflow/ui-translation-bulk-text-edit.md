@@ -52,9 +52,11 @@ Layer 3 (calculated-field / parameter `caption` + `<desc>`) is **refuse-first**.
 
 ## Implementation
 
-### Prefer per-worksheet round-trips (W61)
+### Prefer per-object round-trips (W61)
 
-For text edits, work **one worksheet/dashboard at a time**: `get-worksheet-xml` → edit the matched runs → `apply-worksheet`. Do **not** pull or re-apply the whole workbook to change tooltip/label text. Per-object round-trips keep the `<datasources>` block out of the edit path (a whole-workbook apply can silently collapse a datasource on an unrelated change) and keep only the object you are editing in context. The W61 cache-slice tools do these per-object round-trips without holding whole-workbook XML; `write-cached-xml` validates the cached object so exact-tag replacement is protected mechanically.
+For text edits, work **one worksheet or dashboard at a time**: `get-worksheet-xml` or `get-dashboard-xml` → edit the matched runs/captions → `apply-worksheet` or `apply-dashboard`. Do **not** pull or re-apply the whole workbook to change tooltip/label text. Per-object round-trips keep the `<datasources>` block out of the edit path (a whole-workbook apply can silently collapse a datasource on an unrelated change) and keep only the object you are editing in context.
+
+When the XML is too large for inline handling, use the cache-slice tools: `read-cached-xml` reads one worksheet/dashboard selector or byte range, and `write-cached-xml` splices back one replacement worksheet/dashboard element. `write-cached-xml` validates the outer tag and name for selector-based splices, so exact-tag replacement is protected mechanically.
 
 The safe text-bearing shapes look like this:
 
@@ -88,14 +90,14 @@ The safe text-bearing shapes look like this:
 
 ### The verify loop
 
-Translate matched runs/captions with **exact-tag replacement** (not loose text search), apply back **per worksheet**, then verify before moving on:
+Translate matched runs/captions with **exact-tag replacement** (not loose text search), apply back **per worksheet or dashboard**, then verify before moving on:
 
-```
-1. get-worksheet-xml          → read this worksheet's XML
+```text
+1. get-worksheet-xml or get-dashboard-xml    → read this object's XML
 2. replace matched <run>/<customized-*> text (exact literal, umlauts, loanwords kept)
-3. apply-worksheet           → apply THIS worksheet only
-4. worksheet-list readback    → confirm the sheet set is intact
-5. check-for-user-changes    → confirm nothing else moved/broke
+3. apply-worksheet or apply-dashboard        → apply THIS object only
+4. worksheet/dashboard list readback         → confirm the sheet and dashboard set is intact
+5. check-for-user-changes                    → confirm nothing else moved/broke
 6. only then advance to the next worksheet/dashboard
 ```
 
@@ -103,8 +105,8 @@ If `check-for-user-changes` shows an unexpected change, stop and reconcile befor
 
 ## Related Knowledge
 
-- Companion — recover if an apply drops or corrupts a change mid-loop: [Recovery from Failed Workbook Applies](data/knowledge/tactics/workflow/recovery.md).
-- Companion — why per-object round-trips avoid the whole-workbook risk surface and command-safety guardrails: [Do Not Guess execute_tableau_command Names](data/knowledge/tactics/workflow/execute-command-crash-risk.md).
+- `expertise://tableau/tactics/workflow/recovery` — recover if an apply drops or corrupts a change mid-loop.
+- `expertise://tableau/tactics/workflow/execute-command-crash-risk` — command-safety guardrails; why per-object round-trips avoid the whole-workbook risk surface.
 
 ## Source and Confidence
 

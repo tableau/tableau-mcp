@@ -11,7 +11,7 @@ import {
   ParsedDatasourceDependencies,
 } from './types.js';
 
-function inferRoleFromType(localType: string | undefined): string {
+export function inferRoleFromType(localType: string | undefined): string {
   if (!localType) return 'dimension';
   switch (localType) {
     case 'integer':
@@ -22,7 +22,7 @@ function inferRoleFromType(localType: string | undefined): string {
   }
 }
 
-function inferFieldTypeFromType(localType: string | undefined): string {
+export function inferFieldTypeFromType(localType: string | undefined): string {
   if (!localType) return 'nominal';
   switch (localType) {
     case 'integer':
@@ -32,6 +32,24 @@ function inferFieldTypeFromType(localType: string | undefined): string {
       return 'quantitative';
     default:
       return 'nominal';
+  }
+}
+
+/**
+ * Visit every `<column>` under a relation tree, outermost relation first.
+ * Relations nest to any depth — a join of joins puts the leaf
+ * `<relation type='table'>` two or more levels down, and only the leaf carries
+ * `<columns>`. Walking one level made those columns invisible to the reader and
+ * unresolvable by the writer, which now refuses rather than fabricating. Both
+ * sides share this walk so they agree on which columns exist at any depth.
+ */
+export function forEachRelationColumn(relations: any[], visit: (column: any) => void): void {
+  for (const relation of relations) {
+    if (!relation || typeof relation !== 'object') continue;
+    for (const column of normalizeArray(relation.columns?.column)) {
+      visit(column);
+    }
+    forEachRelationColumn(normalizeArray(relation.relation), visit);
   }
 }
 
@@ -317,28 +335,16 @@ export function listAvailableFields(
       }
     }
 
-    // 2. Get columns from connection relations (raw table columns)
+    // 2. Get columns from connection relations (raw table columns), at any depth
     if (datasource.connection) {
-      const relations = normalizeArray(datasource.connection.relation);
-      for (const relation of relations) {
-        const nestedRelations = normalizeArray(relation.relation);
-        const allRelations = nestedRelations.length > 0 ? nestedRelations : [relation];
-
-        for (const rel of allRelations) {
-          if (rel.columns && rel.columns.column) {
-            const relationColumns = normalizeArray(rel.columns.column);
-            for (const column of relationColumns) {
-              const columnName = column['@_name'];
-              if (columnName) {
-                const bracketedName = columnName.startsWith('[') ? columnName : `[${columnName}]`;
-                if (!columnMap.has(bracketedName)) {
-                  columnMap.set(bracketedName, { column, source: 'relation' });
-                }
-              }
-            }
-          }
+      forEachRelationColumn(normalizeArray(datasource.connection.relation), (column) => {
+        const columnName = column['@_name'];
+        if (!columnName) return;
+        const bracketedName = columnName.startsWith('[') ? columnName : `[${columnName}]`;
+        if (!columnMap.has(bracketedName)) {
+          columnMap.set(bracketedName, { column, source: 'relation' });
         }
-      }
+      });
 
       // 3. Get columns from metadata-records (covers fields only defined at the connection level)
       const metadataRecords = datasource.connection['metadata-records'];
