@@ -513,7 +513,7 @@ describe('bindTemplateTool', () => {
     const tool = getBindTemplateTool(new DesktopMcpServer());
     expect(tool.name).toBe('bind-template');
     expect(tool.description).toBe(
-      'Bind chart. Quote summary_rows; call get-summary-data only when truncated/absent.',
+      'Bind chart. Quote summary_rows; get-summary-data if truncated, absent or errored.',
     );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
@@ -1782,6 +1782,78 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(Buffer.byteLength(JSON.stringify(body.summary_rows), 'utf8')).toBeLessThanOrEqual(2048);
     expect(body.summary_rows.rows.length).toBeGreaterThan(0);
     expect(body.summary_rows.rows.length).toBeLessThan(20);
+  });
+
+  it('truncates a monster cell before sizing summary_rows', async () => {
+    const mocks = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(mocks, {
+        columns: [
+          { name: 'Region', dataType: 'string' },
+          { name: 'Narrative', dataType: 'string' },
+        ],
+        rows: [['West', 'x'.repeat(1_000_000)]],
+      }),
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.summary_rows_error).toBeUndefined();
+    expect(body.summary_rows.rows).toEqual([['West', 'x'.repeat(256)]]);
+    expect(Buffer.byteLength(JSON.stringify(body.summary_rows), 'utf8')).toBeLessThanOrEqual(2048);
+    expect(body.truncated).toBe(true);
+  });
+
+  it('drops a single capped row that still exceeds the summary_rows byte budget', async () => {
+    const mocks = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+    const columns = Array.from({ length: 10 }, (_, index) => ({
+      name: `Narrative ${index}`,
+      dataType: 'string',
+    }));
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(mocks, {
+        columns,
+        rows: [columns.map(() => 'x'.repeat(1_000_000))],
+      }),
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.summary_rows).toBeUndefined();
+    expect(body.summary_rows_error).toBe('oversize readback');
+  });
+
+  it('treats zero summary rows as inconclusive without failing the bind', async () => {
+    const mocks = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(mocks, { columns: [], rows: [] }),
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.summary_rows).toBeUndefined();
+    expect(body.summary_rows_error).toBe('empty readback — verify with get-summary-data');
   });
 
   it('keeps bind success and reports summary_rows_error when readback fails', async () => {

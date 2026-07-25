@@ -234,6 +234,7 @@ const PROPOSAL_ATTEMPTED_PHASE = ['proposal', 'attempted'].join('-');
 const RETRY_USED_PHASE = ['retry', 'used'].join('-');
 const SUMMARY_ROWS_MAX_ROWS = 20;
 const SUMMARY_ROWS_MAX_BYTES = 2048;
+const SUMMARY_ROWS_MAX_CELL_CHARS = 256;
 const SUMMARY_ROWS_TIMEOUT_MS = 2000;
 const SUMMARY_ROWS_ERROR_MAX_CHARS = 512;
 
@@ -243,33 +244,45 @@ type SummaryRowsEnrichment = Pick<
 >;
 
 function capSummaryRows(columns: unknown[], rows: unknown[][]): SummaryRowsEnrichment {
-  const cappedColumns = [...columns];
-  let cappedRows = rows.slice(0, SUMMARY_ROWS_MAX_ROWS);
-  let truncated = rows.length > cappedRows.length;
-  const byteLength = (): number =>
-    Buffer.byteLength(JSON.stringify({ columns: cappedColumns, rows: cappedRows }), 'utf8');
+  if (rows.length === 0) {
+    return { summary_rows_error: 'empty readback — verify with get-summary-data' };
+  }
 
-  while (byteLength() > SUMMARY_ROWS_MAX_BYTES && cappedRows.length > 1) {
-    cappedRows.pop();
-    truncated = true;
+  const cappedColumns = [...columns];
+  let cellTruncated = false;
+  const candidateRows = rows.slice(0, SUMMARY_ROWS_MAX_ROWS).map((row) =>
+    row.map((cell) => {
+      if (typeof cell !== 'string' || cell.length <= SUMMARY_ROWS_MAX_CELL_CHARS) {
+        return cell;
+      }
+      cellTruncated = true;
+      return cell.slice(0, SUMMARY_ROWS_MAX_CELL_CHARS);
+    }),
+  );
+  const prefix = `{"columns":${JSON.stringify(cappedColumns)},"rows":[`;
+  const suffix = ']}';
+  let payloadBytes =
+    Buffer.byteLength(prefix, 'utf8') + Buffer.byteLength(suffix, 'utf8');
+  const cappedRows: unknown[][] = [];
+
+  for (const row of candidateRows) {
+    const serializedRow = JSON.stringify(row);
+    const nextRowBytes =
+      Buffer.byteLength(serializedRow, 'utf8') + (cappedRows.length === 0 ? 0 : 1);
+    if (payloadBytes + nextRowBytes > SUMMARY_ROWS_MAX_BYTES) {
+      break;
+    }
+    cappedRows.push(row);
+    payloadBytes += nextRowBytes;
   }
-  while (byteLength() > SUMMARY_ROWS_MAX_BYTES && cappedColumns.length > 1) {
-    cappedColumns.pop();
-    cappedRows = cappedRows.map((row) => row.slice(0, cappedColumns.length));
-    truncated = true;
-  }
-  if (byteLength() > SUMMARY_ROWS_MAX_BYTES && cappedRows.length > 0) {
-    cappedRows = [];
-    truncated = true;
-  }
-  while (byteLength() > SUMMARY_ROWS_MAX_BYTES && cappedColumns.length > 0) {
-    cappedColumns.pop();
-    truncated = true;
+
+  if (cappedRows.length === 0) {
+    return { summary_rows_error: 'oversize readback' };
   }
 
   return {
     summary_rows: { columns: cappedColumns, rows: cappedRows },
-    ...(truncated ? { truncated: true } : {}),
+    ...(cellTruncated || rows.length > cappedRows.length ? { truncated: true } : {}),
   };
 }
 
@@ -1697,7 +1710,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     name: 'bind-template',
     title,
     description:
-      'Bind chart. Quote summary_rows; call get-summary-data only when truncated/absent.',
+      'Bind chart. Quote summary_rows; get-summary-data if truncated, absent or errored.',
     paramsSchema,
     annotations: {
       title,
