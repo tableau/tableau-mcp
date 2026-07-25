@@ -1,3 +1,8 @@
+/*
+ * Known limitations: this hunter does not correlate an observed identifier to the claim it
+ * supports (an unrelated `result` identifier can satisfy a receipt), and it does not inspect
+ * Boolean()/!! coercions whose assigned name falls outside FLAG_NAME. Both are follow-ups.
+ */
 import { readdirSync, readFileSync } from 'fs';
 import { join, relative } from 'path';
 import ts from 'typescript';
@@ -17,27 +22,48 @@ type Violation = {
 const RECEIPT_ALLOWLIST: Readonly<Record<string, string>> = {
   // WHY safe: this receipt describes a local retry-policy decision, not an external effect;
   // `reason` is the observed branch input and `unverified` disclaims permanence.
-  'src/tools/desktop/data-source/getSummaryData.ts#nextActionForSummaryError':
-    'Local terminal-policy receipt with no external mutation claim.',
+  [receiptExemptionKey(
+    'src/tools/desktop/data-source/getSummaryData.ts',
+    'nextActionForSummaryError',
+    ['stopped get-summary-data on a terminal " " failure'],
+  )]: 'Local terminal-policy receipt with no external mutation claim.',
   // WHY safe: callers pass this record only after rememberedSheetStillPresent re-read the live
   // workbook; the receipt limits its claim to name presence and disclaims field/content checks.
-  'src/tools/desktop/binder/bindTemplate.ts#reusedSheetResult':
-    'Live name presence is checked immediately before this result is constructed.',
+  [receiptExemptionKey(
+    'src/tools/desktop/binder/bindTemplate.ts',
+    'reusedSheetResult',
+    [
+      'matched this ask to the sheet " " this session already applied (template  )',
+      'authored calcs:  ',
+    ],
+  )]: 'Live name presence is checked immediately before this result is constructed.',
 };
 
 const BOOLEAN_FLAG_ALLOWLIST: Readonly<Record<string, string>> = {
   // WHY safe: `true` requires both an actual encoding report and zero reported gaps. Undefined
   // can only produce false, and the receipt separately reports that analysis as unverified.
-  'src/tools/desktop/binder/bindTemplate.ts#encodingAnalysisComplete':
-    'Undefined cannot produce a completed claim; it is explicitly disclosed as unverified.',
+  [booleanExemptionKey(
+    'src/tools/desktop/binder/bindTemplate.ts',
+    `encodingAnalysisComplete =
+    res.encodings !== undefined && res.encodings.unfilled.length === 0`,
+  )]: 'Undefined cannot produce a completed claim; it is explicitly disclosed as unverified.',
   // WHY safe: this flag means a known non-empty unfilled report exists. Undefined can only
   // contribute false and does not by itself assert that the overall bind is complete.
-  'src/tools/desktop/binder/bindTemplate.ts#incomplete':
-    'Presence is affirmative evidence of an incomplete bind, never evidence of completion.',
+  [booleanExemptionKey(
+    'src/tools/desktop/binder/bindTemplate.ts',
+    `incomplete =
+    waterfallReBindSlotUnfilled(res, schemaSummary) ||
+    unfilledEncodings !== undefined ||
+    spliced.warnings.length > 0 ||
+    promiseOutcome === 'failed'`,
+  )]: 'Presence is affirmative evidence of an incomplete bind, never evidence of completion.',
   // WHY safe: this is checked only after getWorkbookXml succeeds; true additionally requires
   // the read-back worksheet to contain the requested mark-label setting.
-  'src/tools/desktop/data-source/formatLabels.ts#applied':
-    'The optional worksheet is host readback, and true requires its requested setting.',
+  [booleanExemptionKey(
+    'src/tools/desktop/data-source/formatLabels.ts',
+    `applied =
+            worksheetXml !== undefined && hasMarkLabelsSetting(worksheetXml, showLabels)`,
+  )]: 'The optional worksheet is host readback, and true requires its requested setting.',
 };
 
 const CLAIM_EVIDENCE = [
@@ -86,20 +112,6 @@ function callName(node: ts.CallExpression): string | undefined {
   return undefined;
 }
 
-function containsCall(node: ts.Node | undefined, name: string): boolean {
-  if (!node) {
-    return false;
-  }
-  if (ts.isCallExpression(node) && callName(node) === name) {
-    return true;
-  }
-  let found = false;
-  node.forEachChild((child) => {
-    found ||= containsCall(child, name);
-  });
-  return found;
-}
-
 function unwrapExpression(expression: ts.Expression): ts.Expression {
   if (
     ts.isAsExpression(expression) ||
@@ -110,6 +122,14 @@ function unwrapExpression(expression: ts.Expression): ts.Expression {
     return unwrapExpression(expression.expression);
   }
   return expression;
+}
+
+function isDirectCall(node: ts.Expression | undefined, name: string): boolean {
+  if (!node) {
+    return false;
+  }
+  const expression = unwrapExpression(node);
+  return ts.isCallExpression(expression) && callName(expression) === name;
 }
 
 function stringValue(expression: ts.Expression): string | undefined {
@@ -153,12 +173,33 @@ function functionName(node: ts.FunctionLikeDeclaration, sourceFile: ts.SourceFil
   return `<anonymous@${lineOf(sourceFile, node)}>`;
 }
 
+function receiptExemptionKey(file: string, fn: string, claims: readonly string[]): string {
+  return JSON.stringify([file, fn, claims]);
+}
+
 function receiptAllowlistKey(
   file: string,
   fn: ts.FunctionLikeDeclaration,
   sourceFile: ts.SourceFile,
+  claims: readonly string[],
 ): string {
-  return `${normalizedRelative(file)}#${functionName(fn, sourceFile)}`;
+  return receiptExemptionKey(normalizedRelative(file), functionName(fn, sourceFile), claims);
+}
+
+function booleanExemptionKey(file: string, assignmentSource: string): string {
+  return JSON.stringify([file, assignmentSource]);
+}
+
+function useAllowlist(
+  allowlist: Readonly<Record<string, string>>,
+  key: string,
+  usedAllowlist: Set<string>,
+): boolean {
+  if (!allowlist[key] || usedAllowlist.has(key)) {
+    return false;
+  }
+  usedAllowlist.add(key);
+  return true;
 }
 
 function stringClaims(node: ts.Node): string[] {
@@ -210,12 +251,6 @@ function auditReceipt(
     ];
   }
 
-  const allowlistKey = receiptAllowlistKey(file, fn, sourceFile);
-  if (RECEIPT_ALLOWLIST[allowlistKey]) {
-    usedAllowlist.add(allowlistKey);
-    return [];
-  }
-
   const facts = call.arguments[0] && unwrapExpression(call.arguments[0]);
   const did =
     facts && ts.isObjectLiteralExpression(facts)
@@ -246,6 +281,11 @@ function auditReceipt(
         message: 'receipt.did has no statically reviewable claim text',
       },
     ];
+  }
+
+  const allowlistKey = receiptAllowlistKey(file, fn, sourceFile, claims);
+  if (useAllowlist(RECEIPT_ALLOWLIST, allowlistKey, usedAllowlist)) {
+    return [];
   }
 
   return claims.flatMap((claim) => {
@@ -356,9 +396,8 @@ function auditBooleanFlag(
     return [];
   }
 
-  const key = `${normalizedRelative(file)}#${assignment.name}`;
-  if (BOOLEAN_FLAG_ALLOWLIST[key]) {
-    usedAllowlist.add(key);
+  const key = booleanExemptionKey(normalizedRelative(file), node.getText(sourceFile));
+  if (useAllowlist(BOOLEAN_FLAG_ALLOWLIST, key, usedAllowlist)) {
     return [];
   }
   return [
@@ -446,7 +485,7 @@ function auditTerminal(node: ts.Node, file: string, sourceFile: ts.SourceFile): 
   }
 
   const envelope = enclosingCall(node, 'withNextAction');
-  if (envelope && containsCall(envelope.arguments[1], 'doneNextAction')) {
+  if (envelope && isDirectCall(envelope.arguments[1], 'doneNextAction')) {
     return [];
   }
   return [
@@ -455,7 +494,7 @@ function auditTerminal(node: ts.Node, file: string, sourceFile: ts.SourceFile): 
       line: lineOf(sourceFile, node),
       rule: 'TERMINAL_RECEIPT',
       message:
-        "status:'terminal' must be enveloped by withNextAction(..., doneNextAction(Receipt))",
+        "status:'terminal' must use doneNextAction(Receipt) as its unconditional next action",
     },
   ];
 }
@@ -551,5 +590,67 @@ describe('cannot-know hunter gate', () => {
       'RECEIPT_OBSERVATION',
       'TERMINAL_RECEIPT',
     ]);
+  });
+
+  it('does not exempt a new receipt in an allowlisted function', () => {
+    const file = join(DESKTOP_ROOT, 'data-source/getSummaryData.ts');
+    const source = readFileSync(file, 'utf-8');
+    const mutated = source.replace(
+      `function nextActionForSummaryError(
+  status: SummaryDataErrorStatus,
+  reason: SummaryDataErrorReason,
+): NextAction {
+`,
+      `function nextActionForSummaryError(
+  status: SummaryDataErrorStatus,
+  reason: SummaryDataErrorReason,
+): NextAction {
+  receipt({ did: ['applied an unobserved workbook change'], unverified: [] });
+`,
+    );
+    expect(mutated).not.toBe(source);
+
+    const violations = auditSource(file, mutated).violations.filter(
+      ({ rule }) => rule === 'RECEIPT_OBSERVATION',
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain('applied an unobserved workbook change');
+  });
+
+  it('does not exempt a new same-named flag in an allowlisted file', () => {
+    const file = join(DESKTOP_ROOT, 'data-source/formatLabels.ts');
+    const source = `${readFileSync(file, 'utf-8')}
+      function syntheticFlag(optionalResult?: object) {
+        const applied = optionalResult !== undefined;
+        return applied;
+      }
+    `;
+
+    const violations = auditSource(file, source).violations.filter(
+      ({ rule }) => rule === 'BOOLEAN_FLAG',
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain('"applied"');
+  });
+
+  it('rejects a conditional alternative to doneNextAction for terminal status', () => {
+    const synthetic = auditSource(
+      join(DESKTOP_ROOT, 'syntheticConditionalTerminal.ts'),
+      `
+        function conditionalTerminal(condition: boolean) {
+          return withNextAction(
+            { status: 'terminal' as const },
+            condition
+              ? prefillNextAction('Keep going')
+              : doneNextAction(receipt({
+                  did: ['stopped because status was terminal'],
+                  unverified: [],
+                })),
+          );
+        }
+      `,
+    );
+    const violations = synthetic.violations.filter(({ rule }) => rule === 'TERMINAL_RECEIPT');
+    expect(violations).toHaveLength(1);
   });
 });
