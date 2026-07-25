@@ -1325,14 +1325,16 @@ describe('binder/manifest-encoding-corpus — deterministic replay coverage', ()
   it('explicit top-N reaches the ranking template before modifiers attach', () => {
     const summary = summarizeSchema(classifierSchema(['Sales'], ['Customer Name']));
 
-    expect(classifyNoLlm('Show me top 10 customers by revenue.', manifests, summary)).toMatchObject({
-      template: 'ranking-ordered-bar',
-      bindings: [
-        { slot_id: 'region', field: 'Customer Name' },
-        { slot_id: 'sales', field: 'Sales' },
-      ],
-      top_n: 10,
-    });
+    expect(classifyNoLlm('Show me top 10 customers by revenue.', manifests, summary)).toMatchObject(
+      {
+        template: 'ranking-ordered-bar',
+        bindings: [
+          { slot_id: 'region', field: 'Customer Name' },
+          { slot_id: 'sales', field: 'Sales' },
+        ],
+        top_n: 10,
+      },
+    );
   });
 
   it('a lone revenue measure binds the KPI template', () => {

@@ -261,8 +261,7 @@ function capSummaryRows(columns: unknown[], rows: unknown[][]): SummaryRowsEnric
   );
   const prefix = `{"columns":${JSON.stringify(cappedColumns)},"rows":[`;
   const suffix = ']}';
-  let payloadBytes =
-    Buffer.byteLength(prefix, 'utf8') + Buffer.byteLength(suffix, 'utf8');
+  let payloadBytes = Buffer.byteLength(prefix, 'utf8') + Buffer.byteLength(suffix, 'utf8');
   const cappedRows: unknown[][] = [];
 
   for (const row of candidateRows) {
