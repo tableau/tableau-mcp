@@ -80,7 +80,7 @@ describe('knowledge corpus integrity', () => {
       .map(([topic, slugs]) => ({
         topic,
         servedFrom: slugs.map((slug) => `${URI_PREFIX}${slug}`),
-        bytes: slugs.map((slug) => readKnowledgeBySlug(slug)?.length ?? 0),
+        chars: slugs.map((slug) => readKnowledgeBySlug(slug)?.length ?? 0),
       }));
 
     expect(duplicates).toEqual([]);
