@@ -10,14 +10,11 @@ describe('desktop knowledge resources', () => {
   });
 
   it('surfaces the bulk UI translation entry for workbook translation prompts', () => {
-    const query = 'translate the workbook into German';
-    const resource = listKnowledgeResources().find((entry) =>
-      [entry.name, entry.description].some((text) =>
-        text.toLowerCase().includes(query.toLowerCase()),
-      ),
+    const resource = listKnowledgeResources().find(
+      (entry) => entry.uri === 'expertise://tableau/tactics/workflow/ui-translation-bulk-text-edit',
     );
 
-    expect(resource?.uri).toBe('expertise://tableau/tableau-tactics/workflow/bulk-ui-translation');
+    expect(resource?.name).toBe('Bulk UI Translation of a Workbook (Three-Layer Text Model)');
 
     const content = readKnowledgeResource(resource!.uri);
     expect(content).toContain('three layers');

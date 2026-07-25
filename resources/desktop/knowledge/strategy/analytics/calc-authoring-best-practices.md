@@ -2,6 +2,8 @@
 
 Guide for writing clean, maintainable Tableau calculated fields — covering multi-line formulas, formula comments, naming conventions, and avoiding common authoring mistakes.
 
+**Tactics companion:** `expertise://tableau/tactics/data/calc-fields` — the XML/authoring mechanics for this topic, including the internal `[Calculation_<digits>]` column-name rule and why the human-readable label belongs in `caption`.
+
 ## Scope Check
 
 - Primary audience: Tableau user
