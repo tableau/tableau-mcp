@@ -281,3 +281,12 @@ npm run docs:start   # Start dev server
 ```
 
 Official docs: https://tableau.github.io/tableau-mcp/
+
+## Writing PRs, commits, and comments for humans
+
+Reviewers approve what they can read. When you write a PR title, PR body, commit subject, or review comment:
+
+- **Title:** keep the `type(scope):` prefix, then say plainly what the change does. No invented compound nouns, no slogans, no version number in the title.
+- **Body — decision first:** open with the one thing the reviewer must accept, and say whether it is a rule the codebase now keeps or a one-off for this case. Don't make the reviewer infer the policy from the diff.
+- **One PR, one decision:** if the title needs "and" to join two independent changes, it is probably two PRs.
+- Prefer short words, active voice, and cutting every word you can. Break a rule before writing something unreadable.
