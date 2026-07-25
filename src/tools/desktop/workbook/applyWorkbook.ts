@@ -91,8 +91,10 @@ export const getApplyWorkbookTool = (
           }
 
           const executor = await extra.getExecutor(resolvedSession);
+          // A whole-workbook apply names no single artifact, so give the user their sheet back.
           const result = await loadWorkbookXml({
             xml: workbookXml,
+            focus: { navigate: 'restore' },
             executor,
             signal: extra.signal,
           });

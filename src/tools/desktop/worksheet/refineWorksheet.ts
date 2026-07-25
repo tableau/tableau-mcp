@@ -290,6 +290,7 @@ export const getRefineWorksheetTool = (
           const applied = await loadWorksheetXml({
             worksheetName: canonicalWorksheetName,
             xml: prepared,
+            focus: { navigate: 'artifact', sheetName: canonicalWorksheetName },
             executor,
             signal: extra.signal,
           });

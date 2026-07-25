@@ -95,6 +95,7 @@ export const getApplyDashboardTool = (
           const result = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,
+            focus: { navigate: 'artifact', sheetName: dashboardName },
             executor,
             signal: extra.signal,
           });

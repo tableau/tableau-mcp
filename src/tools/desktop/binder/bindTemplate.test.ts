@@ -1549,7 +1549,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
   });
 
-  it('auto_apply=true validates the brand-new worksheet and verifies focus after settle', async () => {
+  it('auto_apply=true validates the brand-new worksheet and reissues focus when the first goto does not land', async () => {
     const { executeCommand, applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
     });
@@ -1562,7 +1562,9 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(4);
+    // One bind read, then one read per validated navigation pass: the first dispatches, the
+    // second reads back, sees the goto did not land in this fixture, and reissues once.
+    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(3);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
     expect(executeCommand).toHaveBeenCalledTimes(2);
     expect(executeCommand).toHaveBeenCalledWith(
@@ -2693,7 +2695,7 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
-  it('applies onto the named existing sheet without activation for composition-neutral replacement', async () => {
+  it('applies onto the named existing sheet and navigates to it', async () => {
     const targetWorkbookXml = INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW.replace(
       /Sales by Region/g,
       'se-eval-scratch',
@@ -2721,7 +2723,16 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
     );
     expect(vi.mocked(classifyWorksheetReplaceTarget)).toHaveBeenCalledWith(XML, 'se-eval-scratch');
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-    expect(executeCommand).not.toHaveBeenCalled();
+    // Naming a target sheet used to suppress navigation. It no longer does: the apply posts
+    // the whole document, which moves the view on its own, so the sheet the call rewrote is
+    // the sheet the user must land on.
+    expect(executeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        namespace: 'tabdoc',
+        command: 'goto-sheet',
+        args: { Sheet: 'se-eval-scratch' },
+      }),
+    );
   });
 
   it('unknown target fails closed BEFORE the bind even runs', async () => {

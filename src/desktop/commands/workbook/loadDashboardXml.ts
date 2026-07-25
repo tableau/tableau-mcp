@@ -12,6 +12,7 @@ import {
 import { blockingValidationIssues, runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { xmlNamesEqual } from '../../xmlElement.js';
+import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
@@ -106,11 +107,13 @@ function resolveCanonicalDashboardName(
 export async function loadDashboardXml({
   dashboardName,
   xml,
+  focus,
   executor,
   signal,
 }: {
   dashboardName: string;
   xml: string;
+  focus: ApplyFocus;
 } & WithExecutorAndAbortSignal): Promise<LoadDashboardXmlResult> {
   xml = xml.trim();
   if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
@@ -170,6 +173,7 @@ export async function loadDashboardXml({
   const result = await loadDashboardXmlViaExternalApi({
     dashboardName: canonicalName,
     xml,
+    focus,
     executor,
     signal,
   });
@@ -184,11 +188,13 @@ export async function loadDashboardXml({
 async function loadDashboardXmlViaExternalApi({
   dashboardName,
   xml,
+  focus,
   executor,
   signal,
 }: {
   dashboardName: string;
   xml: string;
+  focus: ApplyFocus;
 } & WithExecutorAndAbortSignal): Promise<LoadDashboardHelperResult> {
   return withApplyLock(async () => {
     const workbookResult = await getWorkbookXml({ executor, signal });
@@ -203,7 +209,7 @@ async function loadDashboardXmlViaExternalApi({
       return Err({ type: 'execute-command-error', error: { type: 'invalid-response', error } });
     }
 
-    const applyResult = await applyWorkbookText({ xml: workbookDoc, executor, signal });
+    const applyResult = await applyWorkbookText({ xml: workbookDoc, focus, executor, signal });
     if (applyResult.isErr()) {
       return Err({ type: 'execute-command-error', error: applyResult.error });
     }

@@ -18,6 +18,7 @@ import {
 import { blockingValidationIssues, runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { xmlNamesEqual } from '../../xmlElement.js';
+import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { getWorksheetFragment } from './getWorksheetXml.js';
@@ -199,12 +200,14 @@ function resolveCanonicalWorksheetName(
 export async function loadWorksheetXml({
   worksheetName,
   xml,
+  focus,
   executor,
   signal,
   readbackVerificationOut,
 }: {
   worksheetName: string;
   xml: string;
+  focus: ApplyFocus;
   readbackVerificationOut?: ReadbackVerificationResult[];
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   xml = xml.trim();
@@ -265,6 +268,7 @@ export async function loadWorksheetXml({
   const result = await loadWorksheetXmlViaExternalApi({
     worksheetName: canonicalName,
     xml,
+    focus,
     executor,
     signal,
     readbackVerificationOut,
@@ -280,12 +284,14 @@ export async function loadWorksheetXml({
 async function loadWorksheetXmlViaExternalApi({
   worksheetName,
   xml,
+  focus,
   executor,
   signal,
   readbackVerificationOut,
 }: {
   worksheetName: string;
   xml: string;
+  focus: ApplyFocus;
   readbackVerificationOut?: ReadbackVerificationResult[];
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   return withApplyLock(async () => {
@@ -349,7 +355,7 @@ async function loadWorksheetXmlViaExternalApi({
       });
     }
 
-    const applyResult = await applyWorkbookText({ xml: workbookDoc, executor, signal });
+    const applyResult = await applyWorkbookText({ xml: workbookDoc, focus, executor, signal });
     if (applyResult.isErr()) {
       return Err({ type: 'execute-command-error', error: applyResult.error });
     }

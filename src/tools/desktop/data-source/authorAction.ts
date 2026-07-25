@@ -110,6 +110,7 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
 
           const loadResult = await applyWorkbookText({
             xml: editedXml,
+            focus: { navigate: 'restore' },
             executor,
             signal: extra.signal,
           });

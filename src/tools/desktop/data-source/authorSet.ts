@@ -118,6 +118,7 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
 
           const loadResult = await applyWorkbookText({
             xml: editedXml,
+            focus: { navigate: 'restore' },
             executor,
             signal: extra.signal,
           });

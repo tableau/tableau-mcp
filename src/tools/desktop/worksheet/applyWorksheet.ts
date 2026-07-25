@@ -100,6 +100,7 @@ export const getApplyWorksheetTool = (
           const result = await loadWorksheetXml({
             worksheetName,
             xml: worksheetXml,
+            focus: { navigate: 'artifact', sheetName: worksheetName },
             executor,
             signal: extra.signal,
           });
