@@ -82,17 +82,20 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).not.toMatch(/tabui:.*document/i);
   });
 
-  it('tells the singer to author noun-less gross margin before binding', () => {
+  it('passes a noun-less derived metric through bind-template calcs in one call', () => {
     const calcThenBind = routes.find((route) => route.id === 'calc-then-bind');
 
     expect(calcThenBind?.trigger).toContain('no named chart type');
-    expect(calcThenBind?.action).toContain(
-      "author-calc the derived metric FIRST (read knowledge for the formula), then bind-template by the calc's caption",
-    );
+    expect(calcThenBind?.action).toContain('calcs[]');
+    expect(calcThenBind?.action).toContain('ONE call');
     expect(calcThenBind?.action).not.toContain('(SUM(revenue)-SUM(cogs))/SUM(revenue)');
     expect(calcThenBind?.action).not.toContain('opex');
-    expect(calcThenBind?.stopConditions).toEqual(['read knowledge for the formula']);
-    expect(calcThenBind?.toolSequence).toEqual(['author-calc', 'bind-template']);
+    expect(calcThenBind?.stopConditions).toEqual(['ONE call']);
+    expect(calcThenBind?.action).toContain('search-knowledge when unsure of the formula');
+    expect(calcThenBind?.toolSequence).toEqual(['bind-template', 'search-knowledge']);
+    expect(calcThenBind?.requiredEvidence).toEqual([
+      'authored_calcs returned by bind-template',
+    ]);
   });
 
   it('is self-contained and does not require skill loading', () => {
@@ -128,6 +131,32 @@ describe('DESKTOP_ROUTE_TABLE', () => {
       'Do not use manual authoring tools between Call 1 and Call 2',
     );
     expect(plainChart?.action).toContain('proposals may carry sort and top_n.');
+  });
+
+  it('forbids orientation reads before the first bind attempt', () => {
+    const plainChart = routes.find((route) => route.id === 'plain-chart');
+
+    expect(plainChart?.action).toContain(
+      'Never call list-available-fields or get-worksheet-xml before bind-template',
+    );
+    expect(plainChart?.action).toContain('reads schema');
+    expect(plainChart?.action).toContain('failed binds propose relevant candidate fields');
+    expect(plainChart?.action).toContain('Never call list-available-fields or get-worksheet-xml before bind-template');
+  });
+
+  it('asks only when ambiguity changes written workbook content', () => {
+    const ambiguity = DESKTOP_ROUTE_TABLE.find((entry) => entry.id === 'ask-user-ambiguity');
+
+    expect(ambiguity).toMatchObject({
+      kind: 'prose',
+      text: expect.stringContaining('what gets WRITTEN to the workbook'),
+    });
+    expect(ambiguity?.kind === 'prose' ? ambiguity.text : '').toContain(
+      'not labels or titles',
+    );
+    expect(ambiguity?.kind === 'prose' ? ambiguity.text : '').toContain(
+      'state it in the reply instead of asking',
+    );
   });
 
   it('stops on terminal summary outcomes but permits one transient retry', () => {
