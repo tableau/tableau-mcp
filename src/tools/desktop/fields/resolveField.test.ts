@@ -484,7 +484,9 @@ describe('resolve-field workbookFile is optional (self-fetches the current workb
     const workbookFile = paramsSchema['workbookFile']!;
 
     expect(workbookFile.isOptional()).toBe(true);
-    expect(workbookFile.description).toBe('Cache path; omit to fetch current workbook.');
+    expect(workbookFile.description).toBe(
+      'Path from an earlier resolve-field or list-available-fields; omit to read the workbook live.',
+    );
     expect(workbookFile.safeParse(undefined).success).toBe(true);
   });
 

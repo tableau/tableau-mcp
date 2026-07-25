@@ -26,16 +26,39 @@ import {
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
+// session is optional like the other 50 tools. Required + a pin the agent cannot name is an
+// impossible contract: pass the pinned pid and the guard says omit it, omit it and the
+// schema says required. resolveSession(undefined) falls back to the pin (or the sole running
+// Desktop), which is what the sidecar has always been stamped with anyway.
 const paramsSchema = {
-  session: z.string().describe(''),
-  workbookFile: z.string().describe(''),
-  templateName: z.string().describe(''),
-  title: z.string().describe(''),
-  sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe(''),
-  templateParameters: z.record(z.string()).optional().describe(''),
-  fieldMapping: z.record(z.string()).optional().describe(''),
-  insertPosition: z.enum(['end', 'before_sheet', 'after_sheet']).optional().describe(''),
-  relativeSheetName: z.string().optional().describe(''),
+  session: z
+    .string()
+    .optional()
+    .describe(
+      'Omit — the pinned or only Desktop is used. Pass a list-instances pid to target another.',
+    ),
+  workbookFile: z
+    .string()
+    .describe('Workbook path from resolve-field or list-available-fields; then apply-workbook.'),
+  templateName: z.string().describe('Template id from list-templates, not a free-form name.'),
+  title: z.string().describe('Name for the sheet this creates.'),
+  sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe('What the template builds.'),
+  templateParameters: z
+    .record(z.string())
+    .optional()
+    .describe('Placeholder values (e.g. DATASOURCE); see list-templates.'),
+  fieldMapping: z
+    .record(z.string())
+    .optional()
+    .describe('Slot id -> exact column ref from resolve-field.'),
+  insertPosition: z
+    .enum(['end', 'before_sheet', 'after_sheet'])
+    .optional()
+    .describe('end (default), or before_sheet/after_sheet next to relativeSheetName.'),
+  relativeSheetName: z
+    .string()
+    .optional()
+    .describe('Existing sheet from list-worksheets for before_sheet/after_sheet.'),
 };
 
 function inferSingleDatasourceFromFieldMapping(

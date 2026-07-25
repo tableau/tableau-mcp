@@ -84,19 +84,43 @@ function columnRefRejection(columnRef: string, workbookXml: string | undefined):
   return `columnRef "${columnRef}" is not a column reference. Expected [Datasource].[derivation:Column:type], e.g. ${COLUMN_REF_EXAMPLE}. ${next}`;
 }
 
+// Every value here that the agent must OBTAIN somewhere else names the tool that hands it
+// over. Shipped Studio said only 'Session.' / 'Workbook.' / 'Fetched fresh.', so an agent
+// that wanted to add a colour encoding sent a WORKSHEET NAME as workbookFile, then cycled
+// session='pinned' / session omitted / session='x' against a contract no value satisfied:
+// 69 failed add-field calls, 591 seconds, one killed conversation.
 const paramsSchema = {
-  session: z.string().optional().describe('Session.'),
-  worksheetName: z.string().optional().describe('Fetched fresh.'),
-  worksheetFile: z.string().optional().describe('Cache path; stacks edits.'),
-  target: z.enum(FIELD_TARGETS).describe('Shelf.'),
+  session: z
+    .string()
+    .optional()
+    .describe(
+      'Omit — the pinned or only Desktop is used. Pass a list-instances pid to target another.',
+    ),
+  worksheetName: z
+    .string()
+    .optional()
+    .describe('Existing sheet name (see list-worksheets). Read live; returns a file path.'),
+  worksheetFile: z
+    .string()
+    .optional()
+    .describe(
+      'Path from an earlier add-field/remove-field; stack edits, then one apply-worksheet. Or omit and pass worksheetName.',
+    ),
+  target: z.enum(FIELD_TARGETS).describe('Rows shelf, cols shelf, or a mark encoding.'),
   columnRef: z
     .string()
     .describe(
       `Exact ref [Datasource].[derivation:Column:type], e.g. ${COLUMN_REF_EXAMPLE}. Not a bare name; get it from resolve-field.`,
     ),
-  encodingType: z.enum(ENCODING_TYPES).optional().describe('For encoding target.'),
-  index: z.number().optional().describe('Position.'),
-  workbookFile: z.string().optional().describe('Workbook.'),
+  encodingType: z
+    .enum(ENCODING_TYPES)
+    .optional()
+    .describe('Mark channel when target=encoding (color, size, text...); required then.'),
+  index: z.number().optional().describe('0-based slot on the shelf; omit to append last.'),
+  workbookFile: z
+    .string()
+    .optional()
+    .describe('Workbook path from resolve-field or list-available-fields, never a sheet name.'),
 };
 
 const title = 'Add Field';

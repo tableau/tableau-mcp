@@ -18,11 +18,27 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { DesktopTool } from '../tool.js';
 import { refreshWorkbookCache } from './refreshWorkbookCache.js';
 
+// A bare `query` / `datasource` / `session` left the agent guessing what to send here; the
+// same guessing sent a sheet name as workbookFile on the sibling tools. Each value that
+// comes from another call names that call.
 const paramsSchema = {
-  workbookFile: z.string().optional().describe('Cache path; omit to fetch current workbook.'),
-  query: z.string(),
-  datasource: z.string().optional(),
-  session: z.string().optional(),
+  workbookFile: z
+    .string()
+    .optional()
+    .describe(
+      'Path from an earlier resolve-field or list-available-fields; omit to read the workbook live.',
+    ),
+  query: z.string().describe('Field name to resolve, as the user said it.'),
+  datasource: z
+    .string()
+    .optional()
+    .describe('Datasource name from list-available-fields when two share a field name.'),
+  session: z
+    .string()
+    .optional()
+    .describe(
+      'Omit — the pinned or only Desktop is used. Pass a list-instances pid to target another.',
+    ),
 };
 
 interface ResolveFieldResult {
