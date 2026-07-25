@@ -408,12 +408,11 @@ describe('binder/classifyNoLlm — e4 acronym expansion field matching', () => {
 // A plain "map of office locations" ask (pm_name, city, latitude, longitude — NO
 // measure) must be able to bind CONFIDENTLY (used_llm=false) to spatial-symbol-map-
 // latlon by COORDINATE-NAME AFFINITY: longitude→cols, latitude→rows (NEVER swapped),
-// a categorical→detail, NO size/color measure. The template ships gated OFF
-// (fast_path_eligible=false, render_verified='none') until the orchestrator live-
-// render-stamps it, so these exercise the resolver via `withForcedEligible` — exactly
-// the blessed pattern for a stamped-pending code path (same as the scatter/pie forcings
-// above). The axis-swap regression is the #1 risk: the reversed-order case proves the
-// coordinate→axis assignment is name-driven, not schema-order-driven.
+// a categorical→detail, NO size/color measure. The template now ships LIVE
+// (fast_path_eligible=true, render_verified='live-2026-07-22'); the production-path
+// assertion below verifies the committed manifest directly. The axis-swap regression is
+// the #1 risk: the reversed-order case proves the coordinate→axis assignment is
+// name-driven, not schema-order-driven.
 describe('binder/classifyNoLlm — measure-free lat/long symbol map (Blake wall #2)', () => {
   // pm_name + city are dimensions; latitude + longitude are the coordinate measures.
   // NO other measure — a size/color measure would be needed by the old required slot.
