@@ -1,14 +1,17 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import levenshtein from 'fast-levenshtein';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
+import { parseDatasourceQualifiedColumnRef } from '../../../desktop/metadata/field-resolver.js';
 import { parseShelfValue } from '../../../desktop/metadata/fields.js';
 import {
   addFieldToCols,
   addFieldToEncoding,
   addFieldToRows,
+  listAvailableFields,
 } from '../../../desktop/metadata/index.js';
 import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
@@ -38,12 +41,59 @@ const ENCODING_TYPES = [
 /** Shelf / encoding a field can be added to. */
 const FIELD_TARGETS = ['rows', 'cols', 'encoding'] as const;
 
+/** One worked column ref, used in both the schema description and the rejection message. */
+const COLUMN_REF_EXAMPLE = '[Sample - Superstore].[sum:Sales:qk]';
+const MAX_COLUMN_SUGGESTIONS = 3;
+
+/**
+ * Nearest real column refs for a value that is not a column ref at all. The schema
+ * said only "Field.", so the agent sent bare names; restating the grammar back at it
+ * did not help. Name the refs that exist instead.
+ */
+function nearestColumnRefs(columnRef: string, workbookXml: string | undefined): string[] {
+  if (!workbookXml) {
+    return [];
+  }
+  let fields: ReturnType<typeof listAvailableFields>;
+  try {
+    fields = listAvailableFields(workbookXml);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(fields) || fields.length === 0) {
+    return [];
+  }
+  const normalize = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const needle = normalize(columnRef);
+  return fields
+    .map((field) => ({
+      ref: field.column_ref,
+      distance: levenshtein.get(needle, normalize(field.columnName ?? field.column_ref)),
+    }))
+    .sort((a, b) => a.distance - b.distance || a.ref.localeCompare(b.ref))
+    .slice(0, MAX_COLUMN_SUGGESTIONS)
+    .map(({ ref }) => ref);
+}
+
+function columnRefRejection(columnRef: string, workbookXml: string | undefined): string {
+  const suggestions = nearestColumnRefs(columnRef, workbookXml);
+  const next =
+    suggestions.length > 0
+      ? `Did you mean: ${suggestions.join(', ')}?`
+      : 'Call resolve-field with the field name to get the exact ref, or list-available-fields for every ref in the workbook.';
+  return `columnRef "${columnRef}" is not a column reference. Expected [Datasource].[derivation:Column:type], e.g. ${COLUMN_REF_EXAMPLE}. ${next}`;
+}
+
 const paramsSchema = {
   session: z.string().optional().describe('Session.'),
   worksheetName: z.string().optional().describe('Fetched fresh.'),
   worksheetFile: z.string().optional().describe('Cache path; stacks edits.'),
   target: z.enum(FIELD_TARGETS).describe('Shelf.'),
-  columnRef: z.string().describe('Field.'),
+  columnRef: z
+    .string()
+    .describe(
+      `Exact ref [Datasource].[derivation:Column:type], e.g. ${COLUMN_REF_EXAMPLE}. Not a bare name; get it from resolve-field.`,
+    ),
   encodingType: z.enum(ENCODING_TYPES).optional().describe('For encoding target.'),
   index: z.number().optional().describe('Position.'),
   workbookFile: z.string().optional().describe('Workbook.'),
@@ -161,6 +211,12 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
                 `index must be an integer in the range 0..${existingLength} for ${target}.`,
               ).toErr();
             }
+          }
+
+          // Checked here, not deeper down, because this is the only layer that can see
+          // the workbook and name the refs that DO exist.
+          if (!parseDatasourceQualifiedColumnRef(columnRef)) {
+            return new ArgsValidationError(columnRefRejection(columnRef, workbookXml)).toErr();
           }
 
           let modifiedXml: string;

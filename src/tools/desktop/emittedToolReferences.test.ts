@@ -34,6 +34,8 @@ const NON_TOOL_VOCABULARY = [
   'edit-the-open-sheet',
   'episode-events',
   'execute-command-error',
+  // Import specifiers, not emitted tool references (same class as 'ts-results-es').
+  'fast-levenshtein',
   'fast-path',
   'field-not-found',
   'field-resolver',
