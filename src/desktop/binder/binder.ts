@@ -23,6 +23,7 @@ import type { OptionalFieldPruneSpec } from '../templates/optionalFieldPrune.js'
 import {
   buildLlmInput as buildCoreLlmInput,
   classifyNoLlm,
+  type EncodingReport,
   type LlmProposeInput as CoreLlmProposeInput,
   MAX_CLASSIFIABLE_FIELDS,
 } from './classify.js';
@@ -48,6 +49,7 @@ import {
 // import above would trip the target's `no-duplicate-imports` (includeExports).
 export {
   classifyNoLlm,
+  type EncodingReport,
   MAX_CLASSIFIABLE_FIELDS,
   resolveInSummary,
   summarizeSchema,
@@ -176,6 +178,12 @@ export type BinderResult =
       apply_instruction: string;
       /** Advisory avoid_when cautions matching the ask; present only when non-empty. Never blocks. */
       warnings?: string[];
+      /**
+       * Encodings the ask asked for, split by what this bind actually filled. Present ONLY
+       * when at least one requested encoding went unfilled. A caller that applies this bind
+       * must not report completion while `unfilled` is non-empty.
+       */
+      encodings?: EncodingReport;
     }
   | {
       status: 'propose';
@@ -324,7 +332,14 @@ function makeTitle(ask: string): string {
     .replace(/\s+/g, ' ')
     .replace(new RegExp(TITLE_CONTROL_CHAR_RE.source, 'g'), '');
   if (!trimmed) return 'Untitled';
-  return trimmed.length > 80 ? trimmed.slice(0, 80) : trimmed;
+  if (trimmed.length <= 80) return trimmed;
+  // Cut on a word boundary and mark the cut. A hard 80-char slice named the live symbol map
+  // "...Goals For (bigger and", which reads like a finished description of a chart that was
+  // never built — the missing color encoding hid inside a sentence nobody could parse.
+  const head = trimmed.slice(0, 79);
+  const lastSpace = head.lastIndexOf(' ');
+  const kept = lastSpace >= 40 ? head.slice(0, lastSpace) : head;
+  return `${kept.replace(/[\s,;:.—–-]+$/, '')}…`;
 }
 
 /**
@@ -605,6 +620,13 @@ export async function bindTemplate(args: {
       // the bound result's existing `warnings` channel — never a blocker.
       if (cls.notes && cls.notes.length > 0) {
         res.warnings = [...(res.warnings ?? []), ...cls.notes];
+      }
+      // Carry the classifier's own filled/unfilled encoding split to the caller. The binder
+      // is the only layer that knows an ask named an encoding it could not bind; a post-apply
+      // readback cannot recover it, because the XML it would read back never contained the
+      // node in the first place.
+      if (cls.encodings) {
+        res.encodings = cls.encodings;
       }
       return res;
     }

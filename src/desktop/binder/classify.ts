@@ -2008,8 +2008,48 @@ function colorSeriesBinding(
   return { slot_id: colorSlot.slot_id, field: spares[0].name };
 }
 
-type SymbolMapEncodingRole = 'size' | 'color' | 'tooltip';
+export type SymbolMapEncodingRole = 'size' | 'color' | 'tooltip';
 type ClassifiedBinding = { slot_id: string; field: string; derivation?: Derivation };
+
+/**
+ * What the ask asked for, split by what the bind actually filled. The binder knows this
+ * while it is binding; before this it threw the knowledge away, so a symbol map whose
+ * color slot went unbound applied as flat blue and still reported completion.
+ */
+export type EncodingReport = {
+  filled: SymbolMapEncodingRole[];
+  unfilled: SymbolMapEncodingRole[];
+};
+
+/**
+ * Deliberately BROADER than the bind cues below. The bind cues are narrow on purpose —
+ * they must never guess a field onto a shelf. These only decide whether the ask MENTIONED
+ * an encoding, which costs nothing to get slightly wrong: a false positive downgrades a
+ * "done" to "here is what I did not build", while a false negative is the silent flat-blue
+ * map. Report generously; bind conservatively.
+ */
+const ENCODING_REQUEST_CUES: Readonly<Record<SymbolMapEncodingRole, string>> = {
+  size: String.raw`\b(?:siz(?:e|es|ed|ing)|bigger|larger|smaller|scaled?|proportional)\b`,
+  color: String.raw`\b(?:colou?rs?|colou?red|colou?ring|shad(?:e|es|ed|ing)|warm(?:er|est)?|hot(?:ter|test)?|heat|intensity|dark(?:er|est)?|light(?:er|est)?|hue|gradient)\b`,
+  tooltip: String.raw`\b(?:tooltips?|hover(?:s|ing)?|mouse\s?over|reveal)\b|\bshow\b(?=[^.!?;]*\bwhen\b)`,
+};
+
+/**
+ * Did the ask ask for this encoding at all? Masked against the schema so a field literally
+ * named "Warm" or "Hover" is read as a field, not as a request for color or a tooltip.
+ */
+function askRequestsSymbolMapEncoding(
+  ask: string,
+  role: SymbolMapEncodingRole,
+  summary: SchemaSummary,
+): boolean {
+  const cue = new RegExp(ENCODING_REQUEST_CUES[role], 'gi');
+  const fieldMaskedAsk = maskFieldNames(ask, summary);
+  return [...ask.matchAll(cue)].some((match) => {
+    const index = match.index ?? 0;
+    return fieldMaskedAsk.slice(index, index + match[0].length) === match[0];
+  });
+}
 
 const SYMBOL_MAP_TEMPLATES: ReadonlySet<string> = new Set([
   LATLON_SYMBOL_MAP_TEMPLATE,
@@ -2196,8 +2236,9 @@ function symbolMapEncodingBindings(
   bound: ClassifiedBinding[],
   aggOverride: Derivation | null,
   matched: SchemaField[],
-): ClassifiedBinding[] {
-  if (!SYMBOL_MAP_TEMPLATES.has(manifest.template)) return [];
+): { bindings: ClassifiedBinding[]; encodings: EncodingReport } {
+  const empty = { bindings: [], encodings: { filled: [], unfilled: [] } };
+  if (!SYMBOL_MAP_TEMPLATES.has(manifest.template)) return empty;
   const boundIds = new Set(bound.map((binding) => binding.slot_id));
   const boundFieldNames = new Set(bound.map((binding) => binding.field));
   const detailFields = new Set(
@@ -2246,7 +2287,23 @@ function symbolMapEncodingBindings(
     boundIds.add(slot.slot_id);
   }
 
-  return additions;
+  // Report against EVERY binding, not just the additions above: a role carried by a
+  // REQUIRED slot (spatial-symbol-map binds size through its required measure slot) is
+  // filled, and must not be reported as missing just because this loop skipped it.
+  const rolesOf = (slotId: string): readonly string[] =>
+    manifest.slots.find((slot) => slot.slot_id === slotId)?.role ?? [];
+  const all = [...bound, ...additions];
+  const filled: SymbolMapEncodingRole[] = [];
+  const unfilled: SymbolMapEncodingRole[] = [];
+  for (const role of ['size', 'color', 'tooltip'] as const) {
+    if (all.some((binding) => rolesOf(binding.slot_id).includes(role))) {
+      filled.push(role);
+    } else if (askRequestsSymbolMapEncoding(ask, role, summary)) {
+      unfilled.push(role);
+    }
+  }
+
+  return { bindings: additions, encodings: { filled, unfilled } };
 }
 
 const MEASURE_BY_DIMENSION_TEMPLATE = 'magnitude-simple-bar';
@@ -2332,6 +2389,12 @@ interface NoLlmClassification {
   filters?: Array<{ field: string; context?: boolean }>;
   /** Advisory provenance (e.g. a required geo slot auto-completed from the schema, W60). Present only when non-empty. */
   notes?: string[];
+  /**
+   * Encodings the ask asked for, split by what the bind filled. Present ONLY when at least
+   * one requested encoding went UNFILLED — a bind that built everything asked for returns
+   * the exact same shape as before, so "done" stays the complete report on the happy path.
+   */
+  encodings?: EncodingReport;
 }
 
 /**
@@ -2468,12 +2531,24 @@ export function classifyNoLlm(
   if (latlon && latlon.fast_path_eligible) {
     const latlonBindings = resolveLatLonSymbolMap(latlon, ask, maskedAsk, summary);
     if (latlonBindings) {
-      latlonBindings.push(
-        ...symbolMapEncodingBindings(latlon, ask, summary, latlonBindings, aggOverride, matched),
+      const latlonEncodings = symbolMapEncodingBindings(
+        latlon,
+        ask,
+        summary,
+        latlonBindings,
+        aggOverride,
+        matched,
       );
+      latlonBindings.push(...latlonEncodings.bindings);
       return attachAskModifiers(
         ask,
-        { template: latlon.template, bindings: latlonBindings },
+        {
+          template: latlon.template,
+          bindings: latlonBindings,
+          ...(latlonEncodings.encodings.unfilled.length > 0
+            ? { encodings: latlonEncodings.encodings }
+            : {}),
+        },
         filterCandidates,
       );
     }
@@ -2605,7 +2680,15 @@ export function classifyNoLlm(
   });
   if (!rgb) return null; // required slot unfilled → fail closed
   const bindings = rgb.bindings;
-  bindings.push(...symbolMapEncodingBindings(chosen, ask, summary, bindings, aggOverride, matched));
+  const symbolMapEncodings = symbolMapEncodingBindings(
+    chosen,
+    ask,
+    summary,
+    bindings,
+    aggOverride,
+    matched,
+  );
+  bindings.push(...symbolMapEncodings.bindings);
   // OPTIONAL small-multiples facet (W23-SM1): additively bind a simple-trellis facet
   // dim (a spare categorical placed AHEAD of the existing pill) ONLY when the ask
   // names/implies a by-<dim> facet AND a spare categorical remains. This never flips
@@ -2622,9 +2705,14 @@ export function classifyNoLlm(
   // non-geo / no-auto-complete ask returns the exact same {template, bindings} shape.
   return attachAskModifiers(
     ask,
-    rgb.provenance.length > 0
-      ? { template: chosen.template, bindings, notes: rgb.provenance }
-      : { template: chosen.template, bindings },
+    {
+      template: chosen.template,
+      bindings,
+      ...(rgb.provenance.length > 0 ? { notes: rgb.provenance } : {}),
+      ...(symbolMapEncodings.encodings.unfilled.length > 0
+        ? { encodings: symbolMapEncodings.encodings }
+        : {}),
+    },
     filterCandidates,
   );
 }

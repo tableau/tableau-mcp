@@ -3008,3 +3008,131 @@ function appliedXmlAt(applyWorkbookDocument: ReturnType<typeof vi.fn>, index: nu
   invariant(typeof xml === 'string');
   return xml;
 }
+
+// A confident bind that applied cleanly, but whose ask asked for a color encoding the
+// binder could not fill. This is the live flat-blue symbol map: correct dots, no color.
+const boundWithUnfilledColorResult: BinderResult = {
+  ...boundResult,
+  encodings: { filled: ['size'], unfilled: ['color'] },
+};
+
+describe('bind-template — reports what it actually built', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
+  });
+
+  it('does NOT report done when a requested encoding went unfilled', async () => {
+    const { getExecutor } = setupAutoApplyMocks({ bind: boundWithUnfilledColorResult });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'symbol map of Sales by State, warmer dots for more sales',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(body.applied).toBe(true);
+    // The apply succeeded, so the sheet is real — but the tool must not call it complete.
+    expect(result.structuredContent).not.toEqual({
+      nextAction: { label: 'Chart complete — no further calls needed', kind: 'done' },
+    });
+    expect(
+      (result.structuredContent as { nextAction: { kind: string } } | undefined)?.nextAction.kind,
+    ).not.toBe('done');
+    expect(body.guidance).not.toContain('no further tool calls');
+  });
+
+  it('names the missing encoding and the concrete next call', async () => {
+    const { getExecutor } = setupAutoApplyMocks({ bind: boundWithUnfilledColorResult });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'symbol map of Sales by State, warmer dots for more sales',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    const guidance = body.guidance as string;
+    // Name the encoding that is missing...
+    expect(guidance).toContain('color');
+    // ...and the concrete call that fixes it, on THIS sheet.
+    expect(guidance).toContain('add-field');
+    expect(guidance).toContain("encodingType:'color'");
+    expect(guidance).toContain('Sales by Region');
+    // The measured failure mode is the model re-wording the same ask at bind-template.
+    expect(guidance).toContain('Do NOT call bind-template again');
+    // The machine-readable half must point at the same action.
+    expect(
+      (result.structuredContent as { nextAction: { label: string } }).nextAction.label,
+    ).toContain('color');
+  });
+
+  it('reports the filled and unfilled encodings in the body', async () => {
+    const { getExecutor } = setupAutoApplyMocks({ bind: boundWithUnfilledColorResult });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'symbol map of Sales by State, warmer dots for more sales',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(body.encodings).toEqual({ filled: ['size'], unfilled: ['color'] });
+  });
+
+  it('a fully satisfied bind still reports done exactly as today (no regression)', async () => {
+    const { getExecutor } = setupAutoApplyMocks();
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'symbol map of Sales by State',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(result.structuredContent).toEqual({
+      nextAction: { label: 'Chart complete — no further calls needed', kind: 'done' },
+    });
+    expect(body.guidance).toContain('no further tool calls');
+    // No new keys on the happy path: "done" is itself the complete report.
+    expect(Object.keys(body).sort()).toEqual([
+      'applied',
+      'guidance',
+      'phase_ms',
+      'sheet_name',
+      'status',
+    ]);
+    expect(body.encodings).toBeUndefined();
+  });
+
+  it('keeps the nextAction label legal when every encoding is unfilled', async () => {
+    // nextAction labels throw above 60 chars, so the widest possible steer must still fit.
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: {
+        ...boundResult,
+        encodings: { filled: [], unfilled: ['size', 'color', 'tooltip'] },
+      },
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'symbol map of Sales by State, bigger warmer dots, goals on hover',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    const { label } = (result.structuredContent as { nextAction: { label: string } }).nextAction;
+    expect(label.length).toBeLessThanOrEqual(60);
+    expect(label).toContain('color');
+  });
+});
