@@ -5,11 +5,7 @@ import { z } from 'zod';
 
 import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import * as loadDashboardXmlModule from '../../../desktop/commands/workbook/loadDashboardXml.js';
-import {
-  ArgsValidationError,
-  DesktopCommandExecutionError,
-  FileReadError,
-} from '../../../errors/mcpToolError.js';
+import { DesktopCommandExecutionError, FileReadError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -34,9 +30,7 @@ describe('applyDashboardTool', () => {
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       dashboardName: expect.any(Object),
-      mode: expect.any(Object),
       dashboardFile: expect.any(Object),
-      dashboardXml: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({ title: 'Apply Dashboard', readOnlyHint: false });
   });
@@ -48,7 +42,6 @@ describe('applyDashboardTool', () => {
     );
 
     const result = await getToolResult({
-      mode: 'inline',
       dashboardXml: mockXml,
     });
 
@@ -70,7 +63,7 @@ describe('applyDashboardTool', () => {
       Ok({ validationWarnings: [] }),
     );
 
-    const result = await getToolResult({ mode: 'file', dashboardFile: mockFilePath });
+    const result = await getToolResult({ dashboardFile: mockFilePath });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -91,7 +84,7 @@ describe('applyDashboardTool', () => {
       .spyOn(loadDashboardXmlModule, 'loadDashboardXml')
       .mockResolvedValue(Ok({ validationWarnings: [] }));
 
-    const result = await getToolResult({ mode: 'file', dashboardFile: '/path/to/dashboard.xml' });
+    const result = await getToolResult({ dashboardFile: '/path/to/dashboard.xml' });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -103,29 +96,18 @@ describe('applyDashboardTool', () => {
     sidecarSpy.mockRestore();
   });
 
-  it('should return error when inline mode is used without dashboardXml', async () => {
-    const result = await getToolResult({ mode: 'inline' });
+  it('should return error when no dashboardFile is given', async () => {
+    const result = await getToolResult({});
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe(
-      new ArgsValidationError('When mode=inline, non-empty dashboard layout content is required.')
-        .message,
-    );
-  });
-
-  it('should return error when file mode is used without dashboardFile', async () => {
-    const result = await getToolResult({ mode: 'file' });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('When mode=file, a non-empty dashboard file path');
+    expect(result.content[0].text).toContain('A non-empty dashboard file path is required');
   });
 
   it('should return error when dashboard file does not exist', async () => {
     vi.mocked(existsSync).mockReturnValue(false);
 
-    const result = await getToolResult({ mode: 'file', dashboardFile: '/nonexistent.xml' });
+    const result = await getToolResult({ dashboardFile: '/nonexistent.xml' });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -139,7 +121,7 @@ describe('applyDashboardTool', () => {
       throw readError;
     });
 
-    const result = await getToolResult({ mode: 'file', dashboardFile: '/path/to/dashboard.xml' });
+    const result = await getToolResult({ dashboardFile: '/path/to/dashboard.xml' });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -157,28 +139,11 @@ describe('applyDashboardTool', () => {
     };
     vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(Err(error));
 
-    const result = await getToolResult({ mode: 'inline', dashboardXml: mockXml });
+    const result = await getToolResult({ dashboardXml: mockXml });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(new DesktopCommandExecutionError(error.error).message);
-  });
-
-  it('accepts an over-cap inline apply but appends the file-mode note', async () => {
-    const overCapXml =
-      '<dashboard name="Sales Dashboard"><zones>' + 'x'.repeat(20000) + '</zones></dashboard>';
-    vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
-      Ok({ validationWarnings: [] }),
-    );
-
-    const result = await getToolResult({ mode: 'inline', dashboardXml: overCapXml });
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    const message = JSON.parse(result.content[0].text).message as string;
-    expect(message).toContain('Successfully applied dashboard update');
-    expect(message).toContain('inline cap');
-    expect(message).toContain('mode=file');
   });
 
   it('should pass the abort signal to loadDashboardXml', async () => {
@@ -188,7 +153,7 @@ describe('applyDashboardTool', () => {
       .mockResolvedValue(Ok({ validationWarnings: [] }));
     const customSignal = new AbortController().signal;
 
-    await getToolResult({ mode: 'inline', dashboardXml: mockXml, customSignal });
+    await getToolResult({ dashboardXml: mockXml, customSignal });
 
     expect(mockLoad).toHaveBeenCalledWith(
       expect.objectContaining({ xml: mockXml, signal: customSignal }),
@@ -199,7 +164,6 @@ describe('applyDashboardTool', () => {
 async function getToolResult({
   session = '12345',
   dashboardName = 'Sales Dashboard',
-  mode,
   dashboardFile,
   dashboardXml,
   mockExecutor = vi.fn().mockResolvedValue({}),
@@ -207,7 +171,6 @@ async function getToolResult({
 }: {
   session?: string;
   dashboardName?: string;
-  mode: 'file' | 'inline';
   dashboardFile?: string;
   dashboardXml?: string;
   mockExecutor?: TableauDesktopToolContext['getExecutor'];
@@ -215,10 +178,18 @@ async function getToolResult({
 }): Promise<CallToolResult> {
   const tool = getApplyDashboardTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
+  // The tool no longer takes a document. Tests that supplied XML directly now get a
+  // synthetic cache path backed by the fs mock, so they still exercise the apply leg.
+  if (dashboardXml !== undefined && dashboardFile === undefined) {
+    dashboardFile = '/cache/synthetic-dashboard.xml';
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(dashboardXml);
+  }
+
   const extra = {
     ...getMockRequestHandlerExtra(),
     getExecutor: mockExecutor,
     ...(customSignal && { signal: customSignal }),
   };
-  return await callback({ session, dashboardName, mode, dashboardFile, dashboardXml }, extra);
+  return await callback({ session, dashboardName, dashboardFile }, extra);
 }

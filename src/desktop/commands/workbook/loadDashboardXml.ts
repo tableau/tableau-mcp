@@ -80,12 +80,13 @@ function resolveCanonicalDashboardName(
     return Err({
       type: 'name-mismatch',
       message: isWorkbookDocument
-        ? 'apply-dashboard expects a single <dashboard name="..."> fragment, but the XML is a whole ' +
-          `<workbook> document. FIX: Extract just the <dashboard name="${callerName}"> element and retry ` +
-          'with that fragment as dashboardXml — or apply the whole document with apply-workbook.'
-        : 'apply-dashboard could not find a top-level <dashboard name="..."> element in the XML. ' +
-          `FIX: Provide a single <dashboard name="${callerName}"> fragment (as returned by get-dashboard-xml) ` +
-          'as dashboardXml.',
+        ? 'Applying a dashboard needs a single <dashboard name="..."> fragment, but the cached file holds ' +
+          `a whole <workbook> document. FIX: read-cached-xml with dashboard="${callerName}" to pull just ` +
+          'that element, write-cached-xml with the same selector to splice your edit back, then apply ' +
+          'that file.'
+        : 'No top-level <dashboard name="..."> element was found in the cached file. ' +
+          `FIX: the file must hold a single <dashboard name="${callerName}"> fragment. Use read-cached-xml ` +
+          'with that dashboard selector to check what the file actually contains.',
     });
   }
 

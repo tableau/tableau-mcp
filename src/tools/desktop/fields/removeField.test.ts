@@ -600,9 +600,7 @@ async function getApplyResult(params: {
     {
       session,
       worksheetName: params.worksheetName,
-      mode: 'file',
       worksheetFile: params.worksheetFile,
-      worksheetXml: undefined,
     },
     getMockRequestHandlerExtra(),
   );

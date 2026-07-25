@@ -173,12 +173,13 @@ function resolveCanonicalWorksheetName(
     return Err({
       type: 'name-mismatch',
       message: isWorkbookDocument
-        ? 'apply-worksheet expects a single <worksheet name="..."> fragment, but the XML is a whole ' +
-          `<workbook> document. FIX: Extract just the <worksheet name="${callerName}"> element and retry ` +
-          'with that fragment as worksheetXml — or apply the whole document with apply-workbook.'
-        : 'apply-worksheet could not find a top-level <worksheet name="..."> element in the XML. ' +
-          `FIX: Provide a single <worksheet name="${callerName}"> fragment (as returned by get-worksheet-xml) ` +
-          'as worksheetXml.',
+        ? 'apply-worksheet expects a single <worksheet name="..."> fragment, but the cached file ' +
+          `holds a whole <workbook> document. FIX: read-cached-xml with worksheet="${callerName}" to pull ` +
+          'just that element, write-cached-xml with the same selector to splice your edit back, then ' +
+          'apply-worksheet with that file.'
+        : 'apply-worksheet could not find a top-level <worksheet name="..."> element in the cached file. ' +
+          `FIX: get-worksheet-xml for "${callerName}" mints a file holding exactly that fragment; edit it ` +
+          'with read-cached-xml/write-cached-xml and pass that path to apply-worksheet.',
     });
   }
 

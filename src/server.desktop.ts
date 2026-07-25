@@ -115,6 +115,12 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     // The manual field-edit path's read leg: mints the worksheetFile cache path that
     // add-field/remove-field/apply-worksheet consume. Without it the manual path cannot start.
     'get-worksheet-xml',
+    // The edit leg. apply-* no longer accepts a document, so the agent needs a way to
+    // read a slice of the cached file and splice an edit back into it. Without these
+    // two, an edit that add-field/remove-field/refine-worksheet cannot express has no
+    // route at all.
+    'read-cached-xml',
+    'write-cached-xml',
     'apply-worksheet',
     'build-and-apply-worksheet',
     'dashboard-auto-apply',
