@@ -14,7 +14,7 @@ const MAX_RESULT_BYTES = 16 * 1024;
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  command: z.string().describe('namespace:command; use search-commands.'),
+  command: z.string().describe('Command ID from the command search results.'),
   args: z.record(z.any()).optional().describe('JSON command args.'),
 };
 

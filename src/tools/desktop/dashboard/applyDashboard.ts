@@ -55,8 +55,8 @@ export const getApplyDashboardTool = (
             return new ArgsValidationError(
               [
                 'A non-empty dashboard file path is required.',
-                'Get one from the dashboard structure retrieval tool, edit it with the cache',
-                'read/write tools, then pass that path here.',
+                'Use a cached dashboard path, edit it with read-cached-xml and',
+                'write-cached-xml, then pass that path here.',
               ].join(' '),
             ).toErr();
           }
@@ -65,7 +65,7 @@ export const getApplyDashboardTool = (
             return new WorkbookNotFoundError(
               [
                 `Cached dashboard file not found: ${dashboardFile}`,
-                'Provide a path determined by the dashboard structure retrieval tool.',
+                'Provide an existing cached dashboard path.',
               ].join(' '),
             ).toErr();
           }

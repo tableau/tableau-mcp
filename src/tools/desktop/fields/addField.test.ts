@@ -704,7 +704,7 @@ describe('add-field columnRef contract', () => {
 
     expect(description).toContain('[Datasource].[derivation:Column:type]');
     expect(description).toContain('[Sample - Superstore].[sum:Sales:qk]');
-    expect(description).toContain('resolve-field');
+    expect(description).toContain('never a bare name');
   });
 
   it('rejects a bare field name before touching the XML, and names the real refs', async () => {

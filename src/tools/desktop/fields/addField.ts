@@ -93,24 +93,22 @@ const paramsSchema = {
   session: z
     .string()
     .optional()
-    .describe(
-      'Omit — the pinned or only Desktop is used. Pass a list-instances pid to target another.',
-    ),
+    .describe('Desktop process ID; omit to use the pinned or only running instance.'),
   worksheetName: z
     .string()
     .optional()
-    .describe('Existing sheet name (see list-worksheets). Read live; returns a file path.'),
+    .describe('Existing worksheet name; omit when worksheetFile supplies the cached sheet.'),
   worksheetFile: z
     .string()
     .optional()
     .describe(
-      'Path from an earlier add-field/remove-field; stack edits, then one apply-worksheet. Or omit and pass worksheetName.',
+      'Cached worksheet path from an earlier field edit; omit to fetch worksheetName from the live workbook.',
     ),
   target: z.enum(FIELD_TARGETS).describe('Rows shelf, cols shelf, or a mark encoding.'),
   columnRef: z
     .string()
     .describe(
-      `Exact ref [Datasource].[derivation:Column:type], e.g. ${COLUMN_REF_EXAMPLE}. Not a bare name; get it from resolve-field.`,
+      `Exact field ref [Datasource].[derivation:Column:type], e.g. ${COLUMN_REF_EXAMPLE}; never a bare name.`,
     ),
   encodingType: z
     .enum(ENCODING_TYPES)
@@ -120,7 +118,9 @@ const paramsSchema = {
   workbookFile: z
     .string()
     .optional()
-    .describe('Workbook path from resolve-field or list-available-fields, never a sheet name.'),
+    .describe(
+      'Cached workbook path returned by field resolution; omit to add without workbook context.',
+    ),
 };
 
 const title = 'Add Field';

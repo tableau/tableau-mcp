@@ -25,20 +25,16 @@ const paramsSchema = {
   workbookFile: z
     .string()
     .optional()
-    .describe(
-      'Path from an earlier resolve-field or list-available-fields; omit to read the workbook live.',
-    ),
+    .describe('Cached workbook path returned by field resolution; omit to read the workbook live.'),
   query: z.string().describe('Field name to resolve, as the user said it.'),
   datasource: z
     .string()
     .optional()
-    .describe('Datasource name from list-available-fields when two share a field name.'),
+    .describe('Existing datasource name used when multiple datasources share a field name.'),
   session: z
     .string()
     .optional()
-    .describe(
-      'Omit — the pinned or only Desktop is used. Pass a list-instances pid to target another.',
-    ),
+    .describe('Desktop process ID; omit to use the pinned or only running instance.'),
 };
 
 interface ResolveFieldResult {
@@ -67,8 +63,8 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
     paramsSchema,
     annotations: {
       title,
-      // With session, a not_found triggers a live re-snapshot that rewrites the
-      // workbook cache file + sidecar (same as list-available-fields).
+      // A cached not_found triggers a live re-snapshot that rewrites the
+      // workbook cache file + sidecar.
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
@@ -139,7 +135,7 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
 
           // W-23447478: a field/datasource connected AFTER the cache was written is
           // invisible to a cache-only resolve — the P0 "agent doesn't recognize my
-          // datasource" shape. When a session is supplied and nothing matched
+          // datasource" shape. When a cached lookup finds nothing
           // (kind:"not_found" — also covers the empty-cache "workbook has no
           // datasources" / "no fields" variants), re-snapshot the live workbook
           // ONCE and retry via the shared refreshWorkbookCache helper (identical
@@ -159,7 +155,7 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
           // then the honest "it genuinely does not exist" one) and never fetch twice.
           let refreshed = requestedWorkbookFile === undefined;
           let refreshFailure: string | undefined;
-          if (!refreshed && session && resolution.kind === 'not_found') {
+          if (!refreshed && resolution.kind === 'not_found') {
             try {
               const sessionResult = resolveSession(session);
               if (sessionResult.isErr()) {
