@@ -1210,6 +1210,73 @@ function businessSynonymMatchesInAsk(
 }
 
 /**
+ * Candidate dimensions whose friendly name starts with a bare head token in the ask.
+ * Full literal field names retain priority. A head mention is deterministic only when one
+ * schema dimension owns it; callers reject multi-field groups before template selection.
+ */
+function dimensionHeadCandidatesInAsk(
+  ask: string,
+  s: SchemaSummary,
+  literalHits: readonly FieldMatch[],
+): Array<{ noun: string; index: number; candidates: SchemaField[] }> {
+  const exactNames = fieldExactNames(s.fields);
+  const fieldsByHead = new Map<string, Set<SchemaField>>();
+
+  for (const field of s.fields) {
+    // Geographic fields have dedicated concept/affinity resolution with stricter
+    // chart-family safeguards; a caption head must not bypass that path.
+    if (field.role !== 'dimension' || field.semanticRole) continue;
+    const friendlyName = field.caption ?? field.name;
+    const tokens = normalizeFieldPhrase(friendlyName).split(' ').filter(Boolean);
+    if (tokens.length < 2) continue;
+    const head = tokens[0];
+    const fields = fieldsByHead.get(head) ?? new Set<SchemaField>();
+    fields.add(field);
+    fieldsByHead.set(head, fields);
+  }
+
+  const matches: Array<{ noun: string; index: number; candidates: SchemaField[] }> = [];
+  for (const [noun, candidateSet] of fieldsByHead) {
+    const nounMatch = fieldNameMatchInAskSpan(ask, noun, exactNames);
+    if (!nounMatch) continue;
+    // A bare leading token is only a grouping field reference in the explicit
+    // "by <dimension-head>" position. Elsewhere it may be ordinary prose or a chart cue.
+    if (!/\bby\s*$/i.test(ask.slice(0, nounMatch.start))) continue;
+
+    const literalClaimsNoun = literalHits.some(({ field }) =>
+      [bareName(field.columnName), field.caption, field.name]
+        .filter((name): name is string => !!name && name.length > 0)
+        .some((name) => {
+          const literalMatch = fieldNameMatchInAskSpan(ask, name, exactNames);
+          return (
+            literalMatch !== null &&
+            nounMatch.start >= literalMatch.start &&
+            nounMatch.start < literalMatch.end
+          );
+        }),
+    );
+    if (literalClaimsNoun) continue;
+
+    matches.push({ noun, index: nounMatch.index, candidates: [...candidateSet] });
+  }
+  return matches;
+}
+
+/** Exactly-one dimension-head matches; ambiguous heads are withheld and rejected upstream. */
+function dimensionHeadMatchesInAsk(
+  ask: string,
+  s: SchemaSummary,
+  literalHits: readonly FieldMatch[],
+): Array<FieldMatch & { noun: string }> {
+  return dimensionHeadCandidatesInAsk(ask, s, literalHits)
+    .filter(
+      (match): match is typeof match & { candidates: [SchemaField] } =>
+        match.candidates.length === 1,
+    )
+    .map(({ noun, index, candidates }) => ({ noun, index, field: candidates[0] }));
+}
+
+/**
  * Blank out whole-token occurrences of every field name/caption/bare column name
  * in the ask (replaced by spaces so token boundaries are preserved). Used for
  * TEMPLATE SELECTION and aggregation-word detection so a field NAME can never
@@ -1268,6 +1335,16 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
       (_whole, pre: string, mid: string, post: string) => pre + ' '.repeat(mid.length) + post,
     );
   }
+  // A uniquely owned dimension head is a field mention too. Use the same one-way
+  // plural matcher as field resolution, then mask only the exact matched span.
+  for (const { noun } of dimensionHeadMatchesInAsk(ask, s, literalHits)) {
+    const match = fieldNameMatchInAskSpan(masked, noun, exactNames);
+    if (!match) continue;
+    masked =
+      masked.slice(0, match.start) +
+      ' '.repeat(match.end - match.start) +
+      masked.slice(match.end);
+  }
   return masked;
 }
 
@@ -1277,6 +1354,7 @@ function matchFieldsInAsk(ask: string, s: SchemaSummary): SchemaField[] {
   const hits: FieldMatch[] = [
     ...literalHits,
     ...businessSynonymMatchesInAsk(ask, s, literalHits),
+    ...dimensionHeadMatchesInAsk(ask, s, literalHits),
   ];
   hits.sort((a, b) => a.index - b.index);
   const seen = new Set<SchemaField>();
@@ -2514,6 +2592,7 @@ function symbolMapEncodingBindings(
 }
 
 const MEASURE_BY_DIMENSION_TEMPLATE = 'magnitude-simple-bar';
+const BARE_MEASURE_KPI_TEMPLATE = 'kpi-text';
 
 const MEASURE_BY_DIMENSION_RESIDUAL_TOKENS: ReadonlySet<string> = new Set([
   'show',
@@ -2586,6 +2665,37 @@ function resolveMeasureByDimensionBar(
   }
   const bound = roleGreedyBind(manifest, matched, aggOverride, schemaDims);
   if (!bound || bound.bindings.length !== 2 || bound.provenance.length !== 0) return null;
+  return bound.bindings;
+}
+
+/**
+ * Bind a KPI only when the complete semantic ask is one resolved measure, optionally
+ * preceded by the exact request preamble "show me". Any other residual token fails closed.
+ */
+function resolveBareMeasureKpi(
+  manifest: TemplateManifest,
+  maskedAsk: string,
+  matched: SchemaField[],
+  aggOverride: Derivation | null,
+  schemaDims: SchemaField[],
+): Array<{ slot_id: string; field: string; derivation?: Derivation }> | null {
+  if (manifest.template !== BARE_MEASURE_KPI_TEMPLATE || manifest.family !== 'kpi') return null;
+  const residual = nameTokens(maskedAsk);
+  if (
+    residual.length !== 0 &&
+    !(residual.length === 2 && residual[0] === 'show' && residual[1] === 'me')
+  ) {
+    return null;
+  }
+  if (matched.length !== 1 || !isMeasure(matched[0])) return null;
+  if (
+    matchAvoidWhen(maskedAsk, manifest.avoid_when, manifest.intent_keywords).length > 0 ||
+    hasDeterministicPathBlockingHazard(manifest)
+  ) {
+    return null;
+  }
+  const bound = roleGreedyBind(manifest, matched, aggOverride, schemaDims);
+  if (!bound || bound.bindings.length !== 1 || bound.provenance.length !== 0) return null;
   return bound.bindings;
 }
 
@@ -2715,12 +2825,15 @@ export function classifyNoLlm(
   // partial view. Checked at the TOP, before any field is touched, so cost stays bounded.
   if (summary.fields.length > MAX_CLASSIFIABLE_FIELDS) return null;
 
-  // A business noun with multiple caption-pattern candidates is materially ambiguous:
-  // deterministic binding could change the numbers. Fail closed before template selection;
-  // buildLlmInput ranks every candidate into the existing proposal field list.
+  // A business noun or bare dimension head with multiple caption candidates is materially
+  // ambiguous: deterministic binding could change the numbers. Fail closed before template
+  // selection; buildLlmInput ranks every candidate into the existing proposal field list.
   const literalHits = literalFieldMatchesInAsk(ask, summary);
   if (
     businessSynonymCandidatesInAsk(ask, summary, literalHits).some(
+      ({ candidates }) => candidates.length > 1,
+    ) ||
+    dimensionHeadCandidatesInAsk(ask, summary, literalHits).some(
       ({ candidates }) => candidates.length > 1,
     )
   ) {
@@ -2779,6 +2892,13 @@ export function classifyNoLlm(
     if (score > 0) scored.push({ m, score });
   }
   if (scored.length === 0) {
+    const kpi = manifests.get(BARE_MEASURE_KPI_TEMPLATE);
+    if (kpi?.fast_path_eligible) {
+      const bindings = resolveBareMeasureKpi(kpi, maskedAsk, matched, aggOverride, schemaDims);
+      if (bindings) {
+        return attachAskModifiers(ask, { template: kpi.template, bindings }, filterCandidates);
+      }
+    }
     const magnitudeBar = manifests.get(MEASURE_BY_DIMENSION_TEMPLATE);
     if (magnitudeBar?.fast_path_eligible) {
       const bindings = resolveMeasureByDimensionBar(
