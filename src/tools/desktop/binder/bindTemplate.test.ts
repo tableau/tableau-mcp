@@ -512,7 +512,9 @@ describe('bindTemplateTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getBindTemplateTool(new DesktopMcpServer());
     expect(tool.name).toBe('bind-template');
-    expect(tool.description).toContain('Bind and apply a chart in ONE call');
+    expect(tool.description).toBe(
+      'Bind chart. Quote summary_rows; call get-summary-data only when truncated/absent.',
+    );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       ask: expect.any(Object),
@@ -1508,6 +1510,40 @@ function readbackExecutor(base: {
   });
 }
 
+function summaryRowsExecutor(
+  base: {
+    executeCommand: ReturnType<typeof vi.fn>;
+    applyWorkbookDocument: ReturnType<typeof vi.fn>;
+    getEvents: ReturnType<typeof vi.fn>;
+  },
+  summary:
+    | { columns: Array<Record<string, unknown>>; rows: unknown[][] }
+    | ReturnType<typeof Err>
+    | 'pending',
+): TableauDesktopToolContext['getExecutor'] {
+  return vi.fn().mockResolvedValue({
+    executeCommand: base.executeCommand,
+    applyWorkbookDocument: base.applyWorkbookDocument,
+    getEvents: base.getEvents,
+    listWorksheets: vi.fn().mockResolvedValue(
+      Ok({
+        worksheets: [
+          {
+            id: 'sheet-sales',
+            name: 'Sales by Region',
+            datasources: [{ id: 'superstore', name: 'Superstore' }],
+          },
+        ],
+      }),
+    ),
+    getWorksheetDocument: vi.fn(routeMissing),
+    getWorksheetSummaryData:
+      summary === 'pending'
+        ? vi.fn().mockReturnValue(new Promise(() => undefined))
+        : vi.fn().mockResolvedValue('isErr' in summary ? summary : Ok(summary)),
+  });
+}
+
 describe('bindTemplateTool auto_apply gate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1642,6 +1678,7 @@ describe('bindTemplateTool auto_apply gate', () => {
         applied: true,
         sheet_name: 'Sales by Region',
         phase_ms: { bind: 0, inject: 0, apply: 0 },
+        summary_rows_error: 'activeExecutor.listWorksheets is not a function',
       }),
     );
     expect(logSpy).toHaveBeenCalledWith(
@@ -1676,6 +1713,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       'phase_ms',
       'sheet_name',
       'status',
+      'summary_rows_error',
     ]);
     expect(body.status).toBe('bound');
     expect(body.apply_instruction).toBeUndefined();
@@ -1686,6 +1724,116 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(typeof body.guidance).toBe('string');
     expect(body.guidance).toContain('HOST VERIFICATION — verified');
     expect((body.guidance as string).length).toBeLessThan(400);
+  });
+
+  it('includes at most 20 summary rows on an applied:true result', async () => {
+    const mocks = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+    const rows = Array.from({ length: 25 }, (_, index) => [`Region ${index}`, index * 100]);
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(mocks, {
+        columns: [
+          { name: 'Region', dataType: 'string' },
+          { name: 'Sales', dataType: 'real' },
+        ],
+        rows,
+      }),
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.summary_rows).toEqual({
+      columns: [
+        { name: 'Region', dataType: 'string' },
+        { name: 'Sales', dataType: 'real' },
+      ],
+      rows: rows.slice(0, 20),
+    });
+    expect(body.truncated).toBe(true);
+  });
+
+  it('caps serialized summary_rows near 2KB and marks truncation', async () => {
+    const mocks = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(mocks, {
+        columns: [
+          { name: 'Region', dataType: 'string' },
+          { name: 'Narrative', dataType: 'string' },
+        ],
+        rows: Array.from({ length: 20 }, (_, index) => [`Region ${index}`, 'x'.repeat(400)]),
+      }),
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.truncated).toBe(true);
+    expect(Buffer.byteLength(JSON.stringify(body.summary_rows), 'utf8')).toBeLessThanOrEqual(2048);
+    expect(body.summary_rows.rows.length).toBeGreaterThan(0);
+    expect(body.summary_rows.rows.length).toBeLessThan(20);
+  });
+
+  it('keeps bind success and reports summary_rows_error when readback fails', async () => {
+    const mocks = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(
+        mocks,
+        Err({
+          type: 'command-failed',
+          error: { code: 'summary-unavailable', message: 'summary endpoint unavailable' },
+        }),
+      ),
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.sheet_name).toBe('Sales by Region');
+    expect(body.summary_rows).toBeUndefined();
+    expect(body.summary_rows_error).toContain('summary endpoint unavailable');
+  });
+
+  it('times out summary readback after 2s without failing a successful bind', async () => {
+    vi.useFakeTimers();
+    try {
+      const mocks = setupAutoApplyMocks({
+        inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      });
+      const resultPromise = getToolResult({
+        session: '1',
+        ask: 'bar chart of Sales by Region',
+        auto_apply: true,
+        getExecutor: summaryRowsExecutor(mocks, 'pending'),
+      });
+
+      await vi.advanceTimersByTimeAsync(2000);
+      const result = await resultPromise;
+
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.applied).toBe(true);
+      expect(body.summary_rows).toBeUndefined();
+      expect(body.summary_rows_error).toBe('summary rows readback timed out after 2000ms');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('applied:true non-waterfall bind is terminal: guidance says done and nextAction.kind is "done"', async () => {
@@ -1715,6 +1863,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       'phase_ms',
       'sheet_name',
       'status',
+      'summary_rows_error',
     ]);
     expect(body.guidance).toContain('HOST VERIFICATION — verified');
     expect((body.guidance as string).length).toBeLessThan(400);
@@ -3628,13 +3777,14 @@ describe('bind-template — reports what it actually built', () => {
     const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
     expectStructuredBlock(result, COMPLETE_BIND_NEXT_ACTION);
     expect(body.guidance).toContain('no further tool calls');
-    // No new keys on the happy path: "done" is itself the complete report.
+    // This fixture cannot serve summary rows, so the advisory failure is explicit.
     expect(Object.keys(body).sort()).toEqual([
       'applied',
       'guidance',
       'phase_ms',
       'sheet_name',
       'status',
+      'summary_rows_error',
     ]);
     expect(body.encodings).toBeUndefined();
   });

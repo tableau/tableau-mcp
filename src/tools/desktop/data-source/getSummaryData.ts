@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { resolveItemByNameOrId } from '../../../desktop/externalApi/toolUtils.js';
 import { WorksheetItem } from '../../../desktop/externalApi/types.js';
 import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
@@ -22,6 +21,7 @@ import {
   withNextAction,
 } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
+import { fetchWorksheetSummaryData } from './summaryDataCore.js';
 
 const DEFAULT_MAX_ROWS = 200;
 const MAX_ROWS_CAP = 1000;
@@ -124,47 +124,21 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
               session: sessionResult.value,
               extra,
               callback: async (_executor, _signal, read) => {
-                const worksheetsResult = await read(
-                  'worksheet list',
-                  async (executor, signal) => await executor.listWorksheets(signal),
-                );
-                if (worksheetsResult.isErr()) {
-                  return requestError(worksheetsResult.error).toErr();
-                }
-
-                const worksheetResult = resolveWorksheet(
+                const summaryResult = await fetchWorksheetSummaryData({
+                  read,
                   worksheet,
-                  worksheetsResult.value.worksheets ?? [],
-                );
-                if (worksheetResult.isErr()) {
-                  return worksheetError(worksheetResult.error).toErr();
-                }
-
-                const resolvedWorksheet = worksheetResult.value;
-                if (resolvedWorksheet.datasources?.length === 0) {
-                  return new Ok(emptySheetResult(resolvedWorksheet, resolvedMaxRows));
-                }
-
-                const summaryResult = await read(
-                  'summary-data',
-                  async (executor, signal) =>
-                    await executor.getWorksheetSummaryData(
-                      resolvedWorksheet.id,
-                      {
-                        maxRows: resolvedMaxRows,
-                        ...(columns && columns.length > 0
-                          ? { columnsToIncludeByFieldName: columns.join(',') }
-                          : {}),
-                      },
-                      signal,
-                    ),
-                );
+                  maxRows: resolvedMaxRows,
+                  columns,
+                });
                 if (summaryResult.isErr()) {
-                  return requestError(summaryResult.error).toErr();
+                  return summaryResult.error.type === 'worksheet'
+                    ? worksheetError(summaryResult.error.error).toErr()
+                    : requestError(summaryResult.error.error).toErr();
                 }
 
-                const dataColumns = summaryResult.value.columns ?? [];
-                const dataRows = summaryResult.value.rows ?? [];
+                const resolvedWorksheet = summaryResult.value.worksheet;
+                const dataColumns = summaryResult.value.columns;
+                const dataRows = summaryResult.value.rows;
                 if (dataColumns.length === 0) {
                   return new Ok(emptySheetResult(resolvedWorksheet, resolvedMaxRows));
                 }
@@ -451,29 +425,6 @@ function summaryDataUnresolvedSignature({
   });
 }
 
-function resolveWorksheet(
-  worksheet: string | undefined,
-  worksheets: WorksheetItem[],
-): Result<WorksheetItem, ArgsValidationError> {
-  const requested = worksheet?.trim();
-  if (!requested) {
-    if (worksheets.length === 1) {
-      return new Ok(worksheets[0]);
-    }
-    return new ArgsValidationError(
-      `Multiple worksheets exist. Specify worksheet by name or id. Available worksheets: ${formatWorksheets(
-        worksheets,
-      )}`,
-    ).toErr();
-  }
-
-  return resolveItemByNameOrId('Worksheet', worksheet ?? '', worksheets);
-}
-
 function clampMaxRows(maxRows: number | undefined): number {
   return Math.min(maxRows ?? DEFAULT_MAX_ROWS, MAX_ROWS_CAP);
-}
-
-function formatWorksheets(worksheets: WorksheetItem[]): string {
-  return worksheets.map((worksheet) => `${worksheet.name} (${worksheet.id})`).join(', ');
 }

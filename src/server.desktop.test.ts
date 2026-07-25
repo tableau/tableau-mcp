@@ -249,7 +249,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // fix, not prose — the stub describes on these three tools cost 69 failed add-field calls
     // (591s) and 299 repeat binds (2,562s) in shipped v10. Each number below is the CURRENT
     // measured size; the ratchet is unchanged, so trim rather than raise.
-    ['bind-template', 2297], // was 2190 (verbatim-ask describe); +107 for target_worksheet
+    ['bind-template', 2293], // row-proof guidance funded by same-tool description trims
     ['add-field', 1547], // provenance-style describes (from field resolution, never invented)
     ['inject-template', 1522], // provenance-style describes; session also made optional
     ['refine-worksheet', 1583], // raised for omitted-targetField axis detection; funded by a ~500-byte same-tool describe trim
