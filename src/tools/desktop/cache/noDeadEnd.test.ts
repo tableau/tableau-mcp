@@ -106,10 +106,7 @@ describe('no-dead-end file workflow for a filesystem-less client', () => {
 
     // 4) APPLY (file mode): applied straight from the cached file — no inline XML anywhere.
     const applyCb = await Provider.from(getApplyWorkbookTool(new DesktopMcpServer()).callback);
-    const applyResult = await applyCb(
-      { session: 's1', mode: 'file', workbookFile: file, workbookXml: undefined },
-      extra(),
-    );
+    const applyResult = await applyCb({ session: 's1', workbookFile: file }, extra());
     expect(applyResult.isError).toBeFalsy();
     const appliedXml = (loadSpy.mock.calls[0][0] as { xml: string }).xml;
     expect(appliedXml).toContain('[Sales Modified]');
