@@ -167,4 +167,17 @@ describe('tool input schemas say what to send', () => {
 
     expect(offenders).toEqual([]);
   });
+
+  it('never requires session on any served tool', async () => {
+    const offenders: string[] = [];
+
+    for (const [toolName, schema] of await schemasByToolName()) {
+      const session = schema['session'];
+      if (session !== undefined && !session.isOptional()) {
+        offenders.push(`${toolName}.session: required — session must always be optional`);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
 });

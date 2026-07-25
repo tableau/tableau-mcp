@@ -35,7 +35,7 @@ const paramsSchema = {
     .string()
     .optional()
     .describe('Desktop process ID; omit to use the pinned or only running instance.'),
-  workbookFile: z.string().describe('Cached workbook path returned by field resolution.'),
+  workbookFile: z.string().describe('Cached workbook path from field resolution.'),
   templateName: z.string().describe('ID of an existing template.'),
   title: z.string().describe('Name for the sheet this creates.'),
   sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe('What the template builds.'),
@@ -46,7 +46,7 @@ const paramsSchema = {
   fieldMapping: z
     .record(z.string())
     .optional()
-    .describe('Slot ID to exact datasource-qualified column reference.'),
+    .describe('Slot to qualified ref from field resolution, never invented.'),
   insertPosition: z
     .enum(['end', 'before_sheet', 'after_sheet'])
     .optional()

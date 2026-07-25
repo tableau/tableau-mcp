@@ -1471,7 +1471,7 @@ function setupAutoApplyMocks({
       ? vi.fn().mockResolvedValue(Err('events unsupported on this transport'))
       : vi
           .fn()
-          // 1st call: the pre-bind anchor. 2nd call: the pre-apply cleanliness check.
+          // 1st: pre-bind anchor. 2nd: pre-apply cleanliness. 3rd: post-apply reuse anchor.
           .mockResolvedValueOnce(Ok({ events: [], latest_sequence: 41, count: 0 }))
           .mockResolvedValue(
             Ok({
@@ -1740,10 +1740,13 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.used_llm).toBeUndefined();
     expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(1);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-    expect(getEvents).toHaveBeenCalledTimes(2);
+    expect(getEvents).toHaveBeenCalledTimes(3);
     expect(getEvents).toHaveBeenNthCalledWith(2, {
       signal: expect.any(AbortSignal),
       sinceSequence: 41,
+    });
+    expect(getEvents).toHaveBeenNthCalledWith(3, {
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -2321,10 +2324,13 @@ describe('bindTemplateTool auto_apply gate', () => {
       expect.objectContaining({ workbookXml: CALC_READBACK_XML }),
     );
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
-    expect(getEvents).toHaveBeenCalledTimes(2);
+    expect(getEvents).toHaveBeenCalledTimes(3);
     expect(getEvents).toHaveBeenNthCalledWith(2, {
       signal: expect.any(AbortSignal),
       sinceSequence: 41,
+    });
+    expect(getEvents).toHaveBeenNthCalledWith(3, {
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -3154,6 +3160,33 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     expect(third.reused).toBeUndefined();
     expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(2);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
+    expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toBeUndefined();
+  });
+
+  it('reuses when Desktop advances the event sequence during the remembered apply', async () => {
+    const { applyWorkbookDocument, getEvents, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+    });
+    getEvents.mockImplementation(({ sinceSequence }: { sinceSequence?: number }) => {
+      const latestSequence = applyWorkbookDocument.mock.calls.length === 0 ? 41 : 42;
+      return Promise.resolve(
+        Ok({
+          events: [],
+          latest_sequence: latestSequence,
+          count: 0,
+          ...(sinceSequence === undefined ? {} : { since_sequence: sinceSequence }),
+        }),
+      );
+    });
+    const ask = 'bar chart of Sales by Region';
+
+    await getToolResult({ session: '1', ask, auto_apply: true, getExecutor });
+    const second = body(await getToolResult({ session: '1', ask, auto_apply: true, getExecutor }));
+
+    expect(second.reused).toBe(true);
+    expect(second.applied).toBe(false);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(getEvents).toHaveBeenNthCalledWith(3, { signal: expect.any(AbortSignal) });
   });
 
   it('rebuilds when the events anchor advanced after the remembered sheet was built', async () => {
@@ -3172,6 +3205,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
       auto_apply: true,
       getExecutor,
     });
+    expect(getEvents).toHaveBeenCalledTimes(3);
 
     getEvents.mockImplementation(({ sinceSequence }: { sinceSequence?: number }) =>
       sinceSequence === undefined
@@ -3205,6 +3239,39 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
   });
 
+  it('eventually blocks repeated bare same-ask calls after a reuse hit', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+    });
+    const ask = 'bar chart of Sales by Region';
+
+    await getToolResult({ session: '1', ask, auto_apply: true, getExecutor });
+    const reused = body(await getToolResult({ session: '1', ask, auto_apply: true, getExecutor }));
+    const firstBareResubmit = body(
+      await getToolResult({ session: '1', ask, auto_apply: true, getExecutor }),
+    );
+    const terminal = body(
+      await getToolResult({ session: '1', ask, auto_apply: true, getExecutor }),
+    );
+
+    expect(reused.reused).toBe(true);
+    expect(firstBareResubmit).toMatchObject({
+      status: 'blocked',
+      reason: 'awaiting_proposal',
+    });
+    expect(terminal).toMatchObject({
+      status: 'blocked',
+      reason: 'fallback_required',
+    });
+    expect(terminal.guidance).toContain('build-and-apply-worksheet');
+    expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toMatchObject({
+      phase: 'terminal',
+      consecutiveBareResubmitCount: 2,
+    });
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+  });
+
   it('reports calc writes honestly when the sheet itself is reused', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
@@ -3235,7 +3302,7 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
       unverified: string[];
     };
     expect(second.reused).toBe(true);
-    expect(second.applied).toBe(false);
+    expect(second.applied).toBe(true);
     expect(second.authored_calcs).toEqual(['Margin']);
     expect(reuseReceipt.did).toContain('authored calcs: Margin');
     expect(reuseReceipt.didNot.join(' ')).not.toContain('nothing was applied on this call');
@@ -3361,6 +3428,33 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     expect(second.reused).toBeUndefined();
     expect(second.applied).toBe(true);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it('admits an explicit target_worksheet rebuild through a terminal same-ask record', async () => {
+    const ask = 'bar chart of Sales by Region';
+    const askKey = normalizeAskForMatch(ask);
+    sessionRouteState.recordBindRecoveryTerminal('1', askKey, { outcome: 'escalate' });
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
+    });
+
+    const rebuilt = body(
+      await getToolResult({
+        session: '1',
+        ask,
+        auto_apply: true,
+        target_worksheet: 'Sales by Region',
+        getExecutor,
+      }),
+    );
+
+    expect(rebuilt).toMatchObject({
+      status: 'bound',
+      applied: true,
+      sheet_name: 'Sales by Region',
+    });
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(sessionRouteState.getBindRecovery('1', askKey)).toBeUndefined();
   });
 
   it('rebuilds when the remembered sheet is no longer in the workbook', async () => {
@@ -3565,6 +3659,37 @@ describe('bind-template — reports what it actually built', () => {
     const { label } = (result.structuredContent as { nextAction: { label: string } }).nextAction;
     expect(label.length).toBeLessThanOrEqual(60);
     expect(label).toContain('color');
+  });
+
+  it('chains every additional encoding edit through the previously returned worksheet file', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: {
+        ...boundResult,
+        encodings: { filled: [], unfilled: ['size', 'color', 'tooltip'] },
+      },
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'symbol map of Sales by State, bigger warmer dots, goals on hover',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const guidance = JSON.parse(result.content[0].text).guidance as string;
+    expect(guidance).toContain(
+      "add-field{worksheetName:'Sales by Region',target:'encoding',encodingType:'size'",
+    );
+    expect(guidance).toContain(
+      "add-field{worksheetFile:<path returned by previous add-field>,target:'encoding',encodingType:'color'",
+    );
+    expect(guidance).toContain(
+      "add-field{worksheetFile:<path returned by previous add-field>,target:'encoding',encodingType:'tooltip'",
+    );
+    expect(guidance).toContain(
+      "apply-worksheet{worksheetName:'Sales by Region',worksheetFile:<path returned by previous add-field>}",
+    );
   });
 });
 

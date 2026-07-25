@@ -165,7 +165,7 @@ type AppliedFastPathResult = {
  */
 type ReusedSheetResult = {
   status: 'bound';
-  applied: false;
+  applied: boolean;
   reused: true;
   authored_calcs?: string[];
   sheet_name: string;
@@ -264,7 +264,14 @@ function recoveryGateBlock(
   currentProposalSignature: string | undefined,
   session: string,
   askKey: string,
+  targetWorksheet: string | undefined,
 ): StructuredBindTemplateToolResult | undefined {
+  // Naming a target is an explicit rebuild instruction, not another bare recovery attempt.
+  // It must be able to escape even a terminal same-ask recovery record.
+  if (targetWorksheet !== undefined) {
+    return undefined;
+  }
+
   if (!record) {
     return undefined;
   }
@@ -526,11 +533,15 @@ function appendUnfilledEncodingGuidance(
   const missing = encodings.unfilled.join(' and ');
   const addFieldCalls = encodings.unfilled
     .map(
-      (role) =>
-        `add-field{worksheetName:'${sheetName}',target:'encoding',encodingType:'${role}',columnRef:<field>}`,
+      (role, index) =>
+        `add-field{${
+          index === 0
+            ? `worksheetName:'${sheetName}'`
+            : 'worksheetFile:<path returned by previous add-field>'
+        },target:'encoding',encodingType:'${role}',columnRef:<field>}`,
     )
     .join(', then ');
-  const applyCall = `apply-worksheet{worksheetName:'${sheetName}',worksheetFile:<path returned by add-field>}`;
+  const applyCall = `apply-worksheet{worksheetName:'${sheetName}',worksheetFile:<path returned by previous add-field>}`;
   const filled = encodings.filled.length > 0 ? encodings.filled.join(', ') : 'none';
   return (
     `${receipt} INCOMPLETE — the ask asked for ${missing}, and this bind did NOT fill it: ` +
@@ -1528,7 +1539,7 @@ function reusedSheetResult(
   return withNextAction(
     {
       status: 'bound',
-      applied: false,
+      applied: authoredCalcs.length > 0,
       reused: true,
       ...(authoredCalcs.length > 0 ? { authored_calcs: authoredCalcs } : {}),
       sheet_name: remembered.sheetName,
@@ -1614,6 +1625,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               currentProposalSignature,
               resolvedSession,
               askKey,
+              target_worksheet,
             );
             if (blocked) {
               return new IncompleteOperationError(blocked).toErr();
@@ -1904,13 +1916,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               sessionRouteState.forgetAppliedSheet(resolvedSession, sheetSignature);
             }
             if (remembered !== undefined && !changedSinceBuild) {
-              try {
-                // A dedupe hit is not a recovery outcome. Drop the admission reservation so
-                // the guided target_worksheet follow-up is admitted as a fresh bind.
-                sessionRouteState.clearBindRecovery(resolvedSession, askKey);
-              } catch {
-                /* fail-open */
-              }
               return new Ok(reusedSheetResult(remembered, authoredCalcCaptions));
             }
           }
@@ -1940,10 +1945,16 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             typeof appliedResult.sheet_name === 'string'
           ) {
             try {
+              const postApplyEvents = await executor.getEvents({ signal: extra.signal });
+              const postApplyEventSequence = postApplyEvents.isOk()
+                ? postApplyEvents.value.latest_sequence
+                : undefined;
               sessionRouteState.recordAppliedSheet(resolvedSession, sheetSignature, {
                 sheetName: appliedResult.sheet_name,
                 template: res.args.template_name,
-                ...(eventsAnchor !== undefined ? { eventSequence: eventsAnchor } : {}),
+                ...(postApplyEventSequence !== undefined
+                  ? { eventSequence: postApplyEventSequence }
+                  : {}),
               });
             } catch {
               /* fail-open */

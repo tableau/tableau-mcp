@@ -97,7 +97,7 @@ const paramsSchema = {
   worksheetName: z
     .string()
     .optional()
-    .describe('Existing worksheet name; omit when worksheetFile supplies the cached sheet.'),
+    .describe('Existing worksheet name; omit when worksheetFile is set.'),
   worksheetFile: z
     .string()
     .optional()
@@ -108,7 +108,7 @@ const paramsSchema = {
   columnRef: z
     .string()
     .describe(
-      `Exact field ref [Datasource].[derivation:Column:type], e.g. ${COLUMN_REF_EXAMPLE}; never a bare name.`,
+      `[Datasource].[derivation:Column:type], e.g. ${COLUMN_REF_EXAMPLE}; from field resolution, never invented.`,
     ),
   encodingType: z
     .enum(ENCODING_TYPES)
