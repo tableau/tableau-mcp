@@ -21,7 +21,6 @@ import {
 } from '../../../desktop/binder/binder.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { classifyAskRoute, normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
-import { activateSheetBestEffort } from '../../../desktop/commands/workbook/activateSheet.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import {
   loadWorkbookXml,
@@ -1103,7 +1102,6 @@ async function performAutoApply({
   bindMs,
   eventsAnchor,
   schemaSummary,
-  suppressActivation,
   manifest,
 }: {
   res: BoundResult;
@@ -1115,7 +1113,6 @@ async function performAutoApply({
   bindMs: number;
   eventsAnchor?: number;
   schemaSummary: SchemaSummary;
-  suppressActivation: boolean;
   manifest: TemplateManifest;
 }): Promise<{
   result: StructuredBindTemplateToolResult;
@@ -1215,6 +1212,7 @@ async function performAutoApply({
   const applyStart = Date.now();
   const applyResult = await loadWorkbookXml({
     xml: spliced.xml,
+    focus: { navigate: 'artifact', sheetName: literalTitle },
     executor,
     signal,
   });
@@ -1223,13 +1221,6 @@ async function performAutoApply({
       result: applyFallback(base, `apply failed: ${describeApplyError(applyResult.error)}`),
       failureDisposition: applyFailureDisposition(applyResult.error),
     };
-  }
-  if (!suppressActivation) {
-    await activateSheetBestEffort({
-      sheetName: literalTitle,
-      executor,
-      signal,
-    });
   }
   const applyMs = Date.now() - applyStart;
 
@@ -1728,7 +1719,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             bindMs,
             eventsAnchor,
             schemaSummary,
-            suppressActivation: target_worksheet !== undefined,
             manifest,
           });
           const appliedResult = autoApplyResult.result;

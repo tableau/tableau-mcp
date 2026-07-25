@@ -86,9 +86,12 @@ export const getApplyDashboardWithViewpointsTool = (
 
           // Apply the dashboard first. A new dashboard has no dashboard window in the
           // pre-apply workbook, so injecting viewpoints before this step is a silent no-op.
+          // Both writes in this call produce the same dashboard, and the viewpoint apply
+          // below returns early when the viewpoints are already present, so each one names it.
           const dashboardApplyResult = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,
+            focus: { navigate: 'artifact', sheetName: dashboardName },
             executor,
             signal: extra.signal,
           });
@@ -168,6 +171,7 @@ export const getApplyDashboardWithViewpointsTool = (
 
           const workbookApplyResult = await loadWorkbookXml({
             xml: updatedWorkbookXml,
+            focus: { navigate: 'artifact', sheetName: dashboardName },
             executor,
             signal: extra.signal,
           });

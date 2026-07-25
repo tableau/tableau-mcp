@@ -65,7 +65,14 @@ export async function authorCalculationsInWorkbook({
     return prepared;
   }
 
-  const loadResult = await applyWorkbookText({ xml: prepared.value.editedXml, executor, signal });
+  // A calc is not something the user looks at, and this helper also runs as an early leg of
+  // bind-template, where the apply that follows names the chart it built.
+  const loadResult = await applyWorkbookText({
+    xml: prepared.value.editedXml,
+    focus: { navigate: 'restore' },
+    executor,
+    signal,
+  });
   if (loadResult.isErr()) {
     return new DesktopCommandExecutionError(loadResult.error).toErr();
   }

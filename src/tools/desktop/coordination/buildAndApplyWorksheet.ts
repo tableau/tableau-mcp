@@ -588,6 +588,7 @@ export const getBuildAndApplyWorksheetTool = (
           const applyResult = await loadWorksheetXml({
             worksheetName,
             xml: worksheetXml,
+            focus: { navigate: 'artifact', sheetName: worksheetName },
             executor,
             signal,
           });

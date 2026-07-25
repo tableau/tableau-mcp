@@ -7,6 +7,9 @@ import { buildInjectedWorkbookXml } from '../../templates/injectTemplateCore.js'
 import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import { loadWorkbookXml } from './loadWorkbookXml.js';
 
+// Focus is a required argument at every write seam. Suites that are not about
+// navigation pass the disposition that dispatches nothing.
+const NO_FOCUS = { navigate: 'none', reason: 'intermediate-leg' } as const;
 describe('loadWorkbookXml validation preflight', () => {
   it('Miller World Cup repro: default-named parameters apply with telemetry warnings', async () => {
     const xml = `<?xml version='1.0'?>
@@ -33,6 +36,7 @@ describe('loadWorkbookXml validation preflight', () => {
       xml,
       executor,
       signal: new AbortController().signal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isOk()).toBe(true);
@@ -153,6 +157,7 @@ describe('loadWorkbookXml validation preflight', () => {
       xml: injected.xml,
       executor,
       signal: new AbortController().signal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isOk()).toBe(true);
@@ -200,6 +205,7 @@ describe('loadWorkbookXml validation preflight', () => {
         '</workbook>',
       executor,
       signal: new AbortController().signal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isErr()).toBe(true);

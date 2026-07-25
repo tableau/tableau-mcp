@@ -19,8 +19,10 @@ const paramsSchema = {
   sheetName: z.string().min(1).describe('Worksheet or dashboard name to make active.'),
 };
 
+// `focus_requested`, not `activated`: the inspection this returns is read BEFORE the
+// goto-sheet dispatch, so the tool knows it asked and does not know Tableau complied.
 type ActivateSheetToolResult = {
-  activated: true;
+  focus_requested: boolean;
   sheetName: string;
   message: string;
   previousSheet?: string;
@@ -92,11 +94,19 @@ export const getActivateSheetTool = (
               ).toErr();
             case 'not-found':
               return new ActivateSheetNotFoundError(sheetName, activation.availableSheets).toErr();
+            case 'already-active':
+              return new Ok({
+                focus_requested: false,
+                sheetName,
+                message: `Sheet "${sheetName}" was already the active sheet; nothing was dispatched.`,
+                previousSheet: activation.previousSheet,
+                availableSheets: activation.availableSheets,
+              });
             case 'activated':
               return new Ok({
-                activated: true,
+                focus_requested: true,
                 sheetName,
-                message: `Activated sheet "${sheetName}".`,
+                message: `Requested focus on sheet "${sheetName}".`,
                 ...(activation.previousSheet ? { previousSheet: activation.previousSheet } : {}),
                 availableSheets: activation.availableSheets,
               });

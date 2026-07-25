@@ -6,6 +6,9 @@ import type { ParsedWindow } from '../../metadata/types.js';
 import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import { loadDashboardXml } from './loadDashboardXml.js';
 
+// Focus is a required argument at every write seam. Suites that are not about
+// navigation pass the disposition that dispatches nothing.
+const NO_FOCUS = { navigate: 'none', reason: 'intermediate-leg' } as const;
 describe('loadDashboardXml (External Client API transport)', () => {
   const mockSignal = new AbortController().signal;
   const dashboardName = 'Sales Dashboard';
@@ -22,6 +25,17 @@ describe('loadDashboardXml (External Client API transport)', () => {
       .map((name) => `<window class='dashboard' name='${name}' />`)
       .join('');
     return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets><dashboards>${dashboards}</dashboards><windows>${windows}</windows></workbook>`;
+  }
+
+  // A goto-sheet moves the live document, so the readback the verify pass reads must
+  // reflect it — otherwise the double reports a navigation that never landed.
+  function withMaximizedWindow(workbookXml: string, sheetName: string): string {
+    return workbookXml
+      .replace(/ maximized='true'/g, '')
+      .replace(
+        new RegExp(`(<window[^>]*name='${sheetName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}')`),
+        "$1 maximized='true'",
+      );
   }
 
   function dispatchingExecutor(workbookXml: string): {
@@ -48,12 +62,16 @@ describe('loadDashboardXml (External Client API transport)', () => {
         command: params.command,
         args: params.args,
       });
+      if (params.command === 'goto-sheet') {
+        liveXml = withMaximizedWindow(liveXml, String(params.args?.Sheet));
+      }
       return Ok({ command_id: 'cmd-ok', status: 'completed', submitted_at: '' });
     });
+    let liveXml = workbookXml;
     const getWorkbookDocument = vi
       .fn()
-      .mockResolvedValue(
-        Ok({ xml: workbookXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+      .mockImplementation(async () =>
+        Ok({ xml: liveXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
       );
     const applyWorkbookDocument = vi.fn(async (xml: string) => {
       calls.push({ kind: 'apply', xml });
@@ -91,6 +109,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
       xml: validXml,
       executor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isOk()).toBe(true);
@@ -127,6 +146,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
       xml: validXml,
       executor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isOk()).toBe(true);
@@ -144,6 +164,23 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(calls.some((call) => call.command === 'goto-sheet')).toBe(false);
   });
 
+  it('navigates to the dashboard it just applied when the caller names it as the artifact', async () => {
+    const { executor, calls } = dispatchingExecutor(liveWorkbook([dashboardName]));
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: validXml,
+      focus: { navigate: 'artifact', sheetName: dashboardName },
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(
+      calls.filter((call) => call.command === 'goto-sheet').map((call) => call.args?.Sheet),
+    ).toEqual([dashboardName]);
+  });
+
   it('keeps live worksheets referenced by the dashboard zones in the posted document', async () => {
     const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
     const { executor, calls } = dispatchingExecutor(
@@ -155,6 +192,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
       xml: dashboardXml,
       executor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isOk()).toBe(true);
@@ -171,6 +209,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
       xml: validXml,
       executor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isOk()).toBe(true);
@@ -188,6 +227,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
       xml: '   ',
       executor: mockExecutor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isErr()).toBe(true);
@@ -208,6 +248,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
       xml: '<dashboard><unclosed>',
       executor: mockExecutor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isErr()).toBe(true);
@@ -234,6 +275,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
       xml: validXml,
       executor: mockExecutor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isErr()).toBe(true);
@@ -254,6 +296,7 @@ describe('loadDashboardXml (External Client API transport)', () => {
       xml: validXml,
       executor,
       signal: customSignal,
+      focus: NO_FOCUS,
     });
 
     expect(executor.applyWorkbookDocument).toHaveBeenCalledWith(expect.any(String), customSignal);

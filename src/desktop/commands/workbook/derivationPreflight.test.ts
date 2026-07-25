@@ -15,6 +15,9 @@ import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import { loadWorkbookXml } from './loadWorkbookXml.js';
 import { loadWorksheetXml } from './loadWorksheetXml.js';
 
+// Focus is a required argument at every write seam. Suites that are not about
+// navigation pass the disposition that dispatches nothing.
+const NO_FOCUS = { navigate: 'none', reason: 'intermediate-leg' } as const;
 vi.mock('fs');
 vi.mock('../../libraries/workbook-serialization-converter/index.js');
 
@@ -67,6 +70,7 @@ describe('derivation preflight — apply-workbook path', () => {
       xml: workbookWithDerivation('TruncMonth'),
       executor: mockExecutor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isErr()).toBe(true);
@@ -95,6 +99,7 @@ describe('derivation preflight — apply-workbook path', () => {
       xml: workbookWithDerivation('Month-Trunc'),
       executor: mockExecutor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isOk()).toBe(true);
@@ -116,6 +121,7 @@ describe('derivation preflight — apply-worksheet path', () => {
       xml: worksheetWithDerivation('TruncMonth'),
       executor: mockExecutor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isErr()).toBe(true);
@@ -166,6 +172,7 @@ describe('derivation preflight — apply-worksheet path', () => {
       xml: worksheetWithDerivation('Month-Trunc'),
       executor: mockExecutor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isOk()).toBe(true);

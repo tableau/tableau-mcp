@@ -8,6 +8,9 @@ import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import * as validationRegistry from '../../validation/registry.js';
 import { loadWorksheetXml } from './loadWorksheetXml.js';
 
+// Focus is a required argument at every write seam. Suites that are not about
+// navigation pass the disposition that dispatches nothing.
+const NO_FOCUS = { navigate: 'none', reason: 'intermediate-leg' } as const;
 const sheetUpsertMock = vi.hoisted(() => ({
   upsertSheetIntoWorkbook: undefined as
     | undefined
@@ -48,6 +51,17 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     return `<?xml version='1.0'?><workbook><worksheets>${worksheets}</worksheets>${dashboardsBlock}<windows>${windows}</windows></workbook>`;
   }
 
+  // A goto-sheet moves the live document, so the readback the verify pass reads must
+  // reflect it — otherwise the double reports a navigation that never landed.
+  function withMaximizedWindow(workbookXml: string, sheetName: string): string {
+    return workbookXml
+      .replace(/ maximized='true'/g, '')
+      .replace(
+        new RegExp(`(<window[^>]*name='${sheetName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}')`),
+        "$1 maximized='true'",
+      );
+  }
+
   function dispatchingExecutor(workbookXml: string): {
     executor: ToolExecutor;
     calls: Array<{
@@ -72,12 +86,16 @@ describe('loadWorksheetXml (External Client API transport)', () => {
         command: params.command,
         args: params.args,
       });
+      if (params.command === 'goto-sheet') {
+        liveXml = withMaximizedWindow(liveXml, String(params.args?.Sheet));
+      }
       return Ok({ command_id: 'cmd-ok', status: 'completed', submitted_at: '' });
     });
+    let liveXml = workbookXml;
     const getWorkbookDocument = vi
       .fn()
-      .mockResolvedValue(
-        Ok({ xml: workbookXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
+      .mockImplementation(async () =>
+        Ok({ xml: liveXml, applicationVersion: undefined, xsdPayloadVersion: undefined }),
       );
     const applyWorkbookDocument = vi.fn(async (xml: string) => {
       calls.push({ kind: 'apply', xml });
@@ -117,6 +135,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       xml: validXml,
       executor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isOk()).toBe(true);
@@ -149,6 +168,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       xml: validXml,
       executor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isOk()).toBe(true);
@@ -162,6 +182,23 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     expect(calls.some((call) => call.command === 'goto-sheet')).toBe(false);
   });
 
+  it('navigates to the worksheet it just applied when the caller names it as the artifact', async () => {
+    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Sheet 1', 'Sheet 2']));
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: validXml,
+      focus: { navigate: 'artifact', sheetName: worksheetName },
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(
+      calls.filter((call) => call.command === 'goto-sheet').map((call) => call.args?.Sheet),
+    ).toEqual([worksheetName]);
+  });
+
   it('appends a brand-new sheet while preserving the existing one', async () => {
     const { executor, calls } = dispatchingExecutor(liveWorkbook(['Some Other Sheet']));
 
@@ -170,6 +207,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       xml: validXml,
       executor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isOk()).toBe(true);
@@ -198,6 +236,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       xml: validXml,
       executor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isOk()).toBe(true);
@@ -225,6 +264,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       xml: validXml,
       executor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isErr()).toBe(true);
@@ -251,6 +291,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       xml: 'not xml',
       executor: {} as unknown as ToolExecutor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isErr()).toBe(true);
@@ -266,6 +307,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       xml: '',
       executor: {} as unknown as ToolExecutor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isErr()).toBe(true);
@@ -285,6 +327,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       xml: validXml,
       executor: {} as unknown as ToolExecutor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isErr()).toBe(true);
@@ -308,6 +351,7 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       xml: validXml,
       executor: mockExecutor,
       signal: mockSignal,
+      focus: NO_FOCUS,
     });
 
     expect(result.isErr()).toBe(true);

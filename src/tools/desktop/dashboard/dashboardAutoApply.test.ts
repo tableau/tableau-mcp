@@ -313,9 +313,11 @@ describe('dashboardAutoApplyTool happy path', () => {
       'sheets',
     ]);
 
-    // The public dashboard boundary performs the one primary read plus the bounded
-    // not-found activation revalidation; internal worksheets never activate independently.
-    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(3);
+    // The public dashboard boundary performs the one primary read plus one validated
+    // navigation read; internal worksheets never activate independently. The navigation
+    // stops there in this fixture because the dashboard is absent from the read, so there
+    // is nothing to reissue.
+    expect(vi.mocked(getWorkbookXmlModule.getWorkbookXml)).toHaveBeenCalledTimes(2);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
