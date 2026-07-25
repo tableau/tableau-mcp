@@ -194,16 +194,28 @@ const PLURALIZABLE_CHART_NOUNS: ReadonlySet<string> = new Set([
  * Scoped to chart nouns only — no stemming, no mid-token change, no broadening of
  * non-noun keywords; the singular still matches unchanged.
  */
-function phraseIndexInAsk(ask: string, phrase: string): number {
+interface PhraseMatch {
+  index: number;
+  start: number;
+  end: number;
+}
+
+function phraseMatchInAsk(ask: string, phrase: string): PhraseMatch | null {
   const p = phrase.toLowerCase().trim();
-  if (!p) return -1;
+  if (!p) return null;
   const body = escapeRegex(p).replace(/-/g, '[\\s-]+');
   const tokens = p.split(/[^a-z0-9]+/).filter(Boolean);
   const finalToken = tokens[tokens.length - 1];
   const pluralSuffix = finalToken && PLURALIZABLE_CHART_NOUNS.has(finalToken) ? 's?' : '';
-  const re = new RegExp(`(^|[^a-z0-9])${body}${pluralSuffix}([^a-z0-9]|$)`);
+  const re = new RegExp(`(^|[^a-z0-9])(${body}${pluralSuffix})([^a-z0-9]|$)`);
   const match = re.exec(ask.toLowerCase());
-  return match ? match.index : -1;
+  if (!match) return null;
+  const start = match.index + match[1].length;
+  return { index: match.index, start, end: start + match[2].length };
+}
+
+function phraseIndexInAsk(ask: string, phrase: string): number {
+  return phraseMatchInAsk(ask, phrase)?.index ?? -1;
 }
 
 /** Count of a template's intent_keywords that appear as whole tokens in the ask. */
@@ -989,13 +1001,21 @@ function fieldExactNames(fields: SchemaField[]): Set<string> {
  *     alias never claims a "Regions" span that a field literally named "Regions" owns
  *     by exact match.
  */
-function fieldNameMatchInAsk(ask: string, name: string, exactNames: ReadonlySet<string>): number {
-  const exact = phraseIndexInAsk(ask, name);
-  if (exact >= 0) return exact;
+function fieldNameMatchInAskSpan(
+  ask: string,
+  name: string,
+  exactNames: ReadonlySet<string>,
+): PhraseMatch | null {
+  const exact = phraseMatchInAsk(ask, name);
+  if (exact) return exact;
   const plural = naivePlural(name.toLowerCase().trim());
-  if (!plural) return -1; // one-way: an `s`-final (or empty) name gains no alias
-  if (exactNames.has(plural)) return -1; // exact-first: another field owns this token
-  return phraseIndexInAsk(ask, plural);
+  if (!plural) return null; // one-way: an `s`-final (or empty) name gains no alias
+  if (exactNames.has(plural)) return null; // exact-first: another field owns this token
+  return phraseMatchInAsk(ask, plural);
+}
+
+function fieldNameMatchInAsk(ask: string, name: string, exactNames: ReadonlySet<string>): number {
+  return fieldNameMatchInAskSpan(ask, name, exactNames)?.index ?? -1;
 }
 
 /**
@@ -1011,19 +1031,23 @@ const ACRONYM_EXPANSIONS: Readonly<Record<string, readonly string[]>> = {
 
 /**
  * Precision-first business nouns whose schema captions commonly use a different term.
- * Candidate patterns are whole-token caption fragments, not fuzzy stems. A noun contributes
- * a field match only when exactly one schema field contains any candidate pattern.
+ * Candidate patterns are whole-token caption fragments, not fuzzy stems. Partial matches are
+ * retained for proposals; auto-binding requires one candidate whose full normalized field
+ * name/caption/bare column name equals a pattern.
  */
 const BUSINESS_FIELD_SYNONYMS: ReadonlyArray<{
   nouns: readonly string[];
   captionPatterns: readonly string[];
 }> = [
   { nouns: ['revenue'], captionPatterns: ['sales', 'revenue', 'amount'] },
-  { nouns: ['customers'], captionPatterns: ['customer'] },
-  { nouns: ['products'], captionPatterns: ['product'] },
-  { nouns: ['orders'], captionPatterns: ['order'] },
-  { nouns: ['reps', 'salespeople'], captionPatterns: ['rep', 'sales person', 'owner'] },
-  { nouns: ['deals'], captionPatterns: ['deal', 'opportunity'] },
+  { nouns: ['customers'], captionPatterns: ['customer', 'customer name'] },
+  { nouns: ['products'], captionPatterns: ['product', 'product name'] },
+  { nouns: ['orders'], captionPatterns: ['order', 'order id'] },
+  {
+    nouns: ['reps', 'salespeople'],
+    captionPatterns: ['rep', 'rep name', 'sales rep', 'sales person', 'owner'],
+  },
+  { nouns: ['deals'], captionPatterns: ['deal', 'opportunity', 'opportunity name'] },
 ];
 
 /**
@@ -1084,6 +1108,25 @@ function fieldMatchesCaptionPattern(field: SchemaField, pattern: string): boolea
   );
 }
 
+function normalizeFieldPhrase(value: string): string {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .join(' ');
+}
+
+function fieldFullyMatchesCaptionPattern(field: SchemaField, pattern: string): boolean {
+  const normalizedPattern = normalizeFieldPhrase(pattern);
+  return [field.name, field.caption, bareName(field.columnName)].some((name) => {
+    if (!name) return false;
+    const normalizedName = normalizeFieldPhrase(name);
+    return (
+      normalizedName === normalizedPattern || naivePlural(normalizedName) === normalizedPattern
+    );
+  });
+}
+
 /**
  * Candidate fields for business nouns that the literal pass did not already resolve.
  * Literal/plural caption matches at the same ask position win, as do existing acronym
@@ -1093,20 +1136,40 @@ function businessSynonymCandidatesInAsk(
   ask: string,
   s: SchemaSummary,
   literalHits: readonly FieldMatch[],
-): Array<{ noun: string; index: number; candidates: SchemaField[] }> {
+): Array<{
+  noun: string;
+  index: number;
+  candidates: SchemaField[];
+  fullMatchCandidates: SchemaField[];
+}> {
   const exactNames = fieldExactNames(s.fields);
-  const matches: Array<{ noun: string; index: number; candidates: SchemaField[] }> = [];
+  const matches: Array<{
+    noun: string;
+    index: number;
+    candidates: SchemaField[];
+    fullMatchCandidates: SchemaField[];
+  }> = [];
 
   for (const entry of BUSINESS_FIELD_SYNONYMS) {
     for (const noun of entry.nouns) {
-      const nounIndex = phraseIndexInAsk(ask, noun);
-      if (nounIndex < 0) continue;
+      const nounMatch = phraseMatchInAsk(ask, noun);
+      if (!nounMatch) continue;
+      const nounIndex = nounMatch.index;
 
       const literalClaimsNoun = literalHits.some(({ field }) => {
         const names = [bareName(field.columnName), field.caption, field.name].filter(
           (name): name is string => !!name && name.length > 0,
         );
-        if (names.some((name) => fieldNameMatchInAsk(ask, name, exactNames) === nounIndex)) {
+        if (
+          names.some((name) => {
+            const literalMatch = fieldNameMatchInAskSpan(ask, name, exactNames);
+            return (
+              literalMatch !== null &&
+              nounMatch.start >= literalMatch.start &&
+              nounMatch.start < literalMatch.end
+            );
+          })
+        ) {
           return true;
         }
         return names.some((name) => {
@@ -1119,7 +1182,10 @@ function businessSynonymCandidatesInAsk(
       const candidates = s.fields.filter((field) =>
         entry.captionPatterns.some((pattern) => fieldMatchesCaptionPattern(field, pattern)),
       );
-      matches.push({ noun, index: nounIndex, candidates });
+      const fullMatchCandidates = candidates.filter((field) =>
+        entry.captionPatterns.some((pattern) => fieldFullyMatchesCaptionPattern(field, pattern)),
+      );
+      matches.push({ noun, index: nounIndex, candidates, fullMatchCandidates });
     }
   }
 
@@ -1127,8 +1193,8 @@ function businessSynonymCandidatesInAsk(
 }
 
 /**
- * Unambiguous business-synonym field matches. Zero candidates fall through; multiple
- * candidates are withheld so classifyNoLlm can fail closed and expose them in proposal fields.
+ * Unambiguous full-name business-synonym matches. Zero, partial-only, and multiple candidates
+ * are withheld so classifyNoLlm fails closed and exposes candidates in proposal fields.
  */
 function businessSynonymMatchesInAsk(
   ask: string,
@@ -1138,7 +1204,7 @@ function businessSynonymMatchesInAsk(
   return businessSynonymCandidatesInAsk(ask, s, literalHits)
     .filter(
       (match): match is typeof match & { candidates: [SchemaField] } =>
-        match.candidates.length === 1,
+        match.candidates.length === 1 && match.fullMatchCandidates.length === 1,
     )
     .map(({ noun, index, candidates }) => ({ noun, index, field: candidates[0] }));
 }

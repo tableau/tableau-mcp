@@ -1177,15 +1177,39 @@ const MATRIX = CORPUS.flatMap((row) =>
 );
 
 describe('binder/manifest-encoding-corpus — business-synonym field resolution', () => {
-  it('"revenue" uniquely resolves to Sales', () => {
+  it('"revenue by region" uniquely resolves to the full-name Sales match', () => {
     const summary = summarizeSchema(businessSynonymSchema(['Sales']));
 
-    const result = classifyNoLlm('Show me revenue by region', manifests, summary);
+    const result = classifyNoLlm('revenue by region', manifests, summary);
 
     expect(result).not.toBeNull();
     expect(result!.bindings).toEqual([
       { slot_id: 'category', field: 'Region' },
       { slot_id: 'measure', field: 'Sales' },
+    ]);
+  });
+
+  it('a lone partial-caption revenue candidate proposes instead of auto-binding', async () => {
+    const result = await bindTemplate({
+      ask: 'revenue by region',
+      workbookXml: businessSynonymSchema(['Sales Tax']),
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+    if (result.status !== 'propose') throw new Error(`expected propose, got ${result.status}`);
+    expect(result.llm_input.fields.map((field) => field.name)).toContain('Sales Tax');
+  });
+
+  it('a compound literal field suppresses synonym ambiguity for a noun inside its span', () => {
+    const summary = summarizeSchema(businessSynonymSchema(['Net Revenue', 'Sales']));
+
+    const result = classifyNoLlm('show Net Revenue by Region', manifests, summary);
+
+    expect(result).not.toBeNull();
+    expect(result!.bindings).toEqual([
+      { slot_id: 'category', field: 'Region' },
+      { slot_id: 'measure', field: 'Net Revenue' },
     ]);
   });
 
