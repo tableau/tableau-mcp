@@ -62,7 +62,12 @@ type SummaryDataCompletedBody =
   | ({ status: 'success' } & SummaryDataValue)
   | ({
       status: 'terminal';
-      reason: 'empty-sheet' | 'no-rows';
+      reason: 'no-rows';
+      guidance: string;
+    } & SummaryDataValue)
+  | ({
+      status: 'action-required';
+      reason: 'empty-sheet';
       guidance: string;
     } & SummaryDataValue);
 
@@ -346,7 +351,7 @@ function worksheetError(error: ArgsValidationError): SummaryDataResponseError {
 function emptySheetResult(worksheet: WorksheetItem, maxRows: number): SummaryDataCompletedResult {
   return withNextAction(
     {
-      status: 'terminal' as const,
+      status: 'action-required' as const,
       reason: 'empty-sheet' as const,
       worksheet: { id: worksheet.id, name: worksheet.name },
       maxRows,
