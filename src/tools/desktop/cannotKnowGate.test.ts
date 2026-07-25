@@ -29,14 +29,10 @@ const RECEIPT_ALLOWLIST: Readonly<Record<string, string>> = {
   )]: 'Local terminal-policy receipt with no external mutation claim.',
   // WHY safe: callers pass this record only after rememberedSheetStillPresent re-read the live
   // workbook; the receipt limits its claim to name presence and disclaims field/content checks.
-  [receiptExemptionKey(
-    'src/tools/desktop/binder/bindTemplate.ts',
-    'reusedSheetResult',
-    [
-      'matched this ask to the sheet " " this session already applied (template  )',
-      'authored calcs:  ',
-    ],
-  )]: 'Live name presence is checked immediately before this result is constructed.',
+  [receiptExemptionKey('src/tools/desktop/binder/bindTemplate.ts', 'reusedSheetResult', [
+    'matched this ask to the sheet " " this session already applied (template  )',
+    'authored calcs:  ',
+  ])]: 'Live name presence is checked immediately before this result is constructed.',
 };
 
 const BOOLEAN_FLAG_ALLOWLIST: Readonly<Record<string, string>> = {
