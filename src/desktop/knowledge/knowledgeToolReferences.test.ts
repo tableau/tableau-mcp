@@ -77,6 +77,7 @@ const allowedNonToolTokens = new Set<string>([
   'free-form',
   'full-canvas',
   'get-export-image-layout-options',
+  'group-filter',
   'high-cardinality',
   'invalid-column-instance-pivot',
   'invalid-derivation-string',
