@@ -31,6 +31,7 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { appliedSheetSignature } from './appliedSheetSignature.js';
 import { getBindTemplateTool } from './bindTemplate.js';
 import { proposalSignature } from './proposalSignature.js';
 
@@ -3129,13 +3130,45 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     expect(second.reused).toBe(true);
     expect(second.applied).toBe(true);
     expect(second.sheet_name).toBe('Sales by Region');
-    expect(second.guidance).toContain('already built');
+    expect(second.guidance).toContain('still present by name');
     // The loop cost is the extra call, so the reuse must be terminal.
     expect(second.guidance).toContain('no further tool calls needed');
 
     // No second sheet was injected and no second apply reached Desktop.
     expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(1);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not claim unchanged fields or settings when only the remembered sheet name still exists', async () => {
+    const userEditedWorkbook = INJECTED_RANKING_WORKBOOK_XML.replace(
+      '<rows>[Superstore].[none:Region:nk]</rows>',
+      '<rows>[Superstore].[none:Category:nk]</rows>',
+    );
+    const { getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      workbookReads: [XML, userEditedWorkbook],
+    });
+
+    await getToolResult({
+      session: '1',
+      ask: REWORDED_TITLES[0],
+      auto_apply: true,
+      getExecutor,
+    });
+
+    bindReturning(retitled(REWORDED_TITLES[1]));
+    const second = body(
+      await getToolResult({
+        session: '1',
+        ask: REWORDED_TITLES[1],
+        auto_apply: true,
+        getExecutor,
+      }),
+    );
+
+    expect(second.reused).toBe(true);
+    expect(second.guidance).not.toContain('fields');
+    expect(second.guidance).not.toContain('settings');
   });
 
   it('holds across a run of rewordings — the third and fourth restatement reuse too', async () => {
@@ -3481,6 +3514,40 @@ describe('bindTemplateTool incomplete bind is not remembered as applied', () => 
     vi.mocked(classifyWorksheetReplaceTarget).mockReturnValue('replaceable');
   });
 
+  it('marks a skipped requested sort incomplete after clean readback and does not remember it', async () => {
+    invariant(boundWithSortResult.status === 'bound');
+    const skippedSortBind: BinderResult = {
+      ...boundWithSortResult,
+      args: {
+        ...boundWithSortResult.args,
+        sort: { by: 'Missing Sales', direction: 'desc' },
+      },
+    };
+    const mocks = setupAutoApplyMocks({
+      bind: skippedSortBind,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region sorted by Missing Sales',
+      proposal: { ...sampleProposal, sort: { by: 'Missing Sales', direction: 'desc' } },
+      auto_apply: true,
+      getExecutor: readbackExecutor(mocks),
+    });
+    const first = body(result);
+
+    expect(first.warnings).toEqual([expect.stringContaining('sort splice skipped')]);
+    expect(first.guidance).toContain('HOST VERIFICATION — verified');
+    // No terminal marker plus no memory is the public contract produced by incomplete:true.
+    expect(
+      (result.structuredContent as { nextAction?: { kind: string } } | undefined)?.nextAction?.kind,
+    ).not.toBe('done');
+    expect(
+      sessionRouteState.getAppliedSheet('1', appliedSheetSignature(skippedSortBind.args)),
+    ).toBeUndefined();
+  });
+
   it('a reworded re-bind after an incomplete bind is not reported as already built', async () => {
     const { getExecutor } = setupAutoApplyMocks({
       bind: boundWithUnfilledColorResult,
@@ -3554,7 +3621,7 @@ describe('bindTemplateTool incomplete bind is not remembered as applied', () => 
     );
 
     expect(second.reused).toBe(true);
-    expect(second.guidance).toContain('already built');
+    expect(second.guidance).toContain('still present by name');
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 });
@@ -3705,12 +3772,15 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
       getExecutor,
     });
     const applied = body(result);
-    const receipt = terminalReceipt(result);
     const warnings = applied.warnings as string[];
 
     expect(warnings).toEqual([expect.stringContaining('filter splice skipped')]);
     expect(applied.guidance).not.toContain('requested filter is ALREADY applied');
-    expect(receipt.didNot).toEqual(expect.arrayContaining(warnings));
+    // A skipped request cannot have a terminal receipt: its warning is the unfinished work.
+    expect(applied.guidance).not.toContain('Done — no further tool calls needed');
+    expect(
+      (result.structuredContent as { nextAction?: { kind: string } } | undefined)?.nextAction?.kind,
+    ).not.toBe('done');
   });
 
   it('a WARNING-severity dropped promised sort is incomplete and not terminal', async () => {

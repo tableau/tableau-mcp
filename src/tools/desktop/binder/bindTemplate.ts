@@ -1336,11 +1336,12 @@ async function performAutoApply({
     res.encodings && res.encodings.unfilled.length > 0 ? res.encodings : undefined;
   const encodingAnalysisComplete =
     res.encodings !== undefined && res.encodings.unfilled.length === 0;
-  // promiseOutcome includes WARNING-severity promised-sort loss. Checking only error findings
-  // lets a dropped sort retain "done" and enter duplicate-sheet memory.
+  // A splice warning means requested work was skipped before readback. Include it here so a
+  // clean readback cannot mint "done" or duplicate-sheet memory for an incomplete bind.
   const incomplete =
     waterfallReBindSlotUnfilled(res, schemaSummary) ||
     unfilledEncodings !== undefined ||
+    spliced.warnings.length > 0 ||
     promiseOutcome === 'failed';
   const appliedSpliceGuidance = [
     ...(spliced.appliedFilterCount > 0 ? [FILTER_APPLIED_GUIDANCE] : []),
@@ -1521,9 +1522,10 @@ function reusedSheetResult(remembered: AppliedSheetRecord): StructuredBindTempla
       reused: true,
       sheet_name: remembered.sheetName,
       guidance:
-        `This chart is already built: sheet "${remembered.sheetName}" (template ` +
-        `${remembered.template}) holds exactly these fields and settings, so no second copy ` +
-        `was created. ${TERMINAL_GUIDANCE}`,
+        // Name presence is the only live fact checked here; claiming contents would make this
+        // prose contradict the receipt after a user edits the remembered sheet.
+        `The remembered sheet "${remembered.sheetName}" (template ${remembered.template}) ` +
+        `is still present by name, so no second copy was created. ${TERMINAL_GUIDANCE}`,
     },
     doneNextAction(
       receipt({
