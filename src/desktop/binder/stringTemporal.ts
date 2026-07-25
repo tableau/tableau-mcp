@@ -12,7 +12,18 @@
  * The inferred format is still a guess about the VALUES; the render must be verified
  * live before a template opts in (see dateparseTemporalAxis.ts caveat).
  */
-import type { SchemaField } from './schema-summary.js';
+/**
+ * The three schema properties this file reads, declared structurally rather than
+ * imported from schema-summary.js. A lockstep-core file must resolve entirely inside
+ * the lockstep set, and importing SchemaField would drag schema-summary and its own
+ * import chain in with it. Same trick as calc-derivation.ts. A real `SchemaField`
+ * satisfies this shape, so callers pass one unchanged.
+ */
+interface TemporalCandidateField {
+  name: string;
+  datatype: string;
+  role: 'dimension' | 'measure';
+}
 
 /** Field-name tokens that strongly imply the string holds a date/period. */
 const TEMPORAL_NAME_RE =
@@ -30,7 +41,7 @@ export interface StringTemporalInference {
  * Only strings pass here; a real date/datetime field never reaches this path (it
  * already satisfies the temporal gate). Non-date-like names return null (fail-closed).
  */
-export function inferStringTemporal(field: SchemaField): StringTemporalInference | null {
+export function inferStringTemporal(field: TemporalCandidateField): StringTemporalInference | null {
   if (field.datatype !== 'string') return null;
   if (field.role !== 'dimension') return null;
   const name = field.name;
