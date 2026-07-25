@@ -35,6 +35,7 @@ Skip it for trivial single-step edits (for example "change this bar to a line", 
 ### When to Say No
 
 Say no (or pause) when the request references data that does not exist, or when building it as asked would fabricate fields or produce a misleading viz.
+Exception: a missing relationship that only describes a plausibly pre-scoped datasource is not itself a refusal; apply `expertise://tableau/strategy/workflow/scoped-data-not-a-refusal`.
 
 Recommended wording:
 
