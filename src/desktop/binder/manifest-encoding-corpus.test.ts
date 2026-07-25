@@ -1361,6 +1361,26 @@ describe('binder/manifest-encoding-corpus — deterministic replay coverage', ()
     expect(classifyNoLlm('Show me revenue by customer.', manifests, summary)).toBeNull();
   });
 
+  it('declines plural-equivalent dimension heads that claim the same ask span', async () => {
+    const result = await bindTemplate({
+      ask: 'Show me a bar chart of sales by customers.',
+      workbookXml: classifierSchema(['Sales'], ['Customer Name', 'Customers Segment']),
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+  });
+
+  it('keeps the plural alias for a sole dimension head', async () => {
+    const result = await bindTemplate({
+      ask: 'Show me a bar chart of sales by customers.',
+      workbookXml: classifierSchema(['Sales'], ['Customer Name']),
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+  });
+
   it('declines top products when more than one measure could supply the ranking', () => {
     const summary = summarizeSchema(classifierSchema(['Sales', 'Profit'], ['Product Name']));
 

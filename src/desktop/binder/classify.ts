@@ -965,6 +965,10 @@ function naivePlural(lower: string): string | null {
   return `${lower}s`;
 }
 
+function pluralEquivalent(a: string, b: string): boolean {
+  return a === b || naivePlural(a) === b || naivePlural(b) === a;
+}
+
 /**
  * Every field name / caption / bare column name in the schema, lowercased. Feeds
  * fieldNameMatchInAsk's EXACT-FIRST tie-break: a field's plural alias is suppressed
@@ -1218,9 +1222,15 @@ function dimensionHeadCandidatesInAsk(
   ask: string,
   s: SchemaSummary,
   literalHits: readonly FieldMatch[],
-): Array<{ noun: string; index: number; candidates: SchemaField[] }> {
+): Array<{
+  noun: string;
+  index: number;
+  start: number;
+  end: number;
+  candidates: SchemaField[];
+}> {
   const exactNames = fieldExactNames(s.fields);
-  const fieldsByHead = new Map<string, Set<SchemaField>>();
+  const headGroups: Array<{ nouns: Set<string>; candidates: Set<SchemaField> }> = [];
 
   for (const field of s.fields) {
     // Geographic fields have dedicated concept/affinity resolution with stricter
@@ -1230,19 +1240,36 @@ function dimensionHeadCandidatesInAsk(
     const tokens = normalizeFieldPhrase(friendlyName).split(' ').filter(Boolean);
     if (tokens.length < 2) continue;
     const head = tokens[0];
-    const fields = fieldsByHead.get(head) ?? new Set<SchemaField>();
-    fields.add(field);
-    fieldsByHead.set(head, fields);
+    const group = headGroups.find(({ nouns }) =>
+      [...nouns].some((noun) => pluralEquivalent(noun, head)),
+    );
+    if (group) {
+      group.nouns.add(head);
+      group.candidates.add(field);
+    } else {
+      headGroups.push({ nouns: new Set([head]), candidates: new Set([field]) });
+    }
   }
 
-  const matches: Array<{ noun: string; index: number; candidates: SchemaField[] }> = [];
-  for (const [noun, candidateSet] of fieldsByHead) {
-    const nounMatch = fieldNameMatchInAskSpan(ask, noun, exactNames);
-    if (!nounMatch) continue;
+  const matches: Array<{
+    noun: string;
+    index: number;
+    start: number;
+    end: number;
+    candidates: SchemaField[];
+  }> = [];
+  for (const { nouns, candidates } of headGroups) {
+    const matchedNoun = [...nouns]
+      .map((noun) => ({ noun, match: fieldNameMatchInAskSpan(ask, noun, exactNames) }))
+      .filter(
+        (entry): entry is { noun: string; match: PhraseMatch } =>
+          entry.match !== null && /\bby\s*$/i.test(ask.slice(0, entry.match.start)),
+      )
+      .sort((a, b) => a.match.start - b.match.start || a.match.end - b.match.end)[0];
+    if (!matchedNoun) continue;
+    const { noun, match: nounMatch } = matchedNoun;
     // A bare leading token is only a grouping field reference in the explicit
     // "by <dimension-head>" position. Elsewhere it may be ordinary prose or a chart cue.
-    if (!/\bby\s*$/i.test(ask.slice(0, nounMatch.start))) continue;
-
     const literalClaimsNoun = literalHits.some(({ field }) =>
       [bareName(field.columnName), field.caption, field.name]
         .filter((name): name is string => !!name && name.length > 0)
@@ -1257,9 +1284,32 @@ function dimensionHeadCandidatesInAsk(
     );
     if (literalClaimsNoun) continue;
 
-    matches.push({ noun, index: nounMatch.index, candidates: [...candidateSet] });
+    matches.push({
+      noun,
+      index: nounMatch.index,
+      start: nounMatch.start,
+      end: nounMatch.end,
+      candidates: [...candidates],
+    });
   }
-  return matches;
+
+  // Collapse overlapping claims into one candidate group. The ambiguity gate sees the
+  // union, while dimensionHeadMatchesInAsk drops the whole group unless exactly one
+  // distinct field owns the span.
+  const groupedMatches: typeof matches = [];
+  for (const match of matches.sort((a, b) => a.start - b.start || a.end - b.end)) {
+    const previous = groupedMatches.at(-1);
+    if (!previous || match.start >= previous.end) {
+      groupedMatches.push(match);
+      continue;
+    }
+
+    previous.index = Math.min(previous.index, match.index);
+    previous.start = Math.min(previous.start, match.start);
+    previous.end = Math.max(previous.end, match.end);
+    previous.candidates = [...new Set([...previous.candidates, ...match.candidates])];
+  }
+  return groupedMatches;
 }
 
 /** Exactly-one dimension-head matches; ambiguous heads are withheld and rejected upstream. */
