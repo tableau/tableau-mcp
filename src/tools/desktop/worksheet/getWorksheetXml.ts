@@ -89,7 +89,7 @@ export const getGetWorksheetXmlTool = (
                     type: 'endpoint-not-in-this-build',
                     message:
                       'This Tableau Desktop build does not serve the worksheet document endpoint yet. ' +
-                      'Use get-app-info to identify the build; this read lights up on a newer Desktop update. Do not retry.',
+                      'Tell the user their Desktop build is too old for this read and that a Desktop update enables it. Do not retry.',
                     statusCode: 404,
                   }).toErr();
                 }

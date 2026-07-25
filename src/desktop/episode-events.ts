@@ -127,7 +127,7 @@ export async function beginEpisode(
   if (open) {
     await closeEpisode(config, open, {
       status: 'abandoned',
-      notes: 'auto-closed by tableau-begin-episode',
+      notes: 'auto-closed when a new episode started',
     });
   }
 
