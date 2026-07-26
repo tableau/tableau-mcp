@@ -6,10 +6,12 @@ import { z } from 'zod';
 import * as cacheFingerprintModule from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as metadataModule from '../../../desktop/metadata/index.js';
+import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { FileReadError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { BIND_FIRST_ORIENTATION_REDIRECT } from '../tool.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getListAvailableFieldsTool } from './listAvailableFields.js';
 
@@ -75,6 +77,8 @@ const LIVE_XML = '<workbook><datasource name="live"/></workbook>';
 describe('listAvailableFieldsTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionRouteState.clear();
+    sessionRouteState.recordAuthoringAttempt(SESSION, 'bind-template');
   });
 
   it('should create a tool instance with correct properties', async () => {
@@ -96,6 +100,25 @@ describe('listAvailableFieldsTool', () => {
     expect(tool.annotations).toMatchObject({
       readOnlyHint: false,
     });
+  });
+
+  it('redirects before the first authoring attempt without invoking the host', async () => {
+    sessionRouteState.clear();
+    const extra = {
+      ...getMockRequestHandlerExtra(),
+      getExecutor: vi.fn(),
+    };
+
+    const result = await getResult({ session: SESSION, extra });
+
+    expect(result.isError).toBe(false);
+    expect(result.content).toEqual([{ type: 'text', text: BIND_FIRST_ORIENTATION_REDIRECT }]);
+    expect(result.structuredContent).toMatchObject({
+      message: BIND_FIRST_ORIENTATION_REDIRECT,
+      nextAction: { kind: 'prefill' },
+    });
+    expect(extra.getExecutor).not.toHaveBeenCalled();
+    expect(getWorkbookXmlModule.getWorkbookXml).not.toHaveBeenCalled();
   });
 
   it('should return helpful error when workbook file does not exist', async () => {
