@@ -92,14 +92,15 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'dashboard',
     trigger: 'a dashboard ask with 2-6 vizzes',
     action:
-      'build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard.',
+      'build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; search-commands only for commands the census does not list.',
     toolSequence: [
       'bind-template',
       'dashboard-auto-apply',
       'plan-dashboard-creation',
       'build-and-apply-dashboard',
+      'search-commands',
     ],
-    stopConditions: ['2-6 plain charts, one call'],
+    stopConditions: ['search-commands only for commands the census does not list'],
     requiredEvidence: ['each sheet build returns a success envelope before dashboard composition'],
   },
   {
@@ -131,7 +132,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'ask-user-ambiguity',
-    text: 'Call ask-user(urgency=blocking) and stop ONLY when the ambiguity is which target to edit, or no defensible default exists. When a canonical default exists (top = highest primary measure, N=10), build it and state the choice — never a bare question. Cosmetic choices never ask.',
+    text: 'Call ask-user(urgency=blocking); stop when ambiguity changes what data gets written or which target is edited. Cosmetic choices take a stated default instead of asking.',
   },
   {
     kind: 'route',

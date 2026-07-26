@@ -32,9 +32,7 @@ If the datasource may contain a broader population and the missing field is requ
 
 ## Implementation
 
-This check needs no orientation reads before binding: `bind-template` reads the schema itself, its proposal payload lists the candidate fields when it cannot bind, and a successful apply returns `summary_rows` — use those to judge grain and population. A wrong-scope discovery after a bind is reversible; the assumption line is what makes it honest.
-
-1. Judge the datasource grain and apparent population from what bind-template returns (proposal fields or `summary_rows`); read fields separately only when binding is not the next step anyway.
+1. List the available fields and identify the datasource grain and apparent population.
 2. Decide whether the missing relationship only describes the datasource's existing scope or is needed to select rows.
 3. If it only describes a plausible existing scope, build over all rows and state the assumption.
 4. If it is needed to select rows, refuse or ask for a field, filter, or already-scoped datasource that can identify the subset.
