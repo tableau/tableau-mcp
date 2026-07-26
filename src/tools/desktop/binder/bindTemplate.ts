@@ -326,7 +326,7 @@ async function readAppliedSummaryRows({
       fetchWorksheetSummaryData({
         read,
         worksheet: worksheetName,
-        maxRows: SUMMARY_ROWS_MAX_ROWS,
+        maxRows: SUMMARY_ROWS_MAX_ROWS + 1,
       }),
       timeoutFailure,
     ]);
