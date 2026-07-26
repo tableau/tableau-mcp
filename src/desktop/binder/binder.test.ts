@@ -1052,6 +1052,13 @@ describe('binder/bindTemplate — Call 1 miss (propose)', () => {
         measure: 'Sales',
         top_n: 10,
         reason: 'revenue-like measure; top-N defaults to 10',
+        binding: {
+          template: 'ranking-ordered-bar',
+          bindings: [
+            { slot_id: 'region', field: 'Customer Name' },
+            { slot_id: 'sales', field: 'Sales' },
+          ],
+        },
       });
     }
   });

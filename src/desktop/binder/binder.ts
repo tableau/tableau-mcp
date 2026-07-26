@@ -324,7 +324,7 @@ export const TITLE_CONTROL_CHAR_RE = new RegExp(`[${XML_ILLEGAL_TITLE_CHARS}]`);
 export const TITLE_CONTROL_CHAR_MESSAGE =
   'title must not contain control characters (C0 block U+0000–U+001F or DEL U+007F), which are illegal in XML 1.0 even when escaped';
 
-function makeTitle(ask: string): string {
+export function makeTitle(ask: string): string {
   // Collapse whitespace FIRST so the XML-legal whitespace controls (TAB/LF/CR/FF/VT ∈ \s)
   // become a single space, THEN strip any remaining C0/DEL control chars (NUL etc.) — so
   // the Call-1 generated title is always XML-safe and agrees with proposalSchema's reject.
