@@ -4588,8 +4588,7 @@ describe('bindTemplateTool incomplete bind is not remembered as applied', () => 
   });
 
   it('surfaces a computed-sort drop from template rewriting as an incomplete warning', async () => {
-    const warning =
-      'computed-sort dropped: [Superstore].[sum:Optional Sort:qk] did not resolve';
+    const warning = 'computed-sort dropped: [Superstore].[sum:Optional Sort:qk] did not resolve';
     const mocks = setupAutoApplyMocks({
       inject: {
         ok: true,
