@@ -305,8 +305,10 @@ function currencyHeterogeneityCaveat(
   );
   if (!summedMeasure) return '';
 
+  // Detail/LOD, shape, and text partition marks per member just like rows/cols do,
+  // so a currency column on any of them means the sum is NOT cross-currency.
   const visibleDimensionRefs = canonicalRefsIn(
-    xmlTagRegions(worksheetXml, ['rows', 'cols'], ['color', 'filter']),
+    xmlTagRegions(worksheetXml, ['rows', 'cols'], ['color', 'filter', 'lod', 'shape', 'text']),
   );
   const omittedUnitDimension = schemaSummary.fields.find(
     (field) =>
