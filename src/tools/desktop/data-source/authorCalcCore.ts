@@ -1,6 +1,12 @@
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
+import { resolveLooseFieldReference } from '../../../desktop/binder/classify.js';
+import {
+  bareName,
+  type SchemaField,
+  summarizeSchema,
+} from '../../../desktop/binder/schema-summary.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { applyWorkbookText } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { WithExecutorAndAbortSignal } from '../../../desktop/toolExecutor/toolExecutor.js';
@@ -32,6 +38,7 @@ export type AuthorCalcInput = {
   formula: string;
   role?: Role;
   datatype?: Datatype;
+  defaultFormat?: 'p0%';
 };
 
 export type AuthoredCalc = {
@@ -54,13 +61,21 @@ export async function authorCalculationsInWorkbook({
   executor,
   signal,
   labelErrors = true,
+  resolveLooseReferences = false,
 }: {
   workbookXml: string;
   calcs: AuthorCalcInput[];
   datasource?: string;
   labelErrors?: boolean;
+  resolveLooseReferences?: boolean;
 } & WithExecutorAndAbortSignal): Promise<Result<AuthorCalculationsResult, AuthorCalcError>> {
-  const prepared = prepareCalculationBatch({ workbookXml, calcs, datasource, labelErrors });
+  const prepared = prepareCalculationBatch({
+    workbookXml,
+    calcs,
+    datasource,
+    labelErrors,
+    resolveLooseReferences,
+  });
   if (prepared.isErr()) {
     return prepared;
   }
@@ -97,11 +112,13 @@ function prepareCalculationBatch({
   calcs,
   datasource,
   labelErrors,
+  resolveLooseReferences,
 }: {
   workbookXml: string;
   calcs: AuthorCalcInput[];
   datasource?: string;
   labelErrors: boolean;
+  resolveLooseReferences: boolean;
 }): Result<{ editedXml: string; authoredCalcs: AuthoredCalc[] }, ArgsValidationError> {
   let editedXml = workbookXml;
   const authoredCalcs: AuthoredCalc[] = [];
@@ -139,13 +156,24 @@ function prepareCalculationBatch({
     }
 
     const calcName = nextCalculationName(editedXml, Date.now());
-    const resolvedFormula = resolveCaptionReferences(calc.formula, target.xml, editedXml);
+    let formula = calc.formula;
+    if (resolveLooseReferences) {
+      const looseFormula = resolveLooseFormulaReferences(
+        formula,
+        summarizeSchema(editedXml),
+        label,
+      );
+      if (looseFormula.isErr()) return looseFormula;
+      formula = looseFormula.value;
+    }
+    const resolvedFormula = resolveCaptionReferences(formula, target.xml, editedXml);
     const columnXml = renderCalculationColumn({
       caption,
       formula: resolvedFormula,
       role,
       datatype,
       calcName,
+      defaultFormat: calc.defaultFormat,
     });
     editedXml = spliceColumnIntoDatasource(editedXml, target, columnXml);
     authoredCalcs.push({ calcName, caption, datasource: target.name });
@@ -157,6 +185,44 @@ function prepareCalculationBatch({
   }
 
   return new Ok({ editedXml, authoredCalcs });
+}
+
+function resolveLooseFormulaReferences(
+  formula: string,
+  schema: ReturnType<typeof summarizeSchema>,
+  label: string,
+): Result<string, ArgsValidationError> {
+  let error: ArgsValidationError | undefined;
+  const rewritten = formula.replace(/\[([^\]]+)\]/g, (whole, token: string, offset: number) => {
+    const end = offset + whole.length;
+    if (
+      formula.slice(end, end + 2) === '.[' ||
+      formula.slice(Math.max(0, offset - 2), offset) === '].'
+    ) {
+      return whole;
+    }
+
+    const resolution = resolveLooseFieldReference(token, schema);
+    if (resolution.kind === 'resolved') {
+      return `[${resolution.field.caption ?? bareName(resolution.field.columnName)}]`;
+    }
+
+    if (!error) {
+      const candidates = formatFieldCandidates(resolution.candidates);
+      const outcome = resolution.kind === 'ambiguous' ? 'is ambiguous' : 'was not found';
+      error = new ArgsValidationError(`${label}field reference [${token}] ${outcome}${candidates}`);
+    }
+    return whole;
+  });
+
+  return error ? error.toErr() : new Ok(rewritten);
+}
+
+function formatFieldCandidates(fields: SchemaField[]): string {
+  const names = [
+    ...new Set(fields.map((field) => field.caption ?? bareName(field.columnName))),
+  ].slice(0, 3);
+  return names.length > 0 ? ` <one of: ${names.join(', ')}>` : '';
 }
 
 function selectTargetDatasource(
@@ -314,18 +380,21 @@ function renderCalculationColumn({
   formula,
   role,
   calcName,
+  defaultFormat,
 }: {
   caption: string;
   datatype: Datatype;
   formula: string;
   role: Role;
   calcName: string;
+  defaultFormat?: 'p0%';
 }): string {
   const type =
     role === 'measure' && (datatype === 'real' || datatype === 'integer')
       ? 'quantitative'
       : 'nominal';
-  return `<column caption='${escapeXml(caption)}' datatype='${datatype}' name='${escapeXml(calcName)}' role='${role}' type='${type}'><calculation class='tableau' formula='${escapeXml(formula)}' /></column>`;
+  const formatAttr = defaultFormat ? ` default-format='${defaultFormat}'` : '';
+  return `<column caption='${escapeXml(caption)}' datatype='${datatype}'${formatAttr} name='${escapeXml(calcName)}' role='${role}' type='${type}'><calculation class='tableau' formula='${escapeXml(formula)}' /></column>`;
 }
 
 function spliceColumnIntoDatasource(

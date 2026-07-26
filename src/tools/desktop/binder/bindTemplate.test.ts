@@ -2860,6 +2860,77 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
   });
 
+  it('resolves loose calc references and percent-formats a ratio in the same bind call', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const baseXml = CALC_BASE_XML.replace(
+      "<column caption='Sales' datatype='real' name='[Sales]' role='measure' type='quantitative' />",
+      [
+        "<column caption='Sales' datatype='real' name='[sales_amount]' role='measure' type='quantitative' />",
+        "<column caption='Gross Profit' datatype='real' name='[gross_profit]' role='measure' type='quantitative' />",
+      ].join(''),
+    );
+    const calcXml =
+      "<column caption='Gross Margin %' datatype='real' default-format='p0%' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='SUM([gross_profit]) / SUM([sales_amount])' /></column>";
+    const readbackXml = baseXml.replace('</datasource>', `${calcXml}</datasource>`);
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [baseXml, readbackXml],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Show me gross margin %.',
+      calcs: [
+        {
+          caption: 'Gross Margin %',
+          formula: 'SUM([gross profit]) / SUM([Revenue])',
+        },
+      ],
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
+    expect(applyWorkbookDocument.mock.calls[0]?.[0]).toContain(calcXml);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ workbookXml: readbackXml }),
+    );
+  });
+
+  it('rejects an ambiguous loose calc reference with at most three candidates', async () => {
+    const baseXml = CALC_BASE_XML.replace(
+      '</datasource>',
+      [
+        "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />",
+        "<column caption='Amount' datatype='real' name='[Amount]' role='measure' type='quantitative' />",
+        "<column caption='Revenue Amount' datatype='real' name='[Revenue Amount]' role='measure' type='quantitative' />",
+        "<column caption='Net Sales' datatype='real' name='[Net Sales]' role='measure' type='quantitative' />",
+        '</datasource>',
+      ].join(''),
+    );
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [baseXml],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Show me gross margin %.',
+      calcs: [{ caption: 'Gross Margin %', formula: '[Profit] / [Revenue]' }],
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'field reference [Revenue] is ambiguous <one of: Sales, Amount, Revenue Amount>',
+    );
+    expect(result.content[0].text).not.toContain('Net Sales');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid inline calcs before any document load or bind', async () => {
     const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       workbookReads: [CALC_BASE_XML],
