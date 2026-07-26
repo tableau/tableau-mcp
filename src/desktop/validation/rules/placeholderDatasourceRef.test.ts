@@ -15,6 +15,8 @@ describe('placeholder-datasource-ref rule', () => {
     expect(issues[0].severity).toBe('error');
     expect(issues[0].message).toMatch(/\[DS\]/);
     expect(issues[0].suggestion).toMatch(/real datasource|Sample - Superstore/);
+    expect(issues[0].suggestion).toContain('resolve-field');
+    expect(issues[0].suggestion).not.toContain('list-available-fields');
   });
 
   it('is case-insensitive and flags other placeholder spellings', () => {

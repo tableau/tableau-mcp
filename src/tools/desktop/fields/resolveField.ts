@@ -195,7 +195,7 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
             note =
               `Refreshed the workbook live from Tableau and "${query}" still does not resolve. ` +
               'The field genuinely does not exist in the CURRENT workbook — stop re-reading stale caches. ' +
-              'Call list-available-fields (with session) to see the fields that DO exist, or ask-user to clarify.';
+              'Use a candidate field returned by bind-template, or ask-user to clarify.';
           } else if (refreshFailure && resolution.kind === 'not_found') {
             stale = true;
             note =

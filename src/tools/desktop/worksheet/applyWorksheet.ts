@@ -59,8 +59,8 @@ export const getApplyWorksheetTool = (
             return new ArgsValidationError(
               [
                 'A non-empty worksheet file path is required.',
-                'Get one from get-worksheet-xml, edit it with read-cached-xml and',
-                'write-cached-xml, then pass that path here.',
+                'Get one by calling add-field or remove-field with worksheetName,',
+                'then pass the returned path here.',
               ].join(' '),
             ).toErr();
           }
@@ -69,7 +69,7 @@ export const getApplyWorksheetTool = (
             return new WorksheetNotFoundError(
               [
                 `Cached worksheet file not found: ${worksheetFile}`,
-                'Provide a path returned by get-worksheet-xml.',
+                'Provide a path returned by add-field or remove-field.',
               ].join(' '),
             ).toErr();
           }

@@ -11,6 +11,8 @@ describe('invalid-column-instance-pivot rule', () => {
     expect(issues[0].ruleId).toBe('invalid-column-instance-pivot');
     expect(issues[0].severity).toBe('error');
     expect(issues[0].message).toMatch(/\[none:Order Date:qk\]/);
+    expect(issues[0].suggestion).toContain('resolve-field');
+    expect(issues[0].suggestion).not.toContain('list-available-fields');
   });
 
   it('does not flag valid dimension instances', () => {

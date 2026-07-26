@@ -346,6 +346,8 @@ describe('buildAndApplyWorksheetTool', () => {
     expect(result.content[0].text).toContain('"Country"');
     expect(result.content[0].text).toContain('"Goal Difference"');
     expect(result.content[0].text).toContain('resolve-field');
+    expect(result.content[0].text).toContain('bind-template');
+    expect(result.content[0].text).not.toContain('list-available-fields');
     expect(result.content[0].text).toContain('exact column_ref');
     expect(loadWorksheetXml).not.toHaveBeenCalled();
   });

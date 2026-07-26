@@ -105,7 +105,9 @@ describe('add-field — an absent column comes back as a tool error, not a crash
     expect(failure.isError).toBe(true);
     invariant(failure.content[0].type === 'text');
     expect(failure.content[0].text).toContain('does not exist in datasource "Sample - Superstore"');
-    expect(failure.content[0].text).toContain('list-available-fields');
+    expect(failure.content[0].text).toContain('resolve-field');
+    expect(failure.content[0].text).toContain('bind-template');
+    expect(failure.content[0].text).not.toContain('list-available-fields');
     // Still tells the agent how to beat a stale cache, but via a tool the served
     // profile actually has. Naming an off-profile tool here is a dead end — the
     // model cannot call it, so its retry cannot differ. See

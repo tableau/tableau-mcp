@@ -101,10 +101,9 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * all, so verified Tableau behavior (e.g. the waterfall subtotal/total exclusion rule,
  * the Top-N-needs-a-context-filter rule) stayed dark on every sing. The corpus is
  * served as MCP resources anyway; these two tiny tools are the only way the model reaches it.
- * Thirty-three tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise
- * and first-class workbook/data reads/navigation; the only raw XML read is get-worksheet-xml,
- * the read leg the manual add-field/remove-field/apply-worksheet path needs to mint its
- * worksheetFile — no whole-workbook get/apply, no cache, no validation XML tools. This is the
+ * Thirty-one tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise
+ * and first-class workbook/data reads/navigation — no orientation reads, no whole-workbook
+ * get/apply, no validation XML tools. This is the
  * "make it shorter" answer — a lean, semantically-named surface under the 46k tools/list cliff,
  * not a describe-stub trim of the 45-tool default. Mechanism map live-proven 2026-07-19 (CODA):
  * calcs/sets/actions/formatting MERGE; parameters born at OPEN via author-parameter.
@@ -116,9 +115,6 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'add-field',
     'remove-field',
     'resolve-field',
-    // The manual field-edit path's read leg: mints the worksheetFile cache path that
-    // add-field/remove-field/apply-worksheet consume. Without it the manual path cannot start.
-    'get-worksheet-xml',
     // The edit leg. apply-* no longer accepts a document, so the agent needs a way to
     // read a slice of the cached file and splice an edit back into it. Without these
     // two, an edit that add-field/remove-field/refine-worksheet cannot express has no
@@ -138,7 +134,6 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'activate-sheet',
     'ask-user',
     'list-instances',
-    'list-available-fields',
     'list-worksheets',
     'list-dashboards',
     'get-summary-data',

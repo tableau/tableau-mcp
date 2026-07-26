@@ -39,7 +39,7 @@ export interface CheckSidecarResult {
 export type FingerprintResolver = (sessionId: string) => InstanceFingerprint | undefined;
 
 const READ_TOOL_BY_KIND: Record<CacheArtifactKind, string> = {
-  worksheet: 'get-worksheet-xml',
+  worksheet: 'add-field or remove-field (pass worksheetName)',
   workbook: 'get-workbook-xml',
   dashboard: 'get-dashboard-xml',
 };

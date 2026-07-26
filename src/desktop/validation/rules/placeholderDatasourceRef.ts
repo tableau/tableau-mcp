@@ -31,7 +31,7 @@ export const placeholderDatasourceRefRule: ValidationRule = {
         xpath: "//*[contains(.,'[DS].[')] | //@*[contains(.,'[DS].[')]",
         suggestion:
           'Replace the placeholder with the REAL datasource name (e.g. [Sample - Superstore], or the federated id from ' +
-          'tableau-list-available-fields / lookup-workbook-schema). Build every column ref from a real field instance — ' +
+          'resolve-field). Build every column ref from a real field instance — ' +
           `[<real datasource>].[<derivation:Field:pivot>] — not from a generic [${token}] example. Do NOT fall back to ` +
           'an imperative command (e.g. tabdoc:sort) to work around it; fix the reference and re-apply the XML.',
       });

@@ -327,7 +327,7 @@ function resolveSource(raw: string, schema: SchemaSummary): ResolvedSource | Exp
     return {
       code: 'field-not-found',
       detail: `no schema field matches "${raw}"`,
-      fix: 'Use list-available-fields or resolve-field, then retry with a valid column_ref.',
+      fix: 'Use resolve-field or a candidate from bind-template, then retry with a valid column_ref.',
     };
   }
 
@@ -347,7 +347,7 @@ function resolveSource(raw: string, schema: SchemaSummary): ResolvedSource | Exp
   return {
     code: 'field-not-found',
     detail: `no schema field matches "${raw}"`,
-    fix: 'Use list-available-fields or resolve-field, then retry with a valid field.',
+    fix: 'Use resolve-field or a candidate from bind-template, then retry with a valid field.',
   };
 }
 
@@ -504,7 +504,7 @@ function blockerToFixError(b: Blocker): ExplicitBindError {
 function fixForBlocker(b: Blocker): string {
   switch (b.code) {
     case 'field-not-found':
-      return 'Choose a candidate from list-available-fields or resolve the field, then retry.';
+      return 'Choose a candidate from bind-template or resolve the field with resolve-field, then retry.';
     case 'ambiguous-field':
       return 'Disambiguate with resolve-field and retry with an exact column_ref.';
     case 'missing-required-slot':

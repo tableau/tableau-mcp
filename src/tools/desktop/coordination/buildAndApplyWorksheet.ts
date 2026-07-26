@@ -174,7 +174,7 @@ function droppedFieldWarning({
 }: Extract<RequestedFieldResolution, { ok: false }>): string {
   return (
     `Field "${requested}" was dropped: ${reason}. ` +
-    'Use list-available-fields or resolve-field, then retry with an exact column_ref.'
+    'Use resolve-field or a candidate from bind-template, then retry with an exact column_ref.'
   );
 }
 
@@ -436,7 +436,7 @@ export const getBuildAndApplyWorksheetTool = (
           if (fields.length > 0 && supportedResolvedFields.length === 0) {
             return new ArgsValidationError(
               `All requested fields were dropped: ${quotedFields(fields)}. No worksheet was applied.\n\n` +
-                'FIX: Use list-available-fields or resolve-field, then retry with exact column_ref values for fields that fit the template roles.',
+                'FIX: Use resolve-field or candidate fields from bind-template, then retry with exact column_ref values that fit the template roles.',
             ).toErr();
           }
 
@@ -524,7 +524,7 @@ export const getBuildAndApplyWorksheetTool = (
           if (fields.length > 0 && bindFields.length === 0) {
             return new ArgsValidationError(
               `All requested fields were dropped: ${quotedFields(fields)}. No worksheet was applied.\n\n` +
-                'FIX: Use list-available-fields or resolve-field, then retry with exact column_ref values for fields that fit the template roles.',
+                'FIX: Use resolve-field or candidate fields from bind-template, then retry with exact column_ref values that fit the template roles.',
             ).toErr();
           }
 

@@ -185,8 +185,8 @@ function resolveCanonicalWorksheetName(
           'just that element, write-cached-xml with the same selector to splice your edit back, then ' +
           'apply-worksheet with that file.'
         : 'apply-worksheet could not find a top-level <worksheet name="..."> element in the cached file. ' +
-          `FIX: get-worksheet-xml for "${callerName}" mints a file holding exactly that fragment; edit it ` +
-          'with read-cached-xml/write-cached-xml and pass that path to apply-worksheet.',
+          `FIX: call add-field or remove-field with worksheetName="${callerName}" to mint a valid cached ` +
+          'worksheet file, then pass the returned path to apply-worksheet.',
     });
   }
 

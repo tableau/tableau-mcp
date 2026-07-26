@@ -59,19 +59,15 @@ describe('no served tool accepts a whole document', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('keeps the whole cache-splice route inside the served profile', () => {
-    for (const tool of [
-      'get-worksheet-xml',
-      'read-cached-xml',
-      'write-cached-xml',
-      'apply-worksheet',
-    ]) {
+  it('keeps cache edit/apply tools but not the orientation read inside the served profile', () => {
+    expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has('get-worksheet-xml')).toBe(false);
+    for (const tool of ['read-cached-xml', 'write-cached-xml', 'apply-worksheet']) {
       expect(DYNAMIC_AUTHORING_TOOL_PROFILE.has(tool as never)).toBe(true);
     }
   });
 });
 
-describe('the served profile still has a working edit path with no document parameter', () => {
+describe('the full profile has a working cache-splice path with no document parameter', () => {
   const SHEET = "<worksheet name='Sales'><table><rows>[Sales]</rows></table></worksheet>";
 
   beforeEach(() => {

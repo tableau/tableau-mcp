@@ -15,6 +15,8 @@ describe('unsubstituted-template-token rule', () => {
     expect(issues[0].severity).toBe('error');
     expect(issues[0].message).toMatch(/\{\{DATASOURCE\}\}/);
     expect(issues[0].suggestion).toMatch(/inject-template|build-and-apply/);
+    expect(issues[0].suggestion).toContain('resolve-field');
+    expect(issues[0].suggestion).not.toContain('list-available-fields');
   });
 
   it('dedupes repeats of the same token', () => {

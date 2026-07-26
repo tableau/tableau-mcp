@@ -125,6 +125,31 @@ describe('loadWorksheetXml (External Client API transport)', () => {
     vi.restoreAllMocks();
   });
 
+  it('routes a missing worksheet fragment through default-profile cache producers', async () => {
+    const { executor, calls } = dispatchingExecutor(liveWorkbook([worksheetName]));
+
+    const result = await loadWorksheetXml({
+      worksheetName,
+      xml: '<not-a-worksheet/>',
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.type).toBe('load-worksheet-xml-error');
+      if (result.error.type === 'load-worksheet-xml-error') {
+        expect(result.error.error.type).toBe('name-mismatch');
+        if (result.error.error.type === 'name-mismatch') {
+          expect(result.error.error.message).toContain('add-field or remove-field');
+          expect(result.error.error.message).not.toContain('get-worksheet-xml');
+        }
+      }
+    }
+    expect(calls).toEqual([]);
+  });
+
   it('upserts the edited sheet into the whole live workbook, preserving siblings and dashboards', async () => {
     const { executor, calls } = dispatchingExecutor(
       liveWorkbook(['Sheet 1', 'Other'], ['Dashboard 1']),

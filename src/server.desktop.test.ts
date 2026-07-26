@@ -191,9 +191,9 @@ describe('desktop tools/list serialized surface', () => {
     // Dynamic authoring is the serving surface, so this is the real budget gate.
     // The full desktop surface is not what clients see by default; its looser cap
     // only catches runaway growth without forcing valuable full-profile tools to be trimmed.
-    // Honest wire measurements are 28,553 bytes dynamic and 44,035 bytes full.
+    // Honest wire measurements are 27,345 bytes dynamic and 44,035 bytes full.
     // Keep only a few bytes of ratchet headroom while staying well below the 46k cliff.
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(28_570);
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(27_360);
     expect(fullSurfaceTotal).toBeLessThanOrEqual(44_070);
   });
 });
@@ -388,10 +388,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 33-tool data-first singable surface — native authoring + workbook reads + atomic sheet activation + the manual path read/edit legs, no workbook round-trip/validation XML tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 31-tool data-first singable surface — native authoring + workbook reads + atomic sheet activation, no orientation reads or workbook round-trip/validation XML tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(33);
+    expect(selected).toHaveLength(31);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -421,9 +421,6 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'list-workbook-datasources',
       'list-site-datasources',
       'activate-sheet',
-      // The manual field-edit path's read leg — mints the worksheetFile add-field/
-      // remove-field/apply-worksheet consume.
-      'get-worksheet-xml',
     ]) {
       expect(selected.map((t) => t.name)).toContain(verb);
     }
@@ -455,6 +452,17 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     }
   });
 
+  it('keeps orientation-read tools out of the default profile and available in the full profile', () => {
+    const tools = allTools();
+    const defaultNames = selectToolsForProfile(tools, '').map((tool) => tool.name);
+    const fullNames = selectToolsForProfile(tools, 'full').map((tool) => tool.name);
+
+    for (const orientationRead of ['list-available-fields', 'get-worksheet-xml']) {
+      expect(defaultNames).not.toContain(orientationRead);
+      expect(fullNames).toContain(orientationRead);
+    }
+  });
+
   it('dynamic-authoring surface sits well under the 46k tools/list cliff (the whole point of a lean profile)', async () => {
     const server = new DesktopMcpServer();
     const selected = selectToolsForProfile(
@@ -467,7 +475,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     }
     // A lean surface must have generous headroom — this is a structural win, not a
     // describe-stub squeeze. If this ever approaches 46k something is very wrong.
-    expect(total).toBeLessThanOrEqual(28_570);
+    expect(total).toBeLessThanOrEqual(27_360);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {

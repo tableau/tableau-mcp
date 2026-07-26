@@ -208,7 +208,7 @@ export const getPlanDashboardCreationTool = (
               '',
               'Next step: disambiguate each field, then re-call plan-dashboard-creation.',
               '  • Use resolve-field with an explicit datasource.',
-              '  • For not_found fields, call list-available-fields to see valid names.',
+              '  • For not_found fields, use a candidate field from bind-template or correct the name.',
               '  • Use ask-user to surface the choice to the user.',
             );
             return attachNextAction(

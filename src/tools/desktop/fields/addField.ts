@@ -80,7 +80,7 @@ function columnRefRejection(columnRef: string, workbookXml: string | undefined):
   const next =
     suggestions.length > 0
       ? `Did you mean: ${suggestions.join(', ')}?`
-      : 'Call resolve-field with the field name to get the exact ref, or list-available-fields for every ref in the workbook.';
+      : 'Call resolve-field with the field name to get the exact ref.';
   return `columnRef "${columnRef}" is not a column reference. Expected [Datasource].[derivation:Column:type], e.g. ${COLUMN_REF_EXAMPLE}. ${next}`;
 }
 

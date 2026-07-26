@@ -749,6 +749,7 @@ describe('add-field columnRef contract', () => {
     expect(result.content[0].text).toContain('is not a column reference');
     expect(result.content[0].text).toContain('[Sample - Superstore].[sum:Sales:qk]');
     expect(result.content[0].text).toContain('resolve-field');
+    expect(result.content[0].text).not.toContain('list-available-fields');
     expect(metadataModule.addFieldToCols).not.toHaveBeenCalled();
   });
 

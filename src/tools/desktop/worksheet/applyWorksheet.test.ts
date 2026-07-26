@@ -230,6 +230,8 @@ describe('applyWorksheetTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('A non-empty worksheet file path is required');
+    expect(result.content[0].text).toContain('add-field or remove-field');
+    expect(result.content[0].text).not.toContain('get-worksheet-xml');
   });
 
   it('should return error when worksheet file does not exist', async () => {
@@ -248,6 +250,8 @@ describe('applyWorksheetTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Cached worksheet file not found');
+    expect(result.content[0].text).toContain('add-field or remove-field');
+    expect(result.content[0].text).not.toContain('get-worksheet-xml');
   });
 
   it('should return error when file read fails', async () => {

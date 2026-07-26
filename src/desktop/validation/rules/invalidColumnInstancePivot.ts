@@ -168,7 +168,7 @@ export const invalidColumnInstancePivotRule: ValidationRule = {
         suggestion:
           `Use a valid pivot for the field's role: a discrete dimension is [none:${field}:nk] (nominal) or ` +
           `[none:${field}:ok] (ordinal); a date part/trunc is e.g. [tmn:${field}:ok] / [tyr:${field}:ok]; a measure ` +
-          `aggregate is [sum:${field}:qk] etc. Build the reference from a real field instance (tableau-list-available-fields), ` +
+          `aggregate is [sum:${field}:qk] etc. Build the reference from a real field instance returned by resolve-field, ` +
           'not by pairing none: with :qk.',
       });
     }

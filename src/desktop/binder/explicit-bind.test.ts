@@ -177,6 +177,22 @@ describe('bindExplicitTemplate', () => {
     }
   });
 
+  it('drops unresolved refs without suggesting an off-profile field-list tool', () => {
+    const result = bindExplicitTemplate('x-latlon', ['[Superstore].[sum:Missing:qk]'], SUMMARY, {
+      manifests: manifests(LATLON),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.warnings).toContain(
+        'unresolved-column-ref: no schema field matches "[Superstore].[sum:Missing:qk]"',
+      );
+      expect(result.warnings.every((warning) => !warning.includes('list-available-fields'))).toBe(
+        true,
+      );
+    }
+  });
+
   it('handles qualified-key slots for one field reused at two derivations', () => {
     const highlight = {
       ...LATLON,

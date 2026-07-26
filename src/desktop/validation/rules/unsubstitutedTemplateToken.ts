@@ -30,7 +30,7 @@ export const unsubstitutedTemplateTokenRule: ValidationRule = {
         xpath: "//*[contains(.,'{{')] | //@*[contains(.,'{{')]",
         suggestion:
           `Substitute ${token} with the real value before applying — e.g. replace [${token.replace(/[{}]/g, '')}] ` +
-          'references with [Sample - Superstore] and use real field instances (tableau-list-available-fields) — OR ' +
+          'references with [Sample - Superstore] and use real field instances from resolve-field — OR ' +
           'apply this template through bind-template or build-and-apply-worksheet, which run the ' +
           'substitution for you. Never apply template XML that still holds placeholder tokens.',
       });

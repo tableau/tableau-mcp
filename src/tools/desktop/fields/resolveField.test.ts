@@ -412,6 +412,8 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
     expect(body.isError).toBe(true);
     expect(body.note).toContain('genuinely does not exist');
     expect(body.note).toContain('stop re-reading stale caches');
+    expect(body.note).toContain('bind-template');
+    expect(body.note).not.toContain('list-available-fields');
     // The refresh DID succeed (field just absent), so the cache is rewritten to LIVE.
     expect(writeFileSync).toHaveBeenCalledWith(WORKBOOK_FILE, LIVE_XML, 'utf-8');
     expect(metadataModule.resolveField).toHaveBeenCalledTimes(2);
