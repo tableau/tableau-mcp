@@ -158,9 +158,13 @@ function prepareCalculationBatch({
     const calcName = nextCalculationName(editedXml, Date.now());
     let formula = calc.formula;
     if (resolveLooseReferences) {
+      const workbookSchema = summarizeSchema(editedXml);
       const looseFormula = resolveLooseFormulaReferences(
         formula,
-        summarizeSchema(editedXml),
+        {
+          datasource: target.name,
+          fields: workbookSchema.fields.filter((field) => field.datasource === target.name),
+        },
         label,
       );
       if (looseFormula.isErr()) return looseFormula;
@@ -193,8 +197,7 @@ function resolveLooseFormulaReferences(
   label: string,
 ): Result<string, ArgsValidationError> {
   let error: ArgsValidationError | undefined;
-  const rewritten = formula.replace(/\[([^\]]+)\]/g, (whole, token: string, offset: number) => {
-    const end = offset + whole.length;
+  const rewritten = rewriteUnquotedFieldReferences(formula, (whole, token, offset, end) => {
     if (
       formula.slice(end, end + 2) === '.[' ||
       formula.slice(Math.max(0, offset - 2), offset) === '].'
@@ -204,7 +207,9 @@ function resolveLooseFormulaReferences(
 
     const resolution = resolveLooseFieldReference(token, schema);
     if (resolution.kind === 'resolved') {
-      return `[${resolution.field.caption ?? bareName(resolution.field.columnName)}]`;
+      return renderFieldReference(
+        resolution.field.caption ?? bareName(resolution.field.columnName),
+      );
     }
 
     if (!error) {
@@ -216,6 +221,47 @@ function resolveLooseFormulaReferences(
   });
 
   return error ? error.toErr() : new Ok(rewritten);
+}
+
+function rewriteUnquotedFieldReferences(
+  formula: string,
+  replacer: (whole: string, token: string, offset: number, end: number) => string,
+): string {
+  const fieldReference = /\[(?:[^\]]|\]\])*\]/y;
+  let quote: "'" | '"' | undefined;
+  let cursor = 0;
+  let rewritten = '';
+
+  for (let index = 0; index < formula.length; index += 1) {
+    const char = formula[index];
+    if (quote) {
+      if (char === quote && formula[index - 1] !== '\\') quote = undefined;
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      continue;
+    }
+    if (char !== '[') continue;
+
+    fieldReference.lastIndex = index;
+    const match = fieldReference.exec(formula);
+    if (!match) continue;
+
+    const whole = match[0];
+    const end = index + whole.length;
+    const token = whole.slice(1, -1).replaceAll(']]', ']');
+    rewritten += formula.slice(cursor, index);
+    rewritten += replacer(whole, token, index, end);
+    cursor = end;
+    index = end - 1;
+  }
+
+  return `${rewritten}${formula.slice(cursor)}`;
+}
+
+function renderFieldReference(token: string): string {
+  return `[${token.replaceAll(']', ']]')}]`;
 }
 
 function formatFieldCandidates(fields: SchemaField[]): string {
@@ -335,7 +381,7 @@ function resolveCaptionReferences(
     const capText = unescapeXml(cap);
     const nameText = unescapeXml(name).replace(/^\[|\]$/g, '');
     if (capText !== nameText) {
-      captionToRef.set(capText, `[${nameText}]`);
+      captionToRef.set(capText, renderFieldReference(nameText));
     }
   }
   // Parameters live in their own datasource, so caption references must be qualified.
@@ -351,7 +397,7 @@ function resolveCaptionReferences(
     }
   }
   if (captionToRef.size === 0) return formula;
-  return formula.replace(/\[([^\]]+)\]/g, (whole, token: string) => {
+  return rewriteUnquotedFieldReferences(formula, (whole, token) => {
     return captionToRef.get(token) ?? whole;
   });
 }

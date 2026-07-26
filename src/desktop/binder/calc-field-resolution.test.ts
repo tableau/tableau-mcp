@@ -44,12 +44,12 @@ describe('resolveLooseFieldReference', () => {
     });
   });
 
-  it('resolves one unambiguous business-synonym candidate', () => {
+  it('returns one business-synonym match as a candidate without resolving it', () => {
     const sales = field({ caption: 'Sales', columnName: '[sales_amount]' });
 
     expect(resolveLooseFieldReference('Revenue', summary(sales))).toEqual({
-      kind: 'resolved',
-      field: sales,
+      kind: 'not_found',
+      candidates: [sales],
     });
   });
 

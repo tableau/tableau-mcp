@@ -2882,7 +2882,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       calcs: [
         {
           caption: 'Gross Margin %',
-          formula: 'SUM([gross profit]) / SUM([Revenue])',
+          formula: 'SUM([gross profit]) / SUM([Sales])',
         },
       ],
       auto_apply: true,
@@ -2929,6 +2929,84 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(result.content[0].text).not.toContain('Net Sales');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
     expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+  });
+
+  it('keeps bracketed text inside quoted calc string literals untouched', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const formula = 'IF \'[Revenue]\' = "[Revenue]" THEN [Sales] END';
+    const calcXml =
+      "<column caption='Literal Brackets' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='IF &apos;[Revenue]&apos; = &quot;[Revenue]&quot; THEN [Sales] END' /></column>";
+    const readbackXml = CALC_BASE_XML.replace('</datasource>', `${calcXml}</datasource>`);
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [CALC_BASE_XML, readbackXml],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Literal Brackets',
+      calcs: [{ caption: 'Literal Brackets', formula }],
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(applyWorkbookDocument.mock.calls[0]?.[0]).toContain(calcXml);
+  });
+
+  it('resolves a loose calc field reference containing an escaped closing bracket', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const baseXml = CALC_BASE_XML.replace(
+      "<column caption='Sales' datatype='real' name='[Sales]' role='measure' type='quantitative' />",
+      "<column caption='Rate] Value' datatype='real' name='[rate_value]' role='measure' type='quantitative' />",
+    );
+    const calcXml =
+      "<column caption='Escaped Bracket Calc' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='SUM([rate_value])' /></column>";
+    const readbackXml = baseXml.replace('</datasource>', `${calcXml}</datasource>`);
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [baseXml, readbackXml],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Escaped Bracket Calc',
+      calcs: [{ caption: 'Escaped Bracket Calc', formula: 'SUM([Rate]] Value])' }],
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(applyWorkbookDocument.mock.calls[0]?.[0]).toContain(calcXml);
+    expect(applyWorkbookDocument.mock.calls[0]?.[0]).not.toContain('SUM([Rate]');
+  });
+
+  it('percent-formats only dividing calcs whose own caption is percent-like', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const percentCalcXml =
+      "<column caption='Return %' datatype='real' default-format='p0%' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[Sales] / 100' /></column>";
+    const averageCalcXml =
+      "<column caption='Average Order Value' datatype='real' name='[Calculation_1700000000001]' role='measure' type='quantitative'><calculation class='tableau' formula='[Sales] / 2' /></column>";
+    const readbackXml = CALC_BASE_XML.replace(
+      '</datasource>',
+      `${percentCalcXml}${averageCalcXml}</datasource>`,
+    );
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [CALC_BASE_XML, readbackXml],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'return % and average order value',
+      calcs: [
+        { caption: 'Return %', formula: '[Sales] / 100' },
+        { caption: 'Average Order Value', formula: '[Sales] / 2' },
+      ],
+      auto_apply: true,
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(applyWorkbookDocument.mock.calls[0]?.[0]).toContain(percentCalcXml);
+    expect(applyWorkbookDocument.mock.calls[0]?.[0]).toContain(averageCalcXml);
   });
 
   it('rejects invalid inline calcs before any document load or bind', async () => {

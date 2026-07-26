@@ -3,11 +3,13 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Ok } from 'ts-results-es';
 
+import { ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getAuthorCalcTool } from './authorCalc.js';
+import { authorCalculationsInWorkbook } from './authorCalcCore.js';
 
 const BASE_XML = [
   "<?xml version='1.0' encoding='utf-8'?>",
@@ -233,6 +235,61 @@ describe('authorCalcTool', () => {
     expect(appliedDocumentXml(applyWorkbookDocument)).toContain(
       "name='[Calculation_1700000000001]'",
     );
+  });
+
+  it('scopes loose field resolution to the selected target datasource', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const initialXml = [
+      "<?xml version='1.0' encoding='utf-8'?>",
+      "<workbook version='18.1'><datasources>",
+      "<datasource name='Orders'>",
+      "<column caption='Revenue' datatype='real' name='[revenue]' role='measure' type='quantitative' />",
+      '</datasource>',
+      "<datasource name='Inventory'>",
+      "<column caption='Cost' datatype='real' name='[cost]' role='measure' type='quantitative' />",
+      '</datasource>',
+      "</datasources><worksheets><worksheet name='Sheet 1' /></worksheets></workbook>",
+    ].join('');
+    const calcXml =
+      "<column caption='Scoped Calc' datatype='real' name='[Calculation_1700000000000]' role='measure' type='quantitative'><calculation class='tableau' formula='[Revenue] + 1' /></column>";
+    const readbackXml = initialXml.replace(
+      "<column caption='Cost' datatype='real' name='[cost]' role='measure' type='quantitative' />",
+      `<column caption='Cost' datatype='real' name='[cost]' role='measure' type='quantitative' />${calcXml}`,
+    );
+    const applyWorkbookDocument = vi
+      .fn()
+      .mockResolvedValue(new Ok({ command_id: 'apply-1', status: 'completed', result: null }));
+    const executor: ToolExecutor = {
+      start: vi.fn(),
+      stop: vi.fn(),
+      isAvailable: vi.fn(() => true),
+      executeCommand: vi
+        .fn()
+        .mockResolvedValue(new Ok({ command_id: 'command-1', status: 'completed', result: null })),
+      getWorkbookDocument: vi.fn().mockResolvedValue(
+        new Ok({
+          xml: readbackXml,
+          applicationVersion: undefined,
+          xsdPayloadVersion: undefined,
+        }),
+      ),
+      applyWorkbookDocument,
+      getEvents: vi.fn(),
+    };
+
+    const result = await authorCalculationsInWorkbook({
+      workbookXml: initialXml,
+      calcs: [{ caption: 'Scoped Calc', formula: '[Revenue] + 1' }],
+      datasource: 'Inventory',
+      resolveLooseReferences: true,
+      executor,
+      signal: new AbortController().signal,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error('expected target-scoped field resolution to fail');
+    expect(result.error.message).toContain('field reference [Revenue] was not found');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 });
 

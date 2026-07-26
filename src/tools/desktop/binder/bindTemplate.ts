@@ -1927,6 +1927,10 @@ function asksForPercent(ask: string): boolean {
   return /%|\bpercent(?:age)?\b/i.test(ask);
 }
 
+function hasPercentCaption(caption: string): boolean {
+  return /%|percent|margin|rate|share|ratio/i.test(caption);
+}
+
 function hasDivisionOperator(formula: string): boolean {
   let quote: "'" | '"' | undefined;
   for (let index = 0; index < formula.length; index += 1) {
@@ -2044,7 +2048,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           if (calcs && calcs.length > 0) {
             const percentAsk = asksForPercent(ask);
             const authoredCalcInputs = (calcs as AuthorCalcInput[]).map((calc) =>
-              percentAsk && hasDivisionOperator(calc.formula)
+              percentAsk && hasDivisionOperator(calc.formula) && hasPercentCaption(calc.caption)
                 ? { ...calc, defaultFormat: 'p0%' as const }
                 : calc,
             );

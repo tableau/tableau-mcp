@@ -1329,8 +1329,9 @@ export type LooseFieldReferenceResolution =
 
 /**
  * Resolve one calc-formula field token without fuzzy guessing. Exact normalized
- * caption/bare-name matches win, followed by singular/plural equivalence and the
- * classifier's precision-first business synonyms. Candidate order is schema order.
+ * caption/bare-name matches win, followed by singular/plural equivalence. Business
+ * synonyms are suggestions only because a calc token names a specific field.
+ * Candidate order is schema order.
  */
 export function resolveLooseFieldReference(
   query: string,
@@ -1355,19 +1356,12 @@ export function resolveLooseFieldReference(
   if (plural.length === 1) return { kind: 'resolved', field: plural[0] };
   if (plural.length > 1) return { kind: 'ambiguous', candidates: plural };
 
-  // No literal field owns the whole token at this point. Passing no literal hits
-  // lets a noun inside a longer phrase ("gross profit") use the same closed synonym
-  // table while preserving its existing full-name requirement for auto-resolution.
+  // No literal field owns the whole token at this point. Reuse the closed synonym
+  // table only to surface guidance candidates; calc references never substitute them.
   const synonymMatches = businessSynonymCandidatesInAsk(query, s, []);
   const candidates = s.fields.filter((field) =>
     synonymMatches.some((match) => match.candidates.includes(field)),
   );
-  const fullMatchCandidates = s.fields.filter((field) =>
-    synonymMatches.some((match) => match.fullMatchCandidates.includes(field)),
-  );
-  if (candidates.length === 1 && fullMatchCandidates.length === 1) {
-    return { kind: 'resolved', field: candidates[0] };
-  }
   if (candidates.length > 1) return { kind: 'ambiguous', candidates };
 
   const literalCandidates = literalFieldMatchesInAsk(query, s).map(({ field }) => field);
