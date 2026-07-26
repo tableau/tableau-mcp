@@ -335,9 +335,7 @@ describe('listAvailableFieldsTool', () => {
       role: 'dimension',
       datatype: 'string',
     });
-    // Slim carries only the field-picking essentials: the full column_ref and the
-    // column-ref-reconstruction ingredients (columnInstanceName/derivation/typePivot)
-    // are omitted.
+    // Slim omits column_ref and the columnInstanceName/derivation/typePivot fields.
     const first = groupFields[0] as Record<string, unknown>;
     expect(first.column_ref).toBeUndefined();
     expect(first.columnInstanceName).toBeUndefined();
