@@ -1196,6 +1196,8 @@ function acronymExpansionMatch(ask: string, field: SchemaField): number {
 interface FieldMatch {
   field: SchemaField;
   index: number;
+  start?: number;
+  end?: number;
 }
 
 /** Existing literal/plural/acronym field matches, before business synonyms are considered. */
@@ -1206,13 +1208,24 @@ function literalFieldMatchesInAsk(ask: string, s: SchemaSummary): FieldMatch[] {
     const names = [bareName(field.columnName), field.caption, field.name].filter(
       (name): name is string => !!name && name.length > 0,
     );
-    let best = -1;
+    let best: PhraseMatch | null = null;
     for (const name of names) {
-      const index = fieldNameMatchInAsk(ask, name, exactNames);
-      if (index >= 0 && (best < 0 || index < best)) best = index;
+      const match = fieldNameMatchInAskSpan(ask, name, exactNames);
+      if (
+        match &&
+        (!best ||
+          match.index < best.index ||
+          (match.index === best.index && match.end - match.start > best.end - best.start))
+      ) {
+        best = match;
+      }
     }
-    if (best < 0) best = acronymExpansionMatch(ask, field);
-    if (best >= 0) hits.push({ field, index: best });
+    if (best) {
+      hits.push({ field, index: best.index, start: best.start, end: best.end });
+      continue;
+    }
+    const acronymIndex = acronymExpansionMatch(ask, field);
+    if (acronymIndex >= 0) hits.push({ field, index: acronymIndex });
   }
   hits.sort((a, b) => a.index - b.index);
   return hits;
@@ -1499,9 +1512,9 @@ function explicitMeasureAtToken(
 }
 
 /**
- * A shared ask token can identify measures at different remote grains even when only
- * one full caption is literal. Resolve only a unique explicit compound name or the
- * sole candidate co-tabled with an ask-matched dimension; otherwise leave no winner.
+ * A token covered by a literal measure name can identify measures at different remote
+ * grains. Resolve only a unique explicit compound name or the sole candidate co-tabled
+ * with an ask-matched dimension; otherwise leave no winner.
  */
 function grainMeasureMatchesInAsk(
   ask: string,
@@ -1537,6 +1550,16 @@ function grainMeasureMatchesInAsk(
     if (candidates.length < 2 || candidateTables.size < 2) continue;
 
     const end = index + tokenMatch[0].length;
+    const hasLiteralCandidateAtToken = literalHits.some(
+      (hit) =>
+        candidates.includes(hit.field) &&
+        hit.start !== undefined &&
+        hit.end !== undefined &&
+        hit.start <= index &&
+        hit.end >= end,
+    );
+    if (!hasLiteralCandidateAtToken) continue;
+
     const explicit = explicitMeasureAtToken(ask, index, end, candidates, exactNames);
     const coTabled = candidates.filter(
       (field) => field.table !== undefined && dimensionTables.has(field.table),
@@ -1552,13 +1575,6 @@ function remoteTableName(table: string): string {
   return bareName(table).split(/[\\/]/).at(-1) ?? bareName(table);
 }
 
-function remoteTableGrain(table: string): string {
-  const stem = remoteTableName(table).replace(/\.[^.]+$/, '').toLowerCase();
-  if (stem.endsWith('ies')) return `${stem.slice(0, -3)}y`;
-  if (stem.endsWith('s') && !stem.endsWith('ss')) return stem.slice(0, -1);
-  return stem || 'row';
-}
-
 function grainMeasureLabels(ask: string, s: SchemaSummary): Map<SchemaField, string> {
   const literalHits = literalFieldMatchesInAsk(ask, s);
   const labels = new Map<SchemaField, string>();
@@ -1566,10 +1582,7 @@ function grainMeasureLabels(ask: string, s: SchemaSummary): Map<SchemaField, str
     if (group.winner) continue;
     for (const field of group.candidates) {
       if (!field.table) continue;
-      labels.set(
-        field,
-        `${field.name} (${remoteTableName(field.table)} — per-${remoteTableGrain(field.table)})`,
-      );
+      labels.set(field, `${field.name} (from ${remoteTableName(field.table)})`);
     }
   }
   return labels;

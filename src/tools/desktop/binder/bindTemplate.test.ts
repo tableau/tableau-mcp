@@ -351,7 +351,7 @@ const ambiguousGoalsProposeResult: BinderResult = {
         type: 'quantitative',
         datatype: 'integer',
         table: '[players.csv]',
-        label: 'Goals (players.csv — per-player)',
+        label: 'Goals (from players.csv)',
       },
       {
         name: 'Goals For',
@@ -359,7 +359,7 @@ const ambiguousGoalsProposeResult: BinderResult = {
         type: 'quantitative',
         datatype: 'integer',
         table: '[standings.csv]',
-        label: 'Goals For (standings.csv — per-standing)',
+        label: 'Goals For (from standings.csv)',
       },
       {
         name: 'Goals Against',
@@ -367,7 +367,7 @@ const ambiguousGoalsProposeResult: BinderResult = {
         type: 'quantitative',
         datatype: 'integer',
         table: '[standings.csv]',
-        label: 'Goals Against (standings.csv — per-standing)',
+        label: 'Goals Against (from standings.csv)',
       },
       { name: 'Goal Difference', role: 'measure', type: 'quantitative', datatype: 'integer' },
     ],
@@ -1095,9 +1095,9 @@ describe('bindTemplateTool bind recovery gate', () => {
         (slot: { slot_id: string }) => slot.slot_id === 'sales',
       ).compatible_field_options,
     ).toEqual([
-      { name: 'Goals', label: 'Goals (players.csv — per-player)' },
-      { name: 'Goals For', label: 'Goals For (standings.csv — per-standing)' },
-      { name: 'Goals Against', label: 'Goals Against (standings.csv — per-standing)' },
+      { name: 'Goals', label: 'Goals (from players.csv)' },
+      { name: 'Goals For', label: 'Goals For (from standings.csv)' },
+      { name: 'Goals Against', label: 'Goals Against (from standings.csv)' },
     ]);
     expect(repeatedBody.guidance).toContain('Do not resubmit the bare ask');
     expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);

@@ -241,7 +241,7 @@ describe('binder/classifyNoLlm', () => {
     expect(classifyNoLlm('Map the countries by Goals For', manifests, s)).toBeNull();
   });
 
-  it('routes cross-table measures sharing an ask token through grain-labeled proposals', async () => {
+  it('still routes the s8 cross-table goals ambiguity through labeled proposals', async () => {
     const ask =
       'Map the countries by goals scored — bigger, warmer dots for the teams that scored more';
     const summary = summarizeSchema(GRAIN_AMBIGUOUS_WORKBOOK_XML);
@@ -256,11 +256,39 @@ describe('binder/classifyNoLlm', () => {
     expect(result.status).toBe('propose');
     if (result.status !== 'propose') throw new Error('expected a grain-aware proposal');
     expect(result.llm_input.fields.find((field) => field.name === 'Goals')?.label).toBe(
-      'Goals (players.csv — per-player)',
+      'Goals (from players.csv)',
     );
     expect(result.llm_input.fields.find((field) => field.name === 'Goals For')?.label).toBe(
-      'Goals For (standings.csv — per-standing)',
+      'Goals For (from standings.csv)',
     );
+  });
+
+  it('keeps an explicit Sales ask deterministic when daily is only an incidental shared token', async () => {
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Region, refreshed daily',
+      workbookXml: `<workbook><datasources><datasource name='Federated'>
+        <column name='[Region]' role='dimension' type='nominal' datatype='string' />
+        <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+        <column name='[Daily Active Users]' role='measure' type='quantitative' datatype='integer' />
+        <column name='[Daily Sales]' role='measure' type='quantitative' datatype='real' />
+        <connection><metadata-records>
+          <metadata-record class='column'><local-name>[Region]</local-name><parent-name>[orders.csv]</parent-name></metadata-record>
+          <metadata-record class='column'><local-name>[Sales]</local-name><parent-name>[orders.csv]</parent-name></metadata-record>
+          <metadata-record class='column'><local-name>[Daily Active Users]</local-name><parent-name>[users.csv]</parent-name></metadata-record>
+          <metadata-record class='column'><local-name>[Daily Sales]</local-name><parent-name>[daily-sales.csv]</parent-name></metadata-record>
+        </metadata-records></connection>
+      </datasource></datasources></workbook>`,
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') throw new Error('expected the explicit Sales ask to bind');
+    expect(result.used_llm).toBe(false);
+    expect(result.args.template_name).toBe('ranking-ordered-bar');
+    expect(Object.values(result.args.field_mapping)).toEqual([
+      '[Federated].[none:Region:nk]',
+      '[Federated].[sum:Sales:qk]',
+    ]);
   });
 
   it('auto-selects the only ambiguous measure co-tabled with an ask-matched dimension', () => {
