@@ -78,6 +78,8 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 const XML = '<?xml version="1.0"?><workbook></workbook>';
+const NOT_APPLIED_GUIDANCE =
+  'NOT APPLIED — the worksheet is unchanged. Resubmit this exact call with auto_apply:true to apply the bind.';
 const ENCODING_GUIDANCE_XML = `<?xml version='1.0'?>
 <workbook>
   <datasources>
@@ -627,7 +629,7 @@ describe('bindTemplateTool', () => {
     });
   });
 
-  it('returns status "bound" with args and apply_instruction as guidance (Call 1)', async () => {
+  it('leads an unapplied bound result with an explicit NOT APPLIED receipt', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValue(boundResult);
 
@@ -638,7 +640,9 @@ describe('bindTemplateTool', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.status).toBe('bound');
     expect(body.args.template_name).toBe('bar-basic');
-    expect(body.guidance).toBe(boundResult.status === 'bound' ? boundResult.apply_instruction : '');
+    expect(body.guidance).toBe(`${NOT_APPLIED_GUIDANCE} ${boundResult.apply_instruction}`);
+    expect(body.guidance.startsWith(NOT_APPLIED_GUIDANCE)).toBe(true);
+    expect(body.guidance).toContain('auto_apply:true');
   });
 
   it('returns the standard MCP content-block envelope, not a bare JSON string', async () => {
@@ -655,7 +659,7 @@ describe('bindTemplateTool', () => {
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text)).toEqual({
       ...boundResult,
-      guidance: boundResult.status === 'bound' ? boundResult.apply_instruction : '',
+      guidance: `${NOT_APPLIED_GUIDANCE} ${boundResult.apply_instruction}`,
     });
   });
 
@@ -1689,7 +1693,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
-  it('auto_apply=false leaves today’s read-only bound result byte-compatible (no apply)', async () => {
+  it('auto_apply=false returns an honest unapplied bound result', async () => {
     const { executeCommand, getExecutor } = setupAutoApplyMocks();
 
     const result = await getToolResult({
@@ -1704,7 +1708,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body).toEqual({
       ...boundResult,
-      guidance: boundResult.status === 'bound' ? boundResult.apply_instruction : '',
+      guidance: `${NOT_APPLIED_GUIDANCE} ${boundResult.apply_instruction}`,
     });
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
     expect(executeCommand).not.toHaveBeenCalled();
@@ -1948,6 +1952,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(true);
     expect(body.sheet_name).toBe('Sales by Region');
+    expect(body.guidance.startsWith(NOT_APPLIED_GUIDANCE)).toBe(false);
     expect(typeof body.phase_ms.bind).toBe('number');
     expect(typeof body.phase_ms.inject).toBe('number');
     expect(typeof body.phase_ms.apply).toBe('number');
@@ -2904,6 +2909,31 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(executeCommand).not.toHaveBeenCalled();
   });
 
+  it('keeps NOT APPLIED first when calcs are authored but the bind is not applied', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
+      workbookReads: [CALC_BASE_XML, CALC_READBACK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Margin by Region',
+      calcs: [{ caption: 'Margin', formula: '[Sales] * 0.2' }],
+      getExecutor,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.status).toBe('bound');
+    expect(body.authored_calcs).toEqual(['Margin']);
+    expect(body.guidance.startsWith(NOT_APPLIED_GUIDANCE)).toBe(true);
+    expect(body.guidance).toContain('Calcs authored: Margin');
+    expect(body.guidance).toContain('auto_apply:true');
+    expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
+    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+  });
+
   it('authors inline calcs before binding and auto-applies against the readback workbook', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const { applyWorkbookDocument, getEvents, getExecutor } = setupAutoApplyMocks({
@@ -3789,7 +3819,7 @@ describe('bindTemplateTool route-state recording', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body).toEqual({
       ...boundResult,
-      guidance: boundResult.status === 'bound' ? boundResult.apply_instruction : '',
+      guidance: `${NOT_APPLIED_GUIDANCE} ${boundResult.apply_instruction}`,
     });
     expect(body.current_ask).toBeUndefined();
     expect(body.next_route).toBeUndefined();

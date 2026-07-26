@@ -220,6 +220,8 @@ const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
   // route to the general authoring flow.
   'schema-too-large',
 ]);
+const NOT_APPLIED_GUIDANCE =
+  'NOT APPLIED — the worksheet is unchanged. Resubmit this exact call with auto_apply:true to apply the bind.';
 const WATERFALL_TEMPLATE = 'part-to-whole-waterfall';
 const WATERFALL_ANCHOR_MAPPING_KEY = 'Anchor Category';
 // WATERFALL_ANCHOR_SLOT_ID / WATERFALL_ANCHOR_FIELD_RE and WATERFALL_ORDER_FIELD_RE are all
@@ -931,7 +933,7 @@ function buildGuidance(
   let guidance: string;
   switch (res.status) {
     case 'bound':
-      guidance = res.apply_instruction || APPLY_INSTRUCTION;
+      guidance = `${NOT_APPLIED_GUIDANCE} ${res.apply_instruction || APPLY_INSTRUCTION}`;
       break;
     case 'propose':
       guidance =
@@ -1777,10 +1779,15 @@ function annotateAuthoredCalcs<T extends StructuredBindTemplateToolResult>(
   if (captions.length === 0) {
     return result;
   }
+  const calcPrefix = renderAuthoredCalcPrefix(captions, result.status);
   return {
     ...result,
     authored_calcs: captions,
-    guidance: `${renderAuthoredCalcPrefix(captions, result.status)}${result.guidance}`,
+    guidance: result.guidance.startsWith(NOT_APPLIED_GUIDANCE)
+      ? `${NOT_APPLIED_GUIDANCE} ${calcPrefix}${result.guidance
+          .slice(NOT_APPLIED_GUIDANCE.length)
+          .trimStart()}`
+      : `${calcPrefix}${result.guidance}`,
   };
 }
 
