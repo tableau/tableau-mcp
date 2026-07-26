@@ -1322,6 +1322,55 @@ function businessSynonymMatchesInAsk(
     .map(({ noun, index, candidates }) => ({ noun, index, field: candidates[0] }));
 }
 
+export type LooseFieldReferenceResolution =
+  | { kind: 'resolved'; field: SchemaField }
+  | { kind: 'ambiguous'; candidates: SchemaField[] }
+  | { kind: 'not_found'; candidates: SchemaField[] };
+
+/**
+ * Resolve one calc-formula field token without fuzzy guessing. Exact normalized
+ * caption/bare-name matches win, followed by singular/plural equivalence. Business
+ * synonyms are suggestions only because a calc token names a specific field.
+ * Candidate order is schema order.
+ */
+export function resolveLooseFieldReference(
+  query: string,
+  s: SchemaSummary,
+): LooseFieldReferenceResolution {
+  const normalizedQuery = normalizeFieldPhrase(bareName(query).trim());
+  if (!normalizedQuery) return { kind: 'not_found', candidates: [] };
+
+  const fieldNames = (field: SchemaField): string[] =>
+    [field.name, field.caption, bareName(field.columnName)]
+      .filter((name): name is string => !!name)
+      .map(normalizeFieldPhrase);
+  const exact = s.fields.filter((field) =>
+    fieldNames(field).some((name) => name === normalizedQuery),
+  );
+  if (exact.length === 1) return { kind: 'resolved', field: exact[0] };
+  if (exact.length > 1) return { kind: 'ambiguous', candidates: exact };
+
+  const plural = s.fields.filter((field) =>
+    fieldNames(field).some((name) => pluralEquivalent(name, normalizedQuery)),
+  );
+  if (plural.length === 1) return { kind: 'resolved', field: plural[0] };
+  if (plural.length > 1) return { kind: 'ambiguous', candidates: plural };
+
+  // No literal field owns the whole token at this point. Reuse the closed synonym
+  // table only to surface guidance candidates; calc references never substitute them.
+  const synonymMatches = businessSynonymCandidatesInAsk(query, s, []);
+  const candidates = s.fields.filter((field) =>
+    synonymMatches.some((match) => match.candidates.includes(field)),
+  );
+  if (candidates.length > 1) return { kind: 'ambiguous', candidates };
+
+  const literalCandidates = literalFieldMatchesInAsk(query, s).map(({ field }) => field);
+  return {
+    kind: 'not_found',
+    candidates: candidates.length > 0 ? candidates : literalCandidates,
+  };
+}
+
 /**
  * Candidate dimensions whose friendly name starts with a bare head token in the ask.
  * Full literal field names retain priority. A head mention is deterministic only when one

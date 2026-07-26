@@ -26,8 +26,10 @@ import {
   type EncodingFieldResolution,
   type EncodingReport,
   type LlmProposeInput as CoreLlmProposeInput,
+  type LooseFieldReferenceResolution,
   MAX_CLASSIFIABLE_FIELDS,
   resolveEncodingFieldInAsk,
+  resolveLooseFieldReference,
 } from './classify.js';
 import { escapeXml } from './escape.js';
 import type { BlockerCode, Derivation, TemplateManifest } from './manifest-types.js';
@@ -53,9 +55,11 @@ export {
   classifyNoLlm,
   type EncodingFieldResolution,
   type EncodingReport,
+  type LooseFieldReferenceResolution,
   MAX_CLASSIFIABLE_FIELDS,
   resolveEncodingFieldInAsk,
   resolveInSummary,
+  resolveLooseFieldReference,
   summarizeSchema,
   validateBinding,
   WATERFALL_ANCHOR_FIELD_RE,

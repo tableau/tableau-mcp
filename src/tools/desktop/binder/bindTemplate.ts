@@ -1923,6 +1923,31 @@ function recordBoundRecoveryAfterFinalResult({
   });
 }
 
+function asksForPercent(ask: string): boolean {
+  return /%|\bpercent(?:age)?\b/i.test(ask);
+}
+
+function hasPercentCaption(caption: string): boolean {
+  return /%|percent|margin|rate|share|ratio/i.test(caption);
+}
+
+function hasDivisionOperator(formula: string): boolean {
+  let quote: "'" | '"' | undefined;
+  for (let index = 0; index < formula.length; index += 1) {
+    const char = formula[index];
+    if (quote) {
+      if (char === quote && formula[index - 1] !== '\\') quote = undefined;
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+    } else if (char === '/') {
+      return true;
+    }
+  }
+  return false;
+}
+
 const title = 'Bind Template';
 
 export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
@@ -2021,11 +2046,18 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           let workbookXml = xmlResult.value;
           let authoredCalcCaptions: string[] = [];
           if (calcs && calcs.length > 0) {
+            const percentAsk = asksForPercent(ask);
+            const authoredCalcInputs = (calcs as AuthorCalcInput[]).map((calc) =>
+              percentAsk && hasDivisionOperator(calc.formula) && hasPercentCaption(calc.caption)
+                ? { ...calc, defaultFormat: 'p0%' as const }
+                : calc,
+            );
             const authored = await authorCalculationsInWorkbook({
               workbookXml,
-              calcs: calcs as AuthorCalcInput[],
+              calcs: authoredCalcInputs,
               executor,
               signal: extra.signal,
+              resolveLooseReferences: true,
             });
             if (authored.isErr()) {
               return authored.error.toErr();
