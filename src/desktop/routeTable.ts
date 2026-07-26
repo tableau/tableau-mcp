@@ -71,10 +71,14 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %)',
     action:
-      "pass the calc in bind-template's calcs[] and bind its caption in ONE call (a proposal still resolves via Call 2); search-knowledge first when unsure of the formula.",
+      'FIRST pass its conventional calc in ONE bind-template(auto_apply:true) call via calcs[], binding its caption (for example, gross margin % = (SUM(Revenue)-SUM(COGS))/SUM(Revenue); a proposal still resolves via Call 2). Only after a formula/field-resolution failure, search-knowledge, then make ONE corrective bind-template call.',
     toolSequence: ['bind-template', 'search-knowledge'],
-    stopConditions: ['ONE call'],
-    requiredEvidence: ['authored_calcs returned by bind-template'],
+    stopConditions: [
+      'ONE bind-template(auto_apply:true) call',
+      'Only after a formula/field-resolution failure',
+      'ONE corrective bind-template call',
+    ],
+    requiredEvidence: ['authored_calcs returned by successful bind-template'],
   },
   {
     kind: 'route',
@@ -115,7 +119,8 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'route',
     id: 'dynamic-authoring',
-    trigger: 'a dynamic ask or a calc/derived field the data lacks (ratio, running total, LOD)',
+    trigger:
+      'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (a named ratio/margin/growth ask routes via calc-then-bind; examples here include running total and LOD)',
     action:
       'use author-* verbs: author-parameter FIRST (on { reopened: true } continue immediately), then author-set, author-calc, author-action, format-labels. Build with bind-template and authored captions.',
     toolSequence: [

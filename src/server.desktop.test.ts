@@ -141,7 +141,7 @@ Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gr
 
 For any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.), FIRST use bind-template's two-call sequence. Call 1: bind-template(auto_apply:true), deterministic, ~0.3s; pass the user's message verbatim as \`ask\` (never paraphrase, reword, or expand it). If it proposes, Call 2: bind-template with the same ask/target, selected proposal, auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. Never call list-available-fields or get-worksheet-xml to orient before bind-template: it reads schema; failed binds propose candidate fields (author-parameter/author-set may list fields first). Named charts use this first, even calc-heavy or asking "how <X> changes"; do not author template-owned calcs (including waterfall running totals) before binding. author-parameter/author-set/author-action before charts; else search-commands.
 
-For a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %), pass the calc in bind-template's calcs[] and bind its caption in ONE call (a proposal still resolves via Call 2); search-knowledge first when unsure of the formula.
+For a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %), FIRST pass its conventional calc in ONE bind-template(auto_apply:true) call via calcs[], binding its caption (for example, gross margin % = (SUM(Revenue)-SUM(COGS))/SUM(Revenue); a proposal still resolves via Call 2). Only after a formula/field-resolution failure, search-knowledge, then make ONE corrective bind-template call.
 
 For an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult, FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.
 
@@ -149,7 +149,7 @@ For a dashboard ask with 2-6 vizzes, build sheets with bind-template (author cal
 
 For a data-value question, on a populated worksheet, call get-summary-data; answer only from returned rows.
 
-For a dynamic ask or a calc/derived field the data lacks (ratio, running total, LOD), use author-* verbs: author-parameter FIRST (on { reopened: true } continue immediately), then author-set, author-calc, author-action, format-labels. Build with bind-template and authored captions.
+For a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (a named ratio/margin/growth ask routes via calc-then-bind; examples here include running total and LOD), use author-* verbs: author-parameter FIRST (on { reopened: true } continue immediately), then author-set, author-calc, author-action, format-labels. Build with bind-template and authored captions.
 
 If ambiguity changes workbook content, call ask-user with urgency=blocking; stop.
 
@@ -208,10 +208,10 @@ describe('desktop tools/list serialized surface', () => {
     // Dynamic authoring is the serving surface, so this is the real budget gate.
     // The full desktop surface is not what clients see by default; its looser cap
     // only catches runaway growth without forcing valuable full-profile tools to be trimmed.
-    // Honest wire measurements are 28,553 bytes dynamic and 44,035 bytes full.
+    // Honest wire measurements are 28,804 bytes dynamic and 44,286 bytes full.
     // Keep only a few bytes of ratchet headroom while staying well below the 46k cliff.
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(28_570);
-    expect(fullSurfaceTotal).toBeLessThanOrEqual(44_070);
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(28_820);
+    expect(fullSurfaceTotal).toBeLessThanOrEqual(44_300);
   });
 });
 
@@ -522,7 +522,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     }
     // A lean surface must have generous headroom — this is a structural win, not a
     // describe-stub squeeze. If this ever approaches 46k something is very wrong.
-    expect(total).toBeLessThanOrEqual(28_570);
+    expect(total).toBeLessThanOrEqual(28_820);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {
