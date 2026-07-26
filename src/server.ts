@@ -12,6 +12,13 @@ export type ClientInfo = InitializeRequest['params']['clientInfo'];
 
 export abstract class Server {
   readonly mcpServer: McpServer;
+  /**
+   * True when this instance created its own McpServer (single-variant entrypoints).
+   * False when one was passed in (the combined variant shares one McpServer across
+   * the web and desktop halves) — a shared server means no variant may take sole
+   * ownership of protocol handlers like tools/list.
+   */
+  readonly ownsMcpServer: boolean;
   readonly name: string;
   readonly version: string;
 
@@ -43,6 +50,7 @@ export abstract class Server {
     /** MCP server instructions surfaced to every connecting client at initialize. */
     instructions?: string;
   }) {
+    this.ownsMcpServer = mcpServer === undefined;
     this.mcpServer =
       mcpServer ??
       new McpServer(

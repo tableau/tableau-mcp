@@ -111,14 +111,12 @@ type Captured = {
 
 function captureCall(): Captured {
   const captured: Captured = { mapping: {}, datasource: '', metadata: {} };
-  vi.mocked(rewriteFieldReferencesWithDiagnostics).mockImplementation(
-    (_xml, mapping, ds, meta) => {
-      captured.mapping = mapping;
-      captured.datasource = ds;
-      captured.metadata = (meta ?? {}) as Captured['metadata'];
-      return { xml: WORKSHEET_OUTPUT, droppedOptionalElements: [] };
-    },
-  );
+  vi.mocked(rewriteFieldReferencesWithDiagnostics).mockImplementation((_xml, mapping, ds, meta) => {
+    captured.mapping = mapping;
+    captured.datasource = ds;
+    captured.metadata = (meta ?? {}) as Captured['metadata'];
+    return { xml: WORKSHEET_OUTPUT, droppedOptionalElements: [] };
+  });
   return captured;
 }
 

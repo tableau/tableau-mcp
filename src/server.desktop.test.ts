@@ -1,3 +1,4 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
 import { CallToolResult, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -113,6 +114,20 @@ describe('DesktopMcpServer', () => {
       expect(tool.inputSchema).not.toHaveProperty('$schema');
       expect(tool.annotations).not.toHaveProperty('title');
     }
+  });
+
+  it('does not override tools/list on a shared McpServer (combined variant)', async () => {
+    // The combined variant registers the web half on the same McpServer; a desktop
+    // tools/list override there hides every web tool (caught live by the e2e suite).
+    const sharedMcpServer = new McpServer({ name: 'shared', version: '0.0.0' });
+    const server = new DesktopMcpServer({ mcpServer: sharedMcpServer });
+    await server.registerTools();
+
+    expect(server.ownsMcpServer).toBe(false);
+    const listToolsCall = vi
+      .mocked(sharedMcpServer.server.setRequestHandler)
+      .mock.calls.find(([requestSchema]) => requestSchema === ListToolsRequestSchema);
+    expect(listToolsCall).toBeUndefined();
   });
 });
 

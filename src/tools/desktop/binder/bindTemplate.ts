@@ -42,10 +42,7 @@ import type { ExternalApiToolExecutor } from '../../../desktop/externalApi/exter
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import { parseCanonicalColumnRef } from '../../../desktop/metadata/field-resolver.js';
 import { addFieldToEncoding } from '../../../desktop/metadata/fields.js';
-import {
-  extractSheetXml,
-  upsertSheetIntoWorkbook,
-} from '../../../desktop/metadata/sheets.js';
+import { extractSheetXml, upsertSheetIntoWorkbook } from '../../../desktop/metadata/sheets.js';
 import {
   planSortByFieldOnCategoricalAxis,
   planTopN,
@@ -293,9 +290,7 @@ function currencyHeterogeneityCaveat(
 ): string {
   if (!worksheetXml) return '';
 
-  const displayedRefs = canonicalRefsIn(
-    xmlTagRegions(worksheetXml, ['rows', 'cols', 'encodings']),
-  );
+  const displayedRefs = canonicalRefsIn(xmlTagRegions(worksheetXml, ['rows', 'cols', 'encodings']));
   const summedMeasure = schemaSummary.fields.find(
     (field) =>
       field.role === 'measure' &&
@@ -1572,11 +1567,7 @@ async function performAutoApply({
           workbookXml,
         );
       }
-      appliedWorkbookXml = upsertSheetIntoWorkbook(
-        appliedWorkbookXml,
-        literalTitle,
-        worksheetXml,
-      );
+      appliedWorkbookXml = upsertSheetIntoWorkbook(appliedWorkbookXml, literalTitle, worksheetXml);
     } catch (err) {
       appliedWorkbookXml = spliced.xml;
       appliedDefault.context_measures = [];
