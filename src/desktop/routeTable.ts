@@ -71,10 +71,10 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %)',
     action:
-      "FIRST pass its conventional calc in bind-template's calcs[] and bind its caption in ONE call (for example, gross margin % = (SUM(Revenue)-SUM(COGS))/SUM(Revenue); a proposal still resolves via Call 2). Only after a formula/field-resolution failure, search-knowledge, then make ONE corrective bind-template call.",
+      'FIRST pass its conventional calc in ONE bind-template(auto_apply:true) call via calcs[], binding its caption (for example, gross margin % = (SUM(Revenue)-SUM(COGS))/SUM(Revenue); a proposal still resolves via Call 2). Only after a formula/field-resolution failure, search-knowledge, then make ONE corrective bind-template call.',
     toolSequence: ['bind-template', 'search-knowledge'],
     stopConditions: [
-      'ONE call',
+      'ONE bind-template(auto_apply:true) call',
       'Only after a formula/field-resolution failure',
       'ONE corrective bind-template call',
     ],

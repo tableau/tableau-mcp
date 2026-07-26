@@ -87,12 +87,12 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(calcThenBind?.trigger).toContain('no named chart type');
     expect(calcThenBind?.action).toBe(
-      "FIRST pass its conventional calc in bind-template's calcs[] and bind its caption in ONE call (for example, gross margin % = (SUM(Revenue)-SUM(COGS))/SUM(Revenue); a proposal still resolves via Call 2). Only after a formula/field-resolution failure, search-knowledge, then make ONE corrective bind-template call.",
+      'FIRST pass its conventional calc in ONE bind-template(auto_apply:true) call via calcs[], binding its caption (for example, gross margin % = (SUM(Revenue)-SUM(COGS))/SUM(Revenue); a proposal still resolves via Call 2). Only after a formula/field-resolution failure, search-knowledge, then make ONE corrective bind-template call.',
     );
     expect(calcThenBind?.action).not.toContain('opex');
     expect(calcThenBind?.toolSequence).toEqual(['bind-template', 'search-knowledge']);
     expect(calcThenBind?.stopConditions).toEqual([
-      'ONE call',
+      'ONE bind-template(auto_apply:true) call',
       'Only after a formula/field-resolution failure',
       'ONE corrective bind-template call',
     ]);
