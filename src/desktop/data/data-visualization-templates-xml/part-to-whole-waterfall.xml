@@ -10,9 +10,6 @@
             <column caption='-SUM([Profit])' datatype='real' name='[Calculation_767019348535836686]' role='measure' type='quantitative'>
               <calculation class='tableau' formula='-SUM([Profit])' />
             </column>
-            <column caption='Gain' datatype='boolean' name='[Calculation_767019348535836687]' role='dimension' type='nominal'>
-              <calculation class='tableau' formula='SUM([Profit]) &gt;= 0' />
-            </column>
             <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
             <column datatype='string' name='[Sub-Category]' role='dimension' type='nominal' />
             <column-instance column='[Profit]' derivation='Sum' name='[cum:sum:Profit:qk]' pivot='key' type='quantitative'>
@@ -21,9 +18,8 @@
             <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />
             <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
             <column-instance column='[Calculation_767019348535836686]' derivation='User' name='[usr:Calculation_767019348535836686:qk]' pivot='key' type='quantitative' />
-            <column-instance column='[Calculation_767019348535836687]' derivation='User' name='[usr:Calculation_767019348535836687:nk]' pivot='key' type='nominal' />
           </datasource-dependencies>
-          <computed-sort column='[{{DATASOURCE}}].[none:{{field_base_2}}:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:{{field_base_1}}:qk]' />
+          <computed-sort column='[{{DATASOURCE}}].[none:Sub-Category:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:Profit:qk]' />
           <aggregation value='true' />
         </view>
         <style>
@@ -65,16 +61,6 @@
             <format attr='line-visibility' scope='rows' value='off' />
             <format attr='line-visibility' scope='cols' value='off' />
           </style-rule>
-          <style-rule element='mark'>
-            <encoding attr='color' field='[{{DATASOURCE}}].[usr:Calculation_767019348535836687:nk]' type='palette'>
-              <map to='#76b7b2'>
-                <bucket>true</bucket>
-              </map>
-              <map to='#e15759'>
-                <bucket>false</bucket>
-              </map>
-            </encoding>
-          </style-rule>
         </style>
         <panes>
           <pane selection-relaxation-option='selection-relaxation-disallow'>
@@ -83,9 +69,8 @@
             </view>
             <mark class='GanttBar' />
             <encodings>
-              <color column='[{{DATASOURCE}}].[usr:Calculation_767019348535836687:nk]' />
+              <color column='[{{DATASOURCE}}].[sum:Profit:qk]' />
               <size column='[{{DATASOURCE}}].[usr:Calculation_767019348535836686:qk]' />
-              <text column='[{{DATASOURCE}}].[sum:Profit:qk]' />
             </encodings>
             <style>
               <style-rule element='datalabel'>
@@ -93,8 +78,6 @@
                 <format attr='color' value='#ffffff' />
               </style-rule>
               <style-rule element='mark'>
-                <format attr='mark-labels-show' value='true' />
-                <format attr='mark-labels-cull' value='false' />
                 <format attr='mark-color' value='#000000' />
                 <format attr='mark-transparency' value='255' />
                 <format attr='has-stroke' value='true' />

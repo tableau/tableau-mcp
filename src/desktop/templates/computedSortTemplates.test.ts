@@ -7,22 +7,16 @@ function template(name: string): string {
   return readFileSync(join(TEMPLATE_DIR, `${name}.xml`), 'utf8');
 }
 
+// magnitude-simple-bar, part-to-whole-waterfall, and ranking-ordered-column also carry
+// hardcoded Superstore computed-sort refs, but they are render-stamped: their bytes may
+// only change through the factory golden-parity re-stamp flow. The parameterized versions
+// (plus the waterfall label/gain-loss presentation defaults) are held on
+// claude/stamped-template-polish; extend the table below when that branch re-earns its
+// stamps and lands.
 describe('computed-sort template parameters', () => {
   it.each([
     [
-      'magnitude-simple-bar',
-      "<computed-sort column='[{{DATASOURCE}}].[none:{{field_base_1}}:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]' />",
-    ],
-    [
       'pareto-chart',
-      "<computed-sort column='[{{DATASOURCE}}].[none:{{field_base_1}}:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]' />",
-    ],
-    [
-      'part-to-whole-waterfall',
-      "<computed-sort column='[{{DATASOURCE}}].[none:{{field_base_2}}:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:{{field_base_1}}:qk]' />",
-    ],
-    [
-      'ranking-ordered-column',
       "<computed-sort column='[{{DATASOURCE}}].[none:{{field_base_1}}:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]' />",
     ],
     [
@@ -38,28 +32,5 @@ describe('computed-sort template parameters', () => {
     expect(xml).not.toContain('federated.1ko0q9z0cybhx212227b819gayqi');
     expect(xml).toContain("name='{{DATASOURCE}}'");
     expect(xml).toContain("datasource-dependencies datasource='{{DATASOURCE}}'");
-  });
-});
-
-describe('part-to-whole-waterfall presentation defaults', () => {
-  const xml = template('part-to-whole-waterfall');
-
-  it('labels every mark with its step value', () => {
-    expect(xml).toContain("<text column='[{{DATASOURCE}}].[sum:Profit:qk]' />");
-    expect(xml).toContain("<format attr='mark-labels-show' value='true' />");
-  });
-
-  it('colors gains and losses with a template-owned boolean calculation', () => {
-    expect(xml).toContain(
-      "<column caption='Gain' datatype='boolean' name='[Calculation_767019348535836687]' role='dimension' type='nominal'>",
-    );
-    expect(xml).toContain("<calculation class='tableau' formula='SUM([Profit]) &gt;= 0' />");
-    expect(xml).toContain(
-      "<column-instance column='[Calculation_767019348535836687]' derivation='User' name='[usr:Calculation_767019348535836687:nk]'",
-    );
-    expect(xml).toContain(
-      "<color column='[{{DATASOURCE}}].[usr:Calculation_767019348535836687:nk]' />",
-    );
-    expect(xml).not.toContain("<color column='[{{DATASOURCE}}].[sum:Profit:qk]' />");
   });
 });

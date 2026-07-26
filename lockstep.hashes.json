@@ -7,5 +7,5 @@
   "src/desktop/binder/stringTemporal.ts": "8b4808dcc410453fed10041d2cb8908f9728a0dd94353bf0c6bc31a295a67c9b",
   "src/desktop/binder/waterfall.ts": "a157e6c94e88dd6ff2ecb5d4977c6b62f6366e338a1e7491788fe78ee2fa2fae",
   "src/desktop/derivations.ts": "d95ec48b7d9989e2489b73f25f102e7b3b6766129601c4fa89392b6aa1dec093",
-  "src/desktop/templates/fieldReferenceRewriter.ts": "ba78cd01201db85a41fe40b7be138d66feb7f60eb6b65a9fb6782dd9911a3de1"
+  "src/desktop/templates/fieldReferenceRewriter.ts": "ea78b827e2ba236f30c3bef30f6f9ba871768666395d92616ed5c3617b352786"
 }

@@ -21,7 +21,7 @@
         <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />
         <column-instance column='[Measure]' derivation='Sum' name='[sum:Measure:qk]' pivot='key' type='quantitative' />
       </datasource-dependencies>
-      <computed-sort column='[{{DATASOURCE}}].[none:{{field_base_1}}:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]' />
+      <computed-sort column='[{{DATASOURCE}}].[none:Category:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:Measure:qk]' />
       <aggregation value='true' />
     </view>
     <style>

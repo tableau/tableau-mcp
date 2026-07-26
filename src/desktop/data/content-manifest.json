@@ -132,8 +132,8 @@
     },
     {
       "path": "data-visualization-templates-xml/magnitude-simple-bar.xml",
-      "sha256": "3ce7dfa8c7d8b6ebb54c53f0372589dce7e2c54d4e71fb17bdb59a840ef535b1",
-      "bytes": 2476
+      "sha256": "ef0503faa2dd6320f902335dcd721909f4cb161d315a7746f296dc2967c60a4c",
+      "bytes": 2457
     },
     {
       "path": "data-visualization-templates-xml/pareto-chart.xml",
@@ -167,8 +167,8 @@
     },
     {
       "path": "data-visualization-templates-xml/part-to-whole-waterfall.xml",
-      "sha256": "085430fc1832e2433e5b48bfc5ebef6aee425ba96e180399c3b2c1a275f7c0bc",
-      "bytes": 6078
+      "sha256": "a11963e06787ea973007a20d882712c3c8719efd43efd0a1ae03387ef79d984e",
+      "bytes": 5066
     },
     {
       "path": "data-visualization-templates-xml/quota-attainment-bullet.xml",
@@ -197,8 +197,8 @@
     },
     {
       "path": "data-visualization-templates-xml/ranking-ordered-column.xml",
-      "sha256": "afb71d90510a3df77c64fa4549df37cc3285dd15b1d2db603c90c53ba5c69856",
-      "bytes": 2452
+      "sha256": "a0a23ffcf5fb34263b4e1a46a107590200a03d3f02fdc5efcf8622cc9e4a9235",
+      "bytes": 2435
     },
     {
       "path": "data-visualization-templates-xml/slope-chart.xml",
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "7cc3aea70a5e20106e421a831be20c7b008be41430dba94ec7fa8c956c8636fe",
-      "bytes": 280972
+      "sha256": "09f5edf1a6e006fe19e577f7856ee8cacbff5f9b8da468a5f69483abdde364b5",
+      "bytes": 280084
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -407,8 +407,8 @@
     },
     {
       "path": "template-manifests/part-to-whole-waterfall.manifest.json",
-      "sha256": "4e49b03704c178668c4545ddef96cb84c29cf72b08d07928968614a412c20436",
-      "bytes": 11626
+      "sha256": "7ac230d561d17c70a80796c6ba79f5761210576665ec8a8f38e916032e4fd3f1",
+      "bytes": 10850
     },
     {
       "path": "template-manifests/quota-attainment-bullet.manifest.json",
