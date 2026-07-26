@@ -95,6 +95,7 @@ export interface BindRecoveryProposalContext {
       slot_id: string;
       required: boolean;
       compatible_field_names: string[];
+      compatible_field_options?: Array<{ name: string; label: string }>;
     }>;
   }>;
   proposal_requirements: {

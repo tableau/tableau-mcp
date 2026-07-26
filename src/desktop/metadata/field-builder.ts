@@ -308,6 +308,8 @@ export function listAvailableFields(
       string,
       { column: any; source: 'top-level' | 'relation' | 'metadata-record' }
     >();
+    const tableByColumn = new Map<string, string>();
+    const ambiguousTableColumns = new Set<string>();
 
     // Build folder lookup: field name -> folder name
     const folderMap = new Map<string, string>();
@@ -355,6 +357,16 @@ export function listAvailableFields(
           const localName = record['local-name'];
           if (!localName) continue;
           const bracketedName = localName.startsWith('[') ? localName : `[${localName}]`;
+          const parentName = record['parent-name'];
+          if (typeof parentName === 'string' && parentName.length > 0) {
+            const previous = tableByColumn.get(bracketedName);
+            if (previous !== undefined && previous !== parentName) {
+              ambiguousTableColumns.add(bracketedName);
+              tableByColumn.delete(bracketedName);
+            } else if (!ambiguousTableColumns.has(bracketedName)) {
+              tableByColumn.set(bracketedName, parentName);
+            }
+          }
           if (!columnMap.has(bracketedName)) {
             columnMap.set(bracketedName, {
               column: {
@@ -455,6 +467,7 @@ export function listAvailableFields(
 
       const fieldRef: FieldReference = {
         datasource: datasourceName,
+        ...(tableByColumn.has(columnName) ? { table: tableByColumn.get(columnName) } : {}),
         contentUrl: contentUrl,
         columnName: columnName,
         columnInstanceName: constructedInstance,
