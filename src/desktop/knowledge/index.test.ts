@@ -165,5 +165,80 @@ describe('knowledge/index', () => {
         `Knowledge corpus is empty; expected assets under ${KNOWLEDGE_DIR}`,
       );
     });
+
+    it('includes the only matching module body within the payload cap', () => {
+      const body = [
+        '# Margin Calculation',
+        '- Relevant user prompts/search terms: margin calculation',
+        '',
+        '## When to Use',
+        'Use this for margin calculations.',
+      ].join('\n');
+      setupFsMock({ [join(KNOWLEDGE_DIR, 'margin-calculation.md')]: body });
+
+      const result = searchKnowledgeWithFallback('margin calculation', 5);
+
+      expect(result.hits).toHaveLength(1);
+      expect(result.topHitBody).toBe(body);
+      expect(Buffer.byteLength(result.topHitBody ?? '', 'utf8')).toBeLessThanOrEqual(6_144);
+    });
+
+    it('omits the module body when the top two scores are close', () => {
+      const sharedMetadata = [
+        '- Relevant user prompts/search terms: margin calculation',
+        '',
+        '## When to Use',
+        'Use this for margin calculations.',
+      ].join('\n');
+      setupFsMock({
+        [join(KNOWLEDGE_DIR, 'alpha.md')]: `# Alpha\n${sharedMetadata}`,
+        [join(KNOWLEDGE_DIR, 'beta.md')]: `# Beta\n${sharedMetadata}`,
+      });
+
+      const result = searchKnowledgeWithFallback('margin calculation', 5);
+
+      expect(result.hits).toHaveLength(2);
+      expect(result.hits[0].score - result.hits[1].score).toBeLessThan(0.15);
+      expect(result).not.toHaveProperty('topHitBody');
+    });
+
+    it('includes the top module body when its score clears the runner-up by 0.15', () => {
+      const topBody = [
+        '# Margin Calculation',
+        '- Relevant user prompts/search terms: margin calculation',
+        '',
+        '## When to Use',
+        'Use this for margin calculations.',
+      ].join('\n');
+      setupFsMock({
+        [join(KNOWLEDGE_DIR, 'margin-calculation.md')]: topBody,
+        [join(KNOWLEDGE_DIR, 'margin-overview.md')]:
+          '# Margin Overview\n- Relevant user prompts/search terms: margin',
+      });
+
+      const result = searchKnowledgeWithFallback('margin calculation', 5);
+
+      expect(result.hits).toHaveLength(2);
+      expect(result.hits[0].score - result.hits[1].score).toBeGreaterThanOrEqual(0.15);
+      expect(result.topHitBody).toBe(topBody);
+    });
+
+    it('truncates an oversized module body with a marker inside the payload cap', () => {
+      const body = [
+        '# Margin Calculation',
+        '- Relevant user prompts/search terms: margin calculation',
+        '',
+        '## When to Use',
+        'Use this for margin calculations.',
+        '',
+        'x'.repeat(7_000),
+      ].join('\n');
+      setupFsMock({ [join(KNOWLEDGE_DIR, 'margin-calculation.md')]: body });
+
+      const result = searchKnowledgeWithFallback('margin calculation', 5);
+
+      expect(result.topHitBody).toContain('[TRUNCATED: body exceeds 6144-byte cap]');
+      expect(Buffer.byteLength(result.topHitBody ?? '', 'utf8')).toBeLessThanOrEqual(6_144);
+    });
   });
 });
