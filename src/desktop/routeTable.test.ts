@@ -151,10 +151,10 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(ambiguity).toMatchObject({
       kind: 'prose',
-      text: expect.stringContaining('what data gets written or which target is edited'),
+      text: expect.stringContaining('no defensible default exists'),
     });
     expect(ambiguity?.kind === 'prose' ? ambiguity.text : '').toContain(
-      'Cosmetic choices take a stated default instead of asking.',
+      'build it and state the choice',
     );
   });
 
@@ -177,14 +177,13 @@ describe('DESKTOP_ROUTE_TABLE', () => {
   it('routes dashboard composition through visible dashboard tools before command search', () => {
     const dashboard = routes.find((route) => route.id === 'dashboard');
     expect(dashboard?.action).toBe(
-      'build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; search-commands only for commands the census does not list.',
+      'build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard.',
     );
     expect(dashboard?.toolSequence).toEqual([
       'bind-template',
       'dashboard-auto-apply',
       'plan-dashboard-creation',
       'build-and-apply-dashboard',
-      'search-commands',
     ]);
   });
 
