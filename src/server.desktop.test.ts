@@ -1,8 +1,9 @@
 import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
-import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import * as configModule from './config.desktop.js';
+import { sessionRouteState } from './desktop/route/route-state.js';
 import {
   buildDesktopInstructions,
   SESSION_RESOLUTION_TEXT_PINNED,
@@ -19,6 +20,7 @@ import {
   SPEC_LOOP_TOOL_PROFILE,
 } from './server.desktop.js';
 import { DesktopTool } from './tools/desktop/tool.js';
+import { getMockRequestHandlerExtra } from './tools/desktop/toolContext.mock.js';
 import { desktopToolNames } from './tools/desktop/toolName.js';
 import { desktopToolFactories } from './tools/desktop/tools.js';
 import { Provider } from './utils/provider.js';
@@ -343,6 +345,43 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
   const allTools = (): Array<DesktopTool<any>> =>
     desktopToolFactories.map((toolFactory) => toolFactory(new DesktopMcpServer()));
 
+  it.each(['', 'dynamic-authoring', 'demo', 'spec-loop', 'full', 'combined-lean'])(
+    'keeps both bind-first orientation tools registered in profile "%s"',
+    (profile) => {
+      const names = selectToolsForProfile(allTools(), profile).map((tool) => tool.name);
+
+      expect(names).toContain('list-available-fields');
+      expect(names).toContain('get-worksheet-xml');
+    },
+  );
+
+  it('gates the full-profile orientation tool identically to the default profile', async () => {
+    sessionRouteState.clear();
+    const tools = allTools();
+    const defaultTool = selectToolsForProfile(tools, '').find(
+      (tool) => tool.name === 'list-available-fields',
+    )!;
+    const fullTool = selectToolsForProfile(tools, 'full').find(
+      (tool) => tool.name === 'list-available-fields',
+    )!;
+    const extra = { ...getMockRequestHandlerExtra(), getExecutor: vi.fn() };
+    type OrientationCallback = (
+      args: { session?: string },
+      callbackExtra: ReturnType<typeof getMockRequestHandlerExtra>,
+    ) => Promise<CallToolResult>;
+    const defaultCallback = (await Provider.from(
+      defaultTool.callback,
+    )) as unknown as OrientationCallback;
+    const fullCallback = (await Provider.from(fullTool.callback)) as unknown as OrientationCallback;
+
+    const defaultResult = await defaultCallback({ session: 'S1' }, extra);
+    const fullResult = await fullCallback({ session: 'S1' }, extra);
+
+    expect(fullResult).toEqual(defaultResult);
+    expect(fullResult.isError).toBe(false);
+    expect(extra.getExecutor).not.toHaveBeenCalled();
+  });
+
   it('every slim-profile name is a real desktop tool name', () => {
     for (const name of DEMO_TOOL_PROFILE) {
       expect(desktopToolNames).toContain(name);
@@ -370,10 +409,11 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     }
   });
 
-  it('TOOL_PROFILE=spec-loop registers exactly the ruthless 5-tool set — no XML tools, no templates', () => {
+  it('TOOL_PROFILE=spec-loop registers exactly the 6-tool set — command loop plus gated repair read', () => {
     const selected = selectToolsForProfile(allTools(), 'spec-loop');
     expect(new Set(selected.map((t) => t.name))).toEqual(SPEC_LOOP_TOOL_PROFILE);
-    // The whole point: the XML/template surface must be GONE.
+    // XML authoring and template tools remain absent; the universal gated
+    // get-worksheet-xml repair read is asserted by the profile-wide test above.
     for (const banished of [
       'get-workbook-xml',
       'apply-workbook',

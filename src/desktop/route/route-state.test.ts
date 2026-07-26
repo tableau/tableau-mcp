@@ -30,6 +30,38 @@ function mkDeflection(over: Partial<RouteDeflection> = {}): RouteDeflection {
 describe('SessionRouteStateStore', () => {
   beforeEach(() => sessionRouteState.clear());
 
+  describe('authoring attempt state', () => {
+    it('records the first authoring attempt for a session', () => {
+      const store = new SessionRouteStateStore();
+
+      const state = store.recordAuthoringAttempt('S1', 'bind-template')!;
+
+      expect(state.firstAuthoringAttempt).toMatchObject({
+        tool: 'bind-template',
+        ts: expect.any(String),
+      });
+      expect(store.hasAuthoringAttempt('S1')).toBe(true);
+    });
+
+    it('keeps authoring attempts isolated by session and preserves the first attempt', () => {
+      const store = new SessionRouteStateStore();
+
+      store.recordAuthoringAttempt('S1', 'author-parameter');
+      store.recordAuthoringAttempt('S1', 'author-set');
+
+      expect(store.hasAuthoringAttempt('S1')).toBe(true);
+      expect(store.hasAuthoringAttempt('S2')).toBe(false);
+      expect(store.get('S1')?.firstAuthoringAttempt?.tool).toBe('author-parameter');
+    });
+
+    it('fails open when no session can be resolved', () => {
+      const store = new SessionRouteStateStore();
+
+      expect(store.recordAuthoringAttempt(undefined, 'bind-template')).toBeUndefined();
+      expect(store.hasAuthoringAttempt(undefined)).toBe(false);
+    });
+  });
+
   it('recordDeflection lazy-inits the session state and appends the deflection', () => {
     const store = new SessionRouteStateStore();
     const s = store.recordDeflection('S1', mkDeflection())!;

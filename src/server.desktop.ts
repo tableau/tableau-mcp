@@ -53,6 +53,7 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
   'list-instances',
   'list-worksheets',
   'list-available-fields',
+  'get-worksheet-xml',
   'apply-workbook',
   'get-workbook-xml',
   'inject-template',
@@ -66,12 +67,13 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
  * selected by TOOL_PROFILE=spec-loop. Hypothesis under test: the native semantic
  * loop — generate-viz-from-notional-spec for charts, the whole-document GET/POST
  * for calcs, both dispatched through execute-tableau-command on the /v0 External
- * API — is sufficient on its own, with NO XML tools, NO templates, NO bind-template.
+ * API — is sufficient with no XML authoring tools, templates, or bind-template.
  * Everything a chart/calc/dashboard ask needs routes through execute-tableau-command;
  * the rest is discovery + readback (on apiVersion <=0.1.0 the /v0 generic route was
- * write-blind, so the list-* tools were how the model observed state). Proven by hand
- * 2026-07-19: a full analytics workbook (calcs + charts + dashboard) authored live in
- * seconds, zero XML.
+ * write-blind, so the list-* tools were how the model observed state). The gated
+ * get-worksheet-xml repair read is retained across every profile but cannot run before
+ * an authoring attempt. Proven by hand 2026-07-19: a full analytics workbook (calcs +
+ * charts + dashboard) authored live in seconds, zero agent-authored XML.
  * The known-command guard (from #542) makes the single execute-tableau-command tool
  * safe against hallucinated verbs.
  */
@@ -79,6 +81,7 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
   'execute-tableau-command',
   'list-instances',
   'list-available-fields',
+  'get-worksheet-xml',
   'list-worksheets',
   'list-dashboards',
 ]);
