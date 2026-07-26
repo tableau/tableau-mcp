@@ -256,7 +256,26 @@ const recommendedProposeResult: BinderResult = {
       measure: 'Sales',
       top_n: 10,
       reason: 'revenue-like measure; top-N defaults to 10',
+      binding: {
+        template: 'bar-basic',
+        bindings: [
+          { slot_id: 'cat', field: 'Region' },
+          { slot_id: 'val', field: 'Sales' },
+        ],
+      },
     },
+  },
+};
+const contestedRevenueProposeResult: BinderResult = {
+  ...proposeResult,
+  llm_input: {
+    ...proposeResult.llm_input,
+    ask: 'Show me our top customers.',
+    fields: [
+      { name: 'Customer Name', role: 'dimension', type: 'nominal', datatype: 'string' },
+      { name: 'Sales', role: 'measure', type: 'quantitative', datatype: 'real' },
+      { name: 'Revenue', role: 'measure', type: 'quantitative', datatype: 'real' },
+    ],
   },
 };
 const ambiguousGoalsProposeResult: BinderResult = {
@@ -524,7 +543,7 @@ describe('bindTemplateTool', () => {
     const tool = getBindTemplateTool(new DesktopMcpServer());
     expect(tool.name).toBe('bind-template');
     expect(tool.description).toBe(
-      'Bind. recommended=>Call2+state; else ask-user. Quote summary_rows; get-summary-data if absent/cut/error.',
+      'Bind. applied_default=>state as default+offer change. Quote summary_rows; fetch now if absent/cut/error.',
     );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
@@ -597,14 +616,20 @@ describe('bindTemplateTool', () => {
     });
   });
 
-  it('carries a ranking recommendation into Call 2 and tells the agent to state the choice', async () => {
+  it('auto_apply=false returns the recommended ranking proposal without applying it', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate).mockResolvedValue(recommendedProposeResult);
 
-    const result = await getToolResult({ session: '1', ask: 'Show me our top customers.' });
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Show me our top customers.',
+      auto_apply: false,
+    });
 
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
+    expect(body.status).toBe('propose');
+    expect(body.applied).toBeUndefined();
     expect(body.llm_input.recommended).toEqual(recommendedProposeResult.llm_input.recommended);
     expect(body.call_2_contract.recommended).toEqual(
       recommendedProposeResult.llm_input.recommended,
@@ -614,6 +639,7 @@ describe('bindTemplateTool', () => {
     expect(body.guidance).toContain('top_n:10');
     expect(body.guidance).toContain('STATE this choice in your reply');
     expect(body.guidance).not.toContain('ask-user');
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
   });
 
   it('requires a call_2_contract proposal in the Call 1 nextAction label', async () => {
@@ -1606,6 +1632,69 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
     expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('auto-applies a recommended ranking proposal in one call and discloses the default', async () => {
+    const mocks = setupAutoApplyMocks({
+      bind: recommendedProposeResult,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(recommendedProposeResult)
+      .mockResolvedValueOnce(boundWithTopNResult);
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Show me our top customers.',
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(mocks, {
+        columns: [
+          { name: 'Customer Name', dataType: 'string' },
+          { name: 'Sales', dataType: 'real' },
+        ],
+        rows: [['Acme', 100]],
+      }),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body).toMatchObject({
+      status: 'bound',
+      applied: true,
+      applied_default: {
+        measure: 'Sales',
+        top_n: 10,
+        reason: 'revenue-like measure; top-N defaults to 10',
+      },
+      summary_rows: {
+        columns: [
+          { name: 'Customer Name', dataType: 'string' },
+          { name: 'Sales', dataType: 'real' },
+        ],
+        rows: [['Acme', 100]],
+      },
+    });
+    expect(body.guidance).toContain('not the user’s stated choice');
+    expect(body.guidance).toContain('Sales');
+    expect(body.guidance).toContain('top 10');
+    expect(body.guidance).toContain('change the measure or top_n');
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+    expect(binderModule.bindTemplate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        proposal: {
+          template: 'bar-basic',
+          title: 'Show me our top customers.',
+          bindings: [
+            { slot_id: 'cat', field: 'Region' },
+            { slot_id: 'val', field: 'Sales' },
+          ],
+          confidence: 1,
+          top_n: 10,
+        },
+      }),
+    );
   });
 
   it('auto_apply=true on a standalone Call-1 bind applies then issues validated goto-sheet', async () => {
@@ -2639,12 +2728,14 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(buildInjectedWorkbookXml).not.toHaveBeenCalled();
   });
 
-  it('auto_apply=true leaves a propose outcome unchanged (no apply)', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({ bind: proposeResult });
+  it('auto_apply=true leaves a contested-revenue ranking proposal unchanged', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({
+      bind: contestedRevenueProposeResult,
+    });
 
     const result = await getToolResult({
       session: '1',
-      ask: 'something weird',
+      ask: 'Show me our top customers.',
       auto_apply: true,
       getExecutor,
     });
@@ -2654,6 +2745,26 @@ describe('bindTemplateTool auto_apply gate', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.status).toBe('propose');
     expect(body.applied).toBeUndefined();
+    expect(body.llm_input).not.toHaveProperty('recommended');
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('auto_apply=true leaves a non-ranking proposal unchanged', async () => {
+    const { executeCommand, getExecutor } = setupAutoApplyMocks({ bind: proposeResult });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'something weird',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.status).toBe('propose');
+    expect(body.applied).toBeUndefined();
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
     expect(executeCommand).not.toHaveBeenCalled();
   });
 

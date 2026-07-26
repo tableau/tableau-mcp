@@ -14,6 +14,7 @@ import {
   type EncodingReport,
   type EscalateReason,
   type LlmProposeInput,
+  makeTitle,
   MAX_CLASSIFIABLE_FIELDS,
   resolveInSummary,
   type SchemaSummary,
@@ -134,6 +135,11 @@ type BindTemplateToolResultBase = BinderResult & {
   apply_error?: string;
 };
 
+type AppliedDefault = Pick<
+  NonNullable<LlmProposeInput['recommended']>,
+  'measure' | 'top_n' | 'reason'
+>;
+
 /**
  * Trimmed shape returned ONLY on applied:true fast-path success (W60 spike lever 5 /
  * preamble P4). It keeps just what a rendered success needs and drops the args echo, the
@@ -150,6 +156,7 @@ type AppliedFastPathResult = {
   sheet_name: string;
   phase_ms: { bind: number; inject: number; apply: number };
   guidance: string;
+  applied_default?: AppliedDefault;
   summary_rows?: { columns: unknown[]; rows: unknown[][] };
   summary_rows_error?: string;
   truncated?: true;
@@ -755,6 +762,28 @@ function proposalChoiceGuidance(llmInput: LlmProposeInput): string {
     : 'No recommendation is available. If a required choice remains ambiguous, call ask-user; do not guess.';
 }
 
+function proposalFromRecommendation(
+  ask: string,
+  recommended: NonNullable<LlmProposeInput['recommended']>,
+): BindingProposal {
+  return {
+    ...recommended.binding,
+    title: makeTitle(ask),
+    confidence: 1,
+    top_n: recommended.top_n,
+  };
+}
+
+function appliedDefaultFrom(
+  recommended: NonNullable<LlmProposeInput['recommended']>,
+): AppliedDefault {
+  return {
+    measure: recommended.measure,
+    top_n: recommended.top_n,
+    reason: recommended.reason,
+  };
+}
+
 /**
  * True iff this applied waterfall bind still has a NAMED, fillable re-bind slot (an anchor
  * category candidate or an explicit order column) — the m1 genuine-unfilled case that MUST
@@ -1286,6 +1315,7 @@ async function performAutoApply({
   eventsAnchor,
   schemaSummary,
   manifest,
+  appliedDefault,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -1298,6 +1328,7 @@ async function performAutoApply({
   eventsAnchor?: number;
   schemaSummary: SchemaSummary;
   manifest: TemplateManifest;
+  appliedDefault?: AppliedDefault;
 }): Promise<{
   result: StructuredBindTemplateToolResult;
   failureDisposition?: AutoApplyFailureDisposition;
@@ -1486,13 +1517,16 @@ async function performAutoApply({
   const terminalGuidance = appliedSpliceGuidance
     ? `${TERMINAL_GUIDANCE} ${appliedSpliceGuidance}`
     : TERMINAL_GUIDANCE;
+  const defaultGuidance = appliedDefault
+    ? ` Tool default applied (not the user’s stated choice): measure ${JSON.stringify(appliedDefault.measure)}, top ${appliedDefault.top_n}. State this default and offer to change the measure or top_n.`
+    : '';
   const guidance = `${
     unfilledEncodings
       ? appendUnfilledEncodingGuidance(receiptText, literalTitle, unfilledEncodings)
       : incomplete
         ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
         : `${receiptText} ${terminalGuidance}`
-  }${readbackEvidence}${promiseCheck}`;
+  }${defaultGuidance}${readbackEvidence}${promiseCheck}`;
   const summaryRows = await readAppliedSummaryRows({
     executor,
     signal,
@@ -1503,6 +1537,7 @@ async function performAutoApply({
     ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
     ...(base.warnings && base.warnings.length > 0 ? { warnings: base.warnings } : {}),
     guidance,
+    ...(appliedDefault ? { applied_default: appliedDefault } : {}),
     applied: true,
     sheet_name: literalTitle,
     phase_ms: { bind: bindMs, inject: injectMs, apply: applyMs },
@@ -1724,7 +1759,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     name: 'bind-template',
     title,
     description:
-      'Bind. recommended=>Call2+state; else ask-user. Quote summary_rows; get-summary-data if absent/cut/error.',
+      'Bind. applied_default=>state as default+offer change. Quote summary_rows; fetch now if absent/cut/error.',
     paramsSchema,
     annotations: {
       // NOT read-only and NOT idempotent: auto_apply:true mutates the live workbook via
@@ -1880,7 +1915,8 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
           }
 
-          let res;
+          let res: BinderResult;
+          let appliedDefault: AppliedDefault | undefined;
           try {
             res = await bindTemplate({
               ask,
@@ -1889,6 +1925,24 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               ...(proposal ? { proposal: proposal as BindingProposal } : {}),
               ...(minConfidence !== undefined ? { minConfidence } : {}),
             });
+            if (
+              proposal === undefined &&
+              auto_apply === true &&
+              res.status === 'propose' &&
+              res.llm_input.recommended
+            ) {
+              const recommended = res.llm_input.recommended;
+              res = await bindTemplate({
+                ask,
+                workbookXml,
+                manifests,
+                proposal: proposalFromRecommendation(ask, recommended),
+                ...(minConfidence !== undefined ? { minConfidence } : {}),
+              });
+              if (res.status === 'bound') {
+                appliedDefault = appliedDefaultFrom(recommended);
+              }
+            }
           } catch (e) {
             // A THROWN bind has no recordable outcome; clear the pending record (only if
             // it is still this ask's) so the gate can never read "no bind attempt yet"
@@ -2068,6 +2122,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             eventsAnchor,
             schemaSummary,
             manifest,
+            appliedDefault,
           });
           const appliedResult = autoApplyResult.result;
           // Only a bind the binder called FINISHED may be replayed as "already built" on

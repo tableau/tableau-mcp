@@ -63,13 +63,17 @@ function bareName(name: string): string {
 export interface LlmProposeInput {
   ask: string;
   /**
-   * Advisory default for an ambiguous positive ranking ask. The caller must still
-   * construct and resubmit Call 2; this never bypasses proposal validation.
+   * Agent-decidable default for an ambiguous positive ranking ask. `binding` is complete
+   * enough for the tool to construct a normal Call-2 proposal and run the same validation.
    */
   recommended?: {
     measure: string;
     top_n: 10;
     reason: 'revenue-like measure; top-N defaults to 10';
+    binding: {
+      template: string;
+      bindings: Array<{ slot_id: string; field: string }>;
+    };
   };
   candidate_templates: Array<{
     template: string;
@@ -1069,10 +1073,18 @@ function recommendedRankingDefault(
   ask: string,
   summary: SchemaSummary,
   proposedFields: readonly SchemaField[],
+  candidate: TemplateManifest | undefined,
 ): LlmProposeInput['recommended'] {
   // A top_n proposal always ranks the top end, so negative rankings (bottom/lowest)
   // are deliberately excluded rather than silently reversing the user's direction.
   if (!/\b(?:top|highest|rank|ranked|ranking)\b/i.test(ask)) return undefined;
+  if (
+    candidate?.fast_path_eligible !== true ||
+    candidate.family !== 'ranking' ||
+    !['ranking-ordered-bar', 'ranking-ordered-column'].includes(candidate.template)
+  ) {
+    return undefined;
+  }
 
   const revenuePatterns = BUSINESS_FIELD_SYNONYMS.find((entry) =>
     entry.nouns.includes('revenue'),
@@ -1090,7 +1102,34 @@ function recommendedRankingDefault(
 
   const measure = revenueLikeMeasures[0];
   if (!proposedFields.includes(measure)) return undefined;
-  return { measure: measure.name, top_n: 10, reason: REVENUE_RECOMMENDATION_REASON };
+  const dimensions = matchFieldsInAsk(ask, summary).filter(
+    (field) => isCategorical(field) && proposedFields.includes(field),
+  );
+  if (dimensions.length !== 1) return undefined;
+
+  const requiredSlots = candidate.slots.filter((slot) => slot.bindable && slot.required);
+  const categorySlots = requiredSlots.filter((slot) => slot.kind === 'categorical');
+  const measureSlots = requiredSlots.filter((slot) => slot.kind === 'quantitative');
+  if (
+    requiredSlots.length !== 2 ||
+    categorySlots.length !== 1 ||
+    measureSlots.length !== 1
+  ) {
+    return undefined;
+  }
+
+  return {
+    measure: measure.name,
+    top_n: 10,
+    reason: REVENUE_RECOMMENDATION_REASON,
+    binding: {
+      template: candidate.template,
+      bindings: [
+        { slot_id: categorySlots[0].slot_id, field: dimensions[0].name },
+        { slot_id: measureSlots[0].slot_id, field: measure.name },
+      ],
+    },
+  };
 }
 
 /**
@@ -3244,7 +3283,7 @@ export function buildLlmInput(
   const withheld = summary.fields.length - narrowed.length;
 
   const exposeFieldIdentity = shouldExposeFieldIdentity(summary.fields);
-  const recommended = recommendedRankingDefault(ask, summary, narrowed);
+  const recommended = recommendedRankingDefault(ask, summary, narrowed, top[0]?.m);
   const result: LlmProposeInput = {
     ask,
     ...(recommended ? { recommended } : {}),

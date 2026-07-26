@@ -83,6 +83,10 @@ export interface BindRecoveryProposalContext {
     measure: string;
     top_n: 10;
     reason: 'revenue-like measure; top-N defaults to 10';
+    binding: {
+      template: string;
+      bindings: Array<{ slot_id: string; field: string }>;
+    };
   };
   proposal_choices: Array<{
     template: string;
