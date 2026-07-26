@@ -1049,7 +1049,7 @@ const BUSINESS_FIELD_SYNONYMS: ReadonlyArray<{
   { nouns: ['orders'], captionPatterns: ['order', 'order id'] },
   {
     nouns: ['reps', 'salespeople'],
-    captionPatterns: ['rep', 'rep name', 'sales rep', 'sales person', 'owner'],
+    captionPatterns: ['rep', 'rep name', 'sales rep', 'sales person'],
   },
   { nouns: ['deals'], captionPatterns: ['deal', 'opportunity', 'opportunity name'] },
 ];
@@ -1312,7 +1312,25 @@ function dimensionHeadCandidatesInAsk(
   return groupedMatches;
 }
 
-/** Exactly-one dimension-head matches; ambiguous heads are withheld and rejected upstream. */
+const IDENTITY_LIKE_DIMENSION_HEAD_SUFFIXES = new Set([
+  'name',
+  'id',
+  'key',
+  'code',
+  'number',
+  'no',
+]);
+
+function hasIdentityLikeDimensionHeadSuffix(field: SchemaField): boolean {
+  const friendlyName = field.caption ?? field.name;
+  const tokens = normalizeFieldPhrase(friendlyName).split(' ').filter(Boolean);
+  return tokens.length === 2 && IDENTITY_LIKE_DIMENSION_HEAD_SUFFIXES.has(tokens[1]);
+}
+
+/**
+ * Exactly-one dimension-head matches whose sole trailing caption token identifies the entity.
+ * Ambiguous heads and grain-changing suffixes such as "segment" or "region" are withheld.
+ */
 function dimensionHeadMatchesInAsk(
   ask: string,
   s: SchemaSummary,
@@ -1321,7 +1339,8 @@ function dimensionHeadMatchesInAsk(
   return dimensionHeadCandidatesInAsk(ask, s, literalHits)
     .filter(
       (match): match is typeof match & { candidates: [SchemaField] } =>
-        match.candidates.length === 1,
+        match.candidates.length === 1 &&
+        hasIdentityLikeDimensionHeadSuffix(match.candidates[0]),
     )
     .map(({ noun, index, candidates }) => ({ noun, index, field: candidates[0] }));
 }

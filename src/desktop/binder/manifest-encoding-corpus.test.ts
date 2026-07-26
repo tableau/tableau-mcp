@@ -1299,6 +1299,16 @@ describe('binder/manifest-encoding-corpus — business-synonym field resolution'
     ]);
   });
 
+  it('does not treat an unqualified Owner field as a sales representative', async () => {
+    const result = await bindTemplate({
+      ask: 'Show me Sales by reps',
+      workbookXml: businessSynonymSchema(['Sales'], 'Owner'),
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+  });
+
   it('falls through when a business noun has no caption-pattern match', () => {
     const summary = summarizeSchema(businessSynonymSchema(['Profit']));
 
@@ -1307,20 +1317,31 @@ describe('binder/manifest-encoding-corpus — business-synonym field resolution'
 });
 
 describe('binder/manifest-encoding-corpus — deterministic replay coverage', () => {
-  it.each(['Show me revenue by customer.', 'Show me revenue by customers.'])(
-    'head noun binds the sole matching dimension in "%s"',
-    (ask) => {
-      const summary = summarizeSchema(classifierSchema(['Sales'], ['Customer Name']));
+  it.each([
+    ['Show me revenue by customer.', 'Customer Name'],
+    ['Show me revenue by customers.', 'Customer Name'],
+    ['Show me revenue by customer.', 'Customer ID'],
+  ])('head noun in "%s" binds the identity field %s', (ask, dimension) => {
+    const summary = summarizeSchema(classifierSchema(['Sales'], [dimension]));
 
-      expect(classifyNoLlm(ask, manifests, summary)).toMatchObject({
-        template: 'magnitude-simple-bar',
-        bindings: [
-          { slot_id: 'category', field: 'Customer Name' },
-          { slot_id: 'measure', field: 'Sales' },
-        ],
-      });
-    },
-  );
+    expect(classifyNoLlm(ask, manifests, summary)).toMatchObject({
+      template: 'magnitude-simple-bar',
+      bindings: [
+        { slot_id: 'category', field: dimension },
+        { slot_id: 'measure', field: 'Sales' },
+      ],
+    });
+  });
+
+  it('proposes rather than treating Customer Segment as a per-customer identity', async () => {
+    const result = await bindTemplate({
+      ask: 'Show me revenue by customer.',
+      workbookXml: classifierSchema(['Sales'], ['Customer Segment']),
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+  });
 
   it('explicit top-N reaches the ranking template before modifiers attach', () => {
     const summary = summarizeSchema(classifierSchema(['Sales'], ['Customer Name']));

@@ -1521,6 +1521,16 @@ function summaryRowsExecutor(
     | ReturnType<typeof Err>
     | 'pending',
 ): TableauDesktopToolContext['getExecutor'] {
+  const getWorksheetSummaryData =
+    summary === 'pending'
+      ? vi.fn().mockReturnValue(new Promise(() => undefined))
+      : 'isErr' in summary
+        ? vi.fn().mockResolvedValue(summary)
+        : vi
+            .fn()
+            .mockImplementation(async (_worksheetId: string, options: { maxRows: number }) =>
+              Ok({ ...summary, rows: summary.rows.slice(0, options.maxRows) }),
+            );
   return vi.fn().mockResolvedValue({
     executeCommand: base.executeCommand,
     applyWorkbookDocument: base.applyWorkbookDocument,
@@ -1537,10 +1547,7 @@ function summaryRowsExecutor(
       }),
     ),
     getWorksheetDocument: vi.fn(routeMissing),
-    getWorksheetSummaryData:
-      summary === 'pending'
-        ? vi.fn().mockReturnValue(new Promise(() => undefined))
-        : vi.fn().mockResolvedValue('isErr' in summary ? summary : Ok(summary)),
+    getWorksheetSummaryData,
   });
 }
 
@@ -1726,11 +1733,11 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect((body.guidance as string).length).toBeLessThan(400);
   });
 
-  it('includes at most 20 summary rows on an applied:true result', async () => {
+  it('marks 21 source rows truncated while returning 20 summary rows', async () => {
     const mocks = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
     });
-    const rows = Array.from({ length: 25 }, (_, index) => [`Region ${index}`, index * 100]);
+    const rows = Array.from({ length: 21 }, (_, index) => [`Region ${index}`, index * 100]);
 
     const result = await getToolResult({
       session: '1',
@@ -1756,6 +1763,32 @@ describe('bindTemplateTool auto_apply gate', () => {
       rows: rows.slice(0, 20),
     });
     expect(body.truncated).toBe(true);
+  });
+
+  it('omits truncated for exactly 20 source rows', async () => {
+    const mocks = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+    const rows = Array.from({ length: 20 }, (_, index) => [`Region ${index}`, index * 100]);
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(mocks, {
+        columns: [
+          { name: 'Region', dataType: 'string' },
+          { name: 'Sales', dataType: 'real' },
+        ],
+        rows,
+      }),
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.applied).toBe(true);
+    expect(body.summary_rows.rows).toEqual(rows);
+    expect(body.truncated).toBeUndefined();
   });
 
   it('caps serialized summary_rows near 2KB and marks truncation', async () => {
