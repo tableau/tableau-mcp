@@ -1790,11 +1790,13 @@ function fieldFitsSlotKind(kind: SlotKind, f: SchemaField): boolean {
 /**
  * Field-narrowing for the propose prompt (stage 2B, adjudicated attack 1). A wide
  * schema (300–1000 fields) would blow the prompt, so rank and cap:
- *   rank 0 — business-synonym candidates when that noun was not literally resolved;
- *   rank 1 — fields whose name/caption tokens overlap the ask (a field the ask
- *            NAMES is guaranteed rank-1, so it survives the cap);
- *   rank 2 — fields kind-compatible with any required slot of any candidate;
- *   rank 3 — everything else (fills headroom only).
+ *   rank 0 — fields the ask names exactly/normalizes to (never evicted by the cap);
+ *   rank 1 — business-synonym candidates when that noun was not literally resolved;
+ *   rank 2 — fields whose name/caption tokens overlap the ask;
+ *   rank 3 — fields kind-compatible with any required slot of any candidate;
+ *   rank 4 — everything else (fills headroom only).
+ * At least one field compatible with every required slot kind is also reserved so a
+ * synonym-heavy schema cannot leave the Call-2 contract with an empty slot.
  * Deterministic: stable sort keyed tier → named → overlap → name → original index.
  * A pass-through (≤ cap) returns the fields UNCHANGED with no withholding.
  */
@@ -1827,7 +1829,7 @@ function narrowFields(
     const relevant = named || overlap > 0;
     const compatible = !relevant && [...kinds].some((k) => fieldFitsSlotKind(k, f));
     const synonymCandidate = synonymCandidates.has(f);
-    const tier = synonymCandidate ? 3 : relevant ? 2 : compatible ? 1 : 0;
+    const tier = named ? 4 : synonymCandidate ? 3 : relevant ? 2 : compatible ? 1 : 0;
     return { f, index, tier, named, overlap };
   });
 
@@ -1840,7 +1842,17 @@ function narrowFields(
       a.index - b.index,
   );
 
-  const kept = ranked.slice(0, maxFields).map((r) => r.f);
+  const reserved = new Set(ranked.filter((candidate) => candidate.named));
+  for (const kind of kinds) {
+    const representative = ranked.find((candidate) => fieldFitsSlotKind(kind, candidate.f));
+    if (representative) reserved.add(representative);
+  }
+  const keepCount = Math.max(maxFields, reserved.size);
+  for (const candidate of ranked) {
+    if (reserved.size >= keepCount) break;
+    reserved.add(candidate);
+  }
+  const kept = ranked.filter((candidate) => reserved.has(candidate)).map((candidate) => candidate.f);
   return { fields: kept, withheld: fields.length - kept.length };
 }
 

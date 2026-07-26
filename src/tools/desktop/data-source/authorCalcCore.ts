@@ -229,13 +229,37 @@ function rewriteUnquotedFieldReferences(
 ): string {
   const fieldReference = /\[(?:[^\]]|\]\])*\]/y;
   let quote: "'" | '"' | undefined;
+  let lineComment = false;
+  let blockComment = false;
   let cursor = 0;
   let rewritten = '';
 
   for (let index = 0; index < formula.length; index += 1) {
     const char = formula[index];
+    const next = formula[index + 1];
+    if (lineComment) {
+      if (char === '\n' || char === '\r') lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      if (char === '*' && next === '/') {
+        blockComment = false;
+        index += 1;
+      }
+      continue;
+    }
     if (quote) {
       if (char === quote && formula[index - 1] !== '\\') quote = undefined;
+      continue;
+    }
+    if (char === '/' && next === '/') {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+    if (char === '/' && next === '*') {
+      blockComment = true;
+      index += 1;
       continue;
     }
     if (char === "'" || char === '"') {

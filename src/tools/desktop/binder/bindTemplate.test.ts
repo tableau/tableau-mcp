@@ -8,6 +8,7 @@ import { loadManifests } from '../../../desktop/binder/manifest.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import * as routeSpecModule from '../../../desktop/binder/route-spec.js';
 import { normalizeAskForMatch } from '../../../desktop/binder/route-spec.js';
+import type { SchemaField } from '../../../desktop/binder/schema-summary.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
@@ -788,6 +789,88 @@ describe('bindTemplateTool', () => {
       2,
     );
     expect(body.call_2_contract.proposal_choices[0].slots[0]).not.toHaveProperty('field');
+  });
+
+  it('keeps the ask-named dimension in a synonym-heavy Call-2 categorical slot', async () => {
+    const schemaField = (
+      name: string,
+      role: 'dimension' | 'measure',
+      type: 'nominal' | 'quantitative',
+      datatype: 'string' | 'real',
+    ): SchemaField => ({
+      name,
+      columnName: `[${name}]`,
+      role,
+      type,
+      datatype,
+      datasource: 'DS',
+      isAggregated: false,
+      column_ref: `[DS].[${name}]`,
+    });
+    const collisionWords = [
+      'Booked',
+      'Billed',
+      'Contracted',
+      'Deferred',
+      'Domestic',
+      'Enterprise',
+      'Forecast',
+      'Gross',
+      'International',
+      'Invoiced',
+      'Net',
+      'Online',
+      'Partner',
+      'Pipeline',
+      'Projected',
+      'Recurring',
+      'Renewal',
+      'Retail',
+      'Services',
+      'Subscription',
+      'Total',
+      'Wholesale',
+    ];
+    const fields = [
+      ...collisionWords.map((word, index) =>
+        schemaField(
+          `${word} ${index % 2 === 0 ? 'Amount' : 'Sales'}`,
+          'measure',
+          'quantitative',
+          'real',
+        ),
+      ),
+      ...['Customer Segment', 'Customer Name', 'Product Category', 'Market', 'Region'].map((name) =>
+        schemaField(name, 'dimension', 'nominal', 'string'),
+      ),
+    ];
+    const manifest = loadManifests().get('ranking-ordered-bar');
+    invariant(manifest);
+    const llmInput = binderModule.buildLlmInput(
+      'bar chart of revenue by Customer Segment',
+      new Map([[manifest.template, manifest]]),
+      { datasource: 'DS', fields },
+    );
+    const synonymHeavyPropose: BinderResult = {
+      ...proposeResult,
+      llm_input: llmInput,
+    };
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(synonymHeavyPropose);
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of revenue by Customer Segment',
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    const categoricalSlotId = manifest.slots.find((slot) => slot.kind === 'categorical')?.slot_id;
+    const categoricalSlot = body.call_2_contract.proposal_choices[0].slots.find(
+      (slot: { slot_id: string }) => slot.slot_id === categoricalSlotId,
+    );
+    expect(categoricalSlot.compatible_field_names).toContain('Customer Segment');
+    expect(categoricalSlot.compatible_field_names.length).toBeGreaterThan(0);
   });
 
   it.each([
@@ -2245,6 +2328,10 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.applied).toBe(true);
     expect(body.summary_rows).toBeUndefined();
     expect(body.summary_rows_error).toBe('empty readback — verify with get-summary-data');
+    expect(body.guidance).toContain('Summary readback returned zero rows');
+    expect(body.guidance).toContain('check the sheet');
+    expect(body.guidance).not.toContain('no further tool calls');
+    expect(result.structuredContent?.nextAction).not.toMatchObject({ kind: 'done' });
   });
 
   it('keeps bind success and reports summary_rows_error when readback fails', async () => {
@@ -2271,6 +2358,8 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.sheet_name).toBe('Sales by Region');
     expect(body.summary_rows).toBeUndefined();
     expect(body.summary_rows_error).toContain('summary endpoint unavailable');
+    expect(body.guidance).toContain('no further tool calls');
+    expect(result.structuredContent?.nextAction).toMatchObject({ kind: 'done' });
   });
 
   it('times out summary readback after 2s without failing a successful bind', async () => {

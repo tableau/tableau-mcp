@@ -208,6 +208,30 @@ describe('injectTemplateTool', () => {
     );
   });
 
+  it('surfaces warnings returned by the shared inject core', async () => {
+    const extra = makeExtra();
+    vi.mocked(rewriteFieldReferencesWithDiagnostics).mockReturnValue({
+      xml: TEMPLATE_XML,
+      droppedOptionalElements: ['computed-sort dropped: [DS].[sum:Missing:qk] did not resolve'],
+    });
+
+    const result = await getResult(
+      {
+        ...BASE_PARAMS,
+        templateParameters: { DATASOURCE: 'Sample Superstore' },
+        fieldMapping: { Sales: '[sum:Sales:qk]' },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Template advisory warnings:');
+    expect(result.content[0].text).toContain(
+      'computed-sort dropped: [DS].[sum:Missing:qk] did not resolve',
+    );
+  });
+
   it('blocks caller DATASOURCE when explicit mapping resolves to a different datasource', async () => {
     const extra = makeExtra();
     vi.mocked(readFileSync).mockReturnValue(TWO_DATASOURCE_WORKBOOK_XML);

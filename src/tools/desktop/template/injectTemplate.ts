@@ -214,7 +214,7 @@ export const getInjectTemplateTool = (
               templateName,
               title,
               sheetType,
-              warnings: explicitTemplateWarnings,
+              warnings: [...explicitTemplateWarnings, ...(result.warnings ?? [])],
             });
           } catch (err) {
             return new FileReadError(err).toErr();
