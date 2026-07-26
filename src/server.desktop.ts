@@ -283,10 +283,15 @@ export class DesktopMcpServer extends Server {
       );
     }
 
-    const listedTools = await Promise.all(tools.map(getDesktopToolListEntry));
-    this.mcpServer.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: listedTools,
-    }));
+    // Slim tools/list (no $schema dialect tags): only when this server owns the
+    // McpServer. On the combined variant's shared server, overriding tools/list
+    // would hide the web half's tools (including ones combined-lean registers late).
+    if (this.ownsMcpServer) {
+      const listedTools = await Promise.all(tools.map(getDesktopToolListEntry));
+      this.mcpServer.server.setRequestHandler(ListToolsRequestSchema, async () => ({
+        tools: listedTools,
+      }));
+    }
   };
 
   protected _getToolsToRegister = async (): Promise<Array<DesktopTool<any>>> => {
