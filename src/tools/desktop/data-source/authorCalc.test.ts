@@ -291,6 +291,56 @@ describe('authorCalcTool', () => {
     expect(result.error.message).toContain('field reference [Revenue] was not found');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
+
+  it.each([
+    {
+      commentKind: '//',
+      formula: "// don't do this\n[Fabricated] + [Sales]",
+    },
+    {
+      commentKind: '/* */',
+      formula: "/* don't inspect [Comment Field] */\n[Fabricated] + [Sales]",
+    },
+  ])(
+    'checks fabricated field references after an apostrophe in a $commentKind comment',
+    async ({ formula }) => {
+      const applyWorkbookDocument = vi
+        .fn()
+        .mockResolvedValue(new Ok({ command_id: 'apply-1', status: 'completed', result: null }));
+      const executor: ToolExecutor = {
+        start: vi.fn(),
+        stop: vi.fn(),
+        isAvailable: vi.fn(() => true),
+        executeCommand: vi
+          .fn()
+          .mockResolvedValue(
+            new Ok({ command_id: 'command-1', status: 'completed', result: null }),
+          ),
+        getWorkbookDocument: vi.fn().mockResolvedValue(
+          new Ok({
+            xml: BASE_XML,
+            applicationVersion: undefined,
+            xsdPayloadVersion: undefined,
+          }),
+        ),
+        applyWorkbookDocument,
+        getEvents: vi.fn(),
+      };
+
+      const result = await authorCalculationsInWorkbook({
+        workbookXml: BASE_XML,
+        calcs: [{ caption: 'Unsafe Calc', formula }],
+        resolveLooseReferences: true,
+        executor,
+        signal: new AbortController().signal,
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isOk()) throw new Error('expected fabricated field reference to fail');
+      expect(result.error.message).toContain('field reference [Fabricated] was not found');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    },
+  );
 });
 
 type AuthorCalcArgs = {

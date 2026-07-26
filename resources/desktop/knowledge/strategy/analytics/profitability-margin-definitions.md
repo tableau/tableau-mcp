@@ -45,7 +45,7 @@ If the user names the exact margin *and* the data has a single obvious cost, ski
 ## Implementation
 
 1. Identify the margin the user means; if the ask is bare and the data has multiple cost columns, state the assumption (default to **gross**: revenue − COGS) or ask one question.
-2. Author the calc through the no-XML authoring verb (`author-calc`), never hand-spliced XML: `(SUM([revenue]) - SUM([cogs])) / SUM([revenue])` for gross, extending the subtracted set for operating/net.
+2. Pass the calc with the bind in one call through a chart-authoring verb that accepts inline calculations, never hand-spliced XML: `(SUM([revenue]) - SUM([cogs])) / SUM([revenue])` for gross, extending the subtracted set for operating/net.
 3. Guard the zero denominator and format as a percentage.
 4. Report which margin you built and which costs it subtracts, so the user can correct the definition in one word.
 

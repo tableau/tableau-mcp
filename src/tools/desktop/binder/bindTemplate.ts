@@ -244,6 +244,9 @@ const TOP_N_APPLIED_GUIDANCE =
 const PROPOSAL_ATTEMPTED_PHASE = ['proposal', 'attempted'].join('-');
 const RETRY_USED_PHASE = ['retry', 'used'].join('-');
 const SUMMARY_ROWS_MAX_ROWS = 20;
+const EMPTY_SUMMARY_ROWS_ERROR = 'empty readback — verify with get-summary-data';
+const EMPTY_SUMMARY_ROWS_GUIDANCE =
+  'Summary readback returned zero rows; check the sheet and its filters before claiming the chart is complete.';
 const SUMMARY_ROWS_MAX_BYTES = 2048;
 const SUMMARY_ROWS_MAX_CELL_CHARS = 256;
 const SUMMARY_ROWS_TIMEOUT_MS = 2000;
@@ -328,7 +331,7 @@ type SummaryRowsEnrichment = Pick<
 
 function capSummaryRows(columns: unknown[], rows: unknown[][]): SummaryRowsEnrichment {
   if (rows.length === 0) {
-    return { summary_rows_error: 'empty readback — verify with get-summary-data' };
+    return { summary_rows_error: EMPTY_SUMMARY_ROWS_ERROR };
   }
 
   const cappedColumns = [...columns];
@@ -1659,6 +1662,12 @@ async function performAutoApply({
     res.encodings && res.encodings.unfilled.length > 0 ? res.encodings : undefined;
   const encodingAnalysisComplete =
     res.encodings !== undefined && res.encodings.unfilled.length === 0;
+  const summaryRows = await readAppliedSummaryRows({
+    executor,
+    signal,
+    worksheetName: literalTitle,
+  });
+  const emptySummaryReadback = summaryRows.summary_rows_error === EMPTY_SUMMARY_ROWS_ERROR;
   // A splice warning means requested work was skipped before readback. The core incomplete
   // evidence stays separate from rewriter diagnostics so this truth flag keeps its audited,
   // presence-safe shape.
@@ -1669,7 +1678,7 @@ async function performAutoApply({
     promiseOutcome === 'failed';
   // Rewriter warnings describe work the tool dropped (for example, an unresolved optional
   // computed sort). They still prevent a clean readback from minting "done" or sheet memory.
-  const needsFollowUp = incomplete || (injected.warnings?.length ?? 0) > 0;
+  const needsFollowUp = incomplete || (injected.warnings?.length ?? 0) > 0 || emptySummaryReadback;
   const appliedSpliceGuidance = [
     ...(spliced.appliedFilterCount > 0 ? [FILTER_APPLIED_GUIDANCE] : []),
     ...(args.top_n !== undefined ? [TOP_N_APPLIED_GUIDANCE] : []),
@@ -1697,12 +1706,7 @@ async function performAutoApply({
       : needsFollowUp
         ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
         : `${receiptText} ${terminalGuidance}`
-  }${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
-  const summaryRows = await readAppliedSummaryRows({
-    executor,
-    signal,
-    worksheetName: literalTitle,
-  });
+  }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
