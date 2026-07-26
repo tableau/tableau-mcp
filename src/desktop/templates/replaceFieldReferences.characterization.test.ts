@@ -125,11 +125,17 @@ describe('rewriteFieldReferences — pareto-chart (compound derivation / Paramet
     Sales: '[DS].[sum:Profit:qk]',
     'Sub-Category': '[DS].[none:Segment:nk]',
   };
+  const slots = [
+    { template_field: 'Sub-Category', required: true, bindable: true },
+    { template_field: 'Sales', required: true, bindable: true },
+  ];
   const datasource = 'Superstore';
+  const run = (): string =>
+    rewriteFieldReferences(pareto, mapping, datasource, undefined, { templateSlots: slots });
 
   it('rewrites the simple aggregated ref', () => {
     // CONVERGENCE: lowercase short code (`sum`), not the old capitalized `Sum`.
-    const out = rewriteFieldReferences(pareto, mapping, datasource);
+    const out = run();
     expect(out).toContain('[Superstore].[sum:Profit:qk]');
     expect(out).not.toContain('{{DATASOURCE}}');
     expect(out).not.toContain('Sub-Category');
@@ -140,7 +146,7 @@ describe('rewriteFieldReferences — pareto-chart (compound derivation / Paramet
     // colon-tolerantly, so `[{{DATASOURCE}}].[pcto:cum:sum:Sales:qk]` now remaps
     // its field `Sales`→`Profit` while PRESERVING the `pcto:cum` wrapper — the
     // W10-E8 gap the old single-segment regex left behind is closed.
-    const out = rewriteFieldReferences(pareto, mapping, datasource);
+    const out = run();
     expect(out).toContain('[Superstore].[pcto:cum:sum:Profit:qk]');
     expect(out).not.toContain('[pcto:cum:sum:Sales:qk]');
     // Side-by-side proof in the <rows> formula: BOTH the simple ref and the
@@ -152,7 +158,7 @@ describe('rewriteFieldReferences — pareto-chart (compound derivation / Paramet
     // CONVERGENCE: the `<column-instance name='[pcto:cum:sum:Sales:qk]'>` field
     // segment is now parsed correctly, so the rebuilt instance name reads
     // `Profit`, not `Sales`.
-    const out = rewriteFieldReferences(pareto, mapping, datasource);
+    const out = run();
     expect(out).toContain('[pcto:cum:sum:Profit:qk]');
     expect(out).not.toContain('[pcto:cum:sum:Sales:qk]');
   });
@@ -160,7 +166,7 @@ describe('rewriteFieldReferences — pareto-chart (compound derivation / Paramet
   it('CHARACTERIZATION: does not rewrite the [:Measure Names] pseudo-field ref (only fills datasource)', () => {
     // CHARACTERIZATION: `[{{DATASOURCE}}].[:Measure Names]` has no derivation/field
     // segments to map, so only {{DATASOURCE}} is substituted.
-    const out = rewriteFieldReferences(pareto, mapping, datasource);
+    const out = run();
     expect(out).toContain('[Superstore].[:Measure Names]');
   });
 
@@ -168,7 +174,7 @@ describe('rewriteFieldReferences — pareto-chart (compound derivation / Paramet
     // CHARACTERIZATION: no calc-caption rewrite — the parameter column caption ('80%')
     // and the literal `[Parameters].[Parameter 3]` refs / `Parameters` datasource name
     // are left exactly as authored.
-    const out = rewriteFieldReferences(pareto, mapping, datasource);
+    const out = run();
     expect(out).toContain('[Parameters].[Parameter 3]');
     // Serializer re-quotes attributes to double quotes; the caption VALUE ('80%')
     // is what we pin — it is passed through untouched.

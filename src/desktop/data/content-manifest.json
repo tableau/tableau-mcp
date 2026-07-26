@@ -2,11 +2,11 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.56.2+content.2026-07-24",
+  "content_version": "2.57.2+content.2026-07-26",
   "schema_version": "2",
-  "generated": "2026-07-24",
+  "generated": "2026-07-26",
   "engine_compat": {
-    "server_min": "2.56.2",
+    "server_min": "2.57.2",
     "node": ">=22.7.5"
   },
   "resources": [
@@ -82,8 +82,8 @@
     },
     {
       "path": "data-visualization-templates-xml/deviation-spine-chart.xml",
-      "sha256": "cf958268a76cb0c64a47ba7bca6319fbb807674776c9ac460c62b78a3c593b5a",
-      "bytes": 5937
+      "sha256": "4cf6d72995c814e3b0b007e29c65bd86b3d5b791ea35c7fe05001c9ca5af6812",
+      "bytes": 5486
     },
     {
       "path": "data-visualization-templates-xml/distribution-bar-code-chart.xml",
@@ -132,13 +132,13 @@
     },
     {
       "path": "data-visualization-templates-xml/magnitude-simple-bar.xml",
-      "sha256": "ef0503faa2dd6320f902335dcd721909f4cb161d315a7746f296dc2967c60a4c",
-      "bytes": 2457
+      "sha256": "3ce7dfa8c7d8b6ebb54c53f0372589dce7e2c54d4e71fb17bdb59a840ef535b1",
+      "bytes": 2476
     },
     {
       "path": "data-visualization-templates-xml/pareto-chart.xml",
-      "sha256": "13ae1fe5ae37b147efa79865e6a0752bf340a5113fb2176678021e08d4aed77a",
-      "bytes": 4954
+      "sha256": "59b51c161676a528baa371e3bf6259a36ff3216f54236d3a33f29446e1a4f5c3",
+      "bytes": 4969
     },
     {
       "path": "data-visualization-templates-xml/part-to-whole-pie-chart.xml",
@@ -167,8 +167,8 @@
     },
     {
       "path": "data-visualization-templates-xml/part-to-whole-waterfall.xml",
-      "sha256": "a11963e06787ea973007a20d882712c3c8719efd43efd0a1ae03387ef79d984e",
-      "bytes": 5066
+      "sha256": "085430fc1832e2433e5b48bfc5ebef6aee425ba96e180399c3b2c1a275f7c0bc",
+      "bytes": 6078
     },
     {
       "path": "data-visualization-templates-xml/quota-attainment-bullet.xml",
@@ -197,8 +197,8 @@
     },
     {
       "path": "data-visualization-templates-xml/ranking-ordered-column.xml",
-      "sha256": "a0a23ffcf5fb34263b4e1a46a107590200a03d3f02fdc5efcf8622cc9e4a9235",
-      "bytes": 2435
+      "sha256": "afb71d90510a3df77c64fa4549df37cc3285dd15b1d2db603c90c53ba5c69856",
+      "bytes": 2452
     },
     {
       "path": "data-visualization-templates-xml/slope-chart.xml",
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "ea5a0aeb7693ee86b64ada566405e7b0e529b8c76824aa5ae7d3b2203381bda0",
-      "bytes": 280808
+      "sha256": "7cc3aea70a5e20106e421a831be20c7b008be41430dba94ec7fa8c956c8636fe",
+      "bytes": 280972
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -327,8 +327,8 @@
     },
     {
       "path": "template-manifests/deviation-spine-chart.manifest.json",
-      "sha256": "40c5f9d5ab5f6bc73afe84eab1798d196b33ddf28d0d9b618aab0e0649651c39",
-      "bytes": 6995
+      "sha256": "88934804b5277dc03d21fc46635fffad11eb83a23a28998c44e3ae7f0c2298b3",
+      "bytes": 6285
     },
     {
       "path": "template-manifests/distribution-bar-code-chart.manifest.json",
@@ -407,8 +407,8 @@
     },
     {
       "path": "template-manifests/part-to-whole-waterfall.manifest.json",
-      "sha256": "7ac230d561d17c70a80796c6ba79f5761210576665ec8a8f38e916032e4fd3f1",
-      "bytes": 10850
+      "sha256": "4e49b03704c178668c4545ddef96cb84c29cf72b08d07928968614a412c20436",
+      "bytes": 11626
     },
     {
       "path": "template-manifests/quota-attainment-bullet.manifest.json",

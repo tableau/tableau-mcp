@@ -1407,6 +1407,9 @@ async function performAutoApply({
       failureDisposition: 'pre-dispatch',
     };
   }
+  if (injected.warnings && injected.warnings.length > 0) {
+    base.warnings = [...(base.warnings ?? []), ...injected.warnings];
+  }
   // The window name in the injected doc is escaped to the SAME depth as {{TITLE}} in the
   // worksheet (both come from args.title through inject core), so fully-decode args.title to
   // the plain literal and scope the shown-filter-card splice to that window by name.
@@ -1503,13 +1506,17 @@ async function performAutoApply({
     res.encodings && res.encodings.unfilled.length > 0 ? res.encodings : undefined;
   const encodingAnalysisComplete =
     res.encodings !== undefined && res.encodings.unfilled.length === 0;
-  // A splice warning means requested work was skipped before readback. Include it here so a
-  // clean readback cannot mint "done" or duplicate-sheet memory for an incomplete bind.
+  // A splice warning means requested work was skipped before readback. The core incomplete
+  // evidence stays separate from rewriter diagnostics so this truth flag keeps its audited,
+  // presence-safe shape.
   const incomplete =
     waterfallReBindSlotUnfilled(res, schemaSummary) ||
     unfilledEncodings !== undefined ||
     spliced.warnings.length > 0 ||
     promiseOutcome === 'failed';
+  // Rewriter warnings describe work the tool dropped (for example, an unresolved optional
+  // computed sort). They still prevent a clean readback from minting "done" or sheet memory.
+  const needsFollowUp = incomplete || (injected.warnings?.length ?? 0) > 0;
   const appliedSpliceGuidance = [
     ...(spliced.appliedFilterCount > 0 ? [FILTER_APPLIED_GUIDANCE] : []),
     ...(args.top_n !== undefined ? [TOP_N_APPLIED_GUIDANCE] : []),
@@ -1523,7 +1530,7 @@ async function performAutoApply({
   const guidance = `${
     unfilledEncodings
       ? appendUnfilledEncodingGuidance(receiptText, literalTitle, unfilledEncodings)
-      : incomplete
+      : needsFollowUp
         ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
         : `${receiptText} ${terminalGuidance}`
   }${defaultGuidance}${readbackEvidence}${promiseCheck}`;
@@ -1553,7 +1560,7 @@ async function performAutoApply({
       ),
     };
   }
-  return incomplete
+  return needsFollowUp
     ? { incomplete: true, result: applied }
     : {
         result: withNextAction(

@@ -30,7 +30,7 @@ import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorkshe
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
 import { deflectionText } from '../../../desktop/route/route-gate.js';
 import { sessionRouteState } from '../../../desktop/route/route-state.js';
-import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
+import { rewriteFieldReferencesWithDiagnostics as rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import type { ReadbackFinding } from '../../../desktop/validation/readback-verify.js';
@@ -105,7 +105,10 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(getTemplateColumnRequirements).mockReturnValue([
     { name: 'Sales', role: 'measure', datatype: 'integer', type: 'quantitative' },
   ]);
-  vi.mocked(rewriteFieldReferences).mockReturnValue(TEMPLATE_XML);
+  vi.mocked(rewriteFieldReferences).mockReturnValue({
+    xml: TEMPLATE_XML,
+    droppedOptionalElements: [],
+  });
   vi.mocked(getWorkbookXml).mockResolvedValue(new Ok(WORKBOOK_XML));
   vi.mocked(loadWorksheetXml).mockResolvedValue(new Ok({ readbackWarnings: [] }));
   return extra;
@@ -217,7 +220,10 @@ describe('buildAndApplyWorksheetTool', () => {
       "<table><filter user:ui-enumeration='all'/></table>",
       '</worksheet></worksheets></workbook>',
     ].join('');
-    vi.mocked(rewriteFieldReferences).mockReturnValue(rewritten);
+    vi.mocked(rewriteFieldReferences).mockReturnValue({
+      xml: rewritten,
+      droppedOptionalElements: [],
+    });
 
     const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
 
@@ -290,7 +296,9 @@ describe('buildAndApplyWorksheetTool', () => {
       { name: 'Sub-Category', role: 'dimension', datatype: 'string', type: 'nominal' },
       { name: 'Profit', role: 'measure', datatype: 'real', type: 'quantitative' },
     ]);
-    vi.mocked(rewriteFieldReferences).mockImplementation(actualRewriter.rewriteFieldReferences);
+    vi.mocked(rewriteFieldReferences).mockImplementation(
+      actualRewriter.rewriteFieldReferencesWithDiagnostics,
+    );
     let appliedXml = '';
     vi.mocked(loadWorksheetXml).mockImplementation(async ({ xml }) => {
       appliedXml = xml;
@@ -1011,7 +1019,10 @@ describe('buildAndApplyWorksheetTool', () => {
 
   it('should return error when extracted worksheet element is missing from template', async () => {
     const extra = makeExtra();
-    vi.mocked(rewriteFieldReferences).mockReturnValue('<workbook>no worksheet here</workbook>');
+    vi.mocked(rewriteFieldReferences).mockReturnValue({
+      xml: '<workbook>no worksheet here</workbook>',
+      droppedOptionalElements: [],
+    });
 
     const result = await getResult({ session: SESSION, taskSpec: TASK_SPEC_BASE }, extra);
     expect(result.isError).toBe(true);

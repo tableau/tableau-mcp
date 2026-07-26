@@ -38,7 +38,7 @@
     "bridge",
     "contribution"
   ],
-  "description": "A waterfall (bridge) chart: GanttBar floating bars whose tops sit on a running total ([cum:sum:Profit:qk] on rows) and whose lengths are the negative per-category measure (-SUM([Profit]) on size), so each category shows its incremental contribution to a cumulative whole across an ordered categorical axis (Sub-Category on cols, sorted DESC by SUM(Profit)). Color is a continuous SUM(Profit) encoding. Factory-compiled from the CookBook 'Waterfall Viz' worksheet; structurally compiled and render-verified (live-2026-07-06).",
+  "description": "A waterfall (bridge) chart: GanttBar floating bars whose tops sit on a running total ([cum:sum:Profit:qk] on rows) and whose lengths are the negative per-category measure (-SUM([Profit]) on size), so each category shows its incremental contribution to a cumulative whole across an ordered categorical axis (Sub-Category on cols, sorted DESC by SUM(Profit)). Per-step labels show SUM(Profit), and a template-owned boolean calc colors gains separately from losses. Factory-compiled from the CookBook 'Waterfall Viz' worksheet; the presentation-default changes after the live-2026-07-06 stamp are not yet render-verified.",
   "avoid_when": [
     "The ask is about a smooth trend or trajectory over continuous time — a line/area chart shows the running trajectory better than a waterfall's discrete running-total bars.",
     "The bound categorical has no meaningful order and you do not sort it by the measure — the running total is order-dependent, so an arbitrary member order yields an arbitrary cumulative path (this template sorts Sub-Category DESC by SUM(Profit); binding an unordered dimension without that sort breaks the bridge).",
@@ -51,13 +51,12 @@
       "derivation": "sum",
       "role": [
         "rows",
-        "color",
         "formula-input"
       ],
       "kind": "quantitative",
       "bindable": true,
       "required": true,
-      "notes": "The measure whose per-category contributions build the waterfall. Bound as SUM on color ([sum:Profit:qk]); the SAME base [Profit] also feeds the running-total [cum:sum:Profit:qk] on rows (a CumTotal table calc that rides along — hazard running-total-table-calc-rides-along) and the -SUM([Profit]) bar-length calc (calcs[0]). replaceFieldReferences rewrites every [Profit] instance on bind."
+      "notes": "The measure whose per-category contributions build the waterfall. SUM([Profit]) appears as each mark label and feeds the gain/loss color calc. The SAME base [Profit] also feeds the running-total [cum:sum:Profit:qk] on rows (a CumTotal table calc that rides along — hazard running-total-table-calc-rides-along) and the -SUM([Profit]) bar-length calc (calcs[0]). replaceFieldReferences rewrites every [Profit] instance on bind."
     },
     {
       "slot_id": "sub_category",
@@ -113,6 +112,35 @@
         }
       ],
       "notes": "Template-owned GanttBar length: -SUM([Profit]) sizes each floating bar downward from its running-total row anchor so the bar spans this category's delta. A self-closing <calculation>, so parseTemplateCalcs sees it — a declared calc slot. Its one input is the bindable 'profit' slot; replaceFieldReferences rewrites [Profit] on bind."
+    },
+    {
+      "slot_id": "profit_gain_color_calc",
+      "template_field": "Calculation_767019348535836687",
+      "derivation": "usr",
+      "role": [
+        "color"
+      ],
+      "kind": "calc",
+      "bindable": false,
+      "required": true,
+      "formula": "SUM([Profit]) >= 0",
+      "formula_refs": [
+        "Profit"
+      ],
+      "depends_on_slots": [
+        "profit"
+      ],
+      "result_role": "dimension",
+      "inputs": [
+        {
+          "ref": "Profit",
+          "slot_id": "profit",
+          "slot_kind": "quantitative",
+          "required": true,
+          "template_internal": false
+        }
+      ],
+      "notes": "Template-owned boolean color: true for a non-negative step and false for a loss. The categorical palette maps the two outcomes to distinct gain/loss colors instead of a continuous amount gradient."
     }
   ],
   "hazards": [
@@ -123,8 +151,8 @@
     },
     {
       "code": "datasource-style-dropped",
-      "detail": "The source workbook carries a datasource-level <style-rule element='mark'> value->hue/glyph map (3 color / 4 shape maps, factory-detected) referencing Sub-Category and other workbook-shared fields. It is NOT carried into this template (no datasource_style sidecar) because it is irrelevant to this waterfall: the color that matters is the continuous SUM(Profit) encoding fully contained in the worksheet (<color column='[sum:Profit:qk]'>), NOT a categorical Sub-Category hue. Carrying it would also splice customer member values + federated datasource IDs into the repo (licensing/sensitive-data wall) — the same decision L1 made for spatial-choropleth-map. No fidelity loss for this template; on apply only the in-worksheet encoding is applied.",
-      "xml": "part-to-whole-waterfall.xml:73"
+      "detail": "The source workbook carries a datasource-level <style-rule element='mark'> value->hue/glyph map (3 color / 4 shape maps, factory-detected) referencing Sub-Category and other workbook-shared fields. It is NOT carried into this template (no datasource_style sidecar) because the worksheet now owns its gain/loss palette through the boolean color calculation. Carrying the source style would also splice customer member values + federated datasource IDs into the repo (licensing/sensitive-data wall) — the same decision L1 made for spatial-choropleth-map.",
+      "xml": "part-to-whole-waterfall.xml:68-85"
     },
     {
       "code": "subtotals-mid-chain",
