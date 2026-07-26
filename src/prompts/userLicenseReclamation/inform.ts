@@ -132,7 +132,7 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
       '## Step 3 — Render the report',
       '',
       '1. Print a header line: `License reclamation candidates (threshold = <inactiveDays> days, roles = [<roles>], total candidates = <count>)`.',
-      '2. Render the final candidates (those NOT seen in TS Events) as a Markdown table with columns: `User Name | Email | Site Role | Last Login | Days Inactive | Auth Setting`.',
+      '2. Render the final candidates (those NOT seen in TS Events) as a Markdown table with columns: `User Name | Email | Site Role | Last Login | Days Inactive`.',
       '   - Sort by Days Inactive descending. Users with null `lastLogin` (never signed in) go at the top with Days Inactive = "Never".',
       '   - Days Inactive = number of days between now and their `lastLogin`, or "Never" if null.',
       '3. If no candidates remain after the TS Events cross-reference, state: "No reclamation candidates found above the threshold." and stop.',

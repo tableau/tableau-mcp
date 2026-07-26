@@ -57,12 +57,6 @@ describe('usersFilterUtils', () => {
       expect(getFieldValue(mockUser, 'lastLogin')).toBe('2026-05-20T10:30:00Z');
     });
 
-    it('should get authentication and locale fields', () => {
-      expect(getFieldValue(mockUser, 'authSetting')).toBe('SAML');
-      expect(getFieldValue(mockUser, 'locale')).toBe('en_US');
-      expect(getFieldValue(mockUser, 'language')).toBe('en');
-    });
-
     it('should return undefined for missing optional fields', () => {
       const minimalUser: User = { id: 'user-456', name: 'test' };
       expect(getFieldValue(minimalUser, 'email')).toBeUndefined();
@@ -153,6 +147,24 @@ describe('usersFilterUtils', () => {
       expect(matchesFilter(undefined, 'eq', 'value', 'name')).toBe(false);
       expect(matchesFilter(null as any, 'eq', 'value', 'name')).toBe(false);
     });
+
+    describe('missing lastLogin (never signed in)', () => {
+      const cutoff = '2025-01-01T00:00:00Z';
+
+      it('should MATCH lt/lte — never-logged-in users are the most inactive', () => {
+        expect(matchesFilter(undefined, 'lt', cutoff, 'lastLogin')).toBe(true);
+        expect(matchesFilter(undefined, 'lte', cutoff, 'lastLogin')).toBe(true);
+      });
+
+      it('should NOT match gt/gte — they never logged in after any date', () => {
+        expect(matchesFilter(undefined, 'gt', cutoff, 'lastLogin')).toBe(false);
+        expect(matchesFilter(undefined, 'gte', cutoff, 'lastLogin')).toBe(false);
+      });
+
+      it('should NOT match eq — there is no date to equal', () => {
+        expect(matchesFilter(undefined, 'eq', cutoff, 'lastLogin')).toBe(false);
+      });
+    });
   });
 
   describe('applyUserFilters', () => {
@@ -201,7 +213,7 @@ describe('usersFilterUtils', () => {
     });
 
     it('should filter by multiple conditions (AND)', () => {
-      const result = applyUserFilters(users, 'siteRole:eq:Creator,authSetting:eq:SAML');
+      const result = applyUserFilters(users, 'siteRole:eq:Creator,email:eq:john.smith@example.com');
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe('user-123');
     });
@@ -223,16 +235,23 @@ describe('usersFilterUtils', () => {
       expect(result[0].id).toBe('user-789');
     });
 
-    it('should filter by locale', () => {
-      const result = applyUserFilters(users, 'locale:eq:en_US');
-      expect(result).toHaveLength(2);
+    it('should filter by fullName', () => {
+      const result = applyUserFilters(users, 'fullName:eq:Alice Smith');
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('user-456');
     });
 
-    it('should filter by authSetting', () => {
-      const result = applyUserFilters(users, 'authSetting:eq:SAML');
-      expect(result).toHaveLength(2);
-      expect(result[0].authSetting).toBe('SAML');
-      expect(result[1].authSetting).toBe('SAML');
+    it('should reject a filter on an unsupported (un-fetched) field, not silently return empty', () => {
+      // authSetting/locale/language/externalAuthUserId are no longer fetched, so
+      // they are no longer filterable. Filtering on them must be REJECTED with a
+      // validation error rather than silently matching nothing (which was the
+      // original lastLogin bug class).
+      expect(() => applyUserFilters(users, 'authSetting:eq:SAML')).toThrow(/authSetting/);
+      expect(() => applyUserFilters(users, 'locale:eq:en_US')).toThrow(/locale/);
+      // Rejection also flows through the shared parse/validate entrypoint.
+      expect(() => parseAndValidateUsersFilterString('authSetting:eq:SAML')).toThrow(
+        /Invalid enum value/,
+      );
     });
 
     it('should handle complex inactive user query', () => {
@@ -242,6 +261,50 @@ describe('usersFilterUtils', () => {
       );
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe('user-789');
+    });
+
+    it('should include never-logged-in users in lastLogin:lt (inactivity) queries', () => {
+      const neverLoggedIn: User = {
+        id: 'user-never',
+        name: 'nlogin',
+        siteRole: 'Explorer',
+        email: 'never.login@example.com',
+        // no lastLogin — provisioned but never signed in
+      };
+      const usersWithNever = [...users, neverLoggedIn];
+      const result = applyUserFilters(usersWithNever, 'lastLogin:lt:2025-01-01T00:00:00Z');
+      // user-789 (2024-12-01) plus the never-logged-in user
+      expect(result.map((u) => u.id).sort()).toEqual(['user-789', 'user-never']);
+    });
+
+    it('should include never-logged-in users in lastLogin:lte queries', () => {
+      const neverLoggedIn: User = { id: 'user-never', name: 'nlogin', siteRole: 'Explorer' };
+      const result = applyUserFilters([neverLoggedIn], 'lastLogin:lte:2025-01-01T00:00:00Z');
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('user-never');
+    });
+
+    it('should exclude never-logged-in users from lastLogin:gt queries', () => {
+      const neverLoggedIn: User = { id: 'user-never', name: 'nlogin', siteRole: 'Explorer' };
+      const usersWithNever = [...users, neverLoggedIn];
+      const result = applyUserFilters(usersWithNever, 'lastLogin:gt:2025-01-01T00:00:00Z');
+      expect(result.map((u) => u.id)).not.toContain('user-never');
+    });
+
+    it('should find never-logged-in reclamation candidates by role and inactivity', () => {
+      const neverLoggedIn: User = {
+        id: 'user-never',
+        name: 'nlogin',
+        siteRole: 'Creator',
+      };
+      const usersWithNever = [...users, neverLoggedIn];
+      const result = applyUserFilters(
+        usersWithNever,
+        'siteRole:eq:Creator,lastLogin:lt:2025-01-01T00:00:00Z',
+      );
+      // Only the never-logged-in Creator qualifies; user-123 (Creator) logged in recently.
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('user-never');
     });
 
     it('should support date range with same-field multiple conditions', () => {

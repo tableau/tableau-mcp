@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # List Users
 
-Retrieves a list of users on the Tableau site. Each user includes profile information such as site role, email, last login time, and authentication settings.
+Retrieves a list of users on the Tableau site. Each user includes profile information such as site role, email, full name, and last login time.
 
 :::warning[Admin Only]
 This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable to be enabled.
@@ -54,6 +54,10 @@ See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)
 The Tableau REST API does not support server-side filtering or pagination for users. All users are fetched and filtering is performed client-side by this tool.
 :::
 
+:::note[Never-logged-in users]
+Tableau emits no `lastLogin` value for users who were provisioned but have never signed in. Because these users are the most inactive, a `lastLogin:lt:<date>` or `lastLogin:lte:<date>` (inactivity) filter **includes** them, while `lastLogin:gt:`/`gte:`/`eq:` filters exclude them. This makes never-logged-in users discoverable as license-reclamation candidates.
+:::
+
 ## Filterable Fields
 
 | Field | Type | Operators | Example |
@@ -64,9 +68,8 @@ The Tableau REST API does not support server-side filtering or pagination for us
 | `email` | string | `eq`, `in` | `email:eq:user@example.com` |
 | `fullName` | string | `eq`, `in` | `fullName:eq:John Smith` |
 | `lastLogin` | string (ISO 8601) | `eq`, `gt`, `gte`, `lt`, `lte` | `lastLogin:lt:2025-01-01T00:00:00Z` |
-| `authSetting` | string | `eq`, `in` | `authSetting:eq:SAML` |
-| `locale` | string | `eq`, `in` | `locale:eq:en_US` |
-| `language` | string | `eq`, `in` | `language:eq:en` |
+
+Only the fields above are filterable — they match the attributes this tool requests from Tableau. Filtering on any other field (e.g. `authSetting`, `locale`, `language`) is rejected with a validation error.
 
 ### Site Roles
 
@@ -81,13 +84,6 @@ Common values for `siteRole`:
 - `Unlicensed` - No active license
 - `Guest` - Guest user (limited access)
 
-### Authentication Settings
-
-Common values for `authSetting`:
-- `ServerDefault` - Uses server's default authentication
-- `SAML` - SAML-based SSO
-- `OpenID` - OpenID Connect authentication
-
 ### Filter Examples
 
 - Find all Creators: `siteRole:eq:Creator`
@@ -95,7 +91,6 @@ Common values for `authSetting`:
 - Inactive users (no login in 6 months): `lastLogin:lt:2025-12-01T00:00:00Z`
 - Unlicensed users: `siteRole:eq:Unlicensed`
 - Combined filter for license reclamation: `siteRole:eq:Unlicensed,lastLogin:lt:2025-01-01T00:00:00Z`
-- Users with SAML auth: `authSetting:eq:SAML`
 - Find specific user by email: `email:eq:john.smith@example.com`
 
 ## Response structure
@@ -108,10 +103,10 @@ Each user includes:
 - `email` – user email address
 - `fullName` – user's full display name
 - `lastLogin` – timestamp of last login (ISO 8601 format)
-- `authSetting` – authentication method
-- `locale` – user's locale setting (e.g., `en_US`, `en_GB`)
-- `language` – user's language preference (e.g., `en`, `fr`, `de`)
-- `externalAuthUserId` – ID from external authentication provider (if applicable)
+
+:::note[Output fields]
+This tool returns a lean, fixed field set: `id`, `name`, `fullName`, `siteRole`, `email`, and `lastLogin`. Tableau's REST API may return additional attributes (such as `authSetting`, `locale`, `language`), but the tool strips them from its output; only the six fields above appear.
+:::
 
 ## Example result
 
@@ -123,10 +118,7 @@ Each user includes:
     "siteRole": "Creator",
     "email": "john.smith@example.com",
     "fullName": "John Smith",
-    "lastLogin": "2026-05-20T10:30:00Z",
-    "authSetting": "SAML",
-    "locale": "en_US",
-    "language": "en"
+    "lastLogin": "2026-05-20T10:30:00Z"
   },
   {
     "id": "user-def456",
@@ -134,10 +126,7 @@ Each user includes:
     "siteRole": "Viewer",
     "email": "alice.smith@example.com",
     "fullName": "Alice Smith",
-    "lastLogin": "2026-05-15T08:00:00Z",
-    "authSetting": "ServerDefault",
-    "locale": "en_GB",
-    "language": "en"
+    "lastLogin": "2026-05-15T08:00:00Z"
   },
   {
     "id": "user-ghi789",
@@ -145,10 +134,7 @@ Each user includes:
     "siteRole": "Unlicensed",
     "email": "bob.jones@example.com",
     "fullName": "Bob Jones",
-    "lastLogin": "2024-12-01T12:00:00Z",
-    "authSetting": "SAML",
-    "locale": "en_US",
-    "language": "en"
+    "lastLogin": "2024-12-01T12:00:00Z"
   }
 ]
 ```
