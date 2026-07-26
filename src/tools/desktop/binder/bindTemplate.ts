@@ -96,15 +96,15 @@ import { proposalSchema } from './proposalSchema.js';
 import { proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('PID; omit if pinned/only.'),
-  ask: z.string().describe('Verbatim request.'),
+  session: z.string().optional().describe('PID; omit if one/pinned.'),
+  ask: z.string().describe('Verbatim ask.'),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
   auto_apply: z.boolean().optional(),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
-  target_worksheet: z.string().optional().describe('Rebuild sheet; omit to create.'),
+  target_worksheet: z.string().optional().describe('Rebuild; omit to create.'),
   calcs: z
     .array(
       z.object({
@@ -409,11 +409,17 @@ function recoveryGateBlock(
     if (updatedRecord?.phase === 'terminal') {
       return bareResubmitFallbackResult(updatedRecord.proposalContext);
     }
+    const proposalContext = updatedRecord?.proposalContext ?? record.proposalContext;
+    const recommended = proposalContext?.recommended;
+    const choiceGuidance = recommended
+      ? `Use recommended measure ${JSON.stringify(recommended.measure)} with top_n:${recommended.top_n} in Call 2, then STATE this choice in your reply.`
+      : 'If the measure remains ambiguous, use ask-user and present these choices; do not guess.';
     return blockedResult(
       'awaiting_proposal',
-      'Blocked: bind-template already returned a proposal request for this ask. The same choices from the previous llm_input are repeated in call_2_contract below. Choose an exact compatible field for every required slot, then call bind-template with the listed arguments plus proposal:{template,title,bindings:[{slot_id,field}],confidence}. Do not resubmit the bare ask. If the measure remains ambiguous, use ask-user and present these choices; do not guess.',
-      'Pick a proposal or ask user',
-      updatedRecord?.proposalContext ?? record.proposalContext,
+      'Blocked: bind-template already returned a proposal request for this ask. The same choices from the previous llm_input are repeated in call_2_contract below. Choose an exact compatible field for every required slot, then call bind-template with the listed arguments plus proposal:{template,title,bindings:[{slot_id,field}],confidence}. Do not resubmit the bare ask. ' +
+        choiceGuidance,
+      recommended ? 'Use recommended proposal' : 'Pick a proposal or ask user',
+      proposalContext,
     );
   }
 
@@ -722,6 +728,7 @@ function buildCall2Contract({
       ...(targetWorksheet !== undefined ? { target_worksheet: targetWorksheet } : {}),
       auto_apply: true,
     },
+    ...(llmInput.recommended ? { recommended: llmInput.recommended } : {}),
     proposal_choices: llmInput.candidate_templates.map((candidate) => ({
       template: candidate.template,
       slots: candidate.slots.map((slot) => ({
@@ -739,6 +746,13 @@ function buildCall2Contract({
         'For each binding, choose one exact compatible_field_names value; do not rename or infer a field.',
     },
   };
+}
+
+function proposalChoiceGuidance(llmInput: LlmProposeInput): string {
+  const recommended = llmInput.recommended;
+  return recommended
+    ? `Use recommended measure ${JSON.stringify(recommended.measure)} with top_n:${recommended.top_n} in Call 2; after it succeeds, STATE this choice in your reply.`
+    : 'No recommendation is available. If a required choice remains ambiguous, call ask-user; do not guess.';
 }
 
 /**
@@ -775,7 +789,8 @@ function buildGuidance(
       guidance =
         'Call 1 requires a proposal. Choose one call_2_contract proposal choice, bind its exact slot IDs ' +
         'to exact compatible field names, and make Call 2 with the same ask/target, proposal, and ' +
-        `auto_apply:true. ${DERIVATION_OVERRIDE_INSTRUCTION}. Do not call other authoring tools between calls.`;
+        `auto_apply:true. ${proposalChoiceGuidance(res.llm_input)} ${DERIVATION_OVERRIDE_INSTRUCTION}. ` +
+        'Do not call other authoring tools between calls.';
       break;
     case 'escalate':
       guidance = renderEscalationGuidance(res.reason, res.blockers, escalateHasCandidates);
@@ -1709,7 +1724,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     name: 'bind-template',
     title,
     description:
-      'Bind chart. Quote summary_rows; get-summary-data if truncated, absent or errored.',
+      'Bind. recommended=>Call2+state; else ask-user. Quote summary_rows; get-summary-data if absent/cut/error.',
     paramsSchema,
     annotations: {
       title,

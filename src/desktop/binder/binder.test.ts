@@ -1039,6 +1039,53 @@ describe('binder/bindTemplate — Call 1 miss (propose)', () => {
   const scatterManifests = (): Map<string, TemplateManifest> =>
     withForcedEligible(['correlation-scatter-plot-chart']);
 
+  it('recommends the sole revenue-like measure and default top 10 for an ambiguous ranking ask', async () => {
+    const res = await bindTemplate({
+      ask: 'Show me our top customers.',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(res.status).toBe('propose');
+    if (res.status === 'propose') {
+      expect(res.llm_input.recommended).toEqual({
+        measure: 'Sales',
+        top_n: 10,
+        reason: 'revenue-like measure; top-N defaults to 10',
+      });
+    }
+  });
+
+  it('does not recommend a measure when two revenue-like measures are candidates', async () => {
+    const contestedRevenueXml = WORKBOOK_XML.replace(
+      '</datasource>',
+      "<column name='[Revenue]' role='measure' type='quantitative' datatype='real' /></datasource>",
+    );
+    const res = await bindTemplate({
+      ask: 'Show me our top customers.',
+      workbookXml: contestedRevenueXml,
+      manifests,
+    });
+
+    expect(res.status).toBe('propose');
+    if (res.status === 'propose') {
+      expect(res.llm_input).not.toHaveProperty('recommended');
+    }
+  });
+
+  it('does not recommend a revenue-like measure for a non-ranking ask', async () => {
+    const res = await bindTemplate({
+      ask: 'Show me our customers.',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(res.status).toBe('propose');
+    if (res.status === 'propose') {
+      expect(res.llm_input).not.toHaveProperty('recommended');
+    }
+  });
+
   it('under-specified scatter ask → propose payload with only bindable slots + fields + schema', async () => {
     const res = await bindTemplate({
       ask: 'scatter of Profit vs Sales',

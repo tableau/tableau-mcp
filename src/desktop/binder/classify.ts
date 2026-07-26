@@ -62,6 +62,15 @@ function bareName(name: string): string {
 
 export interface LlmProposeInput {
   ask: string;
+  /**
+   * Advisory default for an ambiguous positive ranking ask. The caller must still
+   * construct and resubmit Call 2; this never bypasses proposal validation.
+   */
+  recommended?: {
+    measure: string;
+    top_n: 10;
+    reason: 'revenue-like measure; top-N defaults to 10';
+  };
   candidate_templates: Array<{
     template: string;
     description: string;
@@ -1053,6 +1062,36 @@ const BUSINESS_FIELD_SYNONYMS: ReadonlyArray<{
   },
   { nouns: ['deals'], captionPatterns: ['deal', 'opportunity', 'opportunity name'] },
 ];
+
+const REVENUE_RECOMMENDATION_REASON = 'revenue-like measure; top-N defaults to 10' as const;
+
+function recommendedRankingDefault(
+  ask: string,
+  summary: SchemaSummary,
+  proposedFields: readonly SchemaField[],
+): LlmProposeInput['recommended'] {
+  // A top_n proposal always ranks the top end, so negative rankings (bottom/lowest)
+  // are deliberately excluded rather than silently reversing the user's direction.
+  if (!/\b(?:top|highest|rank|ranked|ranking)\b/i.test(ask)) return undefined;
+
+  const revenuePatterns = BUSINESS_FIELD_SYNONYMS.find((entry) =>
+    entry.nouns.includes('revenue'),
+  )?.captionPatterns;
+  if (!revenuePatterns) return undefined;
+
+  // Check the full schema, not only the narrowed proposal list: a second revenue-like
+  // field hidden by narrowing still makes the business choice genuinely contested.
+  const revenueLikeMeasures = summary.fields.filter(
+    (field) =>
+      field.role === 'measure' &&
+      revenuePatterns.some((pattern) => fieldMatchesCaptionPattern(field, pattern)),
+  );
+  if (revenueLikeMeasures.length !== 1) return undefined;
+
+  const measure = revenueLikeMeasures[0];
+  if (!proposedFields.includes(measure)) return undefined;
+  return { measure: measure.name, top_n: 10, reason: REVENUE_RECOMMENDATION_REASON };
+}
 
 /**
  * Return the earliest token index of a known acronym's full expansion, or -1.
@@ -3205,8 +3244,10 @@ export function buildLlmInput(
   const withheld = summary.fields.length - narrowed.length;
 
   const exposeFieldIdentity = shouldExposeFieldIdentity(summary.fields);
+  const recommended = recommendedRankingDefault(ask, summary, narrowed);
   const result: LlmProposeInput = {
     ask,
+    ...(recommended ? { recommended } : {}),
     candidate_templates: top.map(({ m }) => ({
       template: m.template,
       description: m.description,

@@ -248,6 +248,17 @@ const proposeResult: BinderResult = {
   } as unknown as Extract<BinderResult, { status: 'propose' }>['llm_input'],
   output_schema: { type: 'object' },
 };
+const recommendedProposeResult: BinderResult = {
+  ...proposeResult,
+  llm_input: {
+    ...proposeResult.llm_input,
+    recommended: {
+      measure: 'Sales',
+      top_n: 10,
+      reason: 'revenue-like measure; top-N defaults to 10',
+    },
+  },
+};
 const ambiguousGoalsProposeResult: BinderResult = {
   status: 'propose',
   decline_reason: {
@@ -513,7 +524,7 @@ describe('bindTemplateTool', () => {
     const tool = getBindTemplateTool(new DesktopMcpServer());
     expect(tool.name).toBe('bind-template');
     expect(tool.description).toBe(
-      'Bind chart. Quote summary_rows; get-summary-data if truncated, absent or errored.',
+      'Bind. recommended=>Call2+state; else ask-user. Quote summary_rows; get-summary-data if absent/cut/error.',
     );
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
@@ -578,12 +589,32 @@ describe('bindTemplateTool', () => {
     expect(body.guidance).toContain('Call 2');
     expect(body.guidance).toContain('auto_apply:true');
     expect(body.guidance).toContain('Do not call other authoring tools between calls');
+    expect(body.guidance).toContain('ask-user');
     expect(body.guidance).not.toContain('add-field');
     expect(body.guidance).not.toContain('build-and-apply-worksheet');
     expectStructuredBlock(result, {
       label: 'Supply proposal from call_2_contract to bind-template',
       kind: 'prefill',
     });
+  });
+
+  it('carries a ranking recommendation into Call 2 and tells the agent to state the choice', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue(recommendedProposeResult);
+
+    const result = await getToolResult({ session: '1', ask: 'Show me our top customers.' });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.llm_input.recommended).toEqual(recommendedProposeResult.llm_input.recommended);
+    expect(body.call_2_contract.recommended).toEqual(
+      recommendedProposeResult.llm_input.recommended,
+    );
+    expect(body.guidance).toContain('Call 2');
+    expect(body.guidance).toContain('Sales');
+    expect(body.guidance).toContain('top_n:10');
+    expect(body.guidance).toContain('STATE this choice in your reply');
+    expect(body.guidance).not.toContain('ask-user');
   });
 
   it('requires a call_2_contract proposal in the Call 1 nextAction label', async () => {

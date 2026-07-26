@@ -80,5 +80,5 @@ export const proposalSchema = z
   })
   .strict()
   .describe(
-    'Omit Call 1. Call 2: same ask/target, top-level auto_apply:true; exact returned template/slots. top_n ranks; filters interactive; context=true scopes rank; applied=terminal.',
+    'Omit Call 1; same ask/target, top-level auto_apply:true, exact returned template/slots. top_n ranks; filters interactive; context scopes rank; applied=terminal.',
   );
