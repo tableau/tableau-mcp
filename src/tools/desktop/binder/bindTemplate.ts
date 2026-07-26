@@ -18,6 +18,7 @@ import {
   MAX_CLASSIFIABLE_FIELDS,
   resolveEncodingFieldInAsk,
   resolveInSummary,
+  type SchemaField,
   type SchemaSummary,
   summarizeSchema,
   WATERFALL_ANCHOR_FIELD_RE,
@@ -39,7 +40,12 @@ import { resolveDerivation } from '../../../desktop/derivations.js';
 import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
 import type { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
-import { extractSheetXml } from '../../../desktop/metadata/sheets.js';
+import { parseCanonicalColumnRef } from '../../../desktop/metadata/field-resolver.js';
+import { addFieldToEncoding } from '../../../desktop/metadata/fields.js';
+import {
+  extractSheetXml,
+  upsertSheetIntoWorkbook,
+} from '../../../desktop/metadata/sheets.js';
 import {
   planSortByFieldOnCategoricalAxis,
   planTopN,
@@ -138,7 +144,7 @@ type BindTemplateToolResultBase = BinderResult & {
 
 type AppliedDefault = Pick<
   NonNullable<LlmProposeInput['recommended']>,
-  'measure' | 'top_n' | 'reason'
+  'measure' | 'top_n' | 'reason' | 'context_measures'
 >;
 
 /**
@@ -245,6 +251,78 @@ const SUMMARY_ROWS_MAX_BYTES = 2048;
 const SUMMARY_ROWS_MAX_CELL_CHARS = 256;
 const SUMMARY_ROWS_TIMEOUT_MS = 2000;
 const SUMMARY_ROWS_ERROR_MAX_CHARS = 512;
+const UNIT_HETEROGENEITY_DIMENSION_RE =
+  /^(currency([ _-]?code)?|curr|fx([ _-]?rate)?|unit([ _-]?of[ _-]?measure)?)$/i;
+
+type CanonicalColumnRef = NonNullable<ReturnType<typeof parseCanonicalColumnRef>>;
+
+function xmlTagRegions(xml: string, containerTags: string[], elementTags: string[] = []): string {
+  const regions: string[] = [];
+  for (const tag of containerTags) {
+    const pattern = new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi');
+    for (const match of xml.matchAll(pattern)) {
+      regions.push(match[1]);
+    }
+  }
+  for (const tag of elementTags) {
+    const pattern = new RegExp(`<${tag}\\b[^>]*>`, 'gi');
+    for (const match of xml.matchAll(pattern)) {
+      regions.push(match[0]);
+    }
+  }
+  return regions.join(' ');
+}
+
+function canonicalRefsIn(xml: string): CanonicalColumnRef[] {
+  const decoded = decodeXmlEntities(xml);
+  return Array.from(decoded.matchAll(/\[[^\]]+\]\.\[[^\]]+\]/g), ([ref]) =>
+    parseCanonicalColumnRef(ref),
+  ).filter((ref): ref is CanonicalColumnRef => ref !== null);
+}
+
+function refMatchesSchemaField(ref: CanonicalColumnRef, field: SchemaField): boolean {
+  return (
+    ref.datasource.toLowerCase() === field.datasource.toLowerCase() &&
+    ref.localFieldName.toLowerCase() === bareColumnName(field.columnName).toLowerCase()
+  );
+}
+
+function currencyHeterogeneityCaveat(
+  schemaSummary: SchemaSummary,
+  worksheetXml: string | null,
+): string {
+  if (!worksheetXml) return '';
+
+  const displayedRefs = canonicalRefsIn(
+    xmlTagRegions(worksheetXml, ['rows', 'cols', 'encodings']),
+  );
+  const summedMeasure = schemaSummary.fields.find(
+    (field) =>
+      field.role === 'measure' &&
+      displayedRefs.some(
+        (ref) => ref.derivation.toLowerCase() === 'sum' && refMatchesSchemaField(ref, field),
+      ),
+  );
+  if (!summedMeasure) return '';
+
+  const visibleDimensionRefs = canonicalRefsIn(
+    xmlTagRegions(worksheetXml, ['rows', 'cols'], ['color', 'filter']),
+  );
+  const omittedUnitDimension = schemaSummary.fields.find(
+    (field) =>
+      field.datasource === summedMeasure.datasource &&
+      field.role === 'dimension' &&
+      [field.caption, bareColumnName(field.columnName)].some(
+        (name) => !!name && UNIT_HETEROGENEITY_DIMENSION_RE.test(name),
+      ) &&
+      !visibleDimensionRefs.some((ref) => refMatchesSchemaField(ref, field)),
+  );
+  if (!omittedUnitDimension) return '';
+
+  const measureName = summedMeasure.caption ?? bareColumnName(summedMeasure.columnName);
+  const unitName = omittedUnitDimension.caption ?? bareColumnName(omittedUnitDimension.columnName);
+  return `Note: [${measureName}] is summed across [${unitName}] without conversion — state this assumption in one line.`;
+}
 
 type SummaryRowsEnrichment = Pick<
   AppliedFastPathResult,
@@ -816,6 +894,7 @@ function appliedDefaultFrom(
     measure: recommended.measure,
     top_n: recommended.top_n,
     reason: recommended.reason,
+    context_measures: recommended.context_measures,
   };
 }
 
@@ -1458,12 +1537,48 @@ async function performAutoApply({
   if (spliced.warnings.length > 0) {
     base.warnings = [...(base.warnings ?? []), ...spliced.warnings];
   }
+  let appliedWorkbookXml = spliced.xml;
+  // Context measures are best-effort garnish on the canonical default: a failure here
+  // must never demote a working bind to the fallback path.
+  if (appliedDefault && appliedDefault.context_measures.length > 0) {
+    try {
+      let worksheetXml = extractSheetXml(appliedWorkbookXml, literalTitle);
+      if (!worksheetXml) {
+        throw new Error(`injected worksheet "${literalTitle}" was not found`);
+      }
+      for (const contextMeasure of appliedDefault.context_measures) {
+        const resolution = resolveInSummary(schemaSummary, contextMeasure);
+        if (!resolution.field || resolution.field.role !== 'measure') {
+          throw new Error(`context measure "${contextMeasure}" no longer resolves uniquely`);
+        }
+        worksheetXml = addFieldToEncoding(
+          worksheetXml,
+          'tooltip',
+          resolution.field.column_ref,
+          undefined,
+          workbookXml,
+        );
+      }
+      appliedWorkbookXml = upsertSheetIntoWorkbook(
+        appliedWorkbookXml,
+        literalTitle,
+        worksheetXml,
+      );
+    } catch (err) {
+      appliedWorkbookXml = spliced.xml;
+      appliedDefault.context_measures = [];
+      base.warnings = [
+        ...(base.warnings ?? []),
+        `context measures dropped: ${getExceptionMessage(err)}`,
+      ];
+    }
+  }
   const injectMs = Date.now() - injectStart;
 
   // ── Apply leg (SAME validated path; runValidation preflight runs) ─
   const applyStart = Date.now();
   const applyResult = await loadWorkbookXml({
-    xml: spliced.xml,
+    xml: appliedWorkbookXml,
     focus: { navigate: 'artifact', sheetName: literalTitle },
     executor,
     signal,
@@ -1490,7 +1605,7 @@ async function performAutoApply({
   // that never ran.
   let intendedWorksheetXml: string | null = null;
   try {
-    intendedWorksheetXml = extractSheetXml(spliced.xml, literalTitle);
+    intendedWorksheetXml = extractSheetXml(appliedWorkbookXml, literalTitle);
   } catch {
     intendedWorksheetXml = null;
   }
@@ -1554,9 +1669,14 @@ async function performAutoApply({
   const terminalGuidance = appliedSpliceGuidance
     ? `${TERMINAL_GUIDANCE} ${appliedSpliceGuidance}`
     : TERMINAL_GUIDANCE;
+  const contextMeasureGuidance =
+    appliedDefault && appliedDefault.context_measures.length > 0
+      ? ', and also quote notable values of the context measures for the top entries'
+      : '';
   const defaultGuidance = appliedDefault
-    ? ` Tool default applied (not the user’s stated choice): measure ${JSON.stringify(appliedDefault.measure)}, top ${appliedDefault.top_n}. State this default and offer to change the measure or top_n.`
+    ? ` Tool default applied (not the user’s stated choice): measure ${JSON.stringify(appliedDefault.measure)}, top ${appliedDefault.top_n}. State this default, offer to change the measure or top_n${contextMeasureGuidance}.`
     : '';
+  const currencyGuidance = currencyHeterogeneityCaveat(schemaSummary, intendedWorksheetXml);
   const guidance = `${
     unfilledEncodings
       ? appendUnfilledEncodingGuidance(
@@ -1569,7 +1689,7 @@ async function performAutoApply({
       : incomplete
         ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
         : `${receiptText} ${terminalGuidance}`
-  }${defaultGuidance}${readbackEvidence}${promiseCheck}`;
+  }${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
   const summaryRows = await readAppliedSummaryRows({
     executor,
     signal,
