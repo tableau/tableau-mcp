@@ -21,7 +21,6 @@ export const getValidateWorksheetXmlTool = (
     description: 'Check worksheet content is well-formed before apply-worksheet.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

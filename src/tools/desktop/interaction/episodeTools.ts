@@ -29,7 +29,6 @@ export const getBeginEpisodeTool = (
     description: 'Begin an eval episode and return its episode_id.',
     paramsSchema: beginParamsSchema,
     annotations: {
-      title: 'Begin Episode',
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: false,
@@ -66,7 +65,6 @@ export const getEndEpisodeTool = (
     description: 'End the current eval episode for a Desktop session.',
     paramsSchema: endParamsSchema,
     annotations: {
-      title: 'End Episode',
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: false,

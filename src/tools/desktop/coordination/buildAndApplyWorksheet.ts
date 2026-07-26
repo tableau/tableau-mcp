@@ -287,7 +287,6 @@ export const getBuildAndApplyWorksheetTool = (
     description: 'Build a worksheet from a spec and apply it in one validated call.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: true,

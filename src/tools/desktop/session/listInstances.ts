@@ -29,7 +29,6 @@ export const getListInstancesTool = (
       'List all running Tableau Desktop instances. Returns available instances with session IDs that can be used in the session parameter of other tools.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

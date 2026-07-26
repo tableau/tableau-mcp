@@ -35,7 +35,6 @@ describe('checkForUserChangesTool', () => {
       sinceSequence: expect.any(Object),
     });
     expect(checkForUserChangesTool.annotations).toMatchObject({
-      title: 'Check for User Changes',
       readOnlyHint: true,
       openWorldHint: false,
     });

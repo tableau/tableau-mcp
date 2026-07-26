@@ -94,7 +94,6 @@ describe('listAvailableFieldsTool', () => {
     expect(paramsSchema.verbosity.safeParse('full').success).toBe(true);
     expect(paramsSchema.verbosity.safeParse('verbose').success).toBe(false);
     expect(tool.annotations).toMatchObject({
-      title: 'List All Available Fields in Workbook Datasources',
       readOnlyHint: false,
     });
   });

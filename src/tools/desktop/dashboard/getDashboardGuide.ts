@@ -19,7 +19,6 @@ export const getGetDashboardGuideTool = (
     description: 'Read dashboard layout guide.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

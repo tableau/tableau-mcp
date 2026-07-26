@@ -88,7 +88,6 @@ export const getPlanDashboardCreationTool = (
     description: 'Plan dashboard tasks. parallel plan.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

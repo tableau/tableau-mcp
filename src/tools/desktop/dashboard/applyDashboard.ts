@@ -36,7 +36,6 @@ export const getApplyDashboardTool = (
     description: 'Apply modified dashboard layout to Tableau.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: true,

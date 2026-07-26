@@ -46,7 +46,6 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
     description: 'Author action.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,

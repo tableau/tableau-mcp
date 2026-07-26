@@ -83,7 +83,6 @@ export const getSummaryDataTool = (server: DesktopMcpServer): DesktopTool<typeof
       'Read summary rows from a populated worksheet with fields on the view. A terminal/no-data result means stop; a transient failure may be retried once.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

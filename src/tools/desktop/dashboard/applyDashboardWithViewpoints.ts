@@ -46,7 +46,6 @@ export const getApplyDashboardWithViewpointsTool = (
     description: 'Apply dashboard layout and register worksheet viewpoints.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: true,

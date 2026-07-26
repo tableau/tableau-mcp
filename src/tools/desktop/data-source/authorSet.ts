@@ -57,7 +57,6 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
     description: 'Author set.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,

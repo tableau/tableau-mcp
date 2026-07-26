@@ -523,7 +523,6 @@ describe('bindTemplateTool', () => {
       calcs: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Bind Template',
       // NOT read-only / NOT idempotent: auto_apply + calcs[] mutate the live workbook.
       readOnlyHint: false,
       idempotentHint: false,

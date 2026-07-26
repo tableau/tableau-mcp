@@ -18,7 +18,6 @@ export const getApiRootTool = (server: DesktopMcpServer): DesktopTool<typeof par
     description: 'Read API root.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

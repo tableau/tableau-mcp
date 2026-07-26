@@ -49,7 +49,6 @@ export const getSearchWorkbookExamplesTool = (
     description: 'Search workbook examples.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

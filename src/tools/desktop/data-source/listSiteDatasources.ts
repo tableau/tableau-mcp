@@ -23,7 +23,6 @@ export const getListSiteDatasourcesTool = (
       'List datasources PUBLISHED to the connected site (LUID; contentUrl when build provides it). Map workbook connections to published datasource LUIDs.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

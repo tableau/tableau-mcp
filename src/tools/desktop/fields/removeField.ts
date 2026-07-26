@@ -60,7 +60,6 @@ export const getRemoveFieldTool = (server: DesktopMcpServer): DesktopTool<typeof
     description: 'Remove a field from a shelf (rows/cols/encoding); counterpart to add-field.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,

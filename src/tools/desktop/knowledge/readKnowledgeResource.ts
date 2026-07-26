@@ -22,7 +22,6 @@ export const getReadKnowledgeResourceTool = (
     description: 'Read expertise by URI; search-knowledge finds URIs.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -48,7 +47,7 @@ export const getReadKnowledgeResourceTool = (
               ).toErr();
             }
             return new ArgsValidationError(
-              `Resource not found: ${uri}\n\nUse list-knowledge-resources to see available URIs.`,
+              `Resource not found: ${uri}\n\nUse search-knowledge to find available resource URIs.`,
             ).toErr();
           }
           return new Ok(content);

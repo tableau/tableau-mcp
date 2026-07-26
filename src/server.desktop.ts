@@ -1,10 +1,14 @@
 import { McpServer, ResourceTemplate, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
+import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import {
   ErrorCode,
+  ListToolsRequestSchema,
   McpError,
   ServerNotification,
   ServerRequest,
+  Tool as McpTool,
 } from '@modelcontextprotocol/sdk/types.js';
 
 import pkg from '../package.json';
@@ -91,13 +95,13 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * bind-template, the deterministic fast-path (no LLM, ~0.3s) for plain chart shapes,
  * and refine-worksheet, the primitives-only top-N/sort editor that carries
  * edit-in-place now that the notional-spec loop is retired.
- * PLUS the two knowledge doors — list-knowledge-resources + read-knowledge-resource —
+ * PLUS the two knowledge doors — search-knowledge + read-knowledge-resource —
  * without which the system prompt's "consult the expertise library BEFORE authoring"
  * instruction had no tool to route to: the singer could not read the curated corpus at
  * all, so verified Tableau behavior (e.g. the waterfall subtotal/total exclusion rule,
  * the Top-N-needs-a-context-filter rule) stayed dark on every sing. The corpus is
  * served as MCP resources anyway; these two tiny tools are the only way the model reaches it.
- * Thirty-two tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise
+ * Thirty-three tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise
  * and first-class workbook/data reads/navigation; the only raw XML read is get-worksheet-xml,
  * the read leg the manual add-field/remove-field/apply-worksheet path needs to mint its
  * worksheetFile — no whole-workbook get/apply, no cache, no validation XML tools. This is the
@@ -146,7 +150,6 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'author-parameter',
     'author-action',
     'format-labels',
-    'list-knowledge-resources',
     'read-knowledge-resource',
     'search-knowledge',
   ]);
@@ -227,6 +230,7 @@ export class DesktopMcpServer extends Server {
 
   registerTools = async (): Promise<void> => {
     const config = getDesktopConfig();
+    const tools = await this._getToolsToRegister();
 
     log({
       message: 'Desktop transport ACTIVE: External Client API (Athena V0)',
@@ -234,14 +238,7 @@ export class DesktopMcpServer extends Server {
       logger: 'DesktopMcpServer',
     });
 
-    for (const {
-      name,
-      title,
-      description,
-      paramsSchema,
-      annotations,
-      callback,
-    } of await this._getToolsToRegister()) {
+    for (const { name, title, description, paramsSchema, annotations, callback } of tools) {
       const toolCallback: ToolCallback<typeof paramsSchema> = async (
         args: typeof paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
@@ -282,6 +279,11 @@ export class DesktopMcpServer extends Server {
         toolCallback,
       );
     }
+
+    const listedTools = await Promise.all(tools.map(getDesktopToolListEntry));
+    this.mcpServer.server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: listedTools,
+    }));
   };
 
   protected _getToolsToRegister = async (): Promise<Array<DesktopTool<any>>> => {
@@ -347,5 +349,24 @@ export class DesktopMcpServer extends Server {
       text,
       mimeType: 'text/markdown',
     });
+  };
+}
+
+export async function getDesktopToolListEntry(tool: DesktopTool<any>): Promise<McpTool> {
+  const paramsSchema = await Provider.from(tool.paramsSchema);
+  const objectSchema = normalizeObjectSchema(paramsSchema as any);
+  const inputSchema = (
+    objectSchema
+      ? toJsonSchemaCompat(objectSchema, { strictUnions: true, pipeStrategy: 'input' } as any)
+      : { type: 'object' as const, properties: {} }
+  ) as McpTool['inputSchema'] & { $schema?: string };
+  delete inputSchema.$schema;
+
+  return {
+    name: tool.name,
+    title: await Provider.from(tool.title),
+    description: await Provider.from(tool.description),
+    inputSchema,
+    annotations: await Provider.from(tool.annotations),
   };
 }

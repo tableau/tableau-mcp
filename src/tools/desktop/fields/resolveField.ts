@@ -62,7 +62,6 @@ export const getResolveFieldTool = (server: DesktopMcpServer): DesktopTool<typeo
       'Disambiguate a field name to its exact column ref (the Country-vs-Country1 class).',
     paramsSchema,
     annotations: {
-      title,
       // A cached not_found triggers a live re-snapshot that rewrites the
       // workbook cache file + sidecar.
       readOnlyHint: false,

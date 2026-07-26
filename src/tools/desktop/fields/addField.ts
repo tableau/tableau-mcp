@@ -133,7 +133,6 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
       'Put a field on rows, cols, or a color/size/detail encoding; then apply-worksheet.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,

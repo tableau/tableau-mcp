@@ -42,7 +42,7 @@ describe('readKnowledgeResourceTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('not found');
-    expect(result.content[0].text).toContain('list-knowledge-resources');
+    expect(result.content[0].text).toContain('search-knowledge');
   });
 
   it('should pass the URI directly to readKnowledgeResource', async () => {

@@ -45,7 +45,6 @@ export const getGetWorkbookXmlTool = (
     description: 'Get current workbook structure.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false, // Writes to a cache file
       openWorldHint: false,
       destructiveHint: false, // A new cache file is created for each tool call

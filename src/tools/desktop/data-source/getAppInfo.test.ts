@@ -37,7 +37,6 @@ describe('getAppInfoTool', () => {
     expect(tool.description).toBe('Identify the Desktop build when an endpoint 404s as too-new.');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
-      title: 'Get App Info',
       readOnlyHint: true,
       openWorldHint: false,
     });

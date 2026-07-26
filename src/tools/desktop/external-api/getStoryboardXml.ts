@@ -23,7 +23,6 @@ export const getStoryboardXmlTool = (
     description: 'Return one storyboard document subtree.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

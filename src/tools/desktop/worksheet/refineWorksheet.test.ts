@@ -164,7 +164,6 @@ describe('refineWorksheetTool — instance', () => {
       direction: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Refine Worksheet',
       readOnlyHint: false,
       destructiveHint: true,
     });

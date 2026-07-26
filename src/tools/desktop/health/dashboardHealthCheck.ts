@@ -396,7 +396,6 @@ export const getDashboardHealthCheckTool = (
     description: 'Read-only drift check; no repairs; D9 undetectable.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       openWorldHint: false,
       destructiveHint: false,

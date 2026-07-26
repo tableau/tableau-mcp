@@ -44,7 +44,6 @@ describe('getWorksheetXmlTool', () => {
       mode: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Get Worksheet Structure',
       readOnlyHint: false,
       openWorldHint: false,
     });
