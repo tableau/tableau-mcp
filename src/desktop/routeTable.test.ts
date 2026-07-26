@@ -73,28 +73,32 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('add-field + apply-worksheet change encodings.');
   });
 
-  it('routes calc-derived-field asks through the dynamic-authoring verbs', () => {
-    const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
-    expect(rendered).toContain(
-      'or a calc/derived field the data lacks (ratio, running total, LOD)',
+  it('carves named derived metrics out of the dynamic-authoring route', () => {
+    const dynamicAuthoring = routes.find((route) => route.id === 'dynamic-authoring');
+
+    expect(dynamicAuthoring?.trigger).toBe(
+      'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (a named ratio/margin/growth ask routes via calc-then-bind; examples here include running total and LOD)',
     );
-    expect(rendered).toContain('author-calc');
-    expect(rendered).not.toMatch(/tabui:.*document/i);
+    expect(dynamicAuthoring?.action).toContain('author-calc');
   });
 
   it('passes a noun-less derived metric through bind-template calcs in one call', () => {
     const calcThenBind = routes.find((route) => route.id === 'calc-then-bind');
 
     expect(calcThenBind?.trigger).toContain('no named chart type');
-    expect(calcThenBind?.action).toContain('calcs[]');
-    expect(calcThenBind?.action).toContain('ONE call');
-    expect(calcThenBind?.action).not.toContain('(SUM(revenue)-SUM(cogs))/SUM(revenue)');
+    expect(calcThenBind?.action).toBe(
+      "FIRST pass its conventional calc in bind-template's calcs[] and bind its caption in ONE call (for example, gross margin % = (SUM(Revenue)-SUM(COGS))/SUM(Revenue); a proposal still resolves via Call 2). Only after a formula/field-resolution failure, search-knowledge, then make ONE corrective bind-template call.",
+    );
     expect(calcThenBind?.action).not.toContain('opex');
-    expect(calcThenBind?.stopConditions).toEqual(['ONE call']);
-    expect(calcThenBind?.action).toContain('search-knowledge first when unsure of the formula');
-    expect(calcThenBind?.action).toContain('a proposal still resolves via Call 2');
     expect(calcThenBind?.toolSequence).toEqual(['bind-template', 'search-knowledge']);
-    expect(calcThenBind?.requiredEvidence).toEqual(['authored_calcs returned by bind-template']);
+    expect(calcThenBind?.stopConditions).toEqual([
+      'ONE call',
+      'Only after a formula/field-resolution failure',
+      'ONE corrective bind-template call',
+    ]);
+    expect(calcThenBind?.requiredEvidence).toEqual([
+      'authored_calcs returned by successful bind-template',
+    ]);
   });
 
   it('is self-contained and does not require skill loading', () => {
