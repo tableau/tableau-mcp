@@ -167,8 +167,8 @@
     },
     {
       "path": "data-visualization-templates-xml/part-to-whole-waterfall.xml",
-      "sha256": "a11963e06787ea973007a20d882712c3c8719efd43efd0a1ae03387ef79d984e",
-      "bytes": 5066
+      "sha256": "085430fc1832e2433e5b48bfc5ebef6aee425ba96e180399c3b2c1a275f7c0bc",
+      "bytes": 6078
     },
     {
       "path": "data-visualization-templates-xml/quota-attainment-bullet.xml",
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "09f5edf1a6e006fe19e577f7856ee8cacbff5f9b8da468a5f69483abdde364b5",
-      "bytes": 280084
+      "sha256": "6dcb4dfad254ab01fff19403a5293a104f8d1e9a4afcbe78bee9681847d7ea8e",
+      "bytes": 281695
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -407,8 +407,8 @@
     },
     {
       "path": "template-manifests/part-to-whole-waterfall.manifest.json",
-      "sha256": "7ac230d561d17c70a80796c6ba79f5761210576665ec8a8f38e916032e4fd3f1",
-      "bytes": 10850
+      "sha256": "872c5afc37b689ac5900925f000a22562ea6523f4f20265ab076382904e810f9",
+      "bytes": 12400
     },
     {
       "path": "template-manifests/quota-attainment-bullet.manifest.json",
