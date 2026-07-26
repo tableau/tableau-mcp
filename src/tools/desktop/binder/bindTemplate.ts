@@ -16,6 +16,7 @@ import {
   type LlmProposeInput,
   makeTitle,
   MAX_CLASSIFIABLE_FIELDS,
+  resolveEncodingFieldInAsk,
   resolveInSummary,
   type SchemaSummary,
   summarizeSchema,
@@ -653,10 +654,40 @@ function buildWaterfallDiscoveryGuidance(
  * AWAY from bind-template: the measured failure mode is the model asking again in other
  * words (55% of production bind traces rebind the same worksheet), rebuilding the same chart.
  */
+const MAX_ENCODING_FIELD_CANDIDATES = 3;
+
+function quoteGuidanceValue(value: string): string {
+  return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+}
+
+function encodingColumnRefGuidance(
+  ask: string,
+  role: EncodingReport['unfilled'][number],
+  schemaSummary: SchemaSummary,
+): string {
+  const resolution = resolveEncodingFieldInAsk(ask, role, schemaSummary);
+  if (resolution.field) {
+    return quoteGuidanceValue(resolution.field.column_ref);
+  }
+  if (resolution.candidates.length === 0) {
+    return '<field>';
+  }
+  const candidates = resolution.candidates
+    .slice(0, MAX_ENCODING_FIELD_CANDIDATES)
+    .map((candidate) => {
+      const caption = candidate.caption ?? candidate.name;
+      return `${quoteGuidanceValue(candidate.column_ref)} (${quoteGuidanceValue(caption)})`;
+    })
+    .join(', ');
+  return `<one of: ${candidates}>`;
+}
+
 function appendUnfilledEncodingGuidance(
   receipt: string,
   sheetName: string,
   encodings: EncodingReport,
+  ask: string,
+  schemaSummary: SchemaSummary,
 ): string {
   const missing = encodings.unfilled.join(' and ');
   const addFieldCalls = encodings.unfilled
@@ -666,7 +697,11 @@ function appendUnfilledEncodingGuidance(
           index === 0
             ? `worksheetName:'${sheetName}'`
             : 'worksheetFile:<path returned by previous add-field>'
-        },target:'encoding',encodingType:'${role}',columnRef:<field>}`,
+        },target:'encoding',encodingType:'${role}',columnRef:${encodingColumnRefGuidance(
+          ask,
+          role,
+          schemaSummary,
+        )}}`,
     )
     .join(', then ');
   const applyCall = `apply-worksheet{worksheetName:'${sheetName}',worksheetFile:<path returned by previous add-field>}`;
@@ -1306,6 +1341,7 @@ function applyFallback(
 async function performAutoApply({
   res,
   base,
+  ask,
   workbookXml,
   session,
   config,
@@ -1319,6 +1355,7 @@ async function performAutoApply({
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
+  ask: string;
   workbookXml: string;
   session: string;
   config: TableauDesktopRequestHandlerExtra['config'];
@@ -1522,7 +1559,13 @@ async function performAutoApply({
     : '';
   const guidance = `${
     unfilledEncodings
-      ? appendUnfilledEncodingGuidance(receiptText, literalTitle, unfilledEncodings)
+      ? appendUnfilledEncodingGuidance(
+          receiptText,
+          literalTitle,
+          unfilledEncodings,
+          ask,
+          schemaSummary,
+        )
       : incomplete
         ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
         : `${receiptText} ${terminalGuidance}`
@@ -2113,6 +2156,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           const autoApplyResult = await performAutoApply({
             res,
             base,
+            ask,
             workbookXml,
             session: resolvedSession,
             config: extra.config,
