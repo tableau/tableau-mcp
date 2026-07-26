@@ -38,7 +38,6 @@ export const getValidateWorkbookXmlTool = (
     description: 'Check workbook content before apply-workbook.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

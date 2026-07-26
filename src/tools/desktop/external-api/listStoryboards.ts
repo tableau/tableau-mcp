@@ -21,7 +21,6 @@ export const getListStoryboardsTool = (
     description: 'List storyboards.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

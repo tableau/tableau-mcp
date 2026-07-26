@@ -41,7 +41,6 @@ export const getApplyWorksheetTool = (
       'Apply a modified cached worksheet file to Desktop — the apply leg of the manual build path.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false, // updates worksheet in workbook
       openWorldHint: false,
       destructiveHint: true, // updates active workbook

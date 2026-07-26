@@ -41,7 +41,6 @@ describe('listSiteWorkbooksTool', () => {
     expect(tool.description).toBe('List workbooks published to the connected site.');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
-      title: 'List Site Workbooks',
       readOnlyHint: true,
       openWorldHint: false,
     });

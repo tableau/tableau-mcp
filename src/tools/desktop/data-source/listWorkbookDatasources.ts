@@ -23,7 +23,6 @@ export const getListWorkbookDatasourcesTool = (
       "List the workbook's OWN connected datasources (id/name/caption); pair with list-site-datasources for published LUIDs.",
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

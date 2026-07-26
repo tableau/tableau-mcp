@@ -41,7 +41,6 @@ describe('listWorkbookDatasourcesTool', () => {
     expect(tool.description).toContain('pair with list-site-datasources');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
-      title: 'List Workbook Datasources',
       readOnlyHint: true,
       openWorldHint: false,
     });

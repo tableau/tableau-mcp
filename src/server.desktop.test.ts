@@ -1,5 +1,6 @@
 import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
+import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import * as configModule from './config.desktop.js';
 import {
@@ -13,6 +14,7 @@ import {
   DESKTOP_INSTRUCTIONS,
   DesktopMcpServer,
   DYNAMIC_AUTHORING_TOOL_PROFILE,
+  getDesktopToolListEntry,
   selectToolsForProfile,
   SPEC_LOOP_TOOL_PROFILE,
 } from './server.desktop.js';
@@ -90,6 +92,26 @@ describe('DesktopMcpServer', () => {
     ).map(([name]) => name);
     expect(registeredNames).toContain('list-instances');
   });
+
+  it('serves tools/list without schema dialect metadata or duplicated annotation titles', async () => {
+    vi.stubEnv('TOOL_PROFILE', 'full');
+    const server = getServer();
+    await server.registerTools();
+
+    const setRequestHandler = vi.mocked(server.mcpServer.server.setRequestHandler);
+    const listToolsCall = setRequestHandler.mock.calls.find(
+      ([requestSchema]) => requestSchema === ListToolsRequestSchema,
+    );
+    expect(listToolsCall).toBeDefined();
+
+    const result = await listToolsCall![1]({} as never, {} as never);
+    const tools = (result as { tools: Array<Record<string, unknown>> }).tools;
+    expect(tools.length).toBeGreaterThan(0);
+    for (const tool of tools) {
+      expect(tool.inputSchema).not.toHaveProperty('$schema');
+      expect(tool.annotations).not.toHaveProperty('title');
+    }
+  });
 });
 
 describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
@@ -144,20 +166,7 @@ If NO native tool covers the asked shape, say so plainly — never invent or han
  * (Σ per-tool bytes + DESKTOP_INSTRUCTIONS.length === the sum test's total).
  */
 async function serializeDesktopToolSurface(tool: DesktopTool<any>): Promise<string> {
-  const paramsSchema = await Provider.from(tool.paramsSchema);
-  const obj = normalizeObjectSchema(paramsSchema as any);
-  const inputSchema = obj
-    ? toJsonSchemaCompat(obj, { strictUnions: true, pipeStrategy: 'input' } as any)
-    : { type: 'object', properties: {} };
-
-  return JSON.stringify({
-    name: tool.name,
-    title: await Provider.from(tool.title),
-    description: await Provider.from(tool.description),
-    inputSchema,
-    annotations: await Provider.from(tool.annotations),
-    execution: { taskSupport: 'forbidden' },
-  });
+  return JSON.stringify(await getDesktopToolListEntry(tool));
 }
 
 describe('desktop tools/list serialized surface', () => {
@@ -182,11 +191,10 @@ describe('desktop tools/list serialized surface', () => {
     // Dynamic authoring is the serving surface, so this is the real budget gate.
     // The full desktop surface is not what clients see by default; its looser cap
     // only catches runaway growth without forcing valuable full-profile tools to be trimmed.
-    // Raised 30k -> 35k: the old cap left 4 bytes of headroom, so any honest parameter
-    // description was rejected by the budget rather than by review. 35k still sits well
-    // under the 46k tools/list cliff.
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(35_000);
-    expect(fullSurfaceTotal).toBeLessThanOrEqual(52_000);
+    // Honest wire measurements are 28,553 bytes dynamic and 44,035 bytes full.
+    // Keep only a few bytes of ratchet headroom while staying well below the 46k cliff.
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(28_570);
+    expect(fullSurfaceTotal).toBeLessThanOrEqual(44_070);
   });
 });
 
@@ -237,7 +245,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
   // Per-tool ceiling. The sum test above pins the SURFACE; this pins ATTRIBUTION:
   // when the sum reddens it names WHICH tool got fat, with numbers. Kept well
   // under the sum's slack so a single tool can't silently eat the whole budget.
-  const PER_TOOL_BUDGET = 1_200;
+  const PER_TOOL_BUDGET = 1_020;
 
   // Tools already over PER_TOOL_BUDGET at this base (feature/authoring @ 241a67e7).
   // Each value is the tool's CURRENT serialized size — a ceiling, NOT a target.
@@ -249,18 +257,18 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // fix, not prose — the stub describes on these three tools cost 69 failed add-field calls
     // (591s) and 299 repeat binds (2,562s) in shipped v10. Each number below is the CURRENT
     // measured size; the ratchet is unchanged, so trim rather than raise.
-    ['bind-template', 2293], // row-proof guidance funded by same-tool description trims
-    ['add-field', 1547], // provenance-style describes (from field resolution, never invented)
-    ['inject-template', 1522], // provenance-style describes; session also made optional
-    ['refine-worksheet', 1583], // raised for omitted-targetField axis detection; funded by a ~500-byte same-tool describe trim
-    ['plan-dashboard-creation', 1509], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
-    ['build-and-apply-dashboard', 1558], // ratcheted down in the CODA funding trim; do not grow
-    ['validate-proposal', 1630], // ratcheted down with compact shared proposal descriptions; 46k stays green
+    ['bind-template', 2177], // row-proof guidance funded by same-tool description trims
+    ['add-field', 1435], // provenance-style describes (from field resolution, never invented)
+    ['inject-template', 1404], // provenance-style describes; session also made optional
+    ['refine-worksheet', 1464], // raised for omitted-targetField axis detection; funded by a ~500-byte same-tool describe trim
+    ['plan-dashboard-creation', 1383], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
+    ['build-and-apply-dashboard', 1430], // ratcheted down in the CODA funding trim; do not grow
+    ['validate-proposal', 1510], // ratcheted down with compact shared proposal descriptions; 46k stays green
     // The template parameter is a z.enum over the real template vocabulary, so its cost
     // is the vocabulary itself, not prose. Agents invented 13 template ids against 47
     // real ones and burned 188s discovering it; the enum makes that unrepresentable.
     // Trim by retiring templates, not by re-opening the parameter to a free string.
-    ['build-and-apply-worksheet', 1914],
+    ['build-and-apply-worksheet', 1786],
   ]);
 
   const measure = async (): Promise<Array<{ name: string; bytes: number }>> => {
@@ -380,12 +388,12 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 34-tool data-first singable surface — native authoring + workbook reads + atomic sheet activation + the manual path read/edit legs, no workbook round-trip/validation XML tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 33-tool data-first singable surface — native authoring + workbook reads + atomic sheet activation + the manual path read/edit legs, no workbook round-trip/validation XML tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(34);
+    expect(selected).toHaveLength(33);
     // The full dynamic dialect, semantically named — every author-* verb present,
-    // plus the ask-for-help, command-discovery, deterministic fast-path, and the three
+    // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
     for (const verb of [
       'author-calc',
@@ -406,7 +414,6 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'plan-dashboard-creation',
       'batch-create-and-cache-sheets',
       'build-and-apply-dashboard',
-      'list-knowledge-resources',
       'read-knowledge-resource',
       'search-knowledge',
       'get-summary-data',
@@ -442,6 +449,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'get-site-info',
       'get-dashboard-info',
       'get-storyboard-info',
+      'list-knowledge-resources',
     ]) {
       expect(selected.map((t) => t.name)).not.toContain(banished);
     }
@@ -459,7 +467,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     }
     // A lean surface must have generous headroom — this is a structural win, not a
     // describe-stub squeeze. If this ever approaches 46k something is very wrong.
-    expect(total).toBeLessThanOrEqual(35_000);
+    expect(total).toBeLessThanOrEqual(28_570);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {
@@ -470,6 +478,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
   it('explicit "full" profile returns the full set unchanged', () => {
     const tools = allTools();
     expect(selectToolsForProfile(tools, 'full')).toBe(tools);
+    expect(tools.map((tool) => tool.name)).toContain('list-knowledge-resources');
   });
 
   it('"combined-lean" registers the full desktop set (the lean half is the web side)', () => {

@@ -75,7 +75,6 @@ describe('getSummaryDataTool', () => {
       columns: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Get Summary Data',
       readOnlyHint: true,
       openWorldHint: false,
     });

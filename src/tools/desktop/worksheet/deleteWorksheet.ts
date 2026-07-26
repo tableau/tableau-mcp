@@ -182,7 +182,6 @@ export const getDeleteWorksheetTool = (
     description: 'Delete a worksheet safely.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: true, // removes a worksheet from the active workbook

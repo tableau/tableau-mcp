@@ -280,7 +280,6 @@ describe('dashboardHealthCheckTool (wiring)', () => {
       manifest: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Dashboard Health Check (Flag-Only)',
       readOnlyHint: true,
       destructiveHint: false,
       openWorldHint: false,

@@ -1712,7 +1712,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
       'Bind chart. Quote summary_rows; get-summary-data if truncated, absent or errored.',
     paramsSchema,
     annotations: {
-      title,
       // NOT read-only and NOT idempotent: auto_apply:true mutates the live workbook via
       // loadWorkbookXml, and calcs[] author (mutate) even without auto-apply. The old
       // readOnly/idempotent hints told the host/model that retrying a bind is free — a

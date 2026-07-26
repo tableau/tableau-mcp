@@ -32,7 +32,7 @@ describe('applyDashboardTool', () => {
       dashboardName: expect.any(Object),
       dashboardFile: expect.any(Object),
     });
-    expect(tool.annotations).toMatchObject({ title: 'Apply Dashboard', readOnlyHint: false });
+    expect(tool.annotations).toMatchObject({ readOnlyHint: false });
   });
 
   it('should successfully apply dashboard XML in inline mode', async () => {

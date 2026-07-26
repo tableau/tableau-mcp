@@ -23,7 +23,6 @@ export const getSearchKnowledgeTool = (
       'Find targeted expertise by concept phrase, not tool name. Search snippets are not modules: read mustReadUri once before authoring. Use this to discover knowledge, not list.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

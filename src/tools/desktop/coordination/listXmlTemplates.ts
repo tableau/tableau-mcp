@@ -18,7 +18,6 @@ export const getListXmlTemplatesTool = (
     description: 'List templates.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

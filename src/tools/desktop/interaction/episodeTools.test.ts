@@ -30,7 +30,7 @@ function readEvents(dir: string): Array<Record<string, unknown>> {
 afterEach(() => {
   resetEpisodeEventsForTests();
   vi.unstubAllEnvs();
-  vi.restoreAllMocks();
+  vi.clearAllMocks();
   for (const dir of tmpDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 

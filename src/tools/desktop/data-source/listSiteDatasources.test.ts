@@ -42,7 +42,6 @@ describe('listSiteDatasourcesTool', () => {
     expect(tool.description).toContain('contentUrl when build provides it');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
-      title: 'List Site Datasources',
       readOnlyHint: true,
       openWorldHint: false,
     });

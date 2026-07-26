@@ -140,7 +140,6 @@ export const getRefineWorksheetTool = (
     description: REFINE_WORKSHEET_DESCRIPTION,
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: true, // mutates the named worksheet

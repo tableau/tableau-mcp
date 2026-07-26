@@ -22,7 +22,6 @@ export const getStoryboardInfoTool = (
     description: 'Read one storyboard by name or id.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

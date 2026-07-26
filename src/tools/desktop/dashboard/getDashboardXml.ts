@@ -48,7 +48,6 @@ export const getGetDashboardXmlTool = (
     description: 'Get layout for an existing dashboard.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false, // Writes to a cache file
       openWorldHint: false,
       destructiveHint: false,

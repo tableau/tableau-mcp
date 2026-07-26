@@ -33,7 +33,6 @@ describe('listDashboardsTool', () => {
       session: expect.any(Object),
     });
     expect(listDashboardsTool.annotations).toMatchObject({
-      title: 'List All Dashboards in Workbook',
       readOnlyHint: true,
       openWorldHint: false,
     });

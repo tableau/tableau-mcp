@@ -55,7 +55,6 @@ export const getGetWorksheetXmlTool = (
     description: 'Get structure for an EXISTING worksheet.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false, // Writes to a cache file
       openWorldHint: false,
       destructiveHint: false,

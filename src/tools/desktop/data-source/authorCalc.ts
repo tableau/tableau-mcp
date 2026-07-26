@@ -39,7 +39,6 @@ export const getAuthorCalcTool = (server: DesktopMcpServer): DesktopTool<typeof 
     description: 'Author a calculated field (caption + formula).',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,

@@ -66,11 +66,11 @@ export const getActivateSheetTool = (
   const activateSheetTool = new DesktopTool({
     server,
     name: 'activate-sheet',
+    title,
     description:
       'Activate an existing worksheet or dashboard by exact name after validating it against a fresh live-workbook read.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,

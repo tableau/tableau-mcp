@@ -79,7 +79,6 @@ export const getInjectTemplateTool = (
     description: 'Inject a template.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,

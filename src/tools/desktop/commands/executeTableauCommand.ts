@@ -30,7 +30,6 @@ export const getExecuteTableauCommandTool = (
       'Execute a registered Tableau Desktop command. Use search-commands first; format namespace:command.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: false,

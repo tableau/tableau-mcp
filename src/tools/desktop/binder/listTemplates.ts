@@ -109,7 +109,6 @@ export const getListTemplatesTool = (
     description: 'List chart templates.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       openWorldHint: false,
       destructiveHint: false,

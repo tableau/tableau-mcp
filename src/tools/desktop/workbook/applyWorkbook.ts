@@ -35,7 +35,6 @@ export const getApplyWorkbookTool = (
     description: 'Apply modified workbook content to Tableau.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false, // writes cache files and updates workbook
       openWorldHint: false,
       destructiveHint: true, // updates active workbook

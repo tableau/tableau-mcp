@@ -88,7 +88,6 @@ export const getProposeTemplateTool = (
     description: 'Classify template candidates.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       openWorldHint: false,
       destructiveHint: false,
