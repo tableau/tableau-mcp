@@ -45,6 +45,7 @@ interface SchemaField {
   datatype: string; // "string" | "real" | "integer" | "date" | "datetime" | ...
   semanticRole?: string; // Tableau geo semantic role, e.g. "[State].[Name]"
   datasource: string;
+  table?: string; // metadata-record parent-name for federated grain disambiguation
   isAggregated: boolean;
   column_ref: string; // straight from listAvailableFields, e.g. "[Superstore].[sum:Sales:qk]"
 }
@@ -108,6 +109,8 @@ export interface LlmProposeInput {
     datatype: string;
     datasource?: string;
     column_ref?: string;
+    table?: string;
+    label?: string;
   }>;
   /**
    * FIELD-NARROWING signal (stage 2B, adjudicated attack 1): present ONLY when
@@ -1454,6 +1457,124 @@ function dimensionHeadMatchesInAsk(
     .map(({ noun, index, candidates }) => ({ noun, index, field: candidates[0] }));
 }
 
+interface GrainMeasureMatch {
+  index: number;
+  candidates: SchemaField[];
+  winner?: SchemaField;
+}
+
+function fieldNameTokens(field: SchemaField): Set<string> {
+  const tokens = new Set<string>();
+  for (const name of [bareName(field.columnName), field.caption, field.name]) {
+    if (!name) continue;
+    for (const token of normalizeFieldPhrase(name).split(' ')) {
+      if (token) tokens.add(token);
+    }
+  }
+  return tokens;
+}
+
+function explicitMeasureAtToken(
+  ask: string,
+  start: number,
+  end: number,
+  candidates: SchemaField[],
+  exactNames: Set<string>,
+): SchemaField | undefined {
+  const ranked = candidates.map((field) => {
+    let longest = 0;
+    for (const name of [bareName(field.columnName), field.caption, field.name]) {
+      if (!name) continue;
+      const match = fieldNameMatchInAskSpan(ask, name, exactNames);
+      if (match && match.start <= start && match.end >= end) {
+        longest = Math.max(longest, match.end - match.start);
+      }
+    }
+    return { field, longest };
+  });
+  const longest = Math.max(...ranked.map((candidate) => candidate.longest), 0);
+  if (longest <= end - start) return undefined;
+  const winners = ranked.filter((candidate) => candidate.longest === longest);
+  return winners.length === 1 ? winners[0].field : undefined;
+}
+
+/**
+ * A shared ask token can identify measures at different remote grains even when only
+ * one full caption is literal. Resolve only a unique explicit compound name or the
+ * sole candidate co-tabled with an ask-matched dimension; otherwise leave no winner.
+ */
+function grainMeasureMatchesInAsk(
+  ask: string,
+  s: SchemaSummary,
+  literalHits: readonly FieldMatch[],
+): GrainMeasureMatch[] {
+  const measures = s.fields.filter(isMeasure);
+  const knownTables = new Set(measures.flatMap((field) => (field.table ? [field.table] : [])));
+  if (knownTables.size < 2) return [];
+
+  const dimensionTables = new Set(
+    [
+      ...literalHits,
+      ...businessSynonymMatchesInAsk(ask, s, literalHits),
+      ...dimensionHeadMatchesInAsk(ask, s, literalHits),
+    ].flatMap(({ field }) =>
+      field.role === 'dimension' && field.table ? [field.table] : [],
+    ),
+  );
+  const exactNames = fieldExactNames(s.fields);
+  const groups: GrainMeasureMatch[] = [];
+
+  for (const tokenMatch of ask.matchAll(/[a-z0-9]+/gi)) {
+    const token = tokenMatch[0].toLowerCase();
+    const index = tokenMatch.index;
+    if (contentTokens(token).size === 0) continue;
+    const candidates = measures.filter((field) =>
+      [...fieldNameTokens(field)].some((fieldToken) => pluralEquivalent(token, fieldToken)),
+    );
+    const candidateTables = new Set(
+      candidates.flatMap((field) => (field.table ? [field.table] : [])),
+    );
+    if (candidates.length < 2 || candidateTables.size < 2) continue;
+
+    const end = index + tokenMatch[0].length;
+    const explicit = explicitMeasureAtToken(ask, index, end, candidates, exactNames);
+    const coTabled = candidates.filter(
+      (field) => field.table !== undefined && dimensionTables.has(field.table),
+    );
+    const winner = explicit ?? (coTabled.length === 1 ? coTabled[0] : undefined);
+    groups.push({ index, candidates, ...(winner ? { winner } : {}) });
+  }
+
+  return groups;
+}
+
+function remoteTableName(table: string): string {
+  return bareName(table).split(/[\\/]/).at(-1) ?? bareName(table);
+}
+
+function remoteTableGrain(table: string): string {
+  const stem = remoteTableName(table).replace(/\.[^.]+$/, '').toLowerCase();
+  if (stem.endsWith('ies')) return `${stem.slice(0, -3)}y`;
+  if (stem.endsWith('s') && !stem.endsWith('ss')) return stem.slice(0, -1);
+  return stem || 'row';
+}
+
+function grainMeasureLabels(ask: string, s: SchemaSummary): Map<SchemaField, string> {
+  const literalHits = literalFieldMatchesInAsk(ask, s);
+  const labels = new Map<SchemaField, string>();
+  for (const group of grainMeasureMatchesInAsk(ask, s, literalHits)) {
+    if (group.winner) continue;
+    for (const field of group.candidates) {
+      if (!field.table) continue;
+      labels.set(
+        field,
+        `${field.name} (${remoteTableName(field.table)} — per-${remoteTableGrain(field.table)})`,
+      );
+    }
+  }
+  return labels;
+}
+
 /**
  * Blank out whole-token occurrences of every field name/caption/bare column name
  * in the ask (replaced by spaces so token boundaries are preserved). Used for
@@ -1529,11 +1650,17 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
 /** Fields whose name/caption/bare column name appear in the ask, earliest-first. */
 function matchFieldsInAsk(ask: string, s: SchemaSummary): SchemaField[] {
   const literalHits = literalFieldMatchesInAsk(ask, s);
+  const grainMatches = grainMeasureMatchesInAsk(ask, s, literalHits);
+  const grainCandidates = new Set(grainMatches.flatMap((match) => match.candidates));
   const hits: FieldMatch[] = [
     ...literalHits,
     ...businessSynonymMatchesInAsk(ask, s, literalHits),
     ...dimensionHeadMatchesInAsk(ask, s, literalHits),
-  ];
+  ]
+    .filter(({ field }) => !grainCandidates.has(field))
+    .concat(
+      grainMatches.flatMap(({ index, winner }) => (winner ? [{ field: winner, index }] : [])),
+    );
   hits.sort((a, b) => a.index - b.index);
   const seen = new Set<SchemaField>();
   return hits.flatMap(({ field }) => {
@@ -1681,13 +1808,18 @@ function shouldExposeFieldIdentity(fields: SchemaField[]): boolean {
   return datasources.size > 1;
 }
 
-function proposeField(f: SchemaField, exposeIdentity: boolean): LlmProposeInput['fields'][number] {
+function proposeField(
+  f: SchemaField,
+  exposeIdentity: boolean,
+  grainLabel?: string,
+): LlmProposeInput['fields'][number] {
   return {
     name: f.name,
     role: f.role,
     type: f.type,
     datatype: f.datatype,
     ...(exposeIdentity ? { datasource: f.datasource, column_ref: f.column_ref } : {}),
+    ...(grainLabel && f.table ? { table: f.table, label: grainLabel } : {}),
   };
 }
 
@@ -3053,6 +3185,9 @@ export function classifyNoLlm(
   ) {
     return null;
   }
+  if (grainMeasureMatchesInAsk(ask, summary, literalHits).some((match) => !match.winner)) {
+    return null;
+  }
 
   // Mask field names before scoring so a field NAME can't select a template or
   // read as an aggregation word; field↔slot matching still uses the raw ask.
@@ -3350,6 +3485,7 @@ export function buildLlmInput(
   const withheld = summary.fields.length - narrowed.length;
 
   const exposeFieldIdentity = shouldExposeFieldIdentity(summary.fields);
+  const grainLabels = grainMeasureLabels(ask, summary);
   const recommended = recommendedRankingDefault(ask, summary, narrowed, top[0]?.m);
   const result: LlmProposeInput = {
     ask,
@@ -3375,7 +3511,7 @@ export function buildLlmInput(
           ...(slot.temporal_from_string ? { temporal_from_string: true } : {}),
         })),
     })),
-    fields: narrowed.map((f) => proposeField(f, exposeFieldIdentity)),
+    fields: narrowed.map((f) => proposeField(f, exposeFieldIdentity, grainLabels.get(f))),
   };
 
   if (withheld > 0) {

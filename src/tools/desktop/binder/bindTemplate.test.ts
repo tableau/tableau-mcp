@@ -345,9 +345,30 @@ const ambiguousGoalsProposeResult: BinderResult = {
     ],
     fields: [
       { name: 'Country Code', role: 'dimension', type: 'nominal', datatype: 'string' },
-      { name: 'Goals', role: 'measure', type: 'quantitative', datatype: 'integer' },
-      { name: 'Goals For', role: 'measure', type: 'quantitative', datatype: 'integer' },
-      { name: 'Goals Against', role: 'measure', type: 'quantitative', datatype: 'integer' },
+      {
+        name: 'Goals',
+        role: 'measure',
+        type: 'quantitative',
+        datatype: 'integer',
+        table: '[players.csv]',
+        label: 'Goals (players.csv — per-player)',
+      },
+      {
+        name: 'Goals For',
+        role: 'measure',
+        type: 'quantitative',
+        datatype: 'integer',
+        table: '[standings.csv]',
+        label: 'Goals For (standings.csv — per-standing)',
+      },
+      {
+        name: 'Goals Against',
+        role: 'measure',
+        type: 'quantitative',
+        datatype: 'integer',
+        table: '[standings.csv]',
+        label: 'Goals Against (standings.csv — per-standing)',
+      },
       { name: 'Goal Difference', role: 'measure', type: 'quantitative', datatype: 'integer' },
     ],
   } as unknown as Extract<BinderResult, { status: 'propose' }>['llm_input'],
@@ -1069,6 +1090,15 @@ describe('bindTemplateTool bind recovery gate', () => {
         (slot: { slot_id: string }) => slot.slot_id === 'sales',
       ).compatible_field_names,
     ).toEqual(['Goals', 'Goals For', 'Goals Against', 'Goal Difference']);
+    expect(
+      repeatedBody.call_2_contract.proposal_choices[0].slots.find(
+        (slot: { slot_id: string }) => slot.slot_id === 'sales',
+      ).compatible_field_options,
+    ).toEqual([
+      { name: 'Goals', label: 'Goals (players.csv — per-player)' },
+      { name: 'Goals For', label: 'Goals For (standings.csv — per-standing)' },
+      { name: 'Goals Against', label: 'Goals Against (standings.csv — per-standing)' },
+    ]);
     expect(repeatedBody.guidance).toContain('Do not resubmit the bare ask');
     expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);

@@ -853,19 +853,27 @@ function buildCall2Contract({
     ...(llmInput.recommended ? { recommended: llmInput.recommended } : {}),
     proposal_choices: llmInput.candidate_templates.map((candidate) => ({
       template: candidate.template,
-      slots: candidate.slots.map((slot) => ({
-        slot_id: slot.slot_id,
-        required: slot.required,
-        compatible_field_names: llmInput.fields
-          .filter((field) => fieldFitsProposedSlot(field, slot))
-          .map((field) => field.name),
-      })),
+      slots: candidate.slots.map((slot) => {
+        const compatibleFields = llmInput.fields.filter((field) =>
+          fieldFitsProposedSlot(field, slot),
+        );
+        const labeledOptions = compatibleFields.flatMap((field) =>
+          field.label ? [{ name: field.name, label: field.label }] : [],
+        );
+        return {
+          slot_id: slot.slot_id,
+          required: slot.required,
+          compatible_field_names: compatibleFields.map((field) => field.name),
+          ...(labeledOptions.length > 0 ? { compatible_field_options: labeledOptions } : {}),
+        };
+      }),
     })),
     proposal_requirements: {
       title: 'Choose a worksheet title.',
       confidence: 'Set a confidence from 0 to 1.',
-      field_selection:
-        'For each binding, choose one exact compatible_field_names value; do not rename or infer a field.',
+      field_selection: llmInput.fields.some((field) => field.label)
+        ? 'Use compatible_field_options labels to compare table grain, then bind its exact name from compatible_field_names; do not rename or infer a field.'
+        : 'For each binding, choose one exact compatible_field_names value; do not rename or infer a field.',
     },
   };
 }
