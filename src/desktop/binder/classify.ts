@@ -2453,6 +2453,13 @@ export type EncodingReport = {
   unfilled: SymbolMapEncodingRole[];
 };
 
+export type EncodingFieldCandidate = Pick<SchemaField, 'name' | 'caption' | 'column_ref'>;
+
+export type EncodingFieldResolution = {
+  field: EncodingFieldCandidate | null;
+  candidates: EncodingFieldCandidate[];
+};
+
 /**
  * Deliberately BROADER than the bind cues below. The bind cues are narrow on purpose —
  * they must never guess a field onto a shelf. These only decide whether the ask MENTIONED
@@ -2520,6 +2527,35 @@ function mostSpecificDirectedField(
     fields: candidates.filter((candidate) => candidate !== winner.field),
   };
   return matchFieldsInAsk(remainder, remainingSummary).length === 0 ? winner.field : null;
+}
+
+/**
+ * Resolve the field named for an unfilled symbol-map encoding using the classifier's
+ * existing exact caption/token, plural, acronym, and business-synonym matching. The same
+ * longest-name disambiguation used by explicit encoding directives makes "Goals For" beat
+ * its overlapping "Goals" field, while two separately named fields remain ambiguous.
+ *
+ * Candidate order is the classifier's ask order. Callers can expose the bounded leading
+ * candidates when `field` is null instead of forcing another schema-orientation call.
+ */
+export function resolveEncodingFieldInAsk(
+  ask: string,
+  role: SymbolMapEncodingRole,
+  summary: SchemaSummary,
+): EncodingFieldResolution {
+  const matched = matchFieldsInAsk(ask, summary).filter((field) =>
+    fieldFitsSymbolMapEncoding(role, field),
+  );
+  const field = mostSpecificDirectedField(ask, summary, matched);
+  const project = (candidate: SchemaField): EncodingFieldCandidate => ({
+    name: candidate.name,
+    ...(candidate.caption ? { caption: candidate.caption } : {}),
+    column_ref: candidate.column_ref,
+  });
+  return {
+    field: field ? project(field) : null,
+    candidates: matched.map(project),
+  };
 }
 
 /**

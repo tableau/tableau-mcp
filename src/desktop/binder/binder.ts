@@ -23,9 +23,11 @@ import type { OptionalFieldPruneSpec } from '../templates/optionalFieldPrune.js'
 import {
   buildLlmInput as buildCoreLlmInput,
   classifyNoLlm,
+  type EncodingFieldResolution,
   type EncodingReport,
   type LlmProposeInput as CoreLlmProposeInput,
   MAX_CLASSIFIABLE_FIELDS,
+  resolveEncodingFieldInAsk,
 } from './classify.js';
 import { escapeXml } from './escape.js';
 import type { BlockerCode, Derivation, TemplateManifest } from './manifest-types.js';
@@ -49,8 +51,10 @@ import {
 // import above would trip the target's `no-duplicate-imports` (includeExports).
 export {
   classifyNoLlm,
+  type EncodingFieldResolution,
   type EncodingReport,
   MAX_CLASSIFIABLE_FIELDS,
+  resolveEncodingFieldInAsk,
   resolveInSummary,
   summarizeSchema,
   validateBinding,

@@ -78,6 +78,16 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 const XML = '<?xml version="1.0"?><workbook></workbook>';
+const ENCODING_GUIDANCE_XML = `<?xml version='1.0'?>
+<workbook>
+  <datasources>
+    <datasource name='World Cup'>
+      <column name='[country_code]' caption='Country Code' role='dimension' type='nominal' datatype='string' />
+      <column name='[goals]' caption='Goals' role='measure' type='quantitative' datatype='integer' />
+      <column name='[goals_for]' caption='Goals For' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>`;
 
 /**
  * The block a client actually receives: the JSON body plus the nextAction envelope. A
@@ -3992,6 +4002,64 @@ describe('bind-template — reports what it actually built', () => {
     expect(
       (result.structuredContent as { nextAction: { label: string } }).nextAction.label,
     ).toContain('apply-worksheet');
+  });
+
+  it('resolves one confidently named encoding field to its exact column ref', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: boundWithUnfilledColorResult,
+      workbookReads: [ENCODING_GUIDANCE_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'symbol map of countries with size and color both encoding Goals For',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const guidance = JSON.parse(result.content[0].text).guidance as string;
+    expect(guidance).toContain("encodingType:'color',columnRef:'[World Cup].[sum:goals_for:qk]'");
+    expect(guidance).not.toContain('columnRef:<field>');
+  });
+
+  it('lists exact refs and captions when encoding field resolution is ambiguous', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: boundWithUnfilledColorResult,
+      workbookReads: [ENCODING_GUIDANCE_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'symbol map of countries with color encoding Goals For and Goals',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const guidance = JSON.parse(result.content[0].text).guidance as string;
+    expect(guidance).toContain('columnRef:<one of:');
+    expect(guidance).toContain("'[World Cup].[sum:goals_for:qk]' ('Goals For')");
+    expect(guidance).toContain("'[World Cup].[sum:goals:qk]' ('Goals')");
+  });
+
+  it('keeps the field placeholder when the ask names no encoding field candidate', async () => {
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: boundWithUnfilledColorResult,
+      workbookReads: [ENCODING_GUIDANCE_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'symbol map with color intensity',
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const guidance = JSON.parse(result.content[0].text).guidance as string;
+    expect(guidance).toContain("encodingType:'color',columnRef:<field>");
+    expect(guidance).not.toContain('columnRef:<one of:');
   });
 
   it('reports the filled and unfilled encodings in the body', async () => {
