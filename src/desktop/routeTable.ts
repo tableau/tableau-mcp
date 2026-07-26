@@ -132,7 +132,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'ask-user-ambiguity',
-    text: 'Call ask-user(urgency=blocking); stop when ambiguity changes what data gets written or which target is edited. Cosmetic choices take a stated default instead of asking.',
+    text: 'If ambiguity changes workbook content, call ask-user with urgency=blocking; stop.',
   },
   {
     kind: 'route',

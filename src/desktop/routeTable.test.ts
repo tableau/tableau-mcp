@@ -151,10 +151,10 @@ describe('DESKTOP_ROUTE_TABLE', () => {
 
     expect(ambiguity).toMatchObject({
       kind: 'prose',
-      text: expect.stringContaining('what data gets written or which target is edited'),
+      text: expect.stringContaining('If ambiguity changes workbook content'),
     });
     expect(ambiguity?.kind === 'prose' ? ambiguity.text : '').toContain(
-      'Cosmetic choices take a stated default instead of asking.',
+      'call ask-user with urgency=blocking; stop.',
     );
   });
 
