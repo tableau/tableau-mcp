@@ -2154,6 +2154,37 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               if (res.status === 'bound') {
                 appliedDefault = appliedDefaultFrom(recommended);
               }
+            } else if (
+              proposal !== undefined &&
+              auto_apply === true &&
+              res.status === 'bound' &&
+              appliedDefault === undefined
+            ) {
+              // A Call-2 proposal that lands on the recommended measure must carry the
+              // same context-measure garnish as the internal auto-default: the agent's
+              // route (auto vs explicit confirm) is variance, not a decision to drop
+              // the profit/margin context the receipt quotes from. Best-effort — a dry
+              // re-classify failure must never disturb the working bind.
+              try {
+                const dry = await bindTemplate({
+                  ask,
+                  workbookXml,
+                  manifests,
+                  ...(minConfidence !== undefined ? { minConfidence } : {}),
+                });
+                const recommended =
+                  dry.status === 'propose' ? dry.llm_input.recommended : undefined;
+                if (
+                  recommended &&
+                  (proposal as BindingProposal).bindings?.some(
+                    (b) => b.field === recommended.measure,
+                  )
+                ) {
+                  appliedDefault = appliedDefaultFrom(recommended);
+                }
+              } catch {
+                /* fail-open: bind stands, garnish skipped */
+              }
             }
           } catch (e) {
             // A THROWN bind has no recordable outcome; clear the pending record (only if

@@ -1783,6 +1783,57 @@ describe('bindTemplateTool auto_apply gate', () => {
     );
   });
 
+  it('carries the context-measure default when an explicit Call-2 proposal lands on the recommended measure', async () => {
+    const mocks = setupAutoApplyMocks({
+      bind: boundWithTopNResult,
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      workbookReads: [RANKING_CONTEXT_WORKBOOK_XML],
+    });
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(boundWithTopNResult)
+      .mockResolvedValueOnce(recommendedProposeResult);
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'Show me our top customers.',
+      auto_apply: true,
+      proposal: {
+        template: 'bar-basic',
+        title: 'Show me our top customers.',
+        bindings: [
+          { slot_id: 'cat', field: 'Region' },
+          { slot_id: 'val', field: 'Sales' },
+        ],
+        confidence: 1,
+        top_n: 10,
+      },
+      getExecutor: summaryRowsExecutor(mocks, {
+        columns: [
+          { name: 'Customer Name', dataType: 'string' },
+          { name: 'Sales', dataType: 'real' },
+          { name: 'Profit', dataType: 'real' },
+        ],
+        rows: [['Acme', 100, -75000]],
+      }),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body).toMatchObject({
+      status: 'bound',
+      applied: true,
+      applied_default: {
+        measure: 'Sales',
+        context_measures: ['Profit'],
+      },
+    });
+    expect(appliedXml(mocks.applyWorkbookDocument)).toContain(
+      '<tooltip column="[Superstore].[sum:Profit:qk]"></tooltip>',
+    );
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+  });
+
   it('adds one currency caveat when a summed measure omits the currency dimension', async () => {
     const mocks = setupAutoApplyMocks({
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
@@ -3336,7 +3387,9 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
       status: 'blocked',
       reason: 'unchanged_proposal',
     });
-    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(3);
+    // 5 = the three user-visible calls plus one context-measure dry re-classify
+    // per bound Call-2 proposal (both dries no-op: the base mock is already bound).
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(5);
     expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(2);
   });
 
@@ -3372,7 +3425,9 @@ describe('bindTemplateTool auto_apply graceful fallback', () => {
       status: 'blocked',
       reason: 'unchanged_proposal',
     });
-    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+    // 3 = two user-visible calls plus the context-measure dry re-classify on the
+    // bound Call-2 proposal (no-op: the base mock is already bound).
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(3);
   });
 });
 
