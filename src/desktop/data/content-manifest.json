@@ -2,11 +2,11 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.56.2+content.2026-07-24",
+  "content_version": "2.57.2+content.2026-07-26",
   "schema_version": "2",
-  "generated": "2026-07-24",
+  "generated": "2026-07-26",
   "engine_compat": {
-    "server_min": "2.56.2",
+    "server_min": "2.57.2",
     "node": ">=22.7.5"
   },
   "resources": [
@@ -82,8 +82,8 @@
     },
     {
       "path": "data-visualization-templates-xml/deviation-spine-chart.xml",
-      "sha256": "cf958268a76cb0c64a47ba7bca6319fbb807674776c9ac460c62b78a3c593b5a",
-      "bytes": 5937
+      "sha256": "4cf6d72995c814e3b0b007e29c65bd86b3d5b791ea35c7fe05001c9ca5af6812",
+      "bytes": 5486
     },
     {
       "path": "data-visualization-templates-xml/distribution-bar-code-chart.xml",
@@ -137,8 +137,8 @@
     },
     {
       "path": "data-visualization-templates-xml/pareto-chart.xml",
-      "sha256": "13ae1fe5ae37b147efa79865e6a0752bf340a5113fb2176678021e08d4aed77a",
-      "bytes": 4954
+      "sha256": "59b51c161676a528baa371e3bf6259a36ff3216f54236d3a33f29446e1a4f5c3",
+      "bytes": 4969
     },
     {
       "path": "data-visualization-templates-xml/part-to-whole-pie-chart.xml",
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "ea5a0aeb7693ee86b64ada566405e7b0e529b8c76824aa5ae7d3b2203381bda0",
-      "bytes": 280808
+      "sha256": "09f5edf1a6e006fe19e577f7856ee8cacbff5f9b8da468a5f69483abdde364b5",
+      "bytes": 280084
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -327,8 +327,8 @@
     },
     {
       "path": "template-manifests/deviation-spine-chart.manifest.json",
-      "sha256": "40c5f9d5ab5f6bc73afe84eab1798d196b33ddf28d0d9b618aab0e0649651c39",
-      "bytes": 6995
+      "sha256": "88934804b5277dc03d21fc46635fffad11eb83a23a28998c44e3ae7f0c2298b3",
+      "bytes": 6285
     },
     {
       "path": "template-manifests/distribution-bar-code-chart.manifest.json",

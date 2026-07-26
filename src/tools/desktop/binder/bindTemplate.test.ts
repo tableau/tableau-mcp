@@ -1523,7 +1523,7 @@ function setupAutoApplyMocks({
 }: {
   bind?: BinderResult;
   fastPathEligible?: boolean;
-  inject?: { ok: true; xml: string } | { ok: false; issues: string[] };
+  inject?: { ok: true; xml: string; warnings?: string[] } | { ok: false; issues: string[] };
   validationValid?: boolean;
   dispatch?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
   activationDispatch?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
@@ -4351,6 +4351,31 @@ describe('bindTemplateTool incomplete bind is not remembered as applied', () => 
     expect(
       sessionRouteState.getAppliedSheet('1', appliedSheetSignature(skippedSortBind.args)),
     ).toBeUndefined();
+  });
+
+  it('surfaces a computed-sort drop from template rewriting as an incomplete warning', async () => {
+    const warning =
+      'computed-sort dropped: [Superstore].[sum:Optional Sort:qk] did not resolve';
+    const mocks = setupAutoApplyMocks({
+      inject: {
+        ok: true,
+        xml: INJECTED_RANKING_WORKBOOK_XML,
+        warnings: [warning],
+      },
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: readbackExecutor(mocks),
+    });
+    const receipt = body(result);
+
+    expect(receipt.warnings).toEqual([warning]);
+    expect(
+      (result.structuredContent as { nextAction?: { kind: string } } | undefined)?.nextAction?.kind,
+    ).not.toBe('done');
   });
 
   it('a reworded re-bind after an incomplete bind is not reported as already built', async () => {

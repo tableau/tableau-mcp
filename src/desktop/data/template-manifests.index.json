@@ -1617,16 +1617,16 @@
       "readiness": "RED",
       "fast_path_eligible": false,
       "fast_path_blockers": [
-        "NO_DATASOURCE_PLACEHOLDER",
         "DATASET_SPECIFIC_FORMULA"
       ],
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "none"
       },
-      "datasource_placeholder": false,
+      "datasource_placeholder": true,
       "placeholders": [
-        "TITLE"
+        "TITLE",
+        "DATASOURCE"
       ],
       "intent_keywords": [
         "spine-chart",
@@ -1635,7 +1635,7 @@
         "two-component-split",
         "deviation"
       ],
-      "description": "A spine chart: one row per category (Nationality) split into two contrasting components that diverge left/right of a center line (e.g. Women | Men), each component a signed share-of-total template calc so the pair reads as a two-sided deviation. RED: the source worksheet has NO {{DATASOURCE}} placeholder (bound to a federated datasource id) and its component calcs bake dataset-specific member literals ([Gender]='Men'/'Women') — not injectable as-is.",
+      "description": "A spine chart: one row per category (Nationality) split into two contrasting components that diverge left/right of a center line (e.g. Women | Men), each component a signed share-of-total template calc so the pair reads as a two-sided deviation. RED: its component calcs bake dataset-specific member literals ([Gender]='Men'/'Women') and remain non-portable even though the computed sort now uses the datasource placeholder.",
       "slots": [
         {
           "slot_id": "nationality",
@@ -1741,11 +1741,6 @@
       ],
       "hazards": [
         {
-          "code": "no-datasource-placeholder",
-          "detail": "The worksheet has NO {{DATASOURCE}} placeholder: <datasources> and every field reference are bound to the literal federated datasource id 'federated.1ko0q9z0cybhx212227b819gayqi'. The inject/apply path fills {{DATASOURCE}} to retarget a template onto a new datasource — with none present the template cannot be retargeted and would carry the source datasource id verbatim. Flagged NO_DATASOURCE_PLACEHOLDER; a follow-up must re-parameterize the datasource id to make this template injectable.",
-          "xml": "deviation-spine-chart.xml:16-18"
-        },
-        {
           "code": "baked-member-literals",
           "detail": "The two component measures bake dataset-specific member literals into their formulas — SUM(if [Gender]='Men' ...) and -SUM(if [Gender]='Women' ...) — and reference bare [Value]/[Gender] that are NOT declared bindable slots (template-internal inputs). replaceFieldReferences cannot rewrite a string literal member ('Men'/'Women') and does not touch template-internal refs, so the calcs only compute on a dataset that literally carries Gender/Value with those members. Flagged DATASET_SPECIFIC_FORMULA (fail-closed): a portable spine would parameterize the split dimension + its two member values.",
           "xml": "deviation-spine-chart.xml:19-31"
@@ -1757,7 +1752,7 @@
         },
         {
           "code": "hardcoded-filter-members",
-          "detail": "Three categorical filters pin source members verbatim: Measure='\"Weighted Sample\"', a Measure-Names filter enumerating the two component measures, and the spine-label filter member='\"Women     |     Men\"'. These are source-specific pins kept on the Filters shelf (<slices>); on any other dataset they match nothing. Not separately blocked because the NO_DATASOURCE_PLACEHOLDER + DATASET_SPECIFIC_FORMULA blockers already gate this template far below fast-path.",
+          "detail": "Three categorical filters pin source members verbatim: Measure='\"Weighted Sample\"', a Measure-Names filter enumerating the two component measures, and the spine-label filter member='\"Women     |     Men\"'. These are source-specific pins kept on the Filters shelf (<slices>); on any other dataset they match nothing. Not separately blocked because DATASET_SPECIFIC_FORMULA already gates this template far below fast-path.",
           "xml": "deviation-spine-chart.xml:40-57"
         },
         {

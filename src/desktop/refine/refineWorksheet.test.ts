@@ -811,7 +811,19 @@ describe('planSortByFieldOnCategoricalAxis — anchor_category coexistence (wate
       'Sub-Category': `[${DS}].[none:line_item:nk]`,
       'Anchor Category': `[${DS}].[none:category:nk]`,
     };
-    const rewritten = rewriteFieldReferences(ensureUserNamespace(WATERFALL_XML), mapping, DS);
+    const rewritten = rewriteFieldReferences(
+      ensureUserNamespace(WATERFALL_XML),
+      mapping,
+      DS,
+      undefined,
+      {
+        templateSlots: [
+          { template_field: 'Profit', required: true, bindable: true },
+          { template_field: 'Sub-Category', required: true, bindable: true },
+          { template_field: 'Anchor Category', required: false, bindable: true },
+        ],
+      },
+    );
     return spliceWaterfallAnchorFilter(rewritten, mapping);
   };
 
