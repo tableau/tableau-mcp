@@ -27,10 +27,12 @@ describe('searchKnowledgeTool', () => {
     vi.mocked(searchKnowledgeWithFallback).mockReturnValue({ hits: [TOP_HIT] });
   });
 
-  it('tells callers that search snippets require a targeted read', async () => {
+  it('tells callers to skip the targeted read when the top body is present', async () => {
     const tool = getSearchKnowledgeTool(new DesktopMcpServer());
 
-    expect(await Provider.from(tool.description)).toContain('read mustReadUri');
+    expect(await Provider.from(tool.description)).toContain(
+      'When topHitBody is present, use it; do not call read-knowledge-resource',
+    );
   });
 
   it('returns the top hit read requirement', async () => {
