@@ -389,7 +389,8 @@ describe('Tool', () => {
         expect.objectContaining({
           oauth_client_id: '',
           oauth_client_display_name: '',
-          auth_type: 'unknown',
+          // mockExtra has no tableauAuthInfo, so auth_type falls through to config.auth ('pat' in tests).
+          auth_type: 'pat',
         }),
       );
     });

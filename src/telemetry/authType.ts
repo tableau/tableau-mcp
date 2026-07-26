@@ -3,17 +3,17 @@ import { TableauAuthInfo } from '../server/oauth/schemas.js';
 
 /**
  * Derives the auth mode label for the product telemetry `tool_call` event.
- *
- * `TableauAuthInfo.type` disambiguates Bearer/Passthrough directly, but 'X-Tableau-Auth' is shared
- * by pat/uat/direct-trust/embedded-oauth, so those split on the server's configured `config.auth`.
  */
 export function getAuthTypeForTelemetry(
   config: Config,
   tableauAuthInfo: TableauAuthInfo | undefined,
 ): string {
-  if (!tableauAuthInfo) return 'unknown';
-  if (tableauAuthInfo.type === 'Passthrough') return 'passthrough';
-  if (tableauAuthInfo.type === 'Bearer') return 'tableau-oauth'; // external Tableau authz server
+  // Per-request types populated by HTTP auth middleware — check first when present.
+  if (tableauAuthInfo?.type === 'Passthrough') return 'passthrough';
+  if (tableauAuthInfo?.type === 'Bearer') return 'tableau-oauth';
+
+  // Server-level modes (pat/uat/direct-trust) and embedded oauth are identified by
+  // config.auth — tableauAuthInfo is undefined for the former, 'X-Tableau-Auth' for the latter.
   switch (config.auth) {
     case 'pat':
       return 'pat';

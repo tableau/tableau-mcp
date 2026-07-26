@@ -32,8 +32,28 @@ const passthroughAuthInfo: TableauAuthInfo = {
 };
 
 describe('getAuthTypeForTelemetry', () => {
-  it("returns 'unknown' when there is no tableauAuthInfo", () => {
-    expect(getAuthTypeForTelemetry(configWithAuth('pat'), undefined)).toBe('unknown');
+  it("returns 'unknown' for an unrecognized config.auth with no tableauAuthInfo", () => {
+    // Server-level modes leave tableauAuthInfo undefined, so 'unknown' only comes from an
+    // unrecognized config.auth. The AuthType union can't express that, so cast to hit the default.
+    expect(getAuthTypeForTelemetry(configWithAuth('bogus' as Config['auth']), undefined)).toBe(
+      'unknown',
+    );
+  });
+
+  it("returns 'pat' for config.auth='pat' with no tableauAuthInfo (server-level per-request sign-in)", () => {
+    expect(getAuthTypeForTelemetry(configWithAuth('pat'), undefined)).toBe('pat');
+  });
+
+  it("returns 'uat' for config.auth='uat' with no tableauAuthInfo", () => {
+    expect(getAuthTypeForTelemetry(configWithAuth('uat'), undefined)).toBe('uat');
+  });
+
+  it("returns 'direct-trust' for config.auth='direct-trust' with no tableauAuthInfo", () => {
+    expect(getAuthTypeForTelemetry(configWithAuth('direct-trust'), undefined)).toBe('direct-trust');
+  });
+
+  it("returns 'embedded-oauth' for config.auth='oauth' with no tableauAuthInfo", () => {
+    expect(getAuthTypeForTelemetry(configWithAuth('oauth'), undefined)).toBe('embedded-oauth');
   });
 
   it("returns 'passthrough' for Passthrough auth", () => {
