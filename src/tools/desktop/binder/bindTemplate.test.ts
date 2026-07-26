@@ -78,6 +78,26 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 const XML = '<?xml version="1.0"?><workbook></workbook>';
+const RANKING_CONTEXT_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Superstore'>
+      <column caption='Customer Name' name='[Customer Name]' role='dimension' type='nominal' datatype='string' />
+      <column caption='Sales' name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      <column caption='Profit' name='[Profit]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+const CURRENCY_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Superstore'>
+      <column caption='Region' name='[Region]' role='dimension' type='nominal' datatype='string' />
+      <column caption='Currency Code' name='[currency_code]' role='dimension' type='nominal' datatype='string' />
+      <column caption='Sales' name='[Sales]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
 
 /**
  * The block a client actually receives: the JSON body plus the nextAction envelope. A
@@ -140,6 +160,21 @@ const INJECTED_RANKING_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
     </worksheet>
   </worksheets>
 </workbook>`;
+const INJECTED_RANKING_WITH_CURRENCY_COLOR_XML = INJECTED_RANKING_WORKBOOK_XML.replace(
+  "            <column caption='Sales' datatype='real' name='[Sales]' role='measure' type='quantitative' />",
+  [
+    "            <column caption='Sales' datatype='real' name='[Sales]' role='measure' type='quantitative' />",
+    "            <column caption='Currency Code' datatype='string' name='[currency_code]' role='dimension' type='nominal' />",
+    "            <column-instance column='[currency_code]' derivation='None' name='[none:currency_code:nk]' pivot='key' type='nominal' />",
+  ].join('\n'),
+).replace(
+  "            <mark class='Bar' />",
+  "            <mark class='Bar' />\n            <encodings><color column='[Superstore].[none:currency_code:nk]' /></encodings>",
+);
+const INJECTED_RANKING_WITH_AVERAGE_XML = INJECTED_RANKING_WORKBOOK_XML.replaceAll(
+  'sum:Sales',
+  'avg:Sales',
+).replace("derivation='Sum'", "derivation='Average'");
 const INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW = `<?xml version='1.0' encoding='utf-8'?>
 <workbook>
   <worksheets>
@@ -256,6 +291,7 @@ const recommendedProposeResult: BinderResult = {
       measure: 'Sales',
       top_n: 10,
       reason: 'revenue-like measure; top-N defaults to 10',
+      context_measures: ['Profit'],
       binding: {
         template: 'bar-basic',
         bindings: [
@@ -263,7 +299,7 @@ const recommendedProposeResult: BinderResult = {
           { slot_id: 'val', field: 'Sales' },
         ],
       },
-    },
+    } as any,
   },
 };
 const contestedRevenueProposeResult: BinderResult = {
@@ -1638,6 +1674,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     const mocks = setupAutoApplyMocks({
       bind: recommendedProposeResult,
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      workbookReads: [RANKING_CONTEXT_WORKBOOK_XML],
     });
     vi.mocked(binderModule.bindTemplate)
       .mockResolvedValueOnce(recommendedProposeResult)
@@ -1651,8 +1688,9 @@ describe('bindTemplateTool auto_apply gate', () => {
         columns: [
           { name: 'Customer Name', dataType: 'string' },
           { name: 'Sales', dataType: 'real' },
+          { name: 'Profit', dataType: 'real' },
         ],
-        rows: [['Acme', 100]],
+        rows: [['Acme', 100, -75000]],
       }),
     });
 
@@ -1666,19 +1704,27 @@ describe('bindTemplateTool auto_apply gate', () => {
         measure: 'Sales',
         top_n: 10,
         reason: 'revenue-like measure; top-N defaults to 10',
+        context_measures: ['Profit'],
       },
       summary_rows: {
         columns: [
           { name: 'Customer Name', dataType: 'string' },
           { name: 'Sales', dataType: 'real' },
+          { name: 'Profit', dataType: 'real' },
         ],
-        rows: [['Acme', 100]],
+        rows: [['Acme', 100, -75000]],
       },
     });
     expect(body.guidance).toContain('not the user’s stated choice');
     expect(body.guidance).toContain('Sales');
     expect(body.guidance).toContain('top 10');
     expect(body.guidance).toContain('change the measure or top_n');
+    expect(body.guidance).toContain(
+      'also quote notable values of the context measures for the top entries',
+    );
+    expect(appliedXml(mocks.applyWorkbookDocument)).toContain(
+      '<tooltip column="[Superstore].[sum:Profit:qk]"></tooltip>',
+    );
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
     expect(binderModule.bindTemplate).toHaveBeenNthCalledWith(
       2,
@@ -1695,6 +1741,103 @@ describe('bindTemplateTool auto_apply gate', () => {
         },
       }),
     );
+  });
+
+  it('adds one currency caveat when a summed measure omits the currency dimension', async () => {
+    const mocks = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      workbookReads: [CURRENCY_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(mocks, {
+        columns: [
+          { name: 'Region', dataType: 'string' },
+          { name: 'Sales', dataType: 'real' },
+        ],
+        rows: [['West', 1200]],
+      }),
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    const caveat =
+      'Note: [Sales] is summed across [Currency Code] without conversion — state this assumption in one line.';
+    expect(body.guidance).toContain(caveat);
+    expect(body.guidance.match(/without conversion/g)).toHaveLength(1);
+  });
+
+  it('omits the currency caveat when the currency dimension is on color', async () => {
+    const mocks = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WITH_CURRENCY_COLOR_XML },
+      workbookReads: [CURRENCY_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(mocks, {
+        columns: [
+          { name: 'Region', dataType: 'string' },
+          { name: 'Currency Code', dataType: 'string' },
+          { name: 'Sales', dataType: 'real' },
+        ],
+        rows: [['West', 'USD', 1200]],
+      }),
+    });
+
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).guidance).not.toContain('without conversion');
+  });
+
+  it('omits the currency caveat when the datasource has no currency dimension', async () => {
+    const mocks = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+      workbookReads: [RANKING_CONTEXT_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(mocks, {
+        columns: [
+          { name: 'Region', dataType: 'string' },
+          { name: 'Sales', dataType: 'real' },
+        ],
+        rows: [['West', 1200]],
+      }),
+    });
+
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).guidance).not.toContain('without conversion');
+  });
+
+  it('omits the currency caveat when the view has no summed measure', async () => {
+    const mocks = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WITH_AVERAGE_XML },
+      workbookReads: [CURRENCY_WORKBOOK_XML],
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'average Sales by Region',
+      auto_apply: true,
+      getExecutor: summaryRowsExecutor(mocks, {
+        columns: [
+          { name: 'Region', dataType: 'string' },
+          { name: 'Sales', dataType: 'real' },
+        ],
+        rows: [['West', 1200]],
+      }),
+    });
+
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).guidance).not.toContain('without conversion');
   });
 
   it('auto_apply=true on a standalone Call-1 bind applies then issues validated goto-sheet', async () => {

@@ -70,6 +70,7 @@ export interface LlmProposeInput {
     measure: string;
     top_n: 10;
     reason: 'revenue-like measure; top-N defaults to 10';
+    context_measures: string[];
     binding: {
       template: string;
       bindings: Array<{ slot_id: string; field: string }>;
@@ -1057,6 +1058,8 @@ const BUSINESS_FIELD_SYNONYMS: ReadonlyArray<{
   captionPatterns: readonly string[];
 }> = [
   { nouns: ['revenue'], captionPatterns: ['sales', 'revenue', 'amount'] },
+  { nouns: ['profit'], captionPatterns: ['profit'] },
+  { nouns: ['margin'], captionPatterns: ['margin'] },
   { nouns: ['customers'], captionPatterns: ['customer', 'customer name'] },
   { nouns: ['products'], captionPatterns: ['product', 'product name'] },
   { nouns: ['orders'], captionPatterns: ['order', 'order id'] },
@@ -1118,10 +1121,38 @@ function recommendedRankingDefault(
     return undefined;
   }
 
+  const profitPatterns = BUSINESS_FIELD_SYNONYMS.find((entry) =>
+    entry.nouns.includes('profit'),
+  )?.captionPatterns;
+  const marginPatterns = BUSINESS_FIELD_SYNONYMS.find((entry) =>
+    entry.nouns.includes('margin'),
+  )?.captionPatterns;
+  const contextMeasures = summary.fields
+    .filter(
+      (field) =>
+        field !== measure &&
+        field.datasource === measure.datasource &&
+        field.role === 'measure' &&
+        field.type === 'quantitative',
+    )
+    .map((field, index) => {
+      const priority =
+        profitPatterns?.some((pattern) => fieldMatchesCaptionPattern(field, pattern)) === true
+          ? 0
+          : marginPatterns?.some((pattern) => fieldMatchesCaptionPattern(field, pattern)) === true
+            ? 1
+            : 2;
+      return { field, index, priority };
+    })
+    .sort((a, b) => a.priority - b.priority || a.index - b.index)
+    .slice(0, 3)
+    .map(({ field }) => field.name);
+
   return {
     measure: measure.name,
     top_n: 10,
     reason: REVENUE_RECOMMENDATION_REASON,
+    context_measures: contextMeasures,
     binding: {
       template: candidate.template,
       bindings: [

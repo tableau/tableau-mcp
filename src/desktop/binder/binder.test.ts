@@ -1052,6 +1052,7 @@ describe('binder/bindTemplate — Call 1 miss (propose)', () => {
         measure: 'Sales',
         top_n: 10,
         reason: 'revenue-like measure; top-N defaults to 10',
+        context_measures: ['Profit'],
         binding: {
           template: 'ranking-ordered-bar',
           bindings: [
@@ -1060,6 +1061,32 @@ describe('binder/bindTemplate — Call 1 miss (propose)', () => {
           ],
         },
       });
+    }
+  });
+
+  it('caps ranking context at three measures with profit and margin first', async () => {
+    const contextWorkbookXml = WORKBOOK_XML.replace(
+      "<column name='[Profit]' role='measure' type='quantitative' datatype='real' />",
+      [
+        "<column name='[Order Count]' role='measure' type='quantitative' datatype='integer' />",
+        "<column name='[Quantity]' role='measure' type='quantitative' datatype='integer' />",
+        "<column name='[Gross Margin]' role='measure' type='quantitative' datatype='real' />",
+        "<column name='[Profit]' role='measure' type='quantitative' datatype='real' />",
+      ].join('\n      '),
+    );
+    const res = await bindTemplate({
+      ask: 'Show me our top customers.',
+      workbookXml: contextWorkbookXml,
+      manifests,
+    });
+
+    expect(res.status).toBe('propose');
+    if (res.status === 'propose') {
+      expect(res.llm_input.recommended?.context_measures).toEqual([
+        'Profit',
+        'Gross Margin',
+        'Order Count',
+      ]);
     }
   });
 
