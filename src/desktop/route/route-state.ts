@@ -79,6 +79,11 @@ export interface BindRecoveryProposalContext {
     target_worksheet?: string;
     auto_apply: true;
   };
+  recommended?: {
+    measure: string;
+    top_n: 10;
+    reason: 'revenue-like measure; top-N defaults to 10';
+  };
   proposal_choices: Array<{
     template: string;
     slots: Array<{
