@@ -349,6 +349,7 @@ describe('Tool', () => {
         expect.objectContaining({
           oauth_client_id: clientId,
           oauth_client_display_name: 'Claude',
+          auth_type: 'tableau-oauth',
         }),
       );
     });
@@ -388,6 +389,7 @@ describe('Tool', () => {
         expect.objectContaining({
           oauth_client_id: '',
           oauth_client_display_name: '',
+          auth_type: 'unknown',
         }),
       );
     });
