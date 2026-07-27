@@ -14,8 +14,10 @@ const BASE_XML = [
   "<datasource hasconnection='false' inline='true' name='Parameters'>",
   "<column caption='p.Period' datatype='string' name='[Parameter 1]' param-domain-type='list' role='measure' type='nominal' value='&quot;Month&quot;'><calculation class='tableau' formula='&quot;Month&quot;' /></column>",
   '</datasource>',
-  "<datasource name='Sample - Superstore'>",
+  "<datasource caption='Sample - Superstore' name='federated.1syzfv90anwuu119p4zra1ga299n'>",
   "<column caption='Profit' datatype='real' name='[Profit]' role='measure' type='quantitative' />",
+  "<group caption='Category Set' name='[Category Set]' user:ui-builder='filter-group' />",
+  "<group caption='Ad Hoc Group' name='[Ad Hoc Group]' />",
   '</datasource>',
   '</datasources>',
   "<worksheets><worksheet name='Profit' /></worksheets>",
@@ -48,6 +50,8 @@ describe('authorActionTool', () => {
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.actionName).toBe('[Action1]');
     expect(parsed.caption).toBe('Set Period');
+    expect(parsed.mode).toBe('parameter');
+    expect(parsed.target).toBe('[Parameters].[Parameter 1]');
     expect(parsed.targetParameter).toBe('[Parameters].[Parameter 1]');
 
     const loaded = appliedDocumentXml(applyWorkbookDocument);
@@ -70,7 +74,7 @@ describe('authorActionTool', () => {
     );
     const readbackXml = withOne.replace(
       '</actions>',
-      "<edit-parameter-action caption='Second' name='[Action2]'></edit-parameter-action></actions>",
+      "<edit-parameter-action caption='Second' name='[Action2]'><params><param name='target-parameter' value='[Parameters].[Parameter 1]' /></params></edit-parameter-action></actions>",
     );
     const { result, applyWorkbookDocument } = await getToolResult({
       args: {
@@ -111,6 +115,342 @@ describe('authorActionTool', () => {
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
+  it('detects caption collisions with edit-group-action elements', async () => {
+    const xml = withActions(
+      BASE_XML,
+      "<edit-group-action caption='Dup' name='[Action1]'></edit-group-action>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Dup',
+        sourceWorksheet: 'Profit',
+        sourceField: '',
+        targetSet: 'Category Set',
+      },
+      initialXml: xml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('caption collision');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('emits a byte-faithful set action with children in XSD order', async () => {
+    const expectedAction =
+      "<edit-group-action caption='Expand Category' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<single-select value='true' />" +
+      "<add-or-remove-marks value='assign' />" +
+      "<params><param name='selection-clear-set-option' value='do-nothing' />" +
+      "<param name='target-group' value='[federated.1syzfv90anwuu119p4zra1ga299n].[Category Set]' /></params>" +
+      '</edit-group-action>';
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Profit',
+        sourceField: '',
+        targetSet: 'Category Set',
+        singleSelect: true,
+      },
+      readbackXml: withActions(BASE_XML, expectedAction),
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.mode).toBe('set');
+    expect(parsed.target).toBe('[federated.1syzfv90anwuu119p4zra1ga299n].[Category Set]');
+    expect(parsed.targetSet).toBe('[federated.1syzfv90anwuu119p4zra1ga299n].[Category Set]');
+
+    const loaded = appliedDocumentXml(applyWorkbookDocument);
+    expect(loaded).toContain(expectedAction);
+    const activationAt = loaded.indexOf("<activation type='on-select' />");
+    const sourceAt = loaded.indexOf("<source type='sheet' worksheet='Profit' />");
+    const singleAt = loaded.indexOf("<single-select value='true' />");
+    const membershipAt = loaded.indexOf("<add-or-remove-marks value='assign' />");
+    const paramsAt = loaded.indexOf('<params>', membershipAt);
+    expect(activationAt).toBeLessThan(sourceAt);
+    expect(sourceAt).toBeLessThan(singleAt);
+    expect(singleAt).toBeLessThan(membershipAt);
+    expect(membershipAt).toBeLessThan(paramsAt);
+  });
+
+  it('accepts set-action readback when Desktop backfills single-select', async () => {
+    const normalizedAction =
+      "<edit-group-action caption='Expand Category' name='[Action1]'>" +
+      "<activation type='on-select' />" +
+      "<source type='sheet' worksheet='Profit' />" +
+      "<single-select value='false' />" +
+      "<add-or-remove-marks value='assign' />" +
+      "<params><param name='selection-clear-set-option' value='do-nothing' />" +
+      "<param name='target-group' value='[federated.1syzfv90anwuu119p4zra1ga299n].[Category Set]' /></params>" +
+      '</edit-group-action>';
+    const { result } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Profit',
+        targetSet: 'Category Set',
+      },
+      readbackXml: withActions(BASE_XML, normalizedAction),
+    });
+
+    expect(result.isError).toBe(false);
+  });
+
+  it.each([
+    ['assign', 'do-nothing'],
+    ['add', 'show-all'],
+    ['remove', 'exclude-all'],
+  ] as const)(
+    'emits set membership %s and clear selection %s in Tableau wire vocabulary',
+    async (setMembership, clearSelection) => {
+      const expectedAction =
+        "<edit-group-action caption='Map Options' name='[Action1]'>" +
+        "<activation type='on-select' />" +
+        "<source type='sheet' worksheet='Profit' />" +
+        `<add-or-remove-marks value='${setMembership}' />` +
+        `<params><param name='selection-clear-set-option' value='${clearSelection}' />` +
+        "<param name='target-group' value='[federated.1syzfv90anwuu119p4zra1ga299n].[Category Set]' /></params>" +
+        '</edit-group-action>';
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: {
+          mode: 'set',
+          caption: 'Map Options',
+          sourceWorksheet: 'Profit',
+          sourceField: '',
+          targetSet: '[Category Set]',
+          setMembership,
+          clearSelection,
+        },
+        readbackXml: withActions(BASE_XML, expectedAction),
+      });
+
+      expect(result.isError).toBe(false);
+      const loaded = appliedDocumentXml(applyWorkbookDocument);
+      expect(loaded).toContain(`<add-or-remove-marks value='${setMembership}' />`);
+      expect(loaded).toContain(
+        `<param name='selection-clear-set-option' value='${clearSelection}' />`,
+      );
+    },
+  );
+
+  it('rejects a missing targetSet and names available sets', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Profit',
+        sourceField: '',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('targetSet');
+    expect(result.content[0].text).toContain('Category Set');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('ignores non-set groups during target resolution and suggestions', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Group',
+        sourceWorksheet: 'Profit',
+        targetSet: 'Ad Hoc Group',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Category Set');
+    expect(result.content[0].text).not.toContain('Ad Hoc Group (');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('does not parse datasource-dependencies as a datasource', async () => {
+    const xml = BASE_XML.replace(
+      '</datasource>',
+      "<datasource-dependencies name='phantom'><group caption='Phantom Set' name='[Phantom Set]' user:ui-builder='filter-group' /></datasource-dependencies></datasource>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Phantom',
+        sourceWorksheet: 'Profit',
+        targetSet: 'Phantom Set',
+        datasource: 'phantom',
+      },
+      initialXml: xml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain("datasource 'phantom' matched no datasource");
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('reports when a datasource filter matches no datasource', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Profit',
+        targetSet: 'Category Set',
+        datasource: 'Missing Datasource',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      "datasource 'Missing Datasource' matched no datasource; sets found in:",
+    );
+    expect(result.content[0].text).toContain('Category Set');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unqualified targetParameter with recovery guidance', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '',
+        targetParameter: 'Parameter 1',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('[Parameters].[X]');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('requires sourceField in parameter mode', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        targetParameter: '[Parameters].[Parameter 1]',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('sourceField is required in parameter mode');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects mode-incompatible targets', async () => {
+    const { result } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Profit',
+        sourceField: '',
+        targetSet: 'Category Set',
+        targetParameter: '[Parameters].[Parameter 1]',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('targetParameter');
+  });
+
+  it('treats a blank targetParameter as absent in set mode', async () => {
+    const action =
+      "<edit-group-action caption='Expand Category' name='[Action1]'>" +
+      "<activation type='on-select' /><source type='sheet' worksheet='Profit' />" +
+      "<add-or-remove-marks value='assign' />" +
+      "<params><param name='selection-clear-set-option' value='do-nothing' />" +
+      "<param name='target-group' value='[federated.1syzfv90anwuu119p4zra1ga299n].[Category Set]' /></params>" +
+      '</edit-group-action>';
+    const { result } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Profit',
+        targetSet: 'Category Set',
+        targetParameter: '   ',
+      },
+      readbackXml: withActions(BASE_XML, action),
+    });
+
+    expect(result.isError).toBe(false);
+  });
+
+  it('treats a blank targetSet as absent in parameter mode', async () => {
+    const action =
+      "<edit-parameter-action caption='Set Period' name='[Action1]'>" +
+      "<activation type='on-select' /><source type='sheet' worksheet='Profit' />" +
+      "<agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' />" +
+      "<params><param name='source-field' value='[Profit]' />" +
+      "<param name='target-parameter' value='[Parameters].[Parameter 1]' /></params>" +
+      '</edit-parameter-action>';
+    const { result } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '[Profit]',
+        targetParameter: '[Parameters].[Parameter 1]',
+        targetSet: '\t ',
+      },
+      readbackXml: withActions(BASE_XML, action),
+    });
+
+    expect(result.isError).toBe(false);
+  });
+
+  it('fails set-action readback when the target-group param is absent', async () => {
+    const incompleteAction =
+      "<edit-group-action caption='Expand Category' name='[Action1]'>" +
+      "<activation type='on-select' /><source type='sheet' worksheet='Profit' />" +
+      "<add-or-remove-marks value='assign' />" +
+      "<params><param name='selection-clear-set-option' value='do-nothing' /></params>" +
+      '</edit-group-action>';
+    const { result } = await getToolResult({
+      args: {
+        mode: 'set',
+        caption: 'Expand Category',
+        sourceWorksheet: 'Profit',
+        sourceField: '',
+        targetSet: 'Category Set',
+      },
+      readbackXml: withActions(BASE_XML, incompleteAction),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('target-group');
+  });
+
+  it('fails parameter-action readback when the target-parameter param is absent', async () => {
+    const incompleteAction =
+      "<edit-parameter-action caption='Set Period' name='[Action1]'>" +
+      "<activation type='on-select' /><source type='sheet' worksheet='Profit' />" +
+      "<agg-type type='attr' /><clear-option type='do-nothing' value='s:LROOT:' />" +
+      '<params></params></edit-parameter-action>';
+    const { result } = await getToolResult({
+      args: {
+        caption: 'Set Period',
+        sourceWorksheet: 'Profit',
+        sourceField: '',
+        targetParameter: '[Parameters].[Parameter 1]',
+      },
+      readbackXml: withActions(BASE_XML, incompleteAction),
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('target-parameter');
+  });
+
   it('rejects empty required primitives', async () => {
     const { result } = await getToolResult({
       args: {
@@ -133,10 +473,16 @@ function withActions(baseXml: string, actionXml: string): string {
 
 type AuthorActionArgs = {
   session?: string;
+  mode?: 'parameter' | 'set';
   caption: string;
   sourceWorksheet: string;
-  sourceField: string;
-  targetParameter: string;
+  sourceField?: string;
+  targetParameter?: string;
+  targetSet?: string;
+  datasource?: string;
+  setMembership?: 'assign' | 'add' | 'remove';
+  clearSelection?: 'do-nothing' | 'show-all' | 'exclude-all';
+  singleSelect?: boolean;
   activation?: 'on-select' | 'on-hover' | 'on-menu';
 };
 
@@ -182,7 +528,15 @@ async function getToolResult({
     {
       session: '12345',
       ...args,
+      mode: args.mode ?? 'parameter',
+      sourceField: args.sourceField,
+      targetParameter: args.targetParameter,
+      targetSet: args.targetSet,
+      datasource: args.datasource,
+      singleSelect: args.singleSelect,
       activation: args.activation ?? 'on-select',
+      setMembership: args.setMembership ?? 'assign',
+      clearSelection: args.clearSelection ?? 'do-nothing',
     },
     extra,
   );

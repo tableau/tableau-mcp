@@ -15,26 +15,60 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const activationSchema = z.enum(['on-select', 'on-hover', 'on-menu']);
+const modeSchema = z.enum(['parameter', 'set']);
+const setMembershipSchema = z.enum(['assign', 'add', 'remove']);
+const clearSelectionSchema = z.enum(['do-nothing', 'show-all', 'exclude-all']);
 
-// Primitives in, <edit-parameter-action> XML server-side, readback out. A parameter
-// -change action wires a mark interaction on a source sheet to a target parameter.
+// Primitives in, parameter/set action XML server-side, readback out. An action
+// wires a mark interaction on a source sheet to a target parameter or set.
 // PROVEN live 2026-07-19 (CODA): a workbook-level <actions> block MERGES via the
 // document round-trip — the action survived readback with the target-parameter link
 // intact. This is the interactivity layer over the key signature.
 const paramsSchema = {
   session: z.string().optional().describe(''),
+  mode: modeSchema.default('parameter').describe(''),
   caption: z.string().describe(''),
   sourceWorksheet: z.string().describe(''),
-  sourceField: z.string().describe(''),
-  targetParameter: z.string().describe(''),
+  sourceField: z.string().optional().describe(''),
+  targetParameter: z.string().optional().describe(''),
+  targetSet: z.string().optional().describe(''),
+  datasource: z.string().optional().describe(''),
+  setMembership: setMembershipSchema.default('assign').describe(''),
+  clearSelection: clearSelectionSchema.default('do-nothing').describe(''),
+  singleSelect: z.boolean().optional().describe(''),
   activation: activationSchema.default('on-select').describe(''),
 };
 
-type AuthorActionResult = {
+type AuthorActionResultBase = {
   actionName: string;
   caption: string;
-  targetParameter: string;
+  target: string;
   hint: string;
+};
+
+type AuthorActionResult = AuthorActionResultBase &
+  (
+    | {
+        mode: 'parameter';
+        targetParameter: string;
+      }
+    | {
+        mode: 'set';
+        targetSet: string;
+      }
+  );
+
+type DatasourceElement = {
+  name: string;
+  caption?: string;
+  xml: string;
+};
+
+type SetCandidate = {
+  datasourceName: string;
+  datasourceCaption?: string;
+  name: string;
+  caption?: string;
 };
 
 const title = 'Author Action';
@@ -52,12 +86,38 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
       idempotentHint: false,
     },
     callback: async (
-      { session, caption, sourceWorksheet, sourceField, targetParameter, activation = 'on-select' },
+      {
+        session,
+        mode = 'parameter',
+        caption,
+        sourceWorksheet,
+        sourceField,
+        targetParameter,
+        targetSet,
+        datasource,
+        setMembership = 'assign',
+        clearSelection = 'do-nothing',
+        singleSelect,
+        activation = 'on-select',
+      },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute<AuthorActionResult>({
         extra,
-        args: { session, caption, sourceWorksheet, sourceField, targetParameter, activation },
+        args: {
+          session,
+          mode,
+          caption,
+          sourceWorksheet,
+          sourceField,
+          targetParameter,
+          targetSet,
+          datasource,
+          setMembership,
+          clearSelection,
+          singleSelect,
+          activation,
+        },
         callback: async () => {
           if (caption.trim().length === 0) {
             return new ArgsValidationError('caption empty').toErr();
@@ -65,8 +125,30 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           if (sourceWorksheet.trim().length === 0) {
             return new ArgsValidationError('sourceWorksheet empty').toErr();
           }
-          if (targetParameter.trim().length === 0) {
-            return new ArgsValidationError('targetParameter empty').toErr();
+          if (mode === 'set' && (targetParameter?.trim().length ?? 0) > 0) {
+            return new ArgsValidationError(
+              'targetParameter is not allowed in set mode; use targetSet',
+            ).toErr();
+          }
+          if (mode === 'parameter') {
+            if ((targetSet?.trim().length ?? 0) > 0) {
+              return new ArgsValidationError(
+                'targetSet is not allowed in parameter mode; use targetParameter',
+              ).toErr();
+            }
+            if (sourceField === undefined) {
+              return new ArgsValidationError('sourceField is required in parameter mode').toErr();
+            }
+            if (targetParameter === undefined || targetParameter.trim().length === 0) {
+              return new ArgsValidationError(
+                'targetParameter is required in parameter mode',
+              ).toErr();
+            }
+            if (!/^\[.+\]\.\[.+\]$/.test(targetParameter.trim())) {
+              return new ArgsValidationError(
+                'targetParameter must be fully qualified like [Parameters].[X]; unqualified targets can cause a blocking Tableau modal',
+              ).toErr();
+            }
           }
 
           const sessionResult = resolveSession(session);
@@ -88,14 +170,35 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           }
 
           const actionName = nextActionName(liveXml);
-          const actionXml = renderParameterAction({
-            caption,
-            actionName,
-            sourceWorksheet,
-            sourceField,
-            targetParameter,
-            activation,
-          });
+          let target: string;
+          let actionXml: string;
+          if (mode === 'set') {
+            const targetResult = resolveTargetSet(liveXml, targetSet, datasource);
+            if (targetResult.isErr()) {
+              return targetResult.error.toErr();
+            }
+            target = targetResult.value;
+            actionXml = renderSetAction({
+              caption,
+              actionName,
+              sourceWorksheet,
+              targetSet: target,
+              setMembership,
+              clearSelection,
+              singleSelect,
+              activation,
+            });
+          } else {
+            target = targetParameter!.trim();
+            actionXml = renderParameterAction({
+              caption,
+              actionName,
+              sourceWorksheet,
+              sourceField: sourceField ?? '',
+              targetParameter: target,
+              activation,
+            });
+          }
           const editResult = spliceActionIntoWorkbook(liveXml, actionXml);
           if (editResult.isErr()) {
             return editResult.error.toErr();
@@ -121,16 +224,51 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
           if (readbackResult.isErr()) {
             return new DesktopCommandExecutionError(readbackResult.error).toErr();
           }
-          if (!hasActionCaption(readbackResult.value, caption)) {
+          if (
+            mode === 'set' &&
+            !hasActionWithTargetParam(
+              readbackResult.value,
+              'edit-group-action',
+              caption,
+              'target-group',
+              target,
+            )
+          ) {
             return new XmlModificationError(
-              'load completed but did not apply: readback did not contain the new action',
+              'action applied but the target-group param did not survive readback',
+            ).toErr();
+          }
+          if (
+            mode === 'parameter' &&
+            !hasActionWithTargetParam(
+              readbackResult.value,
+              'edit-parameter-action',
+              caption,
+              'target-parameter',
+              target,
+            )
+          ) {
+            return new XmlModificationError(
+              'action applied but the target-parameter param did not survive readback',
             ).toErr();
           }
 
+          if (mode === 'set') {
+            return new Ok({
+              actionName,
+              caption,
+              mode,
+              target,
+              targetSet: target,
+              hint: 'readback verified the qualified target set; the source sheet must expose marks that can drive the action',
+            });
+          }
           return new Ok({
             actionName,
             caption,
-            targetParameter,
+            mode,
+            target,
+            targetParameter: target,
             hint: 'the source sheet must expose the source field; the target parameter must already exist (author it at open time)',
           });
         },
@@ -142,9 +280,31 @@ export const getAuthorActionTool = (server: DesktopMcpServer): DesktopTool<typeo
 };
 
 function hasActionCaption(xml: string, caption: string): boolean {
-  return [...xml.matchAll(/<(?:action|edit-parameter-action)\b[^>]*>/g)].some(
+  return [...xml.matchAll(/<(?:action|edit-parameter-action|edit-group-action)\b[^>]*>/g)].some(
     (match) => unescapeXml(getAttr(match[0], 'caption') ?? '') === caption,
   );
+}
+
+function hasActionWithTargetParam(
+  xml: string,
+  elementName: 'edit-group-action' | 'edit-parameter-action',
+  caption: string,
+  paramName: 'target-group' | 'target-parameter',
+  target: string,
+): boolean {
+  const actionPattern = new RegExp(`<${elementName}\\b[^>]*>[\\s\\S]*?</${elementName}>`, 'g');
+  return [...xml.matchAll(actionPattern)].some((actionMatch) => {
+    const actionXml = actionMatch[0];
+    const openingTag = actionXml.match(new RegExp(`^<${elementName}\\b[^>]*>`))?.[0];
+    if (openingTag === undefined || unescapeXml(getAttr(openingTag, 'caption') ?? '') !== caption) {
+      return false;
+    }
+    return [...actionXml.matchAll(/<param\b[^>]*>/g)].some(
+      (paramMatch) =>
+        getAttr(paramMatch[0], 'name') === paramName &&
+        unescapeXml(getAttr(paramMatch[0], 'value') ?? '') === target,
+    );
+  });
 }
 
 function nextActionName(xml: string): string {
@@ -186,6 +346,163 @@ function renderParameterAction({
     "<clear-option type='do-nothing' value='s:LROOT:' />" +
     `<params>${params.join('')}</params>` +
     '</edit-parameter-action>'
+  );
+}
+
+function resolveTargetSet(
+  liveXml: string,
+  targetSet: string | undefined,
+  datasource?: string,
+): Result<string, ArgsValidationError> {
+  const datasourceElements = findDatasourceElements(liveXml);
+  const allCandidates = datasourceElements.flatMap((element) =>
+    findGroupTags(element.xml).flatMap((tag): SetCandidate[] => {
+      const name = getAttr(tag, 'name');
+      if (name === undefined) {
+        return [];
+      }
+      const caption = getAttr(tag, 'caption');
+      return [
+        {
+          datasourceName: element.name,
+          datasourceCaption: element.caption,
+          name: unescapeXml(name),
+          caption: caption === undefined ? undefined : unescapeXml(caption),
+        },
+      ];
+    }),
+  );
+  const matchedDatasourceElements =
+    datasource === undefined
+      ? datasourceElements
+      : datasourceElements.filter(
+          (element) => element.name === datasource || element.caption === datasource,
+        );
+  if (datasource !== undefined && matchedDatasourceElements.length === 0) {
+    return new ArgsValidationError(
+      `datasource '${datasource}' matched no datasource; sets found in: ${formatSetCandidates(allCandidates)}`,
+    ).toErr();
+  }
+  const matchedDatasourceNames = new Set(matchedDatasourceElements.map((element) => element.name));
+  const candidates = allCandidates.filter((candidate) =>
+    matchedDatasourceNames.has(candidate.datasourceName),
+  );
+  const available = formatSetCandidates(candidates);
+
+  if (targetSet === undefined || targetSet.trim().length === 0) {
+    return new ArgsValidationError(
+      `targetSet is required in set mode. Available sets: ${available}`,
+    ).toErr();
+  }
+
+  const requested = normalizeReferenceToken(targetSet);
+  const matches = candidates.filter(
+    (candidate) =>
+      normalizeReferenceToken(candidate.name) === requested ||
+      (candidate.caption !== undefined && normalizeReferenceToken(candidate.caption) === requested),
+  );
+  if (matches.length === 0) {
+    return new ArgsValidationError(
+      `Set "${targetSet}" was not found. Available sets: ${available}`,
+    ).toErr();
+  }
+  if (matches.length > 1) {
+    return new ArgsValidationError(
+      `Set "${targetSet}" is ambiguous; specify datasource. Matches: ${formatSetCandidates(matches)}`,
+    ).toErr();
+  }
+
+  const match = matches[0];
+  return new Ok(`${bracketToken(match.datasourceName)}.${bracketToken(match.name)}`);
+}
+
+function findDatasourceElements(xml: string): DatasourceElement[] {
+  const elements: DatasourceElement[] = [];
+  const blockStart = xml.indexOf('<datasources>');
+  const blockEnd = xml.indexOf('</datasources>', blockStart);
+  const scanFrom = blockStart === -1 ? 0 : blockStart;
+  const scanTo = blockEnd === -1 ? xml.length : blockEnd;
+  for (const match of xml.matchAll(/<datasource(?=\s)[^>]*\bname=(?:'[^']*'|"[^"]*")[^>]*>/g)) {
+    if (match.index < scanFrom || match.index >= scanTo || /\/\s*>$/.test(match[0])) {
+      continue;
+    }
+    const name = getAttr(match[0], 'name');
+    if (name === undefined) {
+      continue;
+    }
+    const openEnd = match.index + match[0].length;
+    const closeStart = xml.indexOf('</datasource>', openEnd);
+    if (closeStart === -1 || closeStart > scanTo) {
+      continue;
+    }
+    const caption = getAttr(match[0], 'caption');
+    elements.push({
+      name: unescapeXml(name),
+      caption: caption === undefined ? undefined : unescapeXml(caption),
+      xml: xml.slice(match.index, closeStart + '</datasource>'.length),
+    });
+  }
+  return elements;
+}
+
+function findGroupTags(xml: string): string[] {
+  return [...xml.matchAll(/<group\b[^>]*>/g)]
+    .map((match) => match[0])
+    .filter((tag) => getAttr(tag, 'user:ui-builder') === 'filter-group');
+}
+
+function normalizeReferenceToken(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.startsWith('[') && trimmed.endsWith(']') ? trimmed.slice(1, -1) : trimmed;
+}
+
+function bracketToken(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.startsWith('[') && trimmed.endsWith(']') ? trimmed : `[${trimmed}]`;
+}
+
+function formatSetCandidates(candidates: SetCandidate[]): string {
+  if (candidates.length === 0) {
+    return 'none';
+  }
+  return candidates
+    .map(
+      (candidate) =>
+        `${candidate.caption ?? candidate.name} (${candidate.name}, datasource ${candidate.datasourceCaption ?? candidate.datasourceName})`,
+    )
+    .join(', ');
+}
+
+function renderSetAction({
+  caption,
+  actionName,
+  sourceWorksheet,
+  targetSet,
+  setMembership,
+  clearSelection,
+  singleSelect,
+  activation,
+}: {
+  caption: string;
+  actionName: string;
+  sourceWorksheet: string;
+  targetSet: string;
+  setMembership: z.infer<typeof setMembershipSchema>;
+  clearSelection: z.infer<typeof clearSelectionSchema>;
+  singleSelect: boolean | undefined;
+  activation: z.infer<typeof activationSchema>;
+}): string {
+  const singleSelectXml =
+    singleSelect === undefined ? '' : `<single-select value='${singleSelect}' />`;
+  return (
+    `<edit-group-action caption='${escapeXml(caption)}' name='${escapeXml(actionName)}'>` +
+    `<activation type='${activation}' />` +
+    `<source type='sheet' worksheet='${escapeXml(sourceWorksheet.trim())}' />` +
+    singleSelectXml +
+    `<add-or-remove-marks value='${setMembership}' />` +
+    `<params><param name='selection-clear-set-option' value='${clearSelection}' />` +
+    `<param name='target-group' value='${escapeXml(targetSet)}' /></params>` +
+    '</edit-group-action>'
   );
 }
 
