@@ -29,6 +29,16 @@ describe('non-positive-filter-count rule', () => {
     expect(issues[0].message).toContain('AC6CC624');
   });
 
+  it('allows a legacy count="0" groupfilter nested in a group — Desktop persists and round-trips this shape', () => {
+    const xml = workbookWith(
+      `<group caption="Category Set">
+        <groupfilter function="end" end="top" count="0" />
+      </group>`,
+    );
+
+    expect(nonPositiveFilterCountRule.validate(xml)).toEqual([]);
+  });
+
   it('ignores an unevidenced limit attribute on a filter node', () => {
     const issues = nonPositiveFilterCountRule.validate(
       worksheetWith('<filter column="[Category]" limit="0" />'),

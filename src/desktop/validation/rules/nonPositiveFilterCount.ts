@@ -10,8 +10,7 @@ import * as xpath from 'xpath';
 import type { ValidationIssue, ValidationRule } from '../types.js';
 import { parseXml } from './parseXml.js';
 
-const FILTER_ELEMENTS_XPATH =
-  "//*[contains(translate(local-name(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'filter')]";
+const FILTER_ELEMENTS_XPATH = '//groupfilter[not(ancestor::group)][@count]';
 
 function elementName(element: Element): string {
   return element.localName || element.tagName;
@@ -54,7 +53,7 @@ export const nonPositiveFilterCountRule: ValidationRule = {
             `<${nodeName}> ${attributeName}="${rawValue}" is not greater than zero. ` +
             'Tableau Desktop rejects this filter limit with blocking modal AC6CC624 ' +
             '("The filter limit must be greater than zero").',
-          xpath: `//*[contains(local-name(), 'filter')][@${attributeName}]`,
+          xpath: `//groupfilter[not(ancestor::group)][@${attributeName}]`,
           suggestion: `Set ${attributeName} to a literal value of at least 1, or reference a parameter whose value is always positive.`,
         });
       }

@@ -180,9 +180,6 @@ export const getRefineWorksheetTool = (
           if (operation === 'top_n' && topN === undefined) {
             return new ArgsValidationError('topN is required when operation=top_n.').toErr();
           }
-          if (operation === 'top_n' && topN !== undefined && topN.n < 1) {
-            return new ArgsValidationError(`topN.n must be at least 1 (got ${topN.n}).`).toErr();
-          }
           if (operation === 'sort_direction' && sortDirection === undefined) {
             return new ArgsValidationError(
               'sortDirection is required when operation=sort_direction.',

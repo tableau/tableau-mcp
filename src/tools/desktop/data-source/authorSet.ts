@@ -82,12 +82,6 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
           if (count.trim().length === 0) {
             return new ArgsValidationError('count empty').toErr();
           }
-          const literalCount = numericFilterLimit(count);
-          if (literalCount !== undefined && literalCount < 1) {
-            return new ArgsValidationError(
-              `count must be at least 1 (got ${literalCount}).`,
-            ).toErr();
-          }
 
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -101,12 +95,6 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
           }
 
           const liveXml = readResult.value;
-          const parameterCount = resolveParameterFilterLimit(liveXml, count);
-          if (parameterCount !== undefined && parameterCount < 1) {
-            return new ArgsValidationError(
-              `count ${count.trim()} resolves to a value below 1 (got ${parameterCount}).`,
-            ).toErr();
-          }
           const targetResult = selectTargetDatasource(liveXml, datasource);
           if (targetResult.isErr()) {
             return targetResult.error.toErr();
@@ -265,33 +253,6 @@ function bracketize(token: string): string {
     return trimmed;
   }
   return `[${trimmed}]`;
-}
-
-function numericFilterLimit(value: string): number | undefined {
-  const trimmed = value.trim();
-  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(trimmed)) {
-    return undefined;
-  }
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function resolveParameterFilterLimit(xml: string, count: string): number | undefined {
-  const parameterRef = /^\[Parameters\]\.(\[[^\]]+\])$/.exec(count.trim());
-  if (!parameterRef) {
-    return undefined;
-  }
-  const parameters = findDatasourceElements(xml).find(
-    (datasource) => datasource.name === 'Parameters',
-  );
-  if (!parameters) {
-    return undefined;
-  }
-  const parameterTag = [...parameters.xml.matchAll(/<column\b[^>]*>/g)]
-    .map((match) => match[0])
-    .find((tag) => unescapeXml(getAttr(tag, 'name') ?? '') === parameterRef[1]);
-  const currentValue = parameterTag ? getAttr(parameterTag, 'value') : undefined;
-  return currentValue === undefined ? undefined : numericFilterLimit(unescapeXml(currentValue));
 }
 
 function renderGroupSet({
