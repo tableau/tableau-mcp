@@ -120,3 +120,31 @@ The equivalent split-field axis form uses the child calc shown earlier
 calc. The golden's `Title` calc combines the collapsed Category and expanded
 Sub-Category values into one field; both forms are the same set-membership pattern.
 
+
+### Live-confirmed action XML (2026-07-26, build 0000.26.0715.2311)
+
+A set action serializes as **`<edit-group-action>`** — sets are groups in workbook XML;
+there is no `set-action` element, and `edit-parameter-action` targeting a set is malformed
+(Desktop persists it, then throws blocking internal-error modal CDEAC1A9 on interaction).
+This exact node round-trips a live /v0 apply byte-faithfully (Desktop mints the action
+name and backfills `add-or-remove-marks='assign'` when omitted):
+
+```xml
+<edit-group-action caption='Expand Category' name='[Action1]'>
+  <activation type='on-select' />
+  <source type='sheet' worksheet='se-eval-scratch' />
+  <single-select value='true' />
+  <add-or-remove-marks value='assign' />
+  <params>
+    <param name='selection-clear-set-option' value='do-nothing' />
+    <param name='target-group' value='[federated.1syzfv90anwuu119p4zra1ga299n].[Category Set]' />
+  </params>
+</edit-group-action>
+```
+
+Rules that do not bend:
+- Child order is fixed: `activation`, `source`, `single-select`, `add-or-remove-marks`, `params`.
+- `target-group` qualifies with the datasource's **`name` attribute** (`federated.*`), never its caption.
+- `selection-clear-set-option` ∈ `do-nothing` | `show-all` | `exclude-all`. Do NOT emit `<clear-option>` on a group action.
+- Apply-time validation does NOT resolve `target-group` — a dangling target is accepted silently. Always read back and byte-compare the `<actions>` block.
+- The empty set the action targets is `<group caption='Category Set' name='[Category Set]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter function='empty-level' member='[Category]' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' /></group>` inside the target datasource.
