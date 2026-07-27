@@ -54,6 +54,13 @@ describe('addFieldTool', () => {
     vi.clearAllMocks();
     mockPinnedSession(undefined);
     vi.mocked(discoveryModule.discoverInstances).mockReturnValue([]);
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue([
+      {
+        column_ref: COLUMN_REF,
+        columnName: '[Profit]',
+        datasource: 'Sample - Superstore',
+      },
+    ] as never);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -695,6 +702,13 @@ describe('add-field columnRef contract', () => {
     vi.mocked(readFileSync).mockImplementation((path) =>
       String(path) === WORKBOOK_FILE ? (WORKBOOK_XML as never) : ('<worksheet/>' as never),
     );
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue([
+      {
+        column_ref: COLUMN_REF,
+        columnName: '[Profit]',
+        datasource: 'Sample - Superstore',
+      },
+    ] as never);
   });
 
   it('documents the format and a worked example on the parameter itself', async () => {
@@ -750,6 +764,133 @@ describe('add-field columnRef contract', () => {
     expect(result.content[0].text).toContain('[Sample - Superstore].[sum:Sales:qk]');
     expect(result.content[0].text).toContain('resolve-field');
     expect(metadataModule.addFieldToCols).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown well-formed ref with resolver suggestions before writing the cache', async () => {
+    const unknownRef = '[Sample - Superstore].[sum:Profits:qk]';
+    vi.mocked(metadataModule.resolveField).mockReturnValue({
+      kind: 'not_found',
+      query: 'Profits',
+      reason: 'no exact field match',
+      candidates: [
+        {
+          column_ref: COLUMN_REF,
+          datasource: 'Sample - Superstore',
+          column_name: '[Profit]',
+          role: 'measure',
+          is_aggregated: false,
+        },
+      ],
+    });
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      workbookFile: WORKBOOK_FILE,
+      target: 'rows',
+      columnRef: unknownRef,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(unknownRef);
+    expect(result.content[0].text).toContain(COLUMN_REF);
+    expect(result.content[0].text).toContain('not_found');
+    expect(metadataModule.resolveField).toHaveBeenCalledWith(WORKBOOK_XML, 'Profits');
+    expect(metadataModule.addFieldToRows).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it('accepts a ref present in the supplied workbook', async () => {
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      workbookFile: WORKBOOK_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(metadataModule.resolveField).not.toHaveBeenCalled();
+    expect(metadataModule.addFieldToRows).toHaveBeenCalled();
+    expect(writeFileSync).toHaveBeenCalledWith(WORKSHEET_FILE, MODIFIED_XML, 'utf-8');
+  });
+
+  it('accepts a non-default derivation for a known workbook column', async () => {
+    const derivedRef = '[Sample - Superstore].[yr:Order Date:ok]';
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue([
+      {
+        column_ref: '[Sample - Superstore].[none:Order Date:qk]',
+        columnName: '[Order Date]',
+        datasource: 'Sample - Superstore',
+      },
+    ] as never);
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      workbookFile: WORKBOOK_FILE,
+      target: 'rows',
+      columnRef: derivedRef,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(metadataModule.resolveField).not.toHaveBeenCalled();
+    expect(metadataModule.addFieldToRows).toHaveBeenCalledWith(
+      '<worksheet/>',
+      derivedRef,
+      undefined,
+      WORKBOOK_XML,
+    );
+  });
+
+  it('proceeds without workbook prevalidation when workbookFile is missing', async () => {
+    vi.mocked(existsSync).mockImplementation((path) => String(path) !== WORKBOOK_FILE);
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      workbookFile: WORKBOOK_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(metadataModule.listAvailableFields).not.toHaveBeenCalled();
+    expect(metadataModule.addFieldToRows).toHaveBeenCalledWith(
+      '<worksheet/>',
+      COLUMN_REF,
+      undefined,
+      undefined,
+    );
+  });
+
+  it('proceeds without workbook prevalidation when workbookFile is unreadable', async () => {
+    vi.mocked(readFileSync).mockImplementation((path) => {
+      if (String(path) === WORKBOOK_FILE) throw new Error('Permission denied');
+      return '<worksheet/>';
+    });
+    vi.mocked(metadataModule.addFieldToRows).mockReturnValue(MODIFIED_XML);
+    vi.mocked(writeFileSync).mockReturnValue(undefined);
+
+    const result = await getResult({
+      worksheetFile: WORKSHEET_FILE,
+      workbookFile: WORKBOOK_FILE,
+      target: 'rows',
+      columnRef: COLUMN_REF,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(metadataModule.listAvailableFields).not.toHaveBeenCalled();
+    expect(metadataModule.addFieldToRows).toHaveBeenCalledWith(
+      '<worksheet/>',
+      COLUMN_REF,
+      undefined,
+      undefined,
+    );
   });
 
   it('still accepts a well-formed ref', async () => {

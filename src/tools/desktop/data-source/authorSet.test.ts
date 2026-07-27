@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Ok } from 'ts-results-es';
 
+import { ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -104,6 +105,69 @@ describe('authorSetTool', () => {
     expect(appliedDocumentXml(applyWorkbookDocument)).toContain(
       "<groupfilter count='3' end='bottom'",
     );
+  });
+
+  it.each(['0', '-2'])(
+    'rejects a non-positive literal count (%s) before applying workbook XML',
+    async (count) => {
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: {
+          caption: 'Invalid Top N',
+          dimension: 'Sub-Category',
+          orderBy: 'SUM([Profit])',
+          count,
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe(
+        new ArgsValidationError(`count must be at least 1 (got ${count}).`).message,
+      );
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    },
+  );
+
+  it('accepts the minimum literal count of 1', async () => {
+    const groupXml =
+      "<group caption='Top One' name='[Top One]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter count='1' end='top' function='end' units='records' user:ui-marker='end' user:ui-top-by-field='true'><groupfilter direction='DESC' expression='SUM([Profit])' function='order' user:ui-marker='order'><groupfilter function='level-members' level='[Sub-Category]' user:ui-enumeration='all' user:ui-marker='enumerate' /></groupfilter></groupfilter></group>";
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Top One',
+        dimension: 'Sub-Category',
+        orderBy: 'SUM([Profit])',
+        count: '1',
+      },
+      readbackXml: withGroup(BASE_XML, groupXml),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(appliedDocumentXml(applyWorkbookDocument)).toContain("<groupfilter count='1'");
+  });
+
+  it('rejects a parameter-linked count whose current value is zero', async () => {
+    const zeroParameterXml = BASE_XML.replace("value='5'", "value='0'").replace(
+      "formula='5'",
+      "formula='0'",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        caption: 'Invalid Param Top N',
+        dimension: 'Sub-Category',
+        orderBy: 'SUM([Profit])',
+        count: '[Parameters].[Parameter 3]',
+      },
+      initialXml: zeroParameterXml,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      new ArgsValidationError(
+        'count [Parameters].[Parameter 3] resolves to a value below 1 (got 0).',
+      ).message,
+    );
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('rejects empty required primitives', async () => {

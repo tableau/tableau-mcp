@@ -23,6 +23,7 @@ import {
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import * as validationRegistry from '../../../desktop/validation/registry.js';
 import {
+  ArgsValidationError,
   DesktopCommandExecutionError,
   NoDesktopInstancesFoundError,
 } from '../../../errors/mcpToolError.js';
@@ -1078,6 +1079,26 @@ describe('bindTemplateTool', () => {
       true,
     );
   });
+
+  it.each([0, -3])(
+    'rejects proposal.top_n=%s as a typed error before reading or applying the workbook',
+    async (top_n) => {
+      const result = await getToolResult({
+        session: '1',
+        ask: 'top regions by sales',
+        proposal: { ...sampleProposal, top_n },
+        auto_apply: true,
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe(
+        new ArgsValidationError(`proposal.top_n must be at least 1 (got ${top_n}).`).message,
+      );
+      expect(getWorkbookXmlModule.getWorkbookXml).not.toHaveBeenCalled();
+      expect(binderModule.bindTemplate).not.toHaveBeenCalled();
+    },
+  );
 
   it('sources template manifests through the intelligence provider seam, not raw loadManifests', async () => {
     // All four binder tools obtain manifests through bundledIntelligenceProvider so a

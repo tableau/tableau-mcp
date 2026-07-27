@@ -1987,6 +1987,11 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
         extra,
         args: { session, ask, proposal, minConfidence, auto_apply, target_worksheet, calcs },
         callback: async () => {
+          if (proposal?.top_n !== undefined && proposal.top_n < 1) {
+            return new ArgsValidationError(
+              `proposal.top_n must be at least 1 (got ${proposal.top_n}).`,
+            ).toErr();
+          }
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
             return sessionResult.error.toErr();

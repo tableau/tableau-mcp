@@ -583,6 +583,26 @@ describe('refineWorksheetTool — refusals and errors', () => {
     expect(loadMock()).not.toHaveBeenCalled();
   });
 
+  it.each([0, -2])(
+    'rejects a non-positive Top-N value (%s) as a typed error before touching Tableau',
+    async (n) => {
+      setupMocks();
+      const result = await getToolResult({
+        worksheetName: 'Sales by Region',
+        operation: 'top_n',
+        topN: { n },
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe(
+        new ArgsValidationError(`topN.n must be at least 1 (got ${n}).`).message,
+      );
+      expect(getMock()).not.toHaveBeenCalled();
+      expect(loadMock()).not.toHaveBeenCalled();
+    },
+  );
+
   it('errors when operation=sort_by_field is missing sortByField, before touching Tableau', async () => {
     setupMocks();
     const result = await getToolResult({

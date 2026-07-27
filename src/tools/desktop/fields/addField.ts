@@ -5,13 +5,17 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
-import { parseDatasourceQualifiedColumnRef } from '../../../desktop/metadata/field-resolver.js';
+import {
+  parseCanonicalColumnRef,
+  parseDatasourceQualifiedColumnRef,
+} from '../../../desktop/metadata/field-resolver.js';
 import { parseShelfValue } from '../../../desktop/metadata/fields.js';
 import {
   addFieldToCols,
   addFieldToEncoding,
   addFieldToRows,
   listAvailableFields,
+  resolveField,
 } from '../../../desktop/metadata/index.js';
 import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
@@ -82,6 +86,38 @@ function columnRefRejection(columnRef: string, workbookXml: string | undefined):
       ? `Did you mean: ${suggestions.join(', ')}?`
       : 'Call resolve-field with the field name to get the exact ref, or list-available-fields for every ref in the workbook.';
   return `columnRef "${columnRef}" is not a column reference. Expected [Datasource].[derivation:Column:type], e.g. ${COLUMN_REF_EXAMPLE}. ${next}`;
+}
+
+function missingColumnRefRejection(columnRef: string, workbookXml: string): string {
+  const parsed = parseCanonicalColumnRef(columnRef);
+  const query = parsed?.localFieldName ?? columnRef;
+  const resolution = resolveField(workbookXml, query);
+  const suggestions = [
+    ...(resolution.column_ref ? [resolution.column_ref] : []),
+    ...(resolution.candidates?.map((candidate) => candidate.column_ref) ?? []),
+  ].filter((ref, index, refs) => refs.indexOf(ref) === index);
+  const next =
+    suggestions.length > 0
+      ? `Suggestions: ${suggestions.join(', ')}.`
+      : 'Call resolve-field with the field name for suggestions.';
+  const location = parsed
+    ? `datasource "${parsed.datasource}" in the supplied workbook`
+    : 'the supplied workbook';
+  const reason = resolution.reason?.replace(/[.\s]+$/, '');
+  return `columnRef "${columnRef}" does not exist in ${location}. resolveField("${query}") returned ${resolution.kind}${reason ? `: ${reason}` : ''}. ${next} Call list-available-fields to refresh a stale cache and obtain exact refs.`;
+}
+
+function isKnownWorkbookColumn(
+  columnRef: string,
+  availableFields: ReturnType<typeof listAvailableFields>,
+): boolean {
+  const parsed = parseCanonicalColumnRef(columnRef);
+  if (!parsed) return false;
+
+  return availableFields.some((field) => {
+    const columnName = field.columnName.replace(/^\[|\]$/g, '');
+    return field.datasource === parsed.datasource && columnName === parsed.localFieldName;
+  });
 }
 
 // Every value here that the agent must OBTAIN somewhere else names the tool that hands it
@@ -176,6 +212,41 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             ).toErr();
           }
 
+          let workbookXml: string | undefined;
+          if (workbookFile?.trim() && existsSync(workbookFile)) {
+            try {
+              workbookXml = readFileSync(workbookFile, 'utf-8');
+            } catch {
+              // Workbook context is optional. Preserve the original non-fatal path when a
+              // stale cache path is unreadable and continue without prevalidation.
+            }
+          }
+
+          // Check the caller-facing contract before fetching or mutating a worksheet cache.
+          // With workbook context, syntax alone is insufficient: the referenced column must
+          // be real. Derivation and type suffix may legitimately differ from the one canonical
+          // ref listAvailableFields mints for that column.
+          if (!parseDatasourceQualifiedColumnRef(columnRef)) {
+            return new ArgsValidationError(columnRefRejection(columnRef, workbookXml)).toErr();
+          }
+          if (workbookXml !== undefined) {
+            let availableFields: ReturnType<typeof listAvailableFields>;
+            try {
+              availableFields = listAvailableFields(workbookXml);
+            } catch (error) {
+              return new XmlModificationError(
+                `Unable to validate columnRef against the supplied workbook: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              ).toErr();
+            }
+            if (!isKnownWorkbookColumn(columnRef, availableFields)) {
+              return new ArgsValidationError(
+                missingColumnRefRejection(columnRef, workbookXml),
+              ).toErr();
+            }
+          }
+
           // Name-based path: no cache file yet — fetch the sheet fragment and mint one. The
           // returned worksheetFile lets follow-up add-field/remove-field calls accumulate edits
           // on the same cache before a single apply-worksheet (get-once, edit-many, apply-once).
@@ -210,15 +281,6 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
             return new FileReadError(error).toErr();
           }
 
-          let workbookXml: string | undefined;
-          if (workbookFile && existsSync(workbookFile)) {
-            try {
-              workbookXml = readFileSync(workbookFile, 'utf-8');
-            } catch {
-              // Non-fatal — proceed without workbook context
-            }
-          }
-
           if (index !== undefined) {
             let existingLength: number;
             try {
@@ -234,12 +296,6 @@ export const getAddFieldTool = (server: DesktopMcpServer): DesktopTool<typeof pa
                 `index must be an integer in the range 0..${existingLength} for ${target}.`,
               ).toErr();
             }
-          }
-
-          // Checked here, not deeper down, because this is the only layer that can see
-          // the workbook and name the refs that DO exist.
-          if (!parseDatasourceQualifiedColumnRef(columnRef)) {
-            return new ArgsValidationError(columnRefRejection(columnRef, workbookXml)).toErr();
           }
 
           let modifiedXml: string;
