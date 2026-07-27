@@ -95,6 +95,7 @@ Entries show the tactics slug and, where one exists, its strategy companion.
 
 ### "Something went wrong / governance / tooling"
 - Recovering from a failed apply (MCP) → `tactics/workflow/recovery` · general troubleshooting: `strategy/workflow/troubleshooting-workbooks`
+- Blocking Desktop error dialogs (10-code catalog, prevention guards, no headless dismissal) → `tactics/workflow/errors-as-modals`
 - Field/datasource "not found" after a user change = stale cache (refresh with a live `session` first, don't declare Tableau unreachable); honor the `HOST VERIFICATION` receipt before claiming success → `tactics/workflow/failure-recovery-honesty`
 - Python helper templates → `tactics/workflow/python-helpers` · tool-selection strategy: `strategy/workflow/automation-tool-selection`
 - Template injection workflow → `tactics/workflow/templates`
