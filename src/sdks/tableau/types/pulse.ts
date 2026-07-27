@@ -50,13 +50,6 @@ export const pulseMetricSpecificationSchema = z.object({
   measurement_period: z.object({
     granularity: z.string(),
     range: z.string(),
-    // An explicit target period, used ONLY when range is 'RANGE_BY_CONFIG'
-    // (the service ignores specific_period for RANGE_CURRENT_PARTIAL /
-    // RANGE_LAST_COMPLETE). `date` is the period at the given granularity that
-    // includes this day; optional `end_date` extends the window to span from the
-    // start of `date`'s period through the end of `end_date`'s period. Both
-    // 'YYYY-MM-DD'. Lets a request target an arbitrary past period or span
-    // rather than only today-relative windows.
     specific_period: z
       .object({
         date: z.string(),
@@ -363,12 +356,6 @@ export const pulseBundleRequestSchema = z.object({
       time_zone: z.string(),
       language: languageEnumSchema,
       locale: localeEnumSchema,
-      // Anchors the analysis to a specific date instead of "now", letting a
-      // request target a past period (e.g. a prior month) rather than only
-      // today-relative windows. Format: 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'
-      // (24-hr). When set, the service ignores time_zone (per the proto). Empty
-      // string / omitted = use the current date/time. Optional to keep existing
-      // today-relative payloads valid.
       now: z.string().optional(),
     }),
     input: z.object({
