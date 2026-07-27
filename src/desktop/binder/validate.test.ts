@@ -1,7 +1,9 @@
+import { DOMParser } from '@xmldom/xmldom';
 import * as fs from 'fs';
 import * as path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { pruneUnboundOptionalFields } from '../templates/optionalFieldPrune.js';
 import { loadManifests } from './manifest.js';
 import type { TemplateManifest } from './manifest-types.js';
 import type { SchemaField, SchemaSummary } from './schema-summary.js';
@@ -1288,6 +1290,44 @@ describe('binder/validate — field_mapping covers calc inputs (H3, item 4)', ()
 });
 
 describe('binder/validate — gate 7: full scatter emission', () => {
+  it('prunes every authored Customer Name node when the optional detail slot is unbound', () => {
+    const m = manifests.get('correlation-scatter-plot-chart')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 'Scatter',
+      bindings: [
+        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'profit', field: 'Profit' },
+        { slot_id: 'region', field: 'Region' },
+      ],
+    };
+    const r = validateBinding(m, p, SUMMARY);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.optional_field_prunes).toEqual([
+      {
+        templateField: 'Customer Name',
+        derivation: 'none',
+        role: ['nk', 'ok'],
+      },
+    ]);
+
+    const template = fs.readFileSync(
+      path.join(__dirname, '../data/templates/correlation-scatter-plot-chart.xml'),
+      'utf8',
+    );
+    const pruned = pruneUnboundOptionalFields(template, r.optional_field_prunes);
+    expect(pruned).not.toContain('name="[Customer Name]"');
+    expect(pruned).not.toContain('column="[Customer Name]"');
+    expect(pruned).not.toContain('].[none:Customer Name:nk]');
+    const parsed = new DOMParser().parseFromString(pruned, 'text/xml');
+    expect(parsed.getElementsByTagName('parsererror')).toHaveLength(0);
+
+    const ordinalTemplate = template.replaceAll('none:Customer Name:nk', 'none:Customer Name:ok');
+    const prunedOrdinal = pruneUnboundOptionalFields(ordinalTemplate, r.optional_field_prunes);
+    expect(prunedOrdinal).not.toContain('Customer Name');
+  });
+
   it('emits the exact 4-slot field_mapping (calc excluded)', () => {
     const m = manifests.get('correlation-scatter-plot-chart')!;
     const p: BindingProposal = {

@@ -68,6 +68,17 @@ interface ProposalBuild {
   warnings: string[];
 }
 
+interface GreedyAssignment {
+  slot: SlotSpec;
+  field: SchemaField;
+  affinityPlaced: boolean;
+}
+
+interface CompatibleSourceSelection {
+  source: ResolvedSource;
+  affinityPlaced: boolean;
+}
+
 export function schemaSummaryFromAvailableFields(fields: AvailableFieldLike[]): SchemaSummary {
   const summaryFields: SchemaField[] = fields.map((f) => {
     const bare = bareName(f.columnName);
@@ -195,21 +206,44 @@ function buildProposalFromOrderedRefs(
   const reusableByTemplateField = new Map<string, ResolvedSource>();
   const fieldBySlot = new Map<string, SchemaField>();
   const bindings: BindingProposal['bindings'] = [];
+  const greedyAssignments: GreedyAssignment[] = [];
 
-  for (const slot of manifest.slots) {
-    if (!slot.bindable) continue;
-    const source = takeCompatibleSource(slot, sources, used, reusableByTemplateField);
-    if (!source) continue;
+  const orderedSlots = manifest.slots.filter((slot) => slot.bindable);
+  for (const [index, slot] of orderedSlots.entries()) {
+    if (shouldReserveCategoricalSource(slot, orderedSlots.slice(index + 1), sources, used)) {
+      continue;
+    }
+    const selection = takeCompatibleSource(slot, sources, used, reusableByTemplateField);
+    if (!selection) continue;
+    const { source, affinityPlaced } = selection;
     reusableByTemplateField.set(slot.template_field, source);
     fieldBySlot.set(slot.slot_id, source.field);
     bindings.push({ slot_id: slot.slot_id, field: source.field.name });
+    greedyAssignments.push({ slot, field: source.field, affinityPlaced });
   }
+  appendCategoricalSwapWarning(warnings, greedyAssignments);
 
   return {
     proposal: { template: manifest.template, title: title ?? manifest.template, bindings },
     fieldBySlot,
     warnings,
   };
+}
+
+function shouldReserveCategoricalSource(
+  slot: SlotSpec,
+  laterSlots: SlotSpec[],
+  sources: ResolvedSource[],
+  used: Set<SchemaField>,
+): boolean {
+  if (slot.required || slot.kind !== 'categorical') return false;
+  const compatible = sources.filter(
+    (source) => !used.has(source.field) && kindCompatible(slot.kind, source.field),
+  );
+  const laterRequired = laterSlots.filter(
+    (candidate) => candidate.required && candidate.kind === 'categorical',
+  ).length;
+  return compatible.length <= laterRequired;
 }
 
 function buildProposalFromFieldMapping(
@@ -223,6 +257,7 @@ function buildProposalFromFieldMapping(
   const usedFields = new Set<SchemaField>();
   const fieldBySlot = new Map<string, SchemaField>();
   const bindings: BindingProposal['bindings'] = [];
+  const greedyAssignments: GreedyAssignment[] = [];
 
   for (const slot of manifest.slots) {
     if (!slot.bindable) continue;
@@ -250,12 +285,15 @@ function buildProposalFromFieldMapping(
 
   for (const slot of manifest.slots) {
     if (!slot.bindable || !slot.required || fieldBySlot.has(slot.slot_id)) continue;
-    const source = takeCompatibleSource(slot, remainingSources, usedFields, new Map());
-    if (!source) continue;
+    const selection = takeCompatibleSource(slot, remainingSources, usedFields, new Map());
+    if (!selection) continue;
+    const { source, affinityPlaced } = selection;
     usedFields.add(source.field);
     fieldBySlot.set(slot.slot_id, source.field);
     bindings.push({ slot_id: slot.slot_id, field: source.field.name });
+    greedyAssignments.push({ slot, field: source.field, affinityPlaced });
   }
+  appendCategoricalSwapWarning(warnings, greedyAssignments);
 
   return {
     proposal: { template: manifest.template, title: title ?? manifest.template, bindings },
@@ -269,18 +307,46 @@ function takeCompatibleSource(
   sources: ResolvedSource[],
   used: Set<SchemaField>,
   reusableByTemplateField: Map<string, ResolvedSource>,
-): ResolvedSource | null {
+): CompatibleSourceSelection | null {
   const reusable = reusableByTemplateField.get(slot.template_field);
-  if (reusable && kindCompatible(slot.kind, reusable.field)) return reusable;
+  if (reusable && kindCompatible(slot.kind, reusable.field)) {
+    return { source: reusable, affinityPlaced: false };
+  }
+
+  if (slot.kind === 'categorical') {
+    const affine = sources.filter(
+      (source) =>
+        !used.has(source.field) &&
+        kindCompatible(slot.kind, source.field) &&
+        fieldNameMatchesSlot(source.field, slot),
+    );
+    if (affine.length === 1) {
+      used.add(affine[0].field);
+      return { source: affine[0], affinityPlaced: true };
+    }
+  }
 
   for (const source of sources) {
     if (used.has(source.field)) continue;
     if (!kindCompatible(slot.kind, source.field)) continue;
     used.add(source.field);
-    return source;
+    return { source, affinityPlaced: false };
   }
 
   return null;
+}
+
+function fieldNameMatchesSlot(field: SchemaField, slot: SlotSpec): boolean {
+  if (slot.template_field.includes('{{')) return false;
+  const templateFieldName = normalizeComparableName(slot.template_field);
+  return [field.name, field.caption, bareName(field.columnName)]
+    .filter((name): name is string => typeof name === 'string')
+    .map(normalizeComparableName)
+    .some((name) => name === templateFieldName);
+}
+
+function normalizeComparableName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
 function mappingKeyForSlot(
@@ -388,6 +454,21 @@ function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
   }
 }
 
+function appendCategoricalSwapWarning(warnings: string[], assignments: GreedyAssignment[]): void {
+  const categorical = assignments.filter(
+    ({ slot, field, affinityPlaced }) =>
+      !affinityPlaced && slot.kind === 'categorical' && field.role === 'dimension',
+  );
+  if (categorical.length < 2) return;
+
+  const landed = categorical
+    .map(({ slot, field }) => `field '${field.name}' landed on slot '${slot.slot_id}'`)
+    .join('; ');
+  warnings.push(
+    `Ambiguous categorical assignment: ${landed}. These categorical sources fit either slot and could swap when field order changes.`,
+  );
+}
+
 function suffixFor(derivation: Derivation, type: string): string {
   if (TRUNCATION_DERIVATIONS.has(derivation)) return 'qk';
   if (type === 'quantitative') return 'qk';
@@ -459,14 +540,14 @@ function optionalFieldPrunesFor(
       (slot) =>
         slot.bindable &&
         !slot.required &&
-        slot.kind === 'geo' &&
-        slot.role.includes('lod') &&
+        (slot.kind === 'geo' || slot.kind === 'categorical') &&
+        (slot.role.includes('lod') || slot.role.includes('detail')) &&
         !fieldBySlot.has(slot.slot_id),
     )
     .map((slot) => ({
       templateField: slot.template_field,
       derivation: slot.derivation,
-      role: 'nk',
+      role: slot.kind === 'categorical' ? ['nk', 'ok'] : 'nk',
     }));
 }
 

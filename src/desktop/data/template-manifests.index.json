@@ -507,6 +507,7 @@
       "intent_keywords": [
         "connected-scatterplot",
         "connected-scatter",
+        "scatterplot",
         "trajectory",
         "path",
         "relationship"
@@ -1126,6 +1127,7 @@
       ],
       "intent_keywords": [
         "scatter",
+        "scatterplot",
         "correlation",
         "relationship",
         "vs",
@@ -1167,7 +1169,7 @@
           ],
           "kind": "categorical",
           "bindable": true,
-          "required": true
+          "required": false
         },
         {
           "slot_id": "region",

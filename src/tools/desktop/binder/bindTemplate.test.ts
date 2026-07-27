@@ -459,6 +459,26 @@ const changedProposalAgain: BindingProposal & { confidence: number } = {
   ...changedProposal,
   sort: { by: 'Profit', direction: 'desc' },
 };
+const missingCountryProposal: BindingProposal & { confidence: number } = {
+  ...sampleProposal,
+  bindings: sampleProposal.bindings.filter((binding) => binding.slot_id !== 'country'),
+};
+const repairedCountryProposal: BindingProposal & { confidence: number } = {
+  ...missingCountryProposal,
+  bindings: [...missingCountryProposal.bindings, { slot_id: 'country', field: 'Country' }],
+};
+const missingCountryEscalateResult: BinderResult = {
+  status: 'escalate',
+  reason: 'missing-required-slot',
+  blockers: [
+    {
+      code: 'missing-required-slot',
+      slot_id: 'country',
+      detail: "required slot 'country' has no binding",
+    },
+  ],
+  proposal: missingCountryProposal,
+};
 
 // A Call-2 proposal that validated into a bound result is marked used_llm:true.
 // The auto-apply gate should preserve that field on non-applied results, but it no
@@ -794,6 +814,72 @@ describe('bindTemplateTool', () => {
       2,
     );
     expect(body.call_2_contract.proposal_choices[0].slots[0]).not.toHaveProperty('field');
+  });
+
+  it('keeps every manifest bindable slot kind reachable in the Call-2 contract', async () => {
+    const manifests = [...loadManifests().values()];
+    const llmInput = {
+      ask: 'reachability probe',
+      candidate_templates: manifests.map((manifest) => ({
+        template: manifest.template,
+        description: manifest.description,
+        intent_keywords: manifest.intent_keywords,
+        slots: manifest.slots
+          .filter((slot) => slot.bindable)
+          .map((slot) => ({
+            slot_id: slot.slot_id,
+            role: slot.role,
+            kind: slot.kind,
+            required: slot.required,
+            ...(slot.temporal_from_string === true ? { temporal_from_string: true } : {}),
+          })),
+      })),
+      // One nominal date dimension reaches categorical, temporal, and geo; one measure
+      // reaches quantitative. Together they must cover every bindable manifest SlotKind.
+      fields: [
+        { name: 'Dimension', role: 'dimension', type: 'nominal', datatype: 'date' },
+        { name: 'Measure', role: 'measure', type: 'quantitative', datatype: 'real' },
+      ],
+    } as Extract<BinderResult, { status: 'propose' }>['llm_input'];
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue({
+      ...proposeResult,
+      llm_input: llmInput,
+    });
+
+    const result = await getToolResult({ session: '1', ask: llmInput.ask });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    const choices = body.call_2_contract.proposal_choices as Array<{
+      template: string;
+      slots: Array<{ slot_id: string; compatible_field_names: string[] }>;
+    }>;
+    const choiceByTemplate = new Map(choices.map((choice) => [choice.template, choice]));
+    const compatibilityCountsByKind = new Map<string, number[]>();
+    for (const manifest of manifests) {
+      const choice = choiceByTemplate.get(manifest.template);
+      invariant(choice);
+      for (const slot of manifest.slots.filter((candidate) => candidate.bindable)) {
+        const contractSlot = choice.slots.find((candidate) => candidate.slot_id === slot.slot_id);
+        invariant(contractSlot);
+        const counts = compatibilityCountsByKind.get(slot.kind) ?? [];
+        counts.push(contractSlot.compatible_field_names.length);
+        compatibilityCountsByKind.set(slot.kind, counts);
+      }
+    }
+    for (const [kind, counts] of compatibilityCountsByKind) {
+      expect(
+        counts.some((count) => count > 0),
+        `bindable manifest slot kind '${kind}' must have a compatible Call-2 field`,
+      ).toBe(true);
+    }
+
+    const symbolMap = choiceByTemplate.get('spatial-symbol-map');
+    invariant(symbolMap);
+    const color = symbolMap.slots.find((slot) => slot.slot_id === 'color');
+    invariant(color);
+    expect(color.compatible_field_names.length).toBeGreaterThan(0);
   });
 
   it('keeps the ask-named dimension in a synonym-heavy Call-2 categorical slot', async () => {
@@ -1536,6 +1622,93 @@ describe('bindTemplateTool bind recovery gate', () => {
     expect(blockedBody.guidance).toContain('not recoverable in the fast path');
     expectStructuredBlock(blocked, { label: 'Use fallback authoring path', kind: 'prefill' });
     expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+  });
+
+  it('admits exactly one Tier-2 repair that names the sole blocked slot', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(missingCountryEscalateResult)
+      .mockResolvedValueOnce(boundResult);
+    const ask = 'symbol map of Sales by State';
+
+    const tier2 = await getToolResult({ session: '1', ask });
+    const admittedRepair = await getToolResult({
+      session: '1',
+      ask,
+      proposal: repairedCountryProposal,
+    });
+    const terminal = await getToolResult({
+      session: '1',
+      ask,
+      proposal: repairedCountryProposal,
+    });
+
+    invariant(tier2.content[0].type === 'text');
+    invariant(admittedRepair.content[0].type === 'text');
+    invariant(terminal.content[0].type === 'text');
+    expect(JSON.parse(tier2.content[0].text).reason).toBe('missing-required-slot');
+    expect(JSON.parse(admittedRepair.content[0].text).status).toBe('bound');
+    expect(terminal.isError).toBe(true);
+    expect(JSON.parse(terminal.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'fallback_required',
+    });
+    expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toMatchObject({
+      phase: 'terminal',
+      terminalRepairAllowance: {
+        template: missingCountryProposal.template,
+        slotId: 'country',
+        remaining: 0,
+      },
+    });
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the ask terminal when an admitted Tier-2 repair proposes again', async () => {
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(missingCountryEscalateResult)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(proposeResult);
+    const ask = 'symbol map of Sales by State';
+    const differentRepair = {
+      ...repairedCountryProposal,
+      bindings: repairedCountryProposal.bindings.map((binding) =>
+        binding.slot_id === 'val' ? { ...binding, field: 'Profit' } : binding,
+      ),
+    };
+
+    await getToolResult({ session: '1', ask });
+    const admittedRepair = await getToolResult({
+      session: '1',
+      ask,
+      proposal: repairedCountryProposal,
+    });
+    const blocked = await getToolResult({
+      session: '1',
+      ask,
+      proposal: differentRepair,
+    });
+
+    invariant(admittedRepair.content[0].type === 'text');
+    invariant(blocked.content[0].type === 'text');
+    expect(JSON.parse(admittedRepair.content[0].text).status).toBe('propose');
+    expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toMatchObject({
+      phase: 'terminal',
+      terminalRepairAllowance: {
+        template: missingCountryProposal.template,
+        slotId: 'country',
+        remaining: 0,
+      },
+    });
+    expect(blocked.isError).toBe(true);
+    expect(JSON.parse(blocked.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'fallback_required',
+    });
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
   });
 

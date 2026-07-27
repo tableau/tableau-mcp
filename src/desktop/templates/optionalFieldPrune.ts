@@ -3,7 +3,8 @@ import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 export interface OptionalFieldPruneSpec {
   templateField: string;
   derivation: string;
-  role: string;
+  /** Authored column-instance suffix(es); categorical templates may be nominal or ordinal. */
+  role: string | string[];
 }
 
 const ELEMENT_NODE = 1;
@@ -18,16 +19,16 @@ function removeElement(element: Element): void {
   element.parentNode?.removeChild(element);
 }
 
-function qualifiedInstanceSuffix(spec: OptionalFieldPruneSpec): string {
-  return `].[${spec.derivation}:${spec.templateField}:${spec.role}]`;
+function roles(spec: OptionalFieldPruneSpec): string[] {
+  return Array.isArray(spec.role) ? spec.role : [spec.role];
 }
 
 /**
  * Remove unbound optional template fields that are safe to omit structurally.
  *
  * This is intentionally narrow: callers pass only manifest-approved optional geo LOD
- * slots, and this helper removes exactly their LOD pill, matching column-instance,
- * and base column declaration before the normal field-reference rewrite runs.
+ * or categorical detail slots, and this helper removes exactly their LOD pill, matching
+ * column-instance, and base column declaration before normal field-reference rewriting.
  */
 export function pruneUnboundOptionalFields(
   templateXml: string,
@@ -40,11 +41,17 @@ export function pruneUnboundOptionalFields(
 
   for (const spec of specs) {
     const baseColumn = `[${spec.templateField}]`;
-    const instanceName = `[${spec.derivation}:${spec.templateField}:${spec.role}]`;
-    const qualifiedSuffix = qualifiedInstanceSuffix(spec);
+    const instanceNames = roles(spec).map(
+      (role) => `[${spec.derivation}:${spec.templateField}:${role}]`,
+    );
+    const qualifiedSuffixes = instanceNames.map((instanceName) => `].${instanceName}`);
 
     for (const lod of elementsByTag(doc, 'lod')) {
-      if (lod.getAttribute('column')?.endsWith(qualifiedSuffix)) {
+      if (
+        qualifiedSuffixes.some((qualifiedSuffix) =>
+          lod.getAttribute('column')?.endsWith(qualifiedSuffix),
+        )
+      ) {
         removeElement(lod);
       }
     }
@@ -52,7 +59,7 @@ export function pruneUnboundOptionalFields(
     for (const columnInstance of elementsByTag(doc, 'column-instance')) {
       if (
         columnInstance.getAttribute('column') === baseColumn &&
-        columnInstance.getAttribute('name') === instanceName
+        instanceNames.includes(columnInstance.getAttribute('name') ?? '')
       ) {
         removeElement(columnInstance);
       }

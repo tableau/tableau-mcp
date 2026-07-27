@@ -418,14 +418,17 @@ function optionalFieldPrunesFor(
       (slot) =>
         slot.bindable &&
         !slot.required &&
-        slot.kind === 'geo' &&
-        slot.role.includes('lod') &&
+        (slot.kind === 'geo' || slot.kind === 'categorical') &&
+        (slot.role.includes('lod') || slot.role.includes('detail')) &&
         !resolved.has(slot.slot_id),
     )
     .map((slot) => ({
       templateField: slot.template_field,
       derivation: slot.derivation,
-      role: 'nk',
+      // An unbound categorical slot has no target field whose type can choose suffixFor.
+      // Match both authored dimension suffixes so ordinal (:ok) templates prune as safely
+      // as nominal (:nk) templates; geo slots retain their existing nominal-only contract.
+      role: slot.kind === 'categorical' ? ['nk', 'ok'] : 'nk',
     }));
 }
 

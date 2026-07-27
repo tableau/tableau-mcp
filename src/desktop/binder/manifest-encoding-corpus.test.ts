@@ -679,6 +679,21 @@ interface OptionalSlotRow {
 
 const OPTIONAL_SLOTS: readonly OptionalSlotRow[] = [
   {
+    template: 'correlation-scatter-plot-chart',
+    slot: 'customer_name',
+    fills: {
+      ask: 'scatter plot of Profit and Sales by Customer Name and Region',
+      schema: 'superstore',
+      field: 'Customer Name',
+      why: 'a second ask-named categorical fills the optional fine-grain detail slot by name affinity',
+    },
+    staysUnbound: {
+      ask: 'scatter plot of Profit and Sales by Region',
+      schema: 'superstore',
+      why: 'the lone categorical is reserved for required Region, leaving Customer Name prunable',
+    },
+  },
+  {
     template: 'box-plot-chart',
     slot: 'facet',
     fills: {
@@ -980,13 +995,6 @@ const CUE_DEGRADATION: ReadonlyArray<{
     schema: 'superstore',
     boundTemplate: 'spatial-choropleth-map',
     why: 'same spatial contention. The choropleth has no colour slot (colour IS the required measure), so a bind would have dropped the directive; the softer natural cue ("warmer colours") still binds and is covered in the matrix',
-  },
-  {
-    base: 'connected scatterplot of Profit vs Sales by Customer Name and Region',
-    cued: 'connected scatterplot of Profit vs Sales by Customer Name and Region, top 5',
-    schema: 'superstore',
-    boundTemplate: 'connected-scatterplot',
-    why: 'the top-N cue pulls the ranking family into contention with the connected scatterplot',
   },
   {
     base: 'scatter plot of Profit and Sales by Customer Name and Region',
@@ -1437,6 +1445,7 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
     }
     expect(inventory).toEqual({
       'box-plot-chart': ['facet'],
+      'correlation-scatter-plot-chart': ['customer_name'],
       'part-to-whole-waterfall': ['anchor_category'],
       'ranking-ordered-bar': ['facet_row'],
       'spatial-choropleth-map': ['state'],
@@ -1444,8 +1453,8 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
       'spatial-symbol-map-latlon': ['color', 'detail2', 'size', 'tooltip'],
       'trend-line-chart': ['color_series', 'facet_col'],
     });
-    expect(Object.keys(inventory)).toHaveLength(7);
-    expect(Object.values(inventory).flat()).toHaveLength(14);
+    expect(Object.keys(inventory)).toHaveLength(8);
+    expect(Object.values(inventory).flat()).toHaveLength(15);
   });
 
   it('gives every optional bindable slot in the corpus a row in the optional-slot table', () => {
@@ -1456,7 +1465,7 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
       .flatMap((m) => optionalSlotIds(m).map((slot) => `${m.template}.${slot}`))
       .sort();
     expect(declared).toEqual(actual);
-    expect(declared).toHaveLength(14);
+    expect(declared).toHaveLength(15);
   });
 
   it('pins how much of the manifest-intent matrix reaches a deterministic bind', () => {
@@ -1465,8 +1474,8 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
     const failedClosed = outcomes.length - bound;
 
     expect({ bound, failedClosed, total: outcomes.length }).toEqual({
-      bound: 230,
-      failedClosed: 166,
+      bound: 231,
+      failedClosed: 165,
       total: 396,
     });
   });
@@ -1486,8 +1495,8 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
     }
 
     expect({ comparable, failedClosed, rerouted, total: cued.length }).toEqual({
-      comparable: 188,
-      failedClosed: 158,
+      comparable: 189,
+      failedClosed: 157,
       rerouted: 6,
       total: 352,
     });
@@ -1744,6 +1753,19 @@ describe('binder/manifest-encoding-corpus — cue degradation (fail-closed pins)
     // Fails closed, so the LLM propose path handles it. What must never happen is a silent
     // bind to some other template that drops the cue.
     expect(classify(row.cued, row.schema), row.why).toBeNull();
+  });
+});
+
+describe('binder/manifest-encoding-corpus — connected scatter intent retention', () => {
+  it('keeps an explicit connected scatterplot on its template with a top-N modifier', () => {
+    const result = classify(
+      'connected scatterplot of Profit vs Sales by Customer Name and Region, top 5',
+      'superstore',
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.template).toBe('connected-scatterplot');
+    expect(result!.top_n).toBe(5);
   });
 });
 
