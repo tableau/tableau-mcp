@@ -2,6 +2,10 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
+import {
+  BARE_COMMAND_FAILURE_GUIDANCE,
+  BARE_COMMAND_FAILURE_PATTERN,
+} from '../desktop/commands/workbook/applyFailureClassifier.js';
 import type { GetDashboardXmlError } from '../desktop/commands/workbook/getDashboardXml.js';
 import type { GetWorksheetXmlError } from '../desktop/commands/workbook/getWorksheetXml.js';
 import type { LoadDashboardXmlError } from '../desktop/commands/workbook/loadDashboardXml.js';
@@ -15,10 +19,7 @@ import {
 } from '../tools/desktop/structuredContent.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
-// The load-*-xml error union carries Desktop's own rejection text on its message-bearing
-// variants (load-rejected / readback-failed), already formatted for the agent by
-// applyFailureClassifier. Surface that text directly instead of JSON.stringify-wrapping it;
-// fall back to JSON only for the structural variants that carry no message string.
+// Load XML errors preserve Desktop's message when present; otherwise serialize structural errors.
 function xmlLoadErrorMessage(
   error: LoadWorkbookXmlError | LoadWorksheetXmlError | LoadDashboardXmlError,
 ): string {
@@ -320,9 +321,13 @@ function formatDesktopCommandExecutionError(error: ExecuteCommandError): string 
   }
 
   const tableauErrorCode = commandError['tableau-error-code'];
-  return typeof tableauErrorCode === 'string' && tableauErrorCode.length > 0
-    ? `${message}\ntableau-error-code: ${tableauErrorCode}`
-    : message;
+  const formattedMessage =
+    typeof tableauErrorCode === 'string' && tableauErrorCode.length > 0
+      ? `${message}\ntableau-error-code: ${tableauErrorCode}`
+      : message;
+  return BARE_COMMAND_FAILURE_PATTERN.test(message)
+    ? `${formattedMessage}\n${BARE_COMMAND_FAILURE_GUIDANCE}`
+    : formattedMessage;
 }
 
 export class WorkbookXmlLoadFailedError extends McpToolError {

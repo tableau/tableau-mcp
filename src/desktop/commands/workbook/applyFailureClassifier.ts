@@ -5,6 +5,7 @@ export type ApplyFailureClass =
   | 'field-binding'
   | 'dashboard-composition'
   | 'command-rejected'
+  | 'command-failed-bare'
   | 'worksheet-not-found'
   | 'timeout-or-transport'
   | 'unknown';
@@ -23,6 +24,10 @@ export interface ClassifyApplyFailureInput {
   context: ApplyFailureContext;
 }
 
+export const BARE_COMMAND_FAILURE_PATTERN = /^Command\s+[\w.-]+:[\w.-]+\s+failed\s*$/im;
+export const BARE_COMMAND_FAILURE_GUIDANCE =
+  'Report the raw error verbatim. Do not name, guess, or imply a cause the tooling did not report. Offer next diagnostic steps only: retry, check the workbook state, and gather logs.';
+
 const GUIDANCE: Record<ApplyFailureClass, string> = {
   'xml-grammar':
     'The document was structurally rejected at load. Do not regenerate the workbook. Re-read the current known-good content, diff it against your payload, and apply the smallest XML patch that fixes the structural delta before re-applying.',
@@ -32,12 +37,13 @@ const GUIDANCE: Record<ApplyFailureClass, string> = {
     'The dashboard linkage was rejected. Verify every zone references a real worksheet included in the workbook, avoid guessed ids/window pairings, and patch the specific dashboard zone instead of rebuilding unrelated sheets.',
   'command-rejected':
     'The External Client API rejected the command or verb. Check the command name and required params; do not retry the same command unchanged.',
+  'command-failed-bare': BARE_COMMAND_FAILURE_GUIDANCE,
   'worksheet-not-found':
     'The target worksheet does not exist. List the live worksheets, verify the actual sheet name, then target or rename the real sheet before applying. Do not regenerate the workbook.',
   'timeout-or-transport':
     'Transport failed before Tableau could evaluate the payload. Confirm Tableau Desktop and the External Client API are reachable, then re-issue the same payload once instead of rewriting the XML.',
   unknown:
-    'Only a generic wrapper survived. Do not blind-retry. First gather evidence: inspect the command result/logs, re-read the current known-good content, structural-diff it against your payload, then retry with a minimal patch.',
+    'Only a generic wrapper survived. Report the raw error verbatim and say the cause is unknown. Do not name, guess, or imply a cause the tooling did not report. Do not blind-retry. First gather evidence: inspect the command result/logs, re-read the current known-good content, structural-diff it against your payload, then retry with a minimal patch.',
 };
 
 interface Rule {
@@ -121,6 +127,11 @@ const RULES: Rule[] = [
     failure_class: 'timeout-or-transport',
     confidence: 0.65,
     patterns: [/timed out/i, /\btimeout\b/i, /null response/i, /no response/i],
+  },
+  {
+    failure_class: 'command-failed-bare',
+    confidence: 0.7,
+    patterns: [BARE_COMMAND_FAILURE_PATTERN],
   },
 ];
 
