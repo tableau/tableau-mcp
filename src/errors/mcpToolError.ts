@@ -4,7 +4,7 @@ import { fromError } from 'zod-validation-error/v3';
 
 import {
   BARE_COMMAND_FAILURE_GUIDANCE,
-  BARE_COMMAND_FAILURE_PATTERN,
+  isBareCommandFailure,
 } from '../desktop/commands/workbook/applyFailureClassifier.js';
 import type { GetDashboardXmlError } from '../desktop/commands/workbook/getDashboardXml.js';
 import type { GetWorksheetXmlError } from '../desktop/commands/workbook/getWorksheetXml.js';
@@ -325,7 +325,7 @@ function formatDesktopCommandExecutionError(error: ExecuteCommandError): string 
     typeof tableauErrorCode === 'string' && tableauErrorCode.length > 0
       ? `${message}\ntableau-error-code: ${tableauErrorCode}`
       : message;
-  return BARE_COMMAND_FAILURE_PATTERN.test(message)
+  return isBareCommandFailure(message)
     ? `${formattedMessage}\n${BARE_COMMAND_FAILURE_GUIDANCE}`
     : formattedMessage;
 }

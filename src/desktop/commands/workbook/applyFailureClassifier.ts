@@ -26,7 +26,14 @@ export interface ClassifyApplyFailureInput {
 
 export const BARE_COMMAND_FAILURE_PATTERN = /^Command\s+[\w.-]+:[\w.-]+\s+failed\s*$/im;
 export const BARE_COMMAND_FAILURE_GUIDANCE =
-  'Report the raw error verbatim. Do not name, guess, or imply a cause the tooling did not report. Offer next diagnostic steps only: retry, check the workbook state, and gather logs.';
+  'Report the raw error VERBATIM. Do NOT name, guess, or imply a cause the tooling did not report. Offer next diagnostic steps only: retry once, check the workbook state, and gather logs.';
+
+// With multiline mode, `$` can stop before a newline. The bare wrapper class is valid only
+// when the entire preserved server error is that one line; any additional error line is cause
+// evidence that this intentionally cause-free class must not swallow.
+export function isBareCommandFailure(message: string): boolean {
+  return message.trim().split(/\r?\n/).length === 1 && BARE_COMMAND_FAILURE_PATTERN.test(message);
+}
 
 const GUIDANCE: Record<ApplyFailureClass, string> = {
   'xml-grammar':
@@ -205,6 +212,7 @@ export function classifyApplyFailure(input: ClassifyApplyFailureInput): ApplyFai
   const text = [toText(input.serverError), toText(input.applyResponse)].filter(Boolean).join('\n');
 
   for (const rule of RULES) {
+    if (rule.failure_class === 'command-failed-bare' && !isBareCommandFailure(text)) continue;
     const evidence = collectEvidence(text, rule.patterns);
     if (evidence.length === 0) continue;
     const confidence =
