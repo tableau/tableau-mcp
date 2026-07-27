@@ -24,6 +24,9 @@ const BASE_XML = [
   '</workbook>',
 ].join('');
 
+const EMPTY_CATEGORY_SET_XML =
+  "<group caption='Category Set' name='[Category Set]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter function='empty-level' member='[Category]' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' /></group>";
+
 describe('authorSetTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -61,6 +64,67 @@ describe('authorSetTool', () => {
     );
     expect(appliedXml).toContain("expression='SUM([Profit])'");
     expect(appliedXml).toContain("level='[Sub-Category]'");
+  });
+
+  it('emits the exact empty-level group shape for empty mode', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'empty',
+        caption: 'Category Set',
+        dimension: 'Category',
+      },
+      readbackXml: withGroup(BASE_XML, EMPTY_CATEGORY_SET_XML),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(appliedDocumentXml(applyWorkbookDocument)).toBe(
+      withGroup(BASE_XML, EMPTY_CATEGORY_SET_XML),
+    );
+  });
+
+  it('creates an empty group that matches the author-action set resolver predicate', async () => {
+    const { applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'empty',
+        caption: 'Category Set',
+        dimension: 'Category',
+      },
+      readbackXml: withGroup(BASE_XML, EMPTY_CATEGORY_SET_XML),
+    });
+
+    expect(isResolvableSet(appliedDocumentXml(applyWorkbookDocument), '[Category Set]')).toBe(true);
+  });
+
+  it('requires orderBy in top-n mode', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'top-n',
+        caption: 'Top Categories',
+        dimension: 'Category',
+        count: '5',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('orderBy is required in top-n mode');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('requires count in top-n mode', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'top-n',
+        caption: 'Top Categories',
+        dimension: 'Category',
+        orderBy: 'SUM([Profit])',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('count is required in top-n mode');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
   it('rejects a caption collision before loading metadata', async () => {
@@ -164,10 +228,11 @@ function withGroup(baseXml: string, groupXml: string): string {
 
 type AuthorSetArgs = {
   session?: string;
+  mode?: 'top-n' | 'empty';
   caption: string;
   dimension: string;
-  orderBy: string;
-  count: string;
+  orderBy?: string;
+  count?: string;
   end?: 'top' | 'bottom';
   datasource?: string;
 };
@@ -214,6 +279,9 @@ async function getToolResult({
     {
       session: '12345',
       ...args,
+      mode: args.mode ?? 'top-n',
+      orderBy: args.orderBy,
+      count: args.count,
       end: args.end ?? 'top',
       datasource: args.datasource,
     },
@@ -227,4 +295,18 @@ function appliedDocumentXml(applyWorkbookDocument: ReturnType<typeof vi.fn>): st
   const [xml] = applyWorkbookDocument.mock.calls[0] ?? [];
   invariant(typeof xml === 'string');
   return xml;
+}
+
+// Mirrors authorAction.resolveTargetSet's load-bearing group predicate without
+// exporting that private implementation detail.
+function isResolvableSet(xml: string, setName: string): boolean {
+  return [...xml.matchAll(/<group\b[^>]*>/g)].some(
+    (match) =>
+      getAttr(match[0], 'name') === setName &&
+      getAttr(match[0], 'user:ui-builder') === 'filter-group',
+  );
+}
+
+function getAttr(tag: string, name: string): string | undefined {
+  return tag.match(new RegExp(`\\b${name}=(['"])(.*?)\\1`))?.[2];
 }
