@@ -394,6 +394,73 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(parsedExplicitFalse).not.toHaveProperty('metric_context');
   });
 
+  it('forwards options.now verbatim to the API', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+    const withNow = {
+      bundle_request: {
+        ...bundleRequest.bundle_request,
+        options: { ...bundleRequest.bundle_request.options, now: '2026-05-31' },
+      },
+    };
+    const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
+    const callback = await Provider.from(tool.callback);
+    await callback(
+      { bundleRequest: withNow, bundleType: undefined, slim: undefined, verbosity: undefined },
+      getMockRequestHandlerExtra(),
+    );
+    expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(withNow, 'ban');
+    expect(
+      mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0][0].bundle_request.options.now,
+    ).toBe('2026-05-31');
+  });
+
+  it('forwards measurement_period.specific_period verbatim (under RANGE_BY_CONFIG)', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
+    const ms = bundleRequest.bundle_request.input.metric.metric_specification;
+    const withSpecificPeriod = {
+      bundle_request: {
+        ...bundleRequest.bundle_request,
+        input: {
+          ...bundleRequest.bundle_request.input,
+          metric: {
+            ...bundleRequest.bundle_request.input.metric,
+            metric_specification: {
+              ...ms,
+              measurement_period: {
+                ...ms.measurement_period,
+                range: 'RANGE_BY_CONFIG',
+                specific_period: { date: '2026-04-15', end_date: '2026-04-20' },
+              },
+            },
+          },
+        },
+      },
+    };
+    const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
+    const callback = await Provider.from(tool.callback);
+    await callback(
+      {
+        bundleRequest: withSpecificPeriod,
+        bundleType: undefined,
+        slim: undefined,
+        verbosity: undefined,
+      },
+      getMockRequestHandlerExtra(),
+    );
+    expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(
+      withSpecificPeriod,
+      'ban',
+    );
+    expect(
+      mocks.mockGeneratePulseMetricValueInsightBundle.mock.calls[0][0].bundle_request.input.metric
+        .metric_specification.measurement_period.specific_period,
+    ).toEqual({ date: '2026-04-15', end_date: '2026-04-20' });
+  });
+
   async function getToolResult(
     bundleType?: PulseInsightBundleType,
     slim?: boolean,
