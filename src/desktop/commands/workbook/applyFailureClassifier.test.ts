@@ -59,8 +59,16 @@ describe('classifyApplyFailure', () => {
     });
     expect(c.failure_class).toBe('command-failed-bare');
     expect(c.evidence).toEqual(['Command tabui:load-underlying-metadata failed']);
-    expect(c.guidance).toContain('raw error verbatim');
-    expect(c.guidance).toContain('Do not name, guess, or imply a cause');
+    expect(c.guidance).toContain('raw error VERBATIM');
+    expect(c.guidance).toContain('Do NOT name, guess, or imply a cause');
+  });
+
+  it('does not classify a multi-line command failure with cause evidence as bare', () => {
+    const c = classifyApplyFailure({
+      context: 'workbook',
+      serverError: 'Command tabdoc:apply failed\nAccess denied to workbook',
+    });
+    expect(c.failure_class).toBe('unknown');
   });
 
   it('keeps a detailed command failure classified as worksheet-not-found', () => {
