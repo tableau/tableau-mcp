@@ -211,6 +211,9 @@ describe('ExternalApiClient', () => {
     const result = await client.listWorkbookDatasources();
 
     expect(result.isOk()).toBe(true);
+    // The client passes the wire shape through verbatim: a real luid, an explicit
+    // null (embedded/federated), and an absent luid (legacy build) all round-trip
+    // as-is — the nullish() schema accepts string | null | undefined.
     expect(result.unwrap().datasources).toEqual([
       {
         id: 'wb-ds-superstore',
@@ -219,6 +222,7 @@ describe('ExternalApiClient', () => {
         caption: 'Sample - Superstore',
       },
       { id: 'wb-ds-quota', luid: null, name: 'Quota Targets', caption: 'Quota Targets' },
+      { id: 'wb-ds-legacy', name: 'Legacy Extract', caption: 'Legacy Extract' },
     ]);
 
     const last = server.requests.at(-1);

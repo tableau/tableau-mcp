@@ -64,7 +64,9 @@ describe('listWorkbookDatasourcesTool', () => {
       const result = await callback({ session: undefined }, extra);
 
       expect(result.isError).toBe(false);
-      // The published datasource surfaces its server LUID; the embedded one (luid: null) omits it.
+      // The published datasource surfaces its server LUID; the embedded one
+      // (luid: null) and the legacy one (luid absent — the nullish() undefined
+      // leg) both omit it. Only a non-null string luid is projected.
       expect(parseResult(result).datasources).toEqual([
         {
           id: 'wb-ds-superstore',
@@ -73,6 +75,7 @@ describe('listWorkbookDatasourcesTool', () => {
           caption: 'Sample - Superstore',
         },
         { id: 'wb-ds-quota', name: 'Quota Targets', caption: 'Quota Targets' },
+        { id: 'wb-ds-legacy', name: 'Legacy Extract', caption: 'Legacy Extract' },
       ]);
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook/datasources');
     } finally {

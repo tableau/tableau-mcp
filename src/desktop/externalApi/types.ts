@@ -267,7 +267,9 @@ export const datasourceItemSchema = z
   .object({
     id: z.string().optional(),
     // Server LUID of the datasource; present only for a published, non-federated datasource and null
-    // otherwise. Mirrors the luid on `GET /v0/site/datasources` (nullable string in OpenAPI 3.1).
+    // otherwise. Same field as the luid on `GET /v0/site/datasources`, but nullable here (["string",
+    // "null"]) because the workbook endpoint emits null for embedded/federated datasources, whereas
+    // the site endpoint's luid is a plain string.
     luid: z.string().nullish(),
     name: z.string().optional(),
     caption: z.string().optional(),

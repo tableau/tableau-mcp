@@ -107,6 +107,14 @@ const DEFAULT_WORKBOOK_DATASOURCES = [
     name: 'Quota Targets',
     caption: 'Quota Targets',
   },
+  {
+    // luid absent entirely (older API build that predates the field): exercises
+    // the `undefined` leg of `luid: z.string().nullish()` — the reason it's
+    // nullish() rather than nullable(). Projected out of the tool output like null.
+    id: 'wb-ds-legacy',
+    name: 'Legacy Extract',
+    caption: 'Legacy Extract',
+  },
 ];
 const DEFAULT_SUMMARY_DATA = {
   columns: [
