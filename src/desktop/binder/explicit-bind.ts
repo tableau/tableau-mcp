@@ -71,6 +71,12 @@ interface ProposalBuild {
 interface GreedyAssignment {
   slot: SlotSpec;
   field: SchemaField;
+  affinityPlaced: boolean;
+}
+
+interface CompatibleSourceSelection {
+  source: ResolvedSource;
+  affinityPlaced: boolean;
 }
 
 export function schemaSummaryFromAvailableFields(fields: AvailableFieldLike[]): SchemaSummary {
@@ -207,12 +213,13 @@ function buildProposalFromOrderedRefs(
     if (shouldReserveCategoricalSource(slot, orderedSlots.slice(index + 1), sources, used)) {
       continue;
     }
-    const source = takeCompatibleSource(slot, sources, used, reusableByTemplateField);
-    if (!source) continue;
+    const selection = takeCompatibleSource(slot, sources, used, reusableByTemplateField);
+    if (!selection) continue;
+    const { source, affinityPlaced } = selection;
     reusableByTemplateField.set(slot.template_field, source);
     fieldBySlot.set(slot.slot_id, source.field);
     bindings.push({ slot_id: slot.slot_id, field: source.field.name });
-    greedyAssignments.push({ slot, field: source.field });
+    greedyAssignments.push({ slot, field: source.field, affinityPlaced });
   }
   appendCategoricalSwapWarning(warnings, greedyAssignments);
 
@@ -233,7 +240,6 @@ function shouldReserveCategoricalSource(
   const compatible = sources.filter(
     (source) => !used.has(source.field) && kindCompatible(slot.kind, source.field),
   );
-  if (compatible.some((source) => fieldNameMatchesSlot(source.field, slot))) return false;
   const laterRequired = laterSlots.filter(
     (candidate) => candidate.required && candidate.kind === 'categorical',
   ).length;
@@ -279,12 +285,13 @@ function buildProposalFromFieldMapping(
 
   for (const slot of manifest.slots) {
     if (!slot.bindable || !slot.required || fieldBySlot.has(slot.slot_id)) continue;
-    const source = takeCompatibleSource(slot, remainingSources, usedFields, new Map());
-    if (!source) continue;
+    const selection = takeCompatibleSource(slot, remainingSources, usedFields, new Map());
+    if (!selection) continue;
+    const { source, affinityPlaced } = selection;
     usedFields.add(source.field);
     fieldBySlot.set(slot.slot_id, source.field);
     bindings.push({ slot_id: slot.slot_id, field: source.field.name });
-    greedyAssignments.push({ slot, field: source.field });
+    greedyAssignments.push({ slot, field: source.field, affinityPlaced });
   }
   appendCategoricalSwapWarning(warnings, greedyAssignments);
 
@@ -300,9 +307,11 @@ function takeCompatibleSource(
   sources: ResolvedSource[],
   used: Set<SchemaField>,
   reusableByTemplateField: Map<string, ResolvedSource>,
-): ResolvedSource | null {
+): CompatibleSourceSelection | null {
   const reusable = reusableByTemplateField.get(slot.template_field);
-  if (reusable && kindCompatible(slot.kind, reusable.field)) return reusable;
+  if (reusable && kindCompatible(slot.kind, reusable.field)) {
+    return { source: reusable, affinityPlaced: false };
+  }
 
   if (slot.kind === 'categorical') {
     const affine = sources.filter(
@@ -313,7 +322,7 @@ function takeCompatibleSource(
     );
     if (affine.length === 1) {
       used.add(affine[0].field);
-      return affine[0];
+      return { source: affine[0], affinityPlaced: true };
     }
   }
 
@@ -321,7 +330,7 @@ function takeCompatibleSource(
     if (used.has(source.field)) continue;
     if (!kindCompatible(slot.kind, source.field)) continue;
     used.add(source.field);
-    return source;
+    return { source, affinityPlaced: false };
   }
 
   return null;
@@ -447,12 +456,8 @@ function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
 
 function appendCategoricalSwapWarning(warnings: string[], assignments: GreedyAssignment[]): void {
   const categorical = assignments.filter(
-    ({ slot, field }) =>
-      slot.kind === 'categorical' &&
-      field.role === 'dimension' &&
-      assignments
-        .filter((candidate) => candidate.slot.kind === 'categorical')
-        .every((candidate) => kindCompatible(candidate.slot.kind, field)),
+    ({ slot, field, affinityPlaced }) =>
+      !affinityPlaced && slot.kind === 'categorical' && field.role === 'dimension',
   );
   if (categorical.length < 2) return;
 

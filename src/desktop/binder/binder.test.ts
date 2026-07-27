@@ -1319,6 +1319,18 @@ describe('binder/bindTemplate — Call 1 miss (propose)', () => {
       );
     }
   });
+
+  it('routes the single token scatterplot to the correlation scatter candidate', () => {
+    const input = buildLlmInput(
+      'Show me a scatterplot of Sales and Profit by Region',
+      manifests,
+      summarizeSchema(WORKBOOK_XML),
+    );
+
+    expect(input.candidate_templates.map((candidate) => candidate.template)).toContain(
+      'correlation-scatter-plot-chart',
+    );
+  });
 });
 
 describe('binder/bindTemplate — Call 2 (agent proposal)', () => {

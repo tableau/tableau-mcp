@@ -1666,6 +1666,52 @@ describe('bindTemplateTool bind recovery gate', () => {
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps the ask terminal when an admitted Tier-2 repair proposes again', async () => {
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate)
+      .mockResolvedValueOnce(missingCountryEscalateResult)
+      .mockResolvedValueOnce(proposeResult)
+      .mockResolvedValueOnce(proposeResult);
+    const ask = 'symbol map of Sales by State';
+    const differentRepair = {
+      ...repairedCountryProposal,
+      bindings: repairedCountryProposal.bindings.map((binding) =>
+        binding.slot_id === 'val' ? { ...binding, field: 'Profit' } : binding,
+      ),
+    };
+
+    await getToolResult({ session: '1', ask });
+    const admittedRepair = await getToolResult({
+      session: '1',
+      ask,
+      proposal: repairedCountryProposal,
+    });
+    const blocked = await getToolResult({
+      session: '1',
+      ask,
+      proposal: differentRepair,
+    });
+
+    invariant(admittedRepair.content[0].type === 'text');
+    invariant(blocked.content[0].type === 'text');
+    expect(JSON.parse(admittedRepair.content[0].text).status).toBe('propose');
+    expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toMatchObject({
+      phase: 'terminal',
+      terminalRepairAllowance: {
+        template: missingCountryProposal.template,
+        slotId: 'country',
+        remaining: 0,
+      },
+    });
+    expect(blocked.isError).toBe(true);
+    expect(JSON.parse(blocked.content[0].text)).toMatchObject({
+      status: 'blocked',
+      reason: 'fallback_required',
+    });
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+  });
+
   it('clears the recovery record after a terminal bound result', async () => {
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
     vi.mocked(binderModule.bindTemplate)

@@ -243,12 +243,23 @@ describe('portability-lane — histogram bin-width refusal (W3)', () => {
 });
 
 describe('portability-lane — coarse-grain scatter omits its optional detail slot', () => {
-  it('healthcare scatter binds with the schema-affine required region and prunes customer detail', async () => {
+  it('keeps a dimension-less healthcare scatter on the propose path', async () => {
     const res = await bindTemplate({
       ask: 'scatter of Paid Amount vs Allowed Amount',
       workbookXml: HEALTHCARE_CLAIMS_WORKBOOK_XML,
       manifests: withForcedEligible(['correlation-scatter-plot-chart']),
     });
+
+    expect(res.status).toBe('propose');
+  });
+
+  it('binds a healthcare scatter at an ask-named region grain and prunes customer detail', async () => {
+    const res = await bindTemplate({
+      ask: 'scatter of Paid Amount vs Allowed Amount by Provider Region',
+      workbookXml: HEALTHCARE_CLAIMS_WORKBOOK_XML,
+      manifests: withForcedEligible(['correlation-scatter-plot-chart']),
+    });
+
     expect(res.status).toBe('bound');
     if (res.status === 'bound') {
       expect(res.used_llm).toBe(false);

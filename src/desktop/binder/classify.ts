@@ -2288,6 +2288,7 @@ function roleGreedyBind(
     pred: (f: SchemaField) => boolean,
   ): SchemaField | null => {
     if (!temporalCompletion) return null;
+    if (slot.required && slot.kind === 'categorical' && !matched.some(isCategorical)) return null;
     const candidates = temporalCompletion.schemaFields.filter((f) => !used.has(f) && pred(f));
     if (candidates.length === 0) return null;
 
@@ -2396,7 +2397,6 @@ function roleGreedyBind(
   for (const [i, slot] of activeSlots.entries()) {
     if (isOptionalCategoricalDetail(slot)) {
       const compatible = matched.filter((field) => !used.has(field) && isCategorical(field));
-      const hasNameMatch = compatible.some((field) => fieldNameMatchesSlot(field, slot));
       const laterRequired = activeSlots
         .slice(i + 1)
         .filter(
@@ -2404,7 +2404,7 @@ function roleGreedyBind(
             (candidate.required || forced.has(candidate.slot_id)) &&
             candidate.kind === 'categorical',
         ).length;
-      if (!hasNameMatch && compatible.length <= laterRequired) continue;
+      if (compatible.length <= laterRequired) continue;
     }
     let chosen: SchemaField | null = null;
     switch (slot.kind) {

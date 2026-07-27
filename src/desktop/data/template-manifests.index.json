@@ -507,6 +507,7 @@
       "intent_keywords": [
         "connected-scatterplot",
         "connected-scatter",
+        "scatterplot",
         "trajectory",
         "path",
         "relationship"
@@ -1126,6 +1127,7 @@
       ],
       "intent_keywords": [
         "scatter",
+        "scatterplot",
         "correlation",
         "relationship",
         "vs",

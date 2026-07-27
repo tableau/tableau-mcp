@@ -232,6 +232,9 @@ describe('bindExplicitTemplate', () => {
       expect(result.fieldMapping['Customer Name']).toBe('[Superstore].[none:Customer Name:nk]');
       expect(result.fieldMapping.Region).toBe('[Superstore].[none:Region:nk]');
       expect(result.optionalFieldPrunes).toEqual([]);
+      expect(
+        result.warnings.some((warning) => warning.startsWith('Ambiguous categorical assignment:')),
+      ).toBe(false);
     }
   });
 
@@ -255,6 +258,38 @@ describe('bindExplicitTemplate', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.fieldMapping.Region).toBe('[Superstore].[none:Region:nk]');
+      expect(result.fieldMapping).not.toHaveProperty('Customer Name');
+      expect(result.optionalFieldPrunes).toEqual([
+        { templateField: 'Customer Name', derivation: 'none', role: ['nk', 'ok'] },
+      ]);
+    }
+  });
+
+  it('reserves a lone Customer Name field for the required scatter detail slot', () => {
+    const scatterSummary: SchemaSummary = {
+      datasource: 'Superstore',
+      fields: [
+        field({ name: 'Sales', role: 'measure', type: 'quantitative', datatype: 'real' }),
+        field({ name: 'Profit', role: 'measure', type: 'quantitative', datatype: 'real' }),
+        field({
+          name: 'Customer Name',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+        }),
+      ],
+    };
+
+    const result = bindExplicitTemplate(
+      'correlation-scatter-plot-chart',
+      scatterSummary.fields.map((candidate) => candidate.column_ref),
+      scatterSummary,
+      { manifests: loadManifests() },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.fieldMapping.Region).toBe('[Superstore].[none:Customer Name:nk]');
       expect(result.fieldMapping).not.toHaveProperty('Customer Name');
       expect(result.optionalFieldPrunes).toEqual([
         { templateField: 'Customer Name', derivation: 'none', role: ['nk', 'ok'] },

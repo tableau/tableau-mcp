@@ -1863,11 +1863,10 @@ function recordBindRecoveryAttemptFailOpen({
       return;
     }
     if (
-      terminal &&
       sessionRouteState.getBindRecovery(session, askKey)?.terminalRepairAllowance?.remaining === 0
     ) {
-      // A successful repair used its sole terminal escape. Keep the ask terminal instead
-      // of clearing recovery state, so an identical second repair cannot re-enter.
+      // An admitted repair used its sole terminal escape. Keep the ask terminal regardless
+      // of outcome, so no later proposal can re-enter after the allowance is consumed.
       sessionRouteState.recordBindRecoveryTerminal(session, askKey, attempt);
       return;
     }

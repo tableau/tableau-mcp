@@ -2,11 +2,11 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.59.0+content.2026-07-27",
+  "content_version": "2.59.1+content.2026-07-27",
   "schema_version": "2",
   "generated": "2026-07-27",
   "engine_compat": {
-    "server_min": "2.59.0",
+    "server_min": "2.59.1",
     "node": ">=22.7.5"
   },
   "resources": [
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "fd0eade17d4a16b3a337c58c4ef798103da6f53ce50951cd463ccd623b3020e9",
-      "bytes": 283232
+      "sha256": "9a72ff66a3a4b9720cf2309c2a7793129d8b6bee120ad202316a8b1d214f5255",
+      "bytes": 283278
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -282,8 +282,8 @@
     },
     {
       "path": "template-manifests/connected-scatterplot.manifest.json",
-      "sha256": "e6a1f201d46669834604285f594ad4f7ccc716c04615680bb7308db1cb308841",
-      "bytes": 5372
+      "sha256": "cdfde5d2f4bd44a5dd1b7628d186f0fbb91a66379eaee616cc01469423aaf938",
+      "bytes": 5391
     },
     {
       "path": "template-manifests/control-chart-xmr.manifest.json",
@@ -307,8 +307,8 @@
     },
     {
       "path": "template-manifests/correlation-scatter-plot-chart.manifest.json",
-      "sha256": "32d760330cd48166ba8b118e52e4ed089b0b6a7fc6ee6a095f16ec573ea10617",
-      "bytes": 4774
+      "sha256": "858ddd80c02fa40d54a50e35e1792fcff3d91263a29cdb97106713570a0e0b74",
+      "bytes": 4793
     },
     {
       "path": "template-manifests/deviation-arrow.manifest.json",
