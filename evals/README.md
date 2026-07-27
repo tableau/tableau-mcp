@@ -61,6 +61,13 @@ tracing docs: <https://www.langchain.com/blog/your-coding-agents-are-a-black-box
 The adapters enable tracing via `TRACE_TO_LANGSMITH=true` plus the harness-specific
 `*_LANGSMITH_*` env vars and stamp the `eval_run_id` correlation metadata.
 
+> **A free LangSmith account is sufficient for local eval runs.** The harness only
+> writes traces and reads them back (`makeClient` → `listRuns`); it uses no
+> paid/team-only features. Sign up at <https://smith.langchain.com>, create a
+> personal API key (`lsv2_...`), and set `LANGSMITH_API_KEY` + `LANGSMITH_PROJECT`
+> in `.env` (§Configuration). Verified end-to-end (`eval:run` → `eval:grade`,
+> trace fetched back) on a free-tier key.
+
 > If no trace with a matching `eval_run_id` appears within the grader's poll window,
 > the case is recorded as `grading_error` (no local fallback). This almost always
 > means the plugin is not installed/configured for that harness.
