@@ -104,10 +104,10 @@ describe('authorSetTool', () => {
     );
   });
 
-  it('keeps top-n readback independent of the set marker', async () => {
+  it('rejects top-n mode when the set marker does not survive readback', async () => {
     const readbackWithoutMarker = withGroup(
       BASE_XML,
-      "<group caption='Top Categories' name='[Top Categories]' name-style='unqualified'><groupfilter count='5' end='top' function='end' /></group>",
+      "<group caption='Top Categories' name='[Top Categories]' name-style='unqualified'><groupfilter count='5' end='top' function='end' units='records' user:ui-marker='end' user:ui-top-by-field='true'><groupfilter direction='DESC' expression='SUM([Profit])' function='order' user:ui-marker='order'><groupfilter function='level-members' level='[Category]' user:ui-enumeration='all' user:ui-marker='enumerate' /></groupfilter></groupfilter></group>",
     );
     const { result } = await getToolResult({
       args: {
@@ -120,7 +120,12 @@ describe('authorSetTool', () => {
       readbackXml: readbackWithoutMarker,
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('set name and caption survived readback');
+    expect(result.content[0].text).toContain(
+      "user:ui-builder='filter-group' marker did not survive readback",
+    );
   });
 
   it('creates an empty group that matches the author-action set resolver predicate', async () => {

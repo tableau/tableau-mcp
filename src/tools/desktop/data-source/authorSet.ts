@@ -149,7 +149,7 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
               'load completed but did not apply: readback did not contain the new set name and caption',
             ).toErr();
           }
-          if (mode === 'empty' && getAttr(readbackGroup, 'user:ui-builder') !== 'filter-group') {
+          if (getAttr(readbackGroup, 'user:ui-builder') !== 'filter-group') {
             return new XmlModificationError(
               "load completed and the set name and caption survived readback, but the user:ui-builder='filter-group' marker did not survive readback",
             ).toErr();
