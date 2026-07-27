@@ -82,8 +82,9 @@ Use the authoring lane in dependency order:
 1. **`author-set` first:** create an initially empty set named `Category Set` on
    `[Category]`.
 2. **`author-calc` next:** create the drill/detail and label calculations.
-3. **`author-action` next:** create an on-select worksheet-source set action targeting
-   `[Category Set]`, with add/remove or toggle-equivalent membership behavior.
+3. **`author-action` next (mode 'set'):** create an on-select worksheet-source set action
+   targeting `[Category Set]` (params: mode 'set', targetSet, setMembership 'assign' — the
+   Desktop default; 'add'/'remove' are one-way variants).
 4. **Bind and place fields last:** use `bind-template` for the Sales bar shell
    when eligible, then `add-field` to place the Category/header/drill fields on
    the same discrete Rows axis and `SUM([Sales])` on Columns. If the shell already
@@ -108,7 +109,8 @@ Rows    = [Category] / [Header] / [Title]
 Columns = SUM([Sales])
 
 Action  = on-select set action
-Target  = [Sample - Superstore].[Category Set]
+Target  = the Category set — prose shorthand; the emitted 'target-group' must use the
+          datasource's name attribute, e.g. '[federated.<id>].[Category Set]', never the caption
 ```
 
 In the collapsed state, `Header` is `+` and `Title` is Category. After the action adds
@@ -121,7 +123,7 @@ calc. The golden's `Title` calc combines the collapsed Category and expanded
 Sub-Category values into one field; both forms are the same set-membership pattern.
 
 
-### Live-confirmed action XML (2026-07-26, build 0000.26.0715.2311)
+### Live-confirmed action XML (2026-07-26, build 0000.26.0724.1117, Apple-silicon main.app)
 
 A set action serializes as **`<edit-group-action>`** — sets are groups in workbook XML;
 there is no `<set-action>` element, and `<edit-parameter-action>` targeting a set is malformed
@@ -143,7 +145,7 @@ name and backfills `add-or-remove-marks='assign'` when omitted):
 ```
 
 Rules that do not bend:
-- Child order is fixed: `<activation>`, `<single-select>`, `<add-or-remove-marks>`, `<params>` (with `<source>` second).
+- Child order is fixed: `<activation>`, `<source>`, `<single-select>`, `<add-or-remove-marks>`, `<params>`.
 - `'target-group'` qualifies with the datasource's **`name` attribute** (`federated.*`), never its caption.
 - `'selection-clear-set-option'` ∈ `'do-nothing'` | `'show-all'` | `'exclude-all'`. Do NOT emit `<clear-option>` on a group action.
 - Apply-time validation does NOT resolve `'target-group'` — a dangling target is accepted silently. Always read back and byte-compare the `<actions>` block.
