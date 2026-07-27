@@ -82,6 +82,25 @@ describe('authorSetTool', () => {
     );
   });
 
+  it.each(['orderBy', 'count'] as const)(
+    'rejects empty mode when %s is supplied',
+    async (signal) => {
+      const { result, applyWorkbookDocument } = await getToolResult({
+        args: {
+          mode: 'empty',
+          caption: 'Category Set',
+          dimension: 'Category',
+          [signal]: signal === 'orderBy' ? 'SUM([Profit])' : '5',
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toBe('orderBy and count cannot be supplied in empty mode');
+      expect(applyWorkbookDocument).not.toHaveBeenCalled();
+    },
+  );
+
   it('rejects empty mode when the set marker does not survive readback', async () => {
     const readbackWithoutMarker = withGroup(
       BASE_XML,
@@ -128,6 +147,34 @@ describe('authorSetTool', () => {
     );
   });
 
+  it('rejects a readback match from a different datasource', async () => {
+    const twoDatasourceXml = BASE_XML.replace(
+      "<datasource name='Sample - Superstore'>",
+      "<datasource name='Datasource A'></datasource><datasource name='Datasource B'>",
+    );
+    const readbackXml = twoDatasourceXml.replace(
+      "<datasource name='Datasource A'></datasource>",
+      "<datasource name='Datasource A'><group caption='Shared' name='[Shared]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter function='empty-level' member='[Category]' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' /></group></datasource>",
+    );
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'empty',
+        caption: 'Shared',
+        dimension: 'Category',
+        datasource: 'Datasource B',
+      },
+      initialXml: twoDatasourceXml,
+      readbackXml,
+    });
+
+    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'readback did not contain the new set name and caption',
+    );
+  });
+
   it('creates an empty group that matches the author-action set resolver predicate', async () => {
     const { applyWorkbookDocument } = await getToolResult({
       args: {
@@ -170,6 +217,40 @@ describe('authorSetTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('count is required in top-n mode');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it.each(['0', '-1'])('rejects non-positive top-n count %s', async (count) => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'top-n',
+        caption: 'Top Categories',
+        dimension: 'Category',
+        orderBy: 'SUM([Profit])',
+        count,
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe('count must be a positive integer in top-n mode');
+    expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-numeric top-n count', async () => {
+    const { result, applyWorkbookDocument } = await getToolResult({
+      args: {
+        mode: 'top-n',
+        caption: 'Top Categories',
+        dimension: 'Category',
+        orderBy: 'SUM([Profit])',
+        count: 'many',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe('count must be a positive integer in top-n mode');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 

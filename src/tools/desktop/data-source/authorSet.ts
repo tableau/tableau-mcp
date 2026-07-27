@@ -76,6 +76,11 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
           if (dimension.trim().length === 0) {
             return new ArgsValidationError('dimension empty').toErr();
           }
+          if (mode === 'empty' && (orderBy !== undefined || count !== undefined)) {
+            return new ArgsValidationError(
+              'orderBy and count cannot be supplied in empty mode',
+            ).toErr();
+          }
 
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -110,8 +115,15 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
             if (count === undefined || count.trim().length === 0) {
               return new ArgsValidationError('count is required in top-n mode').toErr();
             }
-            // PR #654: numericFilterLimit(count) and resolveParameterFilterLimit(liveXml, count)
-            // guards belong INSIDE this mode === 'top-n' block; empty sets have no count.
+            const trimmedCount = count.trim();
+            const isParameterReference = /^\[Parameters\]\.\[[^\]]+\]$/.test(trimmedCount);
+            // Parameter references are write-blind: their live value is not validated here.
+            // Literal counts must be positive integers before the workbook is written.
+            if (!isParameterReference && !/^[1-9]\d*$/.test(trimmedCount)) {
+              return new ArgsValidationError(
+                'count must be a positive integer in top-n mode',
+              ).toErr();
+            }
             groupXml = renderTopNGroupSet({
               caption,
               setName,
@@ -143,7 +155,13 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
           if (readbackResult.isErr()) {
             return new DesktopCommandExecutionError(readbackResult.error).toErr();
           }
-          const readbackGroup = findGroupByNameAndCaption(readbackResult.value, setName, caption);
+          const readbackTarget = findDatasourceElements(readbackResult.value).find(
+            (datasource) => datasource.name === target.name,
+          );
+          const readbackGroup =
+            readbackTarget === undefined
+              ? undefined
+              : findGroupByNameAndCaption(readbackTarget.xml, setName, caption);
           if (readbackGroup === undefined) {
             return new XmlModificationError(
               'load completed but did not apply: readback did not contain the new set name and caption',
