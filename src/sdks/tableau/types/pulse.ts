@@ -1,5 +1,12 @@
 import { z } from 'zod';
 
+// Date-only value (YYYY-MM-DD), non-empty — used by specific_period, which names
+// a calendar day, not a datetime. Distinct from tableauDateTimeSchema (below),
+// which also accepts a time component and an empty string.
+export const tableauDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Format must be a date, YYYY-MM-DD.');
+
 const pulseMetadataSchema = z.object({
   name: z.string(),
   description: z.string(),
@@ -52,8 +59,12 @@ export const pulseMetricSpecificationSchema = z.object({
     range: z.string(),
     specific_period: z
       .object({
-        date: z.string(),
-        end_date: z.string().optional(),
+        date: tableauDateSchema,
+        end_date: tableauDateSchema.optional(),
+      })
+      .refine((sp) => sp.end_date === undefined || sp.end_date >= sp.date, {
+        message: 'specific_period.end_date must be on or after specific_period.date.',
+        path: ['end_date'],
       })
       .optional(),
   }),
@@ -356,7 +367,9 @@ export const pulseBundleRequestSchema = z.object({
       time_zone: z.string(),
       language: languageEnumSchema,
       locale: localeEnumSchema,
-      now: z.string().optional(),
+      // Same field/format as the brief request's `now` (YYYY-MM-DD or
+      // YYYY-MM-DD HH:MM:SS, or empty for today-relative) — reuse its schema.
+      now: tableauDateTimeSchema.optional(),
     }),
     input: z.object({
       metadata: z.object({
