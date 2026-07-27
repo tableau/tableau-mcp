@@ -82,6 +82,47 @@ describe('authorSetTool', () => {
     );
   });
 
+  it('rejects empty mode when the set marker does not survive readback', async () => {
+    const readbackWithoutMarker = withGroup(
+      BASE_XML,
+      "<group caption='Category Set' name='[Category Set]' name-style='unqualified'><groupfilter function='empty-level' member='[Category]' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' /></group>",
+    );
+    const { result } = await getToolResult({
+      args: {
+        mode: 'empty',
+        caption: 'Category Set',
+        dimension: 'Category',
+      },
+      readbackXml: readbackWithoutMarker,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('set name and caption survived readback');
+    expect(result.content[0].text).toContain(
+      "user:ui-builder='filter-group' marker did not survive readback",
+    );
+  });
+
+  it('keeps top-n readback independent of the set marker', async () => {
+    const readbackWithoutMarker = withGroup(
+      BASE_XML,
+      "<group caption='Top Categories' name='[Top Categories]' name-style='unqualified'><groupfilter count='5' end='top' function='end' /></group>",
+    );
+    const { result } = await getToolResult({
+      args: {
+        mode: 'top-n',
+        caption: 'Top Categories',
+        dimension: 'Category',
+        orderBy: 'SUM([Profit])',
+        count: '5',
+      },
+      readbackXml: readbackWithoutMarker,
+    });
+
+    expect(result.isError).toBe(false);
+  });
+
   it('creates an empty group that matches the author-action set resolver predicate', async () => {
     const { applyWorkbookDocument } = await getToolResult({
       args: {

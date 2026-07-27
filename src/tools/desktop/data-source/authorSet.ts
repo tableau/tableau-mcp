@@ -18,7 +18,8 @@ const endSchema = z.enum(['top', 'bottom']);
 const modeSchema = z.enum(['top-n', 'empty']);
 
 // Primitives in, groupfilter XML server-side, readback out. Authors either an
-// initially empty set or a computed Top/Bottom-N set on a dimension.
+// initially empty set or a computed Top/Bottom-N set on a dimension; the Top-N
+// shape retains its provenance from the WW2021W44 golden workbook.
 const paramsSchema = {
   session: z.string().optional().describe(''),
   mode: modeSchema.default('top-n').describe(''),
@@ -75,14 +76,6 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
           if (dimension.trim().length === 0) {
             return new ArgsValidationError('dimension empty').toErr();
           }
-          if (mode === 'top-n') {
-            if (orderBy === undefined || orderBy.trim().length === 0) {
-              return new ArgsValidationError('orderBy is required in top-n mode').toErr();
-            }
-            if (count === undefined || count.trim().length === 0) {
-              return new ArgsValidationError('count is required in top-n mode').toErr();
-            }
-          }
 
           const sessionResult = resolveSession(session);
           if (sessionResult.isErr()) {
@@ -109,17 +102,27 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
           }
 
           const setName = `[${caption}]`;
-          const groupXml =
-            mode === 'empty'
-              ? renderEmptyGroupSet({ caption, setName, dimension })
-              : renderTopNGroupSet({
-                  caption,
-                  setName,
-                  dimension,
-                  orderBy: orderBy ?? '',
-                  count: count ?? '',
-                  end,
-                });
+          let groupXml: string;
+          if (mode === 'top-n') {
+            if (orderBy === undefined || orderBy.trim().length === 0) {
+              return new ArgsValidationError('orderBy is required in top-n mode').toErr();
+            }
+            if (count === undefined || count.trim().length === 0) {
+              return new ArgsValidationError('count is required in top-n mode').toErr();
+            }
+            // PR #654: numericFilterLimit(count) and resolveParameterFilterLimit(liveXml, count)
+            // guards belong INSIDE this mode === 'top-n' block; empty sets have no count.
+            groupXml = renderTopNGroupSet({
+              caption,
+              setName,
+              dimension,
+              orderBy,
+              count,
+              end,
+            });
+          } else {
+            groupXml = renderEmptyGroupSet({ caption, setName, dimension });
+          }
           const editedXml = spliceElementIntoDatasource(liveXml, target, groupXml);
           const validation = validateWorkbookDocumentApply(editedXml, liveXml);
           if (!validation.ok) {
@@ -140,9 +143,15 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
           if (readbackResult.isErr()) {
             return new DesktopCommandExecutionError(readbackResult.error).toErr();
           }
-          if (!hasGroupNameAndCaption(readbackResult.value, setName, caption)) {
+          const readbackGroup = findGroupByNameAndCaption(readbackResult.value, setName, caption);
+          if (readbackGroup === undefined) {
             return new XmlModificationError(
               'load completed but did not apply: readback did not contain the new set name and caption',
+            ).toErr();
+          }
+          if (mode === 'empty' && getAttr(readbackGroup, 'user:ui-builder') !== 'filter-group') {
+            return new XmlModificationError(
+              "load completed and the set name and caption survived readback, but the user:ui-builder='filter-group' marker did not survive readback",
             ).toErr();
           }
 
@@ -244,8 +253,8 @@ function hasGroupCaption(datasourceXml: string, caption: string): boolean {
   );
 }
 
-function hasGroupNameAndCaption(xml: string, name: string, caption: string): boolean {
-  return findGroupTags(xml).some(
+function findGroupByNameAndCaption(xml: string, name: string, caption: string): string | undefined {
+  return findGroupTags(xml).find(
     (tag) =>
       unescapeXml(getAttr(tag, 'name') ?? '') === name &&
       unescapeXml(getAttr(tag, 'caption') ?? '') === caption,
