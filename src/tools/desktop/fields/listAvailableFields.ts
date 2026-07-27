@@ -117,7 +117,6 @@ export const getListAvailableFieldsTool = (
     ].join(' '),
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false, // With session, rewrites the workbook cache file + sidecar
       destructiveHint: false,
       idempotentHint: true,

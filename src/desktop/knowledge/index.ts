@@ -93,7 +93,13 @@ export function readKnowledgeSections(slug: string): string[] {
 function extractSection(content: string, wanted: string): string | null {
   const lines = content.split('\n');
   const all = headings(lines);
-  const target = headingSlug(decodeURIComponent(wanted));
+  let decoded = wanted;
+  try {
+    decoded = decodeURIComponent(wanted);
+  } catch {
+    // A literal or malformed percent escape is still valid heading text.
+  }
+  const target = headingSlug(decoded);
   const index = all.findIndex((heading) => headingSlug(heading.text) === target);
   if (index === -1) return null;
 
@@ -301,10 +307,17 @@ export interface KnowledgeSearchResult {
   hits: KnowledgeHit[];
   nearestMatches?: KnowledgeHit[];
   note?: string;
+  topHitBody?: string;
 }
 
 export const ZERO_HIT_NEAREST_MATCHES_NOTE =
   'hits is empty; nearestMatches contains the nearest keyword results, not exact hits.';
+
+// Representative ambiguous searches have 0–0.028 top-two gaps; clearly targeted calculation
+// searches have 0.181–0.449 gaps. Keep the gate conservatively between those distributions.
+const CONFIDENT_TOP_HIT_SCORE_GAP = 0.15;
+const TOP_HIT_BODY_MAX_BYTES = 6_144;
+const TOP_HIT_BODY_TRUNCATION_MARKER = `\n\n[TRUNCATED: body exceeds ${TOP_HIT_BODY_MAX_BYTES}-byte cap]`;
 
 const MUST_READ_INSTRUCTION =
   'snippet is not the module — read this URI before authoring; append #<section> from sections to read one section instead of the whole module';
@@ -322,6 +335,29 @@ function requireTopHitRead(hits: KnowledgeHit[]): KnowledgeHit[] {
     },
     ...hits.slice(1),
   ];
+}
+
+function hasConfidentTopHit(hits: KnowledgeHit[]): boolean {
+  return (
+    hits.length === 1 ||
+    (hits.length > 1 && hits[0].score - hits[1].score >= CONFIDENT_TOP_HIT_SCORE_GAP)
+  );
+}
+
+function capTopHitBody(body: string): string {
+  if (Buffer.byteLength(body, 'utf8') <= TOP_HIT_BODY_MAX_BYTES) return body;
+
+  const prefixBudget =
+    TOP_HIT_BODY_MAX_BYTES - Buffer.byteLength(TOP_HIT_BODY_TRUNCATION_MARKER, 'utf8');
+  const prefix: string[] = [];
+  let prefixBytes = 0;
+  for (const character of body) {
+    const characterBytes = Buffer.byteLength(character, 'utf8');
+    if (prefixBytes + characterBytes > prefixBudget) break;
+    prefix.push(character);
+    prefixBytes += characterBytes;
+  }
+  return prefix.join('') + TOP_HIT_BODY_TRUNCATION_MARKER;
 }
 
 function ensureKnowledgeBroadNearestFuse(): Fuse<KnowledgeDoc> {
@@ -491,8 +527,14 @@ export function searchKnowledge(query: string, limit = 5): KnowledgeHit[] {
 }
 
 export function searchKnowledgeWithFallback(query: string, limit = 5): KnowledgeSearchResult {
-  const hits = searchKnowledge(query, limit);
-  if (hits.length > 0) return { hits };
+  const resultLimit = Math.max(1, limit);
+  // Inspect a runner-up even when limit is 1 so caller truncation cannot manufacture confidence.
+  const candidates = searchKnowledge(query, Math.max(2, resultLimit));
+  const hits = candidates.slice(0, resultLimit);
+  if (hits.length > 0) {
+    const body = hasConfidentTopHit(candidates) ? readKnowledgeResource(hits[0].uri) : null;
+    return body === null ? { hits } : { hits, topHitBody: capTopHitBody(body) };
+  }
 
   const q = (query ?? '').trim();
   const nearestMatches = nearestKeywordMatches(q, limit, true);

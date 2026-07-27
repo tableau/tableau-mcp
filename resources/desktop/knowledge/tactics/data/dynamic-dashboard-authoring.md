@@ -25,6 +25,7 @@ When an ask is DYNAMIC — the user wants to drive the viz (pick N, pick a perio
 | Computed Top/Bottom-N set (param-linked or fixed) | `author-set` | live MERGE |
 | **Parameter** (the control the user drives) | `author-parameter` | **OPEN — the verb reopens for you, in-call** |
 | Parameter-change action (click a mark → set a param) | `author-action` | live MERGE |
+| Set action (click a mark → change set membership, mode 'set' + targetSet) | `author-action` | live MERGE |
 | Mark labels on/off | `format-labels` | live MERGE |
 
 The build ORDER follows the law: **author the parameters FIRST** (they need a reopen to be born — `author-parameter` performs that reopen itself and re-pins the session before returning), then merge calcs/sets/actions/formatting over them, then build the sheets/dashboard with `bind-template` / `refine-worksheet`.

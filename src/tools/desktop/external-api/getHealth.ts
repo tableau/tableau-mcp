@@ -18,7 +18,6 @@ export const getHealthTool = (server: DesktopMcpServer): DesktopTool<typeof para
     description: 'Check External Client API liveness.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

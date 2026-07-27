@@ -181,6 +181,25 @@ describe('loadDashboardXml (External Client API transport)', () => {
     ).toEqual([dashboardName]);
   });
 
+  it('navigates with the NFC canonical dashboard name', async () => {
+    const canonicalName = 'Año';
+    const callerName = canonicalName.normalize('NFD');
+    const { executor, calls } = dispatchingExecutor(liveWorkbook([canonicalName]));
+
+    const result = await loadDashboardXml({
+      dashboardName: callerName,
+      xml: `<dashboard name='${canonicalName}'><zones></zones></dashboard>`,
+      focus: { navigate: 'artifact', sheetName: callerName },
+      executor,
+      signal: mockSignal,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(
+      calls.filter((call) => call.command === 'goto-sheet').map((call) => call.args?.Sheet),
+    ).toEqual([canonicalName]);
+  });
+
   it('keeps live worksheets referenced by the dashboard zones in the posted document', async () => {
     const dashboardXml = `<dashboard name='${dashboardName}'><zones><zone name='Sheet 1' /></zones></dashboard>`;
     const { executor, calls } = dispatchingExecutor(

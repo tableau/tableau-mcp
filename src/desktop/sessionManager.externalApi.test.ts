@@ -15,6 +15,8 @@ describe('SessionManager executor selection', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });
 
@@ -31,6 +33,29 @@ describe('SessionManager executor selection', () => {
     const executor = await new SessionManager().getExecutor('12345');
 
     expect(executor).toBeInstanceOf(ExternalApiToolExecutor);
+  });
+
+  it('wires the configured 90 second timeout into External API requests', async () => {
+    vi.stubEnv('TABLEAU_DESKTOP_CALL_TIMEOUT_MS', '90000');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('<workbook />', { status: 200 })),
+    );
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+    mocks.discoverInstances.mockReturnValue([
+      {
+        baseUrl: 'http://127.0.0.1:8765',
+        token: 'token',
+        pid: 12345,
+        instanceId: 'inst',
+      },
+    ] as never);
+
+    const executor = await new SessionManager().getExecutor('12345');
+    const result = await executor.getWorkbookDocument(new AbortController().signal);
+
+    expect(result.isOk()).toBe(true);
+    expect(timeoutSpy).toHaveBeenCalledWith(90_000);
   });
 
   it('throws an honest update-required error when an unpinned Desktop does not serve the External Client API', async () => {

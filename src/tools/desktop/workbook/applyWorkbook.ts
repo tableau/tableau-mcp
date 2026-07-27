@@ -35,7 +35,6 @@ export const getApplyWorkbookTool = (
     description: 'Apply modified workbook content to Tableau.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false, // writes cache files and updates workbook
       openWorldHint: false,
       destructiveHint: true, // updates active workbook
@@ -54,8 +53,8 @@ export const getApplyWorkbookTool = (
             return new ArgsValidationError(
               [
                 'A non-empty workbook file path is required.',
-                'Get one from the workbook structure retrieval tool, edit it with the cache',
-                'read/write tools, then pass that path here.',
+                'Get one from resolve-field, edit it with read-cached-xml and',
+                'write-cached-xml, then pass that path here.',
               ].join(' '),
             ).toErr();
           }
@@ -64,7 +63,7 @@ export const getApplyWorkbookTool = (
             return new WorkbookNotFoundError(
               [
                 `Cached workbook file not found: ${workbookFile}`,
-                'Provide a path determined by the workbook structure retrieval tool.',
+                'Provide a cached path returned by resolve-field.',
               ].join(' '),
             ).toErr();
           }
@@ -111,9 +110,6 @@ export const getApplyWorkbookTool = (
               }
             }
           }
-
-          // Applies are never rejected on size; if an inline payload was over the cap, just
-          // point at the cheaper file-mode workflow for next time (the token win is on GET).
 
           // Host verification receipt (W-23447506): whole-workbook applies have
           // no structural readback, so say so honestly instead of implying

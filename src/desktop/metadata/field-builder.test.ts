@@ -194,4 +194,40 @@ describe('listAvailableFields', () => {
     const mrr = availableFields.find((f) => f.columnName === '[MRR]');
     expect(mrr?.semanticRole).toBeUndefined();
   });
+
+  it('projects metadata-record parent-name onto top-level columns', () => {
+    const xml = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='teams+'>
+      <column name='[country_code]' caption='Country Code' role='dimension' type='nominal' datatype='string' />
+      <column name='[goals]' caption='Goals' role='measure' type='quantitative' datatype='integer' />
+      <connection>
+        <metadata-records>
+          <metadata-record class='column'>
+            <local-name>[country_code]</local-name>
+            <parent-name>[teams.csv]</parent-name>
+          </metadata-record>
+          <metadata-record class='column'>
+            <local-name>[goals]</local-name>
+            <parent-name>[players.csv]</parent-name>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+    </datasource>
+  </datasources>
+</workbook>`;
+
+    const availableFields = listAvailableFields(xml);
+
+    expect(availableFields.find((f) => f.columnName === '[country_code]')?.table).toBe(
+      '[teams.csv]',
+    );
+    expect(availableFields.find((f) => f.columnName === '[goals]')?.table).toBe('[players.csv]');
+  });
+
+  it('leaves table undefined when metadata-record parent-name is absent', () => {
+    const fields = listAvailableFields(WORKBOOK_XML);
+    expect(fields.every((field) => field.table === undefined)).toBe(true);
+  });
 });

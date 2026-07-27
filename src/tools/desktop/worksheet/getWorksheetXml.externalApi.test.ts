@@ -6,6 +6,7 @@ import {
   startMockExternalApiServer,
 } from '../../../desktop/externalApi/mockExternalApiServer.js';
 import { ExternalApiInstance } from '../../../desktop/externalApi/types.js';
+import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -22,6 +23,8 @@ describe('getWorksheetXmlTool with External Client API transport', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    sessionRouteState.clear();
+    sessionRouteState.recordAuthoringAttempt('999', 'bind-template');
     server = await startMockExternalApiServer({
       workbookXml:
         '<?xml version="1.0"?><workbook><worksheets><worksheet name="Sales by Region"><table /></worksheet></worksheets></workbook>',

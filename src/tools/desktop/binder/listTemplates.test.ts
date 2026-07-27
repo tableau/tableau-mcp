@@ -25,7 +25,6 @@ describe('listTemplatesTool', () => {
       fastPathOnly: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'List Bundled Chart Templates',
       readOnlyHint: true,
       openWorldHint: false,
     });

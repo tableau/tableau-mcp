@@ -24,7 +24,6 @@ export const getSearchCommandsTool = (
     description: 'Search the Tableau Desktop commands reference for invocable commands.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

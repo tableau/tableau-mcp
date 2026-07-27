@@ -52,7 +52,6 @@ export const getBuildAndApplyDashboardTool = (
     description: 'Build/apply dashboard; registers viewpoints.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: true,

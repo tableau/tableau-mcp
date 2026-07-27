@@ -10,6 +10,11 @@ import {
   XmlModificationError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import {
+  prefillNextAction,
+  type WireStructuredContent,
+  wireStructuredContent,
+} from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 
 export { activateSheetWithValidatedGoto };
@@ -31,22 +36,26 @@ type ActivateSheetToolResult = {
 
 class ActivateSheetNotFoundError extends McpToolError {
   readonly availableSheets: string[];
-  readonly structuredContent: { readonly availableSheets: string[] };
+  readonly structuredContent: WireStructuredContent;
 
   constructor(sheetName: string, availableSheets: string[]) {
+    const message = [
+      `Sheet "${sheetName}" was not found in the live workbook worksheet/dashboard list.`,
+      availableSheets.length > 0
+        ? `Available sheets: ${availableSheets.map((name) => `"${name}"`).join(', ')}.`
+        : 'The workbook has no activatable worksheets or dashboards.',
+      'Use list-worksheets or list-dashboards to confirm the current names.',
+    ].join(' ');
     super({
       type: 'sheet-not-found',
       statusCode: 404,
-      message: [
-        `Sheet "${sheetName}" was not found in the live workbook worksheet/dashboard list.`,
-        availableSheets.length > 0
-          ? `Available sheets: ${availableSheets.map((name) => `"${name}"`).join(', ')}.`
-          : 'The workbook has no activatable worksheets or dashboards.',
-        'Use list-worksheets or list-dashboards to confirm the current names.',
-      ].join(' '),
+      message,
     });
     this.availableSheets = availableSheets;
-    this.structuredContent = { availableSheets };
+    this.structuredContent = wireStructuredContent(
+      { message, availableSheets },
+      { nextAction: prefillNextAction('Choose an available sheet and retry') },
+    );
   }
 }
 
@@ -57,11 +66,11 @@ export const getActivateSheetTool = (
   const activateSheetTool = new DesktopTool({
     server,
     name: 'activate-sheet',
+    title,
     description:
       'Activate an existing worksheet or dashboard by exact name after validating it against a fresh live-workbook read.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,

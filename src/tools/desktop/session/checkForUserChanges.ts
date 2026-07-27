@@ -31,7 +31,6 @@ export const getCheckForUserChangesTool = (
     description: 'Check workbook event sequence.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

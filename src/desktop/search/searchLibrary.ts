@@ -106,7 +106,7 @@ function ensureCommandsSearchIndex(): any {
   const blockingNames = new Set<string>(ref.command_names_opening_blocking_dialog || []);
   const recommendation: string =
     ref.routing_recommendation ||
-    'If no command above does the job: for a chart or viz, call bind-template. To change an existing sheet — put a field on color, size or detail, or on rows/cols — call add-field (target=encoding, encodingType=color) then apply-worksheet; refine-worksheet only does top-N and sort. For calculated fields, parameters, sets and actions, call author-calc, author-parameter, author-set or author-action. Edit workbook XML only when none of these covers the ask.';
+    'If no command above does the job: for a chart or viz, call bind-template. To change an existing sheet — put a field on color, size or detail, or on rows/cols — call add-field (target=encoding, encodingType=color) then apply-worksheet; refine-worksheet only does top-N and sort. For calculated fields, parameters, sets and actions, call author-calc, author-parameter, author-set or author-action.';
 
   const invocable = allCommands.filter((cmd: any) => {
     if (!cmd || typeof cmd !== 'object') return false;
@@ -179,7 +179,7 @@ function formatCommandSearchResult(cmd: any, blockingNames: Set<string>, score?:
     result.warning = policy.fix;
   } else if (opensBlockingSurface(cmd, blockingNames)) {
     result.warning =
-      'The reference says this command opens a dialog or editor. It blocks on a UI surface and may hang the CDP socket when invoked via execute_tableau_command — prefer the route named in recommendation.';
+      'The reference says this command opens a dialog or editor. It blocks on a UI surface and may hang the CDP socket when invoked via execute-tableau-command — prefer the route named in recommendation.';
   }
   return result;
 }

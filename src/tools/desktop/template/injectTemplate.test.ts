@@ -23,7 +23,7 @@ vi.mock('fs');
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 
 import * as discoveryModule from '../../../desktop/externalApi/discovery.js';
-import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
+import { rewriteFieldReferencesWithDiagnostics } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
 import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
@@ -58,7 +58,10 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(writeFileSync).mockImplementation(() => {});
   vi.mocked(readTemplate).mockReturnValue(TEMPLATE_XML);
   vi.mocked(listTemplateNames).mockReturnValue(['kpi-text', 'ranking-ordered-bar']);
-  vi.mocked(rewriteFieldReferences).mockReturnValue(TEMPLATE_XML);
+  vi.mocked(rewriteFieldReferencesWithDiagnostics).mockReturnValue({
+    xml: TEMPLATE_XML,
+    droppedOptionalElements: [],
+  });
   vi.mocked(injectTemplate).mockReturnValue(INJECTED_XML);
   return extra;
 }
@@ -181,7 +184,7 @@ describe('injectTemplateTool', () => {
     expect(capturedTemplate).not.toContain('{{TITLE}}');
   });
 
-  it('should call rewriteFieldReferences when DATASOURCE is in templateParameters', async () => {
+  it('should call rewriteFieldReferencesWithDiagnostics when DATASOURCE is in templateParameters', async () => {
     await getResult({
       ...BASE_PARAMS,
       templateParameters: { DATASOURCE: 'Sample Superstore' },
@@ -192,7 +195,7 @@ describe('injectTemplateTool', () => {
     // directly instead of the deleted replaceFieldReferences wrapper. The call gains
     // two trailing args over the wrapper's 3-arg form: fieldMetadata (undefined here)
     // and the per-apply options object that wires calc namespacing on with a nonce.
-    expect(rewriteFieldReferences).toHaveBeenCalledWith(
+    expect(rewriteFieldReferencesWithDiagnostics).toHaveBeenCalledWith(
       expect.any(String),
       { Sales: '[sum:Sales:qk]' },
       'Sample Superstore',
@@ -202,6 +205,30 @@ describe('injectTemplateTool', () => {
         applyNonce: expect.any(String),
         templateSlots: undefined,
       },
+    );
+  });
+
+  it('surfaces warnings returned by the shared inject core', async () => {
+    const extra = makeExtra();
+    vi.mocked(rewriteFieldReferencesWithDiagnostics).mockReturnValue({
+      xml: TEMPLATE_XML,
+      droppedOptionalElements: ['computed-sort dropped: [DS].[sum:Missing:qk] did not resolve'],
+    });
+
+    const result = await getResult(
+      {
+        ...BASE_PARAMS,
+        templateParameters: { DATASOURCE: 'Sample Superstore' },
+        fieldMapping: { Sales: '[sum:Sales:qk]' },
+      },
+      extra,
+    );
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Template advisory warnings:');
+    expect(result.content[0].text).toContain(
+      'computed-sort dropped: [DS].[sum:Missing:qk] did not resolve',
     );
   });
 
@@ -229,10 +256,10 @@ describe('injectTemplateTool', () => {
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
-  it('should not call rewriteFieldReferences when no DATASOURCE is given', async () => {
+  it('should not call rewriteFieldReferencesWithDiagnostics when no DATASOURCE is given', async () => {
     await getResult(BASE_PARAMS);
 
-    expect(rewriteFieldReferences).not.toHaveBeenCalled();
+    expect(rewriteFieldReferencesWithDiagnostics).not.toHaveBeenCalled();
   });
 
   it('should return error when injectTemplate throws', async () => {

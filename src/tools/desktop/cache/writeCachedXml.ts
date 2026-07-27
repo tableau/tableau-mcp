@@ -36,7 +36,6 @@ export const getWriteCachedXmlTool = (
     description: 'Save cached content.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,

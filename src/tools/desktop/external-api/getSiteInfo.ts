@@ -18,7 +18,6 @@ export const getSiteInfoTool = (server: DesktopMcpServer): DesktopTool<typeof pa
     description: 'Read the connected Tableau site.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

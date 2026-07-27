@@ -75,7 +75,6 @@ describe('getSummaryDataTool', () => {
       columns: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Get Summary Data',
       readOnlyHint: true,
       openWorldHint: false,
     });
@@ -111,7 +110,7 @@ describe('getSummaryDataTool', () => {
     }
   });
 
-  it('returns a terminal result without querying a worksheet that has no datasource', async () => {
+  it('requires action without querying a worksheet that has no datasource', async () => {
     const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets', {
         status: 200,
@@ -127,7 +126,7 @@ describe('getSummaryDataTool', () => {
 
       expect(result.isError).toBe(false);
       expect(parseJsonResult(result)).toEqual({
-        status: 'terminal',
+        status: 'action-required',
         reason: 'empty-sheet',
         worksheet: { id: 'sheet-empty', name: 'Empty Sheet' },
         maxRows: 200,
@@ -148,7 +147,7 @@ describe('getSummaryDataTool', () => {
     }
   });
 
-  it('returns a terminal result when the worksheet has no marks', async () => {
+  it('requires action when the worksheet has no marks', async () => {
     const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
         status: 200,
@@ -162,7 +161,7 @@ describe('getSummaryDataTool', () => {
 
       expect(result.isError).toBe(false);
       expect(parseJsonResult(result)).toMatchObject({
-        status: 'terminal',
+        status: 'action-required',
         reason: 'empty-sheet',
         shape: '0 rows x 0 columns',
         summaryData: { columns: [], rows: [] },

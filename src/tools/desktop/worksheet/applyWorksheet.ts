@@ -41,7 +41,6 @@ export const getApplyWorksheetTool = (
       'Apply a modified cached worksheet file to Desktop — the apply leg of the manual build path.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false, // updates worksheet in workbook
       openWorldHint: false,
       destructiveHint: true, // updates active workbook
@@ -60,8 +59,8 @@ export const getApplyWorksheetTool = (
             return new ArgsValidationError(
               [
                 'A non-empty worksheet file path is required.',
-                'Get one from the worksheet structure retrieval tool, edit it with the cache',
-                'read/write tools, then pass that path here.',
+                'Get one from get-worksheet-xml, edit it with read-cached-xml and',
+                'write-cached-xml, then pass that path here.',
               ].join(' '),
             ).toErr();
           }
@@ -70,7 +69,7 @@ export const getApplyWorksheetTool = (
             return new WorksheetNotFoundError(
               [
                 `Cached worksheet file not found: ${worksheetFile}`,
-                'Provide a path determined by the worksheet structure retrieval tool.',
+                'Provide a path returned by get-worksheet-xml.',
               ].join(' '),
             ).toErr();
           }

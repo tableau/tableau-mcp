@@ -128,7 +128,7 @@ const CALC_FIRST_DERIVED_METRIC_RES = [
   /\b(?:ratio|rate)\s+(?:of|between)\b/i,
   /\b[\w-]+\s+(?:ratio|rate)\b/i,
   /\b[\w-]+\s+per\s+[\w-]+\b/i,
-  /\b(?:growth|change)\s*(?:%|rate|percent|percentage)\b/i,
+  /\b(?:growth|change)\s*(?:%|(?:rate|percent|percentage)\b)/i,
   /\b(?:percent|percentage)\s+(?:growth|change)\b/i,
   /\b(?:year[- ]over[- ]year|month[- ]over[- ]month|quarter[- ]over[- ]quarter|yoy|mom|qoq)\s+(?:growth|change)\b/i,
 ];

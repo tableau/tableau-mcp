@@ -1,10 +1,14 @@
 import { McpServer, ResourceTemplate, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { normalizeObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
+import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import {
   ErrorCode,
+  ListToolsRequestSchema,
   McpError,
   ServerNotification,
   ServerRequest,
+  Tool as McpTool,
 } from '@modelcontextprotocol/sdk/types.js';
 
 import pkg from '../package.json';
@@ -49,6 +53,7 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
   'list-instances',
   'list-worksheets',
   'list-available-fields',
+  'get-worksheet-xml',
   'apply-workbook',
   'get-workbook-xml',
   'inject-template',
@@ -62,12 +67,13 @@ export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopTo
  * selected by TOOL_PROFILE=spec-loop. Hypothesis under test: the native semantic
  * loop — generate-viz-from-notional-spec for charts, the whole-document GET/POST
  * for calcs, both dispatched through execute-tableau-command on the /v0 External
- * API — is sufficient on its own, with NO XML tools, NO templates, NO bind-template.
+ * API — is sufficient with no XML authoring tools, templates, or bind-template.
  * Everything a chart/calc/dashboard ask needs routes through execute-tableau-command;
  * the rest is discovery + readback (on apiVersion <=0.1.0 the /v0 generic route was
- * write-blind, so the list-* tools were how the model observed state). Proven by hand
- * 2026-07-19: a full analytics workbook (calcs + charts + dashboard) authored live in
- * seconds, zero XML.
+ * write-blind, so the list-* tools were how the model observed state). The gated
+ * get-worksheet-xml repair read is retained across every profile but cannot run before
+ * an authoring attempt. Proven by hand 2026-07-19: a full analytics workbook (calcs +
+ * charts + dashboard) authored live in seconds, zero agent-authored XML.
  * The known-command guard (from #542) makes the single execute-tableau-command tool
  * safe against hallucinated verbs.
  */
@@ -75,6 +81,7 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
   'execute-tableau-command',
   'list-instances',
   'list-available-fields',
+  'get-worksheet-xml',
   'list-worksheets',
   'list-dashboards',
 ]);
@@ -91,13 +98,13 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
  * bind-template, the deterministic fast-path (no LLM, ~0.3s) for plain chart shapes,
  * and refine-worksheet, the primitives-only top-N/sort editor that carries
  * edit-in-place now that the notional-spec loop is retired.
- * PLUS the two knowledge doors — list-knowledge-resources + read-knowledge-resource —
+ * PLUS the two knowledge doors — search-knowledge + read-knowledge-resource —
  * without which the system prompt's "consult the expertise library BEFORE authoring"
  * instruction had no tool to route to: the singer could not read the curated corpus at
  * all, so verified Tableau behavior (e.g. the waterfall subtotal/total exclusion rule,
  * the Top-N-needs-a-context-filter rule) stayed dark on every sing. The corpus is
  * served as MCP resources anyway; these two tiny tools are the only way the model reaches it.
- * Thirty-two tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise
+ * Thirty-three tools cover the full Workout-Wednesday-W44 dialect plus on-demand expertise
  * and first-class workbook/data reads/navigation; the only raw XML read is get-worksheet-xml,
  * the read leg the manual add-field/remove-field/apply-worksheet path needs to mint its
  * worksheetFile — no whole-workbook get/apply, no cache, no validation XML tools. This is the
@@ -146,7 +153,6 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'author-parameter',
     'author-action',
     'format-labels',
-    'list-knowledge-resources',
     'read-knowledge-resource',
     'search-knowledge',
   ]);
@@ -227,6 +233,7 @@ export class DesktopMcpServer extends Server {
 
   registerTools = async (): Promise<void> => {
     const config = getDesktopConfig();
+    const tools = await this._getToolsToRegister();
 
     log({
       message: 'Desktop transport ACTIVE: External Client API (Athena V0)',
@@ -234,14 +241,7 @@ export class DesktopMcpServer extends Server {
       logger: 'DesktopMcpServer',
     });
 
-    for (const {
-      name,
-      title,
-      description,
-      paramsSchema,
-      annotations,
-      callback,
-    } of await this._getToolsToRegister()) {
+    for (const { name, title, description, paramsSchema, annotations, callback } of tools) {
       const toolCallback: ToolCallback<typeof paramsSchema> = async (
         args: typeof paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
@@ -281,6 +281,16 @@ export class DesktopMcpServer extends Server {
         },
         toolCallback,
       );
+    }
+
+    // Slim tools/list (no $schema dialect tags): only when this server owns the
+    // McpServer. On the combined variant's shared server, overriding tools/list
+    // would hide the web half's tools (including ones combined-lean registers late).
+    if (this.ownsMcpServer) {
+      const listedTools = await Promise.all(tools.map(getDesktopToolListEntry));
+      this.mcpServer.server.setRequestHandler(ListToolsRequestSchema, async () => ({
+        tools: listedTools,
+      }));
     }
   };
 
@@ -347,5 +357,24 @@ export class DesktopMcpServer extends Server {
       text,
       mimeType: 'text/markdown',
     });
+  };
+}
+
+export async function getDesktopToolListEntry(tool: DesktopTool<any>): Promise<McpTool> {
+  const paramsSchema = await Provider.from(tool.paramsSchema);
+  const objectSchema = normalizeObjectSchema(paramsSchema as any);
+  const inputSchema = (
+    objectSchema
+      ? toJsonSchemaCompat(objectSchema, { strictUnions: true, pipeStrategy: 'input' } as any)
+      : { type: 'object' as const, properties: {} }
+  ) as McpTool['inputSchema'] & { $schema?: string };
+  delete inputSchema.$schema;
+
+  return {
+    name: tool.name,
+    title: await Provider.from(tool.title),
+    description: await Provider.from(tool.description),
+    inputSchema,
+    annotations: await Provider.from(tool.annotations),
   };
 }

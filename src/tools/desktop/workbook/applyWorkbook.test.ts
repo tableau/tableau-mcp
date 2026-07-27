@@ -38,7 +38,6 @@ describe('applyWorkbookTool', () => {
       workbookFile: expect.any(Object),
     });
     expect(applyWorkbookTool.annotations).toMatchObject({
-      title: 'Apply Workbook',
       readOnlyHint: false,
       openWorldHint: false,
     });

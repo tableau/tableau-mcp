@@ -27,7 +27,7 @@ vi.mock('fs');
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
-import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
+import { rewriteFieldReferencesWithDiagnostics } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
 import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
@@ -66,7 +66,10 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(bundledIntelligenceProvider.getTemplateManifest).mockReturnValue(undefined);
   // Echo the (already placeholder-substituted) template so injectTemplate receives
   // a valid <worksheets>/<window> structure.
-  vi.mocked(rewriteFieldReferences).mockImplementation((xml) => xml);
+  vi.mocked(rewriteFieldReferencesWithDiagnostics).mockImplementation((xml) => ({
+    xml,
+    droppedOptionalElements: [],
+  }));
   vi.mocked(injectTemplate).mockReturnValue(INJECTED_XML);
   return extra;
 }
@@ -79,13 +82,13 @@ describe('injectTemplateTool — consumer glue characterization', () => {
   it('passes fieldMapping ?? {} — defaults to an empty mapping when none is given', async () => {
     await getResult({ ...BASE_PARAMS, templateParameters: { DATASOURCE: 'Sales Data' } });
 
-    expect(rewriteFieldReferences).toHaveBeenCalledTimes(1);
+    expect(rewriteFieldReferencesWithDiagnostics).toHaveBeenCalledTimes(1);
     // CONVERGENCE: the consumer now calls the shared core directly (W14-CM1), so the
     // call carries the core's full arity — the same (template, {}, datasource) it
     // always did, PLUS fieldMetadata (undefined here) and the per-apply options that
     // turn calc namespacing ON with a caller-minted nonce. The empty-mapping default
     // is unchanged.
-    expect(rewriteFieldReferences).toHaveBeenCalledWith(
+    expect(rewriteFieldReferencesWithDiagnostics).toHaveBeenCalledWith(
       expect.any(String),
       {},
       'Sales Data',
@@ -105,10 +108,10 @@ describe('injectTemplateTool — consumer glue characterization', () => {
     const extra = makeExtra();
     let capturedTemplate = '';
     let capturedDatasource = '';
-    vi.mocked(rewriteFieldReferences).mockImplementation((xml, _map, ds) => {
+    vi.mocked(rewriteFieldReferencesWithDiagnostics).mockImplementation((xml, _map, ds) => {
       capturedTemplate = xml;
       capturedDatasource = ds;
-      return xml;
+      return { xml, droppedOptionalElements: [] };
     });
 
     await getResult(
@@ -132,9 +135,9 @@ describe('injectTemplateTool — consumer glue characterization', () => {
   it('substitutes and XML-escapes {{TITLE}} before handing the template to C', async () => {
     const extra = makeExtra();
     let capturedTemplate = '';
-    vi.mocked(rewriteFieldReferences).mockImplementation((xml) => {
+    vi.mocked(rewriteFieldReferencesWithDiagnostics).mockImplementation((xml) => {
       capturedTemplate = xml;
-      return xml;
+      return { xml, droppedOptionalElements: [] };
     });
 
     await getResult(
@@ -166,7 +169,7 @@ describe('injectTemplateTool — consumer glue characterization', () => {
     );
 
     expect(result.isError).toBe(true);
-    expect(rewriteFieldReferences).not.toHaveBeenCalled();
+    expect(rewriteFieldReferencesWithDiagnostics).not.toHaveBeenCalled();
     expect(injectTemplate).not.toHaveBeenCalled();
     expect(result.content[0]).toEqual(
       expect.objectContaining({
@@ -187,7 +190,7 @@ describe('injectTemplateTool — consumer glue characterization', () => {
     await getResult({ ...BASE_PARAMS, templateParameters: { DATASOURCE: 'Sales Data' } }, extra);
     await getResult({ ...BASE_PARAMS, templateParameters: { DATASOURCE: 'Sales Data' } }, extra);
 
-    const calls = vi.mocked(rewriteFieldReferences).mock.calls;
+    const calls = vi.mocked(rewriteFieldReferencesWithDiagnostics).mock.calls;
     expect(calls).toHaveLength(2);
 
     const opts1 = calls[0][4] as { namespaceCalcs?: boolean; applyNonce?: string };

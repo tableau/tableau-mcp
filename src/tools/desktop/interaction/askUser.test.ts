@@ -19,7 +19,6 @@ describe('askUserTool', () => {
       options: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Ask the User a Clarifying Question',
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

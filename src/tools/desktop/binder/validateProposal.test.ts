@@ -85,7 +85,6 @@ describe('validateProposalTool', () => {
       minConfidence: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Validate Proposal',
       readOnlyHint: true,
       openWorldHint: false,
     });

@@ -42,7 +42,6 @@ export const getSearchExamplesTool = (
     description: 'Search workbook-change examples.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

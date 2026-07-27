@@ -2,7 +2,10 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { rewriteFieldReferences } from './fieldReferenceRewriter.js';
+import {
+  rewriteFieldReferences,
+  rewriteFieldReferencesWithDiagnostics,
+} from './fieldReferenceRewriter.js';
 
 // Ports A's ref-class coverage (W10-E8) onto THIS repo's real shipped templates.
 // The shared DOM-structural rewriter must rewrite every reference CLASS a template
@@ -42,6 +45,13 @@ describe('rewriteFieldReferences — raw-vs-escaped boundary (named contract)', 
     // NOT left raw/unescaped anywhere.
     expect(out).not.toContain('R&D <Team>');
     expect(out).not.toContain('[Field]');
+  });
+
+  it('parses a five-segment indexed table-calc instance without inventing a field name', () => {
+    const out = rewriteFieldReferences(xml, { Field: '[DS].[pcto:sum:Sales:qk:3]' }, 'DS');
+
+    expect(out).toContain('name="[Sales]"');
+    expect(out).not.toContain('name="[qk]"');
   });
 });
 
@@ -123,6 +133,88 @@ describe('rewriteFieldReferences — explicit base-name placeholders', () => {
     expect(out).toMatch(/Calculation_field_base_1_tpl_[0-9a-f]{8}/);
     expect(out).not.toContain('{{field_base_1}}');
   });
+
+  it('resolves positional field placeholders in a computed sort for concrete legacy slots', () => {
+    const legacySlots = [
+      {
+        slot_id: 'measure',
+        template_field: 'Profit',
+        required: true,
+        bindable: true,
+        kind: 'quantitative',
+        role: ['rows', 'sort-measure'],
+      },
+      {
+        slot_id: 'category',
+        template_field: 'Sub-Category',
+        required: true,
+        bindable: true,
+        kind: 'categorical',
+        role: ['cols', 'sort-dimension'],
+      },
+    ];
+    const legacyXml =
+      '<workbook><worksheets><worksheet><table><view>' +
+      "<computed-sort column='[{{DATASOURCE}}].[none:{{field_base_2}}:nk]' " +
+      "using='[{{DATASOURCE}}].[sum:{{field_base_1}}:qk]' />" +
+      '</view></table></worksheet></worksheets></workbook>';
+
+    const out = rewriteFieldReferences(
+      legacyXml,
+      {
+        Profit: '[DS].[sum:Margin:qk]',
+        'Sub-Category': '[DS].[none:Product:nk]',
+      },
+      'DS',
+      undefined,
+      { templateSlots: legacySlots },
+    );
+
+    expect(out).toContain('column="[DS].[none:Product:nk]"');
+    expect(out).toContain('using="[DS].[sum:Margin:qk]"');
+    expect(out).not.toMatch(/\{\{field_base_\d+\}\}/);
+  });
+
+  it('reports an optional computed sort removed for an unresolved positional slot', () => {
+    const optionalSlots = [
+      {
+        slot_id: 'category',
+        template_field: 'Category',
+        required: true,
+        bindable: true,
+        kind: 'categorical',
+        role: ['rows'],
+      },
+      {
+        slot_id: 'sort_measure',
+        template_field: 'Sort Measure',
+        required: false,
+        bindable: true,
+        kind: 'quantitative',
+        role: ['sort-measure'],
+      },
+    ];
+    const optionalSortXml =
+      '<workbook><worksheets><worksheet><table><view>' +
+      "<column datatype='string' name='[Category]' role='dimension' type='nominal' />" +
+      "<computed-sort column='[{{DATASOURCE}}].[none:{{field_base_1}}:nk]' " +
+      "using='[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]' />" +
+      '</view><rows>[{{DATASOURCE}}].[none:Category:nk]</rows>' +
+      '</table></worksheet></worksheets></workbook>';
+
+    const result = rewriteFieldReferencesWithDiagnostics(
+      optionalSortXml,
+      { Category: '[DS].[none:Product:nk]' },
+      'DS',
+      undefined,
+      { templateSlots: optionalSlots },
+    );
+
+    expect(result.xml).not.toContain('<computed-sort');
+    expect(result.droppedOptionalElements).toEqual([
+      'computed-sort dropped: [DS].[sum:{{field_base_2}}:qk] did not resolve',
+    ]);
+  });
 });
 
 describe('rewriteFieldReferences — ref-class coverage: kpi-text (aggregated measure)', () => {
@@ -201,13 +293,27 @@ describe('rewriteFieldReferences — ref-class coverage: pareto-chart (compound 
     Sales: '[DS].[sum:Profit:qk]',
     'Sub-Category': '[DS].[none:Segment:nk]',
   };
+  const slots = [
+    {
+      template_field: 'Sub-Category',
+      required: true,
+      bindable: true,
+    },
+    {
+      template_field: 'Sales',
+      required: true,
+      bindable: true,
+    },
+  ];
   const datasource = 'Superstore';
+  const run = (): string =>
+    rewriteFieldReferences(pareto, mapping, datasource, undefined, { templateSlots: slots });
   beforeAll(() => {
     pareto = readTemplate('pareto-chart');
   });
 
   it('remaps the COMPOUND (table-calc) derivation ref, preserving the pcto:cum wrapper', () => {
-    const r = rewriteFieldReferences(pareto, mapping, datasource);
+    const r = run();
     // instance name + every qualified occurrence
     expect(r).toContain('name="[pcto:cum:sum:Profit:qk]"');
     expect(r).toContain('[Superstore].[pcto:cum:sum:Profit:qk]');
@@ -215,24 +321,24 @@ describe('rewriteFieldReferences — ref-class coverage: pareto-chart (compound 
   });
 
   it('remaps the simple aggregated ref alongside the compound one in the rows formula', () => {
-    const r = rewriteFieldReferences(pareto, mapping, datasource);
+    const r = run();
     expect(r).toContain('([Superstore].[sum:Profit:qk] + [Superstore].[pcto:cum:sum:Profit:qk])');
   });
 
   it('preserves the [:Measure Names] pseudo-field ref (fills datasource only)', () => {
-    const r = rewriteFieldReferences(pareto, mapping, datasource);
+    const r = run();
     expect(r).toContain('[Superstore].[:Measure Names]');
   });
 
   it('leaves the Parameters datasource + calc caption untouched (namespacing off by default)', () => {
-    const r = rewriteFieldReferences(pareto, mapping, datasource);
+    const r = run();
     expect(r).toContain('[Parameters].[Parameter 3]');
     expect(r).toContain('caption="80%"');
     expect(r).not.toMatch(/_tpl_/);
   });
 
   it('leaves ZERO mapped-field-ref residue', () => {
-    const r = rewriteFieldReferences(pareto, mapping, datasource);
+    const r = run();
     expect(r).not.toContain('{{DATASOURCE}}');
     expect(r).not.toMatch(/:Sales:|:Sub-Category:|\[Sub-Category\]|\[Sales\]/);
   });

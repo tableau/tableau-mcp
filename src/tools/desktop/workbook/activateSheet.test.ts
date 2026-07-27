@@ -207,7 +207,12 @@ describe('activateSheetTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Sheet "Missing" was not found');
     expect(result.structuredContent).toEqual({
+      message: result.content[0].text,
       availableSheets: ['Revenue "Q1"', 'Profit, YoY'],
+      nextAction: {
+        label: 'Choose an available sheet and retry',
+        kind: 'prefill',
+      },
     });
     expect(executeCommand).not.toHaveBeenCalled();
   });

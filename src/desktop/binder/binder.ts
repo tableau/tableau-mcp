@@ -23,9 +23,13 @@ import type { OptionalFieldPruneSpec } from '../templates/optionalFieldPrune.js'
 import {
   buildLlmInput as buildCoreLlmInput,
   classifyNoLlm,
+  type EncodingFieldResolution,
   type EncodingReport,
   type LlmProposeInput as CoreLlmProposeInput,
+  type LooseFieldReferenceResolution,
   MAX_CLASSIFIABLE_FIELDS,
+  resolveEncodingFieldInAsk,
+  resolveLooseFieldReference,
 } from './classify.js';
 import { escapeXml } from './escape.js';
 import type { BlockerCode, Derivation, TemplateManifest } from './manifest-types.js';
@@ -49,9 +53,13 @@ import {
 // import above would trip the target's `no-duplicate-imports` (includeExports).
 export {
   classifyNoLlm,
+  type EncodingFieldResolution,
   type EncodingReport,
+  type LooseFieldReferenceResolution,
   MAX_CLASSIFIABLE_FIELDS,
+  resolveEncodingFieldInAsk,
   resolveInSummary,
+  resolveLooseFieldReference,
   summarizeSchema,
   validateBinding,
   WATERFALL_ANCHOR_FIELD_RE,
@@ -179,9 +187,10 @@ export type BinderResult =
       /** Advisory avoid_when cautions matching the ask; present only when non-empty. Never blocks. */
       warnings?: string[];
       /**
-       * Encodings the ask asked for, split by what this bind actually filled. Present ONLY
-       * when at least one requested encoding went unfilled. A caller that applies this bind
-       * must not report completion while `unfilled` is non-empty.
+       * Encodings the classifier analyzed, split by what this bind actually filled. The
+       * deterministic classifier always supplies this report, including empty arrays when
+       * the ask named no optional encodings. A caller that applies this bind must not report
+       * completion while `unfilled` is non-empty.
        */
       encodings?: EncodingReport;
     }
@@ -323,7 +332,7 @@ export const TITLE_CONTROL_CHAR_RE = new RegExp(`[${XML_ILLEGAL_TITLE_CHARS}]`);
 export const TITLE_CONTROL_CHAR_MESSAGE =
   'title must not contain control characters (C0 block U+0000–U+001F or DEL U+007F), which are illegal in XML 1.0 even when escaped';
 
-function makeTitle(ask: string): string {
+export function makeTitle(ask: string): string {
   // Collapse whitespace FIRST so the XML-legal whitespace controls (TAB/LF/CR/FF/VT ∈ \s)
   // become a single space, THEN strip any remaining C0/DEL control chars (NUL etc.) — so
   // the Call-1 generated title is always XML-safe and agrees with proposalSchema's reject.

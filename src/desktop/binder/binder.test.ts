@@ -55,6 +55,43 @@ const COUNTRY_ONLY_DUPLICATE_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8
   </datasources>
 </workbook>`;
 
+const GRAIN_AMBIGUOUS_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='teams+'>
+      <column caption='Country Code' datatype='string' name='[country_code]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />
+      <column caption='Goals' datatype='integer' name='[goals]' role='measure' type='quantitative' />
+      <column caption='Goals Against' datatype='integer' name='[goals_against]' role='measure' type='quantitative' />
+      <column caption='Goals For' datatype='integer' name='[goals_for]' role='measure' type='quantitative' />
+      <column caption='Player Name' datatype='string' name='[player_name]' role='dimension' type='nominal' />
+      <connection>
+        <metadata-records>
+          <metadata-record class='column'>
+            <local-name>[country_code]</local-name>
+            <parent-name>[teams.csv]</parent-name>
+          </metadata-record>
+          <metadata-record class='column'>
+            <local-name>[goals]</local-name>
+            <parent-name>[players.csv]</parent-name>
+          </metadata-record>
+          <metadata-record class='column'>
+            <local-name>[goals_against]</local-name>
+            <parent-name>[standings.csv]</parent-name>
+          </metadata-record>
+          <metadata-record class='column'>
+            <local-name>[goals_for]</local-name>
+            <parent-name>[standings.csv]</parent-name>
+          </metadata-record>
+          <metadata-record class='column'>
+            <local-name>[player_name]</local-name>
+            <parent-name>[players.csv]</parent-name>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+    </datasource>
+  </datasources>
+</workbook>`;
+
 let manifests: Map<string, TemplateManifest>;
 beforeAll(() => {
   manifests = loadManifests();
@@ -90,6 +127,13 @@ describe('binder/schema-summary', () => {
     expect(s.datasource).toBe('Superstore');
     expect(s.fields.find((f) => f.name === 'Sales')?.role).toBe('measure');
     expect(s.fields.find((f) => f.name === 'Region')?.role).toBe('dimension');
+  });
+
+  it('surfaces each federated field parent table when metadata records provide it', () => {
+    const s = summarizeSchema(GRAIN_AMBIGUOUS_WORKBOOK_XML);
+
+    expect(s.fields.find((f) => f.name === 'Goals')?.table).toBe('[players.csv]');
+    expect(s.fields.find((f) => f.name === 'Goals For')?.table).toBe('[standings.csv]');
   });
 });
 
@@ -195,6 +239,101 @@ describe('binder/classifyNoLlm', () => {
     expect(cls!.bindings).toContainEqual({ slot_id: 'country', field: 'Country Code' });
 
     expect(classifyNoLlm('Map the countries by Goals For', manifests, s)).toBeNull();
+  });
+
+  it('still routes the s8 cross-table goals ambiguity through labeled proposals', async () => {
+    const ask =
+      'Map the countries by goals scored — bigger, warmer dots for the teams that scored more';
+    const summary = summarizeSchema(GRAIN_AMBIGUOUS_WORKBOOK_XML);
+
+    expect(classifyNoLlm(ask, manifests, summary)).toBeNull();
+
+    const result = await bindTemplate({
+      ask,
+      workbookXml: GRAIN_AMBIGUOUS_WORKBOOK_XML,
+      manifests,
+    });
+    expect(result.status).toBe('propose');
+    if (result.status !== 'propose') throw new Error('expected a grain-aware proposal');
+    expect(result.llm_input.fields.find((field) => field.name === 'Goals')?.label).toBe(
+      'Goals (from players.csv)',
+    );
+    expect(result.llm_input.fields.find((field) => field.name === 'Goals For')?.label).toBe(
+      'Goals For (from standings.csv)',
+    );
+  });
+
+  it('keeps an explicit Sales ask deterministic when daily is only an incidental shared token', async () => {
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Region, refreshed daily',
+      workbookXml: `<workbook><datasources><datasource name='Federated'>
+        <column name='[Region]' role='dimension' type='nominal' datatype='string' />
+        <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+        <column name='[Daily Active Users]' role='measure' type='quantitative' datatype='integer' />
+        <column name='[Daily Sales]' role='measure' type='quantitative' datatype='real' />
+        <connection><metadata-records>
+          <metadata-record class='column'><local-name>[Region]</local-name><parent-name>[orders.csv]</parent-name></metadata-record>
+          <metadata-record class='column'><local-name>[Sales]</local-name><parent-name>[orders.csv]</parent-name></metadata-record>
+          <metadata-record class='column'><local-name>[Daily Active Users]</local-name><parent-name>[users.csv]</parent-name></metadata-record>
+          <metadata-record class='column'><local-name>[Daily Sales]</local-name><parent-name>[daily-sales.csv]</parent-name></metadata-record>
+        </metadata-records></connection>
+      </datasource></datasources></workbook>`,
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') throw new Error('expected the explicit Sales ask to bind');
+    expect(result.used_llm).toBe(false);
+    expect(result.args.template_name).toBe('ranking-ordered-bar');
+    expect(Object.values(result.args.field_mapping)).toEqual([
+      '[Federated].[none:Region:nk]',
+      '[Federated].[sum:Sales:qk]',
+    ]);
+  });
+
+  it('auto-selects the only ambiguous measure co-tabled with an ask-matched dimension', () => {
+    const cls = classifyNoLlm(
+      'bar chart of goals by Player Name',
+      manifests,
+      summarizeSchema(GRAIN_AMBIGUOUS_WORKBOOK_XML),
+    );
+
+    expect(cls).not.toBeNull();
+    expect(cls!.bindings).toContainEqual({ slot_id: 'sales', field: 'Goals' });
+  });
+
+  it('keeps an explicitly named compound measure deterministic across tables', () => {
+    const cls = classifyNoLlm(
+      'Map the countries by Goals For with bigger dots',
+      manifests,
+      summarizeSchema(GRAIN_AMBIGUOUS_WORKBOOK_XML),
+    );
+
+    expect(cls).not.toBeNull();
+    expect(cls!.bindings).toContainEqual({ slot_id: 'sales', field: 'Goals For' });
+  });
+
+  it('keeps a single matching measure on the one-call fast path', async () => {
+    const result = await bindTemplate({
+      ask: 'bar chart of Sales by Region',
+      workbookXml: `<workbook><datasources><datasource name='Orders'>
+        <column name='[Region]' role='dimension' type='nominal' datatype='string' />
+        <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+        <connection><metadata-records>
+          <metadata-record class='column'><local-name>[Region]</local-name><parent-name>[regions.csv]</parent-name></metadata-record>
+          <metadata-record class='column'><local-name>[Sales]</local-name><parent-name>[orders.csv]</parent-name></metadata-record>
+        </metadata-records></connection>
+      </datasource></datasources></workbook>`,
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+    if (result.status !== 'bound') throw new Error('expected the single-match ask to bind');
+    expect(result.used_llm).toBe(false);
+    expect(Object.values(result.args.field_mapping)).toEqual([
+      '[Orders].[none:Region:nk]',
+      '[Orders].[sum:Sales:qk]',
+    ]);
   });
 });
 
@@ -408,12 +547,11 @@ describe('binder/classifyNoLlm — e4 acronym expansion field matching', () => {
 // A plain "map of office locations" ask (pm_name, city, latitude, longitude — NO
 // measure) must be able to bind CONFIDENTLY (used_llm=false) to spatial-symbol-map-
 // latlon by COORDINATE-NAME AFFINITY: longitude→cols, latitude→rows (NEVER swapped),
-// a categorical→detail, NO size/color measure. The template ships gated OFF
-// (fast_path_eligible=false, render_verified='none') until the orchestrator live-
-// render-stamps it, so these exercise the resolver via `withForcedEligible` — exactly
-// the blessed pattern for a stamped-pending code path (same as the scatter/pie forcings
-// above). The axis-swap regression is the #1 risk: the reversed-order case proves the
-// coordinate→axis assignment is name-driven, not schema-order-driven.
+// a categorical→detail, NO size/color measure. The template now ships LIVE
+// (fast_path_eligible=true, render_verified='live-2026-07-22'); the production-path
+// assertion below verifies the committed manifest directly. The axis-swap regression is
+// the #1 risk: the reversed-order case proves the coordinate→axis assignment is
+// name-driven, not schema-order-driven.
 describe('binder/classifyNoLlm — measure-free lat/long symbol map (Blake wall #2)', () => {
   // pm_name + city are dimensions; latitude + longitude are the coordinate measures.
   // NO other measure — a size/color measure would be needed by the old required slot.
@@ -1040,6 +1178,87 @@ describe('binder/bindTemplate — Call 1 miss (propose)', () => {
   const scatterManifests = (): Map<string, TemplateManifest> =>
     withForcedEligible(['correlation-scatter-plot-chart']);
 
+  it('recommends the sole revenue-like measure and default top 10 for an ambiguous ranking ask', async () => {
+    const res = await bindTemplate({
+      ask: 'Show me our top customers.',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(res.status).toBe('propose');
+    if (res.status === 'propose') {
+      expect(res.llm_input.recommended).toEqual({
+        measure: 'Sales',
+        top_n: 10,
+        reason: 'revenue-like measure; top-N defaults to 10',
+        context_measures: ['Profit'],
+        binding: {
+          template: 'ranking-ordered-bar',
+          bindings: [
+            { slot_id: 'region', field: 'Customer Name' },
+            { slot_id: 'sales', field: 'Sales' },
+          ],
+        },
+      });
+    }
+  });
+
+  it('caps ranking context at three measures with profit and margin first', async () => {
+    const contextWorkbookXml = WORKBOOK_XML.replace(
+      "<column name='[Profit]' role='measure' type='quantitative' datatype='real' />",
+      [
+        "<column name='[Order Count]' role='measure' type='quantitative' datatype='integer' />",
+        "<column name='[Quantity]' role='measure' type='quantitative' datatype='integer' />",
+        "<column name='[Gross Margin]' role='measure' type='quantitative' datatype='real' />",
+        "<column name='[Profit]' role='measure' type='quantitative' datatype='real' />",
+      ].join('\n      '),
+    );
+    const res = await bindTemplate({
+      ask: 'Show me our top customers.',
+      workbookXml: contextWorkbookXml,
+      manifests,
+    });
+
+    expect(res.status).toBe('propose');
+    if (res.status === 'propose') {
+      expect(res.llm_input.recommended?.context_measures).toEqual([
+        'Profit',
+        'Gross Margin',
+        'Order Count',
+      ]);
+    }
+  });
+
+  it('does not recommend a measure when two revenue-like measures are candidates', async () => {
+    const contestedRevenueXml = WORKBOOK_XML.replace(
+      '</datasource>',
+      "<column name='[Revenue]' role='measure' type='quantitative' datatype='real' /></datasource>",
+    );
+    const res = await bindTemplate({
+      ask: 'Show me our top customers.',
+      workbookXml: contestedRevenueXml,
+      manifests,
+    });
+
+    expect(res.status).toBe('propose');
+    if (res.status === 'propose') {
+      expect(res.llm_input).not.toHaveProperty('recommended');
+    }
+  });
+
+  it('does not recommend a revenue-like measure for a non-ranking ask', async () => {
+    const res = await bindTemplate({
+      ask: 'Show me our customers.',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(res.status).toBe('propose');
+    if (res.status === 'propose') {
+      expect(res.llm_input).not.toHaveProperty('recommended');
+    }
+  });
+
   it('under-specified scatter ask → propose payload with only bindable slots + fields + schema', async () => {
     const res = await bindTemplate({
       ask: 'scatter of Profit vs Sales',
@@ -1099,6 +1318,18 @@ describe('binder/bindTemplate — Call 1 miss (propose)', () => {
         'quota-attainment-bullet',
       );
     }
+  });
+
+  it('routes the single token scatterplot to the correlation scatter candidate', () => {
+    const input = buildLlmInput(
+      'Show me a scatterplot of Sales and Profit by Region',
+      manifests,
+      summarizeSchema(WORKBOOK_XML),
+    );
+
+    expect(input.candidate_templates.map((candidate) => candidate.template)).toContain(
+      'correlation-scatter-plot-chart',
+    );
   });
 });
 
@@ -2614,6 +2845,7 @@ describe('binder/classifyNoLlm — spatial mark-cue tie-break ordering (W-635)',
         { slot_id: 'sales', field: 'Goals For' },
         { slot_id: 'color', field: 'Goals For' },
       ],
+      encodings: { filled: ['size', 'color'], unfilled: [] },
     });
   });
 
@@ -2650,6 +2882,7 @@ describe('binder/classifyNoLlm — spatial mark-cue tie-break ordering (W-635)',
         { slot_id: 'size', field: 'Goals For' },
         { slot_id: 'color', field: 'Goals For' },
       ],
+      encodings: { filled: ['size', 'color'], unfilled: [] },
     });
   });
 
@@ -2687,6 +2920,7 @@ describe('binder/classifyNoLlm — spatial mark-cue tie-break ordering (W-635)',
         { slot_id: 'size', field: 'Goals For' },
         { slot_id: 'color', field: 'Goals For' },
       ],
+      encodings: { filled: ['size', 'color'], unfilled: [] },
     });
   });
 
@@ -2793,6 +3027,7 @@ describe('binder/classifyNoLlm — spatial mark-cue tie-break ordering (W-635)',
         { slot_id: 'latitude', field: 'Latitude' },
         { slot_id: 'detail1', field: 'Country Code' },
       ],
+      encodings: { filled: [], unfilled: [] },
     });
     // Never a 'sales'/size binding invented from an unnamed measure.
     expect(cls!.bindings.some((b) => b.slot_id === 'sales' || b.slot_id === 'size')).toBe(false);
@@ -2811,6 +3046,7 @@ describe('binder/classifyNoLlm — spatial mark-cue tie-break ordering (W-635)',
         { slot_id: 'latitude', field: 'Latitude' },
         { slot_id: 'detail1', field: 'Country Code' },
       ],
+      encodings: { filled: [], unfilled: [] },
     });
   });
 

@@ -89,6 +89,11 @@ export interface RewriteFieldReferencesOptions {
   templateSlots?: readonly TemplateSlotReference[];
 }
 
+export interface RewriteFieldReferencesResult {
+  xml: string;
+  droppedOptionalElements: string[];
+}
+
 /** Minimal, repo-agnostic manifest slot shape needed by the rewrite guard. */
 export interface TemplateSlotReference {
   /** Stable manifest/proposal identity; accepted as a field-mapping alias. */
@@ -130,6 +135,22 @@ export function rewriteFieldReferences(
   fieldMetadata?: Record<string, { datatype: string; type: string }>,
   options?: RewriteFieldReferencesOptions,
 ): string {
+  return rewriteFieldReferencesWithDiagnostics(
+    templateXml,
+    fieldMapping,
+    datasourceName,
+    fieldMetadata,
+    options,
+  ).xml;
+}
+
+export function rewriteFieldReferencesWithDiagnostics(
+  templateXml: string,
+  fieldMapping: Record<string, string>,
+  datasourceName: string,
+  fieldMetadata?: Record<string, { datatype: string; type: string }>,
+  options?: RewriteFieldReferencesOptions,
+): RewriteFieldReferencesResult {
   // Parse with a silent error handler — the upstream caller validates the
   // post-transform result and reports problems there.
   const parser = new DOMParser({
@@ -137,17 +158,21 @@ export function rewriteFieldReferences(
   });
   const doc = parser.parseFromString(templateXml, 'text/xml') as unknown as Document;
   const normalizedFieldMapping = normalizeFieldMapping(fieldMapping, options?.templateSlots);
+  const droppedOptionalElements: string[] = [];
 
   // Parse a mapped column-instance value into the actual field info we write.
-  // Accepts [datasource].[derivation:fieldName:role] or [derivation:fieldName:role].
+  // Accepts [datasource].[derivation:fieldName:role] or [derivation:fieldName:role],
+  // with an optional trailing table-calc index after the role.
   // The first group is greedy so a table-calc chain ([pcto:cum:sum:Sales:qk], which
   // real Tableau writes) keeps its wrappers instead of being read as field "sum".
+  // Anchoring the role to Tableau's role markers prevents an optional trailing index
+  // ([pcto:sum:Sales:qk:3]) from being mistaken for the role and shifting the field to qk.
   const parseColumnInstance = (columnInstance: string): FieldInfo | null => {
     const strippedInstance = columnInstance.includes('].[')
       ? columnInstance.substring(columnInstance.indexOf('].[') + 2)
       : columnInstance;
 
-    const match = strippedInstance.match(/\[(.+):([^:]+):([^:\]]+)\]/);
+    const match = strippedInstance.match(/^\[(.+):([^:]+):(nk|ok|qk)(?::[^:\]]+)?\]$/);
     if (!match) {
       return null;
     }
@@ -193,6 +218,7 @@ export function rewriteFieldReferences(
     normalizedFieldMapping,
     mappedFields,
     options?.templateSlots,
+    droppedOptionalElements,
   );
 
   // 0. Per-apply CALC NAMESPACING (opt-in; requires a caller-supplied nonce).
@@ -467,7 +493,12 @@ export function rewriteFieldReferences(
     }
   }
 
-  return new XMLSerializer().serializeToString(doc as any);
+  return {
+    xml: new XMLSerializer().serializeToString(doc as any),
+    droppedOptionalElements: droppedOptionalElements.map((message) =>
+      message.replace(/\{\{DATASOURCE\}\}/g, () => datasourceName),
+    ),
+  };
 }
 
 /**
@@ -529,30 +560,55 @@ function normalizeFieldMapping(
   fieldMapping: Record<string, string>,
   slots?: readonly TemplateSlotReference[],
 ): Record<string, string> {
-  if (!slots?.some((slot) => slot.slot_id)) return fieldMapping;
+  if (!slots || slots.length === 0) return fieldMapping;
   const bySlotId = new Map(
     slots
       .filter((slot): slot is TemplateSlotReference & { slot_id: string } => !!slot.slot_id)
       .map((slot) => [slot.slot_id, slot]),
   );
+  const byTemplateField = new Map(slots.map((slot) => [slot.template_field, slot]));
+  const bindableSlots = slots.filter((slot) => slot.bindable !== false);
+  const positionalAlias = new Map<TemplateSlotReference, string>();
+  for (const [index, slot] of bindableSlots.entries()) {
+    const alias = `{{field_base_${index + 1}}}`;
+    const declaredOwner = byTemplateField.get(alias);
+    // Legacy concrete-field manifests use positional placeholders in computed
+    // sorts. Mixed manifests instead declare those placeholders as real slots;
+    // never let an earlier concrete slot steal an explicitly owned token.
+    if (!declaredOwner || declaredOwner === slot) {
+      positionalAlias.set(slot, alias);
+    }
+  }
   const normalized: Record<string, string> = {};
 
   for (const [rawKey, value] of Object.entries(fieldMapping)) {
     const { base, derivation } = splitMappingKey(rawKey);
-    const slot = bySlotId.get(base);
+    const slot = bySlotId.get(base) ?? byTemplateField.get(base);
     const canonical = slot
       ? `${slot.template_field}${derivation ? `@${derivation}` : ''}`
       : rawKey;
-    const prior = normalized[canonical];
-    if (prior !== undefined && prior !== value) {
-      throw new Error(
-        `Field mapping provides conflicting values for '${canonical}' through template-field and slot-id keys.`,
-      );
+    addNormalizedMapping(normalized, canonical, value);
+    const alias = slot ? positionalAlias.get(slot) : undefined;
+    if (alias && alias !== slot?.template_field) {
+      addNormalizedMapping(normalized, `${alias}${derivation ? `@${derivation}` : ''}`, value);
     }
-    normalized[canonical] = value;
   }
 
   return normalized;
+}
+
+function addNormalizedMapping(
+  normalized: Record<string, string>,
+  key: string,
+  value: string,
+): void {
+  const prior = normalized[key];
+  if (prior !== undefined && prior !== value) {
+    throw new Error(
+      `Field mapping provides conflicting values for '${key}' through template-field and slot-id keys.`,
+    );
+  }
+  normalized[key] = value;
 }
 
 function rawMappingFields(fieldMapping: Record<string, string>): Set<string> {
@@ -626,13 +682,23 @@ function pruneShelfFieldReferences(doc: Document, templateField: string): void {
   }
 }
 
-function pruneOptionalTemplateField(doc: Document, templateField: string): void {
+function pruneOptionalTemplateField(
+  doc: Document,
+  templateField: string,
+  droppedOptionalElements: string[],
+): void {
   for (const element of selectElements('//*', doc)) {
     if (!OPTIONAL_REFERENCE_ELEMENTS.has(element.tagName)) continue;
-    const referencesField = Array.from(element.attributes).some((attribute) =>
+    const unresolvedRef = Array.from(element.attributes).find((attribute) =>
       referencesTemplateField(attribute.value, templateField),
     );
-    if (referencesField) removeOptionalReferenceElement(element);
+    if (!unresolvedRef) continue;
+    if (element.tagName === 'computed-sort') {
+      droppedOptionalElements.push(
+        `computed-sort dropped: ${unresolvedRef.value} did not resolve`,
+      );
+    }
+    removeOptionalReferenceElement(element);
   }
   removeEmptyEncodingContainers(doc);
   pruneShelfFieldReferences(doc, templateField);
@@ -643,10 +709,13 @@ function pruneUnusedOptionalTemplateSlots(
   fieldMapping: Record<string, string>,
   mappedFields: Set<string>,
   slots?: readonly TemplateSlotReference[],
+  droppedOptionalElements: string[] = [],
 ): void {
   if (!slots || slots.length === 0) return;
   const rawMappedFields = rawMappingFields(fieldMapping);
   const pruned = new Set<string>();
+  const bindableSlots = slots.filter((slot) => slot.bindable !== false);
+  const declaredTemplateFields = new Set(slots.map((slot) => slot.template_field));
   for (const slot of slots) {
     if (
       slot.bindable === false ||
@@ -657,8 +726,22 @@ function pruneUnusedOptionalTemplateSlots(
     ) {
       continue;
     }
-    pruneOptionalTemplateField(doc, slot.template_field);
-    pruned.add(slot.template_field);
+    const position = bindableSlots.indexOf(slot);
+    const positionalReference =
+      position >= 0 ? `{{field_base_${position + 1}}}` : undefined;
+    const references = [
+      slot.template_field,
+      ...(positionalReference &&
+      (!declaredTemplateFields.has(positionalReference) ||
+        positionalReference === slot.template_field)
+        ? [positionalReference]
+        : []),
+    ];
+    for (const reference of new Set(references)) {
+      if (pruned.has(reference)) continue;
+      pruneOptionalTemplateField(doc, reference, droppedOptionalElements);
+      pruned.add(reference);
+    }
   }
 }
 

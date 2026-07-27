@@ -107,13 +107,21 @@ describe('planTopN — happy path', () => {
     expect(r.xml).toMatch(/function='end'\s+end='bottom'\s+count='3'/);
     expect(r.xml).toContain("function='order' direction='ASC'");
   });
+
+  it('emits the minimum count of 1', () => {
+    const r = planTopN(BASE, { n: 1 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.xml).toMatch(/function='end'\s+end='top'\s+count='1'/);
+  });
 });
 
 describe('planTopN — kill criteria (refuse with message)', () => {
-  it('refuses n below 1', () => {
-    const r = planTopN(BASE, { n: 0 });
+  it.each([0, -2])('refuses n below 1 (%s)', (n) => {
+    const r = planTopN(BASE, { n });
     expect(r.ok).toBe(false);
     if (r.ok) return;
+    expect(r.reason).toContain(`got ${n}`);
     expect(r.reason).toMatch(/between 1 and 50/);
   });
 
@@ -811,7 +819,19 @@ describe('planSortByFieldOnCategoricalAxis — anchor_category coexistence (wate
       'Sub-Category': `[${DS}].[none:line_item:nk]`,
       'Anchor Category': `[${DS}].[none:category:nk]`,
     };
-    const rewritten = rewriteFieldReferences(ensureUserNamespace(WATERFALL_XML), mapping, DS);
+    const rewritten = rewriteFieldReferences(
+      ensureUserNamespace(WATERFALL_XML),
+      mapping,
+      DS,
+      undefined,
+      {
+        templateSlots: [
+          { template_field: 'Profit', required: true, bindable: true },
+          { template_field: 'Sub-Category', required: true, bindable: true },
+          { template_field: 'Anchor Category', required: false, bindable: true },
+        ],
+      },
+    );
     return spliceWaterfallAnchorFilter(rewritten, mapping);
   };
 

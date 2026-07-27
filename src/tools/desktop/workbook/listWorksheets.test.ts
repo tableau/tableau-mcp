@@ -33,7 +33,6 @@ describe('listWorksheetsTool', () => {
       session: expect.any(Object),
     });
     expect(listWorksheetsTool.annotations).toMatchObject({
-      title: 'List All Worksheets in Workbook',
       readOnlyHint: true,
       openWorldHint: false,
     });

@@ -2,6 +2,7 @@ import { Ok } from 'ts-results-es';
 
 import * as getWorksheetXmlCmd from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import * as loadWorksheetXmlCmd from '../../../desktop/commands/workbook/loadWorksheetXml.js';
+import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import {
   DesktopMcpServer,
   DYNAMIC_AUTHORING_TOOL_PROFILE,
@@ -77,6 +78,8 @@ describe('the served profile still has a working edit path with no document para
   beforeEach(() => {
     store.clear();
     vi.clearAllMocks();
+    sessionRouteState.clear();
+    sessionRouteState.recordAuthoringAttempt('s1', 'bind-template');
     vi.mocked(mkdirSync).mockReturnValue(undefined);
     vi.mocked(existsSync).mockImplementation((p) => store.has(String(p)));
     vi.mocked(readFileSync).mockImplementation((p) => {
@@ -91,7 +94,7 @@ describe('the served profile still has a working edit path with no document para
     });
   });
 
-  it('runs get -> slice-read -> splice-write -> apply(file) using only served tools', async () => {
+  it('runs the post-bind get -> slice-read -> splice-write -> apply(file) repair path', async () => {
     vi.spyOn(getWorksheetXmlCmd, 'getWorksheetFragment').mockResolvedValue(Ok(SHEET));
     const loadSpy = vi
       .spyOn(loadWorksheetXmlCmd, 'loadWorksheetXml')

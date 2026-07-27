@@ -82,7 +82,6 @@ export const getValidateProposalTool = (
     description: 'Dry-run proposal.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true, // Reads the workbook and validates; never mutates it.
       openWorldHint: false,
       destructiveHint: false,

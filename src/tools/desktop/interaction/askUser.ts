@@ -26,7 +26,6 @@ export const getAskUserTool = (server: DesktopMcpServer): DesktopTool<typeof par
     description: 'Ask instead of guessing; stop and wait.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

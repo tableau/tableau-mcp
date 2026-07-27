@@ -34,23 +34,19 @@ const paramsSchema = {
   session: z
     .string()
     .optional()
-    .describe(
-      'Omit — the pinned or only Desktop is used. Pass a list-instances pid to target another.',
-    ),
-  workbookFile: z
-    .string()
-    .describe('Workbook path from resolve-field or list-available-fields; then apply-workbook.'),
-  templateName: z.string().describe('Template id from list-templates, not a free-form name.'),
+    .describe('Desktop process ID; omit to use the pinned or only running instance.'),
+  workbookFile: z.string().describe('Cached workbook path from field resolution.'),
+  templateName: z.string().describe('ID of an existing template.'),
   title: z.string().describe('Name for the sheet this creates.'),
   sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe('What the template builds.'),
   templateParameters: z
     .record(z.string())
     .optional()
-    .describe('Placeholder values (e.g. DATASOURCE); see list-templates.'),
+    .describe('Placeholder values required by the selected template (e.g. DATASOURCE).'),
   fieldMapping: z
     .record(z.string())
     .optional()
-    .describe('Slot id -> exact column ref from resolve-field.'),
+    .describe('Slot to qualified ref from field resolution, never invented.'),
   insertPosition: z
     .enum(['end', 'before_sheet', 'after_sheet'])
     .optional()
@@ -58,7 +54,7 @@ const paramsSchema = {
   relativeSheetName: z
     .string()
     .optional()
-    .describe('Existing sheet from list-worksheets for before_sheet/after_sheet.'),
+    .describe('Existing sheet name; omit when insertPosition defaults to end.'),
 };
 
 function inferSingleDatasourceFromFieldMapping(
@@ -83,7 +79,6 @@ export const getInjectTemplateTool = (
     description: 'Inject a template.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
@@ -219,7 +214,7 @@ export const getInjectTemplateTool = (
               templateName,
               title,
               sheetType,
-              warnings: explicitTemplateWarnings,
+              warnings: [...explicitTemplateWarnings, ...(result.warnings ?? [])],
             });
           } catch (err) {
             return new FileReadError(err).toErr();

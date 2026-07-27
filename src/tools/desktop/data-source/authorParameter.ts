@@ -69,7 +69,6 @@ export const getAuthorParameterTool = (
     description: 'Author parameter.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,

@@ -166,6 +166,8 @@ export async function loadDashboardXml({
     return Err({ type: 'load-dashboard-xml-error', error: canonicalNameResult.error });
   }
   const canonicalName = canonicalNameResult.value;
+  const canonicalFocus: ApplyFocus =
+    focus.navigate === 'artifact' ? { ...focus, sheetName: canonicalName } : focus;
 
   // External Client API ("Athena V0") exposes no per-dashboard apply route, so applying a single
   // dashboard re-posts the whole live workbook with just this dashboard swapped in (the POST
@@ -173,7 +175,7 @@ export async function loadDashboardXml({
   const result = await loadDashboardXmlViaExternalApi({
     dashboardName: canonicalName,
     xml,
-    focus,
+    focus: canonicalFocus,
     executor,
     signal,
   });

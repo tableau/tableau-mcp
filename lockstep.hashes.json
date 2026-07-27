@@ -1,11 +1,11 @@
 {
   "src/desktop/binder/calc-derivation.ts": "5105d466e3c31019affa91320edf3047259301ca5cd27aeb5883ba1faa251098",
-  "src/desktop/binder/classify.ts": "560b25b358603f71272359798809e7f427561b150cd983f65f8d7158c1fc6bff",
+  "src/desktop/binder/classify.ts": "191eb4d5592b4dac44c9ee9afbaf79b566c424ff3b86f3c5ef1381b1e5b3fdba",
   "src/desktop/binder/escape.ts": "3c79bcf77c33fad64975e95ea57df5fb3e416008633e15dc7a585018fbc92d3f",
   "src/desktop/binder/manifest-types.ts": "22740b978fdf7f1f463aa9ccd94f1e2ae5d383e610bf9063bff37e1624d173f8",
   "src/desktop/binder/manifest-validation.ts": "fc46c7b874cb2bd5958a2ed40848d18f6b3654e2d8559cff90fb841ca8fdd8d6",
   "src/desktop/binder/stringTemporal.ts": "8b4808dcc410453fed10041d2cb8908f9728a0dd94353bf0c6bc31a295a67c9b",
   "src/desktop/binder/waterfall.ts": "a157e6c94e88dd6ff2ecb5d4977c6b62f6366e338a1e7491788fe78ee2fa2fae",
   "src/desktop/derivations.ts": "d95ec48b7d9989e2489b73f25f102e7b3b6766129601c4fa89392b6aa1dec093",
-  "src/desktop/templates/fieldReferenceRewriter.ts": "3b81bf5fba227349827a16b924273fa125ad1e944543997d5d273f43a415f75a"
+  "src/desktop/templates/fieldReferenceRewriter.ts": "ea78b827e2ba236f30c3bef30f6f9ba871768666395d92616ed5c3617b352786"
 }

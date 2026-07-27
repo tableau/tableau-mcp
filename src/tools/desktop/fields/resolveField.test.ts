@@ -87,7 +87,7 @@ describe('resolveFieldTool', () => {
       datasource: expect.any(Object),
       session: expect.any(Object),
     });
-    // With session, a not_found triggers a cache/sidecar rewrite (self-heal),
+    // A cached not_found triggers a cache/sidecar rewrite (self-heal),
     // so the tool is no longer strictly read-only (matches list-available-fields).
     expect(tool.annotations).toMatchObject({ readOnlyHint: false });
   });
@@ -157,8 +157,9 @@ describe('resolveFieldTool', () => {
     invariant(result.content[0].type === 'text');
     const body = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(body.resolution.kind).toBe('not_found');
-    expect(body.status).toBe('not_found');
+    expect(body.status).toBe('stale_not_found');
     expect(body.isError).toBe(true);
+    expect(body.stale).toBe(true);
   });
 
   it('should pass datasource option to resolveField', async () => {
@@ -179,9 +180,9 @@ describe('resolveFieldTool', () => {
 });
 
 // W-23447478 (P0): resolve-field must self-heal a stale cache — a field that
-// exists only after a mid-session datasource connection. With session, a
-// not_found triggers exactly one live re-snapshot + retry; without session the
-// cache-only behavior is unchanged. Ported by content from a2td #213 to tmcp's
+// exists only after a mid-session datasource connection. A cached not_found
+// triggers exactly one live re-snapshot + retry after resolving the optional
+// session. Ported by content from a2td #213 to tmcp's
 // error/result conventions (Ok-wrapped { resolution, isError } body; CallToolResult
 // .isError stays false — the not_found signal lives in the JSON body).
 describe('resolve-field refresh-on-not_found (W-23447478)', () => {
@@ -248,35 +249,27 @@ describe('resolve-field refresh-on-not_found (W-23447478)', () => {
     expect(metadataModule.resolveField).toHaveBeenCalledTimes(2);
   });
 
-  it('without session: cache-only, never refreshes, byte-identical not_found (no note appended)', async () => {
+  it('without session: resolves the only instance and marks a failed refresh as stale', async () => {
+    vi.mocked(discoveryModule.discoverInstances).mockReturnValue([
+      { pid: 4242 } as unknown as ReturnType<typeof discoveryModule.discoverInstances>[number],
+    ]);
     vi.mocked(readFileSync).mockReturnValue(STALE_XML);
-    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(LIVE_XML));
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(
+      Err({ type: 'command-timed-out', error: 'transient executor fault' }),
+    );
     vi.mocked(metadataModule.resolveField).mockReturnValue(staleNotFound);
     const extra = extraWithExecutor();
 
     const result = await getResult({ workbookFile: WORKBOOK_FILE, query: 'Sales', extra });
 
-    expect(extra.getExecutor).not.toHaveBeenCalled();
-    expect(getWorkbookXmlModule.getWorkbookXml).not.toHaveBeenCalled();
+    expect(extra.getExecutor).toHaveBeenCalledWith('4242');
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    const text = result.content[0].text;
-    // Pure compact JSON, NOTHING concatenated
-    // after it. Round-trip identity proves no note was appended when session is absent.
-    expect(text).toBe(
-      JSON.stringify({
-        resolution: staleNotFound,
-        status: 'not_found',
-        workbookFile: WORKBOOK_FILE,
-        isError: true,
-      }),
-    );
-    expect(JSON.parse(text)).toEqual({
-      resolution: staleNotFound,
-      status: 'not_found',
-      workbookFile: WORKBOOK_FILE,
-      isError: true,
-    });
+    const body = resultSchema.parse(JSON.parse(result.content[0].text));
+    expect(body.status).toBe('stale_not_found');
+    expect(body.stale).toBe(true);
+    expect(body.note).toContain('transient executor fault');
     expect(writeFileSync).not.toHaveBeenCalled();
     expect(cacheFingerprintModule.writeSidecar).not.toHaveBeenCalled();
   });
@@ -485,7 +478,7 @@ describe('resolve-field workbookFile is optional (self-fetches the current workb
 
     expect(workbookFile.isOptional()).toBe(true);
     expect(workbookFile.description).toBe(
-      'Path from an earlier resolve-field or list-available-fields; omit to read the workbook live.',
+      'Cached workbook path returned by field resolution; omit to read the workbook live.',
     );
     expect(workbookFile.safeParse(undefined).success).toBe(true);
   });

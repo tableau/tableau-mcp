@@ -22,7 +22,6 @@ export const getListWorksheetsTool = (
     description: 'Gets a list of all worksheet names in the current workbook.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

@@ -26,7 +26,7 @@ import {
 } from '../../../desktop/route/route-gate.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { spliceBoundFacet } from '../../../desktop/templates/facetSplice.js';
-import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
+import { rewriteFieldReferencesWithDiagnostics } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
 import { pruneUnboundOptionalFields } from '../../../desktop/templates/optionalFieldPrune.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
@@ -287,7 +287,6 @@ export const getBuildAndApplyWorksheetTool = (
     description: 'Build a worksheet from a spec and apply it in one validated call.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: true,
@@ -556,7 +555,7 @@ export const getBuildAndApplyWorksheetTool = (
           templateXml = pruneUnboundOptionalFields(templateXml, explicitBind.optionalFieldPrunes);
           templateXml = ensureUserNamespace(templateXml);
           templateXml = spliceBoundFacet(templateXml, fieldMapping, explicitBind.templateSlots);
-          templateXml = rewriteFieldReferences(
+          const rewrite = rewriteFieldReferencesWithDiagnostics(
             templateXml,
             fieldMapping,
             rewriteDatasource,
@@ -567,6 +566,8 @@ export const getBuildAndApplyWorksheetTool = (
               templateSlots: explicitBind.templateSlots,
             },
           );
+          templateXml = rewrite.xml;
+          warnings.push(...rewrite.droppedOptionalElements);
           // Parity with the binder auto-apply path (injectTemplateCore): a waterfall
           // built through this fallback must also exclude subtotal/total rows, or the
           // running total double-counts them. No-ops unless the XML is a waterfall with

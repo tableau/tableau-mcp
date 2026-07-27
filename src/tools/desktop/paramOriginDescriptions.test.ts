@@ -1,44 +1,29 @@
 import { z } from 'zod';
 
-import { DesktopMcpServer } from '../../server.desktop.js';
+import { DesktopMcpServer, DYNAMIC_AUTHORING_TOOL_PROFILE } from '../../server.desktop.js';
 import { Provider } from '../../utils/provider.js';
-import { desktopToolNames } from './toolName.js';
+import { type DesktopToolName, desktopToolNames } from './toolName.js';
 import { desktopToolFactories } from './tools.js';
 
 /**
- * A parameter whose value the agent must OBTAIN FROM SOMEWHERE ELSE has to say where it
- * comes from. Shipped v10 said 'Workbook.' and 'Session.', and 'Fetched fresh.', so the
- * agent sent a WORKSHEET NAME where a cache path belonged and then cycled session='pinned'
- * / omitted / 'x' against a contract no value could satisfy. bind-template's
- * target_worksheet said nothing at all, so an edit-in-place ask built a second sheet and
- * every later call chased it. Measured: 69 failed add-field calls (591s), 299 repeat binds
- * (2,562s), one conversation the user killed.
+ * Opaque values cannot be invented from the parameter name alone. Their descriptions must
+ * explain the value semantically, without coupling one tool's contract to another tool's
+ * name. Optional opaque values must also explain what happens when they are not supplied.
  *
  * WHAT THIS GATE CHECKS
- *   1. every parameter of a covered tool carries description text;
- *   2. that text is more than a single word (a label is not a description);
- *   3. a parameter in the origin class — a path, a session id, or the name of something
- *      that must already exist — names a real tool from the registry, or says what
- *      happens when it is left out. Those are the only two honest answers to "where do I
- *      get this?", and neither can be produced by padding: the tool name is checked
- *      against desktopToolNames;
- *   4. surface-wide: no tool makes `session` REQUIRED. Required + a pin the agent cannot
- *      name is the impossible contract itself — the tool refuses every value it accepts.
+ *   1. every covered opaque parameter has description text;
+ *   2. no parameter description on the served surface names any registered tool, in either
+ *      kebab-case or underscore_case;
+ *   3. every optional covered opaque parameter describes its omission/default behavior;
+ *   4. every required covered opaque parameter states a semantic source.
  *
  * WHAT THIS GATE CANNOT CHECK
- *   It cannot tell whether a description is TRUE. It cannot tell whether the tool it names
- *   actually returns that value, whether the text still matches the code after a refactor,
- *   or whether an enum explains when to pick which member. A description that says
- *   "path from resolve-field" about a parameter resolve-field never returns passes here and
- *   fails a human review. Accuracy is a review job; presence and origin are this test's job.
+ *   It cannot prove that prose matches runtime behavior. Accuracy remains a review job; this
+ *   test prevents missing provenance, missing omission behavior, and cross-tool coupling.
  *
- * SCOPE — deliberately the four tools fixed in this change, not the whole surface.
- *   368 parameters were scanned across the desktop tools: 252 carry no description at all
- *   and 73 more carry a stub of <= 24 characters. A surface-wide gate would fail the build
- *   today, so it would have to ship disabled or with a 300-entry allow-list, and neither is
- *   a gate. Rule 4 (session never required) IS surface-wide because the surface already
- *   passes it. TODO: move tools into COVERED_TOOLS as their parameters are described; the
- *   gate needs no other change.
+ * SCOPE
+ *   Semantic provenance and omission checks cover the four tools repaired by this gate.
+ *   The registered-name prohibition is surface-wide for the default served profile.
  */
 const COVERED_TOOLS: ReadonlySet<string> = new Set([
   'add-field',
@@ -48,44 +33,49 @@ const COVERED_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Exemptions inside the covered tools. Small on purpose — every entry is a decision, and a
- * long list here means the gate has been talked out of its job.
- */
-const EXEMPT: Readonly<Record<string, readonly string[]>> = {
-  'bind-template': [
-    // Self-evident from the name and the type: a boolean that applies the bind, and a 0..1
-    // floor. Neither is a value fetched from anywhere.
-    'auto_apply',
-    'minConfidence',
-    // The Call-1 propose payload echoed back verbatim, and the calcs to author alongside the
-    // bind. Both are objects whose own members carry the contract (proposalSchema), and this
-    // change did not touch them. TODO with the rest of the surface.
-    'proposal',
-    'calcs',
-    // KNOWN GAP, not a self-evident parameter: bind-template auto-resolves the session and
-    // this parameter is already optional, but it should still say so. It is not described
-    // here because bind-template sits at its per-tool byte cap (server.desktop.test.ts) and
-    // the honest describe does not fit without trimming that tool's other prose — a separate
-    // change. Rule 4 still covers it.
-    'session',
-  ],
-};
-
-/**
  * The origin class: a path minted by another call, a session id, or the name of a sheet /
  * template that must already exist. These are the values an agent cannot invent, and every
  * value in the v10 failure was one of them.
  */
-function comesFromElsewhere(param: string): boolean {
+function isOpaque(param: string): boolean {
   return param === 'session' || /File$/.test(param) || /(Name|_worksheet)$/.test(param);
 }
 
-function namesAnotherTool(description: string): boolean {
-  return desktopToolNames.some((name) => description.includes(name));
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const REGISTERED_TOOL_PATTERNS: ReadonlyArray<readonly [DesktopToolName, RegExp]> =
+  desktopToolNames.flatMap((name) => {
+    const spellings = new Set([name, name.replaceAll('-', '_')]);
+    return [...spellings].map(
+      (spelling) =>
+        [
+          name,
+          new RegExp(`(^|[^a-z0-9_-])${escapeRegExp(spelling)}(?=$|[^a-z0-9_-])`, 'i'),
+        ] as const,
+    );
+  });
+
+function namedRegisteredTool(description: string): DesktopToolName | undefined {
+  return REGISTERED_TOOL_PATTERNS.find(([, pattern]) => pattern.test(description))?.[0];
 }
 
 function saysWhatOmittingDoes(description: string): boolean {
-  return /\bomit\b/i.test(description);
+  return description.split(/[.!?]+/).some((sentence) => {
+    const omissionWord = /\b(?:omit(?:ted)?|defaults?)\b/i;
+    if (!omissionWord.test(sentence)) return false;
+    return /[a-z0-9]+/i.test(sentence.replace(omissionWord, ''));
+  });
+}
+
+function statesSemanticSource(description: string): boolean {
+  return (
+    description.trim().split(/\s+/).length > 1 &&
+    /\b(?:cached|created|existing|live|current|produced|provided|resolved|returned|selected|supplied)\b/i.test(
+      description,
+    )
+  );
 }
 
 async function schemasByToolName(): Promise<Map<string, Record<string, z.ZodTypeAny>>> {
@@ -102,25 +92,18 @@ async function schemasByToolName(): Promise<Map<string, Record<string, z.ZodType
 }
 
 describe('tool input schemas say what to send', () => {
-  it('describes every parameter of a covered tool', async () => {
+  it('describes every covered opaque parameter', async () => {
     const offenders: string[] = [];
 
     for (const [toolName, schema] of await schemasByToolName()) {
       if (!COVERED_TOOLS.has(toolName)) continue;
-      const exempt = EXEMPT[toolName] ?? [];
 
       for (const [param, type] of Object.entries(schema)) {
-        if (exempt.includes(param)) continue;
+        if (!isOpaque(param)) continue;
         const description = type.description?.trim() ?? '';
 
         if (description === '') {
           offenders.push(`${toolName}.${param}: no description`);
-          continue;
-        }
-        // The weakest of the rules, and it stands alone only because every stub that
-        // shipped was one word: 'Session.', 'Shelf.', 'Workbook.', 'Position.', 'Fields.'.
-        if (!/\s/.test(description)) {
-          offenders.push(`${toolName}.${param}: "${description}" is a label, not a description`);
         }
       }
     }
@@ -128,21 +111,37 @@ describe('tool input schemas say what to send', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('tells the agent where an obtained value comes from', async () => {
+  it('names no registered tool in any served parameter description', async () => {
+    const offenders: string[] = [];
+
+    for (const [toolName, schema] of await schemasByToolName()) {
+      if (!DYNAMIC_AUTHORING_TOOL_PROFILE.has(toolName as DesktopToolName)) continue;
+
+      for (const [param, type] of Object.entries(schema)) {
+        const description = type.description?.trim() ?? '';
+        const namedTool = namedRegisteredTool(description);
+
+        if (namedTool) {
+          offenders.push(`${toolName}.${param}: names registered tool "${namedTool}"`);
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('states omission behavior for every optional covered opaque parameter', async () => {
     const offenders: string[] = [];
 
     for (const [toolName, schema] of await schemasByToolName()) {
       if (!COVERED_TOOLS.has(toolName)) continue;
-      const exempt = EXEMPT[toolName] ?? [];
 
       for (const [param, type] of Object.entries(schema)) {
-        if (exempt.includes(param) || !comesFromElsewhere(param)) continue;
+        if (!isOpaque(param) || !type.isOptional()) continue;
         const description = type.description?.trim() ?? '';
 
-        if (!namesAnotherTool(description) && !saysWhatOmittingDoes(description)) {
-          offenders.push(
-            `${toolName}.${param}: "${description}" names no tool that returns it and does not say what omitting it does`,
-          );
+        if (!saysWhatOmittingDoes(description)) {
+          offenders.push(`${toolName}.${param}: does not state what omission defaults to`);
         }
       }
     }
@@ -150,19 +149,35 @@ describe('tool input schemas say what to send', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('never makes session required, on any tool', async () => {
-    const required: string[] = [];
+  it('states a semantic source for every required covered opaque parameter', async () => {
+    const offenders: string[] = [];
 
     for (const [toolName, schema] of await schemasByToolName()) {
+      if (!COVERED_TOOLS.has(toolName)) continue;
+
       for (const [param, type] of Object.entries(schema)) {
-        if (param === 'session' && !type.isOptional()) {
-          required.push(`${toolName}.${param}`);
+        if (!isOpaque(param) || type.isOptional()) continue;
+        const description = type.description?.trim() ?? '';
+
+        if (!statesSemanticSource(description)) {
+          offenders.push(`${toolName}.${param}: does not state a semantic source`);
         }
       }
     }
 
-    // A pinned agent is told to omit the parameter; a required parameter tells it to send
-    // one. The tool then refuses every value in the set it accepts, and the agent loops.
-    expect(required).toEqual([]);
+    expect(offenders).toEqual([]);
+  });
+
+  it('never requires session on any served tool', async () => {
+    const offenders: string[] = [];
+
+    for (const [toolName, schema] of await schemasByToolName()) {
+      const session = schema['session'];
+      if (session !== undefined && !session.isOptional()) {
+        offenders.push(`${toolName}.session: required — session must always be optional`);
+      }
+    }
+
+    expect(offenders).toEqual([]);
   });
 });

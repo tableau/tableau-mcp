@@ -174,4 +174,20 @@ describe('search-commands routing recommendation', () => {
     // refine-worksheet may still be named, but only for what it can actually do.
     expect(recommendation).not.toMatch(/refine-worksheet to edit in place/);
   });
+
+  it('does not recommend full-profile workbook XML editing', () => {
+    const { recommendation } = searchCommandsByKeywords(['sheet']) as { recommendation?: string };
+
+    expect(recommendation).not.toMatch(/edit workbook XML/i);
+  });
+
+  it('names the registered execute-tableau-command tool in blocking-surface warnings', () => {
+    const { commands } = searchCommandsByKeywords(['editor']) as {
+      commands: Array<{ warning?: string }>;
+    };
+    const warning = commands.find((command) => command.warning)?.warning;
+
+    expect(warning).toContain('execute-tableau-command');
+    expect(warning).not.toContain('execute_tableau_command');
+  });
 });

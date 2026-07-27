@@ -21,6 +21,7 @@ type EpisodeConfig = BaseConfig & {
 };
 
 export type EpisodeStatus = 'succeeded' | 'failed' | 'abandoned';
+export type ToolInvocationOutcome = 'succeeded' | 'failed' | 'refused_by_gate';
 
 type EventBase = {
   session_id: string;
@@ -55,6 +56,7 @@ export type EpisodeEventInput =
       tool: string;
       duration_ms: number;
       success: boolean;
+      outcome: ToolInvocationOutcome;
     })
   | (EventBase & {
       type: 'tool_error';

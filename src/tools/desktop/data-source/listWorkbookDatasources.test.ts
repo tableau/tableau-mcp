@@ -42,7 +42,6 @@ describe('listWorkbookDatasourcesTool', () => {
     expect(tool.description).toContain('luid for published');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
-      title: 'List Workbook Datasources',
       readOnlyHint: true,
       openWorldHint: false,
     });

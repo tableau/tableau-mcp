@@ -44,7 +44,6 @@ describe('getDashboardXmlTool', () => {
       mode: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Get Dashboard Layout',
       readOnlyHint: false,
       openWorldHint: false,
     });

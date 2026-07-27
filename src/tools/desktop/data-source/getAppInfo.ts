@@ -31,7 +31,6 @@ export const getAppInfoTool = (server: DesktopMcpServer): DesktopTool<typeof par
     description: 'Identify the Desktop build when an endpoint 404s as too-new.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

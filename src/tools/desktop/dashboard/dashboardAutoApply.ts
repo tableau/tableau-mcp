@@ -184,7 +184,6 @@ export const getDashboardAutoApplyTool = (
     description: 'Build dashboard from 2-6 asks; all-or-nothing.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: true,

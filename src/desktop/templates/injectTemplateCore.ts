@@ -17,7 +17,10 @@ import { ParsedWindow, ParsedWorkbook, ParsedWorksheet } from '../metadata/types
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
 import { type DateparseAxisSpec, spliceDateparseTemporalAxis } from './dateparseTemporalAxis.js';
 import { spliceBoundFacet } from './facetSplice.js';
-import { rewriteFieldReferences, type TemplateSlotReference } from './fieldReferenceRewriter.js';
+import {
+  rewriteFieldReferencesWithDiagnostics,
+  type TemplateSlotReference,
+} from './fieldReferenceRewriter.js';
 import { injectTemplate, InsertPosition, SheetType } from './injectTemplate.js';
 import { type OptionalFieldPruneSpec, pruneUnboundOptionalFields } from './optionalFieldPrune.js';
 import { spliceWaterfallAnchorFilter } from './waterfallAnchorFilter.js';
@@ -85,7 +88,9 @@ export interface InjectTemplateCoreParams {
  * inject-template tool → XmlValidationError; bind-template → graceful fallback).
  * Structural failures inside injectTemplate THROW and propagate to the caller.
  */
-export type InjectTemplateCoreResult = { ok: true; xml: string } | { ok: false; issues: string[] };
+export type InjectTemplateCoreResult =
+  | { ok: true; xml: string; warnings?: string[] }
+  | { ok: false; issues: string[] };
 
 /**
  * True when any `<zone>` element ANYWHERE in the parsed workbook carries the sheet
@@ -206,6 +211,7 @@ export function buildInjectedWorkbookXml({
     sheetType === 'worksheet' ? removeSameNamedWorksheet(workbookXml, title) : workbookXml;
 
   let processed = templateXml.replace(/\{\{TITLE\}\}/g, escapeXml(title));
+  const rewriteWarnings: string[] = [];
 
   if (templateParameters) {
     for (const [key, value] of Object.entries(templateParameters)) {
@@ -238,13 +244,15 @@ export function buildInjectedWorkbookXml({
     // Month-Trunc CI alone — the axis truncates a parsed date instead of a raw string.
     processed = spliceDateparseTemporalAxis(processed, dateparseAxis ?? null);
     processed = spliceBoundFacet(processed, fieldMapping ?? {}, templateSlots);
-    processed = rewriteFieldReferences(
+    const rewrite = rewriteFieldReferencesWithDiagnostics(
       processed,
       fieldMapping ?? {},
       templateParameters['DATASOURCE'],
       undefined,
       { namespaceCalcs: true, applyNonce, templateSlots },
     );
+    processed = rewrite.xml;
+    rewriteWarnings.push(...rewrite.droppedOptionalElements);
     processed = spliceWaterfallAnchorFilter(processed, fieldMapping ?? {});
   }
 
@@ -261,5 +269,9 @@ export function buildInjectedWorkbookXml({
     return { ok: false, issues: issues.map((i) => i.message) };
   }
 
-  return { ok: true, xml: modifiedXml };
+  return {
+    ok: true,
+    xml: modifiedXml,
+    ...(rewriteWarnings.length > 0 ? { warnings: rewriteWarnings } : {}),
+  };
 }

@@ -45,7 +45,6 @@ export const getGetWorkbookXmlTool = (
     description: 'Get current workbook structure.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false, // Writes to a cache file
       openWorldHint: false,
       destructiveHint: false, // A new cache file is created for each tool call
@@ -98,12 +97,14 @@ export const getGetWorkbookXmlTool = (
                 bytes,
                 capBytes,
                 xml: workbookXml,
+                applyTool: 'apply-workbook',
+                pathParam: 'workbookFile',
               }),
               file: cacheFile,
               instructions:
                 'This workbook exceeds the inline cap. Use the cache read tool (with a worksheet/dashboard ' +
                 'selector or startByte/endByte to read a slice), the cache write tool (same selector to ' +
-                'splice edits back), then apply-workbook with mode=file. Do not request mode=inline.',
+                'splice edits back), then call apply-workbook with workbookFile set to this file path.',
             });
           }
 

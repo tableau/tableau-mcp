@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { classifyNoLlm, summarizeSchema } from './binder.js';
+import { bindTemplate, classifyNoLlm, summarizeSchema } from './binder.js';
 import { hasDeterministicPathBlockingHazard } from './classify.js';
 import { loadManifests } from './manifest.js';
 import type { SlotSpec, TemplateManifest } from './manifest-types.js';
@@ -77,6 +77,56 @@ const NARROW = `<?xml version='1.0'?>
   <column name='[Region]' role='dimension' type='nominal' datatype='string' />
   <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
 </datasource></datasources></workbook>`;
+
+const SINGLE_DATE = `<?xml version='1.0'?>
+<workbook><datasources><datasource name='SingleDate'>
+  <column name='[Order Date]' role='dimension' type='quantitative' datatype='date' />
+  <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+</datasource></datasources></workbook>`;
+
+const TWO_DATES = `<?xml version='1.0'?>
+<workbook><datasources><datasource name='TwoDates'>
+  <column name='[Order Date]' role='dimension' type='quantitative' datatype='date' />
+  <column name='[Ship Date]' role='dimension' type='quantitative' datatype='datetime' />
+  <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+</datasource></datasources></workbook>`;
+
+function businessSynonymSchema(measures: readonly string[], dimension = 'Region'): string {
+  const columns = [
+    `<column name='[${dimension}]' role='dimension' type='nominal' datatype='string' />`,
+    ...measures.map(
+      (measure) =>
+        `<column name='[${measure}]' role='measure' type='quantitative' datatype='real' />`,
+    ),
+  ];
+  return `<?xml version='1.0'?><workbook><datasources><datasource name='BusinessSynonyms'>
+  ${columns.join('\n  ')}
+</datasource></datasources></workbook>`;
+}
+
+function classifierSchema(
+  measures: readonly string[],
+  dimensions: readonly string[],
+  calculatedMeasures: readonly string[] = [],
+): string {
+  const columns = [
+    ...dimensions.map(
+      (dimension) =>
+        `<column name='[${dimension}]' role='dimension' type='nominal' datatype='string' />`,
+    ),
+    ...measures.map(
+      (measure) =>
+        `<column name='[${measure}]' role='measure' type='quantitative' datatype='real' />`,
+    ),
+    ...calculatedMeasures.map(
+      (measure, index) =>
+        `<column caption='${measure}' name='[Calculation_${index + 1}]' role='measure' type='quantitative' datatype='real'><calculation class='tableau' formula='1' /></column>`,
+    ),
+  ];
+  return `<?xml version='1.0'?><workbook><datasources><datasource name='Classifier'>
+  ${columns.join('\n  ')}
+</datasource></datasources></workbook>`;
+}
 
 /**
  * One geo level (country) plus a NON-geographic spare dimension. This is the schema in which
@@ -629,6 +679,21 @@ interface OptionalSlotRow {
 
 const OPTIONAL_SLOTS: readonly OptionalSlotRow[] = [
   {
+    template: 'correlation-scatter-plot-chart',
+    slot: 'customer_name',
+    fills: {
+      ask: 'scatter plot of Profit and Sales by Customer Name and Region',
+      schema: 'superstore',
+      field: 'Customer Name',
+      why: 'a second ask-named categorical fills the optional fine-grain detail slot by name affinity',
+    },
+    staysUnbound: {
+      ask: 'scatter plot of Profit and Sales by Region',
+      schema: 'superstore',
+      why: 'the lone categorical is reserved for required Region, leaving Customer Name prunable',
+    },
+  },
+  {
     template: 'box-plot-chart',
     slot: 'facet',
     fills: {
@@ -931,6 +996,99 @@ const CUE_DEGRADATION: ReadonlyArray<{
     boundTemplate: 'spatial-choropleth-map',
     why: 'same spatial contention. The choropleth has no colour slot (colour IS the required measure), so a bind would have dropped the directive; the softer natural cue ("warmer colours") still binds and is covered in the matrix',
   },
+  {
+    base: 'scatter plot of Profit and Sales by Customer Name and Region',
+    cued: 'scatter plot of Profit and Sales by Customer Name and Region, top 5',
+    schema: 'superstore',
+    boundTemplate: 'correlation-scatter-plot-chart',
+    why: 'the top-N cue pulls the ranking family into contention with the scatter plot',
+  },
+  {
+    base: 'diverging bar chart of Profit and Sales by Sub-Category',
+    cued: 'diverging bar chart of Profit and Sales by Sub-Category, and show me the details when I hover over a mark',
+    schema: 'superstore',
+    boundTemplate: 'ranking-ordered-bar',
+    why: 'the long hover cue makes the existing ranking-bar fallback fail closed',
+  },
+  {
+    base: 'paired bar chart of Sales by Region over Order Date',
+    cued: 'paired bar chart of Sales by Region over Order Date, and show me the details when I hover over a mark',
+    schema: 'superstore',
+    boundTemplate: 'ranking-ordered-bar',
+    why: 'the long hover cue makes the existing ranking-bar fallback fail closed',
+  },
+  {
+    base: 'floating bar chart of Sales by Region and Sub-Category',
+    cued: 'floating bar chart of Sales by Region and Sub-Category, and show me the details when I hover over a mark',
+    schema: 'superstore',
+    boundTemplate: 'ranking-ordered-bar',
+    why: 'the long hover cue makes the existing ranking-bar fallback fail closed',
+  },
+];
+
+const REROUTED_CUES: ReadonlyArray<{
+  base: string;
+  cued: string;
+  schema: SchemaId;
+  fromTemplate: string;
+  toTemplate: string;
+  droppedFields: readonly string[];
+  why: string;
+}> = [
+  {
+    base: 'scatter plot of Profit and Sales by Customer Name and Region',
+    cued: 'scatter plot of Profit and Sales by Customer Name and Region, sized by Quantity',
+    schema: 'superstore',
+    fromTemplate: 'correlation-scatter-plot-chart',
+    toTemplate: 'correlation-bubble-chart',
+    droppedFields: ['Region'],
+    why: 'the size cue reroutes to the bubble chart and drops the requested Region field',
+  },
+  {
+    base: 'scatter plot of Profit and Sales by Customer Name and Region',
+    cued: 'scatter plot of Profit and Sales by Customer Name and Region, with warmer colours where Quantity is higher',
+    schema: 'superstore',
+    fromTemplate: 'correlation-scatter-plot-chart',
+    toTemplate: 'correlation-bubble-chart',
+    droppedFields: ['Region'],
+    why: 'the natural colour cue reroutes to the bubble chart and drops the requested Region field',
+  },
+  {
+    base: 'scatter plot of Profit and Sales by Customer Name and Region',
+    cued: 'scatter plot of Profit and Sales by Customer Name and Region. Put Quantity on Color.',
+    schema: 'superstore',
+    fromTemplate: 'correlation-scatter-plot-chart',
+    toTemplate: 'correlation-bubble-chart',
+    droppedFields: ['Region'],
+    why: 'the explicit colour cue reroutes to the bubble chart and drops the requested Region field',
+  },
+  {
+    base: 'bar code chart of Sales by Sub-Category, Country/Region and State/Province',
+    cued: 'bar code chart of Sales by Sub-Category, Country/Region and State/Province, top 5',
+    schema: 'superstore',
+    fromTemplate: 'distribution-bar-code-chart',
+    toTemplate: 'ranking-ordered-bar',
+    droppedFields: ['Country/Region', 'State/Province'],
+    why: 'the top-N cue reroutes to the ranking bar and drops both requested geo fields',
+  },
+  {
+    base: 'proportional stacked bar of Sales by Region and Category',
+    cued: 'proportional stacked bar of Sales by Region and Category, top 5',
+    schema: 'superstore',
+    fromTemplate: 'part-to-whole-stacked-bar-chart',
+    toTemplate: 'ranking-ordered-bar',
+    droppedFields: ['Category'],
+    why: 'the top-N cue reroutes to the ranking bar and drops the requested Category field',
+  },
+  {
+    base: 'stacked bar of Sales by Category and Sub-Category',
+    cued: 'stacked bar of Sales by Category and Sub-Category, top 5',
+    schema: 'superstore',
+    fromTemplate: 'part-to-whole-stacked-bar-chart',
+    toTemplate: 'ranking-ordered-bar',
+    droppedFields: ['Sub-Category'],
+    why: 'the top-N cue reroutes to the ranking bar and drops the requested Sub-Category field',
+  },
 ];
 
 let manifests: Map<string, TemplateManifest>;
@@ -946,6 +1104,83 @@ beforeAll(() => {
 beforeEach(() => {
   // A future early return must fail instead of manufacturing another green, assertion-free row.
   expect.hasAssertions();
+});
+
+describe('binder/manifest-encoding-corpus — temporal-slot fallback', () => {
+  const expectedExplicitDateClassification = {
+    template: 'trend-line-chart',
+    bindings: [
+      { slot_id: 'order_date', field: 'Order Date' },
+      { slot_id: 'sales', field: 'Sales' },
+    ],
+    encodings: { filled: [], unfilled: [] },
+  };
+
+  it('binds the only date field when a trend ask names no date field', () => {
+    const result = classifyNoLlm('sales over time', manifests, summarizeSchema(SINGLE_DATE));
+
+    expect(result).toEqual({
+      ...expectedExplicitDateClassification,
+      notes: [
+        "Using 'Order Date' for required temporal slot 'order_date' because it is the only date field in the datasource.",
+      ],
+    });
+  });
+
+  it.each([
+    'line chart of Sales by date',
+    'line chart of Sales by month',
+    'line chart of Sales by quarter',
+    'line chart of Sales by year',
+    'line chart of Sales monthly',
+    'line chart of Sales quarterly',
+    'line chart of Sales yearly',
+    'line chart of Sales daily',
+    'line chart of Sales over the last 6 months',
+    'line chart of Sales for the last 2 quarters',
+    'line chart of Sales across the last 3 years',
+  ])('recognizes the temporal cue in "%s"', (ask) => {
+    const trend = manifests.get('trend-line-chart')!;
+    const result = classifyNoLlm(
+      ask,
+      new Map([[trend.template, trend]]),
+      summarizeSchema(SINGLE_DATE),
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.bindings).toContainEqual({ slot_id: 'order_date', field: 'Order Date' });
+  });
+
+  it('proposes both date candidates instead of binding either when the choice is material', async () => {
+    const result = await bindTemplate({
+      ask: 'sales over time',
+      workbookXml: TWO_DATES,
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+    if (result.status !== 'propose') return;
+    expect(
+      result.llm_input.candidate_templates
+        .find((candidate) => candidate.template === 'trend-line-chart')
+        ?.slots.find((slot) => slot.slot_id === 'order_date'),
+    ).toMatchObject({ kind: 'temporal', required: true });
+    expect(
+      result.llm_input.fields
+        .filter((field) => field.datatype === 'date' || field.datatype === 'datetime')
+        .map((field) => field.name),
+    ).toEqual(['Order Date', 'Ship Date']);
+  });
+
+  it('keeps an explicitly named date-field classification byte-identical', () => {
+    const result = classifyNoLlm(
+      'line chart of Sales by Order Date',
+      manifests,
+      summarizeSchema(SINGLE_DATE),
+    );
+
+    expect(JSON.stringify(result)).toBe(JSON.stringify(expectedExplicitDateClassification));
+  });
 });
 
 function bindableSlots(m: TemplateManifest): SlotSpec[] {
@@ -973,6 +1208,223 @@ const MATRIX = CORPUS.flatMap((row) =>
   INTENTS.map(([intent, suffix]) => ({ row, intent, ask: row.ask + suffix })),
 );
 
+describe('binder/manifest-encoding-corpus — business-synonym field resolution', () => {
+  it('"revenue by region" uniquely resolves to the full-name Sales match', () => {
+    const summary = summarizeSchema(businessSynonymSchema(['Sales']));
+
+    const result = classifyNoLlm('revenue by region', manifests, summary);
+
+    expect(result).not.toBeNull();
+    expect(result!.bindings).toEqual([
+      { slot_id: 'category', field: 'Region' },
+      { slot_id: 'measure', field: 'Sales' },
+    ]);
+  });
+
+  it('a lone partial-caption revenue candidate proposes instead of auto-binding', async () => {
+    const result = await bindTemplate({
+      ask: 'revenue by region',
+      workbookXml: businessSynonymSchema(['Sales Tax']),
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+    if (result.status !== 'propose') throw new Error(`expected propose, got ${result.status}`);
+    expect(result.llm_input.fields.map((field) => field.name)).toContain('Sales Tax');
+  });
+
+  it('a compound literal field suppresses synonym ambiguity for a noun inside its span', () => {
+    const summary = summarizeSchema(businessSynonymSchema(['Net Revenue', 'Sales']));
+
+    const result = classifyNoLlm('show Net Revenue by Region', manifests, summary);
+
+    expect(result).not.toBeNull();
+    expect(result!.bindings).toEqual([
+      { slot_id: 'category', field: 'Region' },
+      { slot_id: 'measure', field: 'Net Revenue' },
+    ]);
+  });
+
+  it('literal Revenue wins over the Sales synonym candidate', () => {
+    const summary = summarizeSchema(businessSynonymSchema(['Sales', 'Revenue']));
+
+    const result = classifyNoLlm('Show me revenue by region', manifests, summary);
+
+    expect(result).not.toBeNull();
+    expect(result!.bindings).toEqual([
+      { slot_id: 'category', field: 'Region' },
+      { slot_id: 'measure', field: 'Revenue' },
+    ]);
+  });
+
+  it('ambiguous revenue candidates propose both Sales and Amount without binding', async () => {
+    const distractors = Array.from({ length: 25 }, (_, index) => `Metric ${index + 1}`);
+    const workbookXml = businessSynonymSchema(['Sales', 'Amount', ...distractors]);
+
+    const result = await bindTemplate({
+      ask: 'Show me revenue by region',
+      workbookXml,
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+    if (result.status !== 'propose') throw new Error(`expected propose, got ${result.status}`);
+    expect(result.llm_input.fields.map((field) => field.name)).toEqual(
+      expect.arrayContaining(['Sales', 'Amount']),
+    );
+  });
+
+  it('"customers" uniquely resolves to Customer Name', () => {
+    const summary = summarizeSchema(businessSynonymSchema(['Sales'], 'Customer Name'));
+
+    const result = classifyNoLlm('top 10 customers by sales', manifests, summary);
+
+    expect(result).not.toBeNull();
+    expect(result!.template).toBe('ranking-ordered-bar');
+    expect(result!.bindings).toEqual([
+      { slot_id: 'region', field: 'Customer Name' },
+      { slot_id: 'sales', field: 'Sales' },
+    ]);
+    expect(result!.top_n).toBe(10);
+  });
+
+  it.each([
+    ['products', 'Product Name'],
+    ['orders', 'Order ID'],
+    ['reps', 'Sales Rep'],
+    ['salespeople', 'Sales Person'],
+    ['deals', 'Opportunity Name'],
+  ])('"%s" uniquely resolves to %s', (noun, dimension) => {
+    const summary = summarizeSchema(businessSynonymSchema(['Sales'], dimension));
+
+    const result = classifyNoLlm(`Show me Sales by ${noun}`, manifests, summary);
+
+    expect(result).not.toBeNull();
+    expect(result!.template).toBe('magnitude-simple-bar');
+    expect(result!.bindings).toEqual([
+      { slot_id: 'category', field: dimension },
+      { slot_id: 'measure', field: 'Sales' },
+    ]);
+  });
+
+  it('does not treat an unqualified Owner field as a sales representative', async () => {
+    const result = await bindTemplate({
+      ask: 'Show me Sales by reps',
+      workbookXml: businessSynonymSchema(['Sales'], 'Owner'),
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+  });
+
+  it('falls through when a business noun has no caption-pattern match', () => {
+    const summary = summarizeSchema(businessSynonymSchema(['Profit']));
+
+    expect(classifyNoLlm('Show me revenue by region', manifests, summary)).toBeNull();
+  });
+});
+
+describe('binder/manifest-encoding-corpus — deterministic replay coverage', () => {
+  it.each([
+    ['Show me revenue by customer.', 'Customer Name'],
+    ['Show me revenue by customers.', 'Customer Name'],
+    ['Show me revenue by customer.', 'Customer ID'],
+  ])('head noun in "%s" binds the identity field %s', (ask, dimension) => {
+    const summary = summarizeSchema(classifierSchema(['Sales'], [dimension]));
+
+    expect(classifyNoLlm(ask, manifests, summary)).toMatchObject({
+      template: 'magnitude-simple-bar',
+      bindings: [
+        { slot_id: 'category', field: dimension },
+        { slot_id: 'measure', field: 'Sales' },
+      ],
+    });
+  });
+
+  it('proposes rather than treating Customer Segment as a per-customer identity', async () => {
+    const result = await bindTemplate({
+      ask: 'Show me revenue by customer.',
+      workbookXml: classifierSchema(['Sales'], ['Customer Segment']),
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+  });
+
+  it('explicit top-N reaches the ranking template before modifiers attach', () => {
+    const summary = summarizeSchema(classifierSchema(['Sales'], ['Customer Name']));
+
+    expect(classifyNoLlm('Show me top 10 customers by revenue.', manifests, summary)).toMatchObject(
+      {
+        template: 'ranking-ordered-bar',
+        bindings: [
+          { slot_id: 'region', field: 'Customer Name' },
+          { slot_id: 'sales', field: 'Sales' },
+        ],
+        top_n: 10,
+      },
+    );
+  });
+
+  it('a lone revenue measure binds the KPI template', () => {
+    const summary = summarizeSchema(classifierSchema(['Sales'], []));
+
+    expect(classifyNoLlm('Show me revenue.', manifests, summary)).toMatchObject({
+      template: 'kpi-text',
+      bindings: [{ slot_id: 'value', field: 'Sales' }],
+    });
+  });
+
+  it('a lone calculated measure caption binds the KPI template', () => {
+    const summary = summarizeSchema(classifierSchema([], [], ['Gross Margin %']));
+
+    expect(classifyNoLlm('Show me gross margin %.', manifests, summary)).toMatchObject({
+      template: 'kpi-text',
+      bindings: [{ slot_id: 'value', field: 'Gross Margin %' }],
+    });
+  });
+
+  it('declines an ambiguous dimension head noun', () => {
+    const summary = summarizeSchema(
+      classifierSchema(['Revenue'], ['Customer Name', 'Customer Segment']),
+    );
+
+    expect(classifyNoLlm('Show me revenue by customer.', manifests, summary)).toBeNull();
+  });
+
+  it('declines plural-equivalent dimension heads that claim the same ask span', async () => {
+    const result = await bindTemplate({
+      ask: 'Show me a bar chart of sales by customers.',
+      workbookXml: classifierSchema(['Sales'], ['Customer Name', 'Customers Segment']),
+      manifests,
+    });
+
+    expect(result.status).toBe('propose');
+  });
+
+  it('keeps the plural alias for a sole dimension head', async () => {
+    const result = await bindTemplate({
+      ask: 'Show me a bar chart of sales by customers.',
+      workbookXml: classifierSchema(['Sales'], ['Customer Name']),
+      manifests,
+    });
+
+    expect(result.status).toBe('bound');
+  });
+
+  it('declines top products when more than one measure could supply the ranking', () => {
+    const summary = summarizeSchema(classifierSchema(['Sales', 'Profit'], ['Product Name']));
+
+    expect(classifyNoLlm('Show me top products.', manifests, summary)).toBeNull();
+  });
+
+  it('declines residual words after a resolvable measure', () => {
+    const summary = summarizeSchema(classifierSchema(['Sales'], []));
+
+    expect(classifyNoLlm('Show me revenue growth.', manifests, summary)).toBeNull();
+  });
+});
+
 describe('binder/manifest-encoding-corpus — census tripwires', () => {
   it('covers every manifest on disk exactly once', () => {
     const onDisk = [...manifests.keys()].sort();
@@ -993,6 +1445,7 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
     }
     expect(inventory).toEqual({
       'box-plot-chart': ['facet'],
+      'correlation-scatter-plot-chart': ['customer_name'],
       'part-to-whole-waterfall': ['anchor_category'],
       'ranking-ordered-bar': ['facet_row'],
       'spatial-choropleth-map': ['state'],
@@ -1000,8 +1453,8 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
       'spatial-symbol-map-latlon': ['color', 'detail2', 'size', 'tooltip'],
       'trend-line-chart': ['color_series', 'facet_col'],
     });
-    expect(Object.keys(inventory)).toHaveLength(7);
-    expect(Object.values(inventory).flat()).toHaveLength(14);
+    expect(Object.keys(inventory)).toHaveLength(8);
+    expect(Object.values(inventory).flat()).toHaveLength(15);
   });
 
   it('gives every optional bindable slot in the corpus a row in the optional-slot table', () => {
@@ -1012,7 +1465,7 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
       .flatMap((m) => optionalSlotIds(m).map((slot) => `${m.template}.${slot}`))
       .sort();
     expect(declared).toEqual(actual);
-    expect(declared).toHaveLength(14);
+    expect(declared).toHaveLength(15);
   });
 
   it('pins how much of the manifest-intent matrix reaches a deterministic bind', () => {
@@ -1021,8 +1474,8 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
     const failedClosed = outcomes.length - bound;
 
     expect({ bound, failedClosed, total: outcomes.length }).toEqual({
-      bound: 230,
-      failedClosed: 166,
+      bound: 231,
+      failedClosed: 165,
       total: 396,
     });
   });
@@ -1042,14 +1495,14 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
     }
 
     expect({ comparable, failedClosed, rerouted, total: cued.length }).toEqual({
-      comparable: 188,
-      failedClosed: 158,
+      comparable: 189,
+      failedClosed: 157,
       rerouted: 6,
       total: 352,
     });
   });
 
-  it('ww-ou-arrow is blocked by the compound-string-parse hazard, not by phrasing', () => {
+  it('ww-ou-arrow declares the compound-string-parse hazard that blocks deterministic binding', () => {
     // The one fails-closed verdict above whose mechanism we assert directly rather than
     // characterise, because the manifest declares it.
     expect(hasDeterministicPathBlockingHazard(manifests.get('ww-ou-arrow')!)).toBe(true);
@@ -1109,7 +1562,7 @@ describe('binder/manifest-encoding-corpus — derived invariants over the matrix
   }
 });
 
-describe('binder/manifest-encoding-corpus — a cue never removes a binding', () => {
+describe('binder/manifest-encoding-corpus — comparable same-template cue outcomes', () => {
   // THE 2.46.0 SHAPE, stated as an invariant. When a cue leaves the selected template
   // unchanged, its slot set must be a superset of the plain ask's: adding "in warmer
   // colours" may add an encoding, never drop one. A cue that re-routes to a different
@@ -1181,7 +1634,7 @@ describe('binder/manifest-encoding-corpus — the optional-slot surface', () => 
   );
 
   it.each(reachable.map((r) => [`${r.template}.${r.slot}`, r] as const))(
-    '%s fills on its cue',
+    '%s fills in its declared positive cases',
     (_label, row) => {
       for (const c of [row.fills, ...(row.alsoFills ?? [])]) {
         const result = classify(c.ask, c.schema);
@@ -1201,7 +1654,7 @@ describe('binder/manifest-encoding-corpus — the optional-slot surface', () => 
   );
 
   it.each(OPTIONAL_SLOTS.map((r) => [`${r.template}.${r.slot}`, r] as const))(
-    '%s stays unbound without its cue',
+    '%s stays unbound in its declared negative case',
     (_label, row) => {
       const result = classify(row.staysUnbound.ask, row.staysUnbound.schema);
       expect(result, row.staysUnbound.why).not.toBeNull();
@@ -1300,5 +1753,39 @@ describe('binder/manifest-encoding-corpus — cue degradation (fail-closed pins)
     // Fails closed, so the LLM propose path handles it. What must never happen is a silent
     // bind to some other template that drops the cue.
     expect(classify(row.cued, row.schema), row.why).toBeNull();
+  });
+});
+
+describe('binder/manifest-encoding-corpus — connected scatter intent retention', () => {
+  it('keeps an explicit connected scatterplot on its template with a top-N modifier', () => {
+    const result = classify(
+      'connected scatterplot of Profit vs Sales by Customer Name and Region, top 5',
+      'superstore',
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.template).toBe('connected-scatterplot');
+    expect(result!.top_n).toBe(5);
+  });
+});
+
+describe('binder/manifest-encoding-corpus — cue reroute pins', () => {
+  it.each(REROUTED_CUES.map((r) => [r.cued, r] as const))('%s', (_label, row) => {
+    const base = classify(row.base, row.schema);
+    expect(base, `the base ask must bind for this pin to mean anything: ${row.why}`).not.toBeNull();
+    expect(base!.template, row.why).toBe(row.fromTemplate);
+
+    const rerouted = classify(row.cued, row.schema);
+    expect(rerouted, row.why).not.toBeNull();
+    expect(rerouted!.template, row.why).toBe(row.toTemplate);
+
+    const baseFields = base!.bindings.map((binding) => binding.field);
+    const reroutedFields = rerouted!.bindings.map((binding) => binding.field);
+    for (const field of row.droppedFields) {
+      expect(baseFields, `${field} must be present before the reroute: ${row.why}`).toContain(
+        field,
+      );
+      expect(reroutedFields, row.why).not.toContain(field);
+    }
   });
 });

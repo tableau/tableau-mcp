@@ -28,7 +28,7 @@ import { existsSync, readFileSync } from 'fs';
 
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { listAvailableFields } from '../../../desktop/metadata/index.js';
-import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
+import { rewriteFieldReferencesWithDiagnostics } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { getTemplateColumnRequirements } from '../../../desktop/templates/templateColumnRequirements.js';
 import { readTemplate } from '../../../desktop/templates/templatePath.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
@@ -81,7 +81,10 @@ function makeExtra(workbookXml = WORKBOOK_WITH_CAPTION): TableauDesktopRequestHa
     { name: 'M1', role: 'measure', datatype: 'integer', type: 'quantitative' },
     { name: 'M2', role: 'measure', datatype: 'real', type: 'quantitative' },
   ]);
-  vi.mocked(rewriteFieldReferences).mockReturnValue(WORKSHEET_OUTPUT);
+  vi.mocked(rewriteFieldReferencesWithDiagnostics).mockReturnValue({
+    xml: WORKSHEET_OUTPUT,
+    droppedOptionalElements: [],
+  });
   vi.mocked(loadWorksheetXml).mockResolvedValue(new Ok({ readbackWarnings: [] }));
   return extra;
 }
@@ -108,11 +111,11 @@ type Captured = {
 
 function captureCall(): Captured {
   const captured: Captured = { mapping: {}, datasource: '', metadata: {} };
-  vi.mocked(rewriteFieldReferences).mockImplementation((_xml, mapping, ds, meta) => {
+  vi.mocked(rewriteFieldReferencesWithDiagnostics).mockImplementation((_xml, mapping, ds, meta) => {
     captured.mapping = mapping;
     captured.datasource = ds;
     captured.metadata = (meta ?? {}) as Captured['metadata'];
-    return WORKSHEET_OUTPUT;
+    return { xml: WORKSHEET_OUTPUT, droppedOptionalElements: [] };
   });
   return captured;
 }
@@ -312,7 +315,9 @@ describe('buildAndApplyWorksheetTool — mapping construction characterization',
     // Feed the calc-bearing template and drive the REAL rewriter.
     vi.mocked(readTemplate).mockReturnValue(CALC_TEMPLATE);
     vi.mocked(readFileSync).mockReturnValue(WORKBOOK_WITH_CAPTION as any);
-    vi.mocked(rewriteFieldReferences).mockImplementation(actual.rewriteFieldReferences);
+    vi.mocked(rewriteFieldReferencesWithDiagnostics).mockImplementation(
+      actual.rewriteFieldReferencesWithDiagnostics,
+    );
 
     const capturedXml: string[] = [];
     vi.mocked(loadWorksheetXml).mockImplementation(async ({ xml }) => {

@@ -8,6 +8,7 @@
 import { readKnowledgeResource, readKnowledgeSections } from './index.js';
 
 const MARKS = 'expertise://tableau/tactics/viz/marks-and-encodings';
+const CHART_SELECTION = 'expertise://tableau/strategy/viz-design/chart-selection';
 
 describe('read-knowledge-resource URI fragments', () => {
   it('returns the whole file when no fragment is given', () => {
@@ -39,6 +40,30 @@ describe('read-knowledge-resource URI fragments', () => {
 
     expect(bySlug).toBeTypeOf('string');
     expect(byText).toBe(bySlug);
+  });
+
+  it('returns the real Revenue and Margin % section from a literal heading fragment', () => {
+    const section = readKnowledgeResource(
+      `${CHART_SELECTION}#Example 7: Revenue and Margin % Over Time (Dual Axis)`,
+    );
+
+    expect(section).toBeTypeOf('string');
+    expect(section!.split('\n')[0]).toBe(
+      '### Example 7: Revenue and Margin % Over Time (Dual Axis)',
+    );
+  });
+
+  it('falls back to raw-text matching for a malformed percent escape', () => {
+    expect(() =>
+      readKnowledgeResource(
+        `${CHART_SELECTION}#Example 7:% Revenue and Margin % Over Time (Dual Axis)`,
+      ),
+    ).not.toThrow();
+    expect(
+      readKnowledgeResource(
+        `${CHART_SELECTION}#Example 7:% Revenue and Margin % Over Time (Dual Axis)`,
+      ),
+    ).toContain('### Example 7: Revenue and Margin % Over Time (Dual Axis)');
   });
 
   it('returns null for a fragment that names no section', () => {

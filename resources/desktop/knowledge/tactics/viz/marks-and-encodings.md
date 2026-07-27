@@ -484,6 +484,12 @@ Rows/cols:
 <cols>[DS].[Longitude (generated)]</cols>
 ```
 
+### Choosing the geographic field
+
+When several fields could supply the same geographic role (country, state, or city), pick by what Tableau's geocoder recognizes: full names and ISO-3166 country codes both geocode; sport or vendor code sets (FIFA, IOC, internal IDs) do not. Prefer the name field unless the codes are known ISO-3166 — and never swap a valid ISO code field for a name field whose members are ambiguous on their own (e.g. "Congo"). If explicit latitude and longitude columns exist, prefer those over either because they bypass geocoding entirely. After binding, verify the map's rendered member count against the data's distinct count — unrecognized members drop silently, with no error or warning.
+
+**Does NOT work:** assuming a code field is safe because most members render. In the 48-country World Cup data, FIFA codes `POR`, `SCO`, `ENG`, and `PAR` are not ISO-3166 codes and silently disappear from the map; the corresponding country names geocode all 48.
+
 ---
 
 ## Double-encoding (avoid)

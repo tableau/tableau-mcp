@@ -49,9 +49,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.)',
     action:
-      "FIRST complete the bind-template two-call sequence: Call 1 is bind-template(auto_apply:true), deterministic, ~0.3s — pass the user's message verbatim as `ask` (do not paraphrase, reword, or expand it; binding keys on the user's own words). If Call 1 proposes, Call 2 resubmits bind-template with the same ask/target, the selected proposal, and auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. A named chart takes this path first even when the ask sounds calc-heavy or asks \"how <X> changes\"; template-owned calculations (including a waterfall's running total) must not be authored before binding. author-parameter/author-set/author-action before charts; else search-commands.",
+      'FIRST use bind-template\'s two-call sequence. Call 1: bind-template(auto_apply:true), deterministic, ~0.3s; pass the user\'s message verbatim as `ask` (never paraphrase, reword, or expand it). If it proposes, Call 2: bind-template with the same ask/target, selected proposal, auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. Never call list-available-fields or get-worksheet-xml to orient before bind-template: it reads schema; failed binds propose candidate fields (author-parameter/author-set may list fields first). Named charts use this first, even calc-heavy or asking "how <X> changes"; do not author template-owned calcs (including waterfall running totals) before binding. author-parameter/author-set/author-action before charts; else search-commands.',
     toolSequence: [
       'bind-template',
+      'list-available-fields',
+      'get-worksheet-xml',
       'author-parameter',
       'author-set',
       'author-action',
@@ -69,10 +71,14 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %)',
     action:
-      "author-calc the derived metric FIRST (read knowledge for the formula), then bind-template by the calc's caption.",
-    toolSequence: ['author-calc', 'bind-template'],
-    stopConditions: ['read knowledge for the formula'],
-    requiredEvidence: ['authored calculation readback before template binding'],
+      'FIRST pass its conventional calc in ONE bind-template(auto_apply:true) call via calcs[], binding its caption (for example, gross margin % = (SUM(Revenue)-SUM(COGS))/SUM(Revenue); a proposal still resolves via Call 2). Only after a formula/field-resolution failure, search-knowledge, then make ONE corrective bind-template call.',
+    toolSequence: ['bind-template', 'search-knowledge'],
+    stopConditions: [
+      'ONE bind-template(auto_apply:true) call',
+      'Only after a formula/field-resolution failure',
+      'ONE corrective bind-template call',
+    ],
+    requiredEvidence: ['authored_calcs returned by successful bind-template'],
   },
   {
     kind: 'route',
@@ -105,16 +111,16 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'route',
     id: 'data-value-question',
     trigger: 'a data-value question',
-    action:
-      'on a populated worksheet, call get-summary-data; answer only from returned rows. A terminal/no-data result means stop; one retry on transient failure is allowed, then report the outcome.',
+    action: 'on a populated worksheet, call get-summary-data; answer only from returned rows.',
     toolSequence: ['get-summary-data'],
-    stopConditions: ['A terminal/no-data result means stop'],
+    stopConditions: ['answer only from returned rows'],
     requiredEvidence: ['get-summary-data returned rows or a discriminated status'],
   },
   {
     kind: 'route',
     id: 'dynamic-authoring',
-    trigger: 'a dynamic ask or a calc/derived field the data lacks (ratio, running total, LOD)',
+    trigger:
+      'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (a named ratio/margin/growth ask routes via calc-then-bind; examples here include running total and LOD)',
     action:
       'use author-* verbs: author-parameter FIRST (on { reopened: true } continue immediately), then author-set, author-calc, author-action, format-labels. Build with bind-template and authored captions.',
     toolSequence: [

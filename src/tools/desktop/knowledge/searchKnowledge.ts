@@ -20,10 +20,9 @@ export const getSearchKnowledgeTool = (
     name: 'search-knowledge',
     title: toolTitle,
     description:
-      'Find targeted expertise by concept phrase, not tool name. Search snippets are not modules: read mustReadUri once before authoring. Use this to discover knowledge, not list.',
+      "Find expertise by concept, not tool name. When topHitBody is present, it is the full module; no follow-up read is needed. Otherwise read the top hit's mustReadUri.",
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

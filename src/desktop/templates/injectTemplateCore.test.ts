@@ -587,6 +587,31 @@ describe('buildInjectedWorkbookXml — manifest slot finalization', () => {
     expect(result.xml).not.toContain('{{field_base_3}}');
   });
 
+  it('returns a warning when an unresolved optional sort field drops computed-sort', () => {
+    const optionalSortSlots = RANKING_SLOTS.map((slot) =>
+      slot.slot_id === 'sales' ? { ...slot, required: false } : slot,
+    );
+    const result = buildInjectedWorkbookXml({
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml: RANKING_TEMPLATE,
+      title: 'Goals by Country',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'World Cup' },
+      fieldMapping: {
+        region: '[World Cup].[none:Country:nk]',
+      },
+      templateSlots: optionalSortSlots,
+      applyNonce: 'optional-sort',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).not.toContain('<computed-sort');
+    expect(result.warnings).toEqual([
+      'computed-sort dropped: [World Cup].[sum:{{field_base_2}}:qk] did not resolve',
+    ]);
+  });
+
   it('keeps fully mapped output byte-stable', () => {
     const common = {
       workbookXml: EMPTY_WORKBOOK,

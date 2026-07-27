@@ -30,8 +30,10 @@ export function buildInlineCapFileMessage(params: {
   bytes: number;
   capBytes: number;
   xml: string;
+  applyTool: string;
+  pathParam: string;
 }): string {
-  const { kind, label, bytes, capBytes, xml } = params;
+  const { kind, label, bytes, capBytes, xml, applyTool, pathParam } = params;
   return [
     `${label} XML is ${bytes} bytes, over the ${capBytes}-byte inline cap. Returned in file mode ` +
       'regardless of the requested mode to keep large XML out of the conversation.',
@@ -42,22 +44,8 @@ export function buildInlineCapFileMessage(params: {
     'Work with the cached file using the server tools (no local filesystem access needed): ' +
       'read-cached-xml (pass a worksheet/dashboard selector, or startByte/endByte, to read just a ' +
       'slice), edit that slice, write-cached-xml (same selector splices your edit back into the ' +
-      'file), then apply-* with mode=file.',
+      `file), then call ${applyTool} with ${pathParam} set to the returned file path.`,
   ].join('\n');
-}
-
-/**
- * Note appended to a successful over-cap inline apply. Applies are never rejected on
- * size — a rejected apply after the agent already spent the tokens helps nobody — so
- * this only points at the cheaper file-mode workflow for next time.
- */
-export function buildApplyOverCapNote(bytes: number, capBytes: number): string {
-  return (
-    `Note: the inline XML you sent was ${bytes} bytes, over the ${capBytes}-byte inline cap. It was ` +
-    'applied, but next time prefer mode=file to keep large XML out of the conversation: get-*-xml ' +
-    'writes a cache file, edit it via read-cached-xml/write-cached-xml (slice selectors keep payloads ' +
-    'small), then apply-* with mode=file.'
-  );
 }
 
 /**

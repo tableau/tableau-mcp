@@ -74,7 +74,6 @@ export const getBatchCreateAndCacheSheetsTool = (
     description: 'Batch-create dashboard sheet caches.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,

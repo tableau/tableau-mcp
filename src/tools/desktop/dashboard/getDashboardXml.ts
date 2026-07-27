@@ -48,7 +48,6 @@ export const getGetDashboardXmlTool = (
     description: 'Get layout for an existing dashboard.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false, // Writes to a cache file
       openWorldHint: false,
       destructiveHint: false,
@@ -124,12 +123,14 @@ export const getGetDashboardXmlTool = (
                 bytes,
                 capBytes,
                 xml: dashboardXml,
+                applyTool: 'apply-dashboard',
+                pathParam: 'dashboardFile',
               }),
               file: cacheFile,
               instructions:
                 'This dashboard exceeds the inline cap. Use the cache read tool (with a dashboard ' +
                 'selector or startByte/endByte to read a slice), the cache write tool (same selector to ' +
-                'splice edits back), then apply-dashboard with mode=file. Do not request mode=inline.',
+                'splice edits back), then call apply-dashboard with dashboardFile set to this file path.',
             });
           }
 

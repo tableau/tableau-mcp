@@ -40,7 +40,6 @@ export const getFormatLabelsTool = (server: DesktopMcpServer): DesktopTool<typeo
     description: 'Format labels.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,
