@@ -1,30 +1,50 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
+import { loadManifests } from '../binder/manifest.js';
+
 const TEMPLATE_DIR = join(process.cwd(), 'src', 'desktop', 'data', 'templates');
+const manifests = loadManifests();
 
 function template(name: string): string {
   return readFileSync(join(TEMPLATE_DIR, `${name}.xml`), 'utf8');
 }
 
-// magnitude-simple-bar, part-to-whole-waterfall, and ranking-ordered-column also carry
-// hardcoded Superstore computed-sort refs, but they are render-stamped: their bytes may
-// only change through the factory golden-parity re-stamp flow. The parameterized versions
-// (plus the waterfall label/gain-loss presentation defaults) are held on
-// claude/stamped-template-polish; extend the table below when that branch re-earns its
-// stamps and lands.
+// stampHash.invariant.test.ts only proves XML bytes match the recorded hash; a
+// legitimate re-stamp could update that hash while silently dropping parameterization.
+// This byte pin catches that, while each slot-kind expectation guards positional order.
 describe('computed-sort template parameters', () => {
   it.each([
     [
+      'magnitude-simple-bar',
+      "<computed-sort column='[{{DATASOURCE}}].[none:{{field_base_1}}:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]' />",
+      'categorical',
+    ],
+    [
       'pareto-chart',
       "<computed-sort column='[{{DATASOURCE}}].[none:{{field_base_1}}:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]' />",
+      'categorical',
     ],
     [
       'deviation-spine-chart',
       "<computed-sort column='[{{DATASOURCE}}].[none:{{field_base_1}}:nk]' direction='ASC' using='[{{DATASOURCE}}].[usr:Men (copy):qk]' />",
+      'categorical',
     ],
-  ])('%s parameterizes its computed sort', (name, expected) => {
+    [
+      'ranking-ordered-column',
+      "<computed-sort column='[{{DATASOURCE}}].[none:{{field_base_1}}:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]' />",
+      'categorical',
+    ],
+    [
+      'part-to-whole-waterfall',
+      "<computed-sort column='[{{DATASOURCE}}].[none:{{field_base_2}}:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:{{field_base_1}}:qk]' />",
+      'quantitative',
+    ],
+  ])('%s parameterizes its computed sort', (name, expected, firstBindableKind) => {
     expect(template(name)).toContain(expected);
+    expect(manifests.get(name)?.slots.filter((slot) => slot.bindable)[0]?.kind).toBe(
+      firstBindableKind,
+    );
   });
 
   it('removes the donor datasource id from deviation-spine-chart', () => {

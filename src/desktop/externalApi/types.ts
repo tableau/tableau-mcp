@@ -369,4 +369,4 @@ export type ExternalApiError =
   | { type: 'unauthorized'; status: number }
   | { type: 'problem'; status: number; code?: string; title?: string; detail?: string }
   | { type: 'invalid-response'; error: unknown }
-  | { type: 'network'; error: unknown };
+  | { type: 'network'; error: unknown; aborted?: boolean };

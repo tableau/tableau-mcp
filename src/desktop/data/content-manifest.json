@@ -132,8 +132,8 @@
     },
     {
       "path": "data-visualization-templates-xml/magnitude-simple-bar.xml",
-      "sha256": "ef0503faa2dd6320f902335dcd721909f4cb161d315a7746f296dc2967c60a4c",
-      "bytes": 2457
+      "sha256": "3ce7dfa8c7d8b6ebb54c53f0372589dce7e2c54d4e71fb17bdb59a840ef535b1",
+      "bytes": 2476
     },
     {
       "path": "data-visualization-templates-xml/pareto-chart.xml",
@@ -197,8 +197,8 @@
     },
     {
       "path": "data-visualization-templates-xml/ranking-ordered-column.xml",
-      "sha256": "a0a23ffcf5fb34263b4e1a46a107590200a03d3f02fdc5efcf8622cc9e4a9235",
-      "bytes": 2435
+      "sha256": "afb71d90510a3df77c64fa4549df37cc3285dd15b1d2db603c90c53ba5c69856",
+      "bytes": 2452
     },
     {
       "path": "data-visualization-templates-xml/slope-chart.xml",
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "b7e98f52323d5a970eb7e4a1f4a2f58bff17429d3da902309a2c21d9a38ac474",
-      "bytes": 281916
+      "sha256": "e95618af3a46d0d39b49530595b65e81ae89de63886b772a9dc60c154c87f409",
+      "bytes": 283231
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -377,8 +377,8 @@
     },
     {
       "path": "template-manifests/magnitude-simple-bar.manifest.json",
-      "sha256": "c00bba1826448bba3ad5fdface31b62a7973a2904b45369d658d375dc11f00a1",
-      "bytes": 4841
+      "sha256": "562948c4d0c28891d279ce4cfa91f199b5e87eeb232e43a8a013b40a60081d3f",
+      "bytes": 5679
     },
     {
       "path": "template-manifests/pareto-chart.manifest.json",
@@ -432,8 +432,8 @@
     },
     {
       "path": "template-manifests/ranking-ordered-column.manifest.json",
-      "sha256": "905b85c0feaf424c8db66df38f251b3d0586a397aff3cc85af96cac59d496551",
-      "bytes": 1936
+      "sha256": "a49de8ee198030f076a2b2d5d8d8d0e315755cb96f49e11ea3fca97c980c63e5",
+      "bytes": 2559
     },
     {
       "path": "template-manifests/slope-chart.manifest.json",

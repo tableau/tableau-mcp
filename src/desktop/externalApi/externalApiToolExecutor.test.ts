@@ -454,6 +454,59 @@ describe('ExternalApiToolExecutor', () => {
     });
   });
 
+  describe('request deadline errors', () => {
+    const hangingFetch = (): typeof fetch =>
+      ((_url: string, init?: RequestInit): Promise<Response> =>
+        new Promise((_resolve, reject) => {
+          if (init?.signal?.aborted) {
+            reject(init.signal.reason);
+            return;
+          }
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), {
+            once: true,
+          });
+        })) as unknown as typeof fetch;
+
+    it('maps a request timeout to command-timed-out without rescanning discovery', async () => {
+      const discover = vi.fn(() => [instanceFor(server)]);
+      const executor = new ExternalApiToolExecutor({
+        discover,
+        clientOptions: { fetchFn: hangingFetch(), timeoutMs: 60 },
+      });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'undo',
+        signal,
+      });
+
+      expect(result.unwrapErr().type).toBe('command-timed-out');
+      expect(discover).toHaveBeenCalledTimes(1);
+    });
+
+    it('respects caller aborts and maps them to command-timed-out', async () => {
+      const discover = vi.fn(() => [instanceFor(server)]);
+      const executor = new ExternalApiToolExecutor({
+        discover,
+        clientOptions: { fetchFn: hangingFetch(), timeoutMs: 60_000 },
+      });
+      await executor.start();
+      const controller = new AbortController();
+
+      const pending = executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'undo',
+        signal: controller.signal,
+      });
+      controller.abort();
+      const result = await pending;
+
+      expect(result.unwrapErr().type).toBe('command-timed-out');
+      expect(discover).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('401 rescan-once', () => {
     it('rediscovers once on a 401 and retries with the fresh token', async () => {
       const discover = vi
