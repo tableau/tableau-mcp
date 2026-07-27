@@ -67,7 +67,18 @@ describe('listUsersTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(`${result.content[0].text}`);
-    expect(parsed.users).toEqual(mockUsers);
+    // mockUser carries extra fields (authSetting/locale/language); the tool
+    // projects output down to the 6 advertised fields, so compare against that.
+    expect(parsed.users).toEqual([
+      {
+        id: mockUser.id,
+        name: mockUser.name,
+        fullName: mockUser.fullName,
+        siteRole: mockUser.siteRole,
+        email: mockUser.email,
+        lastLogin: mockUser.lastLogin,
+      },
+    ]);
     expect(parsed.totalAvailable).toBe(mockUsers.length);
     expect(mocks.mockListUsers).toHaveBeenCalled();
   });
@@ -117,6 +128,96 @@ describe('listUsersTool', () => {
     expect(parsed.users[0].lastLogin).toBe('2026-05-20T10:30:00Z');
   });
 
+  it('should project output to only the 6 advertised fields, stripping extras Tableau still returns', async () => {
+    // CRITICAL: Tableau's `fields=...` param is only an "include at least" hint —
+    // the raw REST response STILL contains authSetting/locale/language/
+    // externalAuthUserId, and userSchema keeps them as known optional keys so Zod
+    // does not strip them. The tool must project them out at its boundary. Mock the
+    // REALISTIC FULL response so this guard actually exercises the projection.
+    const fullUser = {
+      id: 'user-full',
+      name: 'dsmith',
+      fullName: 'Dana Smith',
+      siteRole: 'Explorer',
+      email: 'dsmith@example.com',
+      lastLogin: '2026-05-20T10:30:00Z',
+      authSetting: 'SAML',
+      locale: 'en_US',
+      language: 'en',
+      externalAuthUserId: 'ext-123',
+    };
+    mocks.mockListUsers.mockResolvedValue({
+      users: [fullUser],
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 1 },
+    });
+    const result = await getToolResult({});
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed.users).toHaveLength(1);
+    const out = parsed.users[0];
+    // The 6 advertised fields survive.
+    expect(out).toEqual({
+      id: 'user-full',
+      name: 'dsmith',
+      fullName: 'Dana Smith',
+      siteRole: 'Explorer',
+      email: 'dsmith@example.com',
+      lastLogin: '2026-05-20T10:30:00Z',
+    });
+    // Everything Tableau leaks is stripped.
+    expect(out).not.toHaveProperty('authSetting');
+    expect(out).not.toHaveProperty('locale');
+    expect(out).not.toHaveProperty('language');
+    expect(out).not.toHaveProperty('externalAuthUserId');
+    expect(Object.keys(out).sort()).toEqual(
+      ['email', 'fullName', 'id', 'lastLogin', 'name', 'siteRole'].sort(),
+    );
+  });
+
+  it('should omit lastLogin (not emit null) for never-logged-in users after projection', async () => {
+    // A full response where lastLogin is absent (never signed in) but extras present.
+    const neverUser = {
+      id: 'user-never',
+      name: 'nlogin',
+      fullName: 'No Login',
+      siteRole: 'Creator',
+      email: 'nlogin@example.com',
+      authSetting: 'SAML',
+      locale: 'en_US',
+    };
+    mocks.mockListUsers.mockResolvedValue({
+      users: [neverUser],
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 1 },
+    });
+    const result = await getToolResult({});
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    const out = parsed.users[0];
+    expect(out).not.toHaveProperty('lastLogin'); // omitted, not null
+    expect(out).not.toHaveProperty('authSetting');
+    expect(out.id).toBe('user-never');
+  });
+
+  it('should request an explicit lean field set (not _all_, and not authSetting)', async () => {
+    // Regression guard for the lastLogin bug: we must name every field explicitly
+    // rather than relying on Tableau's silent default set. We deliberately do NOT
+    // request _all_ (avoids the expensive SSO/authSetting path).
+    mocks.mockListUsers.mockResolvedValue({
+      users: [mockUser],
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 1 },
+    });
+    await getToolResult({});
+    expect(mocks.mockListUsers).toHaveBeenCalledWith(
+      expect.objectContaining({ fields: 'id,name,fullName,siteRole,email,lastLogin' }),
+    );
+    const requestedFields: string = mocks.mockListUsers.mock.calls[0][0].fields;
+    expect(requestedFields).not.toContain('_all_');
+    expect(requestedFields).not.toContain('authSetting');
+    expect(requestedFields).toContain('lastLogin');
+  });
+
   it('should handle users with different site roles', async () => {
     const users = [
       { ...mockUser, id: 'u1', siteRole: 'ServerAdministrator' },
@@ -137,25 +238,6 @@ describe('listUsersTool', () => {
     expect(parsed.users[3].siteRole).toBe('Unlicensed');
   });
 
-  it('should handle users with different auth settings', async () => {
-    const users = [
-      { ...mockUser, id: 'u1', authSetting: 'SAML' },
-      { ...mockUser, id: 'u2', authSetting: 'ServerDefault' },
-      { ...mockUser, id: 'u3', authSetting: 'OpenID' },
-    ];
-    mocks.mockListUsers.mockResolvedValue({
-      users,
-      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: users.length },
-    });
-    const result = await getToolResult({});
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    const parsed = JSON.parse(`${result.content[0].text}`);
-    expect(parsed.users[0].authSetting).toBe('SAML');
-    expect(parsed.users[1].authSetting).toBe('ServerDefault');
-    expect(parsed.users[2].authSetting).toBe('OpenID');
-  });
-
   it('should error when user is not admin', async () => {
     mocks.mockAssertAdmin.mockResolvedValue(new Err('Your site role is: Viewer'));
     const result = await getToolResult({});
@@ -171,6 +253,20 @@ describe('listUsersTool', () => {
     });
     const result = await getToolResult({ filter: 'invalidField:eq:value' });
     expect(result.isError).toBe(true);
+  });
+
+  it('should reject a filter on an un-fetched field (isError), not silently return empty', async () => {
+    // authSetting is no longer fetched, so it is no longer filterable. The tool
+    // must surface a clean validation error rather than "No users were found".
+    mocks.mockListUsers.mockResolvedValue({
+      users: [mockUser],
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 1 },
+    });
+    const result = await getToolResult({ filter: 'authSetting:eq:SAML' });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('authSetting');
+    expect(result.content[0].text).not.toContain('No users were found');
   });
 
   it('should respect limit parameter', async () => {

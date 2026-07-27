@@ -105,15 +105,22 @@ describe('user-license-reclamation-inform prompt', () => {
     expect(text).toContain('ETL lag');
   });
 
-  it('includes instruction to fetch null-lastLogin users', async () => {
+  it('covers never-signed-in users in the single list-users call without a second fetch', async () => {
     const prompt = getUserLicenseReclamationInformPrompt(new WebMcpServer());
     const result = await prompt.callback({});
     if (result.messages[0].content.type !== 'text') {
       throw new Error('expected text content');
     }
     const { text } = result.messages[0].content;
+    // Never-signed-in users are still surfaced as candidates...
     expect(text).toContain('never signed in');
     expect(text).toContain('Never');
+    // ...but only ONE list-users call is made. The `lastLogin:lt` filter already
+    // matches null-lastLogin users, so a second call would double-count them.
+    expect(text).not.toContain('a second time');
+    expect(text).toContain('Do not issue a second `list-users` call');
+    const listUsersCalls = text.match(/`list-users`/g) ?? [];
+    expect(listUsersCalls.length).toBe(2); // one in the Step 1 instruction, one in the "do not" note
   });
 
   it('reads LICENSE_RECLAIM_INACTIVE_DAYS from env when no arg provided', async () => {

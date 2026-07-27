@@ -25,13 +25,12 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
     name: 'list-users',
     disabled: !config.adminToolsEnabled,
     description: `
-  Retrieves a list of users on the Tableau site. Each user includes profile information such as site role, email, last login time, and authentication settings.
+  Retrieves a list of users on the Tableau site. Each user includes profile information such as site role, email, full name, and last login time.
 
   Use this tool when you need to:
   - Identify inactive users for license reclamation
   - Audit user site roles and permissions
   - Find users by email, name, or site role
-  - Review user authentication settings
   - Analyze user activity based on last login times
 
   **Parameters:**
@@ -49,10 +48,8 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
   | \`email\` | string | \`eq\`, \`in\` | \`email:eq:user@example.com\` |
   | \`fullName\` | string | \`eq\`, \`in\` | \`fullName:eq:John Smith\` |
   | \`lastLogin\` | string (ISO 8601) | \`eq\`, \`gt\`, \`gte\`, \`lt\`, \`lte\` | \`lastLogin:lt:2025-01-01T00:00:00Z\` |
-  | \`authSetting\` | string | \`eq\`, \`in\` | \`authSetting:eq:SAML\` |
-  | \`locale\` | string | \`eq\`, \`in\` | \`locale:eq:en_US\` |
-  | \`language\` | string | \`eq\`, \`in\` | \`language:eq:en\` |
-  | \`externalAuthUserId\` | string | \`eq\`, \`in\` | \`externalAuthUserId:eq:ext-123\` |
+
+  Never-signed-in users have no \`lastLogin\`: they MATCH \`lt\`/\`lte\` (counted as most-inactive) and are EXCLUDED from \`gt\`/\`gte\`/\`eq\`.
 
   **Filter Examples:**
   - Single filter: \`siteRole:eq:Creator\`
@@ -67,10 +64,6 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
   - \`email\` – user email address
   - \`fullName\` – user's full display name
   - \`lastLogin\` – timestamp of last login (ISO 8601)
-  - \`authSetting\` – ServerDefault, SAML, or OpenID
-  - \`locale\` – user's locale setting
-  - \`language\` – user's language preference
-  - \`externalAuthUserId\` – ID from external authentication provider
   `,
     paramsSchema,
     annotations: {
@@ -114,8 +107,14 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
                     pageSize: pageConfig.pageSize,
                     pageNumber: pageConfig.pageNumber,
                     includeUserCount: true,
-                    includeSSOInfo: false,
                     includeGroups: false,
+                    // Request an explicit, lean field set. Every field must be named
+                    // — do NOT rely on Tableau's "default" set: on some sites the
+                    // default silently omits lastLogin (the original bug), even though
+                    // the REST docs call it a default field. We deliberately avoid
+                    // `_all_` because it pulls the expensive SSO/authSetting path we
+                    // don't need. See rest_api_concepts_fields.htm.
+                    fields: 'id,name,fullName,siteRole,email,lastLogin',
                   });
 
                   const pagination = result.pagination ?? {
@@ -134,11 +133,19 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
             },
           });
 
-          // Apply client-side filtering
+          // Apply client-side filtering (may reference any of the fetched fields).
           const filteredUsers = applyUserFilters(users, args.filter);
 
+          // Project to exactly the fields this tool advertises. The `fields` query
+          // param is only an "include at least" hint on this endpoint — Tableau
+          // still returns authSetting/locale/language/externalAuthUserId, and
+          // userSchema declares them as known optional keys so Zod does NOT strip
+          // them. This projection is what actually enforces the lean output. Runs
+          // AFTER filtering (order: fetch → filter → project → serialize).
+          const projectedUsers = filteredUsers.map(projectLeanUser);
+
           const toolResult: ListUsersToolResult = {
-            users: filteredUsers,
+            users: projectedUsers,
             totalAvailable: siteTotalAvailable,
           };
           return new Ok(toolResult);
@@ -152,8 +159,29 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
   return listUsersTool;
 };
 
+/**
+ * The exact set of user fields this tool returns. Kept in sync with the `fields`
+ * query param and the documented output. Every key is optional except `id`/`name`
+ * because Tableau may omit them (e.g. `lastLogin` for never-logged-in users).
+ */
+type LeanUser = Pick<User, 'id' | 'name' | 'fullName' | 'siteRole' | 'email' | 'lastLogin'>;
+
+/**
+ * Project a full Tableau user down to the lean, advertised field set. Optional
+ * keys that are absent on the source are omitted entirely (not emitted as null),
+ * matching the tool's prior serialization behavior for never-logged-in users.
+ */
+function projectLeanUser(user: User): LeanUser {
+  const lean: LeanUser = { id: user.id, name: user.name };
+  if (user.fullName !== undefined) lean.fullName = user.fullName;
+  if (user.siteRole !== undefined) lean.siteRole = user.siteRole;
+  if (user.email !== undefined) lean.email = user.email;
+  if (user.lastLogin !== undefined) lean.lastLogin = user.lastLogin;
+  return lean;
+}
+
 interface ListUsersToolResult {
-  users: Array<User>;
+  users: Array<LeanUser>;
   totalAvailable?: number;
 }
 
@@ -161,7 +189,7 @@ export function constrainUsers({
   users,
   totalAvailable,
 }: {
-  users: Array<User>;
+  users: Array<LeanUser>;
   totalAvailable?: number;
 }): ConstrainedResult<ListUsersToolResult> {
   if (users.length === 0) {
