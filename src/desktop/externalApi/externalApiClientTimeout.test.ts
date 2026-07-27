@@ -23,6 +23,53 @@ function hangingFetch(): typeof fetch {
 }
 
 describe('ExternalApiClient request deadline', () => {
+  it('applies the health budget beneath the configured global ceiling', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(new Response('<workbook />', { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'op-1',
+            kind: 'command.invoke',
+            state: 'SUCCEEDED',
+          }),
+          { status: 200 },
+        ),
+      ) as unknown as typeof fetch;
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+    // Production always supplies this option from sessionManager.
+    const client = new ExternalApiClient(instance, { fetchFn, timeoutMs: 60_000 });
+
+    try {
+      await client.health();
+      await client.getWorkbookDocument();
+      await client.invokeCommand('tabdoc', 'undo');
+
+      expect(timeoutSpy.mock.calls.map(([budgetMs]) => budgetMs)).toEqual([10_000, 60_000, 60_000]);
+    } finally {
+      timeoutSpy.mockRestore();
+    }
+  });
+
+  it('creates a fresh deadline for every request', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 200 })) as unknown as typeof fetch;
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+    const client = new ExternalApiClient(instance, { fetchFn });
+
+    try {
+      await client.health();
+      await client.health();
+
+      expect(timeoutSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      timeoutSpy.mockRestore();
+    }
+  });
+
   it('applies its own clock even when the caller supplies a signal', async () => {
     // The `??` this replaces meant a caller signal removed the timeout entirely, and every
     // desktop tool supplies extra.signal — so the 60s default was unreachable in shipped code.
