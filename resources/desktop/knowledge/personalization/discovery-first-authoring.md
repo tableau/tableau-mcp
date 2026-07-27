@@ -3,7 +3,7 @@
 ## Scope Check
 
 - Primary audience: Tableau users building a new viz with the agent (and SEs assisting them)
-- Authoring outcome improved: Before building a non-trivial viz, the agent inventories what the workbook and data actually contain, restates the user's goal, flags any mismatch between the request and the data reality, and chooses the right authoring surface - instead of blindly building or fabricating fields.
+- Authoring outcome improved: The agent starts chart asks with the schema-aware binder, then uses focused discovery for repair, edits, or inventory instead of fabricating fields.
 - In-scope reason: Directly improves how the agent turns an ambiguous "build me a viz" into a viable, correct Tableau viz grounded in the real workbook.
 - Out-of-scope risk: Not a project-scoping or requirements-gathering framework, and not a dashboard/whole-workbook assembly flow - this is scoped to a single non-trivial build-a-viz turn.
 - Tags: discovery, alignment, inventory, build a viz, clarify, mismatch, surface selection, available fields, data reality, blind build, fabricated field
@@ -11,26 +11,27 @@
 
 ## When to Use
 
-Use this guidance at the START of any non-trivial build-a-viz request - especially when the request is ambiguous, names a field or metric that may not exist, or could be satisfied several different ways. The goal is to ground the build in the workbook's real state before applying anything.
+For a chart/graph/viz ask, start with `bind-template` and pass the user's ask verbatim. It reads the schema itself. Do not call `list-available-fields` or `get-worksheet-xml` first; the server unlocks those two tools only after an authoring attempt.
 
-This applies to:
+Discovery-first still applies where the gate permits it:
 
-- A user asking for a chart/graph/viz without specifying exact fields or chart type
-- A request that names a measure or dimension that might not be in the workbook (e.g., "profit margin", "channel", "cohort")
-- Any moment the agent is about to call an apply tool without having confirmed the workbook actually contains the referenced fields
+- Inventory-only asks can start with ungated session, worksheet, dashboard, datasource, or workbook inventory tools.
+- Parameter and set asks can start with `author-parameter` or `author-set`.
+- Existing-sheet edit and repair asks can start with the relevant authoring tool. After that attempt, `list-available-fields` and `get-worksheet-xml` are available for diagnosis and repair.
 
-Skip it for trivial single-step edits (for example "change this bar to a line", "rename this sheet", "make the title bigger") or when the user explicitly says "just do X". Discovery is a front-loaded alignment step, not a tax on every keystroke.
+Skip broad discovery for trivial single-step edits. Use only the inventory needed to resolve an existing target.
 
 ## Best Practices
 
-1. **Inventory cheap-first, with a budget.** Prefer the lightweight inventory calls before anything heavy: `list-available-fields`, then worksheet-list readback, then dashboard-list readback. Only reach for `get-workbook-xml` (mode=file) or `get-workbook-xml` when you actually need exact XML or encodings. Budget normally 2-4 discovery calls before you align; do not loop.
-2. **Restate the goal in one line.** Reflect back what the user is asking for so a mismatch surfaces immediately ("You want a monthly trend of profit margin by region.").
-3. **Name what exists.** Briefly state the relevant fields, sheets, and data sources you found, so the user can see you are building on their real workbook.
-4. **Flag mismatches explicitly.** Call out a missing field, a high-cardinality dimension, the wrong grain, or an aggregation problem before building - this is the single highest-value move of the whole step.
-5. **Choose the right authoring surface.** Decide native chart vs. the custom-viz ladder before building; route to chart-selection guidance for chart choice and to the custom-viz solution guidance when the ask is non-standard.
-6. **Ask at most 1-2 clarifying questions, only when a mismatch blocks safe building.** Otherwise proceed with the best-supported interpretation and state what you assumed. Do not interrogate the user for cosmetic details you can default safely.
-7. **Never fabricate a field.** If a requested field does not exist, say so and offer the closest real field or a calculated field to create (with confirmation). Inventing a column in the applied XML produces a broken or misleading viz.
-8. **Build, then verify.** Hand off to the existing build recipes and read back to confirm the viz landed.
+1. **Bind first for charts.** Call `bind-template` with the verbatim ask and `auto_apply:true`; it performs field discovery internally. If it proposes choices, make its prescribed second call before manual authoring.
+2. **Honor the read gate.** `list-available-fields` and `get-worksheet-xml` unlock after an attempt by `bind-template`, `author-parameter`, `author-set`, `author-calc`, `author-action`, `add-field`, `apply-worksheet`, `refine-worksheet`, or `execute-tableau-command`. Use them afterward for repair and edits.
+3. **Inventory cheap-first when the ask is inventory.** Start with session, worksheet, dashboard, or datasource listings. Use `get-workbook-xml` only when it is offered and exact structure is required. Budget 2-4 discovery calls; do not loop.
+4. **Restate the goal in one line.** Reflect back what the user is asking for so a mismatch surfaces immediately ("You want a monthly trend of profit margin by region.").
+5. **Name what exists.** Briefly state the relevant fields, sheets, and data sources you found, so the user can see you are building on their real workbook.
+6. **Flag mismatches explicitly.** Call out a missing field, a high-cardinality dimension, the wrong grain, or an aggregation problem before building.
+7. **Ask at most 1-2 clarifying questions, only when a mismatch blocks safe building.** Otherwise proceed with the best-supported interpretation and state what you assumed.
+8. **Never fabricate a field.** If a requested field does not exist, say so and offer the closest real field or a calculated field to create (with confirmation).
+9. **Build, then verify.** Hand off to the existing build recipes and read back to confirm the viz landed.
 
 ### When to Say No
 
@@ -49,7 +50,7 @@ Offer this instead:
 
 ## Common Mistakes
 
-1. **Blind build.** Applying a viz without first checking what the workbook contains - the most common cause of wrong-field, wrong-grain, or duplicate output.
+1. **Pre-bind orientation.** Calling `list-available-fields` or `get-worksheet-xml` before a chart attempt; the server redirects this to `bind-template`.
 2. **Fabricating a non-existent field.** Referencing a column the user named but that is not in the data, producing a broken or empty apply instead of flagging it.
 3. **Ignoring existing state.** Not checking current sheets/data sources, then duplicating or conflicting with what is already there.
 4. **Over-discovery.** Pulling a full `get-workbook-xml` plus many calls for a trivial one-step edit - discovery should be skipped for those.
@@ -58,14 +59,14 @@ Offer this instead:
 
 ## Implementation
 
-The discovery-first preamble for a non-trivial build-a-viz request:
+The routed discovery flow:
 
-1. **Bootstrap:** if `list-instances` is absent from the tool list, the session is pinned to the launching Desktop; skip discovery because session-scoped tools already target it. Otherwise, call `list-instances` -> capture `_session`.
-2. **Inventory cheap-first (budget 2-4 calls):** `list-available-fields` -> worksheet-list readback -> dashboard-list readback. Use `get-workbook-xml` (mode=file) or `get-workbook-xml` only if you need exact XML/encodings.
-3. **Align:** restate the goal in one line; name the available fields/sheets; flag any mismatch (missing field, high cardinality, wrong grain); choose the authoring surface.
-4. **Clarify (bounded):** ask at most 1-2 `ask-user` questions, and only when a mismatch blocks safe building; otherwise proceed and state your assumptions.
-5. **Build:** hand off to the existing viz recipes (`build-and-apply-worksheet`, or `batch-create-and-cache-sheets`).
-6. **Verify:** read back and confirm the proposed worksheet landed; loop back to align on gaps; cap recovery at 3 attempts.
+1. **Bootstrap:** if needed, call `list-instances` and capture `session`; otherwise omit it to use the pinned or only running Desktop.
+2. **Route the first move:** chart ask -> `bind-template`; parameter/set ask -> `author-parameter`/`author-set`; existing-sheet edit -> the relevant authoring tool; inventory-only ask -> ungated inventory tools.
+3. **Discover after the attempt:** use `list-available-fields` or `get-worksheet-xml` only for repair, verification, or a follow-up edit.
+4. **Align:** restate the goal; name relevant fields/sheets; flag any mismatch; choose the authoring surface.
+5. **Clarify (bounded):** ask at most 1-2 `ask-user` questions, only when a mismatch blocks safe building.
+6. **Build and verify:** complete the authoring path, read back what landed, and cap recovery at 3 attempts.
 
 Telemetry: if you start an episode for the discovery turn, call `tableau-begin-episode` once and `tableau-end-episode` only for the episode you started. Otherwise keep the discovery summary and chosen surface in your normal response; do not invent episode tools.
 

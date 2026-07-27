@@ -101,7 +101,10 @@ import { proposalSchema } from './proposalSchema.js';
 import { proposalSignature } from './proposalSignature.js';
 
 const paramsSchema = {
-  session: z.string().optional().describe('PID; omit if one/pinned.'),
+  session: z
+    .string()
+    .optional()
+    .describe('Desktop process ID; omit to use the pinned or only running instance.'),
   ask: z.string().describe('Verbatim ask.'),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
@@ -109,7 +112,10 @@ const paramsSchema = {
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
-  target_worksheet: z.string().optional().describe('Rebuild; omit to create.'),
+  target_worksheet: z
+    .string()
+    .optional()
+    .describe('Existing worksheet name to rebuild; omit to create.'),
   calcs: z
     .array(
       z.object({
@@ -178,7 +184,7 @@ type AppliedFastPathResult = {
  */
 type ReusedSheetResult = {
   status: 'bound';
-  applied: boolean;
+  applied: false;
   reused: true;
   authored_calcs?: string[];
   sheet_name: string;
@@ -1878,10 +1884,7 @@ function reusedSheetResult(
       `matched this ask to the sheet "${remembered.sheetName}" this session already applied (template ${remembered.template})`,
       ...(authoredCalcs.length > 0 ? [`authored calcs: ${authoredCalcs.join(', ')}`] : []),
     ],
-    didNot:
-      authoredCalcs.length > 0
-        ? ['rebuild the remembered sheet — no second copy was created']
-        : ['touch the workbook — nothing was applied on this call'],
+    didNot: ['apply the chart — the remembered sheet was reused; no second copy was created'],
     // rememberedSheetStillPresent() only confirms that a worksheet of that NAME is still in
     // the document (classifyWorksheetReplaceTarget). Whether its fields still match the
     // ask is never re-derived, so a user edit that emitted no observable event is invisible.
@@ -1892,7 +1895,7 @@ function reusedSheetResult(
   return withNextAction(
     {
       status: 'bound',
-      applied: authoredCalcs.length > 0,
+      applied: false,
       reused: true,
       ...(authoredCalcs.length > 0 ? { authored_calcs: authoredCalcs } : {}),
       sheet_name: remembered.sheetName,
@@ -1965,8 +1968,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
     server,
     name: 'bind-template',
     title,
-    description:
-      'Bind. applied_default=>state as default+offer change. Quote summary_rows; fetch now if absent/cut/error.',
+    description: 'Bind a chart template to fields.',
     paramsSchema,
     annotations: {
       // NOT read-only and NOT idempotent: auto_apply:true mutates the live workbook via

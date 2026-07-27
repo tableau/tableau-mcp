@@ -609,19 +609,24 @@ describe('bindTemplateTool', () => {
     vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
   });
 
-  it('should create a tool instance with correct properties', () => {
+  it('should create a tool instance with correct properties', async () => {
     const tool = getBindTemplateTool(new DesktopMcpServer());
+    const paramsSchema = (await Provider.from(tool.paramsSchema)) as Record<string, z.ZodTypeAny>;
     expect(tool.name).toBe('bind-template');
-    expect(tool.description).toBe(
-      'Bind. applied_default=>state as default+offer change. Quote summary_rows; fetch now if absent/cut/error.',
-    );
-    expect(tool.paramsSchema).toMatchObject({
+    expect(tool.description).toBe('Bind a chart template to fields.');
+    expect(paramsSchema).toMatchObject({
       session: expect.any(Object),
       ask: expect.any(Object),
       proposal: expect.any(Object),
       minConfidence: expect.any(Object),
       calcs: expect.any(Object),
     });
+    expect(paramsSchema['session']!.description).toBe(
+      'Desktop process ID; omit to use the pinned or only running instance.',
+    );
+    expect(paramsSchema['target_worksheet']!.description).toBe(
+      'Existing worksheet name to rebuild; omit to create.',
+    );
     expect(tool.annotations).toMatchObject({
       // NOT read-only / NOT idempotent: auto_apply + calcs[] mutate the live workbook.
       readOnlyHint: false,
@@ -4203,10 +4208,12 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
       unverified: string[];
     };
     expect(second.reused).toBe(true);
-    expect(second.applied).toBe(true);
+    expect(second.applied).toBe(false);
     expect(second.authored_calcs).toEqual(['Margin']);
     expect(reuseReceipt.did).toContain('authored calcs: Margin');
-    expect(reuseReceipt.didNot.join(' ')).not.toContain('nothing was applied on this call');
+    expect(reuseReceipt.didNot).toContain(
+      'apply the chart — the remembered sheet was reused; no second copy was created',
+    );
     // One sheet apply plus one calc-document write; no duplicate sheet apply.
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
   });

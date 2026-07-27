@@ -208,10 +208,10 @@ describe('desktop tools/list serialized surface', () => {
     // Dynamic authoring is the serving surface, so this is the real budget gate.
     // The full desktop surface is not what clients see by default; its looser cap
     // only catches runaway growth without forcing valuable full-profile tools to be trimmed.
-    // Honest wire measurements are 29,182 bytes dynamic and 44,664 bytes full.
+    // Honest wire measurements are 29,181 bytes dynamic and 44,663 bytes full.
     // Keep only a few bytes of ratchet headroom while staying well below the 46k cliff.
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_198);
-    expect(fullSurfaceTotal).toBeLessThanOrEqual(44_680);
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_197);
+    expect(fullSurfaceTotal).toBeLessThanOrEqual(44_679);
   });
 });
 
@@ -274,7 +274,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // fix, not prose — the stub describes on these three tools cost 69 failed add-field calls
     // (591s) and 299 repeat binds (2,562s) in shipped v10. Each number below is the CURRENT
     // measured size; the ratchet is unchanged, so trim rather than raise.
-    ['bind-template', 2176], // row-proof + recommendation guidance funded by same-tool description trims
+    ['bind-template', 2175], // row-proof + recommendation guidance funded by same-tool description trims
     ['add-field', 1435], // provenance-style describes (from field resolution, never invented)
     ['inject-template', 1404], // provenance-style describes; session also made optional
     ['refine-worksheet', 1464], // raised for omitted-targetField axis detection; funded by a ~500-byte same-tool describe trim
