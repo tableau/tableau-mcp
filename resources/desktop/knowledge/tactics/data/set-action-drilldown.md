@@ -124,7 +124,7 @@ Sub-Category values into one field; both forms are the same set-membership patte
 ### Live-confirmed action XML (2026-07-26, build 0000.26.0715.2311)
 
 A set action serializes as **`<edit-group-action>`** — sets are groups in workbook XML;
-there is no `set-action` element, and `edit-parameter-action` targeting a set is malformed
+there is no `<set-action>` element, and `<edit-parameter-action>` targeting a set is malformed
 (Desktop persists it, then throws blocking internal-error modal CDEAC1A9 on interaction).
 This exact node round-trips a live /v0 apply byte-faithfully (Desktop mints the action
 name and backfills `add-or-remove-marks='assign'` when omitted):
@@ -143,8 +143,8 @@ name and backfills `add-or-remove-marks='assign'` when omitted):
 ```
 
 Rules that do not bend:
-- Child order is fixed: `activation`, `source`, `single-select`, `add-or-remove-marks`, `params`.
-- `target-group` qualifies with the datasource's **`name` attribute** (`federated.*`), never its caption.
-- `selection-clear-set-option` ∈ `do-nothing` | `show-all` | `exclude-all`. Do NOT emit `<clear-option>` on a group action.
-- Apply-time validation does NOT resolve `target-group` — a dangling target is accepted silently. Always read back and byte-compare the `<actions>` block.
+- Child order is fixed: `<activation>`, `<single-select>`, `<add-or-remove-marks>`, `<params>` (with `<source>` second).
+- `'target-group'` qualifies with the datasource's **`name` attribute** (`federated.*`), never its caption.
+- `'selection-clear-set-option'` ∈ `'do-nothing'` | `'show-all'` | `'exclude-all'`. Do NOT emit `<clear-option>` on a group action.
+- Apply-time validation does NOT resolve `'target-group'` — a dangling target is accepted silently. Always read back and byte-compare the `<actions>` block.
 - The empty set the action targets is `<group caption='Category Set' name='[Category Set]' name-style='unqualified' user:ui-builder='filter-group'><groupfilter function='empty-level' member='[Category]' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' /></group>` inside the target datasource.
