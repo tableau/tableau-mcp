@@ -78,6 +78,8 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import {
   type AuthorCalcInput,
   authorCalculationsInWorkbook,
+  datatypeSchema,
+  roleSchema,
 } from '../data-source/authorCalcCore.js';
 import { fetchWorksheetSummaryData, type SummaryDataRead } from '../data-source/summaryDataCore.js';
 import { IncompleteOperationError } from '../incompleteOperationError.js';
@@ -109,7 +111,10 @@ const paramsSchema = {
   ask: z.string().describe('Verbatim ask.'),
   proposal: proposalSchema.optional(),
   minConfidence: z.number().min(0).max(1).optional(),
-  auto_apply: z.boolean().optional(),
+  auto_apply: z
+    .boolean()
+    .optional()
+    .describe('true: apply the bound sheet to the live workbook immediately'),
   // Undescribed, this parameter cost 299 repeat binds and 2,562 seconds: with no way to
   // learn that it means "edit THIS sheet", the agent left it out on an edit-in-place ask,
   // bind-template created a second sheet, and the follow-up edits chased the new sheet.
@@ -122,11 +127,14 @@ const paramsSchema = {
       z.object({
         caption: z.string(),
         formula: z.string(),
-        datatype: z.string().optional(),
-        role: z.string().optional(),
+        datatype: datatypeSchema.optional(),
+        role: roleSchema.optional(),
       }),
     )
-    .optional(),
+    .optional()
+    .describe(
+      'Calcs to author before binding, for derived metric asks (margin %, ratios); bind by the calc caption',
+    ),
 };
 
 /**

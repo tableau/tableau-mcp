@@ -65,8 +65,6 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
   }: DesktopToolLogAndExecuteParams<T, Args>): Promise<CallToolResult> {
     const { requestId } = extra;
     const bindFirstGateResult = this.applyBindFirstGate(args);
-    if (bindFirstGateResult) return bindFirstGateResult;
-
     this.notifyInvocation({ requestId, args });
 
     let toolResult: CallToolResult;
@@ -80,6 +78,19 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       episode_id: episodeId,
       tool: this.name,
     });
+
+    if (bindFirstGateResult) {
+      await emitEpisodeEvent(extra.config, {
+        type: 'tool_end',
+        session_id: sessionId,
+        episode_id: episodeId,
+        tool: this.name,
+        duration_ms: Date.now() - startedAt,
+        success: false,
+        outcome: 'refused_by_gate',
+      });
+      return bindFirstGateResult;
+    }
 
     try {
       const result = await raceDeadline(extra, callback);
@@ -97,6 +108,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
           tool: this.name,
           duration_ms: Date.now() - startedAt,
           success: true,
+          outcome: 'succeeded',
         });
         return toolResult;
       }
@@ -120,6 +132,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         tool: this.name,
         duration_ms: Date.now() - startedAt,
         success: false,
+        outcome: 'failed',
       });
       return toolResult;
     } catch (error) {
@@ -153,6 +166,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         tool: this.name,
         duration_ms: Date.now() - startedAt,
         success: false,
+        outcome: 'failed',
       });
       return toolResult;
     }

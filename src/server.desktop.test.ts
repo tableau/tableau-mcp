@@ -208,10 +208,11 @@ describe('desktop tools/list serialized surface', () => {
     // Dynamic authoring is the serving surface, so this is the real budget gate.
     // The full desktop surface is not what clients see by default; its looser cap
     // only catches runaway growth without forcing valuable full-profile tools to be trimmed.
-    // Honest wire measurements are 29,181 bytes dynamic and 44,663 bytes full.
+    // Honest wire measurements are 29,463 bytes dynamic and 44,951 bytes full after the
+    // signed-off bind-template describes (see the grandfathered cap comment above).
     // Keep only a few bytes of ratchet headroom while staying well below the 46k cliff.
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_197);
-    expect(fullSurfaceTotal).toBeLessThanOrEqual(44_679);
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_479);
+    expect(fullSurfaceTotal).toBeLessThanOrEqual(44_967);
   });
 });
 
@@ -274,7 +275,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     // fix, not prose — the stub describes on these three tools cost 69 failed add-field calls
     // (591s) and 299 repeat binds (2,562s) in shipped v10. Each number below is the CURRENT
     // measured size; the ratchet is unchanged, so trim rather than raise.
-    ['bind-template', 2175], // row-proof + recommendation guidance funded by same-tool description trims
+    ['bind-template', 2463], // raised with sign-off (2026-07-27, #643 review fold): calcs[]/auto_apply describes + datatype/role enums for the one-call derived-metric path — the same undescribed-param class that cost 299 repeat binds (2,562s) in shipped v10; restoring gutted descriptions was refused as funding
     ['add-field', 1435], // provenance-style describes (from field resolution, never invented)
     ['inject-template', 1404], // provenance-style describes; session also made optional
     ['refine-worksheet', 1464], // raised for omitted-targetField axis detection; funded by a ~500-byte same-tool describe trim
@@ -522,7 +523,8 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     }
     // A lean surface must have generous headroom — this is a structural win, not a
     // describe-stub squeeze. If this ever approaches 46k something is very wrong.
-    expect(total).toBeLessThanOrEqual(29_198);
+    // Raised with the signed-off bind-template describes (2026-07-27, #643 review fold).
+    expect(total).toBeLessThanOrEqual(29_480);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {

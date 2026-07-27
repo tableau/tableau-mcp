@@ -104,6 +104,53 @@ describe('DesktopTool episode telemetry', () => {
 });
 
 describe('DesktopTool bind-first orientation gate', () => {
+  it('records a gated call as refused in the episode stream', async () => {
+    const dir = tmpDir();
+    const extra = {
+      ...getMockRequestHandlerExtra(),
+      config: {
+        ...getMockRequestHandlerExtra().config,
+        episodeEventsEnabled: true,
+        episodeEventsDirectory: dir,
+      },
+    };
+    const begin = await beginEpisode(extra.config, { sessionId: 'S1' });
+    const gatedCallback = vi.fn(async () => new Ok({ fields: [] }));
+
+    const result = await makeTool('list-available-fields').logAndExecute({
+      extra,
+      args: { session: 'S1' },
+      callback: gatedCallback,
+    });
+    await makeTool().logAndExecute({
+      extra,
+      args: { session: 'S1' },
+      callback: async () => new Ok({ answer: 'continue' }),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(gatedCallback).not.toHaveBeenCalled();
+    expect(readEvents(dir)).toMatchObject([
+      { type: 'episode_begin', episode_id: begin.episode_id },
+      {
+        type: 'tool_start',
+        session_id: 'S1',
+        episode_id: begin.episode_id,
+        tool: 'list-available-fields',
+      },
+      {
+        type: 'tool_end',
+        session_id: 'S1',
+        episode_id: begin.episode_id,
+        tool: 'list-available-fields',
+        success: false,
+        outcome: 'refused_by_gate',
+      },
+      { type: 'tool_start', tool: 'ask-user' },
+      { type: 'tool_end', tool: 'ask-user', success: true, outcome: 'succeeded' },
+    ]);
+  });
+
   it('redirects a pre-bind orientation call without invoking the executor seam', async () => {
     const getExecutor = vi.fn();
     const extra = { ...getMockRequestHandlerExtra(), getExecutor };

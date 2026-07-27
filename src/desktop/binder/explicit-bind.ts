@@ -2,7 +2,10 @@ import {
   parseColumnInstanceRef,
   parseDatasourceQualifiedColumnRef,
 } from '../metadata/field-resolver.js';
-import type { OptionalFieldPruneSpec } from '../templates/optionalFieldPrune.js';
+import {
+  optionalFieldPrunesFor,
+  type OptionalFieldPruneSpec,
+} from '../templates/optionalFieldPrune.js';
 import { loadManifests } from './manifest.js';
 import type { Derivation, SlotSpec, TemplateManifest } from './manifest-types.js';
 import { bareName, type SchemaField, type SchemaSummary } from './schema-summary.js';
@@ -529,26 +532,6 @@ function consumedFieldRefsFor(
     refs.push(ref);
   }
   return refs;
-}
-
-function optionalFieldPrunesFor(
-  manifest: TemplateManifest,
-  fieldBySlot: Map<string, SchemaField>,
-): OptionalFieldPruneSpec[] {
-  return manifest.slots
-    .filter(
-      (slot) =>
-        slot.bindable &&
-        !slot.required &&
-        (slot.kind === 'geo' || slot.kind === 'categorical') &&
-        (slot.role.includes('lod') || slot.role.includes('detail')) &&
-        !fieldBySlot.has(slot.slot_id),
-    )
-    .map((slot) => ({
-      templateField: slot.template_field,
-      derivation: slot.derivation,
-      role: slot.kind === 'categorical' ? ['nk', 'ok'] : 'nk',
-    }));
 }
 
 function rawDatasourceFor(fieldBySlot: Map<string, SchemaField>, fallback: string): string {

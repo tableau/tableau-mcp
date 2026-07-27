@@ -33,7 +33,10 @@ import Fuse from 'fuse.js';
 
 import { COLUMN_REF_REGEX } from '../metadata/field-resolver.js';
 import type { DateparseAxisSpec } from '../templates/dateparseTemporalAxis.js';
-import type { OptionalFieldPruneSpec } from '../templates/optionalFieldPrune.js';
+import {
+  optionalFieldPrunesFor,
+  type OptionalFieldPruneSpec,
+} from '../templates/optionalFieldPrune.js';
 import { matchAvoidWhen } from './classify.js';
 import { escapeXml } from './escape.js';
 import type {
@@ -407,29 +410,6 @@ function effectiveSlotDerivation(
   if (override !== undefined) return override;
   if (slot.kind === 'quantitative-or-categorical' && field.role === 'dimension') return 'none';
   return slot.derivation;
-}
-
-function optionalFieldPrunesFor(
-  manifest: TemplateManifest,
-  resolved: Map<string, { slot: SlotSpec; field: SchemaField }>,
-): OptionalFieldPruneSpec[] {
-  return manifest.slots
-    .filter(
-      (slot) =>
-        slot.bindable &&
-        !slot.required &&
-        (slot.kind === 'geo' || slot.kind === 'categorical') &&
-        (slot.role.includes('lod') || slot.role.includes('detail')) &&
-        !resolved.has(slot.slot_id),
-    )
-    .map((slot) => ({
-      templateField: slot.template_field,
-      derivation: slot.derivation,
-      // An unbound categorical slot has no target field whose type can choose suffixFor.
-      // Match both authored dimension suffixes so ordinal (:ok) templates prune as safely
-      // as nominal (:nk) templates; geo slots retain their existing nominal-only contract.
-      role: slot.kind === 'categorical' ? ['nk', 'ok'] : 'nk',
-    }));
 }
 
 /**

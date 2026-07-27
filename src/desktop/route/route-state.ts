@@ -81,8 +81,8 @@ export interface BindRecoveryProposalContext {
   };
   recommended?: {
     measure: string;
-    top_n: 10;
-    reason: 'revenue-like measure; top-N defaults to 10';
+    top_n: number;
+    reason: string;
     context_measures: string[];
     binding: {
       template: string;

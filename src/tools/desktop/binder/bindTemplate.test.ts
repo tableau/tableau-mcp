@@ -639,6 +639,7 @@ describe('bindTemplateTool', () => {
       ask: expect.any(Object),
       proposal: expect.any(Object),
       minConfidence: expect.any(Object),
+      auto_apply: expect.any(Object),
       calcs: expect.any(Object),
     });
     expect(paramsSchema['session']!.description).toBe(
@@ -647,6 +648,32 @@ describe('bindTemplateTool', () => {
     expect(paramsSchema['target_worksheet']!.description).toBe(
       'Existing worksheet name to rebuild; omit to create.',
     );
+    expect(paramsSchema['auto_apply']!.description).toBe(
+      'true: apply the bound sheet to the live workbook immediately',
+    );
+    expect(paramsSchema['calcs']!.description).toBe(
+      'Calcs to author before binding, for derived metric asks (margin %, ratios); bind by the calc caption',
+    );
+    expect(
+      paramsSchema['calcs']!.safeParse([
+        { caption: 'Margin', formula: '[Profit] / [Sales]', datatype: 'number' },
+      ]).success,
+    ).toBe(false);
+    expect(
+      paramsSchema['calcs']!.safeParse([
+        { caption: 'Margin', formula: '[Profit] / [Sales]', role: 'attribute' },
+      ]).success,
+    ).toBe(false);
+    for (const datatype of ['real', 'integer', 'string', 'boolean', 'date', 'datetime']) {
+      expect(
+        paramsSchema['calcs']!.safeParse([{ caption: 'Calc', formula: '1', datatype }]).success,
+      ).toBe(true);
+    }
+    for (const role of ['measure', 'dimension']) {
+      expect(
+        paramsSchema['calcs']!.safeParse([{ caption: 'Calc', formula: '1', role }]).success,
+      ).toBe(true);
+    }
     expect(tool.annotations).toMatchObject({
       // NOT read-only / NOT idempotent: auto_apply + calcs[] mutate the live workbook.
       readOnlyHint: false,

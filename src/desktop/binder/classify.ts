@@ -69,8 +69,8 @@ export interface LlmProposeInput {
    */
   recommended?: {
     measure: string;
-    top_n: 10;
-    reason: 'revenue-like measure; top-N defaults to 10';
+    top_n: number;
+    reason: string;
     context_measures: string[];
     binding: {
       template: string;
@@ -1056,13 +1056,16 @@ const ACRONYM_EXPANSIONS: Readonly<Record<string, readonly string[]>> = {
  * retained for proposals; auto-binding requires one candidate whose full normalized field
  * name/caption/bare column name equals a pattern.
  */
+const REVENUE_CAPTION_PATTERNS = ['sales', 'revenue', 'amount'] as const;
+const PROFIT_CAPTION_PATTERNS = ['profit'] as const;
+const MARGIN_CAPTION_PATTERNS = ['margin'] as const;
 const BUSINESS_FIELD_SYNONYMS: ReadonlyArray<{
   nouns: readonly string[];
   captionPatterns: readonly string[];
 }> = [
-  { nouns: ['revenue'], captionPatterns: ['sales', 'revenue', 'amount'] },
-  { nouns: ['profit'], captionPatterns: ['profit'] },
-  { nouns: ['margin'], captionPatterns: ['margin'] },
+  { nouns: ['revenue'], captionPatterns: REVENUE_CAPTION_PATTERNS },
+  { nouns: ['profit'], captionPatterns: PROFIT_CAPTION_PATTERNS },
+  { nouns: ['margin'], captionPatterns: MARGIN_CAPTION_PATTERNS },
   { nouns: ['customers'], captionPatterns: ['customer', 'customer name'] },
   { nouns: ['products'], captionPatterns: ['product', 'product name'] },
   { nouns: ['orders'], captionPatterns: ['order', 'order id'] },
@@ -1092,17 +1095,12 @@ function recommendedRankingDefault(
     return undefined;
   }
 
-  const revenuePatterns = BUSINESS_FIELD_SYNONYMS.find((entry) =>
-    entry.nouns.includes('revenue'),
-  )?.captionPatterns;
-  if (!revenuePatterns) return undefined;
-
   // Check the full schema, not only the narrowed proposal list: a second revenue-like
   // field hidden by narrowing still makes the business choice genuinely contested.
   const revenueLikeMeasures = summary.fields.filter(
     (field) =>
       field.role === 'measure' &&
-      revenuePatterns.some((pattern) => fieldMatchesCaptionPattern(field, pattern)),
+      REVENUE_CAPTION_PATTERNS.some((pattern) => fieldMatchesCaptionPattern(field, pattern)),
   );
   if (revenueLikeMeasures.length !== 1) return undefined;
 
@@ -1124,12 +1122,6 @@ function recommendedRankingDefault(
     return undefined;
   }
 
-  const profitPatterns = BUSINESS_FIELD_SYNONYMS.find((entry) =>
-    entry.nouns.includes('profit'),
-  )?.captionPatterns;
-  const marginPatterns = BUSINESS_FIELD_SYNONYMS.find((entry) =>
-    entry.nouns.includes('margin'),
-  )?.captionPatterns;
   const contextMeasures = summary.fields
     .filter(
       (field) =>
@@ -1140,9 +1132,9 @@ function recommendedRankingDefault(
     )
     .map((field, index) => {
       const priority =
-        profitPatterns?.some((pattern) => fieldMatchesCaptionPattern(field, pattern)) === true
+        PROFIT_CAPTION_PATTERNS.some((pattern) => fieldMatchesCaptionPattern(field, pattern))
           ? 0
-          : marginPatterns?.some((pattern) => fieldMatchesCaptionPattern(field, pattern)) === true
+          : MARGIN_CAPTION_PATTERNS.some((pattern) => fieldMatchesCaptionPattern(field, pattern))
             ? 1
             : 2;
       return { field, index, priority };
@@ -2272,6 +2264,7 @@ function roleGreedyBind(
     }
     return tokens;
   };
+  // Duplicated from explicit-bind.ts because lockstep-core cannot import that non-core module.
   const normalizedName = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]+/g, '');
   const fieldNameMatchesSlot = (
     field: SchemaField,

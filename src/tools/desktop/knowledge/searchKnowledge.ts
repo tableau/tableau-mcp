@@ -20,7 +20,7 @@ export const getSearchKnowledgeTool = (
     name: 'search-knowledge',
     title: toolTitle,
     description:
-      "Find expertise by concept, not tool name. When topHitBody is present, use it; do not call read-knowledge-resource. Otherwise read the top hit's mustReadUri.",
+      "Find expertise by concept, not tool name. When topHitBody is present, it is the full module; no follow-up read is needed. Otherwise read the top hit's mustReadUri.",
     paramsSchema,
     annotations: {
       readOnlyHint: true,

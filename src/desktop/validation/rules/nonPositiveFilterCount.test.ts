@@ -29,6 +29,22 @@ describe('non-positive-filter-count rule', () => {
     expect(issues[0].message).toContain('AC6CC624');
   });
 
+  it('reports the exact offending groupfilter path', () => {
+    const xml = worksheetWith(
+      `<filter column="[DS].[none:Category:nk]">
+        <groupfilter function="end" end="top" count="5" />
+      </filter>
+      <filter column="[DS].[none:Region:nk]">
+        <groupfilter function="end" end="top" count="0" />
+      </filter>`,
+    );
+
+    const issues = nonPositiveFilterCountRule.validate(xml);
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].xpath).toBe('/worksheet[1]/table[1]/view[1]/filter[2]/groupfilter[1]');
+  });
+
   it('allows a legacy count="0" groupfilter nested in a group — Desktop persists and round-trips this shape', () => {
     const xml = workbookWith(
       `<group caption="Category Set">

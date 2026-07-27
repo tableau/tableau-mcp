@@ -29,10 +29,12 @@ describe('searchKnowledgeTool', () => {
 
   it('tells callers to skip the targeted read when the top body is present', async () => {
     const tool = getSearchKnowledgeTool(new DesktopMcpServer());
+    const description = await Provider.from(tool.description);
 
-    expect(await Provider.from(tool.description)).toContain(
-      'When topHitBody is present, use it; do not call read-knowledge-resource',
+    expect(description).toContain(
+      'When topHitBody is present, it is the full module; no follow-up read is needed.',
     );
+    expect(description).not.toContain('read-knowledge-resource');
   });
 
   it('returns the top hit read requirement', async () => {

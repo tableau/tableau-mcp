@@ -317,7 +317,7 @@ export const ZERO_HIT_NEAREST_MATCHES_NOTE =
 // searches have 0.181–0.449 gaps. Keep the gate conservatively between those distributions.
 const CONFIDENT_TOP_HIT_SCORE_GAP = 0.15;
 const TOP_HIT_BODY_MAX_BYTES = 6_144;
-const TOP_HIT_BODY_TRUNCATION_MARKER = '\n\n[TRUNCATED: body exceeds 6144-byte cap]';
+const TOP_HIT_BODY_TRUNCATION_MARKER = `\n\n[TRUNCATED: body exceeds ${TOP_HIT_BODY_MAX_BYTES}-byte cap]`;
 
 const MUST_READ_INSTRUCTION =
   'snippet is not the module — read this URI before authoring; append #<section> from sections to read one section instead of the whole module';
