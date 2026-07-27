@@ -107,13 +107,21 @@ describe('planTopN — happy path', () => {
     expect(r.xml).toMatch(/function='end'\s+end='bottom'\s+count='3'/);
     expect(r.xml).toContain("function='order' direction='ASC'");
   });
+
+  it('emits the minimum count of 1', () => {
+    const r = planTopN(BASE, { n: 1 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.xml).toMatch(/function='end'\s+end='top'\s+count='1'/);
+  });
 });
 
 describe('planTopN — kill criteria (refuse with message)', () => {
-  it('refuses n below 1', () => {
-    const r = planTopN(BASE, { n: 0 });
+  it.each([0, -2])('refuses n below 1 (%s)', (n) => {
+    const r = planTopN(BASE, { n });
     expect(r.ok).toBe(false);
     if (r.ok) return;
+    expect(r.reason).toContain(`got ${n}`);
     expect(r.reason).toMatch(/between 1 and 50/);
   });
 
