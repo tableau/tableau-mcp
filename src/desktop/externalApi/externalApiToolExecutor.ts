@@ -562,7 +562,7 @@ function mapClientError(
     case 'invalid-response':
       return { type: 'invalid-response', error: error.error };
     case 'network':
-      return mapNetworkFailure(error.error, pinnedPid);
+      return mapNetworkFailure(error.error, pinnedPid, error.aborted);
     case 'no-instance':
       return {
         type: 'unknown',
@@ -578,7 +578,11 @@ function mapClientError(
  * A dead-but-cached Desktop used to surface as a raw `fetch failed`, which the agent could not
  * act on. Name the instance so it can re-target, and keep a timeout honest as a timeout.
  */
-function mapNetworkFailure(cause: unknown, pinnedPid?: number): ExecuteCommandError {
+function mapNetworkFailure(
+  cause: unknown,
+  pinnedPid?: number,
+  aborted = false,
+): ExecuteCommandError {
   if (isDesktopCallTimeout(cause)) {
     return {
       type: 'command-timed-out',
@@ -586,8 +590,18 @@ function mapNetworkFailure(cause: unknown, pinnedPid?: number): ExecuteCommandEr
     };
   }
 
-  if (cause instanceof Error && cause.name === 'TimeoutError') {
-    return { type: 'command-timed-out', error: cause.message };
+  // Caller AbortError is reported as timed out for now; MCP cancellation discards this response.
+  if (
+    aborted ||
+    (cause instanceof Error && (cause.name === 'TimeoutError' || cause.name === 'AbortError'))
+  ) {
+    return {
+      type: 'command-timed-out',
+      error:
+        cause instanceof Error
+          ? cause.message
+          : 'External Client API request was aborted before completion.',
+    };
   }
 
   const detail = cause instanceof Error ? cause.message : undefined;
