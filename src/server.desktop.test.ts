@@ -208,10 +208,10 @@ describe('desktop tools/list serialized surface', () => {
     // Dynamic authoring is the serving surface, so this is the real budget gate.
     // The full desktop surface is not what clients see by default; its looser cap
     // only catches runaway growth without forcing valuable full-profile tools to be trimmed.
-    // Honest wire measurements are 29,132 bytes dynamic and 44,614 bytes full.
+    // Honest wire measurements are 29,182 bytes dynamic and 44,664 bytes full.
     // Keep only a few bytes of ratchet headroom while staying well below the 46k cliff.
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_148);
-    expect(fullSurfaceTotal).toBeLessThanOrEqual(44_630);
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_198);
+    expect(fullSurfaceTotal).toBeLessThanOrEqual(44_680);
   });
 });
 
@@ -522,7 +522,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     }
     // A lean surface must have generous headroom — this is a structural win, not a
     // describe-stub squeeze. If this ever approaches 46k something is very wrong.
-    expect(total).toBeLessThanOrEqual(29_148);
+    expect(total).toBeLessThanOrEqual(29_198);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {

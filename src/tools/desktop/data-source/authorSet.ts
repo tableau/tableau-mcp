@@ -15,18 +15,18 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const endSchema = z.enum(['top', 'bottom']);
+const modeSchema = z.enum(['top-n', 'empty']);
 
-// Primitives in, groupfilter XML server-side, readback out. A computed Top/Bottom-N
-// set on a dimension, ranked by a measure expression, optionally param-linked.
-// Golden-shaped (WW2021W44): <group><groupfilter end><groupfilter order><groupfilter
-// level-members>>>. count accepts a literal integer OR a parameter reference token
-// like "[Parameters].[Parameter 3]" — the whole point of the dialect's key signature.
+// Primitives in, groupfilter XML server-side, readback out. Authors either an
+// initially empty set or a computed Top/Bottom-N set on a dimension; the Top-N
+// shape retains its provenance from the WW2021W44 golden workbook.
 const paramsSchema = {
   session: z.string().optional().describe(''),
+  mode: modeSchema.default('top-n').describe(''),
   caption: z.string().describe(''),
   dimension: z.string().describe(''),
-  orderBy: z.string().describe(''),
-  count: z.string().describe(''),
+  orderBy: z.string().optional().describe(''),
+  count: z.string().optional().describe(''),
   end: endSchema.default('top').describe(''),
   datasource: z.string().optional().describe(''),
 };
@@ -63,24 +63,18 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
       idempotentHint: false,
     },
     callback: async (
-      { session, caption, dimension, orderBy, count, end = 'top', datasource },
+      { session, mode = 'top-n', caption, dimension, orderBy, count, end = 'top', datasource },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute<AuthorSetResult>({
         extra,
-        args: { session, caption, dimension, orderBy, count, end, datasource },
+        args: { session, mode, caption, dimension, orderBy, count, end, datasource },
         callback: async () => {
           if (caption.trim().length === 0) {
             return new ArgsValidationError('caption empty').toErr();
           }
           if (dimension.trim().length === 0) {
             return new ArgsValidationError('dimension empty').toErr();
-          }
-          if (orderBy.trim().length === 0) {
-            return new ArgsValidationError('orderBy empty').toErr();
-          }
-          if (count.trim().length === 0) {
-            return new ArgsValidationError('count empty').toErr();
           }
 
           const sessionResult = resolveSession(session);
@@ -108,7 +102,27 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
           }
 
           const setName = `[${caption}]`;
-          const groupXml = renderGroupSet({ caption, setName, dimension, orderBy, count, end });
+          let groupXml: string;
+          if (mode === 'top-n') {
+            if (orderBy === undefined || orderBy.trim().length === 0) {
+              return new ArgsValidationError('orderBy is required in top-n mode').toErr();
+            }
+            if (count === undefined || count.trim().length === 0) {
+              return new ArgsValidationError('count is required in top-n mode').toErr();
+            }
+            // PR #654: numericFilterLimit(count) and resolveParameterFilterLimit(liveXml, count)
+            // guards belong INSIDE this mode === 'top-n' block; empty sets have no count.
+            groupXml = renderTopNGroupSet({
+              caption,
+              setName,
+              dimension,
+              orderBy,
+              count,
+              end,
+            });
+          } else {
+            groupXml = renderEmptyGroupSet({ caption, setName, dimension });
+          }
           const editedXml = spliceElementIntoDatasource(liveXml, target, groupXml);
           const validation = validateWorkbookDocumentApply(editedXml, liveXml);
           if (!validation.ok) {
@@ -129,9 +143,15 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
           if (readbackResult.isErr()) {
             return new DesktopCommandExecutionError(readbackResult.error).toErr();
           }
-          if (!hasGroupNameAndCaption(readbackResult.value, setName, caption)) {
+          const readbackGroup = findGroupByNameAndCaption(readbackResult.value, setName, caption);
+          if (readbackGroup === undefined) {
             return new XmlModificationError(
               'load completed but did not apply: readback did not contain the new set name and caption',
+            ).toErr();
+          }
+          if (getAttr(readbackGroup, 'user:ui-builder') !== 'filter-group') {
+            return new XmlModificationError(
+              "load completed and the set name and caption survived readback, but the user:ui-builder='filter-group' marker did not survive readback",
             ).toErr();
           }
 
@@ -233,8 +253,8 @@ function hasGroupCaption(datasourceXml: string, caption: string): boolean {
   );
 }
 
-function hasGroupNameAndCaption(xml: string, name: string, caption: string): boolean {
-  return findGroupTags(xml).some(
+function findGroupByNameAndCaption(xml: string, name: string, caption: string): string | undefined {
+  return findGroupTags(xml).find(
     (tag) =>
       unescapeXml(getAttr(tag, 'name') ?? '') === name &&
       unescapeXml(getAttr(tag, 'caption') ?? '') === caption,
@@ -255,7 +275,7 @@ function bracketize(token: string): string {
   return `[${trimmed}]`;
 }
 
-function renderGroupSet({
+function renderTopNGroupSet({
   caption,
   setName,
   dimension,
@@ -279,6 +299,22 @@ function renderGroupSet({
     `<groupfilter direction='DESC' expression='${escapeXml(orderBy)}' function='order' user:ui-marker='order'>` +
     `<groupfilter function='level-members' level='${escapeXml(level)}' user:ui-enumeration='all' user:ui-marker='enumerate' />` +
     '</groupfilter></groupfilter></group>'
+  );
+}
+
+function renderEmptyGroupSet({
+  caption,
+  setName,
+  dimension,
+}: {
+  caption: string;
+  setName: string;
+  dimension: string;
+}): string {
+  return (
+    `<group caption='${escapeXml(caption)}' name='${escapeXml(setName)}' name-style='unqualified' user:ui-builder='filter-group'>` +
+    `<groupfilter function='empty-level' member='${escapeXml(bracketize(dimension))}' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />` +
+    '</group>'
   );
 }
 
