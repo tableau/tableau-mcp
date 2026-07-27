@@ -1,12 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import {
-  type BindingProposal,
-  bindTemplate,
-  classifyNoLlm,
-  PROPOSAL_OUTPUT_SCHEMA,
-  summarizeSchema,
-} from './binder.js';
+import { type BindingProposal, bindTemplate, classifyNoLlm, summarizeSchema } from './binder.js';
 import { loadManifests } from './manifest.js';
 import type { TemplateManifest } from './manifest-types.js';
 
@@ -248,18 +242,25 @@ describe('portability-lane — histogram bin-width refusal (W3)', () => {
   });
 });
 
-describe('portability-lane — under-specified scatter proposes with only bindable slots', () => {
-  it('healthcare scatter with too few fields → propose payload exposes the PROPOSAL_OUTPUT_SCHEMA', async () => {
+describe('portability-lane — coarse-grain scatter omits its optional detail slot', () => {
+  it('healthcare scatter binds with the schema-affine required region and prunes customer detail', async () => {
     const res = await bindTemplate({
       ask: 'scatter of Paid Amount vs Allowed Amount',
       workbookXml: HEALTHCARE_CLAIMS_WORKBOOK_XML,
       manifests: withForcedEligible(['correlation-scatter-plot-chart']),
     });
-    expect(res.status).toBe('propose');
-    if (res.status === 'propose') {
-      expect(res.output_schema).toBe(PROPOSAL_OUTPUT_SCHEMA);
-      expect(res.llm_input.fields.some((f) => f.name === 'Paid Amount')).toBe(true);
-      expect(res.llm_input.fields.some((f) => f.name === 'Payer')).toBe(true);
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.used_llm).toBe(false);
+      expect(res.args.template_name).toBe('correlation-scatter-plot-chart');
+      expect(res.args.field_mapping).toEqual({
+        Sales: '[HealthcareClaimsDS].[sum:Paid Amount:qk]',
+        Profit: '[HealthcareClaimsDS].[sum:Allowed Amount:qk]',
+        Region: '[HealthcareClaimsDS].[none:Provider Region:nk]',
+      });
+      expect(res.args.optional_field_prunes).toEqual([
+        { templateField: 'Customer Name', derivation: 'none', role: ['nk', 'ok'] },
+      ]);
     }
   });
 });

@@ -77,7 +77,7 @@
       ],
       "kind": "categorical",
       "bindable": true,
-      "required": true
+      "required": false
     },
     {
       "slot_id": "region",

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { bindExplicitTemplate, schemaSummaryFromAvailableFields } from './explicit-bind.js';
+import { loadManifests } from './manifest.js';
 import type { TemplateManifest } from './manifest-types.js';
 import type { SchemaField, SchemaSummary } from './schema-summary.js';
 
@@ -174,6 +175,90 @@ describe('bindExplicitTemplate', () => {
     if (!result.ok) {
       expect(result.blockers.some((b) => b.code === 'missing-required-slot')).toBe(true);
       expect(result.errors.every((e) => e.fix.length > 0)).toBe(true);
+    }
+  });
+
+  it('warns which fields landed on swappable categorical slots', () => {
+    const scatterSummary: SchemaSummary = {
+      datasource: 'Superstore',
+      fields: [
+        field({ name: 'Sales', role: 'measure', type: 'quantitative', datatype: 'real' }),
+        field({ name: 'Profit', role: 'measure', type: 'quantitative', datatype: 'real' }),
+        field({ name: 'City', role: 'dimension', type: 'nominal', datatype: 'string' }),
+        field({ name: 'Segment', role: 'dimension', type: 'nominal', datatype: 'string' }),
+      ],
+    };
+
+    const result = bindExplicitTemplate(
+      'correlation-scatter-plot-chart',
+      scatterSummary.fields.map((candidate) => candidate.column_ref),
+      scatterSummary,
+      { manifests: loadManifests() },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.warnings).toContain(
+        "Ambiguous categorical assignment: field 'City' landed on slot 'customer_name'; field 'Segment' landed on slot 'region'. These categorical sources fit either slot and could swap when field order changes.",
+      );
+    }
+  });
+
+  it('uses categorical name affinity when both scatter detail fields are supplied', () => {
+    const scatterSummary: SchemaSummary = {
+      datasource: 'Superstore',
+      fields: [
+        field({ name: 'Profit', role: 'measure', type: 'quantitative', datatype: 'real' }),
+        field({ name: 'Sales', role: 'measure', type: 'quantitative', datatype: 'real' }),
+        field({
+          name: 'Customer Name',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+        }),
+        field({ name: 'Region', role: 'dimension', type: 'nominal', datatype: 'string' }),
+      ],
+    };
+
+    const result = bindExplicitTemplate(
+      'correlation-scatter-plot-chart',
+      scatterSummary.fields.map((candidate) => candidate.column_ref),
+      scatterSummary,
+      { manifests: loadManifests() },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.fieldMapping['Customer Name']).toBe('[Superstore].[none:Customer Name:nk]');
+      expect(result.fieldMapping.Region).toBe('[Superstore].[none:Region:nk]');
+      expect(result.optionalFieldPrunes).toEqual([]);
+    }
+  });
+
+  it('reserves a lone categorical field for the required scatter detail slot', () => {
+    const scatterSummary: SchemaSummary = {
+      datasource: 'Superstore',
+      fields: [
+        field({ name: 'Sales', role: 'measure', type: 'quantitative', datatype: 'real' }),
+        field({ name: 'Profit', role: 'measure', type: 'quantitative', datatype: 'real' }),
+        field({ name: 'Region', role: 'dimension', type: 'nominal', datatype: 'string' }),
+      ],
+    };
+
+    const result = bindExplicitTemplate(
+      'correlation-scatter-plot-chart',
+      scatterSummary.fields.map((candidate) => candidate.column_ref),
+      scatterSummary,
+      { manifests: loadManifests() },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.fieldMapping.Region).toBe('[Superstore].[none:Region:nk]');
+      expect(result.fieldMapping).not.toHaveProperty('Customer Name');
+      expect(result.optionalFieldPrunes).toEqual([
+        { templateField: 'Customer Name', derivation: 'none', role: ['nk', 'ok'] },
+      ]);
     }
   });
 

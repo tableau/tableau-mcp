@@ -2272,6 +2272,17 @@ function roleGreedyBind(
     }
     return tokens;
   };
+  const normalizedName = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const fieldNameMatchesSlot = (
+    field: SchemaField,
+    slot: TemplateManifest['slots'][number],
+  ): boolean => {
+    if (slot.template_field.includes('{{')) return false;
+    const templateFieldName = normalizedName(slot.template_field);
+    return [field.name, field.caption ?? '', bareName(field.columnName)]
+      .map(normalizedName)
+      .some((name) => name === templateFieldName);
+  };
   const schemaFallback = (
     slot: TemplateManifest['slots'][number],
     pred: (f: SchemaField) => boolean,
@@ -2312,6 +2323,15 @@ function roleGreedyBind(
     pred: (f: SchemaField) => boolean,
     allowSchemaFallback = true,
   ): SchemaField | null => {
+    if (slot.kind === 'categorical') {
+      const affine = matched.filter(
+        (field) => !used.has(field) && pred(field) && fieldNameMatchesSlot(field, slot),
+      );
+      if (affine.length === 1) {
+        used.add(affine[0]);
+        return affine[0];
+      }
+    }
     for (const f of matched) {
       if (!used.has(f) && pred(f)) {
         used.add(f);
@@ -2324,9 +2344,20 @@ function roleGreedyBind(
     return fallback;
   };
 
+  const isOptionalCategoricalDetail = (
+    slot: TemplateManifest['slots'][number],
+  ): boolean =>
+    slot.bindable &&
+    !slot.required &&
+    slot.kind === 'categorical' &&
+    slot.role.includes('detail');
   const isActive = (slot: TemplateManifest['slots'][number]): boolean =>
     slot.bindable &&
-    (slot.required || forced.has(slot.slot_id) || optionalAskNamedGeoSlots.has(slot.slot_id));
+    (slot.required ||
+      forced.has(slot.slot_id) ||
+      optionalAskNamedGeoSlots.has(slot.slot_id) ||
+      isOptionalCategoricalDetail(slot));
+  const activeSlots = m.slots.filter(isActive);
   const geoSlots = m.slots.filter((s) => isActive(s) && s.kind === 'geo');
   let geoPicks: Map<string, SchemaField> | null = null;
   let geoAutoCompleted = new Map<string, SchemaField>();
@@ -2362,15 +2393,26 @@ function roleGreedyBind(
     return unconsumedNonTemporalDims.length > capacity;
   };
 
-  for (const [i, slot] of m.slots.entries()) {
-    if (!isActive(slot)) continue;
+  for (const [i, slot] of activeSlots.entries()) {
+    if (isOptionalCategoricalDetail(slot)) {
+      const compatible = matched.filter((field) => !used.has(field) && isCategorical(field));
+      const hasNameMatch = compatible.some((field) => fieldNameMatchesSlot(field, slot));
+      const laterRequired = activeSlots
+        .slice(i + 1)
+        .filter(
+          (candidate) =>
+            (candidate.required || forced.has(candidate.slot_id)) &&
+            candidate.kind === 'categorical',
+        ).length;
+      if (!hasNameMatch && compatible.length <= laterRequired) continue;
+    }
     let chosen: SchemaField | null = null;
     switch (slot.kind) {
       case 'quantitative':
         chosen = take(slot, isMeasure);
         break;
       case 'categorical':
-        chosen = take(slot, isCategorical);
+        chosen = take(slot, isCategorical, slot.required || forced.has(slot.slot_id));
         break;
       case 'quantitative-or-categorical':
         chosen = take(slot, (field) => isMeasure(field) || isCategorical(field));
@@ -2399,7 +2441,7 @@ function roleGreedyBind(
           !chosen &&
           temporalCompletion &&
           temporalSlots.length === 1 &&
-          !hasUnslottedNonTemporalDimension(m.slots.slice(i + 1))
+          !hasUnslottedNonTemporalDimension(activeSlots.slice(i + 1))
         ) {
           const completed = completeTemporalSlot(
             temporalCompletion.maskedAsk,
@@ -2436,6 +2478,7 @@ function roleGreedyBind(
       default:
         chosen = null;
     }
+    if (!chosen && isOptionalCategoricalDetail(slot)) continue;
     if (!chosen) return null; // required slot unfilled / geo affinity ambiguous → fail closed
     const binding: { slot_id: string; field: string; derivation?: Derivation } = {
       slot_id: slot.slot_id,

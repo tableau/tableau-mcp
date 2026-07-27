@@ -51,6 +51,7 @@ import {
 import {
   type AppliedSheetRecord,
   type BindRecoveryProposalContext,
+  type BindRecoveryRecord,
   classifyBindProposalProgress,
   MAX_CONSECUTIVE_BIND_RECOVERY_BARE_RESUBMITS,
   sessionRouteState,
@@ -211,6 +212,7 @@ type BindTemplateToolResult =
 type StructuredBindTemplateToolResult = StructuredResult<BindTemplateToolResult>;
 
 type Call2Contract = BindRecoveryProposalContext;
+type TerminalRepairAllowance = NonNullable<BindRecoveryRecord['terminalRepairAllowance']>;
 
 /** Escalation reasons that route back to the general (non-fast-path) authoring flow. */
 const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
@@ -471,6 +473,7 @@ function bareResubmitFallbackResult(
 function recoveryGateBlock(
   record: ReturnType<typeof sessionRouteState.getBindRecovery>,
   currentProposalSignature: string | undefined,
+  currentProposal: BindingProposal | undefined,
   session: string,
   askKey: string,
   targetWorksheet: string | undefined,
@@ -486,6 +489,20 @@ function recoveryGateBlock(
   }
 
   if (record.phase === 'terminal') {
+    const repair = record.terminalRepairAllowance;
+    if (
+      repair?.remaining === 1 &&
+      currentProposal?.template === repair.template &&
+      currentProposal.bindings.some((binding) => binding.slot_id === repair.slotId) &&
+      sessionRouteState.consumeTerminalRepairAllowance(
+        session,
+        askKey,
+        repair.template,
+        repair.slotId,
+      )
+    ) {
+      return undefined;
+    }
     if (
       (record.consecutiveBareResubmitCount ?? 0) >= MAX_CONSECUTIVE_BIND_RECOVERY_BARE_RESUBMITS
     ) {
@@ -824,6 +841,11 @@ function fieldFitsProposedSlot(
       return field.role === 'measure';
     case 'categorical':
       return field.role === 'dimension' && (field.type === 'nominal' || field.type === 'ordinal');
+    case 'quantitative-or-categorical':
+      return (
+        field.role === 'measure' ||
+        (field.role === 'dimension' && (field.type === 'nominal' || field.type === 'ordinal'))
+      );
     case 'temporal':
       return (
         field.datatype === 'date' ||
@@ -1808,6 +1830,7 @@ function recordBindRecoveryAttemptFailOpen({
   currentProposalSignature,
   proposalContext,
   reservationId,
+  terminalRepairAllowance,
   terminal = false,
   terminalFallback = false,
 }: {
@@ -1817,6 +1840,7 @@ function recordBindRecoveryAttemptFailOpen({
   currentProposalSignature?: string;
   proposalContext?: BindRecoveryProposalContext;
   reservationId?: number;
+  terminalRepairAllowance?: TerminalRepairAllowance;
   terminal?: boolean;
   terminalFallback?: boolean;
 }): void {
@@ -1828,12 +1852,22 @@ function recordBindRecoveryAttemptFailOpen({
         : {}),
       ...(proposalContext !== undefined ? { proposalContext } : {}),
       ...(reservationId !== undefined ? { reservationId } : {}),
+      ...(terminalRepairAllowance !== undefined ? { terminalRepairAllowance } : {}),
     };
     if (outcome === 'escalate' && currentProposalSignature === undefined && !terminalFallback) {
       sessionRouteState.clearBindRecovery(session, askKey);
       return;
     }
     if (terminalFallback) {
+      sessionRouteState.recordBindRecoveryTerminal(session, askKey, attempt);
+      return;
+    }
+    if (
+      terminal &&
+      sessionRouteState.getBindRecovery(session, askKey)?.terminalRepairAllowance?.remaining === 0
+    ) {
+      // A successful repair used its sole terminal escape. Keep the ask terminal instead
+      // of clearing recovery state, so an identical second repair cannot re-enter.
       sessionRouteState.recordBindRecoveryTerminal(session, askKey, attempt);
       return;
     }
@@ -1844,6 +1878,26 @@ function recordBindRecoveryAttemptFailOpen({
   } catch {
     /* fail-open */
   }
+}
+
+function terminalRepairAllowanceFor(result: BinderResult): TerminalRepairAllowance | undefined {
+  if (
+    result.status !== 'escalate' ||
+    result.reason !== 'missing-required-slot' ||
+    result.proposal === undefined ||
+    result.blockers.length !== 1
+  ) {
+    return undefined;
+  }
+  const blocker = result.blockers[0];
+  if (blocker.code !== 'missing-required-slot' || blocker.slot_id === undefined) {
+    return undefined;
+  }
+  return {
+    template: result.proposal.template,
+    slotId: blocker.slot_id,
+    remaining: 1,
+  };
 }
 
 /**
@@ -2003,6 +2057,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             const blocked = recoveryGateBlock(
               sessionRouteState.getBindRecovery(resolvedSession, askKey),
               currentProposalSignature,
+              proposal as BindingProposal | undefined,
               resolvedSession,
               askKey,
               target_worksheet,
@@ -2268,6 +2323,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 ...(call2Contract !== undefined ? { proposalContext: call2Contract } : {}),
                 reservationId: bindRecoveryReservationId,
                 terminalFallback: TIER2_REASONS.has(res.reason),
+                terminalRepairAllowance: terminalRepairAllowanceFor(res),
               });
             }
           } catch {

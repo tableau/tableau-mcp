@@ -2,11 +2,11 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.57.2+content.2026-07-26",
+  "content_version": "2.59.0+content.2026-07-27",
   "schema_version": "2",
-  "generated": "2026-07-26",
+  "generated": "2026-07-27",
   "engine_compat": {
-    "server_min": "2.57.2",
+    "server_min": "2.59.0",
     "node": ">=22.7.5"
   },
   "resources": [
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "e95618af3a46d0d39b49530595b65e81ae89de63886b772a9dc60c154c87f409",
-      "bytes": 283231
+      "sha256": "fd0eade17d4a16b3a337c58c4ef798103da6f53ce50951cd463ccd623b3020e9",
+      "bytes": 283232
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -307,8 +307,8 @@
     },
     {
       "path": "template-manifests/correlation-scatter-plot-chart.manifest.json",
-      "sha256": "061577ae88b915061e36daed6db0fed00f0607f8e6f7a61b0b4317eb49e9527e",
-      "bytes": 4773
+      "sha256": "32d760330cd48166ba8b118e52e4ed089b0b6a7fc6ee6a095f16ec573ea10617",
+      "bytes": 4774
     },
     {
       "path": "template-manifests/deviation-arrow.manifest.json",

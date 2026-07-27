@@ -679,6 +679,21 @@ interface OptionalSlotRow {
 
 const OPTIONAL_SLOTS: readonly OptionalSlotRow[] = [
   {
+    template: 'correlation-scatter-plot-chart',
+    slot: 'customer_name',
+    fills: {
+      ask: 'scatter plot of Profit and Sales by Customer Name and Region',
+      schema: 'superstore',
+      field: 'Customer Name',
+      why: 'a second ask-named categorical fills the optional fine-grain detail slot by name affinity',
+    },
+    staysUnbound: {
+      ask: 'scatter plot of Profit and Sales by Region',
+      schema: 'superstore',
+      why: 'the lone categorical is reserved for required Region, leaving Customer Name prunable',
+    },
+  },
+  {
     template: 'box-plot-chart',
     slot: 'facet',
     fills: {
@@ -1437,6 +1452,7 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
     }
     expect(inventory).toEqual({
       'box-plot-chart': ['facet'],
+      'correlation-scatter-plot-chart': ['customer_name'],
       'part-to-whole-waterfall': ['anchor_category'],
       'ranking-ordered-bar': ['facet_row'],
       'spatial-choropleth-map': ['state'],
@@ -1444,8 +1460,8 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
       'spatial-symbol-map-latlon': ['color', 'detail2', 'size', 'tooltip'],
       'trend-line-chart': ['color_series', 'facet_col'],
     });
-    expect(Object.keys(inventory)).toHaveLength(7);
-    expect(Object.values(inventory).flat()).toHaveLength(14);
+    expect(Object.keys(inventory)).toHaveLength(8);
+    expect(Object.values(inventory).flat()).toHaveLength(15);
   });
 
   it('gives every optional bindable slot in the corpus a row in the optional-slot table', () => {
@@ -1456,7 +1472,7 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
       .flatMap((m) => optionalSlotIds(m).map((slot) => `${m.template}.${slot}`))
       .sort();
     expect(declared).toEqual(actual);
-    expect(declared).toHaveLength(14);
+    expect(declared).toHaveLength(15);
   });
 
   it('pins how much of the manifest-intent matrix reaches a deterministic bind', () => {
