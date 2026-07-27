@@ -165,6 +165,78 @@ describe('pulseBundleRequestSchema optionality', () => {
     };
     expect(() => pulseBundleRequestSchema.parse(req)).not.toThrow();
   });
+
+  // Build a request with the given options.now and/or measurement_period.specific_period.
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+  function withTimeWindow(overrides: { now?: unknown; specificPeriod?: unknown }) {
+    const base = minimalBundleRequest.bundle_request;
+    return {
+      bundle_request: {
+        ...base,
+        options: {
+          ...base.options,
+          ...(overrides.now !== undefined ? { now: overrides.now } : {}),
+        },
+        input: {
+          ...base.input,
+          metric: {
+            ...base.input.metric,
+            metric_specification: {
+              ...base.input.metric.metric_specification,
+              measurement_period: {
+                ...base.input.metric.metric_specification.measurement_period,
+                ...(overrides.specificPeriod !== undefined
+                  ? { specific_period: overrides.specificPeriod }
+                  : {}),
+              },
+            },
+          },
+        },
+      },
+    };
+  }
+
+  it('accepts a valid now (date and datetime) and empty string', () => {
+    expect(() =>
+      pulseBundleRequestSchema.parse(withTimeWindow({ now: '2026-05-31' })),
+    ).not.toThrow();
+    expect(() =>
+      pulseBundleRequestSchema.parse(withTimeWindow({ now: '2026-05-31 23:59:59' })),
+    ).not.toThrow();
+    expect(() => pulseBundleRequestSchema.parse(withTimeWindow({ now: '' }))).not.toThrow();
+  });
+
+  it('rejects a malformed now', () => {
+    expect(() => pulseBundleRequestSchema.parse(withTimeWindow({ now: 'not-a-date' }))).toThrow();
+  });
+
+  it('accepts a valid specific_period (date, and date+end_date span)', () => {
+    expect(() =>
+      pulseBundleRequestSchema.parse(withTimeWindow({ specificPeriod: { date: '2026-04-15' } })),
+    ).not.toThrow();
+    expect(() =>
+      pulseBundleRequestSchema.parse(
+        withTimeWindow({ specificPeriod: { date: '2026-04-15', end_date: '2026-04-20' } }),
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects a malformed or empty specific_period.date', () => {
+    expect(() =>
+      pulseBundleRequestSchema.parse(withTimeWindow({ specificPeriod: { date: 'nope' } })),
+    ).toThrow();
+    expect(() =>
+      pulseBundleRequestSchema.parse(withTimeWindow({ specificPeriod: { date: '' } })),
+    ).toThrow();
+  });
+
+  it('rejects specific_period whose end_date precedes date', () => {
+    expect(() =>
+      pulseBundleRequestSchema.parse(
+        withTimeWindow({ specificPeriod: { date: '2026-04-20', end_date: '2026-04-15' } }),
+      ),
+    ).toThrow();
+  });
 });
 
 describe('metricGroupContextSchema optionality', () => {

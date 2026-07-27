@@ -266,6 +266,11 @@ export type WorkbookInventory = z.infer<typeof workbookInventorySchema>;
 export const datasourceItemSchema = z
   .object({
     id: z.string().optional(),
+    // Server LUID of the datasource; present only for a published, non-federated datasource and null
+    // otherwise. Same field as the luid on `GET /v0/site/datasources`, but nullable here (["string",
+    // "null"]) because the workbook endpoint emits null for embedded/federated datasources, whereas
+    // the site endpoint's luid is a plain string.
+    luid: z.string().nullish(),
     name: z.string().optional(),
     caption: z.string().optional(),
   })
