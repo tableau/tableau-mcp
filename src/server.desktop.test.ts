@@ -145,7 +145,7 @@ For a clear derived-metric ask with no named chart type (margin %, ratio/rate/pe
 
 For an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult, FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.
 
-For a dashboard ask with 2-6 vizzes, build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; search-commands only for commands the census does not list.
+For a dashboard ask with 2-6 vizzes, build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; use compose-dashboard to compose EXISTING sheets; search-commands only for commands the census does not list.
 
 For a data-value question, on a populated worksheet, call get-summary-data; answer only from returned rows.
 
@@ -208,10 +208,12 @@ describe('desktop tools/list serialized surface', () => {
     // Dynamic authoring is the serving surface, so this is the real budget gate.
     // The full desktop surface is not what clients see by default; its looser cap
     // only catches runaway growth without forcing valuable full-profile tools to be trimmed.
-    // Honest wire measurements are 29,463 bytes dynamic and 45,956 bytes full after adding
-    // compose-dashboard to the full profile (see the grandfathered cap comment above).
-    // Keep only a few bytes of ratchet headroom while staying well below the 46k cliff.
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_479);
+    // Honest wire measurements are 30,474 bytes dynamic and 45,956 bytes full after adding
+    // compose-dashboard to the serving (dynamic-authoring) profile — 1,011 bytes for the
+    // livelock-killing compose verb, still well below the 46k cliff. The pending removal of
+    // the four legacy dashboard tools from this profile will repay far more than it costs.
+    // Keep only a few bytes of ratchet headroom.
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(30_490);
     expect(fullSurfaceTotal).toBeLessThanOrEqual(45_978);
   });
 });
@@ -444,10 +446,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 33-tool data-first singable surface — native authoring + workbook reads + atomic sheet activation + the manual path read/edit legs, no workbook round-trip/validation XML tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 34-tool data-first singable surface — native authoring + workbook reads + atomic sheet activation + the manual path read/edit legs, no workbook round-trip/validation XML tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(33);
+    expect(selected).toHaveLength(34);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -524,7 +526,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     // A lean surface must have generous headroom — this is a structural win, not a
     // describe-stub squeeze. If this ever approaches 46k something is very wrong.
     // Raised with the signed-off bind-template describes (2026-07-27, #643 review fold).
-    expect(total).toBeLessThanOrEqual(29_480);
+    expect(total).toBeLessThanOrEqual(30_490);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {

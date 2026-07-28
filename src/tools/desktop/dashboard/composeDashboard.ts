@@ -1,25 +1,36 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { DOMParser } from '@xmldom/xmldom';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { getDashboardFragment } from '../../../desktop/commands/workbook/getDashboardXml.js';
+import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
+import { injectViewpoints } from '../../../desktop/commands/workbook/injectViewpoints.js';
 import { listDashboards } from '../../../desktop/commands/workbook/listDashboards.js';
 import { listWorksheets } from '../../../desktop/commands/workbook/listWorksheets.js';
 import { loadDashboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
+import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { formatDashboardPromiseCheck } from '../../../desktop/validation/promise-check.js';
-import { xmlNamesEqual } from '../../../desktop/xmlElement.js';
+import { normalizeXmlName, xmlNamesEqual } from '../../../desktop/xmlElement.js';
 import {
   DashboardXmlLoadFailedError,
   DesktopCommandExecutionError,
   McpToolError,
+  WorkbookXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 import { buildDashboardXml, computeZones } from './dashboardZones.js';
+import { accountDashboardViewpoints } from './viewpointAccounting.js';
 
 const layoutSchema = z.object({
-  layoutType: z.enum(['auto-grid', 'rows', 'columns']).describe('Zone arrangement.'),
-  gridColumns: z.number().int().min(1).max(12).optional().describe('Auto-grid columns.'),
+  layoutType: z
+    .enum(['auto-grid', 'rows', 'columns'])
+    .optional()
+    .default('auto-grid')
+    .describe('Layout.'),
+  gridColumns: z.number().int().min(1).max(12).optional().describe('Grid columns.'),
 });
 
 const paramsSchema = {
@@ -38,11 +49,17 @@ type WorksheetZoneReceipt = {
   position: { x: number; y: number; width: number; height: number };
 };
 
-type ComposeDashboardResult = {
-  dashboardName: string;
-  zones: WorksheetZoneReceipt[];
-  verification: string;
-};
+type ComposeDashboardResult =
+  | {
+      dashboardName: string;
+      zones: WorksheetZoneReceipt[];
+      verification: string;
+    }
+  | {
+      dashboardName: string;
+      attemptedZones: WorksheetZoneReceipt[];
+      verification: string;
+    };
 
 function terminalError(message: string, type = 'compose-dashboard-refused'): McpToolError {
   return new McpToolError({ type, message, statusCode: 409 });
@@ -57,7 +74,7 @@ export const getComposeDashboardTool = (
     server,
     name: 'compose-dashboard',
     title,
-    description: 'Compose a dashboard from 2-12 existing sheets; no overwrite.',
+    description: 'Compose 2-12 existing sheets; no overwrite.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -113,6 +130,18 @@ export const getComposeDashboardTool = (
             ).toErr();
           }
           const canonicalWorksheets = resolvedWorksheets as string[];
+          const seenWorksheets = new Set<string>();
+          for (const worksheet of canonicalWorksheets) {
+            const canonicalName = normalizeXmlName(worksheet);
+            if (seenWorksheets.has(canonicalName)) {
+              return terminalError(
+                `Duplicate worksheet "${worksheet}" resolves to the same live worksheet more than once. ` +
+                  'Next call: compose-dashboard again with each worksheet listed once.',
+                'compose-dashboard-duplicate-worksheet',
+              ).toErr();
+            }
+            seenWorksheets.add(canonicalName);
+          }
 
           const dashboardResult = await listDashboards({ executor, signal: extra.signal });
           if (dashboardResult.isErr()) {
@@ -160,6 +189,49 @@ export const getComposeDashboardTool = (
               'compose-dashboard-apply-error',
             ).toErr();
           }
+          const validationWarnings = [...applyResult.value.validationWarnings];
+
+          const workbookResult = await getWorkbookXml({ executor, signal: extra.signal });
+          if (workbookResult.isErr()) {
+            const detail = new DesktopCommandExecutionError(workbookResult.error).message;
+            return viewpointTerminalError(dashboardName, detail);
+          }
+
+          const updatedWorkbookXml = injectViewpoints(
+            workbookResult.value,
+            dashboardName,
+            canonicalWorksheets,
+          );
+          const viewpointAccounting = accountDashboardViewpoints({
+            beforeXml: workbookResult.value,
+            afterXml: updatedWorkbookXml,
+            dashboardName,
+            requested: canonicalWorksheets,
+          });
+          if (viewpointAccounting.state === 'failed') {
+            const failed = viewpointAccounting.failed.map((name) => `"${name}"`).join(', ');
+            return viewpointTerminalError(
+              dashboardName,
+              `viewpoint injection did not land for ${failed}`,
+            );
+          }
+
+          if (viewpointAccounting.state !== 'success-already-present') {
+            const viewpointApplyResult = await loadWorkbookXml({
+              xml: updatedWorkbookXml,
+              focus: { navigate: 'artifact', sheetName: dashboardName },
+              executor,
+              signal: extra.signal,
+            });
+            if (viewpointApplyResult.isErr()) {
+              const detail =
+                viewpointApplyResult.error.type === 'execute-command-error'
+                  ? new DesktopCommandExecutionError(viewpointApplyResult.error.error).message
+                  : new WorkbookXmlLoadFailedError(viewpointApplyResult.error.error).message;
+              return viewpointTerminalError(dashboardName, detail);
+            }
+            validationWarnings.push(...viewpointApplyResult.value.validationWarnings);
+          }
 
           const worksheetZones: WorksheetZoneReceipt[] = zones
             .filter((zone) => zone.kind === 'worksheet')
@@ -173,10 +245,28 @@ export const getComposeDashboardTool = (
               },
             }));
 
+          const readbackResult = await getDashboardFragment({
+            dashboardName,
+            executor,
+            signal: extra.signal,
+          });
+          if (
+            readbackResult.isErr() ||
+            !readbackConfirmsZones(readbackResult.value, worksheetZones)
+          ) {
+            return new Ok({
+              dashboardName,
+              attemptedZones: worksheetZones,
+              verification:
+                formatDashboardPromiseCheck(validationWarnings) +
+                ' Attempted dashboard zones are NOT confirmed because structural readback was unavailable or did not match.',
+            });
+          }
+
           return new Ok({
             dashboardName,
             zones: worksheetZones,
-            verification: formatDashboardPromiseCheck(applyResult.value.validationWarnings),
+            verification: formatDashboardPromiseCheck(validationWarnings, true),
           });
         },
       });
@@ -185,3 +275,57 @@ export const getComposeDashboardTool = (
 
   return tool;
 };
+
+function viewpointTerminalError(
+  dashboardName: string,
+  detail: string,
+): ReturnType<McpToolError['toErr']> {
+  return terminalError(
+    `Dashboard "${dashboardName}" exists but is NOT confirmed visible (${detail}). ` +
+      'Next call: activate-sheet to bring it into view; do not recreate the dashboard.',
+    'compose-dashboard-viewpoint-error',
+  ).toErr();
+}
+
+function readbackConfirmsZones(
+  dashboardXml: string,
+  expectedZones: WorksheetZoneReceipt[],
+): boolean {
+  const document = new DOMParser({ errorHandler: () => {} }).parseFromString(
+    dashboardXml.trim(),
+    'text/xml',
+  );
+  if (document.getElementsByTagName('parsererror').length > 0) return false;
+
+  const actualZones: WorksheetZoneReceipt[] = [];
+  const zoneElements = document.getElementsByTagName('zone');
+  for (let index = 0; index < zoneElements.length; index++) {
+    const zone = zoneElements.item(index);
+    const worksheet = zone?.getAttribute('name');
+    if (!zone || worksheet == null) continue;
+    actualZones.push({
+      worksheet,
+      position: {
+        x: Number(zone.getAttribute('x')),
+        y: Number(zone.getAttribute('y')),
+        width: Number(zone.getAttribute('w')),
+        height: Number(zone.getAttribute('h')),
+      },
+    });
+  }
+
+  return (
+    actualZones.length === expectedZones.length &&
+    actualZones.every((actual, index) => {
+      const expected = expectedZones[index];
+      if (expected === undefined) return false;
+      return (
+        xmlNamesEqual(actual.worksheet, expected.worksheet) &&
+        actual.position.x === expected.position.x &&
+        actual.position.y === expected.position.y &&
+        actual.position.width === expected.position.width &&
+        actual.position.height === expected.position.height
+      );
+    })
+  );
+}

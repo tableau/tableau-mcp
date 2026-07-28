@@ -142,4 +142,10 @@ describe('promise check receipt (W-23447506)', () => {
     const text = formatDashboardPromiseCheck([]);
     expect(text).toContain('full dashboard intent NOT re-verified');
   });
+
+  it('formats dashboard applies as verified after structural readback', () => {
+    const text = formatDashboardPromiseCheck([], true);
+    expect(text).toContain('HOST VERIFICATION — verified');
+    expect(text).toContain('dashboard zone tree matched structural readback');
+  });
 });
