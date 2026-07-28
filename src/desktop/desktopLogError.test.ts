@@ -27,7 +27,7 @@ describe('desktopLogError', () => {
     fs.rmSync(logDir, { recursive: true, force: true });
   });
 
-  it('extracts the Desktop parameter message and detailed-dialog error code', () => {
+  it('extracts the Desktop parameter message and detailed-dialog error code', async () => {
     const cursor = snapshotDesktopLogs({ pid: PID, candidateDirs: [logDir] });
     fs.appendFileSync(
       logPath,
@@ -58,7 +58,7 @@ describe('desktopLogError', () => {
       ].join(''),
     );
 
-    const result = readDesktopCommandError({
+    const result = await readDesktopCommandError({
       cursor,
       pid: PID,
       namespace: 'tabdoc',
@@ -76,7 +76,7 @@ describe('desktopLogError', () => {
     });
   });
 
-  it('ignores matching records from another pid and before command start', () => {
+  it('ignores matching records from another pid and before command start', async () => {
     const cursor = snapshotDesktopLogs({ pid: PID, candidateDirs: [logDir] });
     fs.appendFileSync(
       logPath,
@@ -97,7 +97,7 @@ describe('desktopLogError', () => {
     );
 
     expect(
-      readDesktopCommandError({
+      await readDesktopCommandError({
         cursor,
         pid: PID,
         namespace: 'tabdoc',
@@ -107,7 +107,7 @@ describe('desktopLogError', () => {
     ).toEqual({ detail: null, logDetail: 'not-found' });
   });
 
-  it('extracts the detailed-error-msg carrier', () => {
+  it('extracts the detailed-error-msg carrier', async () => {
     const cursor = snapshotDesktopLogs({ pid: PID, candidateDirs: [logDir] });
     fs.appendFileSync(
       logPath,
@@ -122,7 +122,7 @@ describe('desktopLogError', () => {
       }),
     );
 
-    const result = readDesktopCommandError({
+    const result = await readDesktopCommandError({
       cursor,
       pid: PID,
       namespace: 'tabdoc',
@@ -136,7 +136,7 @@ describe('desktopLogError', () => {
     });
   });
 
-  it('extracts the correlated command-end carrier', () => {
+  it('extracts the correlated command-end carrier', async () => {
     const cursor = snapshotDesktopLogs({ pid: PID, candidateDirs: [logDir] });
     fs.appendFileSync(
       logPath,
@@ -157,7 +157,7 @@ describe('desktopLogError', () => {
       ].join(''),
     );
 
-    const result = readDesktopCommandError({
+    const result = await readDesktopCommandError({
       cursor,
       pid: PID,
       namespace: 'tabdoc',
@@ -168,7 +168,7 @@ describe('desktopLogError', () => {
     expect(result.detail).toMatchObject({ message: 'Calculation failed', code: '47BF7751' });
   });
 
-  it('follows a same-inode rotation and ignores a malformed final line', () => {
+  it('follows a same-inode rotation and ignores a malformed final line', async () => {
     const cursor = snapshotDesktopLogs({ pid: PID, candidateDirs: [logDir] });
     const rotatedPath = path.join(logDir, 'log_2_bk.txt');
     fs.renameSync(logPath, rotatedPath);
@@ -182,7 +182,7 @@ describe('desktopLogError', () => {
       }) + '{"partial":',
     );
 
-    const result = readDesktopCommandError({
+    const result = await readDesktopCommandError({
       cursor,
       pid: PID,
       namespace: 'tabdoc',
@@ -194,14 +194,46 @@ describe('desktopLogError', () => {
     expect(result.detail?.logPath).toBe(rotatedPath);
   });
 
-  it('degrades to unavailable without readable log files', () => {
+  it('retries once when the matching record is flushed after the first read', async () => {
+    const cursor = snapshotDesktopLogs({ pid: PID, candidateDirs: [logDir] });
+    const recordFlushed = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        fs.appendFileSync(
+          logPath,
+          record({
+            ts: '2026-07-28T16:33:30.929',
+            pid: PID,
+            k: 'msg',
+            v: "Error in parameters for command 'edit-calc'\nflushed late",
+          }),
+        );
+        resolve();
+      }, 0);
+    });
+
+    const pendingResult = readDesktopCommandError({
+      cursor,
+      pid: PID,
+      namespace: 'tabdoc',
+      command: 'edit-calc',
+      startedAt: STARTED_AT,
+      logFlushDelayMs: 1,
+    });
+    await recordFlushed;
+    const result = await pendingResult;
+
+    expect(result.logDetail).toBe('found');
+    expect(result.detail?.message).toContain('flushed late');
+  });
+
+  it('degrades to unavailable without readable log files', async () => {
     const cursor = snapshotDesktopLogs({
       pid: PID,
       candidateDirs: [path.join(logDir, 'missing')],
     });
 
     expect(
-      readDesktopCommandError({
+      await readDesktopCommandError({
         cursor,
         pid: PID,
         namespace: 'tabdoc',

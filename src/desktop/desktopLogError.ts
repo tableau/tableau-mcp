@@ -5,6 +5,8 @@ const MAX_BYTES_PER_FILE = 256 * 1024;
 const MAX_BYTES_TOTAL = 1024 * 1024;
 const CLOCK_TOLERANCE_MS = 1_000;
 const MAX_MESSAGE_LENGTH = 4_096;
+const DEFAULT_LOG_FLUSH_DELAY_MS = 150;
+const MAX_LOG_FLUSH_DELAY_MS = 250;
 
 type LogFileCursor = {
   path: string;
@@ -47,6 +49,14 @@ type ParsedRecord = {
   logPath: string;
   timestamp: string;
   timestampMs: number;
+};
+
+type ReadDesktopCommandErrorArgs = {
+  cursor: DesktopLogCursor;
+  pid: number;
+  namespace: string;
+  command: string;
+  startedAt: Date;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -217,19 +227,13 @@ function quotedArgument(args: string, argumentName: string): string | undefined 
   return args.match(new RegExp(`(?:^|\\s)${escapedName}="([^"]*)"`))?.[1];
 }
 
-export function readDesktopCommandError({
+function readDesktopCommandErrorOnce({
   cursor,
   pid,
   namespace,
   command,
   startedAt,
-}: {
-  cursor: DesktopLogCursor;
-  pid: number;
-  namespace: string;
-  command: string;
-  startedAt: Date;
-}): DesktopCommandErrorRead {
+}: ReadDesktopCommandErrorArgs): DesktopCommandErrorRead {
   try {
     if (!cursor.available || cursor.pid !== pid) {
       return { detail: null, logDetail: 'unavailable' };
@@ -339,4 +343,20 @@ export function readDesktopCommandError({
   } catch {
     return { detail: null, logDetail: 'unavailable' };
   }
+}
+
+export async function readDesktopCommandError({
+  logFlushDelayMs = DEFAULT_LOG_FLUSH_DELAY_MS,
+  ...args
+}: ReadDesktopCommandErrorArgs & {
+  logFlushDelayMs?: number;
+}): Promise<DesktopCommandErrorRead> {
+  const firstRead = readDesktopCommandErrorOnce(args);
+  if (firstRead.logDetail !== 'not-found') return firstRead;
+
+  const boundedDelay = Number.isFinite(logFlushDelayMs)
+    ? Math.min(MAX_LOG_FLUSH_DELAY_MS, Math.max(0, logFlushDelayMs))
+    : DEFAULT_LOG_FLUSH_DELAY_MS;
+  await new Promise((resolve) => setTimeout(resolve, boundedDelay));
+  return readDesktopCommandErrorOnce(args);
 }

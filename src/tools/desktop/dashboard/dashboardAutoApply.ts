@@ -139,27 +139,35 @@ function describeApplyError(
   return `workbook load command failed: ${JSON.stringify(error.error)}`;
 }
 
-function describeApplyFailureGuidance(
+function describeApplyFailure(
   error:
     | { type: 'execute-command-error'; error: ExecuteCommandError }
     | { type: 'load-workbook-xml-error'; error: LoadWorkbookXmlError },
-): string {
+): { guidance: string; nextAction: NextAction } {
   const detail = describeApplyError(error);
   const fallback =
     "fall back to the per-viz bind-template(auto_apply:true) flow using each ask's bound args.";
 
   if (error.type === 'load-workbook-xml-error' && error.error.type === 'validation-failed') {
-    return `Server-side auto-apply did not complete (${detail}). Nothing was applied — ${fallback}`;
+    return {
+      guidance: `Server-side auto-apply did not complete (${detail}). Nothing was applied — ${fallback}`,
+      nextAction: prefillNextAction('Fall back to per-viz auto-apply'),
+    };
   }
 
   if (error.type === 'load-workbook-xml-error' && error.error.type === 'invalid-xml') {
-    return `Server-side auto-apply did not complete (${detail}). The invalid document was not sent to Desktop — ${fallback}`;
+    return {
+      guidance: `Server-side auto-apply did not complete (${detail}). The invalid document was not sent to Desktop — ${fallback}`,
+      nextAction: prefillNextAction('Fall back to per-viz auto-apply'),
+    };
   }
 
-  return (
-    `Server-side auto-apply did not complete (${detail}). The document reached Desktop, but the ` +
-    `live outcome is unverified. Read the workbook before falling back: ${fallback}`
-  );
+  return {
+    guidance:
+      `Server-side auto-apply did not complete (${detail}). The document reached Desktop, but the ` +
+      `live outcome is unverified. Read the workbook before falling back: ${fallback}`,
+    nextAction: prefillNextAction('Read the workbook before falling back'),
+  };
 }
 
 function refusal(
@@ -475,11 +483,12 @@ export const getDashboardAutoApplyTool = (
             signal: extra.signal,
           });
           if (applyResult.isErr()) {
+            const failure = describeApplyFailure(applyResult.error);
             return refusal(
               outcomes,
-              describeApplyFailureGuidance(applyResult.error),
+              failure.guidance,
               describeApplyError(applyResult.error),
-              prefillNextAction('Fall back to per-viz auto-apply'),
+              failure.nextAction,
             );
           }
           if (!zonesViaWorkbook) {
@@ -537,14 +546,23 @@ export const getDashboardAutoApplyTool = (
 
           const applyMs = Date.now() - applyStart;
 
-          return new Ok({
-            applied: 'unverified',
-            dashboard: dashboardName,
-            sheets,
-            phase_ms: { read: readMs, bind: bindMs, inject: injectMs, apply: applyMs },
-            guidance: `Desktop accepted the document request for "${dashboardName}" (${sheets.length} sheet(s)), but no readback after the apply confirmed the live workbook; outcome unverified (read ${readMs}ms, bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
-            ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
-          });
+          return new Ok(
+            withNextAction(
+              {
+                applied: 'unverified',
+                dashboard: dashboardName,
+                sheets,
+                phase_ms: { read: readMs, bind: bindMs, inject: injectMs, apply: applyMs },
+                guidance:
+                  `Desktop accepted the document request for "${dashboardName}" (${sheets.length} sheet(s)), ` +
+                  'but no readback after the apply confirmed the live workbook; outcome unverified. Read the ' +
+                  `workbook to verify before retrying or reporting completion (read ${readMs}ms, bind ${bindMs}ms, ` +
+                  `inject ${injectMs}ms, apply ${applyMs}ms).`,
+                ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
+              },
+              prefillNextAction('Read the workbook to verify'),
+            ),
+          );
         },
         getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });

@@ -299,6 +299,11 @@ describe('dashboardAutoApplyTool happy path', () => {
     expect(body.applied).toBe('unverified');
     expect(body.guidance).toContain('accepted');
     expect(body.guidance).toContain('unverified');
+    expect(body.guidance).toContain('Read the workbook to verify');
+    expect(result.structuredContent).toEqual({
+      ...body,
+      nextAction: { label: 'Read the workbook to verify', kind: 'prefill' },
+    });
     expect(body.dashboard).toBe('Sales Dashboard');
     expect(body.sheets).toEqual([
       { title: 'Sales by Region', template_name: 'bar-basic' },
@@ -639,7 +644,38 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(String(body.apply_error)).toContain('preflight validation failed');
     expect(String(body.guidance)).toContain('Nothing was applied');
     expect(String(body.guidance)).toContain('fall back to the per-viz');
+    expect(result.structuredContent).toEqual({
+      ...body,
+      nextAction: { label: 'Fall back to per-viz auto-apply', kind: 'prefill' },
+    });
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('invalid XML keeps the pre-dispatch fallback action', async () => {
+    const { getExecutor } = setupMocks();
+    const loadSpy = vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Err({
+        type: 'load-workbook-xml-error',
+        error: { type: 'invalid-xml' },
+      }),
+    );
+
+    try {
+      const result = await getToolResult({
+        session: '1',
+        asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+        getExecutor,
+      });
+
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(result.structuredContent).toEqual({
+        ...body,
+        nextAction: { label: 'Fall back to per-viz auto-apply', kind: 'prefill' },
+      });
+    } finally {
+      loadSpy.mockRestore();
+    }
   });
 
   it('failed workbook apply is an error with every ask outcome preserved', async () => {
@@ -667,6 +703,10 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(String(body.guidance)).toContain('Read the workbook before falling back');
     expect(String(body.guidance)).toContain('fall back to the per-viz');
     expect(String(body.guidance)).not.toContain('Nothing was applied');
+    expect(result.structuredContent).toEqual({
+      ...body,
+      nextAction: { label: 'Read the workbook before falling back', kind: 'prefill' },
+    });
   });
 
   it('load rejection reports the live outcome as unverified before fallback', async () => {
@@ -693,6 +733,10 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       expect(String(body.guidance)).toContain('Read the workbook before falling back');
       expect(String(body.guidance)).toContain('fall back to the per-viz');
       expect(String(body.guidance)).not.toContain('Nothing was applied');
+      expect(result.structuredContent).toEqual({
+        ...body,
+        nextAction: { label: 'Read the workbook before falling back', kind: 'prefill' },
+      });
     } finally {
       loadSpy.mockRestore();
     }

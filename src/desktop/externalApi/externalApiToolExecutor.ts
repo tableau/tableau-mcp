@@ -181,7 +181,7 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     });
 
     if (outcomeResult.isErr()) {
-      const mapped = enrichCommandErrorFromDesktopLog(
+      const mapped = await enrichCommandErrorFromDesktopLog(
         mapClientError(outcomeResult.error, this.deps.pid),
         diagnostic,
         namespace,
@@ -198,7 +198,7 @@ export class ExternalApiToolExecutor extends ToolExecutor {
 
     const statusResult = buildCommandStatus(outcomeResult.value, { namespace, command });
     if (statusResult.isErr()) {
-      const enrichedError = enrichCommandErrorFromDesktopLog(
+      const enrichedError = await enrichCommandErrorFromDesktopLog(
         statusResult.error,
         diagnostic,
         namespace,
@@ -582,15 +582,21 @@ function defaultDesktopLogDirs(): string[] {
   ];
 }
 
-function enrichCommandErrorFromDesktopLog(
+async function enrichCommandErrorFromDesktopLog(
   error: ExecuteCommandError,
   diagnostic: CommandDiagnostic | undefined,
   namespace: string,
   command: string,
-): ExecuteCommandError {
-  if (!diagnostic || error.type !== 'command-failed' || !error.error) return error;
+): Promise<ExecuteCommandError> {
+  if (
+    !diagnostic ||
+    (error.type !== 'command-failed' && error.type !== 'command-timed-out') ||
+    !error.error
+  ) {
+    return error;
+  }
 
-  const logRead = readDesktopCommandError({
+  const logRead = await readDesktopCommandError({
     cursor: diagnostic.cursor,
     pid: diagnostic.pid,
     namespace,
@@ -600,6 +606,16 @@ function enrichCommandErrorFromDesktopLog(
   if (!logRead.detail) return error;
 
   const detail = logRead.detail;
+  if (error.type === 'command-timed-out') {
+    const code = detail.code ? ` (code=${detail.code})` : '';
+    return {
+      type: 'command-timed-out',
+      error:
+        `${error.error}\nDesktop log (${path.basename(detail.logPath)} ${detail.timestamp}): ` +
+        `${detail.message}${code}`,
+    };
+  }
+
   return {
     type: 'command-failed',
     error: {

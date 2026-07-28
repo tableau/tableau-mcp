@@ -599,6 +599,56 @@ describe('ExternalApiToolExecutor', () => {
       expect(discover).toHaveBeenCalledTimes(1);
     });
 
+    it('appends matching Desktop-log detail to the original timeout message', async () => {
+      const logDir = fs.mkdtempSync(path.join(process.cwd(), '.executor-timeout-log-test-'));
+      const logPath = path.join(logDir, 'log_2.txt');
+      fs.writeFileSync(logPath, '');
+      const fetchFn = ((_url: string, init?: RequestInit): Promise<Response> =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => {
+              fs.appendFileSync(
+                logPath,
+                `${JSON.stringify({
+                  ts: new Date().toISOString(),
+                  pid: 999,
+                  k: 'msg',
+                  v: "Error in parameters for command 'undo': blocking dialog",
+                })}\n`,
+              );
+              reject(init.signal?.reason);
+            },
+            { once: true },
+          );
+        })) as unknown as typeof fetch;
+
+      try {
+        const executor = new ExternalApiToolExecutor({
+          discover: () => [instanceFor(server)],
+          clientOptions: { fetchFn, timeoutMs: 60 },
+          desktopLogDirs: [logDir],
+        });
+        await executor.start();
+
+        const result = await executor.executeCommand({
+          namespace: 'tabdoc',
+          command: 'undo',
+          signal,
+        });
+
+        const error = result.unwrapErr();
+        expect(error.type).toBe('command-timed-out');
+        if (error.type === 'command-timed-out') {
+          expect(error.error).toContain('The operation was aborted due to timeout');
+          expect(error.error).toContain('blocking dialog');
+          expect(error.error).toContain('Desktop log (log_2.txt');
+        }
+      } finally {
+        fs.rmSync(logDir, { recursive: true, force: true });
+      }
+    });
+
     it('respects caller aborts and maps them to command-timed-out', async () => {
       const discover = vi.fn(() => [instanceFor(server)]);
       const executor = new ExternalApiToolExecutor({
