@@ -8,6 +8,12 @@ interface ParsedInstanceValue {
   role: string;
 }
 
+export type WaterfallAnchorFilterResult =
+  | { ok: true; xml: string }
+  | { ok: false; xml: string; reason: string };
+
+const FAILURE_PREFIX = 'waterfall anchor filter:';
+
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -116,29 +122,54 @@ function insertDependencyDeclarations(xml: string, parsed: ParsedInstanceValue):
 export function spliceWaterfallAnchorFilter(
   templateXml: string,
   fieldMapping: Record<string, string>,
-): string {
+): WaterfallAnchorFilterResult {
   const anchorValue = resolveAnchorMappingValue(fieldMapping);
-  if (anchorValue == null) return templateXml;
-  if (!isWaterfallTemplate(templateXml)) return templateXml;
+  if (anchorValue == null) return { ok: true, xml: templateXml };
+  if (!isWaterfallTemplate(templateXml)) {
+    return {
+      ok: false,
+      xml: templateXml,
+      reason: `${FAILURE_PREFIX} template is not a waterfall`,
+    };
+  }
 
   const parsed = parseInstanceValue(anchorValue);
-  if (!parsed) return templateXml;
+  if (!parsed) {
+    return {
+      ok: false,
+      xml: templateXml,
+      reason: `${FAILURE_PREFIX} anchor mapping is invalid`,
+    };
+  }
 
   const datasource = parsed.datasource ?? datasourceName(templateXml);
-  if (!datasource) return templateXml;
+  if (!datasource) {
+    return {
+      ok: false,
+      xml: templateXml,
+      reason: `${FAILURE_PREFIX} datasource is missing`,
+    };
+  }
 
   const instanceName = `[${parsed.deriv}:${parsed.field}:${parsed.role}]`;
   const qualifiedColumn = `[${datasource}].${instanceName}`;
   if (templateXml.includes(`<filter class="categorical" column="${qualifiedColumn}"`)) {
-    return templateXml;
+    return { ok: true, xml: templateXml };
   }
   if (templateXml.includes(`<filter class='categorical' column='${qualifiedColumn}'`)) {
-    return templateXml;
+    return { ok: true, xml: templateXml };
   }
 
   const withDeclarations = insertDependencyDeclarations(templateXml, parsed);
-  if (withDeclarations === templateXml && !hasColumn(withDeclarations, parsed.field)) {
-    return templateXml;
+  if (
+    !hasColumn(withDeclarations, parsed.field) ||
+    !hasColumnInstance(withDeclarations, instanceName)
+  ) {
+    return {
+      ok: false,
+      xml: templateXml,
+      reason: `${FAILURE_PREFIX} datasource dependencies are missing`,
+    };
   }
 
   const filter = [
@@ -155,8 +186,16 @@ export function spliceWaterfallAnchorFilter(
     '</filter>',
   ].join('\n          ');
 
-  return ensureUserNamespace(withDeclarations).replace(
+  const namespaced = ensureUserNamespace(withDeclarations);
+  const filtered = namespaced.replace(
     /^([ \t]*)<\/datasource-dependencies>/m,
     (_whole, indent: string) => `${indent}</datasource-dependencies>\n${indent}${filter}`,
   );
+  return filtered === namespaced
+    ? {
+        ok: false,
+        xml: templateXml,
+        reason: `${FAILURE_PREFIX} datasource dependencies are missing`,
+      }
+    : { ok: true, xml: filtered };
 }

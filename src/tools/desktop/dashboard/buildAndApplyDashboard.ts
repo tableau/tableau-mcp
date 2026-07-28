@@ -3,6 +3,8 @@ import { existsSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { dispatchApplyFocus } from '../../../desktop/commands/workbook/applyFocus.js';
+import { withApplyLock } from '../../../desktop/commands/workbook/applyMutex.js';
 import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { injectViewpoints } from '../../../desktop/commands/workbook/injectViewpoints.js';
@@ -110,12 +112,12 @@ export const getBuildAndApplyDashboardTool = (
 
           // Apply the dashboard first. A newly created dashboard has no window in the
           // pre-apply workbook, so viewpoint injection must use a fresh post-apply read.
-          // Both writes in this call produce the same dashboard, and the viewpoint apply
-          // below is skipped when the viewpoints are already present, so each one names it.
+          // The later viewpoint apply names the dashboard once its window exists. If that
+          // apply is skipped, the already-present branch below explicitly names it instead.
           const dashboardApplyResult = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,
-            focus: { navigate: 'artifact', sheetName: dashboardName },
+            focus: { navigate: 'none', reason: 'intermediate-leg' },
             executor,
             signal: extra.signal,
           });
@@ -182,6 +184,17 @@ export const getBuildAndApplyDashboardTool = (
                 'were present in the post-injection workbook XML. Do not recreate the dashboard; retry ' +
                 'viewpoint injection for the failed worksheets.',
             }).toErr();
+          }
+
+          if (viewpointAccounting.state === 'success-already-present') {
+            await withApplyLock(() =>
+              dispatchApplyFocus({
+                focus: { navigate: 'artifact', sheetName: dashboardName },
+                postedXml: workbookResult.value,
+                executor,
+                signal: extra.signal,
+              }),
+            );
           }
 
           if (viewpointAccounting.state !== 'success-already-present') {

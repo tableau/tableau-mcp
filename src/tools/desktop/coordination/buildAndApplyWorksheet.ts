@@ -572,7 +572,9 @@ export const getBuildAndApplyWorksheetTool = (
           // built through this fallback must also exclude subtotal/total rows, or the
           // running total double-counts them. No-ops unless the XML is a waterfall with
           // a bound anchor_category. Was missing here since #560 wired only the inject core.
-          templateXml = spliceWaterfallAnchorFilter(templateXml, fieldMapping);
+          const anchorFilter = spliceWaterfallAnchorFilter(templateXml, fieldMapping);
+          templateXml = anchorFilter.xml;
+          if (!anchorFilter.ok) warnings.push(anchorFilter.reason);
 
           // Extract worksheet element
           const worksheetMatch = templateXml.match(/<worksheet(?!s)[^>]*>[\s\S]*?<\/worksheet>/);

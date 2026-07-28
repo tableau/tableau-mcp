@@ -47,6 +47,13 @@
     "map"
   ],
   "description": "A point (symbol) map: one Circle mark per geographic member, placed on generated Lat/Long, sized by a measure. Distinct from a choropleth (which fills regions); use when magnitude is encoded by symbol size rather than region shading.",
+  "at_least_one_of": [
+    [
+      "country",
+      "state",
+      "city"
+    ]
+  ],
   "slots": [
     {
       "slot_id": "country",
@@ -57,7 +64,7 @@
       ],
       "kind": "geo",
       "bindable": true,
-      "required": true,
+      "required": false,
       "notes": "template column carries semantic-role='[Country].[ISO3166_2]'; the LOD level drives generated Lat/Long. Portability is 'across the committed fixture classes + render-verified', not a blanket 'any dataset'."
     },
     {

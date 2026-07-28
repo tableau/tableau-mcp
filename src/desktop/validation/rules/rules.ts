@@ -29,6 +29,7 @@ import { setCountMalformedParameterRule } from './setCountMalformedParameter.js'
 import { tooltipDimensionRequiresAttrRule } from './tooltipDimensionRequiresAttr.js';
 import { undeclaredAggregateOkRefRule } from './undeclaredAggregateOkRef.js';
 import { undeclaredCalcReferenceRule } from './undeclaredCalcReference.js';
+import { undeclaredEncodingColumnInstanceRule } from './undeclaredEncodingColumnInstance.js';
 import { undeclaredSetReferenceRule } from './undeclaredSetReference.js';
 import { unsubstitutedTemplateTokenRule } from './unsubstitutedTemplateToken.js';
 import { wellFormedXmlRule } from './wellFormedXml.js';
@@ -44,6 +45,7 @@ export const validationRules = [
   undeclaredCalcReferenceRule,
   undeclaredSetReferenceRule,
   undeclaredAggregateOkRefRule,
+  undeclaredEncodingColumnInstanceRule,
   dashboardZonesReferenceIncludedWorksheetsRule,
   qualifiedNameBracketsRule,
   worksheetMissingWindowRule,

@@ -222,6 +222,20 @@ type StructuredBindTemplateToolResult = StructuredResult<BindTemplateToolResult>
 type Call2Contract = BindRecoveryProposalContext;
 type TerminalRepairAllowance = NonNullable<BindRecoveryRecord['terminalRepairAllowance']>;
 
+function isAutoCompletedProvenance(value: string): boolean {
+  return (
+    /\brequired (?:geo|temporal) slot\b/i.test(value) ||
+    /\bwaterfall auto-bound anchor_category="/i.test(value)
+  );
+}
+
+function autoCompletedMessageLine(provenance: string): string {
+  const parsed = /^Using '([^']+)' for (?:the )?required (?:geo|temporal) slot '([^']+)'/i.exec(
+    provenance,
+  );
+  return parsed ? `Auto-filled: ${parsed[2]} <- ${parsed[1]}` : `Auto-filled: ${provenance}`;
+}
+
 /** Escalation reasons that route back to the general (non-fast-path) authoring flow. */
 const TIER2_REASONS: ReadonlySet<EscalateReason> = new Set<EscalateReason>([
   'not-fast-path',
@@ -1688,6 +1702,20 @@ async function performAutoApply({
   // enable a manual second call that never happens once the apply succeeds.
   const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, res.status);
   const receiptText = `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`;
+  const bound = res.applied_bindings?.map(({ slot_id, field, asked }) => ({
+    slot_id,
+    field,
+    ...(asked !== undefined ? { asked } : {}),
+  }));
+  const autoCompleted =
+    res.applied_bindings === undefined
+      ? undefined
+      : (res.warnings ?? []).filter(isAutoCompletedProvenance);
+  const autoCompletedMessage =
+    autoCompleted && autoCompleted.length > 0
+      ? `\n${autoCompleted.map(autoCompletedMessageLine).join('\n')}`
+      : '';
+  // Structured auto_completed returns once every filler emits provenance in a coordinated lockstep change.
   // Blake's spiral fix: the applied:true receipt is TERMINAL unless a genuine, named re-bind
   // slot is still unfilled (the m1 waterfall case). On INCOMPLETE we keep today's steer and
   // attach NO structuredContent (byte-for-byte identical to the pre-fix code). On COMPLETE we
@@ -1744,7 +1772,7 @@ async function performAutoApply({
       : needsFollowUp
         ? appendWaterfallDiscoveryGuidance(receiptText, res, schemaSummary)
         : `${receiptText} ${terminalGuidance}`
-  }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}`;
+  }${emptySummaryReadback ? ` ${EMPTY_SUMMARY_ROWS_GUIDANCE}` : ''}${defaultGuidance}${currencyGuidance ? ` ${currencyGuidance}` : ''}${readbackEvidence}${promiseCheck}${autoCompletedMessage}`;
   const applied: AppliedFastPathResult = {
     status: res.status,
     ...(base.authored_calcs ? { authored_calcs: base.authored_calcs } : {}),
@@ -1797,6 +1825,11 @@ async function performAutoApply({
                       'whether the applied sheet retained its intended structure or renders any marks — structural readback did not run',
                     ]),
               ],
+              ...(bound !== undefined
+                ? promiseOutcome === 'unverified'
+                  ? { attempted: bound }
+                  : { bound }
+                : {}),
             }),
           ),
         ),
@@ -2210,11 +2243,12 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               res.llm_input.recommended
             ) {
               const recommended = res.llm_input.recommended;
+              const recommendedProposal = proposalFromRecommendation(ask, recommended);
               res = await bindTemplate({
                 ask,
                 workbookXml,
                 manifests,
-                proposal: proposalFromRecommendation(ask, recommended),
+                proposal: recommendedProposal,
                 ...(minConfidence !== undefined ? { minConfidence } : {}),
               });
               if (res.status === 'bound') {
@@ -2263,11 +2297,11 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
             throw e;
           }
+          const schemaSummary = summarizeSchema(workbookXml);
           if (target_worksheet !== undefined && res.status === 'bound') {
             res = { ...res, args: { ...res.args, title: target_worksheet } };
           }
           const bindMs = Date.now() - bindStart;
-          const schemaSummary = summarizeSchema(workbookXml);
 
           // ── Candidate handover on a RECOVERABLE escalation ────────────────
           // Only `propose` used to carry the candidate list, so an agent told to re-propose

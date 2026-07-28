@@ -241,6 +241,33 @@ describe('binder/classifyNoLlm', () => {
     expect(classifyNoLlm('Map the countries by Goals For', manifests, s)).toBeNull();
   });
 
+  it.each([
+    ['symbol map of Sales by City Tier', 'City Tier', 'Sales'],
+    ['filled map of Profit by State Tax Bracket', 'State Tax Bracket', 'Profit'],
+  ])(
+    'does not treat a geo token inside a non-geo field name as geo evidence',
+    (ask, dimension, measure) => {
+      const xml = `<workbook><datasources><datasource name='Probe'>
+  <column name='[${dimension}]' role='dimension' type='nominal' datatype='string' />
+  <column name='[${measure}]' role='measure' type='quantitative' datatype='real' />
+</datasource></datasources></workbook>`;
+
+      expect(classifyNoLlm(ask, manifests, summarizeSchema(xml))).toBeNull();
+    },
+  );
+
+  it('keeps a bare Region field eligible for the state geo concept', () => {
+    const xml = `<workbook><datasources><datasource name='Probe'>
+  <column name='[Region]' role='dimension' type='nominal' datatype='string' />
+  <column name='[Profit]' role='measure' type='quantitative' datatype='real' />
+</datasource></datasources></workbook>`;
+    const cls = classifyNoLlm('filled map of Profit by Region', manifests, summarizeSchema(xml));
+
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('spatial-choropleth-map');
+    expect(cls!.bindings).toContainEqual({ slot_id: 'state', field: 'Region' });
+  });
+
   it('still routes the s8 cross-table goals ambiguity through labeled proposals', async () => {
     const ask =
       'Map the countries by goals scored — bigger, warmer dots for the teams that scored more';
@@ -1172,6 +1199,33 @@ describe('binder/bindTemplate — Call 1 no-LLM (bound)', () => {
   });
 });
 
+describe('binder/bindTemplate — resolved binding receipt data', () => {
+  it('returns resolved columns with differing proposal tokens as asked', async () => {
+    const res = await bindTemplate({
+      ask: 'bar chart of sales by region',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal: {
+        template: 'ranking-ordered-bar',
+        title: 'Sales by Region',
+        bindings: [
+          { slot_id: 'region', field: 'region' },
+          { slot_id: 'sales', field: 'sales' },
+        ],
+        confidence: 0.95,
+      },
+    });
+
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.applied_bindings).toEqual([
+        { slot_id: 'region', field: 'Region', asked: 'region' },
+        { slot_id: 'sales', field: 'Sales', asked: 'sales' },
+      ]);
+    }
+  });
+});
+
 describe('binder/bindTemplate — Call 1 miss (propose)', () => {
   // scatter is render-unverified post-gate; force it eligible to test the propose
   // payload shape (calc-excluded bindable slots) independent of the shrink.
@@ -1792,6 +1846,11 @@ describe('binder/bindTemplate — Call 2 (agent proposal)', () => {
     if (res.status === 'bound') {
       // Anchor Category auto-bound to the category dim → spliceWaterfallAnchorFilter fires.
       expect(res.args.field_mapping['Anchor Category']).toContain('category');
+      expect(res.applied_bindings).toEqual([
+        { slot_id: 'profit', field: 'amount' },
+        { slot_id: 'sub_category', field: 'line_item' },
+        { slot_id: 'anchor_category', field: 'category' },
+      ]);
       // Warning describes what was ADDED (an exclusion of subtotal/total members), not an
       // assertion that rows were excluded — the splice is inert when no such members exist.
       const warn = res.warnings?.join(' ') ?? '';
@@ -2010,14 +2069,14 @@ describe('binder/roleGreedyBind — single-candidate-per-slot schema fallback', 
 <workbook>
   <datasources>
     <datasource name='NoGeo'>
-      <column name='[region]' caption='Region' role='dimension' type='nominal' datatype='string' />
+      <column name='[department]' caption='Department' role='dimension' type='nominal' datatype='string' />
       <column name='[segment]' caption='Segment' role='dimension' type='nominal' datatype='string' />
       <column name='[sales]' caption='Sales' role='measure' type='quantitative' datatype='real' />
     </datasource>
   </datasources>
 </workbook>`;
     const result = await bindTemplate({
-      ask: 'map of sales by region',
+      ask: 'map of sales by department',
       workbookXml,
       manifests,
     });
@@ -2359,8 +2418,8 @@ describe('binder/bindTemplate — avoid_when consumption (H3.2)', () => {
   });
 });
 
-describe('binder/bindTemplate — W60 choropleth geo-slot completion', () => {
-  it("'choropleth of Profit by State/Province' one-shot binds; country auto-completes to Country/Region", async () => {
+describe('binder/bindTemplate — choropleth at-least-one geo constraint', () => {
+  it("'choropleth of Profit by State/Province' one-shot binds only the named state", async () => {
     const res = await bindTemplate({
       ask: 'choropleth of Profit by State/Province',
       workbookXml: WORKBOOK_XML,
@@ -2370,19 +2429,80 @@ describe('binder/bindTemplate — W60 choropleth geo-slot completion', () => {
     if (res.status === 'bound') {
       expect(res.used_llm).toBe(false);
       expect(res.args.template_name).toBe('spatial-choropleth-map');
-      // The required country slot was NOT named in the ask; it auto-completes to the
-      // unique country-affine field [Country/Region] (template_field 'Country'), while
-      // the ask-named [State/Province] fills the state slot (template_field 'State').
-      expect(res.args.field_mapping['Country']).toBe('[Superstore].[none:Country/Region:nk]');
-      expect(res.args.field_mapping['State']).toBe('[Superstore].[none:State/Province:nk]');
-      expect(res.args.optional_field_prunes).toBeUndefined();
-      // Provenance is surfaced so the agent can say "using Country/Region".
-      expect(res.warnings?.some((w) => /Country\/Region/.test(w))).toBe(true);
+      expect(res.args.field_mapping).toEqual({
+        State: '[Superstore].[none:State/Province:nk]',
+        Profit: '[Superstore].[sum:Profit:qk]',
+      });
+      expect(res.args.optional_field_prunes).toEqual([
+        { templateField: 'Country', derivation: 'none', role: 'nk' },
+      ]);
+    }
+  });
+
+  it('warns when a spatial bind cannot apply an ask-named categorical color field', async () => {
+    const xml = `<workbook><datasources><datasource name='Probe'>
+  <column name='[City]' role='dimension' type='nominal' datatype='string' semantic-role='[City].[Name]' />
+  <column name='[Segment]' role='dimension' type='nominal' datatype='string' />
+  <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+</datasource></datasources></workbook>`;
+    const res = await bindTemplate({
+      ask: 'symbol map of Sales by City colored by Segment',
+      workbookXml: xml,
+      manifests,
+    });
+
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.field_mapping).not.toHaveProperty('Color');
+      expect(res.warnings?.join(' ')).toContain('Segment');
     }
   });
 });
 
 describe('binder/bindTemplate — country-only spatial maps', () => {
+  it('binds a state-only choropleth because one geo slot satisfies the group', async () => {
+    const proposal: BindingProposal = {
+      template: 'spatial-choropleth-map',
+      title: 'Profit by state',
+      bindings: [
+        { slot_id: 'state', field: 'State/Province' },
+        { slot_id: 'profit', field: 'Profit' },
+      ],
+    };
+    const res = await bindTemplate({
+      ask: 'choropleth of Profit by State/Province',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.field_mapping).toEqual({
+        State: '[Superstore].[none:State/Province:nk]',
+        Profit: '[Superstore].[sum:Profit:qk]',
+      });
+    }
+  });
+
+  it('escalates a spatial proposal that binds no geo slot', async () => {
+    const proposal: BindingProposal = {
+      template: 'spatial-choropleth-map',
+      title: 'Profit map',
+      bindings: [{ slot_id: 'profit', field: 'Profit' }],
+    };
+    const res = await bindTemplate({
+      ask: 'choropleth of Profit',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('escalate');
+    if (res.status === 'escalate') {
+      expect(res.reason).toBe('missing-required-slot');
+      expect(res.blockers.some((blocker) => /at least one/.test(blocker.detail))).toBe(true);
+    }
+  });
+
   it('binds a country-only choropleth and marks state for XML pruning', async () => {
     const res = await bindTemplate({
       ask: 'choropleth of Goals For by Country',

@@ -97,6 +97,25 @@ describe('binder/validate — gate 1: slot coverage', () => {
       ).toBe(true);
   });
 
+  it('fire: an unsatisfied slot group identifies its repair slot', () => {
+    const m = manifests.get('spatial-choropleth-map')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 'Profit map',
+      bindings: [{ slot_id: 'profit', field: 'Profit' }],
+    };
+    const r = validateBinding(m, p, SUMMARY);
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.blockers).toContainEqual({
+        code: 'missing-required-slot',
+        slot_id: 'country',
+        detail: 'at least one of slots [country, state] must have a binding',
+      });
+    }
+  });
+
   it('fire: binding to a template-owned calc slot → kind-mismatch', () => {
     const m = manifests.get('correlation-scatter-plot-chart')!;
     const p: BindingProposal = {
@@ -136,6 +155,28 @@ describe('binder/validate — gate 2: field resolution', () => {
       const b = r.blockers.find((x) => x.slot_id === 'region');
       expect(b?.code).toBe('field-not-found');
       expect(Array.isArray(b?.candidates)).toBe(true);
+    }
+  });
+
+  it('records resolved column names and preserves caller tokens that differ', () => {
+    const m = manifests.get('ranking-ordered-bar')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'region', field: 'region' },
+        { slot_id: 'sales', field: 'sales' },
+      ],
+    };
+
+    const r = validateBinding(m, p, SUMMARY);
+
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.resolved_bindings).toEqual([
+        { slot_id: 'region', field: 'Region', asked: 'region' },
+        { slot_id: 'sales', field: 'Sales', asked: 'sales' },
+      ]);
     }
   });
 
@@ -216,7 +257,14 @@ describe('binder/validate — gate 2: field resolution', () => {
     };
     const r = validateBinding(m, p, captionExact);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.field_mapping['{{field_base_1}}']).toBe('[DS].[none:Country Code:nk]');
+    if (r.ok) {
+      expect(r.field_mapping['{{field_base_1}}']).toBe('[DS].[none:Country Code:nk]');
+      expect(r.resolved_bindings).toContainEqual({
+        slot_id: 'region',
+        field: 'Country Code',
+        asked: 'Country',
+      });
+    }
   });
 
   it('no-fire: unsuffixed near-duplicate beats the numeric-suffixed twin with a note', () => {

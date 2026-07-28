@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from 'fs';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as applyFocusModule from '../../../desktop/commands/workbook/applyFocus.js';
+import * as applyMutexModule from '../../../desktop/commands/workbook/applyMutex.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as injectViewpointsModule from '../../../desktop/commands/workbook/injectViewpoints.js';
 import * as loadDashboardXmlModule from '../../../desktop/commands/workbook/loadDashboardXml.js';
@@ -15,6 +17,8 @@ import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getApplyDashboardWithViewpointsTool } from './applyDashboardWithViewpoints.js';
 
+vi.mock('../../../desktop/commands/workbook/applyFocus.js');
+vi.mock('../../../desktop/commands/workbook/applyMutex.js');
 vi.mock('../../../desktop/commands/workbook/getWorkbookXml.js');
 vi.mock('../../../desktop/commands/workbook/loadWorkbookXml.js');
 vi.mock('../../../desktop/commands/workbook/loadDashboardXml.js');
@@ -35,6 +39,7 @@ describe('applyDashboardWithViewpointsTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(applyMutexModule.withApplyLock).mockImplementation(async (fn) => await fn());
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(mockDashboardXml);
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(mockWorkbookXml));
@@ -47,6 +52,25 @@ describe('applyDashboardWithViewpointsTool', () => {
     vi.spyOn(loadDashboardXmlModule, 'loadDashboardXml').mockResolvedValue(
       Ok({ validationWarnings: [] }),
     );
+  });
+
+  it('defers focus until the viewpoint workbook apply', async () => {
+    await getToolResult({
+      dashboardFile: '/path/to/dashboard.xml',
+      worksheetNames: ['Sheet 1', 'Sheet 2'],
+    });
+
+    expect(loadDashboardXmlModule.loadDashboardXml).toHaveBeenCalledWith(
+      expect.objectContaining({
+        focus: { navigate: 'none', reason: 'intermediate-leg' },
+      }),
+    );
+    expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenCalledWith(
+      expect.objectContaining({
+        focus: { navigate: 'artifact', sheetName: 'Sales Dashboard' },
+      }),
+    );
+    expect(applyFocusModule.dispatchApplyFocus).not.toHaveBeenCalled();
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -155,6 +179,13 @@ describe('applyDashboardWithViewpointsTool', () => {
       viewpointState: 'success-already-present',
     });
     expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
+    expect(applyMutexModule.withApplyLock).toHaveBeenCalledOnce();
+    expect(applyFocusModule.dispatchApplyFocus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        focus: { navigate: 'artifact', sheetName: 'Sales Dashboard' },
+        postedXml: mockWorkbookXmlWithAllViewpoints,
+      }),
+    );
   });
 
   it('should return error when dashboard file does not exist', async () => {

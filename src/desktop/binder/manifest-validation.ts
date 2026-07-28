@@ -127,6 +127,9 @@ function isStringArray(v: unknown): v is string[] {
  */
 export interface FixtureField {
   name: string;
+  caption?: string;
+  columnName?: string;
+  semanticRole?: string;
   role: 'dimension' | 'measure';
   type: string; // "quantitative" | "nominal" | "ordinal" | ...
   datatype: string; // "string" | "real" | "integer" | "date" | "datetime" | ...
@@ -157,6 +160,95 @@ function fixtureFieldFitsKind(kind: SlotKind, f: FixtureField): boolean {
   }
 }
 
+type GeoConcept = 'country' | 'state' | 'city' | 'zip';
+
+const GEO_CONSTRAINT_NAME_TOKENS: Readonly<Record<GeoConcept, readonly string[]>> = {
+  country: ['country', 'nation'],
+  state: ['state', 'province', 'region', 'admin'],
+  city: ['city'],
+  zip: ['zip', 'zipcode', 'postal'],
+};
+
+const GEO_CONSTRAINT_NAME_QUALIFIERS: Readonly<Record<GeoConcept, readonly string[]>> = {
+  country: ['region', 'code'],
+  state: ['code'],
+  city: ['code'],
+  zip: ['code'],
+};
+
+const GEO_TOKEN_CONCEPT: Readonly<Record<string, GeoConcept>> = {
+  country: 'country',
+  nation: 'country',
+  state: 'state',
+  province: 'state',
+  region: 'state',
+  admin: 'state',
+  city: 'city',
+  zip: 'zip',
+  zipcode: 'zip',
+  postal: 'zip',
+};
+
+const GEO_SEMANTIC_ROLE_CONCEPT: Readonly<Record<string, GeoConcept>> = {
+  '[Country].[ISO3166_2]': 'country',
+  '[Country].[Name]': 'country',
+  '[State].[Name]': 'state',
+  '[City].[Name]': 'city',
+  '[ZipCode].[Name]': 'zip',
+};
+
+function nameTokens(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+function geoConceptFromSlotId(slotId: string): GeoConcept | null {
+  for (const token of nameTokens(slotId)) {
+    const concept = GEO_TOKEN_CONCEPT[token];
+    if (concept) return concept;
+  }
+  return null;
+}
+
+/**
+ * Shared runtime/fixture rule for whether a field can satisfy a slot-group member.
+ * Untagged geo fields need one complete field name made only of concept tokens and
+ * narrow geo qualifiers; a token buried in "City Tier" or "State Tax Bracket" is
+ * not geographic evidence.
+ */
+export function fieldSatisfiesSlotConstraint(
+  slotId: string,
+  kind: SlotKind,
+  field: Pick<FixtureField, 'name' | 'caption' | 'columnName' | 'semanticRole'>,
+): boolean {
+  if (kind !== 'geo') return true;
+  const slotConcept = geoConceptFromSlotId(slotId);
+  if (!slotConcept) return true;
+  const semanticConcept = field.semanticRole
+    ? (GEO_SEMANTIC_ROLE_CONCEPT[field.semanticRole] ?? null)
+    : null;
+  if (semanticConcept) return semanticConcept === slotConcept;
+
+  const conceptTokens = new Set(GEO_CONSTRAINT_NAME_TOKENS[slotConcept]);
+  const allowedTokens = new Set([
+    ...GEO_CONSTRAINT_NAME_TOKENS[slotConcept],
+    ...GEO_CONSTRAINT_NAME_QUALIFIERS[slotConcept],
+  ]);
+  const names = [field.name, field.caption, field.columnName?.replace(/^\[|\]$/g, '')].filter(
+    (name): name is string => !!name,
+  );
+  return names.some((name) => {
+    const tokens = nameTokens(name);
+    return (
+      tokens.length > 0 &&
+      tokens.some((token) => conceptTokens.has(token)) &&
+      tokens.every((token) => allowedTokens.has(token))
+    );
+  });
+}
+
 /**
  * Prove portability by binding: can every required, bindable slot — PLUS every
  * bindable slot a required calc's inputs force (H3) — be filled by a DISTINCT
@@ -166,11 +258,16 @@ function fixtureFieldFitsKind(kind: SlotKind, f: FixtureField): boolean {
  * the stored `portability_evidence.fixture_bind`.
  */
 export function computeFixtureBind(
-  m: { slots: TemplateManifest['slots']; calcs?: TemplateManifest['calcs'] },
+  m: {
+    slots: TemplateManifest['slots'];
+    at_least_one_of?: TemplateManifest['at_least_one_of'];
+    calcs?: TemplateManifest['calcs'];
+  },
   fields: FixtureField[],
 ): boolean {
   const forced = calcForcedSlotIds(m);
   const used = new Set<FixtureField>();
+  const boundSlotIds = new Set<string>();
   for (const slot of m.slots) {
     // Bind a slot when it is required, OR when a required calc's input forces it.
     if (!slot.bindable || !(slot.required || forced.has(slot.slot_id))) continue;
@@ -184,6 +281,28 @@ export function computeFixtureBind(
     }
     if (!picked) return false;
     used.add(picked);
+    boundSlotIds.add(slot.slot_id);
+  }
+  for (const group of m.at_least_one_of ?? []) {
+    if (group.some((slotId) => boundSlotIds.has(slotId))) continue;
+    let picked: { slotId: string; field: FixtureField } | null = null;
+    for (const slotId of group) {
+      const slot = m.slots.find((candidate) => candidate.slot_id === slotId);
+      if (!slot?.bindable) continue;
+      const field = fields.find(
+        (candidate) =>
+          !used.has(candidate) &&
+          fixtureFieldFitsKind(slot.kind, candidate) &&
+          fieldSatisfiesSlotConstraint(slotId, slot.kind, candidate),
+      );
+      if (field) {
+        picked = { slotId, field };
+        break;
+      }
+    }
+    if (!picked) return false;
+    used.add(picked.field);
+    boundSlotIds.add(picked.slotId);
   }
   return true;
 }
@@ -466,6 +585,7 @@ export function validateManifest(m: unknown): string[] {
   }
 
   const slotIds = new Set<string>();
+  const slotById = new Map<string, Record<string, unknown>>();
   if (!Array.isArray(m.slots)) {
     errors.push('slots must be an array');
   } else {
@@ -474,8 +594,34 @@ export function validateManifest(m: unknown): string[] {
       if (id) {
         if (slotIds.has(id)) errors.push(`slot[${i}]: duplicate slot_id '${id}'`);
         slotIds.add(id);
+        if (isRecord(s)) slotById.set(id, s);
       }
     });
+  }
+
+  if (m.at_least_one_of !== undefined) {
+    if (!Array.isArray(m.at_least_one_of)) {
+      errors.push('at_least_one_of must be an array of non-empty slot-name groups');
+    } else {
+      m.at_least_one_of.forEach((group, i) => {
+        const where = `at_least_one_of[${i}]`;
+        if (
+          !isStringArray(group) ||
+          group.length === 0 ||
+          group.some((slotId) => slotId.trim().length === 0)
+        ) {
+          errors.push(`${where} must be a non-empty string[] of slot names`);
+          return;
+        }
+        for (const slotId of group) {
+          if (!slotIds.has(slotId)) {
+            errors.push(`${where} references unknown slot_id '${slotId}'`);
+          } else if (slotById.get(slotId)?.bindable !== true) {
+            errors.push(`${where} member slot_id '${slotId}' must be bindable`);
+          }
+        }
+      });
+    }
   }
 
   if (!Array.isArray(m.calcs)) {

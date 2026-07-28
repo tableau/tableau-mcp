@@ -39,6 +39,7 @@ import {
   type Blocker,
   type EscalateReason,
   type FilterSpec,
+  type ResolvedBinding,
   resolveInSummary,
   validateBinding,
 } from './validate.js';
@@ -181,6 +182,8 @@ export type BinderResult =
   | {
       status: 'bound';
       args: InjectTemplateArgs;
+      /** Bindings validated and applied to produce args; absent only on legacy/fallback producers. */
+      applied_bindings?: ResolvedBinding[];
       used_llm: boolean;
       apply_hint: ApplyHint;
       apply_instruction: string;
@@ -559,6 +562,7 @@ function validateAndBuild(
   return {
     status: 'bound',
     args,
+    applied_bindings: v.resolved_bindings,
     used_llm: usedLlm,
     apply_hint: APPLY_HINT,
     apply_instruction: APPLY_INSTRUCTION,

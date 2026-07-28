@@ -1,12 +1,11 @@
 import { DOMParser, Element as XmlElement, XMLSerializer } from '@xmldom/xmldom';
 
+import { xmlNamesEqual } from '../../xmlElement.js';
+
 /**
  * Injects viewpoint elements into the dashboard window inside workbook XML.
  * A viewpoint tells Tableau Desktop which worksheets are visible through
  * the dashboard window. Without viewpoints the window renders blank.
- *
- * Returns the modified workbook XML string, or the original if the target
- * window is not found (non-fatal — Tableau will still receive the apply).
  */
 export function injectViewpoints(
   workbookXml: string,
@@ -23,14 +22,35 @@ export function injectViewpoints(
   let dashboardWindow: XmlElement | null = null;
   for (let i = 0; i < windows.length; i++) {
     const w = windows.item(i);
-    if (w && w.getAttribute('class') === 'dashboard' && w.getAttribute('name') === dashboardName) {
+    if (
+      w &&
+      w.getAttribute('class') === 'dashboard' &&
+      xmlNamesEqual(w.getAttribute('name') ?? '', dashboardName)
+    ) {
       dashboardWindow = w;
       break;
     }
   }
 
   if (!dashboardWindow) {
-    return workbookXml;
+    let windowsElement = doc.getElementsByTagName('windows').item(0);
+    if (!windowsElement) {
+      const workbookElement = doc.documentElement;
+      if (!workbookElement) return workbookXml;
+      windowsElement = doc.createElement('windows');
+      workbookElement.appendChild(windowsElement);
+    }
+
+    dashboardWindow = doc.createElement('window');
+    dashboardWindow.setAttribute('class', 'dashboard');
+    dashboardWindow.setAttribute('name', dashboardName);
+    dashboardWindow.appendChild(buildViewpoints(doc, worksheetNames));
+    const active = doc.createElement('active');
+    active.setAttribute('id', '-1');
+    dashboardWindow.appendChild(active);
+    windowsElement.appendChild(dashboardWindow);
+
+    return new XMLSerializer().serializeToString(doc);
   }
 
   // Remove any existing <viewpoints> child
@@ -42,17 +62,29 @@ export function injectViewpoints(
     }
   }
 
-  // Build new <viewpoints> element
+  const activeElements = dashboardWindow.getElementsByTagName('active');
+  let active: XmlElement | null = null;
+  for (let i = 0; i < activeElements.length; i++) {
+    const node = activeElements.item(i);
+    if (node && node.parentNode === dashboardWindow) {
+      active = node;
+      break;
+    }
+  }
+  dashboardWindow.insertBefore(buildViewpoints(doc, worksheetNames), active);
+
+  return new XMLSerializer().serializeToString(doc);
+}
+
+function buildViewpoints(
+  doc: ReturnType<DOMParser['parseFromString']>,
+  worksheetNames: string[],
+): XmlElement {
   const viewpointsEl = doc.createElement('viewpoints');
   for (const name of worksheetNames) {
     const vp = doc.createElement('viewpoint');
     vp.setAttribute('name', name);
-    const zoom = doc.createElement('zoom');
-    zoom.setAttribute('type', 'entire-view');
-    vp.appendChild(zoom);
     viewpointsEl.appendChild(vp);
   }
-  dashboardWindow.appendChild(viewpointsEl);
-
-  return new XMLSerializer().serializeToString(doc);
+  return viewpointsEl;
 }

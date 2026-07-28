@@ -419,6 +419,49 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
   );
   const SYMBOL_SLOTS = loadManifests().get('spatial-symbol-map')!.slots;
 
+  it('declares a worldcup-shaped measure bound to the optional color slot', () => {
+    const worldCupWorkbook = `<workbook>
+      <datasources>
+        <datasource name='federated.worldcup' caption='worldcup'>
+          <column caption='Team Name' datatype='string' name='[team_name]' role='dimension' type='nominal' />
+          <column caption='Goals' datatype='integer' name='[goals]' role='measure' type='quantitative' />
+          <column caption='Goal Difference' datatype='integer' name='[goal_difference]' role='measure' type='quantitative' />
+        </datasource>
+      </datasources>
+      <worksheets />
+      <windows />
+    </workbook>`;
+    const result = buildInjectedWorkbookXml({
+      workbookXml: worldCupWorkbook,
+      templateXml: SYMBOL_TEMPLATE,
+      title: 'World Cup goals',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'federated.worldcup' },
+      fieldMapping: {
+        country: '[federated.worldcup].[none:team_name:nk]',
+        sales: '[federated.worldcup].[sum:goals:qk]',
+        color: '[federated.worldcup].[sum:goal_difference:qk]',
+      },
+      optionalFieldPrunes: [
+        { templateField: 'State/Province', derivation: 'none', role: 'nk' },
+        { templateField: 'City', derivation: 'none', role: 'nk' },
+      ],
+      templateSlots: SYMBOL_SLOTS,
+      applyNonce: 'worldcup-color',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const colorInstance = result.xml.match(
+      /<column-instance\b[^>]*\bname="\[sum:goal_difference:qk\]"[^>]*>/,
+    )?.[0];
+    expect(colorInstance).toBeDefined();
+    expect(colorInstance).toContain('column="[goal_difference]"');
+    expect(colorInstance).toContain('derivation="Sum"');
+    expect(colorInstance).toContain('pivot="key"');
+    expect(colorInstance).toContain('type="quantitative"');
+  });
+
   it('removes an unbound optional state LOD from a country-only choropleth', () => {
     const result = buildInjectedWorkbookXml({
       workbookXml: EMPTY_WORKBOOK,
@@ -494,6 +537,46 @@ describe('buildInjectedWorkbookXml — optional geo LOD pruning', () => {
     expect(result.xml).toContain('[Football].[none:Country:nk]');
     expect(result.xml).toContain('[Football].[none:State:nk]');
     expect(result.xml).toContain('[Football].[none:City:nk]');
+  });
+});
+
+describe('buildInjectedWorkbookXml — declared calculated encoding dependencies', () => {
+  const TEMPLATE = readFileSync(
+    join(__dirname, '../data/templates/part-to-whole-proportional-stacked-bar.xml'),
+    'utf-8',
+  );
+  const manifest = loadManifests().get('part-to-whole-proportional-stacked-bar')!;
+  const slotsWithOptionalColor = manifest.slots.map((slot) =>
+    slot.slot_id === 'category' ? { ...slot, required: false } : slot,
+  );
+
+  it('does not rewrite or redeclare a bound optional-slot template calc instance', () => {
+    const result = buildInjectedWorkbookXml({
+      workbookXml: "<?xml version='1.0'?><workbook><worksheets/><windows/></workbook>",
+      templateXml: TEMPLATE,
+      title: 'Regional mix',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'Superstore' },
+      fieldMapping: {
+        region: '[Superstore].[none:Region:nk]',
+        sales: '[Superstore].[sum:Sales:qk]',
+        category: '[Superstore].[none:Category:nk]',
+      },
+      templateSlots: slotsWithOptionalColor,
+      applyNonce: 'declared-calc',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).not.toContain('[usr:Calculation_3630088501878784');
+    expect(
+      result.xml.match(
+        /<column-instance\b[^>]*\bcolumn="\[Calculation_3630088501878784_tpl_[^"]+\]"[^>]*>/g,
+      ),
+    ).toHaveLength(1);
+    expect(result.xml).toMatch(
+      /<size column="\[Superstore\]\.\[sum:Calculation_3630088501878784_tpl_[^:\]]+:qk\]"><\/size>/,
+    );
   });
 });
 
@@ -609,6 +692,27 @@ describe('buildInjectedWorkbookXml — manifest slot finalization', () => {
     expect(result.xml).not.toContain('<computed-sort');
     expect(result.warnings).toEqual([
       'computed-sort dropped: [World Cup].[sum:{{field_base_2}}:qk] did not resolve',
+    ]);
+  });
+
+  it('returns a warning when a requested waterfall anchor filter cannot be spliced', () => {
+    const result = buildInjectedWorkbookXml({
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml:
+        "<workbook><worksheets><worksheet name='{{TITLE}}'><table><view/><panes><pane><mark class='GanttBar'/></pane></panes><rows>[cum:sum:Profit:qk]</rows></table></worksheet></worksheets><windows><window class='worksheet' name='{{TITLE}}'/></windows></workbook>",
+      title: 'Waterfall',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'P&L Data' },
+      fieldMapping: {
+        'Anchor Category': '[P&L Data].[none:category:nk]',
+      },
+      applyNonce: 'waterfall-anchor-warning',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings).toEqual([
+      'waterfall anchor filter: datasource dependencies are missing',
     ]);
   });
 
