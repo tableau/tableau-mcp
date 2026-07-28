@@ -35,6 +35,21 @@ describe('connections-not-authorable rule', () => {
     expect(issues[0].message).not.toMatch(/^FIX/i);
   });
 
+  it('a published-datasource readback with a bare top-level sqlproxy connection passes', () => {
+    const xml = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource caption="My Published DS" inline="true" name="federated.mypubds01">
+      <connection class="sqlproxy" dbname="MyDatasourceContentUrl"
+        server="https://10az.online.tableau.com/" site="mysitename" />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const result = runValidation(xml, 'workbook');
+    const offenders = result.issues.filter((i) => i.ruleId === 'connections-not-authorable');
+    expect(offenders).toEqual([]);
+  });
+
   it('a federated wrapper with a fabricated (non-Desktop-minted) named-connection id is rejected', () => {
     const xml = `<?xml version="1.0"?>
 <workbook>
