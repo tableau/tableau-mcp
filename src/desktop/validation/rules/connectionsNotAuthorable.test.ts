@@ -50,6 +50,34 @@ describe('connections-not-authorable rule', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('deliberately permits a hand-authored bare sqlproxy connection with suspicious attributes', () => {
+    // Desktop accepted this live (PR #101, 2026-06-22; see nawar-sqlproxy-report);
+    // preflight is not the acceptance gate.
+    const xml = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource name="my-data">
+      <connection class="sqlproxy" dbname="guess" server="" />
+    </datasource>
+  </datasources>
+</workbook>`;
+    expect(connectionsNotAuthorableRule.validate(xml)).toEqual([]);
+  });
+
+  it('a top-level connection with no class attribute is rejected', () => {
+    const xml = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource name="my-data">
+      <connection />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const issues = connectionsNotAuthorableRule.validate(xml);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].xpath).toContain("@class='(none)'");
+  });
+
   it('a federated wrapper with a fabricated (non-Desktop-minted) named-connection id is rejected', () => {
     const xml = `<?xml version="1.0"?>
 <workbook>

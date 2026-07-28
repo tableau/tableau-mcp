@@ -66,8 +66,8 @@ export const connectionsNotAuthorableRule: ValidationRule = {
   id: 'connections-not-authorable',
   description:
     'Rejects hand-authored or structurally invalid <connection> XML with a terminal, ' +
-    'non-retryable error — only the exact shape Desktop itself serializes on a live ' +
-    'readback (federated + named-connection with a Desktop-minted id) ever applies.',
+    "non-retryable error — only Desktop's top-level readback allowlist (federated + " +
+    'sqlproxy) applies; named-connection ids must still be Desktop-minted.',
   contexts: ['workbook', 'datasource'],
 
   validate(xml: string): ValidationIssue[] {
