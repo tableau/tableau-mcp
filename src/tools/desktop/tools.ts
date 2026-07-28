@@ -14,6 +14,7 @@ import { getPlanDashboardCreationTool } from './coordination/planDashboardCreati
 import { getApplyDashboardTool } from './dashboard/applyDashboard.js';
 import { getApplyDashboardWithViewpointsTool } from './dashboard/applyDashboardWithViewpoints.js';
 import { getBuildAndApplyDashboardTool } from './dashboard/buildAndApplyDashboard.js';
+import { getComposeDashboardTool } from './dashboard/composeDashboard.js';
 import { getDashboardAutoApplyTool } from './dashboard/dashboardAutoApply.js';
 import { getGetDashboardGuideTool } from './dashboard/getDashboardGuide.js';
 import { getGetDashboardXmlTool } from './dashboard/getDashboardXml.js';
@@ -80,6 +81,7 @@ export const desktopToolFactories = [
   getApplyDashboardTool,
   getApplyDashboardWithViewpointsTool,
   getBuildAndApplyDashboardTool,
+  getComposeDashboardTool,
   getListAvailableFieldsTool,
   getListFieldsTool,
   getAddFieldTool,

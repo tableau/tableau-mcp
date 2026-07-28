@@ -208,11 +208,11 @@ describe('desktop tools/list serialized surface', () => {
     // Dynamic authoring is the serving surface, so this is the real budget gate.
     // The full desktop surface is not what clients see by default; its looser cap
     // only catches runaway growth without forcing valuable full-profile tools to be trimmed.
-    // Honest wire measurements are 29,463 bytes dynamic and 44,951 bytes full after the
-    // signed-off bind-template describes (see the grandfathered cap comment above).
+    // Honest wire measurements are 29,463 bytes dynamic and 45,956 bytes full after adding
+    // compose-dashboard to the full profile (see the grandfathered cap comment above).
     // Keep only a few bytes of ratchet headroom while staying well below the 46k cliff.
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_479);
-    expect(fullSurfaceTotal).toBeLessThanOrEqual(44_967);
+    expect(fullSurfaceTotal).toBeLessThanOrEqual(45_978);
   });
 });
 
