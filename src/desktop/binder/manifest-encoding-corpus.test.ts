@@ -586,8 +586,8 @@ const CORPUS: readonly CorpusRow[] = [
     schema: 'superstore',
     plain: {
       kind: 'binds',
-      slots: ['country', 'state', 'profit'],
-      why: 'the required country slot has no ask-named candidate so it widens to the schema and picks the unique country-affine field; the optional state slot fills from the ask-named State/Province',
+      slots: ['state', 'profit'],
+      why: 'the ask-named State/Province satisfies the at-least-one geo constraint, so the optional country slot stays unbound',
     },
   },
   {
@@ -768,17 +768,47 @@ const OPTIONAL_SLOTS: readonly OptionalSlotRow[] = [
   },
   {
     template: 'spatial-choropleth-map',
+    slot: 'country',
+    fills: {
+      ask: 'filled map of Profit by Country/Region',
+      schema: 'geo-minimal',
+      field: 'Country/Region',
+      why: 'the ask-named country field satisfies the at-least-one geo constraint',
+    },
+    staysUnbound: {
+      ask: 'filled map of Profit by State/Province',
+      schema: 'superstore',
+      why: 'the ask-named state field satisfies the group without auto-completing optional country',
+    },
+  },
+  {
+    template: 'spatial-choropleth-map',
     slot: 'state',
     fills: {
       ask: 'filled map of Profit by State/Province',
       schema: 'superstore',
       field: 'State/Province',
-      why: 'the optional sub-region slot fills from the geo field the ask names, while the required country slot widens to the schema',
+      why: 'the optional sub-region slot fills from the geo field the ask names',
     },
     staysUnbound: {
       ask: 'filled map of Profit by Country/Region',
       schema: 'geo-minimal',
       why: 'the ask names only the country level and the schema carries no sub-national field, so nothing may reach the optional state slot. Deliberately NOT run on Superstore: see the geo-slot characterisation suite below',
+    },
+  },
+  {
+    template: 'spatial-symbol-map',
+    slot: 'country',
+    fills: {
+      ask: 'symbol map of Sales by Country/Region',
+      schema: 'geo-minimal',
+      field: 'Country/Region',
+      why: 'the ask-named country field satisfies the at-least-one geo constraint',
+    },
+    staysUnbound: {
+      ask: 'symbol map of Sales by State/Province',
+      schema: 'superstore',
+      why: 'the ask-named state field satisfies the group without auto-completing optional country',
     },
   },
   {
@@ -1448,13 +1478,13 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
       'correlation-scatter-plot-chart': ['customer_name'],
       'part-to-whole-waterfall': ['anchor_category'],
       'ranking-ordered-bar': ['facet_row'],
-      'spatial-choropleth-map': ['state'],
-      'spatial-symbol-map': ['city', 'color', 'state', 'tooltip'],
+      'spatial-choropleth-map': ['country', 'state'],
+      'spatial-symbol-map': ['city', 'color', 'country', 'state', 'tooltip'],
       'spatial-symbol-map-latlon': ['color', 'detail2', 'size', 'tooltip'],
       'trend-line-chart': ['color_series', 'facet_col'],
     });
     expect(Object.keys(inventory)).toHaveLength(8);
-    expect(Object.values(inventory).flat()).toHaveLength(15);
+    expect(Object.values(inventory).flat()).toHaveLength(17);
   });
 
   it('gives every optional bindable slot in the corpus a row in the optional-slot table', () => {
@@ -1465,7 +1495,7 @@ describe('binder/manifest-encoding-corpus — census tripwires', () => {
       .flatMap((m) => optionalSlotIds(m).map((slot) => `${m.template}.${slot}`))
       .sort();
     expect(declared).toEqual(actual);
-    expect(declared).toHaveLength(15);
+    expect(declared).toHaveLength(17);
   });
 
   it('pins how much of the manifest-intent matrix reaches a deterministic bind', () => {
