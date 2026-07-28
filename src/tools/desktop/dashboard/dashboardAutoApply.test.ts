@@ -8,6 +8,7 @@ import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as injectViewpointsModule from '../../../desktop/commands/workbook/injectViewpoints.js';
 import * as loadDashboardXmlModule from '../../../desktop/commands/workbook/loadDashboardXml.js';
+import * as loadWorkbookXmlModule from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
@@ -636,6 +637,8 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
     expect(String(body.apply_error)).toContain('preflight validation failed');
+    expect(String(body.guidance)).toContain('Nothing was applied');
+    expect(String(body.guidance)).toContain('fall back to the per-viz');
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
   });
 
@@ -659,6 +662,40 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       { index: 1, ask: 'line chart of Profit by Month', result: boundB },
     ]);
     expect(String(body.apply_error)).toContain('command-timed-out');
+    expect(String(body.guidance)).toContain('The document reached Desktop');
+    expect(String(body.guidance)).toContain('live outcome is unverified');
+    expect(String(body.guidance)).toContain('Read the workbook before falling back');
+    expect(String(body.guidance)).toContain('fall back to the per-viz');
+    expect(String(body.guidance)).not.toContain('Nothing was applied');
+  });
+
+  it('load rejection reports the live outcome as unverified before fallback', async () => {
+    const { getExecutor } = setupMocks();
+    const loadSpy = vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Err({
+        type: 'load-workbook-xml-error',
+        error: { type: 'load-rejected', message: 'Desktop rejected the document' },
+      }),
+    );
+
+    try {
+      const result = await getToolResult({
+        session: '1',
+        asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+        getExecutor,
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(String(body.apply_error)).toContain('Desktop rejected the document');
+      expect(String(body.guidance)).toContain('The document reached Desktop');
+      expect(String(body.guidance)).toContain('Read the workbook before falling back');
+      expect(String(body.guidance)).toContain('fall back to the per-viz');
+      expect(String(body.guidance)).not.toContain('Nothing was applied');
+    } finally {
+      loadSpy.mockRestore();
+    }
   });
 
   it('zone apply failure reports an error naming failed zones and landed artifacts', async () => {
@@ -705,6 +742,10 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       failed: expectedZones,
     });
     expect(String(body.apply_error)).toContain('zone load failed');
+    expect(result.structuredContent).toEqual({
+      ...body,
+      nextAction: { label: 'Read the workbook before retrying', kind: 'prefill' },
+    });
   });
 
   it('zone transport timeout reports unknown zone state with complete attempted specs', async () => {

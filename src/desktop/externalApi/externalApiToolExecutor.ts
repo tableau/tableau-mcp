@@ -604,9 +604,9 @@ function enrichCommandErrorFromDesktopLog(
     type: 'command-failed',
     error: {
       ...error.error,
-      message: detail.message,
       ...(detail.code ? { 'tableau-error-code': detail.code } : {}),
       log_detail: {
+        message: detail.message,
         source: detail.source,
         file: path.basename(detail.logPath),
         timestamp: detail.timestamp,

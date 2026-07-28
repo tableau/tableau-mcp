@@ -256,10 +256,11 @@ describe('ExternalApiToolExecutor', () => {
         if (error.type === 'command-failed') {
           expect(error.error).toMatchObject({
             code: 'operation-failed',
-            message: "Error in parameters for command 'edit-calc'\nmissing: fn",
+            message: 'Command execution failed',
             recoverable: false,
             'tableau-error-code': '47BF7751',
             log_detail: {
+              message: "Error in parameters for command 'edit-calc'\nmissing: fn",
               source: 'tableau-desktop-log',
               file: 'log_2.txt',
             },

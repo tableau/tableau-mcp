@@ -139,6 +139,29 @@ function describeApplyError(
   return `workbook load command failed: ${JSON.stringify(error.error)}`;
 }
 
+function describeApplyFailureGuidance(
+  error:
+    | { type: 'execute-command-error'; error: ExecuteCommandError }
+    | { type: 'load-workbook-xml-error'; error: LoadWorkbookXmlError },
+): string {
+  const detail = describeApplyError(error);
+  const fallback =
+    "fall back to the per-viz bind-template(auto_apply:true) flow using each ask's bound args.";
+
+  if (error.type === 'load-workbook-xml-error' && error.error.type === 'validation-failed') {
+    return `Server-side auto-apply did not complete (${detail}). Nothing was applied — ${fallback}`;
+  }
+
+  if (error.type === 'load-workbook-xml-error' && error.error.type === 'invalid-xml') {
+    return `Server-side auto-apply did not complete (${detail}). The invalid document was not sent to Desktop — ${fallback}`;
+  }
+
+  return (
+    `Server-side auto-apply did not complete (${detail}). The document reached Desktop, but the ` +
+    `live outcome is unverified. Read the workbook before falling back: ${fallback}`
+  );
+}
+
 function refusal(
   results: AskOutcome[],
   guidance: string,
@@ -454,9 +477,7 @@ export const getDashboardAutoApplyTool = (
           if (applyResult.isErr()) {
             return refusal(
               outcomes,
-              `Server-side auto-apply did not complete (${describeApplyError(applyResult.error)}). Nothing ` +
-                'was applied — fall back to the per-viz bind-template(auto_apply:true) flow using each ' +
-                "ask's bound args.",
+              describeApplyFailureGuidance(applyResult.error),
               describeApplyError(applyResult.error),
               prefillNextAction('Fall back to per-viz auto-apply'),
             );
@@ -508,7 +529,7 @@ export const getDashboardAutoApplyTool = (
                       'The live workbook outcome is unverified. Read the workbook and dashboard list before retrying.',
                     ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
                   },
-                  prefillNextAction('Re-issue the zones'),
+                  prefillNextAction('Read the workbook before retrying'),
                 ),
               ).toErr();
             }
