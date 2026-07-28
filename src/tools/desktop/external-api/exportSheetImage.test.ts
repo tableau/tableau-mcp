@@ -90,7 +90,12 @@ describe('export-image tools', () => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ imageBase64: svgBase64, width: 640, height: 480 }),
+        body: JSON.stringify({
+          imageBase64: svgBase64,
+          width: 640,
+          height: 480,
+          effectiveMimeType: 'image/svg+xml',
+        }),
       });
     });
     try {
@@ -177,7 +182,12 @@ describe('export-image tools', () => {
         server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ imageBase64: svgBase64, width: 640, height: 480 }),
+          body: JSON.stringify({
+            imageBase64: svgBase64,
+            width: 640,
+            height: 480,
+            effectiveMimeType: 'image/svg+xml',
+          }),
         });
       },
       { inlineImageMaxBytes: cap },
@@ -221,20 +231,78 @@ describe('export-image tools', () => {
     }
   });
 
-  it('renders a PNG single image block when an SVG was requested but Desktop returned PNG bytes', async () => {
-    // Desktop silently falls back to PNG when it declines an SVG render and does not echo the
-    // format. The result must sniff the bytes: a single image/png block, no SVG text block.
+  it('labels from effectiveMimeType, not the bytes: SVG-looking bytes declared image/png render a single PNG block', async () => {
+    // No byte-sniff fallback: the server-declared effectiveMimeType is authoritative. Even when
+    // the bytes look like SVG, a `image/png` declaration yields a single image/png block with no
+    // SVG text block — proving the label follows the field, not the content.
+    const svgBase64 = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString('base64');
     const harness = await startHarness(exportWorksheetImageTool, (server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
         status: 200,
         contentType: 'application/json',
-        // SAMPLE_IMAGE_BASE64 is a real 1x1 PNG (starts with the PNG magic bytes).
         body: JSON.stringify({
-          imageBase64:
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
+          imageBase64: svgBase64,
           width: 640,
           height: 480,
+          effectiveMimeType: 'image/png',
         }),
+      });
+    });
+    try {
+      const result = await harness.callTool({
+        worksheet: 'sheet-sales',
+        mimeType: 'image/svg+xml',
+      });
+
+      expect(result.isError).toBe(false);
+      expect(result.content).toHaveLength(1);
+      invariant(result.content[0].type === 'image');
+      expect(result.content[0].mimeType).toBe('image/png');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('normalizes effectiveMimeType (mixed case + trailing whitespace) to svg and dual-emits', async () => {
+    const svgBase64 = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString('base64');
+    const harness = await startHarness(exportWorksheetImageTool, (server) => {
+      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          imageBase64: svgBase64,
+          width: 640,
+          height: 480,
+          effectiveMimeType: 'IMAGE/SVG+XML ',
+        }),
+      });
+    });
+    try {
+      const result = await harness.callTool({
+        worksheet: 'sheet-sales',
+        mimeType: 'image/svg+xml',
+      });
+
+      expect(result.isError).toBe(false);
+      expect(result.content).toHaveLength(2);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('<svg');
+      invariant(result.content[1].type === 'image');
+      expect(result.content[1].mimeType).toBe('image/svg+xml');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('defaults to a single image/png block when effectiveMimeType is absent (accepted no-fallback default)', async () => {
+    // Pre-monolith builds omit effectiveMimeType. With no byte-sniff fallback, SVG-looking bytes
+    // and no declaration are labelled image/png — the documented degradation on such builds.
+    const svgBase64 = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString('base64');
+    const harness = await startHarness(exportWorksheetImageTool, (server) => {
+      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ imageBase64: svgBase64, width: 640, height: 480 }),
       });
     });
     try {

@@ -43,7 +43,7 @@ export const exportDashboardImageTool = (
       { session, dashboard, filePath, mimeType },
       extra,
     ): Promise<CallToolResult> => {
-      const { query, effectiveMimeType } = resolveImageExportQuery({ filePath, mimeType });
+      const { query } = resolveImageExportQuery({ filePath, mimeType });
       return await exportDashboardImage.logAndExecute<ImageResult>({
         extra,
         args: { session, dashboard, filePath, mimeType },
@@ -95,7 +95,6 @@ export const exportDashboardImageTool = (
             tool: 'export-dashboard-image',
             label: 'Dashboard',
             cachePrefix: 'dashboard-image',
-            mimeType: effectiveMimeType,
             image,
             config: extra.config,
           }),

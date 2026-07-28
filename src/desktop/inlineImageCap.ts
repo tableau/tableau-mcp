@@ -39,38 +39,6 @@ export function imageExtensionForMimeType(mimeType: string | undefined): 'png' |
 }
 
 /**
- * Sniffs decoded image bytes and returns the MIME type they actually are. The /v0 image
- * contract silently falls back to `image/png` when an SVG render is declined and does NOT
- * echo the format, so trusting the requested MIME type would decode PNG-as-UTF8 and mislabel
- * the block. Only reports `image/svg+xml` when the bytes truly look like SVG/XML; everything
- * else is treated as `image/png`.
- */
-export function sniffImageMimeType(bytes: Buffer): 'image/png' | 'image/svg+xml' {
-  // PNG signature: 89 50 4E 47 0D 0A 1A 0A (check the leading 89 50 4E 47 = "\x89PNG").
-  if (
-    bytes.length >= 4 &&
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47
-  ) {
-    return 'image/png';
-  }
-
-  // SVG/XML: after an optional UTF-8 BOM and leading whitespace, starts with "<svg" or "<?xml".
-  let text = bytes.toString('utf-8');
-  if (text.charCodeAt(0) === 0xfeff) {
-    text = text.slice(1);
-  }
-  const trimmed = text.replace(/^\s+/, '');
-  if (trimmed.startsWith('<svg') || trimmed.startsWith('<?xml')) {
-    return 'image/svg+xml';
-  }
-
-  return 'image/png';
-}
-
-/**
  * Message returned by an export-image tool when the cap forced inline → file. Carries the
  * size-vs-cap reason and the file path so a client can open it.
  */

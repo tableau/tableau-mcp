@@ -10,7 +10,6 @@ import {
   inlineImageFootprintBytes,
   isOverInlineImageCap,
   logInlineImageCapHit,
-  sniffImageMimeType,
 } from '../../../desktop/inlineImageCap.js';
 
 type BuildSheetImageToolResultArgs = {
@@ -20,12 +19,6 @@ type BuildSheetImageToolResultArgs = {
   label: string;
   /** Cache-file prefix used when the cap forces a file, e.g. `worksheet-image`. */
   cachePrefix: string;
-  /**
-   * Requested image MIME type (from the request arg, or `image/png` default). Used only to
-   * decide whether SVG was asked for; the block is labelled by the sniffed actual bytes, since
-   * Desktop silently falls back to PNG when it declines an SVG render.
-   */
-  mimeType: string;
   /** The Desktop image export envelope. */
   image: ImageResult;
   config: Config;
@@ -43,15 +36,15 @@ type BuildSheetImageToolResultArgs = {
  *   3. `imageBase64` present, over the cap → write the bytes to a cache file and return its
  *      path, keeping multi-megabyte images out of the conversation.
  *
- * The bytes are sniffed rather than trusting the requested MIME type: Desktop silently falls
- * back to PNG when it declines an SVG render, so a declined-SVG sheet returns PNG bytes. The
- * cap footprint, file extension, and block label all key on the sniffed `actualMimeType`.
+ * The block is labelled SOLELY from `image.effectiveMimeType` — the server-declared ACTUAL
+ * rendered format (post any server-side fallback), authoritative and case/whitespace-insensitive.
+ * The render format is constrained to `image/png` or `image/svg+xml` , so SVG is emitted only when
+ * the field is `image/svg+xml`; anything else — png, absent, or blank — is labelled `image/png`.
  */
 export function buildSheetImageToolResult({
   tool,
   label,
   cachePrefix,
-  mimeType,
   image,
   config,
 }: BuildSheetImageToolResultArgs): CallToolResult {
@@ -81,13 +74,13 @@ export function buildSheetImageToolResult({
     };
   }
 
-  // Sniff the decoded bytes: Desktop silently returns PNG when it declines an SVG render, and
-  // the response does not echo the format. Only emit SVG when the bytes truly are SVG AND the
-  // caller asked for it; otherwise treat as PNG. All downstream sizing/labelling uses this.
+  // Label SOLELY from the server-declared actual format. The render format is constrained to
+  // image/png or image/svg+xml, so SVG only when the field says so (case/whitespace-insensitive);
+  // anything else — png, absent, blank — is png. No byte-sniff fallback. All downstream
+  // sizing/labelling uses this. The bytes are still decoded for the footprint calc and cache write.
   const decoded = Buffer.from(imageBase64, 'base64');
-  const sniffed = sniffImageMimeType(decoded);
-  const actualMimeType =
-    mimeType === 'image/svg+xml' && sniffed === 'image/svg+xml' ? 'image/svg+xml' : 'image/png';
+  const normalized = (image.effectiveMimeType ?? '').trim().toLowerCase();
+  const actualMimeType = normalized === 'image/svg+xml' ? 'image/svg+xml' : 'image/png';
 
   const capBytes = config.inlineImageMaxBytes;
   // Bytes that actually ride inline: raster is one base64 block, but SVG is dual-emitted
@@ -137,17 +130,16 @@ export function buildSheetImageToolResult({
 
 /**
  * Normalizes the optional `filePath` / `mimeType` args into a client query, dropping blank
- * strings so they read as absent (an empty filePath is a 400 on Desktop). Also returns the
- * effective MIME type used to label the inline image block.
+ * strings so they read as absent (an empty filePath is a 400 on Desktop). `mimeType` forwards
+ * the REQUESTED format to Desktop; the emitted label is derived separately from the response's
+ * `effectiveMimeType`, not from this requested value.
  */
 export function resolveImageExportQuery(args: { filePath?: string; mimeType?: string }): {
   query: { filePath?: string; mimeType?: string };
-  effectiveMimeType: string;
 } {
   const filePath = args.filePath?.trim() || undefined;
   const mimeType = args.mimeType?.trim() || undefined;
   return {
     query: { filePath, mimeType },
-    effectiveMimeType: mimeType ?? 'image/png',
   };
 }

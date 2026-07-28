@@ -43,7 +43,7 @@ export const exportWorksheetImageTool = (
       { session, worksheet, filePath, mimeType },
       extra,
     ): Promise<CallToolResult> => {
-      const { query, effectiveMimeType } = resolveImageExportQuery({ filePath, mimeType });
+      const { query } = resolveImageExportQuery({ filePath, mimeType });
       return await exportWorksheetImage.logAndExecute<ImageResult>({
         extra,
         args: { session, worksheet, filePath, mimeType },
@@ -95,7 +95,6 @@ export const exportWorksheetImageTool = (
             tool: 'export-worksheet-image',
             label: 'Worksheet',
             cachePrefix: 'worksheet-image',
-            mimeType: effectiveMimeType,
             image,
             config: extra.config,
           }),

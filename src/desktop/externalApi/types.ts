@@ -355,6 +355,16 @@ export type ValidationResult = z.infer<typeof validationResultSchema>;
  * requested, otherwise the absolute path written (bytes omitted). Both bytes/path
  * fields stay optional so a partial or evolved envelope still parses; callers pick
  * the branch to render.
+ *
+ * `effectiveMimeType` is the server-declared ACTUAL rendered format (post any
+ * server-side fallback), not the requested one — it is authoritative for the label
+ * the tool emits on the inline image block. The render format is constrained to
+ * `image/png` or `image/svg+xml`. The live server sends it on every rendered response.
+ * It stays optional for parse-safety: (1) the field is being added to the
+ * server async, so a build that predates it must still parse (a required field would
+ * fail `safeParse` and error the whole export, not just mislabel); (2) the degenerate
+ * "neither bytes nor path" envelope legitimately carries no rendered format. When absent,
+ * blank, or not `image/svg+xml`, the block is labelled `image/png`.
  */
 export const imageResultSchema = z
   .object({
@@ -362,6 +372,7 @@ export const imageResultSchema = z
     filePath: z.string().optional(),
     width: z.number().optional(),
     height: z.number().optional(),
+    effectiveMimeType: z.string().optional(),
   })
   .passthrough();
 export type ImageResult = z.infer<typeof imageResultSchema>;

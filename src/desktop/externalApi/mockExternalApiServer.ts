@@ -195,6 +195,10 @@ const sendImageExport = (
   width: number,
   height: number,
 ): void => {
+  // The server declares the actual rendered format on every rendered response, on both the
+  // filePath and inline-bytes branches. The filePath branch writes the file in the requested
+  // format, so it echoes the requested mimeType (png default). The inline branch always returns
+  // SAMPLE_IMAGE_BASE64 (a PNG), so it always declares image/png to keep the envelope consistent.
   const filePath = searchParams['filePath'];
   if (filePath !== undefined && filePath.length > 0) {
     const isAbsolute = filePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(filePath);
@@ -202,10 +206,16 @@ const sendImageExport = (
       sendProblem(res, 400, 'invalid-query-parameter', `Invalid filePath: ${filePath}`);
       return;
     }
-    sendJson(res, 200, { filePath, width, height });
+    const effectiveMimeType = searchParams['mimeType'] || 'image/png';
+    sendJson(res, 200, { filePath, width, height, effectiveMimeType });
     return;
   }
-  sendJson(res, 200, { imageBase64: SAMPLE_IMAGE_BASE64, width, height });
+  sendJson(res, 200, {
+    imageBase64: SAMPLE_IMAGE_BASE64,
+    width,
+    height,
+    effectiveMimeType: 'image/png',
+  });
 };
 
 export async function startMockExternalApiServer(
