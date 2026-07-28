@@ -30,7 +30,7 @@ export interface BuildWorkspaceTwbxOptions {
 /**
  * Read the datasource bindings the builder needs from the workspace's `dataapp.json` manifest. The
  * manifest is a workspace file (not shipped as package content); it records the published-datasource
- * identity + the zombie-sheet field resolved at scaffold time. A missing/malformed manifest, or one
+ * identity + the host-sheet field resolved at scaffold time. A missing/malformed manifest, or one
  * with no datasources, yields an empty list — the builder then produces an extension-only workbook.
  */
 export function readDatasourceBindings(snapshot: DataAppSnapshot): DataAppDatasource[] {

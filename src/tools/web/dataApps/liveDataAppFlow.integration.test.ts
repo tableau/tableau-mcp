@@ -8,7 +8,7 @@
  * `FileSystemWorkspaceStore` rooted in a throwaway temp directory, mocking only the Tableau REST/VDS
  * boundary (`useRestApi`). No live service is contacted and nothing is written outside the temp root.
  *
- * The app is a bundled dashboard extension that queries its published datasource LIVE via
+ * The app is a bundled viz (worksheet) extension that queries its published datasource LIVE via
  * `readMetadataAsync`/`queryAsync` — there is NO embedded data snapshot. Visual review of the live
  * result happens in Tableau after publish (a live query cannot run outside the Tableau host), so this
  * test asserts the mechanical package/receipt/publish contract, not runtime rendering.
@@ -87,13 +87,10 @@ const AUTHORED_APP_JS = `(function () {
   'use strict';
   var root = document.getElementById('app');
   function extractData(result) {
-    var p = result && result.payload;
-    if (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { return []; } }
-    return (p && p.data) || (result && result.data) || [];
+    return result && Array.isArray(result.data) ? result.data : [];
   }
   tableau.extensions.initializeAsync().then(function () {
-    var dc = tableau.extensions.dashboardContent;
-    return dc.dashboard.getAllDataSourcesAsync();
+    return tableau.extensions.workbook.getAllDataSourcesAsync();
   }).then(function (list) {
     var ds = list[0];
     return ds.queryAsync({ fields: [{ fieldCaption: 'Category' }, { fieldCaption: 'Sales', function: 'SUM' }] });
@@ -322,6 +319,10 @@ describe('live data-app workflow (in-memory integration)', () => {
     expect(appJs).toContain('initializeAsync');
     expect(appJs).toContain('readMetadataAsync');
     expect(appJs).toContain('extractData');
+    // Viz-extension data discovery: reach datasources via the workbook, NOT the dashboard.
+    expect(appJs).toContain('tableau.extensions.workbook');
+    expect(appJs).toContain('getAllDataSourcesAsync');
+    expect(appJs).not.toContain('dashboardContent');
     // The live boot skeleton must not embed a static row snapshot.
     expect(appJs).not.toContain('DATA_APP_ROWS');
 

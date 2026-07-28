@@ -52,12 +52,12 @@ describe('buildScaffoldFiles', () => {
     expect(indexHtml).not.toContain('cdn.');
   });
 
-  it('app.js is a live boot skeleton with the payload-unwrap helper and query hooks', () => {
+  it('app.js is a live boot skeleton with the query hooks', () => {
     const appJs = buildScaffoldFiles(input).find((f) => f.path === 'src/app.js')!.content;
     expect(appJs).toContain('initializeAsync');
     expect(appJs).toContain('function extractData');
-    expect(appJs).toContain('result.payload');
-    expect(appJs).toContain('getAllDataSourcesAsync');
+    // The VDS response is the standard { data: [...] } shape — no payload-string unwrap.
+    expect(appJs).not.toContain('result.payload');
     expect(appJs).toContain('queryAsync');
     // Safe DOM only — never innerHTML with live values.
     expect(appJs).toContain('textContent');

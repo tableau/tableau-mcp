@@ -90,16 +90,46 @@ describe('build-data-app resource', () => {
       expect(text).toMatch(/pass.{0,30}`validationId`/i);
     });
 
-    it('encodes the live-query model and the three learnings; no static-snapshot or Heroku guidance', async () => {
+    it('states the sandbox lifecycle rules (on-screen errors, render-first, no CDN, 2D not WebGL)', async () => {
+      const text = await getText();
+      // No console in the sandbox -> errors must be painted on-screen.
+      expect(text).toMatch(/no visible console|on-screen/i);
+      // Render-first / init-second.
+      expect(text).toMatch(/render first|initialize second|render.{0,40}initializ/i);
+      // Vendor libs locally, no CDN.
+      expect(text).toMatch(/no cdn/i);
+      expect(text).toMatch(/vendor/i);
+      // Prefer 2D over WebGL.
+      expect(text).toMatch(/webgl/i);
+      // Direct datasource query, not marks-card summary data.
+      expect(text).toMatch(/no\s+encodings/i);
+    });
+
+    it('cross-links the design skill', async () => {
+      const text = await getText();
+      expect(text).toContain('skill://tableau/design-data-app');
+    });
+
+    it('frames review as loading the published app (personal space), not a local preview', async () => {
+      const text = await getText();
+      expect(text).toMatch(/no local preview/i);
+      expect(text).toMatch(/personal space/i);
+    });
+
+    it('encodes the live-query viz-extension model; no static-snapshot, payload-unwrap, dashboard, or Heroku guidance', async () => {
       const text = await getText();
       // Live model, not a static snapshot.
       expect(text).toMatch(/live/i);
       expect(text).toMatch(/readMetadataAsync|queryAsync/);
       expect(text).toMatch(/no embedded data\s+snapshot/i);
-      // Learning 1: results are wrapped as { payload: "<json>" }.
-      expect(text).toMatch(/payload/i);
-      // Learning 2: the datasource must be on the dashboard (zombie worksheet).
-      expect(text).toMatch(/zombie/i);
+      // Viz-extension model: reach datasources via the workbook, standard { data: [...] } shape.
+      expect(text).toMatch(/viz \(worksheet\) extension/i);
+      expect(text).toMatch(/workbook\.getAllDataSourcesAsync/);
+      expect(text).toMatch(/extractData/);
+      // The old dashboard/zombie + payload-unwrap learnings are gone.
+      expect(text).not.toMatch(/zombie/i);
+      expect(text).not.toMatch(/dashboardContent/);
+      expect(text).not.toMatch(/result\.payload|JSON\.parse\(result/);
       // No non-extension proxy path, no Heroku hosting guidance.
       expect(text).not.toMatch(/heroku/i);
       expect(text).not.toMatch(/proxy/i);

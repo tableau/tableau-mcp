@@ -77,12 +77,19 @@ describe('buildWorkspaceTwbx', () => {
     );
   });
 
-  it('wires the manifest datasource bindings into the .twb (sqlproxy + zombie sheet)', () => {
+  it('wires the manifest datasource bindings into the .twb (sqlproxy + host worksheet)', () => {
     const twb = entries(buildWorkspaceTwbx(snapshot(SCAFFOLD), options).bytes)['My App.twb'];
     expect(twb).toContain("name='sqlproxy.abc123'");
     expect(twb).toContain("dbname='WorldCupSongs'");
-    expect(twb).toContain('<rows>[sqlproxy.abc123].[none:song_title:nk]</rows>');
-    expect(twb).toContain("id='5' name='Sheet 1'");
+    // Field placed on the viz-extension encoding shelf (not on rows), with a VizExtension mark.
+    expect(twb).toContain("<mark class='VizExtension' />");
+    expect(twb).toContain(
+      "column='[sqlproxy.abc123].[none:song_title:nk]' custom-type-name='field'",
+    );
+    // The host worksheet (named after the workbook) carries the viz-extension add-in; no dashboard.
+    expect(twb).toContain("<worksheet name='My App'>");
+    expect(twb).toContain("<add-in add-in-id='com.example.myapp'");
+    expect(twb).not.toContain('<dashboards>');
   });
 
   it('does NOT ship the tool-managed dataapp.json manifest as package content', () => {

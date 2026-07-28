@@ -1,9 +1,9 @@
 /**
  * Live-query scaffold content for a new data-app workspace.
  *
- * A data app is a bundled Tableau **dashboard extension** that queries its published datasource(s)
- * LIVE via the Extensions API (`readMetadataAsync`/`queryAsync`) — there is NO embedded data
- * snapshot. This scaffold generates exactly four files: `index.html` (loads the Extensions API
+ * A data app is a bundled Tableau **viz (worksheet) extension** that queries its published
+ * datasource(s) LIVE via the Extensions API (`readMetadataAsync`/`queryAsync`) — there is NO embedded
+ * data snapshot. This scaffold generates exactly four files: `index.html` (loads the Extensions API
  * library then `src/app.js`), `src/app.js` (a live boot skeleton the agent fills in after
  * introspecting the datasource), `src/styles.css`, and the tool-managed `dataapp.json` manifest
  * (which records the datasource bindings used to wire the workbook at build time).
@@ -22,7 +22,7 @@ export const DATA_APP_ENTRYPOINT = 'index.html';
 /** The content-relative path index.html references for the injected Extensions API library. */
 export const EXTENSIONS_LIB_REF = 'src/tableau.extensions.1.latest.js';
 
-/** One field, resolved from VizQL Data Service metadata, placed on the workbook's zombie sheet. */
+/** One field, resolved from VizQL Data Service metadata, placed on the workbook's host sheet. */
 export type DataAppFieldBinding = {
   /** Logical field name without brackets (VDS `fieldName`), e.g. `song_title`. */
   fieldName: string;
@@ -46,7 +46,7 @@ export type DataAppDatasourceBinding = {
   host: string;
   /** Tableau server port derived from the configured SERVER origin. */
   port: string;
-  /** The single field placed on the zombie sheet so this datasource is "used" on the dashboard. */
+  /** The single field placed on the host sheet so this datasource is "used" (survives publish). */
   field: DataAppFieldBinding;
 };
 
@@ -56,7 +56,7 @@ export type DataAppManifest = {
   packageId: string;
   entrypoint: string;
   template: string;
-  /** Bindings the builder reads to synthesize the datasource references + zombie sheet. */
+  /** Bindings the builder reads to synthesize the datasource references + host sheet. */
   datasources: DataAppDatasourceBinding[];
 };
 
@@ -113,47 +113,36 @@ function scaffoldIndexHtml(appName: string): string {
 `;
 }
 
-// A live boot SKELETON. It initializes the extension, finds the datasource(s) on the dashboard, reads
-// metadata, and renders a starter view that proves the live wiring works. The agent replaces the
-// marked section with the real query (queryAsync) + visualization after introspecting the datasource
-// with get-datasource-metadata / query-datasource. Everything stays local and uses safe DOM APIs
-// (textContent / createElement) — never render live values as raw HTML.
+// A live boot SKELETON for a VIZ (worksheet) extension. It initializes the extension, finds the
+// datasource(s) wired into the workbook, reads metadata, and renders a starter view that proves the
+// live wiring works. The agent replaces the marked section with the real query (queryAsync) +
+// visualization after introspecting the datasource with get-datasource-metadata / query-datasource.
+// Everything stays local and uses safe DOM APIs (textContent / createElement) — never render live
+// values as raw HTML.
 const SCAFFOLD_APP_JS = `(function () {
   'use strict';
 
   var root = document.getElementById('app');
 
-  // The new Extensions API wraps VDS output as { payload: '<json string>' }; older/other shapes
-  // return { data: [...] } directly. Always unwrap through this helper.
+  // queryAsync/readMetadataAsync return the standard VizQL Data Service shape: { data: [...] }.
   function extractData(result) {
-    if (!result) return [];
-    if (Array.isArray(result.data)) return result.data;
-    var p = result.payload;
-    if (typeof p === 'string') {
-      try { p = JSON.parse(p); } catch (e) { return []; }
-    }
-    if (p && Array.isArray(p.data)) return p.data;
-    return [];
+    return result && Array.isArray(result.data) ? result.data : [];
   }
 
-  // A dashboard extension can only see datasources used by a worksheet ON its own dashboard. The
-  // builder wires a tiny "zombie" sheet for exactly this reason. Prefer the dashboard-wide list and
-  // fall back to enumerating worksheets.
-  function getDataSources(dashboard) {
-    if (!dashboard) return Promise.resolve([]);
-    if (typeof dashboard.getAllDataSourcesAsync === 'function') {
-      return dashboard.getAllDataSourcesAsync();
+  // This is a viz extension: it is hosted on a worksheet (tableau.extensions.worksheetContent) rather
+  // than a dashboard. The workbook-level list reaches EVERY datasource wired into the workbook (not
+  // just the host worksheet's), which is what we query live; fall back to the host worksheet's own
+  // datasources if the workbook list is unavailable.
+  function getDataSources() {
+    var wb = tableau.extensions.workbook;
+    if (wb && typeof wb.getAllDataSourcesAsync === 'function') {
+      return wb.getAllDataSourcesAsync();
     }
-    var perSheet = (dashboard.worksheets || []).map(function (ws) {
-      return ws.getDataSourcesAsync();
-    });
-    return Promise.all(perSheet).then(function (lists) {
-      var byId = {};
-      lists.forEach(function (list) {
-        (list || []).forEach(function (ds) { byId[ds.id] = ds; });
-      });
-      return Object.keys(byId).map(function (id) { return byId[id]; });
-    });
+    var wc = tableau.extensions.worksheetContent;
+    if (wc && wc.worksheet && typeof wc.worksheet.getDataSourcesAsync === 'function') {
+      return wc.worksheet.getDataSourcesAsync();
+    }
+    return Promise.resolve([]);
   }
 
   function pickDataSource(list) {
@@ -195,11 +184,10 @@ const SCAFFOLD_APP_JS = `(function () {
     }
     var ds;
     tableau.extensions.initializeAsync().then(function () {
-      var dc = tableau.extensions.dashboardContent;
-      return getDataSources(dc && dc.dashboard);
+      return getDataSources();
     }).then(function (list) {
       ds = pickDataSource(list);
-      if (!ds) { renderError('no data source found on the dashboard'); return; }
+      if (!ds) { renderError('no data source found in the workbook'); return; }
 
       // read-metadata -> the fields VDS knows about for this datasource.
       var metaP = (typeof ds.readMetadataAsync === 'function')

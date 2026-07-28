@@ -2,12 +2,16 @@ import { WebMcpServer } from '../server.web.js';
 import { getDataAppPreviewResource } from './dataApps/dataAppPreviewResource.js';
 import { WebResourceFactory, WebTemplateResourceFactory } from './registry.js';
 import { getBuildDataAppResource } from './skills/buildDataAppResource.js';
+import { getDesignDataAppResource } from './skills/designDataAppResource.js';
 
-// The build-data-app skill and the data-app preview template are the two halves of the data-app
+// The design-data-app + build-data-app skills and the data-app preview template make up the data-app
 // workspace workflow's resource surface. They are gated together with the workspace tools (see
 // `RegisterResourcesOptions.dataAppWorkspacesEnabled`) so a deployment with the feature off never
 // advertises workflow guidance or a preview endpoint for tools it does not expose.
-const dataAppResourceFactories: ReadonlyArray<WebResourceFactory> = [getBuildDataAppResource];
+const dataAppResourceFactories: ReadonlyArray<WebResourceFactory> = [
+  getDesignDataAppResource,
+  getBuildDataAppResource,
+];
 
 const dataAppTemplateResourceFactories: ReadonlyArray<WebTemplateResourceFactory> = [
   getDataAppPreviewResource,

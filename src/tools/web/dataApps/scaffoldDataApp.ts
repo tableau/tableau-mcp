@@ -73,8 +73,8 @@ const paramsSchema = {
     .min(1)
     .max(8)
     .describe(
-      'The published datasource(s) the app queries live. A single tiny "zombie" worksheet is wired ' +
-        'onto the dashboard depending on all of them so the extension can see them at runtime.',
+      'The published datasource(s) the app queries live. The viz-extension host worksheet is wired ' +
+        'to depend on all of them so none is pruned and the app can query them at runtime.',
     ),
   template: z
     .literal(LIVE_EXTENSION_TEMPLATE)
@@ -107,7 +107,7 @@ function sqlproxyNameFor(contentUrl: string): string {
   return `sqlproxy.${createHash('sha1').update(contentUrl).digest('hex').slice(0, 31)}`;
 }
 
-// Only these VDS data types map cleanly to workbook column metadata for the zombie sheet.
+// Only these VDS data types map cleanly to workbook column metadata for the host sheet.
 function mapDataType(dt: DataType): DataAppFieldDataType | null {
   switch (dt) {
     case 'STRING':
@@ -125,11 +125,11 @@ function mapDataType(dt: DataType): DataAppFieldDataType | null {
 function isDimension(field: FieldMetadata): boolean {
   const role = (field as { fieldRole?: unknown }).fieldRole;
   // VDS read-metadata exposes fieldRole via passthrough; when absent, treat as a dimension (the safe
-  // default for a discrete zombie-sheet pill).
+  // default for a discrete host-sheet pill).
   return typeof role === 'string' ? role.toUpperCase() === 'DIMENSION' : true;
 }
 
-// Pick ONE field to place on the zombie sheet. Prefer a STRING dimension (the verified-golden path),
+// Pick ONE field to place on the host sheet. Prefer a STRING dimension (the verified-golden path),
 // then any STRING, then any dimension, then any mappable field. Wiring only — never app logic.
 function pickField(fields: FieldMetadata[]): DataAppFieldBinding | null {
   const usable = fields.filter(
@@ -155,8 +155,8 @@ function pickField(fields: FieldMetadata[]): DataAppFieldBinding | null {
  *
  * Unlike the other data-app tools, scaffold makes lightweight Tableau REST + VizQL Data Service
  * calls to WIRE the workbook to its target published datasource(s): it resolves each datasource's
- * identity (contentUrl/name) and picks one field for the invisible "zombie" worksheet the builder
- * places on the dashboard. It does NOT fetch or embed app data or generate query/render logic — the
+ * identity (contentUrl/name) and picks one field placed on the viz-extension host worksheet the
+ * builder emits. It does NOT fetch or embed app data or generate query/render logic — the
  * agent authors that in `src/app.js` after introspecting the datasource. The actor scope is derived
  * exclusively from server-verified request signals (`resolveScopeFromExtra`).
  */
@@ -167,14 +167,14 @@ export const getScaffoldDataAppTool = (server: WebMcpServer): WebTool<typeof par
     description: `
 Creates a new data-app workspace and writes a **live-query** scaffold into it: \`index.html\` (loads
 the Tableau Extensions API library then \`src/app.js\`), \`src/app.js\` (a live boot skeleton), 
-\`src/styles.css\`, and a tool-managed \`dataapp.json\` manifest. The app is a bundled **dashboard
-extension** that queries its published datasource(s) LIVE via \`readMetadataAsync\`/\`queryAsync\` —
+\`src/styles.css\`, and a tool-managed \`dataapp.json\` manifest. The app is a bundled **viz
+(worksheet) extension** that queries its published datasource(s) LIVE via \`readMetadataAsync\`/\`queryAsync\` —
 there is NO embedded data snapshot.
 
 Provide the target published \`datasources\` up front. Scaffold makes lightweight REST + VizQL Data
-Service calls to resolve each datasource's identity and to wire an invisible tiny "zombie" worksheet
-onto the dashboard that depends on all of them (a dashboard extension can only see datasources used
-by a worksheet on its own dashboard). It does NOT embed data or write query logic — author that in
+Service calls to resolve each datasource's identity and to wire the viz-extension host worksheet so it
+depends on all of them (this keeps every datasource from being pruned at publish; the app reaches them
+at runtime via \`workbook.getAllDataSourcesAsync()\`). It does NOT embed data or write query logic — author that in
 \`src/app.js\` (use \`get-datasource-metadata\` / \`query-datasource\` to introspect first), then
 \`validate-workbook-package\` and \`create-and-publish-workbook\`. Review the live app in Tableau
 after publishing (a live query cannot run outside the Tableau host).
@@ -207,7 +207,7 @@ handle — pass it, never a path, to every other data-app tool.
           const serverUrl = extra.tableauAuthInfo?.server || extra.config.server;
           const { host, port } = parseHostPort(serverUrl);
 
-          // Resolve every datasource's identity + zombie field via REST/VDS under a single session.
+          // Resolve every datasource's identity + host-sheet field via REST/VDS under a single session.
           const bindingsResult = await useRestApi<Result<DataAppDatasourceBinding[], McpToolError>>(
             {
               ...extra,
@@ -247,7 +247,7 @@ handle — pass it, never a path, to every other data-app tool.
                     ).toErr();
                   }
 
-                  // One field for the zombie sheet (wiring only), from VDS read-metadata.
+                  // One field for the host sheet (wiring only), from VDS read-metadata.
                   const meta = await restApi.vizqlDataServiceMethods.readMetadata({
                     datasource: { datasourceLuid: dsIn.luid },
                   });

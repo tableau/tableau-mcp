@@ -4,12 +4,18 @@
 // path (`buildWorkspaceTwbx`), which maps an immutable data-app workspace snapshot's index.html +
 // sibling files straight through and reads the datasource bindings from the workspace manifest.
 //
-// A live data app is a bundled **dashboard extension**: index.html loads the Tableau Extensions API
-// library (injected here as content/src/tableau.extensions.1.latest.js) and calls
-// readMetadataAsync()/queryAsync() against the datasource(s) wired into the workbook. The extension
-// can only see datasources that are used by a worksheet ON its own dashboard, so this builder emits a
-// single tiny "zombie" worksheet that depends on every bound datasource and places it on the same
-// dashboard as the extension object.
+// A live data app is a bundled **viz (worksheet) extension**: index.html loads the Tableau Extensions
+// API library (injected here as content/src/tableau.extensions.1.latest.js) and calls
+// readMetadataAsync()/queryAsync() against the datasource(s) wired into the workbook. A viz extension
+// is hosted directly on a worksheet (tableau.extensions.worksheetContent.worksheet) and can reach
+// every datasource in the workbook via tableau.extensions.workbook.getAllDataSourcesAsync(). This
+// builder emits a single host worksheet that (a) sets its pane's <mark class='VizExtension'/> — the
+// signal that makes Tableau MOUNT the extension as the sheet's viz (without it the server treats the
+// sheet as an ordinary, empty worksheet and never loads the extension iframe), (b) carries the
+// viz-extension add-in in that pane, and (c) references every bound datasource by placing one field
+// per datasource on the extension's <encodings> shelf (NOT on <rows>/<cols>, which stay empty) so
+// none is pruned at publish. The exact shape mirrors a Tableau-authored viz-extension workbook
+// (verified against a real Sankey-extension .twb). No dashboard and no separate "zombie" sheet.
 //
 // Keep this function pure: identical input -> byte-identical output (the determinism tests rely on
 // it). All non-deterministic inputs (the sqlproxy connection name, the datasource identity) are
@@ -25,11 +31,12 @@ import { getTableauExtensionsLibBytes } from '../dataApps/assets/tableauExtensio
  *  provided (buildTwbx injects it; it is not stored in the per-app workspace). */
 export const EXTENSIONS_LIB_PATH = 'src/tableau.extensions.1.latest.js';
 
-/** VDS data types we map into workbook column metadata for the zombie sheet's placed field. */
+/** VDS data types we map into workbook column metadata for the host sheet's placed field. */
 export type DataAppFieldDataType = 'STRING' | 'INTEGER' | 'REAL' | 'BOOLEAN' | 'DATE' | 'DATETIME';
 
-/** One published-datasource field placed on the zombie worksheet so the sheet "uses" the datasource
- *  (a dashboard extension only sees datasources used by a worksheet on its dashboard). */
+/** One published-datasource field placed on the host worksheet's viz-extension <encodings> shelf so
+ *  the sheet "uses" the datasource (otherwise Tableau prunes any datasource no sheet references, and
+ *  the live app could not query it via workbook.getAllDataSourcesAsync()). */
 export interface DataAppField {
   /** The logical field name WITHOUT brackets, e.g. `song_title` (from VDS `fieldName`). */
   fieldName: string;
@@ -39,7 +46,7 @@ export interface DataAppField {
   dataType: DataAppFieldDataType;
 }
 
-/** A published datasource the live app queries. The zombie worksheet takes a dependency on each. */
+/** A published datasource the live app queries. The host worksheet takes a dependency on each. */
 export interface DataAppDatasource {
   /** The workbook-local connection name, e.g. `sqlproxy.<hash>`. Caller-supplied for determinism. */
   sqlproxyName: string;
@@ -51,7 +58,7 @@ export interface DataAppDatasource {
   host: string;
   /** Tableau server port (from the configured SERVER origin; defaults applied by the caller). */
   port: string;
-  /** The single field placed on the zombie sheet to make this datasource "used". */
+  /** The single field placed on the host sheet's viz-extension encoding to make this datasource "used". */
   field: DataAppField;
 }
 
@@ -63,7 +70,7 @@ export interface BuildTwbxInput {
   html: string | Uint8Array; // index.html; strings retain compatibility, bytes are preserved exactly
   assets?: Array<{ path: string; bytes: Uint8Array }>; // extra content/ files (js, css, png…)
   /** Published datasource bindings the live app queries. When empty/omitted the workbook is built
-   *  with only the extension on the dashboard (no live wiring) — a degenerate case kept so the
+   *  with only the extension on its host worksheet (no live wiring) — a degenerate case kept so the
    *  builder never throws on a datasource-less workspace. */
   datasources?: DataAppDatasource[];
 }
@@ -91,7 +98,7 @@ export function buildTwbx(input: BuildTwbxInput): BuildTwbxResult {
     [`${fileBase}.twb`]: strToU8(renderTwb(input)),
     // 2) manifest.json — its "id" MUST equal the Packages/<id>/ folder name
     [`Packages/${id}/manifest.json`]: strToU8(renderManifest(input)),
-    // 3) the .trex — a dashboard-extension whose <source-location><url> is index.html
+    // 3) the .trex — a worksheet-extension (viz) whose <source-location><url> is index.html
     [`Packages/${id}/extensions/toolbar.trex`]: strToU8(renderTrex(input)),
     // 4) content/*
     ...Object.fromEntries(
@@ -168,11 +175,21 @@ function renderTrex(i: BuildTwbxInput): string {
   const name = esc(i.workbookName);
   const id = esc(i.packageId);
   const icon = DEFAULT_ICON_PNG_B64;
-  // A DASHBOARD extension manifest — NOT a workspace/toolbar extension. The .twb embeds this package
-  // as a `type-v2='dashboard-object'` zone; the reader looks up the manifest for that object and, if
-  // it finds a workspace-extension, throws a native "Cannot read properties of undefined (reading
-  // 'extensionIsFirstclass')" at load. The manifest type MUST match the zone type, and the
-  // dashboard-extension id MUST equal the zone's add-in-id (== packageId).
+  // A VIZ (worksheet) extension manifest — root element <worksheet-extension> (NOT dashboard-extension
+  // and NOT a workspace/toolbar extension). The .twb hosts this package on a worksheet via an
+  // <add-in> in the worksheet's <pane> with <type-settings><worksheet/></type-settings>; the reader
+  // looks up the manifest for that add-in and the manifest type MUST match (worksheet). The
+  // worksheet-extension id MUST equal the add-in's add-in-id (== packageId).
+  //
+  // A single generic <encoding id="field"> shelf IS declared. The app does not read data FROM the
+  // encoding at runtime (it queries live via workbook.getAllDataSourcesAsync() + queryAsync()); the
+  // shelf exists solely so the host worksheet can PLACE one field per bound datasource on it (see
+  // renderHostWorksheet), which is what keeps each datasource from being pruned at publish. Every
+  // placed <custom custom-type-name="field"> in the .twb must correspond to a declared encoding id,
+  // matching how a real Tableau-authored viz extension (e.g. Sankey: level/edge) serializes.
+  //
+  // min-api-version MUST be >= 1.11 — viz extensions and the worksheetContent namespace were
+  // introduced at 1.11 (a lower value makes the host reject the extension as not viz-capable).
   //
   // <source-location> MUST wrap the relative path in a <url> child. The server parser reads the URL
   // ONLY from the <url> child element (GetChildText("url")); a bare-text source-location parses to an
@@ -185,12 +202,12 @@ function renderTrex(i: BuildTwbxInput): string {
   // an empty version trips a native LogicException that surfaces as an opaque HTTP 403 on publish.
   return `<?xml version="1.0" encoding="utf-8"?>
 <manifest manifest-version="0.1" xmlns="http://www.tableau.com/xml/extension_manifest">
-  <dashboard-extension id="${id}" extension-version="1.0.0">
+  <worksheet-extension id="${id}" extension-version="1.0.0">
     <default-locale>en_US</default-locale>
     <name resource-id="name" />
     <description>Tableau data app: queries its published datasource live via the Extensions API.</description>
     <author name="Claude" email="noreply@tableau.com" organization="Tableau" website="https://www.tableau.com" />
-    <min-api-version>1.10</min-api-version>
+    <min-api-version>1.11</min-api-version>
     <source-location>
       <url>index.html</url>
     </source-location>
@@ -198,7 +215,18 @@ function renderTrex(i: BuildTwbxInput): string {
     <permissions>
       <permission>full data</permission>
     </permissions>
-  </dashboard-extension>
+    <encoding id="field">
+      <display-name>Data</display-name>
+      <role-spec>
+        <role-type>discrete-dimension</role-type>
+        <role-type>discrete-measure</role-type>
+        <role-type>continuous-dimension</role-type>
+        <role-type>continuous-measure</role-type>
+      </role-spec>
+      <fields max-count="50" />
+      <encoding-icon token="level" />
+    </encoding>
+  </worksheet-extension>
   <resources>
     <resource id="name">
       <text locale="en_US">${name}</text>
@@ -208,7 +236,7 @@ function renderTrex(i: BuildTwbxInput): string {
 }
 
 // Deterministic 32-hex-char instance id (a GUID's worth of entropy, no dashes/braces) for the
-// dashboard-object's <add-in>. Deterministic ON PURPOSE: buildTwbx output must be byte-stable
+// host worksheet's viz-extension <add-in>. Deterministic ON PURPOSE: buildTwbx output must be byte-stable
 // (the golden/determinism tests depend on it), so a random GUID is not an option. There is exactly
 // one extension per built workbook, so instance-id only has to be unique *within* the workbook —
 // trivially satisfied — while still varying by packageId so distinct workbooks differ.
@@ -241,7 +269,7 @@ function uuidFor(seed: string): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
-// Per-VDS-type workbook column metadata. Only load-bearing for the tiny zombie sheet's placed field;
+// Per-VDS-type workbook column metadata. Only load-bearing for the host sheet's placed field;
 // the live query itself is resolved server-side by VDS from the published datasource, independent of
 // this embedded metadata. `string` is the verified-golden path; others are best-effort.
 function columnMeta(dataType: DataAppFieldDataType): {
@@ -314,7 +342,7 @@ function columnMeta(dataType: DataAppFieldDataType): {
 // A single published-datasource reference: repository-location (keyed by contentUrl) + a sqlproxy
 // connection to Data Server + one metadata-record/column for the placed field. The full column
 // metadata is intentionally NOT reproduced — Tableau reconciles the schema from Data Server on load
-// and VDS resolves queries server-side, so one column is sufficient for the zombie sheet to render.
+// and VDS resolves queries server-side, so one column is sufficient for the host sheet to render.
 function renderDatasource(ds: DataAppDatasource): string {
   const cap = esc(ds.caption);
   const sql = esc(ds.sqlproxyName);
@@ -326,7 +354,7 @@ function renderDatasource(ds: DataAppDatasource): string {
   const m = columnMeta(ds.field.dataType);
   return `    <datasource caption='${cap}' inline='true' name='${sql}' version='18.1'>
       <repository-location id='${cu}' path='/datasources' revision='1.0' />
-      <connection channel='http' class='sqlproxy' dbname='${cu}' directory='dataserver' port='${port}' server='${host}' server-ds-friendly-name='${cap}' username=''>
+      <connection channel='http' class='sqlproxy' composed-connection-name='${sql}' dbname='${cu}' directory='dataserver' port='${port}' server='${host}' server-ds-friendly-name='${cap}' username=''>
         <relation connection='${sql}' name='sqlproxy' table='[sqlproxy]' type='table' />
         <metadata-records>
           <metadata-record class='column'>
@@ -346,11 +374,62 @@ function renderDatasource(ds: DataAppDatasource): string {
     </datasource>`;
 }
 
-// The single tiny "zombie" worksheet. It references every bound datasource and places one discrete
-// field from each so each datasource is genuinely "used" (and therefore visible to the dashboard
-// extension via getAllDataSourcesAsync). The first datasource is the primary; the sheet's only job
-// is to make the datasources present on the dashboard, so its visual is irrelevant.
-function renderZombieWorksheet(datasources: DataAppDatasource[], seed: string): string {
+// The viz-extension <add-in>, placed inside the host worksheet's <pane>. Its add-in-id MUST equal
+// the packageId (== the worksheet-extension manifest id) and its type-settings MUST be <worksheet/>
+// (matching the worksheet-extension manifest — a <dashboard/> here trips a native load error).
+// extension-url carries the FULL tableaulocalext:/// form: without a dashboard zone <param> to hold
+// it, the add-in itself is the only place the runtime resolves the bundled content URL from.
+function renderAddIn(id: string, url: string, instanceId: string): string {
+  return `            <add-in add-in-id='${id}' extension-url='${url}' extension-version='1.0.0' instance-id='${instanceId}'>
+              <instance-settings />
+              <type-settings>
+                <worksheet />
+              </type-settings>
+            </add-in>`;
+}
+
+// The single host worksheet. It (a) sets <mark class='VizExtension'/> — the signal that makes Tableau
+// mount the add-in as the sheet's viz — (b) carries the viz-extension add-in in its pane, and (c)
+// references every bound datasource by placing one field per datasource on the extension's
+// <encodings> shelf (custom-type-name='field', matching the manifest's <encoding id='field'>). Fields
+// go on the encoding, NOT on <rows>/<cols> (which stay empty): a VizExtension pane is driven by
+// encodings, and a stray field on rows would trigger a native worksheet query (the DataServiceFailure
+// path). Placing a field per datasource is what makes each datasource genuinely "used" so it survives
+// publish pruning; the live app then reaches them via workbook.getAllDataSourcesAsync() and queries
+// each via queryAsync. This mirrors a real Tableau-authored viz-extension .twb exactly.
+function renderHostWorksheet(
+  datasources: DataAppDatasource[],
+  seed: string,
+  sheetName: string,
+  addInXml: string,
+): string {
+  const name = esc(sheetName);
+
+  // Degenerate case (no datasources): just the worksheet hosting the add-in. Real apps always bind
+  // at least one datasource; this path only exists so the builder never throws.
+  if (datasources.length === 0) {
+    return `    <worksheet name='${name}'>
+      <table>
+        <view>
+          <datasources />
+        </view>
+        <style />
+        <panes>
+          <pane selection-relaxation-option='selection-relaxation-allow'>
+            <view>
+              <breakdown value='auto' />
+            </view>
+            <mark class='VizExtension' />
+${addInXml}
+          </pane>
+        </panes>
+        <rows />
+        <cols />
+      </table>
+      <simple-id uuid='{${uuidFor(`${seed}:ws`)}}' />
+    </worksheet>`;
+  }
+
   const deps = datasources
     .map((ds) => {
       const m = columnMeta(ds.field.dataType);
@@ -371,13 +450,21 @@ function renderZombieWorksheet(datasources: DataAppDatasource[], seed: string): 
     )
     .join('\n');
 
-  // Primary datasource's field on rows gives the sheet a real visual representation (required — a
-  // dashboard zone referencing a sheet with no visual fails publish with "no visual representation").
-  const primary = datasources[0];
-  const pm = columnMeta(primary.field.dataType);
-  const rows = `[${esc(primary.sqlproxyName)}].[none:${esc(primary.field.fieldName)}:${pm.instanceSuffix}]`;
+  // One placed field per datasource on the viz-extension encoding shelf. Each <custom> references the
+  // datasource's column-instance ([<sqlproxy>].[none:<field>:<suffix>]) declared in <datasource-dependencies>
+  // above; custom-type-name='field' matches the manifest's <encoding id='field'>. This is the sole
+  // reason a datasource is retained (not pruned) — the extension itself renders via its own live queries.
+  const encodings = datasources
+    .map((ds) => {
+      const m = columnMeta(ds.field.dataType);
+      const sql = esc(ds.sqlproxyName);
+      const fieldName = esc(ds.field.fieldName);
+      const encId = uuidFor(`${seed}:enc:${ds.sqlproxyName}`);
+      return `            <custom encoding-id='{${encId}}' column='[${sql}].[none:${fieldName}:${m.instanceSuffix}]' custom-type-name='field' />`;
+    })
+    .join('\n');
 
-  return `    <worksheet name='Sheet 1'>
+  return `    <worksheet name='${name}'>
       <table>
         <view>
           <datasources>
@@ -392,20 +479,24 @@ ${deps}
             <view>
               <breakdown value='auto' />
             </view>
-            <mark class='Automatic' />
+            <mark class='VizExtension' />
+${addInXml}
+            <encodings>
+${encodings}
+            </encodings>
           </pane>
         </panes>
-        <rows>${rows}</rows>
+        <rows />
         <cols />
       </table>
       <simple-id uuid='{${uuidFor(`${seed}:ws`)}}' />
     </worksheet>`;
 }
 
-// A worksheet window carries the "visual representation" the publish validator requires for any
-// sheet a dashboard references. Cards are standard shelf layout; datasource-independent boilerplate.
-function renderWorksheetWindow(seed: string): string {
-  return `    <window class='worksheet' name='Sheet 1'>
+// The host worksheet's window (the only window — no dashboard). Maximized so the published workbook
+// opens straight onto the viz-extension sheet. Cards are standard shelf layout; boilerplate.
+function renderWorksheetWindow(seed: string, sheetName: string): string {
+  return `    <window class='worksheet' maximized='true' name='${esc(sheetName)}'>
       <cards>
         <edge name='left'>
           <strip size='160'>
@@ -442,114 +533,61 @@ function renderTwb(i: BuildTwbxInput): string {
   const datasources = i.datasources ?? [];
   const hasData = datasources.length > 0;
 
-  // With live datasources: emit the datasource blocks + the single zombie worksheet, and put BOTH
-  // the zombie sheet zone and the extension dashboard-object zone on the dashboard. Without them
-  // (degenerate case): emit only the extension on the dashboard plus an unreferenced placeholder
-  // worksheet so <worksheets> is non-empty.
+  // The host worksheet's display name IS the published view name (there is no dashboard), so it is
+  // the workbook name. The referenced-view viewId below MUST match it.
+  const addInXml = renderAddIn(id, url, instanceId);
+
   const datasourcesXml = hasData
     ? `  <datasources>
 ${datasources.map(renderDatasource).join('\n')}
   </datasources>`
     : '  <datasources />';
 
-  const worksheetsXml = hasData
-    ? `  <worksheets>
-${renderZombieWorksheet(datasources, i.packageId)}
-  </worksheets>`
-    : `  <worksheets>
-    <worksheet name='Sheet 1'>
-      <table><view><datasources /></view></table>
-    </worksheet>
+  const worksheetsXml = `  <worksheets>
+${renderHostWorksheet(datasources, i.packageId, i.workbookName, addInXml)}
   </worksheets>`;
 
-  // The extension dashboard-object zone. When there is a zombie sheet, it is tucked into a narrow
-  // strip on the left (w small) and the extension takes the rest, so the sheet never distracts.
-  const extZone = `          <zone forceUpdate='true' h='98000' id='3' param='[${id}].[1.0.0].[${url}]' type-v2='dashboard-object' w='${hasData ? '96000' : '98400'}' x='${hasData ? '3000' : '800'}' y='1000'>
-            <add-in add-in-id='${id}' extension-url='${id}/content/index.html' extension-version='1.0.0' instance-id='${instanceId}'>
-              <instance-settings />
-              <type-settings>
-                <dashboard />
-              </type-settings>
-            </add-in>
-            <zone-style>
-              <format attr='border-color' value='#444444' />
-              <format attr='border-style' value='none' />
-              <format attr='border-width' value='0' />
-              <format attr='margin' value='4' />
-            </zone-style>
-          </zone>`;
-
-  // The zombie sheet zone: a very small (w='1500') strip so it is present on the dashboard (required
-  // for the extension to see the datasource) without distracting from the app.
-  const zombieZone = hasData
-    ? `
-          <zone h='98000' id='5' name='Sheet 1' w='1500' x='800' y='1000'>
-            <zone-style>
-              <format attr='border-color' value='#444444' />
-              <format attr='border-style' value='none' />
-              <format attr='border-width' value='0' />
-              <format attr='margin' value='4' />
-            </zone-style>
-          </zone>`
-    : '';
-
-  const viewpointsXml = hasData
-    ? `      <viewpoints>
-        <viewpoint name='Sheet 1' />
-      </viewpoints>
-      <active id='-1' />`
-    : `      <viewpoints />
-      <active id='3' />`;
-
-  const worksheetWindowXml = hasData ? `\n${renderWorksheetWindow(i.packageId)}` : '';
-
-  // The render chain that makes the published workbook NON-EMPTY. Three parts must agree on
-  // id/version/url: (1) the dashboard-object <zone param='[id].[ver].[url]'>, (2) its <add-in>, and
-  // (3) the inline <referenced-extension> dashboard-extension. Omit any and the bundled extension is
-  // orphaned. The referenced-extension manifest is a dashboard-extension to match the zone type.
+  // The render chain that makes the published workbook a valid viz-extension app. Three parts must
+  // agree on id/version/url: (1) the host worksheet's <add-in>, (2) the inline <referenced-extension>
+  // worksheet-extension manifest, and (3) its <source-location><url>. The referenced-extension
+  // manifest is a worksheet-extension (viz) to match the add-in's <type-settings><worksheet/></> —
+  // a dashboard-extension here would orphan the bundled content. The <referenced-view viewId> points
+  // at the host worksheet (the only view; no dashboard).
   return `<?xml version='1.0' encoding='utf-8'?>
 <workbook version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>
 ${datasourcesXml}
 ${worksheetsXml}
-  <dashboards>
-    <dashboard name='${name}'>
-      <style />
-      <!-- Automatic sizing: the dashboard fits the browser window instead of a fixed pixel box. -->
-      <size sizing-mode='automatic' />
-      <zones>
-        <zone h='100000' id='4' type-v2='layout-basic' w='100000' x='0' y='0'>
-${extZone}${zombieZone}
-          <zone-style>
-            <format attr='border-color' value='#444444' />
-            <format attr='border-style' value='none' />
-            <format attr='border-width' value='0' />
-            <format attr='margin' value='8' />
-          </zone-style>
-        </zone>
-      </zones>
-      <simple-id uuid='{${uuidFor(`${i.packageId}:dash`)}}' />
-    </dashboard>
-  </dashboards>
-  <windows>${worksheetWindowXml}
-    <window class='dashboard' maximized='true' name='${name}'>
-${viewpointsXml}
-      <simple-id uuid='{${uuidFor(`${i.packageId}:dashwin`)}}' />
-    </window>
+  <windows>
+${renderWorksheetWindow(i.packageId, i.workbookName)}
   </windows>
   <referenced-extensions>
     <referenced-extension>
       <manifest manifest-version='0.1'>
-        <dashboard-extension extension-version='1.0.0' id='${id}'>
+        <worksheet-extension extension-version='1.0.0' id='${id}'>
           <default-locale>en_US</default-locale>
           <name>${name}</name>
           <description>Embedded workbook extension.</description>
           <author email='noreply@tableau.com' name='Claude' organization='Tableau' website='https://www.tableau.com' />
-          <min-api-version>1.10</min-api-version>
+          <min-api-version>1.11</min-api-version>
           <source-location>
             <url>${url}</url>
           </source-location>
           <icon>${icon}</icon>
-        </dashboard-extension>
+          <permissions>
+            <permission>full data</permission>
+          </permissions>
+          <encoding id='field'>
+            <display-name>Data</display-name>
+            <role-spec>
+              <role-type>discrete-dimension</role-type>
+              <role-type>discrete-measure</role-type>
+              <role-type>continuous-dimension</role-type>
+              <role-type>continuous-measure</role-type>
+            </role-spec>
+            <fields max-count='50' />
+            <encoding-icon token='level' />
+          </encoding>
+        </worksheet-extension>
       </manifest>
       <referenced-views>
         <referenced-view instances='1' viewId='${name}' />
@@ -627,7 +665,7 @@ function validateBundle(files: Record<string, Uint8Array>): void {
 
 function validatePackageId(id: string): void {
   // (b) COPIED CONSTANT — soft fast-fail. The server re-validates this id via XSD at upload, so this
-  //     is UX only. It governs the dashboard-extension id we emit (== packageId).
+  //     is UX only. It governs the worksheet-extension id we emit (== packageId).
   //     Extension-Id-ST: [A-Za-z]{2,6}(\.[A-Za-z0-9-]{1,63})+ | [A-Za-z][A-Za-z0-9-]*
   //     Source-of-truth: monolith ExtensionManifest.xsd — keep pinned.
   const EXT_ID = /^[A-Za-z]{2,6}(\.[A-Za-z0-9-]{1,63})+$|^[A-Za-z][A-Za-z0-9-]*$/;

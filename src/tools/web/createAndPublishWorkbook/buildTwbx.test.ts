@@ -60,24 +60,31 @@ describe('buildTwbx', () => {
     expect(manifest.id).toBe('com.example.myviz');
   });
 
-  it('emits a DASHBOARD-extension .trex (id == packageId) with min-api 1.10, full data, and a <url> source', () => {
+  it('emits a WORKSHEET-extension (viz) .trex (id == packageId) with min-api 1.11, full data, and a <url> source', () => {
     const trex = entries(buildTwbx(base).bytes)[
       'Packages/com.example.myviz/extensions/toolbar.trex'
     ];
     expect(trex).toContain('<?xml version="1.0" encoding="utf-8"?>');
-    // The manifest type MUST be a dashboard-extension to match the .twb's dashboard-object zone; a
-    // workspace/toolbar manifest triggers a native "extensionIsFirstclass" load failure. The id must
-    // equal the zone's add-in-id (== packageId), with NO ".toolbar" suffix.
+    // The manifest type MUST be a worksheet-extension (viz) to match the .twb's worksheet <add-in>
+    // (type-settings/worksheet). A dashboard-extension or workspace/toolbar manifest triggers a
+    // native load failure. The id must equal the add-in's add-in-id (== packageId), no ".toolbar".
     expect(trex).toContain(
-      '<dashboard-extension id="com.example.myviz" extension-version="1.0.0">',
+      '<worksheet-extension id="com.example.myviz" extension-version="1.0.0">',
     );
+    expect(trex).not.toContain('dashboard-extension');
     expect(trex).not.toContain('workspace-extension');
     expect(trex).not.toContain('<target>toolbar</target>');
     expect(trex).not.toContain('id="com.example.myviz.toolbar"');
+    // A single generic <encoding id="field"> shelf is declared so the host worksheet can place one
+    // field per bound datasource on it (custom-type-name='field'), which is what keeps each datasource
+    // from being pruned at publish. The app still queries live (it does not read from the encoding).
+    expect(trex).toContain('<encoding id="field">');
+    expect(trex).toContain('<role-type>discrete-dimension</role-type>');
     // Source-location MUST wrap the relative path in a <url> child (bare text parses to an empty url).
     expect(trex).toContain('<url>index.html</url>');
     expect(trex).not.toContain('<source-location>index.html</source-location>');
-    expect(trex).toContain('<min-api-version>1.10</min-api-version>');
+    // Viz extensions / worksheetContent require min-api >= 1.11.
+    expect(trex).toContain('<min-api-version>1.11</min-api-version>');
     expect(trex).toContain('<permission>full data</permission>');
   });
 
@@ -109,36 +116,30 @@ describe('buildTwbx', () => {
     );
   });
 
-  it('binds the bundled extension to a dashboard so the published workbook is NOT empty', () => {
-    // Regression guard for the empty-publish bug: the .twb must carry the full render chain —
-    // a dashboard, a dashboard-object zone, an <add-in>, and an inline <referenced-extension> —
-    // or the bundled package is orphaned and the workbook publishes blank.
+  it('binds the bundled extension to a host worksheet (no dashboard) so the published workbook is NOT empty', () => {
+    // The viz model carries the full render chain on ONE worksheet: the worksheet <add-in>
+    // (type-settings/worksheet), the inline <referenced-extension> worksheet-extension manifest, and
+    // a <referenced-view> pointing at that worksheet. No dashboard / dashboard-object zone exists.
     const twb = entries(buildTwbx(base).bytes)['My Viz.twb'];
-    expect(twb).toContain('<dashboards>');
-    expect(twb).toContain("<dashboard name='My Viz'>");
-    expect(twb).toContain("type-v2='dashboard-object'");
+    expect(twb).not.toContain('<dashboards>');
+    expect(twb).not.toContain("type-v2='dashboard-object'");
+    expect(twb).not.toContain("<window class='dashboard'");
+    expect(twb).toContain("<worksheet name='My Viz'>");
     expect(twb).toContain("<add-in add-in-id='com.example.myviz'");
-    expect(twb).toContain("<dashboard-extension extension-version='1.0.0' id='com.example.myviz'>");
+    expect(twb).toContain('<worksheet />');
+    expect(twb).toContain("<worksheet-extension extension-version='1.0.0' id='com.example.myviz'>");
     expect(twb).toContain("<referenced-view instances='1' viewId='My Viz' />");
-    expect(twb).toContain("<window class='dashboard'");
+    expect(twb).toContain("<window class='worksheet' maximized='true' name='My Viz'>");
   });
 
-  it('sizes the dashboard as automatic (fit-to-window) rather than a fixed pixel box', () => {
-    const twb = entries(buildTwbx(base).bytes)['My Viz.twb'];
-    expect(twb).toContain("<size sizing-mode='automatic' />");
-    expect(twb).not.toContain('maxheight=');
-    expect(twb).not.toContain('minwidth=');
-    expect(twb).toContain("type-v2='layout-basic' w='100000'");
-  });
-
-  it('points the render chain at the FULL tableaulocalext:///<id>/content/index.html form', () => {
+  it('points the add-in extension-url at the FULL tableaulocalext:///<id>/content/index.html form', () => {
     const twb = entries(buildTwbx(base).bytes)['My Viz.twb'];
     const full = 'tableaulocalext:///com.example.myviz/content/index.html';
-    // The dashboard-object zone param carries the full tableaulocalext render entry point...
-    expect(twb).toContain(`param='[com.example.myviz].[1.0.0].[${full}]'`);
-    // ...while the <add-in> extension-url is the package-relative content path (no scheme).
-    expect(twb).toContain("extension-url='com.example.myviz/content/index.html'");
-    expect(twb).not.toContain("extension-url='content/index.html'");
+    // With no dashboard zone <param> to carry the render entry point, the worksheet <add-in>
+    // extension-url itself holds the full tableaulocalext:/// URL the runtime resolves from.
+    expect(twb).toContain(`extension-url='${full}'`);
+    // ...and the referenced-extension source-location agrees.
+    expect(twb).toContain(`<url>${full}</url>`);
   });
 
   it('warns (does not throw) on a content extension outside the serve-time allow-list', () => {
@@ -214,20 +215,30 @@ describe('buildTwbx', () => {
       expect(twb).toContain('<local-name>[song_title]</local-name>');
     });
 
-    it('wires a single zombie worksheet that places the field and sits on the dashboard', () => {
+    it('wires the field onto the single host worksheet that carries the extension add-in', () => {
       const twb = twbOf([wcsDatasource]);
-      expect(twb).toContain("<worksheet name='Sheet 1'>");
-      expect(twb).toContain('<rows>[sqlproxy.abc123def456].[none:song_title:nk]</rows>');
-      // The sheet must be a zone ON the dashboard (so the extension can see the datasource)...
-      expect(twb).toContain("id='5' name='Sheet 1'");
-      // ...and it is tiny (near-zero width) so it does not distract from the app.
-      expect(twb).toContain("id='5' name='Sheet 1' w='1500'");
-      // A worksheet window with cards gives the sheet the visual representation publish requires.
-      expect(twb).toContain("<window class='worksheet' name='Sheet 1'>");
-      expect(twb).toContain("<viewpoint name='Sheet 1' />");
+      // The host worksheet is named after the workbook (it IS the published view; no dashboard).
+      expect(twb).toContain("<worksheet name='My Viz'>");
+      // The pane mark MUST be VizExtension — the signal that mounts the extension as the sheet's viz.
+      expect(twb).toContain("<mark class='VizExtension' />");
+      expect(twb).not.toContain("<mark class='Automatic' />");
+      // The field is placed on the extension <encodings> shelf (custom-type-name='field'), NOT on
+      // <rows>/<cols> (which stay empty) — a stray rows field would trigger a native worksheet query.
+      expect(twb).toContain(
+        "column='[sqlproxy.abc123def456].[none:song_title:nk]' custom-type-name='field'",
+      );
+      expect(twb).toContain('<rows />');
+      expect(twb).toContain('<cols />');
+      expect(twb).not.toContain('<rows>[');
+      // The viz-extension add-in lives inside the host worksheet's pane (type-settings/worksheet).
+      expect(twb).toContain("<add-in add-in-id='com.example.myviz'");
+      expect(twb).toContain('<worksheet />');
+      // A maximized worksheet window (no dashboard window / viewpoints).
+      expect(twb).toContain("<window class='worksheet' maximized='true' name='My Viz'>");
+      expect(twb).not.toContain('<viewpoint ');
     });
 
-    it('supports multiple datasource bindings on the one zombie sheet', () => {
+    it('references every datasource from the single host worksheet (multi-datasource)', () => {
       const second: DataAppDatasource = {
         sqlproxyName: 'sqlproxy.zzz999',
         contentUrl: 'SuperstoreDatasource',
@@ -239,8 +250,11 @@ describe('buildTwbx', () => {
       const twb = twbOf([wcsDatasource, second]);
       expect(twb).toContain("name='sqlproxy.abc123def456'");
       expect(twb).toContain("name='sqlproxy.zzz999'");
-      // Both datasources are referenced by the single zombie sheet's view.
+      // Both datasources are referenced by the single host sheet's view.
       expect(twb).toContain("<datasource caption='Superstore' name='sqlproxy.zzz999' />");
+      // Both survive pruning via a datasource-dependency (one placed field each).
+      expect(twb).toContain("<datasource-dependencies datasource='sqlproxy.zzz999'>");
+      expect(twb).toContain("<datasource-dependencies datasource='sqlproxy.abc123def456'>");
     });
 
     it('maps non-string field types to the right discrete pill suffix', () => {
@@ -249,7 +263,9 @@ describe('buildTwbx', () => {
         field: { fieldName: 'year', caption: 'Year', dataType: 'INTEGER' },
       };
       const twb = twbOf([intField]);
-      expect(twb).toContain('<rows>[sqlproxy.abc123def456].[none:year:ok]</rows>');
+      expect(twb).toContain(
+        "column='[sqlproxy.abc123def456].[none:year:ok]' custom-type-name='field'",
+      );
       expect(twb).toContain("datatype='integer'");
     });
   });
