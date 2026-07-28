@@ -163,6 +163,13 @@ export interface SlotSpec {
   notes?: string;
 }
 
+/**
+ * Every group requires at least one of its named bindable slots to be bound.
+ * Individual slots remain optional, so the binder can use whichever compatible
+ * field the ask supplies without weakening the template's overall coverage.
+ */
+export type AtLeastOneOfSlotGroup = string[];
+
 /** A calc's OUTPUT role — measure|dimension — read from the calc <column role=…> in the XML. */
 export type CalcResultRole = 'measure' | 'dimension';
 
@@ -441,6 +448,8 @@ export interface TemplateManifest {
    */
   avoid_when?: string[];
   slots: SlotSpec[]; // bindable + non-bindable structural slots
+  /** Every group requires at least one named slot to be bound. */
+  at_least_one_of?: AtLeastOneOfSlotGroup[];
   calcs: CalcSlot[]; // template-owned calculated fields
   hazards: Hazard[];
   /**

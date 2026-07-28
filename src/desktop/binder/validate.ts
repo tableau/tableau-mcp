@@ -450,6 +450,19 @@ export function validateBinding(
       });
     }
   }
+  for (const group of m.at_least_one_of ?? []) {
+    const satisfied = group.some(
+      (slotId) => slotById.get(slotId)?.bindable === true && boundBySlot.has(slotId),
+    );
+    if (!satisfied) {
+      const repairSlotId = group.find((slotId) => slotById.get(slotId)?.bindable === true);
+      blockers.push({
+        code: 'missing-required-slot',
+        ...(repairSlotId !== undefined ? { slot_id: repairSlotId } : {}),
+        detail: `at least one of slots [${group.join(', ')}] must have a binding`,
+      });
+    }
+  }
   for (const b of p.bindings) {
     const slot = slotById.get(b.slot_id);
     if (!slot) {

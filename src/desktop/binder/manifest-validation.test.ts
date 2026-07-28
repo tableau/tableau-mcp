@@ -123,6 +123,69 @@ describe('binder/manifest-validation — the new superset fields are additive/pa
   });
 });
 
+describe('binder/manifest-validation — at_least_one_of slot constraints', () => {
+  function withAtLeastOneOf(groups: unknown): unknown {
+    const base = structuredClone(loadManifests().get('ranking-ordered-bar')!) as unknown as Record<
+      string,
+      unknown
+    >;
+    base.at_least_one_of = groups;
+    return base;
+  }
+
+  it('accepts a non-empty group of declared slot names', () => {
+    expect(validateManifest(withAtLeastOneOf([['region', 'sales']]))).toEqual([]);
+  });
+
+  it('rejects an empty group', () => {
+    expect(validateManifest(withAtLeastOneOf([[]])).join(' ')).toMatch(
+      /at_least_one_of.*non-empty/,
+    );
+  });
+
+  it('rejects an unknown slot name', () => {
+    expect(validateManifest(withAtLeastOneOf([['region', 'does-not-exist']])).join(' ')).toMatch(
+      /at_least_one_of.*does-not-exist/,
+    );
+  });
+
+  it('rejects a group that names a non-bindable slot', () => {
+    const manifest = withAtLeastOneOf([['region']]) as Record<string, unknown>;
+    const slots = manifest.slots as Array<Record<string, unknown>>;
+    slots.find((slot) => slot.slot_id === 'region')!.bindable = false;
+
+    expect(validateManifest(manifest).join(' ')).toMatch(
+      /at_least_one_of.*region.*must be bindable/,
+    );
+  });
+
+  it('uses the runtime geo-evidence rule for fixture group satisfaction', () => {
+    const manifest = structuredClone(loadManifests().get('spatial-symbol-map')!);
+    const sales = {
+      name: 'Sales',
+      role: 'measure' as const,
+      type: 'quantitative',
+      datatype: 'real',
+    };
+    const dimension = (
+      name: string,
+    ): {
+      name: string;
+      role: 'dimension';
+      type: string;
+      datatype: string;
+    } => ({
+      name,
+      role: 'dimension' as const,
+      type: 'nominal',
+      datatype: 'string',
+    });
+
+    expect(computeFixtureBind(manifest, [dimension('City Tier'), sales])).toBe(false);
+    expect(computeFixtureBind(manifest, [dimension('City'), sales])).toBe(true);
+  });
+});
+
 describe('binder/manifest-validation — validateManifest ENFORCES the DerivationContract shape (LR2-3)', () => {
   // Attach a derivation block to a known-valid bundled manifest to exercise the ported shape gate
   // (superset from A's manifest.ts). The facet-vocabulary / parent-existence cross-checks still

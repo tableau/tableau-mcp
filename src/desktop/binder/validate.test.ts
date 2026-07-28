@@ -97,6 +97,25 @@ describe('binder/validate — gate 1: slot coverage', () => {
       ).toBe(true);
   });
 
+  it('fire: an unsatisfied slot group identifies its repair slot', () => {
+    const m = manifests.get('spatial-choropleth-map')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 'Profit map',
+      bindings: [{ slot_id: 'profit', field: 'Profit' }],
+    };
+    const r = validateBinding(m, p, SUMMARY);
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.blockers).toContainEqual({
+        code: 'missing-required-slot',
+        slot_id: 'country',
+        detail: 'at least one of slots [country, state] must have a binding',
+      });
+    }
+  });
+
   it('fire: binding to a template-owned calc slot → kind-mismatch', () => {
     const m = manifests.get('correlation-scatter-plot-chart')!;
     const p: BindingProposal = {

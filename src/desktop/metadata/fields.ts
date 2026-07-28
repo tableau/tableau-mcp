@@ -9,7 +9,11 @@ import {
   inferFieldTypeFromType,
   inferRoleFromType,
 } from './field-builder.js';
-import { parseColumnInstanceRef, parseDatasourceQualifiedColumnRef } from './field-resolver.js';
+import {
+  parseCanonicalColumnRef,
+  parseColumnInstanceRef,
+  parseDatasourceQualifiedColumnRef,
+} from './field-resolver.js';
 import { emitFieldRewrite } from './field-rewrite-listener.js';
 import { normalizeArray, parseXML, serializeXML } from './parser.js';
 import type { EncodingType, FieldInfo, ParsedEncoding, ParsedWorksheet } from './types.js';
@@ -214,6 +218,65 @@ export function addFieldToEncoding(
   }
 
   return serializeXML(parsed);
+}
+
+/**
+ * Ensure every canonical field reference already present under <encodings> has
+ * the datasource-dependencies declarations addFieldToEncoding would create.
+ * Tableau-generated refs have no derivation/role instance shape and are skipped.
+ */
+export function ensureEncodingFieldDependencies(
+  worksheetXml: string,
+  workbookXml?: string,
+): string {
+  const parsed = parseXML(worksheetXml);
+  const worksheet = getWorksheet(parsed);
+
+  if (!worksheet) {
+    return worksheetXml;
+  }
+
+  const declared = new Set<string>();
+  for (const dependency of normalizeArray(worksheet.table?.view?.['datasource-dependencies'])) {
+    const datasource = dependency?.['@_datasource'];
+    if (typeof datasource !== 'string') continue;
+    for (const instance of normalizeArray(dependency['column-instance'])) {
+      const name = instance?.['@_name'];
+      if (typeof name === 'string') declared.add(`${datasource}::${name}`);
+    }
+  }
+
+  let changed = false;
+  const added = new Set<string>();
+  for (const pane of normalizeArray(worksheet.table?.panes?.pane)) {
+    for (const encodings of Object.values(pane.encodings ?? {})) {
+      for (const encoding of normalizeArray<ParsedEncoding>(encodings)) {
+        const columnRef = encoding?.['@_column'];
+        if (typeof columnRef !== 'string') continue;
+
+        const parsedRef = parseCanonicalColumnRef(columnRef);
+        if (!parsedRef) continue;
+        const requestedKey = `${parsedRef.datasource}::${parsedRef.columnInstanceName}`;
+        if (declared.has(requestedKey)) continue;
+
+        const correctedColumnInstanceName = ensureColumnInstanceInDependencies(
+          worksheet,
+          parsedRef.datasource,
+          parsedRef.columnInstanceName,
+          workbookXml,
+        );
+        const correctedKey = `${parsedRef.datasource}::${correctedColumnInstanceName}`;
+        if (declared.has(correctedKey) && !added.has(correctedKey)) continue;
+
+        encoding['@_column'] = `[${parsedRef.datasource}].${correctedColumnInstanceName}`;
+        declared.add(correctedKey);
+        added.add(correctedKey);
+        changed = true;
+      }
+    }
+  }
+
+  return changed ? serializeXML(parsed) : worksheetXml;
 }
 
 /**
