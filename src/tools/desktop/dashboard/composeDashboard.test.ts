@@ -278,6 +278,45 @@ describe('composeDashboardTool', () => {
     });
   });
 
+  it('ignores duplicate named zones in device layouts during readback', async () => {
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml)
+      .mockResolvedValueOnce(Ok(emptyWorkbookXml))
+      .mockResolvedValueOnce(
+        Ok(`<workbook>
+          <dashboards>
+            <dashboard name="New Dashboard">
+              <zones>
+                <zone name="Sales" x="0" y="0" w="50000" h="100000"/>
+                <zone name="Profit" x="50000" y="0" w="50000" h="100000"/>
+              </zones>
+              <devicelayouts>
+                <devicelayout name="Phone">
+                  <zones>
+                    <zone name="Sales" x="0" y="0" w="100000" h="50000"/>
+                    <zone name="Profit" x="0" y="50000" w="100000" h="50000"/>
+                  </zones>
+                </devicelayout>
+              </devicelayouts>
+            </dashboard>
+          </dashboards>
+          <windows><window class="dashboard" name="New Dashboard">
+            <viewpoints><viewpoint name="Profit"/><viewpoint name="Sales"/></viewpoints>
+            <active id="-1"/>
+          </window></windows>
+        </workbook>`),
+      );
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      dashboardName: 'New Dashboard',
+      zones: expect.any(Array),
+      verification: expect.stringContaining('HOST VERIFICATION — verified'),
+    });
+  });
+
   it('does not verify readback without the dashboard window and requested viewpoints', async () => {
     vi.mocked(getWorkbookXmlModule.getWorkbookXml)
       .mockResolvedValueOnce(Ok(emptyWorkbookXml))

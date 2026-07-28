@@ -62,7 +62,16 @@ export function injectViewpoints(
     }
   }
 
-  dashboardWindow.appendChild(buildViewpoints(doc, worksheetNames));
+  const activeElements = dashboardWindow.getElementsByTagName('active');
+  let active: XmlElement | null = null;
+  for (let i = 0; i < activeElements.length; i++) {
+    const node = activeElements.item(i);
+    if (node && node.parentNode === dashboardWindow) {
+      active = node;
+      break;
+    }
+  }
+  dashboardWindow.insertBefore(buildViewpoints(doc, worksheetNames), active);
 
   return new XMLSerializer().serializeToString(doc);
 }

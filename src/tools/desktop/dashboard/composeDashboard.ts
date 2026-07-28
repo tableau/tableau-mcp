@@ -333,9 +333,10 @@ function readbackConfirmsDashboard(
   if (!dashboard) return false;
 
   const actualZones: WorksheetZoneReceipt[] = [];
-  const zoneElements = dashboard.getElementsByTagName('zone');
-  for (let index = 0; index < zoneElements.length; index++) {
-    const zone = zoneElements.item(index);
+  const zonesElement = findDirectChildElement(dashboard, 'zones');
+  const zoneElements = zonesElement?.getElementsByTagName('zone');
+  for (let index = 0; index < (zoneElements?.length ?? 0); index++) {
+    const zone = zoneElements?.item(index);
     const worksheet = zone?.getAttribute('name');
     if (!zone || worksheet == null) continue;
     const x = readCoordinate(zone, 'x');
@@ -357,6 +358,13 @@ function readbackConfirmsDashboard(
   return requestedViewpoints.every((requestedName) =>
     actualViewpoints.some((actualName) => xmlNamesEqual(actualName, requestedName)),
   );
+}
+
+function findDirectChildElement(parent: XmlElement, name: string): XmlElement | null {
+  for (let child = parent.firstChild; child; child = child.nextSibling) {
+    if (child.nodeType === 1 && child.nodeName === name) return child as XmlElement;
+  }
+  return null;
 }
 
 function findNamedElement(

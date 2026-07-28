@@ -33,7 +33,7 @@ describe('injectViewpoints', () => {
     const dashboardWindow = document.getElementsByTagName('window').item(0);
 
     expect(new XMLSerializer().serializeToString(dashboardWindow!)).toBe(
-      '<window class="dashboard" name="Sales &amp; Profit"><active id="-1"/><viewpoints><viewpoint name="Sales"/><viewpoint name="Profit"/></viewpoints></window>',
+      '<window class="dashboard" name="Sales &amp; Profit"><viewpoints><viewpoint name="Sales"/><viewpoint name="Profit"/></viewpoints><active id="-1"/></window>',
     );
     expect(dashboardWindow?.getElementsByTagName('zoom')).toHaveLength(0);
   });
