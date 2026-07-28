@@ -12,13 +12,21 @@ function mimeTypeFor(format: 'PNG' | 'SVG'): string {
  * MCP server never streams the image back to the client and no base64 payload
  * is inlined. The link is short-lived (see IMAGE_S3_PRESIGN_TTL_SECONDS) and
  * should be fetched promptly rather than stored.
+ *
+ * For raster (PNG) images the result also carries `_meta.slack.blocks` with a
+ * Block Kit `image` block pointing at the same presigned URL. Slack renders an
+ * image only when the result emits this convention with a public https
+ * `image_url`; the presigned URL qualifies (its auth lives in the query string
+ * and Slack fetches it server-side). Hosts that don't understand the key ignore
+ * it, so this is inert for non-Slack clients. SVG is intentionally excluded:
+ * Slack `image` blocks do not support SVG, so emitting one would fail to render.
  */
 export function convertViewImageUrlToToolResult(
   url: string,
   format: 'PNG' | 'SVG' | undefined = 'PNG',
 ): CallToolResult {
   const resolvedFormat = format ?? 'PNG';
-  return {
+  const result: CallToolResult = {
     isError: false,
     content: [
       {
@@ -30,6 +38,22 @@ export function convertViewImageUrlToToolResult(
       },
     ],
   };
+
+  if (resolvedFormat !== 'SVG') {
+    result._meta = {
+      slack: {
+        blocks: [
+          {
+            type: 'image',
+            image_url: url,
+            alt_text: 'Tableau view image',
+          },
+        ],
+      },
+    };
+  }
+
+  return result;
 }
 
 export function convertViewImageToToolResult(
