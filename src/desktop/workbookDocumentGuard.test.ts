@@ -37,9 +37,9 @@ describe('validateWorkbookDocumentApply', () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
-    expect(result.message).toContain('whole-document or nothing');
+    expect(result.message).toContain('at least one <datasource');
     expect(result.message).toContain('FIX:');
-    expect(result.message).toContain('get-workbook-xml');
+    expect(result.message).toContain('re-reads the live workbook');
   });
 
   it('rejects a workbook document with zero worksheets', () => {
@@ -66,7 +66,7 @@ describe('validateWorkbookDocumentApply', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
     expect(result.message).toContain('DROP worksheet(s) B');
-    expect(result.message).toContain('delete-worksheet tool');
+    expect(result.message).toContain('a separate request');
   });
 
   it('rejects a dropped worksheet whose live name is DOUBLE-quoted (guard must not fail open)', () => {
@@ -111,7 +111,7 @@ describe('validateWorkbookDocumentApply', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
     expect(result.message).toContain('less than half the size of the live');
-    expect(result.message).toContain('likely a fragment or stale copy');
+    expect(result.message).toContain('likely a fragment or a stale copy');
   });
 
   it('accepts an XML prolog before the workbook root', () => {

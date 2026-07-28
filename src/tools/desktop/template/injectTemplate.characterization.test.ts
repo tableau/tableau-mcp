@@ -19,11 +19,15 @@ vi.mock('../../../desktop/templates/injectTemplate.js');
 vi.mock('../../../desktop/templates/fieldReferenceRewriter.js');
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('../../../desktop/commands/workbook/cacheFingerprint.js');
+vi.mock('../../../desktop/intelligence/provider.js', () => ({
+  bundledIntelligenceProvider: { getTemplateManifest: vi.fn() },
+}));
 vi.mock('fs');
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 
-import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
+import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
+import { rewriteFieldReferencesWithDiagnostics } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
 import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
@@ -59,9 +63,13 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   vi.mocked(writeFileSync).mockImplementation(() => {});
   vi.mocked(readTemplate).mockReturnValue(TEMPLATE_XML);
   vi.mocked(listTemplateNames).mockReturnValue(['kpi-text', 'ranking-ordered-bar']);
+  vi.mocked(bundledIntelligenceProvider.getTemplateManifest).mockReturnValue(undefined);
   // Echo the (already placeholder-substituted) template so injectTemplate receives
   // a valid <worksheets>/<window> structure.
-  vi.mocked(rewriteFieldReferences).mockImplementation((xml) => xml);
+  vi.mocked(rewriteFieldReferencesWithDiagnostics).mockImplementation((xml) => ({
+    xml,
+    droppedOptionalElements: [],
+  }));
   vi.mocked(injectTemplate).mockReturnValue(INJECTED_XML);
   return extra;
 }
@@ -74,18 +82,22 @@ describe('injectTemplateTool — consumer glue characterization', () => {
   it('passes fieldMapping ?? {} — defaults to an empty mapping when none is given', async () => {
     await getResult({ ...BASE_PARAMS, templateParameters: { DATASOURCE: 'Sales Data' } });
 
-    expect(rewriteFieldReferences).toHaveBeenCalledTimes(1);
+    expect(rewriteFieldReferencesWithDiagnostics).toHaveBeenCalledTimes(1);
     // CONVERGENCE: the consumer now calls the shared core directly (W14-CM1), so the
     // call carries the core's full arity — the same (template, {}, datasource) it
     // always did, PLUS fieldMetadata (undefined here) and the per-apply options that
     // turn calc namespacing ON with a caller-minted nonce. The empty-mapping default
     // is unchanged.
-    expect(rewriteFieldReferences).toHaveBeenCalledWith(
+    expect(rewriteFieldReferencesWithDiagnostics).toHaveBeenCalledWith(
       expect.any(String),
       {},
       'Sales Data',
       undefined,
-      { namespaceCalcs: true, applyNonce: expect.any(String) },
+      {
+        namespaceCalcs: true,
+        applyNonce: expect.any(String),
+        templateSlots: undefined,
+      },
     );
   });
 
@@ -96,10 +108,10 @@ describe('injectTemplateTool — consumer glue characterization', () => {
     const extra = makeExtra();
     let capturedTemplate = '';
     let capturedDatasource = '';
-    vi.mocked(rewriteFieldReferences).mockImplementation((xml, _map, ds) => {
+    vi.mocked(rewriteFieldReferencesWithDiagnostics).mockImplementation((xml, _map, ds) => {
       capturedTemplate = xml;
       capturedDatasource = ds;
-      return xml;
+      return { xml, droppedOptionalElements: [] };
     });
 
     await getResult(
@@ -123,9 +135,9 @@ describe('injectTemplateTool — consumer glue characterization', () => {
   it('substitutes and XML-escapes {{TITLE}} before handing the template to C', async () => {
     const extra = makeExtra();
     let capturedTemplate = '';
-    vi.mocked(rewriteFieldReferences).mockImplementation((xml) => {
+    vi.mocked(rewriteFieldReferencesWithDiagnostics).mockImplementation((xml) => {
       capturedTemplate = xml;
-      return xml;
+      return { xml, droppedOptionalElements: [] };
     });
 
     await getResult(
@@ -138,23 +150,33 @@ describe('injectTemplateTool — consumer glue characterization', () => {
     expect(capturedTemplate).not.toContain('A < B & C');
   });
 
-  it('CHARACTERIZATION: without a DATASOURCE param, C is never called and {{DATASOURCE}} survives into the injected XML', async () => {
-    // CHARACTERIZATION: current behavior — {{DATASOURCE}} is filled ONLY by C, and C
-    // runs ONLY when templateParameters.DATASOURCE is set. So a template with field
-    // refs but no DATASOURCE param is injected with literal {{DATASOURCE}} still in
-    // it (and no field remapping). The wellFormedXml check does not catch this.
+  it('blocks a manifest-backed template when DATASOURCE is missing', async () => {
     const extra = makeExtra();
-    let injectedTemplate = '';
-    vi.mocked(injectTemplate).mockImplementation((_wb, tmpl) => {
-      injectedTemplate = tmpl;
-      return INJECTED_XML;
-    });
+    vi.mocked(bundledIntelligenceProvider.getTemplateManifest).mockReturnValue({
+      slots: [
+        {
+          template_field: 'Sales',
+          required: true,
+          bindable: true,
+          kind: 'quantitative',
+          role: ['cols'],
+        },
+      ],
+    } as any);
+    const result = await getResult(
+      { ...BASE_PARAMS, fieldMapping: { Sales: '[DS].[sum:Sales:qk]' } },
+      extra,
+    );
 
-    await getResult({ ...BASE_PARAMS, fieldMapping: { Sales: '[DS].[sum:Sales:qk]' } }, extra);
-
-    expect(rewriteFieldReferences).not.toHaveBeenCalled();
-    expect(injectedTemplate).toContain('{{DATASOURCE}}');
-    expect(injectedTemplate).toContain('sum:Sales:qk');
+    expect(result.isError).toBe(true);
+    expect(rewriteFieldReferencesWithDiagnostics).not.toHaveBeenCalled();
+    expect(injectTemplate).not.toHaveBeenCalled();
+    expect(result.content[0]).toEqual(
+      expect.objectContaining({
+        type: 'text',
+        text: expect.stringContaining('provide a datasource and choose every required chart field'),
+      }),
+    );
   });
 
   it('CONVERGENCE: wires per-apply calc namespacing ON with a DISTINCT nonce per apply', async () => {
@@ -168,7 +190,7 @@ describe('injectTemplateTool — consumer glue characterization', () => {
     await getResult({ ...BASE_PARAMS, templateParameters: { DATASOURCE: 'Sales Data' } }, extra);
     await getResult({ ...BASE_PARAMS, templateParameters: { DATASOURCE: 'Sales Data' } }, extra);
 
-    const calls = vi.mocked(rewriteFieldReferences).mock.calls;
+    const calls = vi.mocked(rewriteFieldReferencesWithDiagnostics).mock.calls;
     expect(calls).toHaveLength(2);
 
     const opts1 = calls[0][4] as { namespaceCalcs?: boolean; applyNonce?: string };

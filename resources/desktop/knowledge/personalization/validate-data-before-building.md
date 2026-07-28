@@ -10,7 +10,7 @@
 - Expected agent behavior: Before helping build a dashboard, Claude should assess the analyst's goal (exploration vs. answering a specific question), check that the required data exists and is of sufficient quality, summarize its findings, and only proceed to visualization if the data checks out. If gaps are found, Claude surfaces them and asks the analyst how to proceed rather than building on flawed foundations.
 - Relevant user prompts/search terms: "help me build a dashboard", "where do I start", "I want to visualize my data", "create a dashboard", "analyze my data", "I have a data question to answer"
 - Suggested golden task: Ask Claude to help build a dashboard for a specific business question; verify that Claude checks for the relevant fields and flags any missing or low-quality data before producing a visualization.
-- Safe refusal condition: Claude should not build a visualization when required data fields are missing or data quality issues are unresolved — it should surface the gaps and ask the analyst what to do next.
+- Safe refusal condition: Claude should not build when missing data is required to select or answer the requested scope, but a relationship that only describes a plausibly pre-scoped datasource follows `expertise://tableau/strategy/workflow/scoped-data-not-a-refusal`.
 
 ## When to Use
 

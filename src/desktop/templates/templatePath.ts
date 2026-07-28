@@ -3,6 +3,8 @@ import { join, resolve, sep } from 'path';
 
 import { DATA_ROOT, listDataAssetNames, readDataAsset } from '../assets.js';
 
+const MANIFEST_SUFFIX = '.manifest.json';
+
 export function getTemplatesDir(): string {
   return process.env['TEMPLATES_DIR'] ?? join(DATA_ROOT, 'templates');
 }
@@ -32,6 +34,11 @@ export function getTemplatePath(templateName: string): string {
 // SEA-aware template listing/reading. When TEMPLATES_DIR is set (or running from
 // a normal build), reads from disk; otherwise reads from the embedded SEA assets.
 export function listTemplateNames(): string[] {
+  const manifestBackedNames = new Set(
+    listDataAssetNames('template-manifests')
+      .filter((f) => f.endsWith(MANIFEST_SUFFIX))
+      .map((f) => f.slice(0, -MANIFEST_SUFFIX.length)),
+  );
   if (process.env['TEMPLATES_DIR']) {
     const dir = getTemplatesDir();
     if (!existsSync(dir)) return [];
@@ -43,6 +50,7 @@ export function listTemplateNames(): string[] {
   return listDataAssetNames('templates')
     .filter((f) => f.endsWith('.xml'))
     .map((f) => f.replace(/\.xml$/, ''))
+    .filter((name) => manifestBackedNames.has(name))
     .sort();
 }
 

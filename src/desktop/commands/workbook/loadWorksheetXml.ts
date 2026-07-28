@@ -15,9 +15,10 @@ import {
   type ReadbackVerificationResult,
   verifyWorksheetReadback,
 } from '../../validation/readback-verify.js';
-import { runValidation } from '../../validation/registry.js';
+import { blockingValidationIssues, runValidation } from '../../validation/registry.js';
 import { ValidationIssue } from '../../validation/types.js';
 import { xmlNamesEqual } from '../../xmlElement.js';
+import { type ApplyFocus } from './applyFocus.js';
 import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { getWorksheetFragment } from './getWorksheetXml.js';
@@ -47,7 +48,7 @@ export interface LoadWorksheetXmlOk {
   validationWarnings?: ValidationIssue[];
 }
 
-interface PostApplyWorksheetReadbackVerification extends ReadbackVerificationResult {
+export interface PostApplyWorksheetReadbackVerification extends ReadbackVerificationResult {
   findings: ReadbackFinding[];
 }
 
@@ -63,7 +64,7 @@ type LoadWorksheetXmlResult = Result<
  * apply on a re-read miss: if the worksheet cannot be re-read, verification is skipped
  * (returns no findings) so telemetry can never mask a real apply.
  */
-function publicReadbackVerificationResult(
+export function publicReadbackVerificationResult(
   result: PostApplyWorksheetReadbackVerification,
 ): ReadbackVerificationResult {
   return result.message
@@ -71,7 +72,13 @@ function publicReadbackVerificationResult(
     : { ok: result.ok, status: result.status };
 }
 
-async function verifyPostApplyWorksheetReadback(
+/**
+ * Exported so the whole-workbook apply paths can run the SAME verification. bind-template
+ * applies through loadWorkbookXml, which has no readback: when Tableau stripped a requested
+ * encoding out of a bind, the response looked exactly like a bind it kept whole, because
+ * "Applied" only ever meant "Desktop accepted a document". One helper, both paths.
+ */
+export async function verifyPostApplyWorksheetReadback(
   worksheetName: string,
   intendedXml: string,
   executor: WithExecutorAndAbortSignal['executor'],
@@ -173,12 +180,13 @@ function resolveCanonicalWorksheetName(
     return Err({
       type: 'name-mismatch',
       message: isWorkbookDocument
-        ? 'apply-worksheet expects a single <worksheet name="..."> fragment, but the XML is a whole ' +
-          `<workbook> document. FIX: Extract just the <worksheet name="${callerName}"> element and retry ` +
-          'with that fragment as worksheetXml — or apply the whole document with apply-workbook.'
-        : 'apply-worksheet could not find a top-level <worksheet name="..."> element in the XML. ' +
-          `FIX: Provide a single <worksheet name="${callerName}"> fragment (as returned by get-worksheet-xml) ` +
-          'as worksheetXml.',
+        ? 'apply-worksheet expects a single <worksheet name="..."> fragment, but the cached file ' +
+          `holds a whole <workbook> document. FIX: read-cached-xml with worksheet="${callerName}" to pull ` +
+          'just that element, write-cached-xml with the same selector to splice your edit back, then ' +
+          'apply-worksheet with that file.'
+        : 'apply-worksheet could not find a top-level <worksheet name="..."> element in the cached file. ' +
+          `FIX: get-worksheet-xml for "${callerName}" mints a file holding exactly that fragment; edit it ` +
+          'with read-cached-xml/write-cached-xml and pass that path to apply-worksheet.',
     });
   }
 
@@ -198,12 +206,14 @@ function resolveCanonicalWorksheetName(
 export async function loadWorksheetXml({
   worksheetName,
   xml,
+  focus,
   executor,
   signal,
   readbackVerificationOut,
 }: {
   worksheetName: string;
   xml: string;
+  focus: ApplyFocus;
   readbackVerificationOut?: ReadbackVerificationResult[];
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   xml = xml.trim();
@@ -212,21 +222,22 @@ export async function loadWorksheetXml({
   }
 
   const validation = runValidation(xml, 'worksheet');
-  if (!validation.valid) {
+  const blockingIssues = blockingValidationIssues(validation.issues);
+  if (blockingIssues.length > 0) {
     log({
       level: 'error',
       message: 'Preflight validation failed — worksheet XML not sent to Tableau',
       logger: 'worksheetCommands',
       data: {
         worksheetName,
-        issues: validation.issues,
+        issues: blockingIssues,
         xmlPreview: sanitize(xml),
       },
     });
 
     return Err({
       type: 'load-worksheet-xml-error',
-      error: { type: 'validation-failed', issues: validation.issues },
+      error: { type: 'validation-failed', issues: blockingIssues },
     });
   }
 
@@ -256,6 +267,8 @@ export async function loadWorksheetXml({
     return Err({ type: 'load-worksheet-xml-error', error: canonicalNameResult.error });
   }
   const canonicalName = canonicalNameResult.value;
+  const canonicalFocus: ApplyFocus =
+    focus.navigate === 'artifact' ? { ...focus, sheetName: canonicalName } : focus;
 
   // External Client API ("Athena V0") exposes no per-sheet apply route, so applying a single sheet
   // re-posts the whole live workbook with just this sheet swapped in (the POST replaces the open
@@ -263,6 +276,7 @@ export async function loadWorksheetXml({
   const result = await loadWorksheetXmlViaExternalApi({
     worksheetName: canonicalName,
     xml,
+    focus: canonicalFocus,
     executor,
     signal,
     readbackVerificationOut,
@@ -278,12 +292,14 @@ export async function loadWorksheetXml({
 async function loadWorksheetXmlViaExternalApi({
   worksheetName,
   xml,
+  focus,
   executor,
   signal,
   readbackVerificationOut,
 }: {
   worksheetName: string;
   xml: string;
+  focus: ApplyFocus;
   readbackVerificationOut?: ReadbackVerificationResult[];
 } & WithExecutorAndAbortSignal): Promise<LoadWorksheetXmlResult> {
   return withApplyLock(async () => {
@@ -300,7 +316,8 @@ async function loadWorksheetXmlViaExternalApi({
     }
 
     const workbookDocValidation = runValidation(workbookDoc, 'workbook');
-    if (!workbookDocValidation.valid) {
+    const workbookBlockingIssues = blockingValidationIssues(workbookDocValidation.issues);
+    if (workbookBlockingIssues.length > 0) {
       log({
         level: 'error',
         message:
@@ -308,18 +325,45 @@ async function loadWorksheetXmlViaExternalApi({
         logger: 'worksheetCommands',
         data: {
           worksheetName,
-          issues: workbookDocValidation.issues,
+          issues: workbookBlockingIssues,
           xmlPreview: sanitize(workbookDoc),
         },
       });
 
       return Err({
         type: 'load-worksheet-xml-error',
-        error: { type: 'validation-failed', issues: workbookDocValidation.issues },
+        error: { type: 'validation-failed', issues: workbookBlockingIssues },
       });
     }
 
-    const applyResult = await applyWorkbookText({ xml: workbookDoc, executor, signal });
+    // Non-blocking findings from the CONSTRUCTED workbook (e.g. a parameter that
+    // only exists in workbook context) never appear in the fragment's warning
+    // ride-along — log them so receipts/diagnostics can still find them.
+    const workbookWarningIssues = workbookDocValidation.issues.filter(
+      (issue) => issue.severity !== 'error',
+    );
+    if (workbookWarningIssues.length > 0) {
+      log({
+        level: 'warning',
+        message: 'Constructed worksheet apply document has non-blocking validation findings',
+        logger: 'worksheetCommands',
+        data: {
+          worksheetName,
+          warningCount: workbookWarningIssues.length,
+          // Capped + sanitized: validation messages can quote field names and
+          // XML context, so never log the unbounded raw array.
+          issues: sanitize(
+            workbookWarningIssues.slice(0, 5).map((issue) => ({
+              ruleId: issue.ruleId,
+              severity: issue.severity,
+              message: issue.message.slice(0, 200),
+            })),
+          ),
+        },
+      });
+    }
+
+    const applyResult = await applyWorkbookText({ xml: workbookDoc, focus, executor, signal });
     if (applyResult.isErr()) {
       return Err({ type: 'execute-command-error', error: applyResult.error });
     }

@@ -160,6 +160,63 @@ describe('binder/buildLlmInput — field narrowing (stage 2B)', () => {
     expect(input.fields.some((f) => f.name === 'Zebra Metric')).toBe(true);
   });
 
+  it('keeps an ask-named dimension when realistic business-synonym measures fill the cap', () => {
+    const collisionWords = [
+      'Booked',
+      'Billed',
+      'Contracted',
+      'Deferred',
+      'Domestic',
+      'Enterprise',
+      'Forecast',
+      'Gross',
+      'International',
+      'Invoiced',
+      'Net',
+      'Online',
+      'Partner',
+      'Pipeline',
+      'Projected',
+      'Recurring',
+      'Renewal',
+      'Retail',
+      'Services',
+      'Subscription',
+      'Total',
+      'Wholesale',
+    ];
+    const collisionMeasures = collisionWords.map((word, index) =>
+      field(`${word} ${index % 2 === 0 ? 'Amount' : 'Sales'}`, 'measure', 'quantitative', 'real'),
+    );
+    const dimensions = [
+      field('Customer Segment', 'dimension', 'nominal', 'string'),
+      field('Customer Name', 'dimension', 'nominal', 'string'),
+      field('Product Category', 'dimension', 'nominal', 'string'),
+      field('Market', 'dimension', 'nominal', 'string'),
+      field('Region', 'dimension', 'nominal', 'string'),
+    ];
+    const summary: SchemaSummary = {
+      datasource: 'DS',
+      fields: [...collisionMeasures, ...dimensions],
+    };
+
+    const input = buildLlmInput('bar chart of revenue by Customer Segment', barTemplate(), summary);
+
+    expect(input.fields).toHaveLength(20);
+    expect(input.fields.some((candidate) => candidate.name === 'Customer Segment')).toBe(true);
+    const categoricalSlot = input.candidate_templates[0]?.slots.find(
+      (slot) => slot.kind === 'categorical',
+    );
+    expect(categoricalSlot).toBeDefined();
+    expect(
+      input.fields.filter(
+        (candidate) =>
+          candidate.role === 'dimension' &&
+          (candidate.type === 'nominal' || candidate.type === 'ordinal'),
+      ),
+    ).not.toHaveLength(0);
+  });
+
   it('rank-2: kind-compatible fields outrank incompatible ones when the ask names nothing', () => {
     // 30 dimensions first, then 5 measures last. Candidate requires ONLY a
     // quantitative slot, so the 5 measures are kind-compatible (rank-2) and the

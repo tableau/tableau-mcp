@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { log } from '../../logging/logger.js';
 import { GetCommandStatusResponse, GetEventsResponse } from '../../sdks/desktop/agentApi/types.js';
+import { desktopCallTimeoutMessage, isDesktopCallTimeout } from '../callDeadline.js';
 import {
   ExecuteCommandArgs,
   ExecuteCommandError,
@@ -10,6 +11,11 @@ import {
   GetEventsArgs,
   ToolExecutor,
 } from '../toolExecutor/toolExecutor.js';
+import {
+  noInstanceFoundMessage,
+  unknownInstanceUnreachableMessage,
+  unreachableInstanceMessage,
+} from '../unreachableInstance.js';
 import {
   ExternalApiClient,
   ExternalApiClientOptions,
@@ -152,7 +158,7 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     );
 
     if (outcomeResult.isErr()) {
-      const mapped = mapClientError(outcomeResult.error);
+      const mapped = mapClientError(outcomeResult.error, this.deps.pid);
       log({
         message: `Failed to execute command ${namespace}:${command} via External Client API`,
         level: 'error',
@@ -216,7 +222,7 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     });
 
     if (outcomeResult.isErr()) {
-      const mapped = mapClientError(outcomeResult.error);
+      const mapped = mapClientError(outcomeResult.error, this.deps.pid);
       log({
         message: 'Failed to apply workbook document via External Client API',
         level: 'error',
@@ -441,7 +447,7 @@ export class ExternalApiToolExecutor extends ToolExecutor {
   ): Promise<Result<T, ExecuteCommandError>> {
     const result = await this.withClientRescan(op);
     if (result.isErr()) {
-      return Err(mapClientError(result.error));
+      return Err(mapClientError(result.error, this.deps.pid));
     }
     return Ok(result.value);
   }
@@ -556,7 +562,10 @@ function supportsOperationResult(apiVersion: string | undefined): boolean {
   return major > 0 || (major === 0 && (minor > 1 || (minor === 1 && patch >= 1)));
 }
 
-function mapClientError(error: ExternalApiError | NoInstance): ExecuteCommandError {
+function mapClientError(
+  error: ExternalApiError | NoInstance,
+  pinnedPid?: number,
+): ExecuteCommandError {
   switch (error.type) {
     case 'problem':
       return {
@@ -576,16 +585,56 @@ function mapClientError(error: ExternalApiError | NoInstance): ExecuteCommandErr
     case 'invalid-response':
       return { type: 'invalid-response', error: error.error };
     case 'network':
-      return { type: 'unknown', error: error.error };
+      return mapNetworkFailure(error.error, pinnedPid, error.aborted);
     case 'no-instance':
       return {
         type: 'unknown',
         error:
           error.pinnedPid !== undefined
-            ? `Pinned Tableau Desktop (pid ${error.pinnedPid}) is no longer running — relaunch the agent from the Desktop you want to control.`
-            : 'No External Client API instance available.',
+            ? noInstanceFoundMessage(error.pinnedPid)
+            : unknownInstanceUnreachableMessage(),
       };
   }
+}
+
+/**
+ * A dead-but-cached Desktop used to surface as a raw `fetch failed`, which the agent could not
+ * act on. Name the instance so it can re-target, and keep a timeout honest as a timeout.
+ */
+function mapNetworkFailure(
+  cause: unknown,
+  pinnedPid?: number,
+  aborted = false,
+): ExecuteCommandError {
+  if (isDesktopCallTimeout(cause)) {
+    return {
+      type: 'command-timed-out',
+      error: desktopCallTimeoutMessage({ budgetMs: cause.budgetMs }),
+    };
+  }
+
+  // Caller AbortError is reported as timed out for now; MCP cancellation discards this response.
+  if (
+    aborted ||
+    (cause instanceof Error && (cause.name === 'TimeoutError' || cause.name === 'AbortError'))
+  ) {
+    return {
+      type: 'command-timed-out',
+      error:
+        cause instanceof Error
+          ? cause.message
+          : 'External Client API request was aborted before completion.',
+    };
+  }
+
+  const detail = cause instanceof Error ? cause.message : undefined;
+  return {
+    type: 'unknown',
+    error:
+      pinnedPid !== undefined
+        ? unreachableInstanceMessage(pinnedPid, detail)
+        : unknownInstanceUnreachableMessage(detail),
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

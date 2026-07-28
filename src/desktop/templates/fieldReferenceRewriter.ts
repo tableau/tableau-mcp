@@ -1,3 +1,4 @@
+import { resolveDerivation } from '../derivations.js';
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { createHash } from 'crypto';
 import * as xpath from 'xpath';
@@ -81,54 +82,39 @@ export interface RewriteFieldReferencesOptions {
    * collision-free names.
    */
   applyNonce?: string;
+  /**
+   * Manifest-declared bindable slots. When supplied, unused optional slots are
+   * removed structurally and any unresolved required slot fails before apply.
+   */
+  templateSlots?: readonly TemplateSlotReference[];
+}
+
+export interface RewriteFieldReferencesResult {
+  xml: string;
+  droppedOptionalElements: string[];
+}
+
+/** Minimal, repo-agnostic manifest slot shape needed by the rewrite guard. */
+export interface TemplateSlotReference {
+  /** Stable manifest/proposal identity; accepted as a field-mapping alias. */
+  slot_id?: string;
+  template_field: string;
+  required: boolean;
+  bindable?: boolean;
+  kind?: string;
+  role?: readonly string[];
+  purpose?: string;
 }
 
 /**
- * CANONICAL short-form → long-form derivation map (adopted from A as the single
- * source of truth for this core). A column-instance NAME carries the lowercase
+ * Short-form → long-form derivation resolution lives in ONE table for the whole
+ * repo: `src/desktop/derivations.ts`. A column-instance NAME carries the lowercase
  * short code (`[sum:Sales:qk]`); the sibling `derivation` ATTRIBUTE carries the
- * capitalized long form (`Sum`, `Month-Trunc`). Writing a long form INTO an
- * instance name fails to bind in live Desktop (red pills / blank viz).
+ * canonical long form (`Sum`, `Month-Trunc`). Writing a long form INTO an instance
+ * name fails to bind in live Desktop (red pills / blank viz), and writing an
+ * unrecognized short code into the attribute makes Tableau silently rewrite the
+ * pill to None — so an unknown prefix throws here instead of being echoed onward.
  */
-const DERIVATION_SHORT_TO_LONG: Readonly<Record<string, string>> = {
-  // Aggregations
-  none: 'None',
-  sum: 'Sum',
-  avg: 'Avg',
-  cnt: 'Count',
-  count: 'Count',
-  cntd: 'CountD',
-  ctd: 'CountD',
-  countd: 'CountD',
-  median: 'Median',
-  attr: 'Attr',
-  min: 'Min',
-  max: 'Max',
-  stdev: 'Stdev',
-  stdevp: 'StdevP',
-  var: 'Var',
-  varp: 'VarP',
-  // Table calc / user
-  usr: 'User',
-  user: 'User',
-  // Discrete date parts
-  yr: 'Year',
-  qr: 'Quarter',
-  mn: 'Month',
-  wk: 'Week',
-  dy: 'Day',
-  hr: 'Hour',
-  mi: 'Minute',
-  sc: 'Second',
-  // Date truncations (continuous *-Trunc long forms)
-  tyr: 'Year-Trunc',
-  tqr: 'Quarter-Trunc',
-  tmn: 'Month-Trunc',
-  tmo: 'Month-Trunc',
-  twk: 'Week-Trunc',
-  tdy: 'Day-Trunc',
-};
-
 /**
  * Replace `{{DATASOURCE}}` placeholders AND template field names with actual
  * values, structurally (per reference class) over the parsed DOM.
@@ -149,30 +135,51 @@ export function rewriteFieldReferences(
   fieldMetadata?: Record<string, { datatype: string; type: string }>,
   options?: RewriteFieldReferencesOptions,
 ): string {
+  return rewriteFieldReferencesWithDiagnostics(
+    templateXml,
+    fieldMapping,
+    datasourceName,
+    fieldMetadata,
+    options,
+  ).xml;
+}
+
+export function rewriteFieldReferencesWithDiagnostics(
+  templateXml: string,
+  fieldMapping: Record<string, string>,
+  datasourceName: string,
+  fieldMetadata?: Record<string, { datatype: string; type: string }>,
+  options?: RewriteFieldReferencesOptions,
+): RewriteFieldReferencesResult {
   // Parse with a silent error handler — the upstream caller validates the
   // post-transform result and reports problems there.
   const parser = new DOMParser({
     errorHandler: (): void => {},
   });
   const doc = parser.parseFromString(templateXml, 'text/xml') as unknown as Document;
-
-  const derivationMap = DERIVATION_SHORT_TO_LONG;
+  const normalizedFieldMapping = normalizeFieldMapping(fieldMapping, options?.templateSlots);
+  const droppedOptionalElements: string[] = [];
 
   // Parse a mapped column-instance value into the actual field info we write.
-  // Accepts [datasource].[derivation:fieldName:role] or [derivation:fieldName:role].
+  // Accepts [datasource].[derivation:fieldName:role] or [derivation:fieldName:role],
+  // with an optional trailing table-calc index after the role.
+  // The first group is greedy so a table-calc chain ([pcto:cum:sum:Sales:qk], which
+  // real Tableau writes) keeps its wrappers instead of being read as field "sum".
+  // Anchoring the role to Tableau's role markers prevents an optional trailing index
+  // ([pcto:sum:Sales:qk:3]) from being mistaken for the role and shifting the field to qk.
   const parseColumnInstance = (columnInstance: string): FieldInfo | null => {
     const strippedInstance = columnInstance.includes('].[')
       ? columnInstance.substring(columnInstance.indexOf('].[') + 2)
       : columnInstance;
 
-    const match = strippedInstance.match(/\[([^:]+):([^:]+):([^\]]+)\]/);
+    const match = strippedInstance.match(/^\[(.+):([^:]+):(nk|ok|qk)(?::[^:\]]+)?\]$/);
     if (!match) {
       return null;
     }
 
     const [, derivShortRaw, actualFieldName, role] = match;
     const derivation = derivShortRaw.toLowerCase();
-    const derivationAttr = derivationMap[derivation] || derivShortRaw;
+    const derivationAttr = resolveDerivation(derivation);
     return { name: actualFieldName, derivation, derivationAttr, role };
   };
 
@@ -183,7 +190,7 @@ export function rewriteFieldReferences(
   const bareKeyInfo: Record<string, FieldInfo> = {};
   const qualifiedKeyInfo: Record<string, FieldInfo> = {}; // key = "field@deriv" (deriv lowercased)
 
-  for (const [rawKey, columnInstance] of Object.entries(fieldMapping)) {
+  for (const [rawKey, columnInstance] of Object.entries(normalizedFieldMapping)) {
     const parsed = parseColumnInstance(columnInstance);
     if (!parsed) continue;
     const atIdx = rawKey.lastIndexOf('@');
@@ -202,6 +209,17 @@ export function rewriteFieldReferences(
   for (const k of Object.keys(bareKeyInfo)) mappedFields.add(k);
   for (const k of Object.keys(qualifiedKeyInfo))
     mappedFields.add(k.substring(0, k.lastIndexOf('@')));
+
+  // Remove optional placeholders while the DOM still carries template names.
+  // Doing this before mapped fields are renamed avoids confusing an actual user
+  // field whose name happens to equal another slot's template placeholder.
+  pruneUnusedOptionalTemplateSlots(
+    doc,
+    normalizedFieldMapping,
+    mappedFields,
+    options?.templateSlots,
+    droppedOptionalElements,
+  );
 
   // 0. Per-apply CALC NAMESPACING (opt-in; requires a caller-supplied nonce).
   if (options?.namespaceCalcs && options.applyNonce) {
@@ -251,6 +269,20 @@ export function rewriteFieldReferences(
     if (simpleMatch && mappedFields.has(simpleMatch[1])) {
       const templateFieldName = simpleMatch[1];
       col.setAttribute('name', `[${baseTarget[templateFieldName]}]`);
+
+      const slot = options?.templateSlots?.find(
+        (candidate) => candidate.template_field === templateFieldName,
+      );
+      const mappedInfo = resolveFieldInfo(templateFieldName);
+      if (slot?.kind === 'quantitative-or-categorical' && mappedInfo) {
+        const isDimension = mappedInfo.role === 'nk' || mappedInfo.role === 'ok';
+        col.setAttribute('role', isDimension ? 'dimension' : 'measure');
+        col.setAttribute(
+          'type',
+          isDimension ? (mappedInfo.role === 'ok' ? 'ordinal' : 'nominal') : 'quantitative',
+        );
+        col.setAttribute('datatype', isDimension ? 'string' : 'real');
+      }
 
       if (fieldMetadata && fieldMetadata[templateFieldName]) {
         const meta = fieldMetadata[templateFieldName];
@@ -435,6 +467,17 @@ export function rewriteFieldReferences(
     }
   }
 
+  // Defense in depth after every substitution pass: a required template field
+  // that was not successfully mapped must never reach Desktop as a literal
+  // sample-data column. Optional cleanup is verified here for the same reason.
+  assertNoUnresolvedTemplateSlots(
+    doc,
+    mappedFields,
+    baseTarget,
+    options?.templateSlots,
+  );
+  assertNoFieldPlaceholderResidue(doc);
+
   // Wrap <run> text with newlines / angle brackets in CDATA (matches Tableau).
   const runElements = selectElements('//run', doc);
   for (const run of runElements) {
@@ -450,7 +493,12 @@ export function rewriteFieldReferences(
     }
   }
 
-  return new XMLSerializer().serializeToString(doc as any);
+  return {
+    xml: new XMLSerializer().serializeToString(doc as any),
+    droppedOptionalElements: droppedOptionalElements.map((message) =>
+      message.replace(/\{\{DATASOURCE\}\}/g, () => datasourceName),
+    ),
+  };
 }
 
 /**
@@ -478,6 +526,306 @@ function selectElements(xp: string, doc: Document): Element[] {
 function selectTexts(xp: string, doc: Document): Text[] {
   return (xpath.select(xp, doc as unknown as Node) as Node[]).filter(
     (n): n is Text => n.nodeType === TEXT_NODE,
+  );
+}
+
+const OPTIONAL_REFERENCE_ELEMENTS = new Set([
+  'column',
+  'column-instance',
+  'color',
+  'computed-sort',
+  'encoding',
+  'filter',
+  'format',
+  'groupfilter',
+  'lod',
+  'size',
+  'tooltip',
+]);
+
+function splitMappingKey(key: string): { base: string; derivation?: string } {
+  const atIdx = key.lastIndexOf('@');
+  const suffix = atIdx >= 0 ? key.substring(atIdx + 1) : '';
+  return atIdx > 0 && /^[A-Za-z][A-Za-z0-9-]*$/.test(suffix)
+    ? { base: key.slice(0, atIdx), derivation: suffix }
+    : { base: key };
+}
+
+/**
+ * Expand stable slot-id mapping aliases to the exact template placeholder token.
+ * Canonical template_field keys remain supported; conflicting alias/canonical
+ * values fail loud instead of making substitution depend on object key order.
+ */
+function normalizeFieldMapping(
+  fieldMapping: Record<string, string>,
+  slots?: readonly TemplateSlotReference[],
+): Record<string, string> {
+  if (!slots || slots.length === 0) return fieldMapping;
+  const bySlotId = new Map(
+    slots
+      .filter((slot): slot is TemplateSlotReference & { slot_id: string } => !!slot.slot_id)
+      .map((slot) => [slot.slot_id, slot]),
+  );
+  const byTemplateField = new Map(slots.map((slot) => [slot.template_field, slot]));
+  const bindableSlots = slots.filter((slot) => slot.bindable !== false);
+  const positionalAlias = new Map<TemplateSlotReference, string>();
+  for (const [index, slot] of bindableSlots.entries()) {
+    const alias = `{{field_base_${index + 1}}}`;
+    const declaredOwner = byTemplateField.get(alias);
+    // Legacy concrete-field manifests use positional placeholders in computed
+    // sorts. Mixed manifests instead declare those placeholders as real slots;
+    // never let an earlier concrete slot steal an explicitly owned token.
+    if (!declaredOwner || declaredOwner === slot) {
+      positionalAlias.set(slot, alias);
+    }
+  }
+  const normalized: Record<string, string> = {};
+
+  for (const [rawKey, value] of Object.entries(fieldMapping)) {
+    const { base, derivation } = splitMappingKey(rawKey);
+    const slot = bySlotId.get(base) ?? byTemplateField.get(base);
+    const canonical = slot
+      ? `${slot.template_field}${derivation ? `@${derivation}` : ''}`
+      : rawKey;
+    addNormalizedMapping(normalized, canonical, value);
+    const alias = slot ? positionalAlias.get(slot) : undefined;
+    if (alias && alias !== slot?.template_field) {
+      addNormalizedMapping(normalized, `${alias}${derivation ? `@${derivation}` : ''}`, value);
+    }
+  }
+
+  return normalized;
+}
+
+function addNormalizedMapping(
+  normalized: Record<string, string>,
+  key: string,
+  value: string,
+): void {
+  const prior = normalized[key];
+  if (prior !== undefined && prior !== value) {
+    throw new Error(
+      `Field mapping provides conflicting values for '${key}' through template-field and slot-id keys.`,
+    );
+  }
+  normalized[key] = value;
+}
+
+function rawMappingFields(fieldMapping: Record<string, string>): Set<string> {
+  const fields = new Set<string>();
+  for (const key of Object.keys(fieldMapping)) {
+    fields.add(splitMappingKey(key).base);
+  }
+  return fields;
+}
+
+function referencesTemplateField(value: string, templateField: string): boolean {
+  for (const match of value.matchAll(/\[([^\]]+)\]/g)) {
+    const token = match[1];
+    if (token === templateField) {
+      // In `[datasource].[instance]`, the first bracket token is a datasource,
+      // not a field. Do not mistake a same-named datasource for a placeholder.
+      const afterToken = value.slice((match.index ?? 0) + match[0].length);
+      if (!afterToken.startsWith('.[')) return true;
+    }
+    if (parseInstanceName(match[0])?.field === templateField) return true;
+  }
+  return false;
+}
+
+function removeElement(element: Element): void {
+  element.parentNode?.removeChild(element);
+}
+
+function isWhitespaceText(node: Node | null): node is Text {
+  return node?.nodeType === TEXT_NODE && !(node as Text).data.trim();
+}
+
+function removeOptionalReferenceElement(element: Element): void {
+  const followingWhitespace = element.nextSibling;
+  removeElement(element);
+  if (isWhitespaceText(followingWhitespace)) {
+    followingWhitespace.parentNode?.removeChild(followingWhitespace);
+  }
+}
+
+function removeEmptyEncodingContainers(doc: Document): void {
+  for (const encodings of selectElements('//encodings', doc)) {
+    const hasEncoding = Array.from(encodings.childNodes).some(
+      (node) => node.nodeType === ELEMENT_NODE,
+    );
+    if (hasEncoding) continue;
+    // The optional color block is authored between two indented siblings. Removing
+    // its following whitespace node as well collapses the two adjacent indentation
+    // nodes back to the exact pre-injection bytes after DOM serialization.
+    const followingWhitespace = encodings.nextSibling;
+    removeElement(encodings);
+    if (isWhitespaceText(followingWhitespace)) {
+      followingWhitespace.parentNode?.removeChild(followingWhitespace);
+    }
+  }
+}
+
+function pruneShelfFieldReferences(doc: Document, templateField: string): void {
+  for (const tag of ['rows', 'cols']) {
+    for (const shelf of selectElements(`//${tag}`, doc)) {
+      for (const text of Array.from(shelf.childNodes).filter(
+        (node): node is Text => node.nodeType === TEXT_NODE,
+      )) {
+        if (!referencesTemplateField(text.data, templateField)) continue;
+        const kept = text.data
+          .split(/\s+\/\s+/)
+          .filter((pill) => !referencesTemplateField(pill, templateField));
+        text.data = kept.join(' / ');
+      }
+    }
+  }
+}
+
+function pruneOptionalTemplateField(
+  doc: Document,
+  templateField: string,
+  droppedOptionalElements: string[],
+): void {
+  for (const element of selectElements('//*', doc)) {
+    if (!OPTIONAL_REFERENCE_ELEMENTS.has(element.tagName)) continue;
+    const unresolvedRef = Array.from(element.attributes).find((attribute) =>
+      referencesTemplateField(attribute.value, templateField),
+    );
+    if (!unresolvedRef) continue;
+    if (element.tagName === 'computed-sort') {
+      droppedOptionalElements.push(
+        `computed-sort dropped: ${unresolvedRef.value} did not resolve`,
+      );
+    }
+    removeOptionalReferenceElement(element);
+  }
+  removeEmptyEncodingContainers(doc);
+  pruneShelfFieldReferences(doc, templateField);
+}
+
+function pruneUnusedOptionalTemplateSlots(
+  doc: Document,
+  fieldMapping: Record<string, string>,
+  mappedFields: Set<string>,
+  slots?: readonly TemplateSlotReference[],
+  droppedOptionalElements: string[] = [],
+): void {
+  if (!slots || slots.length === 0) return;
+  const rawMappedFields = rawMappingFields(fieldMapping);
+  const pruned = new Set<string>();
+  const bindableSlots = slots.filter((slot) => slot.bindable !== false);
+  const declaredTemplateFields = new Set(slots.map((slot) => slot.template_field));
+  for (const slot of slots) {
+    if (
+      slot.bindable === false ||
+      slot.required ||
+      mappedFields.has(slot.template_field) ||
+      rawMappedFields.has(slot.template_field) ||
+      pruned.has(slot.template_field)
+    ) {
+      continue;
+    }
+    const position = bindableSlots.indexOf(slot);
+    const positionalReference =
+      position >= 0 ? `{{field_base_${position + 1}}}` : undefined;
+    const references = [
+      slot.template_field,
+      ...(positionalReference &&
+      (!declaredTemplateFields.has(positionalReference) ||
+        positionalReference === slot.template_field)
+        ? [positionalReference]
+        : []),
+    ];
+    for (const reference of new Set(references)) {
+      if (pruned.has(reference)) continue;
+      pruneOptionalTemplateField(doc, reference, droppedOptionalElements);
+      pruned.add(reference);
+    }
+  }
+}
+
+function documentReferencesTemplateField(doc: Document, templateField: string): boolean {
+  for (const element of selectElements('//*[@*]', doc)) {
+    if (
+      Array.from(element.attributes).some((attribute) =>
+        referencesTemplateField(attribute.value, templateField),
+      )
+    ) {
+      return true;
+    }
+  }
+  return selectTexts('//text()', doc).some((text) =>
+    referencesTemplateField(text.data, templateField),
+  );
+}
+
+function userFacingFieldDescription(slot: TemplateSlotReference): string {
+  switch (slot.kind) {
+    case 'quantitative':
+      return 'a quantitative value field';
+    case 'categorical':
+      return 'a categorical field';
+    case 'quantitative-or-categorical':
+      return 'a quantitative or categorical field';
+    case 'temporal':
+      return 'a date field';
+    case 'geo':
+      return 'a geographic field';
+    default:
+      return 'a field';
+  }
+}
+
+function assertNoUnresolvedTemplateSlots(
+  doc: Document,
+  mappedFields: Set<string>,
+  baseTarget: Record<string, string>,
+  slots?: readonly TemplateSlotReference[],
+): void {
+  if (!slots || slots.length === 0) return;
+  const unresolved: TemplateSlotReference[] = [];
+  const seen = new Set<string>();
+
+  for (const slot of slots) {
+    if (slot.bindable === false) continue;
+    const mapped = mappedFields.has(slot.template_field);
+    if (mapped && baseTarget[slot.template_field] === slot.template_field) continue;
+    const survived = documentReferencesTemplateField(doc, slot.template_field);
+    if (survived && !seen.has(slot.template_field)) {
+      unresolved.push(slot);
+      seen.add(slot.template_field);
+    }
+  }
+
+  if (unresolved.length === 0) return;
+  const descriptions = [...new Set(unresolved.map(userFacingFieldDescription))];
+  const choice =
+    descriptions.length === 1
+      ? descriptions[0]
+      : `${descriptions.slice(0, -1).join(', ')} and ${descriptions.at(-1)}`;
+  const boundUserFields = [...new Set(Object.values(baseTarget))];
+  const boundContext =
+    boundUserFields.length > 0
+      ? ` after binding ${boundUserFields.map((field) => `"${field}"`).join(', ')}`
+      : '';
+  throw new Error(
+    `Template binding is incomplete${boundContext}: choose ${choice} for the chart and retry with a complete field mapping. No worksheet was produced.`,
+  );
+}
+
+function assertNoFieldPlaceholderResidue(doc: Document): void {
+  const residue = new Set<string>();
+  const capture = (value: string): void => {
+    for (const match of value.matchAll(/\{\{field_base_[1-9]\d*\}\}/g)) residue.add(match[0]);
+  };
+  for (const element of selectElements('//*[@*]', doc)) {
+    for (const attribute of Array.from(element.attributes) as Attr[]) capture(attribute.value);
+  }
+  for (const text of selectTexts('//text()', doc)) capture(text.data);
+  if (residue.size === 0) return;
+  throw new Error(
+    `Unresolved template field placeholder(s) ${[...residue].sort().join(', ')} remain after substitution. No worksheet was produced.`,
   );
 }
 
@@ -611,7 +959,9 @@ function namespaceTemplateCalcColumns(
     if (!m) continue;
     const bare = m[1];
     if (mappedFields.has(bare)) continue;
-    if (!renameMap.has(bare)) renameMap.set(bare, `${bare}_tpl_${suffix}`);
+    const placeholder = bare.match(/^\{\{(field_base_[1-9]\d*)\}\}$/);
+    const internalBase = placeholder ? `Calculation_${placeholder[1]}` : bare;
+    if (!renameMap.has(bare)) renameMap.set(bare, `${internalBase}_tpl_${suffix}`);
   }
   if (renameMap.size === 0) return;
 

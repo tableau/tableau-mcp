@@ -22,7 +22,6 @@ export const getDashboardInfoTool = (
     description: 'Read one dashboard by name or id.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

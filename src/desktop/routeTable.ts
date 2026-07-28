@@ -40,29 +40,45 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   },
   {
     kind: 'prose',
-    id: 'authoring-skill',
-    text: 'Load tableau-desktop-authoring; repeat failures -> tableau-agent-debug.',
-  },
-  {
-    kind: 'prose',
     id: 'plan-before-build',
     text: 'Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gradients. State plan, build.',
   },
   {
     kind: 'route',
     id: 'plain-chart',
-    trigger: 'a plain viz ask (bar/line/map/KPI/etc.)',
+    trigger:
+      'any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.)',
     action:
-      'FIRST bind-template(auto_apply:true): deterministic, ~0.3s. On propose, resubmit; proposals may carry sort and top_n. author-parameter/author-set/author-action before charts; else search-commands.',
+      'FIRST use bind-template\'s two-call sequence. Call 1: bind-template(auto_apply:true), deterministic, ~0.3s; pass the user\'s message verbatim as `ask` (never paraphrase, reword, or expand it). If it proposes, Call 2: bind-template with the same ask/target, selected proposal, auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. Never call list-available-fields or get-worksheet-xml to orient before bind-template: it reads schema; failed binds propose candidate fields (author-parameter/author-set may list fields first). Named charts use this first, even calc-heavy or asking "how <X> changes"; do not author template-owned calcs (including waterfall running totals) before binding. author-parameter/author-set/author-action before charts; else search-commands.',
     toolSequence: [
       'bind-template',
+      'list-available-fields',
+      'get-worksheet-xml',
       'author-parameter',
       'author-set',
       'author-action',
       'search-commands',
     ],
-    stopConditions: ['deterministic, ~0.3s'],
+    stopConditions: [
+      'deterministic, ~0.3s',
+      'Do not use manual authoring tools between Call 1 and Call 2',
+    ],
     requiredEvidence: ['bind-template applied result (auto-apply receipt)'],
+  },
+  {
+    kind: 'route',
+    id: 'calc-then-bind',
+    trigger:
+      'a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %)',
+    action:
+      'FIRST pass its conventional calc in ONE bind-template(auto_apply:true) call via calcs[], binding its caption (for example, gross margin % = (SUM(Revenue)-SUM(COGS))/SUM(Revenue); a proposal still resolves via Call 2). Only after a formula/field-resolution failure, search-knowledge, then make ONE corrective bind-template call.',
+    toolSequence: ['bind-template', 'search-knowledge'],
+    stopConditions: [
+      'ONE bind-template(auto_apply:true) call',
+      'Only after a formula/field-resolution failure',
+      'ONE corrective bind-template call',
+    ],
+    requiredEvidence: ['authored_calcs returned by successful bind-template'],
   },
   {
     kind: 'route',
@@ -95,16 +111,16 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'route',
     id: 'data-value-question',
     trigger: 'a data-value question',
-    action:
-      'FIRST get-summary-data; answer only from returned rows. If none, say so and offer a viz.',
+    action: 'on a populated worksheet, call get-summary-data; answer only from returned rows.',
     toolSequence: ['get-summary-data'],
     stopConditions: ['answer only from returned rows'],
-    requiredEvidence: ['get-summary-data returned rows or a no-suitable-worksheet explanation'],
+    requiredEvidence: ['get-summary-data returned rows or a discriminated status'],
   },
   {
     kind: 'route',
     id: 'dynamic-authoring',
-    trigger: 'a dynamic ask or a calc/derived field the data lacks (ratio, running total, LOD)',
+    trigger:
+      'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (a named ratio/margin/growth ask routes via calc-then-bind; examples here include running total and LOD)',
     action:
       'use author-* verbs: author-parameter FIRST (on { reopened: true } continue immediately), then author-set, author-calc, author-action, format-labels. Build with bind-template and authored captions.',
     toolSequence: [
@@ -128,12 +144,14 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'edit-in-place',
     trigger: 'current/existing sheet/chart/view/dashboard',
     action:
-      'edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort or author-* tool; a NEW chart on the current sheet = bind-template with target_worksheet. Never create new sheets unless asked.',
+      'edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort ONLY, add-field + apply-worksheet for a color/size/detail or rows/cols field, or an author-* tool; a NEW chart here = bind-template with target_worksheet. Never create new sheets unless asked.',
     toolSequence: [
       'list-worksheets',
       'list-dashboards',
       'ask-user',
       'refine-worksheet',
+      'add-field',
+      'apply-worksheet',
       'bind-template',
     ],
     stopConditions: ['Never create new sheets unless asked'],
@@ -142,7 +160,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'command-census',
-    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort. Use search-commands ONLY for unlisted commands.',
+    text: 'Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.',
   },
   {
     kind: 'prose',
@@ -153,6 +171,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     kind: 'prose',
     id: 'preflight-rejection',
     text: 'If preflight rejects apply, fix per FIX lines. Prefer file mode',
+  },
+  {
+    kind: 'prose',
+    id: 'no-native-tool-escape',
+    text: 'If NO native tool covers the asked shape, say so plainly — never invent or hand-author XML. get-worksheet-xml -> add-field -> apply-worksheet is sanctioned. Whole-workbook XML surgery is behind TOOL_PROFILE=full, which the user can enable.',
   },
 ];
 

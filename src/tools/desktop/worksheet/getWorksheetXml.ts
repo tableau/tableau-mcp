@@ -55,7 +55,6 @@ export const getGetWorksheetXmlTool = (
     description: 'Get structure for an EXISTING worksheet.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false, // Writes to a cache file
       openWorldHint: false,
       destructiveHint: false,
@@ -89,7 +88,7 @@ export const getGetWorksheetXmlTool = (
                     type: 'endpoint-not-in-this-build',
                     message:
                       'This Tableau Desktop build does not serve the worksheet document endpoint yet. ' +
-                      'Use get-app-info to identify the build; this read lights up on a newer Desktop update. Do not retry.',
+                      'Tell the user their Desktop build is too old for this read and that a Desktop update enables it. Do not retry.',
                     statusCode: 404,
                   }).toErr();
                 }
@@ -131,12 +130,14 @@ export const getGetWorksheetXmlTool = (
                 bytes,
                 capBytes,
                 xml: worksheetXml,
+                applyTool: 'apply-worksheet',
+                pathParam: 'worksheetFile',
               }),
               file: cacheFile,
               instructions:
                 'This worksheet exceeds the inline cap. Use the cache read tool (with a worksheet ' +
                 'selector or startByte/endByte to read a slice), the cache write tool (same selector to ' +
-                'splice edits back), then apply-worksheet with mode=file. Do not request mode=inline.',
+                'splice edits back), then call apply-worksheet with worksheetFile set to this file path.',
             });
           }
 

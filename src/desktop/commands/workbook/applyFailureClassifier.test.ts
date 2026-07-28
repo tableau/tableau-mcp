@@ -52,6 +52,57 @@ describe('classifyApplyFailure', () => {
     expect(c.guidance).toContain('command name');
   });
 
+  it('classifies a bare command failure without inventing a cause', () => {
+    const c = classifyApplyFailure({
+      context: 'workbook',
+      serverError: 'Command tabui:load-underlying-metadata failed',
+    });
+    expect(c.failure_class).toBe('command-failed-bare');
+    expect(c.evidence).toEqual(['Command tabui:load-underlying-metadata failed']);
+    expect(c.guidance).toContain('raw error VERBATIM');
+    expect(c.guidance).toContain('Do NOT name, guess, or imply a cause');
+  });
+
+  it('does not classify a multi-line command failure with cause evidence as bare', () => {
+    const c = classifyApplyFailure({
+      context: 'workbook',
+      serverError: 'Command tabdoc:apply failed\nAccess denied to workbook',
+    });
+    expect(c.failure_class).toBe('unknown');
+  });
+
+  it('keeps a detailed command failure classified as worksheet-not-found', () => {
+    const c = classifyApplyFailure({
+      context: 'worksheet',
+      serverError: 'Command tabdoc:load-workbook failed: worksheet "Sales" not found',
+    });
+    expect(c.failure_class).toBe('worksheet-not-found');
+  });
+
+  it('keeps a detailed command failure classified as xml-grammar', () => {
+    const c = classifyApplyFailure({
+      context: 'workbook',
+      serverError: 'Command tabdoc:load-workbook failed: Qualified Name Parse Error',
+    });
+    expect(c.failure_class).toBe('xml-grammar');
+  });
+
+  it('keeps a detailed command failure classified as field-binding', () => {
+    const c = classifyApplyFailure({
+      context: 'worksheet',
+      serverError: 'Command tabdoc:apply failed: unknown field [Profit Ratio]',
+    });
+    expect(c.failure_class).toBe('field-binding');
+  });
+
+  it('keeps a detailed command failure classified as timeout-or-transport', () => {
+    const c = classifyApplyFailure({
+      context: 'workbook',
+      serverError: 'Command tabui:x failed: request timed out',
+    });
+    expect(c.failure_class).toBe('timeout-or-transport');
+  });
+
   it('falls back to unknown with low confidence on a generic wrapper', () => {
     const c = classifyApplyFailure({
       context: 'workbook',
@@ -61,6 +112,9 @@ describe('classifyApplyFailure', () => {
     expect(c.confidence).toBe(0.2);
     // The honest fallback must forbid blind retrying and force evidence-gathering.
     expect(c.guidance).toContain('blind-retry');
+    expect(c.guidance).toContain('raw error verbatim');
+    expect(c.guidance).toContain('Do not name, guess, or imply a cause');
+    expect(c.guidance).toContain('cause is unknown');
     expect(c.evidence.join(' ')).toContain('an unexpected error occurred');
   });
 

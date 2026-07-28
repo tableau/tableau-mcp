@@ -31,8 +31,8 @@ export const unsubstitutedTemplateTokenRule: ValidationRule = {
         suggestion:
           `Substitute ${token} with the real value before applying — e.g. replace [${token.replace(/[{}]/g, '')}] ` +
           'references with [Sample - Superstore] and use real field instances (tableau-list-available-fields) — OR ' +
-          'apply this template via the template-injection tool (tableau-inject-template / build-and-apply), which runs ' +
-          'the substitution. Do NOT send template XML through a raw apply-workbook/apply-worksheet.',
+          'apply this template through bind-template or build-and-apply-worksheet, which run the ' +
+          'substitution for you. Never apply template XML that still holds placeholder tokens.',
       });
     }
 

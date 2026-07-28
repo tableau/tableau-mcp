@@ -34,6 +34,8 @@ const NON_TOOL_VOCABULARY = [
   'edit-the-open-sheet',
   'episode-events',
   'execute-command-error',
+  // Import specifiers, not emitted tool references (same class as 'ts-results-es').
+  'fast-levenshtein',
   'fast-path',
   'field-not-found',
   'field-resolver',
@@ -43,8 +45,14 @@ const NON_TOOL_VOCABULARY = [
   'higher-confidence',
   'ignored-redundant-aggregation',
   'in-dashboard',
+  'invalid-xml',
   'kind-mismatch',
   'kpi-text',
+  // m7 declarative-filter XML vocabulary emitted into the context-filter node (not tool names):
+  // the filter groupfilter functions/attributes, same class as 'column-instance' / 'level-members'.
+  'level-members',
+  'ui-enumeration',
+  'ui-marker',
   'load-dashboard-xml-error',
   'load-rejected',
   'load-workbook',
@@ -60,8 +68,13 @@ const NON_TOOL_VOCABULARY = [
   'part-to-whole-pie-chart',
   'part-to-whole-waterfall',
   'per-viz',
+  // Internal auto-apply failure dispositions, not emitted tool references.
+  'post-dispatch',
+  'pre-dispatch',
   'pre-edit',
   'promise-check',
+  // Manifest slot-kind vocabulary, not an emitted tool reference.
+  'quantitative-or-categorical',
   'ranking-ordered-bar',
   're-apply',
   're-call',
@@ -99,6 +112,11 @@ function stringLiterals(source: string): string[] {
   const literals: string[] = [];
 
   function visit(node: ts.Node): void {
+    // Module specifiers are dependency paths, not emitted guidance. Scanning them forces an
+    // allowlist entry for every hyphenated internal filename and obscures real tool references.
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      return;
+    }
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       literals.push(node.text);
     }

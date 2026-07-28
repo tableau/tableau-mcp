@@ -21,6 +21,7 @@ const resultSchema = z.object({
   datasources: z.array(
     z.object({
       id: z.string().optional(),
+      luid: z.string().optional(),
       name: z.string().optional(),
       caption: z.string().optional(),
     }),
@@ -38,10 +39,9 @@ describe('listWorkbookDatasourcesTool', () => {
 
     expect(tool.name).toBe('list-workbook-datasources');
     expect(tool.description).toContain("workbook's OWN connected datasources");
-    expect(tool.description).toContain('pair with list-site-datasources');
+    expect(tool.description).toContain('luid for published');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
-      title: 'List Workbook Datasources',
       readOnlyHint: true,
       openWorldHint: false,
     });
@@ -63,9 +63,18 @@ describe('listWorkbookDatasourcesTool', () => {
       const result = await callback({ session: undefined }, extra);
 
       expect(result.isError).toBe(false);
+      // The published datasource surfaces its server LUID; the embedded one
+      // (luid: null) and the legacy one (luid absent — the nullish() undefined
+      // leg) both omit it. Only a non-null string luid is projected.
       expect(parseResult(result).datasources).toEqual([
-        { id: 'wb-ds-superstore', name: 'Sample - Superstore', caption: 'Sample - Superstore' },
+        {
+          id: 'wb-ds-superstore',
+          luid: 'luid-superstore',
+          name: 'Sample - Superstore',
+          caption: 'Sample - Superstore',
+        },
         { id: 'wb-ds-quota', name: 'Quota Targets', caption: 'Quota Targets' },
+        { id: 'wb-ds-legacy', name: 'Legacy Extract', caption: 'Legacy Extract' },
       ]);
       expect(server.requests.at(-1)?.path).toBe('/v0/workbook/datasources');
     } finally {

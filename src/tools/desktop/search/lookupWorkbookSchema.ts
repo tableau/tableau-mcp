@@ -24,7 +24,6 @@ export const getLookupWorkbookSchemaTool = (
     description: 'Search the TWB XSD.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

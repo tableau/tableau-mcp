@@ -21,6 +21,11 @@ import Fuse from 'fuse.js';
 import { calcForcedSlotIds } from './calc-derivation.js';
 import type { Derivation, SlotKind, TemplateManifest } from './manifest-types.js';
 import { inferStringTemporal } from './stringTemporal.js';
+import {
+  WATERFALL_ANCHOR_FIELD_RE,
+  WATERFALL_ORDER_FIELD_RE,
+  WATERFALL_TEMPLATE_NAME,
+} from './waterfall.js';
 
 /**
  * SCHEMA SHAPES + `bareName`, inlined so this file stays import-pure — it severs the
@@ -40,6 +45,7 @@ interface SchemaField {
   datatype: string; // "string" | "real" | "integer" | "date" | "datetime" | ...
   semanticRole?: string; // Tableau geo semantic role, e.g. "[State].[Name]"
   datasource: string;
+  table?: string; // metadata-record parent-name for federated grain disambiguation
   isAggregated: boolean;
   column_ref: string; // straight from listAvailableFields, e.g. "[Superstore].[sum:Sales:qk]"
 }
@@ -57,6 +63,20 @@ function bareName(name: string): string {
 
 export interface LlmProposeInput {
   ask: string;
+  /**
+   * Agent-decidable default for an ambiguous positive ranking ask. `binding` is complete
+   * enough for the tool to construct a normal Call-2 proposal and run the same validation.
+   */
+  recommended?: {
+    measure: string;
+    top_n: number;
+    reason: string;
+    context_measures: string[];
+    binding: {
+      template: string;
+      bindings: Array<{ slot_id: string; field: string }>;
+    };
+  };
   candidate_templates: Array<{
     template: string;
     description: string;
@@ -73,6 +93,8 @@ export interface LlmProposeInput {
       role: string[];
       kind: SlotKind;
       required: boolean;
+      purpose?: string;
+      examples?: string[];
       derivation?: Derivation;
       // Present + true on a temporal slot that also accepts a date-like STRING field
       // (DATEPARSE'd to a continuous axis) — tells the proposer a 'YYYY-MM' string month
@@ -87,6 +109,8 @@ export interface LlmProposeInput {
     datatype: string;
     datasource?: string;
     column_ref?: string;
+    table?: string;
+    label?: string;
   }>;
   /**
    * FIELD-NARROWING signal (stage 2B, adjudicated attack 1): present ONLY when
@@ -187,16 +211,28 @@ const PLURALIZABLE_CHART_NOUNS: ReadonlySet<string> = new Set([
  * Scoped to chart nouns only — no stemming, no mid-token change, no broadening of
  * non-noun keywords; the singular still matches unchanged.
  */
-function phraseIndexInAsk(ask: string, phrase: string): number {
+interface PhraseMatch {
+  index: number;
+  start: number;
+  end: number;
+}
+
+function phraseMatchInAsk(ask: string, phrase: string): PhraseMatch | null {
   const p = phrase.toLowerCase().trim();
-  if (!p) return -1;
+  if (!p) return null;
   const body = escapeRegex(p).replace(/-/g, '[\\s-]+');
   const tokens = p.split(/[^a-z0-9]+/).filter(Boolean);
   const finalToken = tokens[tokens.length - 1];
   const pluralSuffix = finalToken && PLURALIZABLE_CHART_NOUNS.has(finalToken) ? 's?' : '';
-  const re = new RegExp(`(^|[^a-z0-9])${body}${pluralSuffix}([^a-z0-9]|$)`);
+  const re = new RegExp(`(^|[^a-z0-9])(${body}${pluralSuffix})([^a-z0-9]|$)`);
   const match = re.exec(ask.toLowerCase());
-  return match ? match.index : -1;
+  if (!match) return null;
+  const start = match.index + match[1].length;
+  return { index: match.index, start, end: start + match[2].length };
+}
+
+function phraseIndexInAsk(ask: string, phrase: string): number {
+  return phraseMatchInAsk(ask, phrase)?.index ?? -1;
 }
 
 /** Count of a template's intent_keywords that appear as whole tokens in the ask. */
@@ -276,6 +312,11 @@ const AVOID_WHEN_STOPWORDS: ReadonlySet<string> = new Set([
   'read',
   'render',
   'renders',
+  'build',
+  'show',
+  'shows',
+  'shown',
+  'showing',
   'become',
   'becomes',
 ]);
@@ -566,6 +607,41 @@ const SPATIAL_INTENT_ALIASES: ReadonlySet<string> = new Set([
   'lat-lon',
 ]);
 
+const NON_COORDINATE_SPATIAL_ALIASES: ReadonlySet<string> = new Set([
+  'geo',
+  'geographic',
+  'geographical',
+  'geographically',
+]);
+
+/**
+ * Bare point-mark words that disambiguate a generic spatial "map" tie toward a
+ * symbol map. Keep singulars/plurals explicit so matching remains whole-token
+ * and does not broaden phraseIndexInAsk's chart-noun plural tolerance. Hand-mirrored
+ * into ask-router.ts (this file's classifier must stay the sole source of truth,
+ * but the route layer needs the same vocabulary); a parity test enforces set
+ * equality. "circle"/"marker" added because Circle is the literal Tableau mark name
+ * the generated symbol map renders.
+ */
+const SYMBOL_MAP_MARK_CUES: readonly string[] = [
+  'dot',
+  'dots',
+  'bubble',
+  'bubbles',
+  'pin',
+  'pins',
+  'point',
+  'points',
+  'circle',
+  'circles',
+  'marker',
+  'markers',
+];
+
+function askHasSymbolMapMarkCue(maskedAsk: string): boolean {
+  return SYMBOL_MAP_MARK_CUES.some((cue) => phraseIndexInAsk(maskedAsk, cue) >= 0);
+}
+
 function spatialIntentPhrases(manifests: Map<string, TemplateManifest>): Set<string> {
   const phrases = new Set<string>(SPATIAL_INTENT_ALIASES);
   for (const m of manifests.values()) {
@@ -584,6 +660,19 @@ function hasCoordinatePairIntent(rawAsk: string): boolean {
     phraseIndexInAsk(rawAsk, 'lng') >= 0 ||
     phraseIndexInAsk(rawAsk, 'long') >= 0;
   return hasLat && hasLon;
+}
+
+// Alias half runs on the MASKED ask (aliases like "coordinate"/"gps" are generic
+// phrase words, not field names, so masking is harmless). The coordinate-PAIR half
+// runs on the RAW ask deliberately: maskFieldNames blanks a schema's literal
+// Latitude/Longitude field-name occurrences, which would otherwise silently kill
+// this brake on exactly the lat/lon schemas it exists to protect.
+function askHasExplicitCoordinateIntent(rawAsk: string, maskedAsk: string): boolean {
+  for (const alias of SPATIAL_INTENT_ALIASES) {
+    if (NON_COORDINATE_SPATIAL_ALIASES.has(alias)) continue;
+    if (phraseIndexInAsk(maskedAsk, alias) >= 0) return true;
+  }
+  return hasCoordinatePairIntent(rawAsk);
 }
 
 function askCarriesSpatialIntent(
@@ -612,6 +701,7 @@ function askCarriesSpatialIntent(
  * slot shape (longitude→cols, latitude→rows, one categorical→detail, no measure).
  */
 const LATLON_SYMBOL_MAP_TEMPLATE = 'spatial-symbol-map-latlon';
+const GENERATED_SYMBOL_MAP_TEMPLATE = 'spatial-symbol-map';
 
 /**
  * POINT-LOCATION CUES (Blake wall #2). Coordinate/point-location intent a user types when
@@ -620,6 +710,14 @@ const LATLON_SYMBOL_MAP_TEMPLATE = 'spatial-symbol-map-latlon';
  * named "Location"/"Office" can't arm the resolver — intent is a phrasing decision, never a
  * field-name accident. Paired with the coordinate keywords already recognized by
  * SPATIAL_INTENT_ALIASES / hasCoordinatePairIntent for the explicit lat/lon case.
+ *
+ * "point"/"points"/"pins" DELIBERATELY OVERLAP SYMBOL_MAP_MARK_CUES: the same words carry
+ * opposite intent depending on the rest of the ask ("map the pins for each country" with no
+ * measure named is a raw coordinate plot; "bigger, warmer points" naming a measure is the
+ * generated symbol map's marks). Resolving which one wins is NOT this list's job — the
+ * lat/lon resolver below tries first and is itself fail-closed (needs unique lat+lon fields
+ * and a categorical), and selectWithinFamily's mark-cue tie-break only fires when the ask
+ * matched a measure — so removing them here would wrongly starve the lat/lon path instead.
  */
 const POINT_LOCATION_CUES: readonly string[] = [
   'office location',
@@ -630,6 +728,7 @@ const POINT_LOCATION_CUES: readonly string[] = [
   'offices',
   'pins',
   'points',
+  'point',
 ];
 
 /** True when the (masked) ask carries a coordinate keyword OR an explicit point-location cue. */
@@ -869,6 +968,25 @@ function resolveLatLonSymbolMap(
 }
 
 /**
+ * The naive English plural of a lowercased field-name token, or null when the name
+ * already ends in `s` (an `s`-final name gains no alias) or is empty. Covers the two
+ * regular rules a user's ask hits on a singular field name: a consonant + `y` → `ies`
+ * ("country" → "countries", "category" → "categories"), otherwise trailing `s`
+ * ("region" → "regions"). A `y` after a vowel keeps the `s` rule ("day" → "days").
+ * Deliberately NOT a full stemmer — no `es`/`ves`/irregulars — so the alias stays a
+ * single deterministic form per name and never broadens into fuzzy matching.
+ */
+function naivePlural(lower: string): string | null {
+  if (!lower || lower.endsWith('s')) return null;
+  if (/[^aeiou]y$/.test(lower)) return `${lower.slice(0, -1)}ies`;
+  return `${lower}s`;
+}
+
+function pluralEquivalent(a: string, b: string): boolean {
+  return a === b || naivePlural(a) === b || naivePlural(b) === a;
+}
+
+/**
  * Every field name / caption / bare column name in the schema, lowercased. Feeds
  * fieldNameMatchInAsk's EXACT-FIRST tie-break: a field's plural alias is suppressed
  * at any token another field claims by its exact name (so with both "Region" and
@@ -894,26 +1012,621 @@ function fieldExactNames(fields: SchemaField[]): Set<string> {
  * matcher), which is UNCHANGED so keyword scoring is unaffected.
  *
  *   - EXACT FIRST: an exact whole-token occurrence always wins and is returned as-is.
- *   - ONE-WAY PLURAL ALIAS: if `name` does NOT already end in `s`, its naive plural
- *     `name + "s"` also matches — field "Region" matches ask token "Regions". A name
- *     that already ends in `s` gains NO singular alias, so "Sales" never matches
- *     "Sale", and "Species" / "Address" / "Tickets" / "Resolution Hours" stay
- *     exact-only.
- *   - NAIVE TRAILING-`s` ONLY: no ies / es / stemmer, so "Category" does NOT match
- *     "Categories" (deliberately out of scope for this MR).
+ *   - ONE-WAY PLURAL ALIAS: if `name` does NOT already end in `s`, its naive English
+ *     plural also matches — field "Region" matches ask token "Regions", and field
+ *     "Country" matches "Countries" (consonant + `y` → `ies`). A name that already
+ *     ends in `s` gains NO singular alias, so "Sales" never matches "Sale", and
+ *     "Species" / "Address" / "Tickets" / "Resolution Hours" stay exact-only.
  *   - EXACT-FIRST TIE-BREAK ACROSS FIELDS: the plural alias is suppressed whenever the
  *     pluralized token is another field's EXACT name (`exactNames`), so "Region"'s
  *     alias never claims a "Regions" span that a field literally named "Regions" owns
  *     by exact match.
  */
+function fieldNameMatchInAskSpan(
+  ask: string,
+  name: string,
+  exactNames: ReadonlySet<string>,
+): PhraseMatch | null {
+  const exact = phraseMatchInAsk(ask, name);
+  if (exact) return exact;
+  const plural = naivePlural(name.toLowerCase().trim());
+  if (!plural) return null; // one-way: an `s`-final (or empty) name gains no alias
+  if (exactNames.has(plural)) return null; // exact-first: another field owns this token
+  return phraseMatchInAsk(ask, plural);
+}
+
 function fieldNameMatchInAsk(ask: string, name: string, exactNames: ReadonlySet<string>): number {
-  const exact = phraseIndexInAsk(ask, name);
-  if (exact >= 0) return exact;
-  const n = name.toLowerCase().trim();
-  if (!n || n.endsWith('s')) return -1; // one-way: an `s`-final name gains no alias
-  const plural = `${n}s`;
-  if (exactNames.has(plural)) return -1; // exact-first: another field owns this token
-  return phraseIndexInAsk(ask, plural);
+  return fieldNameMatchInAskSpan(ask, name, exactNames)?.index ?? -1;
+}
+
+/**
+ * Known business-acronym expansions. Deliberately closed: an acronym-shaped field
+ * that is absent here gets no inferred expansion.
+ */
+const ACRONYM_EXPANSIONS: Readonly<Record<string, readonly string[]>> = {
+  mau: ['monthly', 'active', 'users'],
+  dau: ['daily', 'active', 'users'],
+  arr: ['annual', 'recurring', 'revenue'],
+  mrr: ['monthly', 'recurring', 'revenue'],
+};
+
+/**
+ * Precision-first business nouns whose schema captions commonly use a different term.
+ * Candidate patterns are whole-token caption fragments, not fuzzy stems. Partial matches are
+ * retained for proposals; auto-binding requires one candidate whose full normalized field
+ * name/caption/bare column name equals a pattern.
+ */
+const REVENUE_CAPTION_PATTERNS = ['sales', 'revenue', 'amount'] as const;
+const PROFIT_CAPTION_PATTERNS = ['profit'] as const;
+const MARGIN_CAPTION_PATTERNS = ['margin'] as const;
+const BUSINESS_FIELD_SYNONYMS: ReadonlyArray<{
+  nouns: readonly string[];
+  captionPatterns: readonly string[];
+}> = [
+  { nouns: ['revenue'], captionPatterns: REVENUE_CAPTION_PATTERNS },
+  { nouns: ['profit'], captionPatterns: PROFIT_CAPTION_PATTERNS },
+  { nouns: ['margin'], captionPatterns: MARGIN_CAPTION_PATTERNS },
+  { nouns: ['customers'], captionPatterns: ['customer', 'customer name'] },
+  { nouns: ['products'], captionPatterns: ['product', 'product name'] },
+  { nouns: ['orders'], captionPatterns: ['order', 'order id'] },
+  {
+    nouns: ['reps', 'salespeople'],
+    captionPatterns: ['rep', 'rep name', 'sales rep', 'sales person'],
+  },
+  { nouns: ['deals'], captionPatterns: ['deal', 'opportunity', 'opportunity name'] },
+];
+
+const REVENUE_RECOMMENDATION_REASON = 'revenue-like measure; top-N defaults to 10' as const;
+
+function recommendedRankingDefault(
+  ask: string,
+  summary: SchemaSummary,
+  proposedFields: readonly SchemaField[],
+  candidate: TemplateManifest | undefined,
+): LlmProposeInput['recommended'] {
+  // A top_n proposal always ranks the top end, so negative rankings (bottom/lowest)
+  // are deliberately excluded rather than silently reversing the user's direction.
+  if (!/\b(?:top|highest|rank|ranked|ranking)\b/i.test(ask)) return undefined;
+  if (
+    candidate?.fast_path_eligible !== true ||
+    candidate.family !== 'ranking' ||
+    !['ranking-ordered-bar', 'ranking-ordered-column'].includes(candidate.template)
+  ) {
+    return undefined;
+  }
+
+  // Check the full schema, not only the narrowed proposal list: a second revenue-like
+  // field hidden by narrowing still makes the business choice genuinely contested.
+  const revenueLikeMeasures = summary.fields.filter(
+    (field) =>
+      field.role === 'measure' &&
+      REVENUE_CAPTION_PATTERNS.some((pattern) => fieldMatchesCaptionPattern(field, pattern)),
+  );
+  if (revenueLikeMeasures.length !== 1) return undefined;
+
+  const measure = revenueLikeMeasures[0];
+  if (!proposedFields.includes(measure)) return undefined;
+  const dimensions = matchFieldsInAsk(ask, summary).filter(
+    (field) => isCategorical(field) && proposedFields.includes(field),
+  );
+  if (dimensions.length !== 1) return undefined;
+
+  const requiredSlots = candidate.slots.filter((slot) => slot.bindable && slot.required);
+  const categorySlots = requiredSlots.filter((slot) => slot.kind === 'categorical');
+  const measureSlots = requiredSlots.filter((slot) => slot.kind === 'quantitative');
+  if (
+    requiredSlots.length !== 2 ||
+    categorySlots.length !== 1 ||
+    measureSlots.length !== 1
+  ) {
+    return undefined;
+  }
+
+  const contextMeasures = summary.fields
+    .filter(
+      (field) =>
+        field !== measure &&
+        field.datasource === measure.datasource &&
+        field.role === 'measure' &&
+        field.type === 'quantitative',
+    )
+    .map((field, index) => {
+      const priority =
+        PROFIT_CAPTION_PATTERNS.some((pattern) => fieldMatchesCaptionPattern(field, pattern))
+          ? 0
+          : MARGIN_CAPTION_PATTERNS.some((pattern) => fieldMatchesCaptionPattern(field, pattern))
+            ? 1
+            : 2;
+      return { field, index, priority };
+    })
+    .sort((a, b) => a.priority - b.priority || a.index - b.index)
+    .slice(0, 3)
+    .map(({ field }) => field.name);
+
+  return {
+    measure: measure.name,
+    top_n: 10,
+    reason: REVENUE_RECOMMENDATION_REASON,
+    context_measures: contextMeasures,
+    binding: {
+      template: candidate.template,
+      bindings: [
+        { slot_id: categorySlots[0].slot_id, field: dimensions[0].name },
+        { slot_id: measureSlots[0].slot_id, field: measure.name },
+      ],
+    },
+  };
+}
+
+/**
+ * Return the earliest token index of a known acronym's full expansion, or -1.
+ * Expansion tokens may appear in any order and punctuation (including hyphens)
+ * is treated as a token boundary. Every token is required, preserving the
+ * monthly/daily and annual/monthly discriminators.
+ */
+function acronymExpansionMatch(ask: string, field: SchemaField): number {
+  let best = -1;
+  const names = [bareName(field.columnName), field.caption, field.name].filter(
+    (name): name is string => !!name && name.length > 0,
+  );
+  for (const name of names) {
+    const candidate = name.trim();
+    // Accept the casings Tableau commonly emits for acronym fields, including
+    // lowercase physical names such as `[mau]`; reject mixed-case words.
+    if (!/^(?:[A-Z]{2,5}|[A-Z][a-z]{1,4}|[a-z]{2,5})$/.test(candidate)) continue;
+    const expansion = ACRONYM_EXPANSIONS[candidate.toLowerCase()];
+    if (!expansion) continue;
+
+    const indices = expansion.map((token) => phraseIndexInAsk(ask, token));
+    if (indices.some((index) => index < 0)) continue;
+    const index = Math.min(...indices);
+    if (best < 0 || index < best) best = index;
+  }
+  return best;
+}
+
+interface FieldMatch {
+  field: SchemaField;
+  index: number;
+  start?: number;
+  end?: number;
+}
+
+/** Existing literal/plural/acronym field matches, before business synonyms are considered. */
+function literalFieldMatchesInAsk(ask: string, s: SchemaSummary): FieldMatch[] {
+  const exactNames = fieldExactNames(s.fields);
+  const hits: FieldMatch[] = [];
+  for (const field of s.fields) {
+    const names = [bareName(field.columnName), field.caption, field.name].filter(
+      (name): name is string => !!name && name.length > 0,
+    );
+    let best: PhraseMatch | null = null;
+    for (const name of names) {
+      const match = fieldNameMatchInAskSpan(ask, name, exactNames);
+      if (
+        match &&
+        (!best ||
+          match.index < best.index ||
+          (match.index === best.index && match.end - match.start > best.end - best.start))
+      ) {
+        best = match;
+      }
+    }
+    if (best) {
+      hits.push({ field, index: best.index, start: best.start, end: best.end });
+      continue;
+    }
+    const acronymIndex = acronymExpansionMatch(ask, field);
+    if (acronymIndex >= 0) hits.push({ field, index: acronymIndex });
+  }
+  hits.sort((a, b) => a.index - b.index);
+  return hits;
+}
+
+function fieldMatchesCaptionPattern(field: SchemaField, pattern: string): boolean {
+  return [field.name, field.caption, bareName(field.columnName)].some(
+    (name) => !!name && phraseIndexInAsk(name, pattern) >= 0,
+  );
+}
+
+function normalizeFieldPhrase(value: string): string {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .join(' ');
+}
+
+function fieldFullyMatchesCaptionPattern(field: SchemaField, pattern: string): boolean {
+  const normalizedPattern = normalizeFieldPhrase(pattern);
+  return [field.name, field.caption, bareName(field.columnName)].some((name) => {
+    if (!name) return false;
+    const normalizedName = normalizeFieldPhrase(name);
+    return (
+      normalizedName === normalizedPattern || naivePlural(normalizedName) === normalizedPattern
+    );
+  });
+}
+
+/**
+ * Candidate fields for business nouns that the literal pass did not already resolve.
+ * Literal/plural caption matches at the same ask position win, as do existing acronym
+ * expansions that claim that noun.
+ */
+function businessSynonymCandidatesInAsk(
+  ask: string,
+  s: SchemaSummary,
+  literalHits: readonly FieldMatch[],
+): Array<{
+  noun: string;
+  index: number;
+  candidates: SchemaField[];
+  fullMatchCandidates: SchemaField[];
+}> {
+  const exactNames = fieldExactNames(s.fields);
+  const matches: Array<{
+    noun: string;
+    index: number;
+    candidates: SchemaField[];
+    fullMatchCandidates: SchemaField[];
+  }> = [];
+
+  for (const entry of BUSINESS_FIELD_SYNONYMS) {
+    for (const noun of entry.nouns) {
+      const nounMatch = phraseMatchInAsk(ask, noun);
+      if (!nounMatch) continue;
+      const nounIndex = nounMatch.index;
+
+      const literalClaimsNoun = literalHits.some(({ field }) => {
+        const names = [bareName(field.columnName), field.caption, field.name].filter(
+          (name): name is string => !!name && name.length > 0,
+        );
+        if (
+          names.some((name) => {
+            const literalMatch = fieldNameMatchInAskSpan(ask, name, exactNames);
+            return (
+              literalMatch !== null &&
+              nounMatch.start >= literalMatch.start &&
+              nounMatch.start < literalMatch.end
+            );
+          })
+        ) {
+          return true;
+        }
+        return names.some((name) => {
+          const expansion = ACRONYM_EXPANSIONS[name.trim().toLowerCase()];
+          return expansion?.includes(noun) && acronymExpansionMatch(ask, field) >= 0;
+        });
+      });
+      if (literalClaimsNoun) continue;
+
+      const candidates = s.fields.filter((field) =>
+        entry.captionPatterns.some((pattern) => fieldMatchesCaptionPattern(field, pattern)),
+      );
+      const fullMatchCandidates = candidates.filter((field) =>
+        entry.captionPatterns.some((pattern) => fieldFullyMatchesCaptionPattern(field, pattern)),
+      );
+      matches.push({ noun, index: nounIndex, candidates, fullMatchCandidates });
+    }
+  }
+
+  return matches;
+}
+
+/**
+ * Unambiguous full-name business-synonym matches. Zero, partial-only, and multiple candidates
+ * are withheld so classifyNoLlm fails closed and exposes candidates in proposal fields.
+ */
+function businessSynonymMatchesInAsk(
+  ask: string,
+  s: SchemaSummary,
+  literalHits: readonly FieldMatch[],
+): Array<FieldMatch & { noun: string }> {
+  return businessSynonymCandidatesInAsk(ask, s, literalHits)
+    .filter(
+      (match): match is typeof match & { candidates: [SchemaField] } =>
+        match.candidates.length === 1 && match.fullMatchCandidates.length === 1,
+    )
+    .map(({ noun, index, candidates }) => ({ noun, index, field: candidates[0] }));
+}
+
+export type LooseFieldReferenceResolution =
+  | { kind: 'resolved'; field: SchemaField }
+  | { kind: 'ambiguous'; candidates: SchemaField[] }
+  | { kind: 'not_found'; candidates: SchemaField[] };
+
+/**
+ * Resolve one calc-formula field token without fuzzy guessing. Exact normalized
+ * caption/bare-name matches win, followed by singular/plural equivalence. Business
+ * synonyms are suggestions only because a calc token names a specific field.
+ * Candidate order is schema order.
+ */
+export function resolveLooseFieldReference(
+  query: string,
+  s: SchemaSummary,
+): LooseFieldReferenceResolution {
+  const normalizedQuery = normalizeFieldPhrase(bareName(query).trim());
+  if (!normalizedQuery) return { kind: 'not_found', candidates: [] };
+
+  const fieldNames = (field: SchemaField): string[] =>
+    [field.name, field.caption, bareName(field.columnName)]
+      .filter((name): name is string => !!name)
+      .map(normalizeFieldPhrase);
+  const exact = s.fields.filter((field) =>
+    fieldNames(field).some((name) => name === normalizedQuery),
+  );
+  if (exact.length === 1) return { kind: 'resolved', field: exact[0] };
+  if (exact.length > 1) return { kind: 'ambiguous', candidates: exact };
+
+  const plural = s.fields.filter((field) =>
+    fieldNames(field).some((name) => pluralEquivalent(name, normalizedQuery)),
+  );
+  if (plural.length === 1) return { kind: 'resolved', field: plural[0] };
+  if (plural.length > 1) return { kind: 'ambiguous', candidates: plural };
+
+  // No literal field owns the whole token at this point. Reuse the closed synonym
+  // table only to surface guidance candidates; calc references never substitute them.
+  const synonymMatches = businessSynonymCandidatesInAsk(query, s, []);
+  const candidates = s.fields.filter((field) =>
+    synonymMatches.some((match) => match.candidates.includes(field)),
+  );
+  if (candidates.length > 1) return { kind: 'ambiguous', candidates };
+
+  const literalCandidates = literalFieldMatchesInAsk(query, s).map(({ field }) => field);
+  return {
+    kind: 'not_found',
+    candidates: candidates.length > 0 ? candidates : literalCandidates,
+  };
+}
+
+/**
+ * Candidate dimensions whose friendly name starts with a bare head token in the ask.
+ * Full literal field names retain priority. A head mention is deterministic only when one
+ * schema dimension owns it; callers reject multi-field groups before template selection.
+ */
+function dimensionHeadCandidatesInAsk(
+  ask: string,
+  s: SchemaSummary,
+  literalHits: readonly FieldMatch[],
+): Array<{
+  noun: string;
+  index: number;
+  start: number;
+  end: number;
+  candidates: SchemaField[];
+}> {
+  const exactNames = fieldExactNames(s.fields);
+  const headGroups: Array<{ nouns: Set<string>; candidates: Set<SchemaField> }> = [];
+
+  for (const field of s.fields) {
+    // Geographic fields have dedicated concept/affinity resolution with stricter
+    // chart-family safeguards; a caption head must not bypass that path.
+    if (field.role !== 'dimension' || field.semanticRole) continue;
+    const friendlyName = field.caption ?? field.name;
+    const tokens = normalizeFieldPhrase(friendlyName).split(' ').filter(Boolean);
+    if (tokens.length < 2) continue;
+    const head = tokens[0];
+    const group = headGroups.find(({ nouns }) =>
+      [...nouns].some((noun) => pluralEquivalent(noun, head)),
+    );
+    if (group) {
+      group.nouns.add(head);
+      group.candidates.add(field);
+    } else {
+      headGroups.push({ nouns: new Set([head]), candidates: new Set([field]) });
+    }
+  }
+
+  const matches: Array<{
+    noun: string;
+    index: number;
+    start: number;
+    end: number;
+    candidates: SchemaField[];
+  }> = [];
+  for (const { nouns, candidates } of headGroups) {
+    const matchedNoun = [...nouns]
+      .map((noun) => ({ noun, match: fieldNameMatchInAskSpan(ask, noun, exactNames) }))
+      .filter(
+        (entry): entry is { noun: string; match: PhraseMatch } =>
+          entry.match !== null && /\bby\s*$/i.test(ask.slice(0, entry.match.start)),
+      )
+      .sort((a, b) => a.match.start - b.match.start || a.match.end - b.match.end)[0];
+    if (!matchedNoun) continue;
+    const { noun, match: nounMatch } = matchedNoun;
+    // A bare leading token is only a grouping field reference in the explicit
+    // "by <dimension-head>" position. Elsewhere it may be ordinary prose or a chart cue.
+    const literalClaimsNoun = literalHits.some(({ field }) =>
+      [bareName(field.columnName), field.caption, field.name]
+        .filter((name): name is string => !!name && name.length > 0)
+        .some((name) => {
+          const literalMatch = fieldNameMatchInAskSpan(ask, name, exactNames);
+          return (
+            literalMatch !== null &&
+            nounMatch.start >= literalMatch.start &&
+            nounMatch.start < literalMatch.end
+          );
+        }),
+    );
+    if (literalClaimsNoun) continue;
+
+    matches.push({
+      noun,
+      index: nounMatch.index,
+      start: nounMatch.start,
+      end: nounMatch.end,
+      candidates: [...candidates],
+    });
+  }
+
+  // Collapse overlapping claims into one candidate group. The ambiguity gate sees the
+  // union, while dimensionHeadMatchesInAsk drops the whole group unless exactly one
+  // distinct field owns the span.
+  const groupedMatches: typeof matches = [];
+  for (const match of matches.sort((a, b) => a.start - b.start || a.end - b.end)) {
+    const previous = groupedMatches.at(-1);
+    if (!previous || match.start >= previous.end) {
+      groupedMatches.push(match);
+      continue;
+    }
+
+    previous.index = Math.min(previous.index, match.index);
+    previous.start = Math.min(previous.start, match.start);
+    previous.end = Math.max(previous.end, match.end);
+    previous.candidates = [...new Set([...previous.candidates, ...match.candidates])];
+  }
+  return groupedMatches;
+}
+
+const IDENTITY_LIKE_DIMENSION_HEAD_SUFFIXES = new Set([
+  'name',
+  'id',
+  'key',
+  'code',
+  'number',
+  'no',
+]);
+
+function hasIdentityLikeDimensionHeadSuffix(field: SchemaField): boolean {
+  const friendlyName = field.caption ?? field.name;
+  const tokens = normalizeFieldPhrase(friendlyName).split(' ').filter(Boolean);
+  return tokens.length === 2 && IDENTITY_LIKE_DIMENSION_HEAD_SUFFIXES.has(tokens[1]);
+}
+
+/**
+ * Exactly-one dimension-head matches whose sole trailing caption token identifies the entity.
+ * Ambiguous heads and grain-changing suffixes such as "segment" or "region" are withheld.
+ */
+function dimensionHeadMatchesInAsk(
+  ask: string,
+  s: SchemaSummary,
+  literalHits: readonly FieldMatch[],
+): Array<FieldMatch & { noun: string }> {
+  return dimensionHeadCandidatesInAsk(ask, s, literalHits)
+    .filter(
+      (match): match is typeof match & { candidates: [SchemaField] } =>
+        match.candidates.length === 1 &&
+        hasIdentityLikeDimensionHeadSuffix(match.candidates[0]),
+    )
+    .map(({ noun, index, candidates }) => ({ noun, index, field: candidates[0] }));
+}
+
+interface GrainMeasureMatch {
+  index: number;
+  candidates: SchemaField[];
+  winner?: SchemaField;
+}
+
+function fieldNameTokens(field: SchemaField): Set<string> {
+  const tokens = new Set<string>();
+  for (const name of [bareName(field.columnName), field.caption, field.name]) {
+    if (!name) continue;
+    for (const token of normalizeFieldPhrase(name).split(' ')) {
+      if (token) tokens.add(token);
+    }
+  }
+  return tokens;
+}
+
+function explicitMeasureAtToken(
+  ask: string,
+  start: number,
+  end: number,
+  candidates: SchemaField[],
+  exactNames: Set<string>,
+): SchemaField | undefined {
+  const ranked = candidates.map((field) => {
+    let longest = 0;
+    for (const name of [bareName(field.columnName), field.caption, field.name]) {
+      if (!name) continue;
+      const match = fieldNameMatchInAskSpan(ask, name, exactNames);
+      if (match && match.start <= start && match.end >= end) {
+        longest = Math.max(longest, match.end - match.start);
+      }
+    }
+    return { field, longest };
+  });
+  const longest = Math.max(...ranked.map((candidate) => candidate.longest), 0);
+  if (longest <= end - start) return undefined;
+  const winners = ranked.filter((candidate) => candidate.longest === longest);
+  return winners.length === 1 ? winners[0].field : undefined;
+}
+
+/**
+ * A token covered by a literal measure name can identify measures at different remote
+ * grains. Resolve only a unique explicit compound name or the sole candidate co-tabled
+ * with an ask-matched dimension; otherwise leave no winner.
+ */
+function grainMeasureMatchesInAsk(
+  ask: string,
+  s: SchemaSummary,
+  literalHits: readonly FieldMatch[],
+): GrainMeasureMatch[] {
+  const measures = s.fields.filter(isMeasure);
+  const knownTables = new Set(measures.flatMap((field) => (field.table ? [field.table] : [])));
+  if (knownTables.size < 2) return [];
+
+  const dimensionTables = new Set(
+    [
+      ...literalHits,
+      ...businessSynonymMatchesInAsk(ask, s, literalHits),
+      ...dimensionHeadMatchesInAsk(ask, s, literalHits),
+    ].flatMap(({ field }) =>
+      field.role === 'dimension' && field.table ? [field.table] : [],
+    ),
+  );
+  const exactNames = fieldExactNames(s.fields);
+  const groups: GrainMeasureMatch[] = [];
+
+  for (const tokenMatch of ask.matchAll(/[a-z0-9]+/gi)) {
+    const token = tokenMatch[0].toLowerCase();
+    const index = tokenMatch.index;
+    if (contentTokens(token).size === 0) continue;
+    const candidates = measures.filter((field) =>
+      [...fieldNameTokens(field)].some((fieldToken) => pluralEquivalent(token, fieldToken)),
+    );
+    const candidateTables = new Set(
+      candidates.flatMap((field) => (field.table ? [field.table] : [])),
+    );
+    if (candidates.length < 2 || candidateTables.size < 2) continue;
+
+    const end = index + tokenMatch[0].length;
+    const hasLiteralCandidateAtToken = literalHits.some(
+      (hit) =>
+        candidates.includes(hit.field) &&
+        hit.start !== undefined &&
+        hit.end !== undefined &&
+        hit.start <= index &&
+        hit.end >= end,
+    );
+    if (!hasLiteralCandidateAtToken) continue;
+
+    const explicit = explicitMeasureAtToken(ask, index, end, candidates, exactNames);
+    const coTabled = candidates.filter(
+      (field) => field.table !== undefined && dimensionTables.has(field.table),
+    );
+    const winner = explicit ?? (coTabled.length === 1 ? coTabled[0] : undefined);
+    groups.push({ index, candidates, ...(winner ? { winner } : {}) });
+  }
+
+  return groups;
+}
+
+function remoteTableName(table: string): string {
+  return bareName(table).split(/[\\/]/).at(-1) ?? bareName(table);
+}
+
+function grainMeasureLabels(ask: string, s: SchemaSummary): Map<SchemaField, string> {
+  const literalHits = literalFieldMatchesInAsk(ask, s);
+  const labels = new Map<SchemaField, string>();
+  for (const group of grainMeasureMatchesInAsk(ask, s, literalHits)) {
+    if (group.winner) continue;
+    for (const field of group.candidates) {
+      if (!field.table) continue;
+      labels.set(field, `${field.name} (from ${remoteTableName(field.table)})`);
+    }
+  }
+  return labels;
 }
 
 /**
@@ -928,6 +1641,7 @@ function fieldNameMatchInAsk(ask: string, name: string, exactNames: ReadonlySet<
 function maskFieldNames(ask: string, s: SchemaSummary): string {
   let masked = ask;
   const exactNames = fieldExactNames(s.fields);
+  const literalHits = literalFieldMatchesInAsk(ask, s);
   // LONGEST FIELD NAME FIRST. Schema-order masking fragments a compound field:
   // masking "Region" before "Country/Region" turns it into "Country/      " so the
   // compound's own regex no longer matches, and the surviving "Country" token trips
@@ -942,44 +1656,72 @@ function maskFieldNames(ask: string, s: SchemaSummary): string {
     for (const n of names) {
       const lower = n.toLowerCase();
       // ONE-WAY plural alias, in lockstep with fieldNameMatchInAsk: a name not already
-      // ending in `s` also masks its naive plural token, so "Regions" is blanked WHOLE
-      // for a field "Region" — no partial "region"+leftover-"s" residue that could then
-      // keyword-match. Suppressed when the plural is another field's exact name (that
-      // field masks the token itself), preserving exact-first tie-breaking.
-      const pluralSuffix = !lower.endsWith('s') && !exactNames.has(`${lower}s`) ? 's?' : '';
+      // ending in `s` also masks its naive English plural token, so "Regions" is blanked
+      // WHOLE for a field "Region" and "Countries" for a field "Country" — no partial
+      // residue that could then keyword-match. Suppressed when the plural is another
+      // field's exact name (that field masks the token itself), preserving exact-first
+      // tie-breaking. naivePlural handles the consonant+`y`→`ies` rule ("category"→
+      // "categories") as well as the trailing-`s` case.
+      const plural = naivePlural(lower);
+      const pluralToken = plural && !exactNames.has(plural) ? plural : null;
       // HYPHEN↔SPACE LOCKSTEP WITH MATCHING (RT finding CLS-002): phraseIndexInAsk
       // matches a hyphenated field name against its spaced form ("Waterfall-Chart"
       // matches "waterfall chart"), so masking must blank that same span — a literal
       // regex would leave "waterfall" alive in the masked ask and let the FIELD NAME
       // select the waterfall family.
-      const body = escapeRegex(lower).replace(/-/g, '[\\s-]+');
-      const re = new RegExp(`(^|[^a-z0-9])(${body}${pluralSuffix})([^a-z0-9]|$)`, 'gi');
+      const toBody = (t: string): string => escapeRegex(t).replace(/-/g, '[\\s-]+');
+      const body = pluralToken ? `(?:${toBody(pluralToken)}|${toBody(lower)})` : toBody(lower);
+      const re = new RegExp(`(^|[^a-z0-9])(${body})([^a-z0-9]|$)`, 'gi');
       masked = masked.replace(
         re,
         (_whole, pre: string, mid: string, post: string) => pre + ' '.repeat(mid.length) + post,
       );
     }
   }
+  // A uniquely resolved business noun is a field mention too: mask it before chart-family
+  // and aggregation scoring. Ambiguous/unknown nouns remain untouched and follow today's path.
+  for (const { noun } of businessSynonymMatchesInAsk(ask, s, literalHits)) {
+    const body = escapeRegex(noun).replace(/-/g, '[\\s-]+');
+    const re = new RegExp(`(^|[^a-z0-9])(${body})([^a-z0-9]|$)`, 'gi');
+    masked = masked.replace(
+      re,
+      (_whole, pre: string, mid: string, post: string) => pre + ' '.repeat(mid.length) + post,
+    );
+  }
+  // A uniquely owned dimension head is a field mention too. Use the same one-way
+  // plural matcher as field resolution, then mask only the exact matched span.
+  for (const { noun } of dimensionHeadMatchesInAsk(ask, s, literalHits)) {
+    const match = fieldNameMatchInAskSpan(masked, noun, exactNames);
+    if (!match) continue;
+    masked =
+      masked.slice(0, match.start) +
+      ' '.repeat(match.end - match.start) +
+      masked.slice(match.end);
+  }
   return masked;
 }
 
 /** Fields whose name/caption/bare column name appear in the ask, earliest-first. */
 function matchFieldsInAsk(ask: string, s: SchemaSummary): SchemaField[] {
-  const exactNames = fieldExactNames(s.fields);
-  const hits: Array<{ field: SchemaField; index: number }> = [];
-  for (const f of s.fields) {
-    const names = [bareName(f.columnName), f.caption, f.name].filter(
-      (n): n is string => !!n && n.length > 0,
+  const literalHits = literalFieldMatchesInAsk(ask, s);
+  const grainMatches = grainMeasureMatchesInAsk(ask, s, literalHits);
+  const grainCandidates = new Set(grainMatches.flatMap((match) => match.candidates));
+  const hits: FieldMatch[] = [
+    ...literalHits,
+    ...businessSynonymMatchesInAsk(ask, s, literalHits),
+    ...dimensionHeadMatchesInAsk(ask, s, literalHits),
+  ]
+    .filter(({ field }) => !grainCandidates.has(field))
+    .concat(
+      grainMatches.flatMap(({ index, winner }) => (winner ? [{ field: winner, index }] : [])),
     );
-    let best = -1;
-    for (const n of names) {
-      const idx = fieldNameMatchInAsk(ask, n, exactNames);
-      if (idx >= 0 && (best < 0 || idx < best)) best = idx;
-    }
-    if (best >= 0) hits.push({ field: f, index: best });
-  }
   hits.sort((a, b) => a.index - b.index);
-  return hits.map((h) => h.field);
+  const seen = new Set<SchemaField>();
+  return hits.flatMap(({ field }) => {
+    if (seen.has(field)) return [];
+    seen.add(field);
+    return [field];
+  });
 }
 
 /** Whole-phrase test: does the ask NAME this field (by name, caption, or bare column)? */
@@ -1027,8 +1769,11 @@ function fieldFitsSlotKind(kind: SlotKind, f: SchemaField): boolean {
     case 'temporal':
       return TEMPORAL_DATATYPES.has(f.datatype);
     case 'categorical':
+    case 'quantitative-or-categorical':
     case 'geo':
-      return f.role === 'dimension';
+      return kind === 'quantitative-or-categorical'
+        ? isMeasure(f) || isCategorical(f)
+        : f.role === 'dimension';
     default:
       return false; // calc/generated/pseudo/parameter are never user-bindable
   }
@@ -1037,10 +1782,13 @@ function fieldFitsSlotKind(kind: SlotKind, f: SchemaField): boolean {
 /**
  * Field-narrowing for the propose prompt (stage 2B, adjudicated attack 1). A wide
  * schema (300–1000 fields) would blow the prompt, so rank and cap:
- *   rank 1 — fields whose name/caption tokens overlap the ask (a field the ask
- *            NAMES is guaranteed rank-1, so it survives the cap);
- *   rank 2 — fields kind-compatible with any required slot of any candidate;
- *   rank 3 — everything else (fills headroom only).
+ *   rank 0 — fields the ask names exactly/normalizes to (never evicted by the cap);
+ *   rank 1 — business-synonym candidates when that noun was not literally resolved;
+ *   rank 2 — fields whose name/caption tokens overlap the ask;
+ *   rank 3 — fields kind-compatible with any required slot of any candidate;
+ *   rank 4 — everything else (fills headroom only).
+ * At least one field compatible with every required slot kind is also reserved so a
+ * synonym-heavy schema cannot leave the Call-2 contract with an empty slot.
  * Deterministic: stable sort keyed tier → named → overlap → name → original index.
  * A pass-through (≤ cap) returns the fields UNCHANGED with no withholding.
  */
@@ -1054,6 +1802,16 @@ function narrowFields(
 
   const askTokens = contentTokens(ask);
   const exactNames = fieldExactNames(fields);
+  const synonymSummary: SchemaSummary = {
+    datasource: fields[0]?.datasource ?? '',
+    fields,
+  };
+  const literalHits = literalFieldMatchesInAsk(ask, synonymSummary);
+  const synonymCandidates = new Set(
+    businessSynonymCandidatesInAsk(ask, synonymSummary, literalHits).flatMap(
+      (match) => match.candidates,
+    ),
+  );
   const ranked = fields.map((f, index) => {
     const named = askNamesField(ask, f, exactNames);
     let overlap = 0;
@@ -1062,7 +1820,8 @@ function narrowFields(
     }
     const relevant = named || overlap > 0;
     const compatible = !relevant && [...kinds].some((k) => fieldFitsSlotKind(k, f));
-    const tier = relevant ? 2 : compatible ? 1 : 0;
+    const synonymCandidate = synonymCandidates.has(f);
+    const tier = named ? 4 : synonymCandidate ? 3 : relevant ? 2 : compatible ? 1 : 0;
     return { f, index, tier, named, overlap };
   });
 
@@ -1075,12 +1834,27 @@ function narrowFields(
       a.index - b.index,
   );
 
-  const kept = ranked.slice(0, maxFields).map((r) => r.f);
+  const reserved = new Set(ranked.filter((candidate) => candidate.named));
+  for (const kind of kinds) {
+    const representative = ranked.find((candidate) => fieldFitsSlotKind(kind, candidate.f));
+    if (representative) reserved.add(representative);
+  }
+  const keepCount = Math.max(maxFields, reserved.size);
+  for (const candidate of ranked) {
+    if (reserved.size >= keepCount) break;
+    reserved.add(candidate);
+  }
+  const kept = ranked.filter((candidate) => reserved.has(candidate)).map((candidate) => candidate.f);
   return { fields: kept, withheld: fields.length - kept.length };
 }
 
 function isTemporal(f: SchemaField): boolean {
   return f.role === 'dimension' && TEMPORAL_DATATYPES.has(f.datatype);
+}
+const WATERFALL_PERIOD_FIELD_RE =
+  /period|quarter|month|year|fiscal|fy|fq|date|week|day/i;
+function isWaterfallPeriodField(f: SchemaField): boolean {
+  return isTemporal(f) || WATERFALL_PERIOD_FIELD_RE.test(f.name);
 }
 function isMeasure(f: SchemaField): boolean {
   return f.role === 'measure' || f.isAggregated;
@@ -1100,13 +1874,18 @@ function shouldExposeFieldIdentity(fields: SchemaField[]): boolean {
   return datasources.size > 1;
 }
 
-function proposeField(f: SchemaField, exposeIdentity: boolean): LlmProposeInput['fields'][number] {
+function proposeField(
+  f: SchemaField,
+  exposeIdentity: boolean,
+  grainLabel?: string,
+): LlmProposeInput['fields'][number] {
   return {
     name: f.name,
     role: f.role,
     type: f.type,
     datatype: f.datatype,
     ...(exposeIdentity ? { datasource: f.datasource, column_ref: f.column_ref } : {}),
+    ...(grainLabel && f.table ? { table: f.table, label: grainLabel } : {}),
   };
 }
 
@@ -1256,6 +2035,45 @@ function pickGeoField(pool: SchemaField[], slotId: string): GeoPick {
 }
 
 /**
+ * Add a uniquely compatible geo field when the ask names the slot's natural geo
+ * concept rather than the field's full caption (for example, "countries" for
+ * "Country Code"). This is deliberately geo-slot-only: ordinary field matching
+ * remains exact-first and never gains generic substring behavior.
+ *
+ * Existing ask-named geo matches always win. Otherwise the masked ask must contain
+ * one of the slot's whole-token concept aliases, and the full schema must produce
+ * exactly one semantic-role/name-affine field. Zero or multiple candidates add
+ * nothing, preserving the existing fail-closed behavior.
+ */
+function augmentGeoConceptMatches(
+  maskedAsk: string,
+  manifest: TemplateManifest,
+  matched: SchemaField[],
+  schemaDims: SchemaField[],
+): SchemaField[] {
+  const augmented = [...matched];
+  const geoSlots = manifest.slots.filter(
+    (slot) => slot.bindable && slot.required && slot.kind === 'geo',
+  );
+
+  for (const slot of geoSlots) {
+    const askNamedPool = augmented.filter((field) => field.role === 'dimension');
+    if (pickGeoField(askNamedPool, slot.slot_id).kind !== 'none') continue;
+    const conceptNamed = [...geoAffinityTokens(slot.slot_id)].some(
+      (token) => fieldNameMatchInAsk(maskedAsk, token, new Set()) >= 0,
+    );
+    if (!conceptNamed) continue;
+
+    const schemaPick = pickGeoField(schemaDims, slot.slot_id);
+    if (schemaPick.kind === 'ok' && !augmented.includes(schemaPick.field)) {
+      augmented.push(schemaPick.field);
+    }
+  }
+
+  return augmented;
+}
+
+/**
  * Resolve every required geo slot to a distinct field by SEMANTIC ROLE, then NAME
  * AFFINITY. Fail-closed
  * (returns null → the caller proposes) when a geo slot is not UNAMBIGUOUS: each binds
@@ -1332,10 +2150,15 @@ const TIME_INTENT_CUES: readonly string[] = [
   'timeline',
   'time-series',
   'over-time',
+  'by-date',
   'by-month',
   'by-week',
   'by-quarter',
   'by-year',
+  'daily',
+  'monthly',
+  'quarterly',
+  'yearly',
   'calendar',
   'period',
   'change-over-time',
@@ -1344,9 +2167,19 @@ const TIME_INTENT_CUES: readonly string[] = [
   'yoy',
 ];
 
+/**
+ * A bounded relative window also names a time axis even when it does not repeat a
+ * static cue above. Keep the unit set narrow: these are the material calendar
+ * grains the temporal fallback contract admits.
+ */
+const LAST_N_TIME_WINDOW_RE = /\blast\s+[1-9]\d*\s+(?:months?|quarters?|years?)\b/i;
+
 /** True when the (masked) ask carries an explicit time-axis cue from the allowlist. */
 function askHasExplicitTimeIntent(maskedAsk: string): boolean {
-  return TIME_INTENT_CUES.some((cue) => phraseIndexInAsk(maskedAsk, cue) >= 0);
+  return (
+    TIME_INTENT_CUES.some((cue) => phraseIndexInAsk(maskedAsk, cue) >= 0) ||
+    LAST_N_TIME_WINDOW_RE.test(maskedAsk)
+  );
 }
 
 /**
@@ -1424,19 +2257,101 @@ function roleGreedyBind(
     if (pick.kind === 'ok') optionalAskNamedGeoSlots.add(slot.slot_id);
   }
 
-  const take = (pred: (f: SchemaField) => boolean): SchemaField | null => {
+  const fieldTokens = (f: SchemaField): Set<string> => {
+    const tokens = new Set<string>();
+    for (const name of [f.name, f.caption ?? '', bareName(f.columnName)]) {
+      for (const token of nameTokens(name)) tokens.add(token);
+    }
+    return tokens;
+  };
+  // Duplicated from explicit-bind.ts because lockstep-core cannot import that non-core module.
+  const normalizedName = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const fieldNameMatchesSlot = (
+    field: SchemaField,
+    slot: TemplateManifest['slots'][number],
+  ): boolean => {
+    if (slot.template_field.includes('{{')) return false;
+    const templateFieldName = normalizedName(slot.template_field);
+    return [field.name, field.caption ?? '', bareName(field.columnName)]
+      .map(normalizedName)
+      .some((name) => name === templateFieldName);
+  };
+  const schemaFallback = (
+    slot: TemplateManifest['slots'][number],
+    pred: (f: SchemaField) => boolean,
+  ): SchemaField | null => {
+    if (!temporalCompletion) return null;
+    if (slot.required && slot.kind === 'categorical' && !matched.some(isCategorical)) return null;
+    const candidates = temporalCompletion.schemaFields.filter((f) => !used.has(f) && pred(f));
+    if (candidates.length === 0) return null;
+
+    // Prefer a unique field whose name is affine to the slot itself. This is what
+    // distinguishes Actual Amount from Quota Amount when both are quantitative.
+    const slotTokenGroups = [nameTokens(slot.slot_id)];
+    if (!slot.template_field.includes('{{')) {
+      slotTokenGroups.push(nameTokens(slot.template_field));
+    }
+    const slotAffine = candidates.filter((f) => {
+      const tokens = fieldTokens(f);
+      return slotTokenGroups.some(
+        (group) => group.length > 0 && group.every((token) => tokens.has(token)),
+      );
+    });
+    if (slotAffine.length > 0) return slotAffine.length === 1 ? slotAffine[0] : null;
+
+    // If the manifest uses a generic slot name (for example `entity`), allow the
+    // ask to narrow the schema pool by a field-name token. Whole-token matching
+    // includes the existing one-way plural alias, so "reps" identifies Rep Name.
+    const askAffine = candidates.filter((f) =>
+      [...fieldTokens(f)].some(
+        (token) => fieldNameMatchInAsk(temporalCompletion.maskedAsk, token, new Set()) >= 0,
+      ),
+    );
+    if (askAffine.length > 0) return askAffine.length === 1 ? askAffine[0] : null;
+
+    // No affinity signal: bind only a single remaining candidate of this kind.
+    return candidates.length === 1 ? candidates[0] : null;
+  };
+  const take = (
+    slot: TemplateManifest['slots'][number],
+    pred: (f: SchemaField) => boolean,
+    allowSchemaFallback = true,
+  ): SchemaField | null => {
+    if (slot.kind === 'categorical') {
+      const affine = matched.filter(
+        (field) => !used.has(field) && pred(field) && fieldNameMatchesSlot(field, slot),
+      );
+      if (affine.length === 1) {
+        used.add(affine[0]);
+        return affine[0];
+      }
+    }
     for (const f of matched) {
       if (!used.has(f) && pred(f)) {
         used.add(f);
         return f;
       }
     }
-    return null;
+    if (!allowSchemaFallback) return null;
+    const fallback = schemaFallback(slot, pred);
+    if (fallback) used.add(fallback);
+    return fallback;
   };
 
+  const isOptionalCategoricalDetail = (
+    slot: TemplateManifest['slots'][number],
+  ): boolean =>
+    slot.bindable &&
+    !slot.required &&
+    slot.kind === 'categorical' &&
+    slot.role.includes('detail');
   const isActive = (slot: TemplateManifest['slots'][number]): boolean =>
     slot.bindable &&
-    (slot.required || forced.has(slot.slot_id) || optionalAskNamedGeoSlots.has(slot.slot_id));
+    (slot.required ||
+      forced.has(slot.slot_id) ||
+      optionalAskNamedGeoSlots.has(slot.slot_id) ||
+      isOptionalCategoricalDetail(slot));
+  const activeSlots = m.slots.filter(isActive);
   const geoSlots = m.slots.filter((s) => isActive(s) && s.kind === 'geo');
   let geoPicks: Map<string, SchemaField> | null = null;
   let geoAutoCompleted = new Map<string, SchemaField>();
@@ -1472,15 +2387,28 @@ function roleGreedyBind(
     return unconsumedNonTemporalDims.length > capacity;
   };
 
-  for (const [i, slot] of m.slots.entries()) {
-    if (!isActive(slot)) continue;
+  for (const [i, slot] of activeSlots.entries()) {
+    if (isOptionalCategoricalDetail(slot)) {
+      const compatible = matched.filter((field) => !used.has(field) && isCategorical(field));
+      const laterRequired = activeSlots
+        .slice(i + 1)
+        .filter(
+          (candidate) =>
+            (candidate.required || forced.has(candidate.slot_id)) &&
+            candidate.kind === 'categorical',
+        ).length;
+      if (compatible.length <= laterRequired) continue;
+    }
     let chosen: SchemaField | null = null;
     switch (slot.kind) {
       case 'quantitative':
-        chosen = take(isMeasure);
+        chosen = take(slot, isMeasure);
         break;
       case 'categorical':
-        chosen = take(isCategorical);
+        chosen = take(slot, isCategorical, slot.required || forced.has(slot.slot_id));
+        break;
+      case 'quantitative-or-categorical':
+        chosen = take(slot, (field) => isMeasure(field) || isCategorical(field));
         break;
       case 'temporal':
         // A real date/datetime field always fits. When the slot opts in via
@@ -1489,9 +2417,12 @@ function roleGreedyBind(
         // (validate.ts + dateparseTemporalAxis) turns it into a continuous truncated axis.
         // Without this the string month never fills the temporal slot, the required-slot
         // gate fails, and the singer thrashes into a bar-over-strings (e4: 310s, judge 40).
-        chosen = take((f) =>
-          isTemporal(f) ||
-          (slot.temporal_from_string === true && inferStringTemporal(f) !== null),
+        chosen = take(
+          slot,
+          (f) =>
+            isTemporal(f) ||
+            (slot.temporal_from_string === true && inferStringTemporal(f) !== null),
+          false,
         );
         // UNIQUE-DATE TEMPORAL COMPLETION (final bind pass only; mirrors W60 geo): a
         // lone required temporal slot the ask did not name is completed with the
@@ -1503,7 +2434,7 @@ function roleGreedyBind(
           !chosen &&
           temporalCompletion &&
           temporalSlots.length === 1 &&
-          !hasUnslottedNonTemporalDimension(m.slots.slice(i + 1))
+          !hasUnslottedNonTemporalDimension(activeSlots.slice(i + 1))
         ) {
           const completed = completeTemporalSlot(
             temporalCompletion.maskedAsk,
@@ -1540,6 +2471,7 @@ function roleGreedyBind(
       default:
         chosen = null;
     }
+    if (!chosen && isOptionalCategoricalDetail(slot)) continue;
     if (!chosen) return null; // required slot unfilled / geo affinity ambiguous → fail closed
     const binding: { slot_id: string; field: string; derivation?: Derivation } = {
       slot_id: slot.slot_id,
@@ -1600,6 +2532,7 @@ function roleGreedyBind(
  */
 function selectWithinFamily(
   top: Array<{ m: TemplateManifest }>,
+  rawAsk: string,
   maskedAsk: string,
   matched: SchemaField[],
   aggOverride: Derivation | null,
@@ -1611,8 +2544,47 @@ function selectWithinFamily(
     const native = familyNativeKeywords(m.family, manifests);
     const won = matchedKeywords(maskedAsk, m.intent_keywords);
     const decisive =
-      won.some((kw) => native.has(kw.toLowerCase())) || wonChartNoun(maskedAsk, m.intent_keywords);
+      won.some((kw) => native.has(kw.toLowerCase())) ||
+      wonChartNoun(maskedAsk, m.intent_keywords) ||
+      // A full known metric expansion carries both the measure identity and its
+      // discriminator (for example MONTHLY active users). That conjunction is
+      // decisive for the trend template even when "monthly" alone is no longer
+      // family-native after additional time-series templates become eligible.
+      (m.template === 'trend-line-chart' &&
+        matched.some((field) => acronymExpansionMatch(maskedAsk, field) >= 0)) ||
+      // `quota` has one eligible carrier, but stopped being family-native when
+      // deviation gained a second eligible template. Keep this exact domain cue
+      // decisive without misclassifying it as a chart noun in ask-router parity.
+      (m.template === 'quota-attainment-bullet' &&
+        won.some((kw) => kw.toLowerCase() === 'quota'));
     return decisive ? m : null;
+  }
+
+  // SPATIAL mark-cue tie-break (one merged check covering both the cross-family
+  // and same-family cases — a poison word from an unrelated template, "total",
+  // "trend", ..., can tie the keyword score and make an otherwise-clean
+  // spatial+mark-cue ask LOOK cross-family, and without checking this BEFORE the
+  // cross-family fail-closed return below, the mark-cue discriminator is never
+  // reached). A bare point-mark word ("dots", "bubbles", "pins", ...) is the
+  // missing discriminator between filled regions and symbols.
+  //
+  // Fires only when: the ask MATCHED a measure (never fill the required
+  // sales/size slot from thin air — a mark-cue-only ask naming no measure, e.g.
+  // "map the pins for each country", must stay off this path so the dedicated
+  // lat/lon resolver or an honest propose handles it instead); the ask does NOT
+  // carry explicit coordinate intent (checked against the RAW ask for the
+  // coordinate-pair half, since maskFieldNames blanks literal Latitude/Longitude
+  // field names and would otherwise silently kill this brake on exactly the
+  // schemas it exists to protect); and the ask carries a mark cue. Finding
+  // GENERATED_SYMBOL_MAP_TEMPLATE in `top` already proves a spatial candidate is
+  // present, so no separate family check is needed.
+  const spatialMarkCueApplies =
+    askHasSymbolMapMarkCue(maskedAsk) &&
+    matched.some((field) => isMeasure(field)) &&
+    !askHasExplicitCoordinateIntent(rawAsk, maskedAsk);
+  const symbolMapCandidate = top.find((t) => t.m.template === GENERATED_SYMBOL_MAP_TEMPLATE);
+  if (spatialMarkCueApplies && symbolMapCandidate) {
+    return symbolMapCandidate.m;
   }
 
   const families = new Set(top.map((t) => t.m.family));
@@ -1628,6 +2600,14 @@ function selectWithinFamily(
     if (byNoun.length === 0) return null;
     if (byNoun.length > 1 && byNoun[0].spec === byNoun[1].spec) return null;
     return byNoun[0].m;
+  }
+
+  // SAME-family spatial "map" tie without a generated-symbol-map candidate in
+  // `top` to pick (e.g. tied only between choropleth and the lat/lon resolver):
+  // the mark cue named an unambiguous MARK preference the tied set can't satisfy,
+  // so stay fail-closed rather than silently choosing a different spatial chart.
+  if (spatialMarkCueApplies) {
+    return null;
   }
 
   const bindable = top
@@ -1706,6 +2686,579 @@ function facetBinding(
 }
 
 /**
+ * FAIL-CLOSED trend-series augmentation. A template may opt into one optional
+ * categorical color slot; bind it only when exactly one unconsumed categorical
+ * exists in the datasource. Zero candidates leaves the default single line alone,
+ * while two or more stay unbound rather than choosing a series arbitrarily.
+ */
+function colorSeriesBinding(
+  m: TemplateManifest,
+  bound: Array<{ slot_id: string; field: string; derivation?: Derivation }>,
+  candidates: SchemaField[],
+): { slot_id: string; field: string } | null {
+  const boundIds = new Set(bound.map((binding) => binding.slot_id));
+  const colorSlot = m.slots.find(
+    (slot) =>
+      slot.slot_id === 'color_series' &&
+      slot.kind === 'categorical' &&
+      !slot.required &&
+      !boundIds.has(slot.slot_id),
+  );
+  if (!colorSlot) return null;
+  const boundFields = new Set(bound.map((binding) => binding.field));
+  const spares = candidates.filter(
+    (field) => isCategorical(field) && !boundFields.has(field.name),
+  );
+  if (spares.length !== 1) return null;
+  return { slot_id: colorSlot.slot_id, field: spares[0].name };
+}
+
+export type SymbolMapEncodingRole = 'size' | 'color' | 'tooltip';
+type ClassifiedBinding = { slot_id: string; field: string; derivation?: Derivation };
+
+/**
+ * What the ask asked for, split by what the bind actually filled. The binder knows this
+ * while it is binding; before this it threw the knowledge away, so a symbol map whose
+ * color slot went unbound applied as flat blue and still reported completion.
+ */
+export type EncodingReport = {
+  filled: SymbolMapEncodingRole[];
+  unfilled: SymbolMapEncodingRole[];
+};
+
+export type EncodingFieldCandidate = Pick<SchemaField, 'name' | 'caption' | 'column_ref'>;
+
+export type EncodingFieldResolution = {
+  field: EncodingFieldCandidate | null;
+  candidates: EncodingFieldCandidate[];
+};
+
+/**
+ * Deliberately BROADER than the bind cues below. The bind cues are narrow on purpose —
+ * they must never guess a field onto a shelf. These only decide whether the ask MENTIONED
+ * an encoding, which costs nothing to get slightly wrong: a false positive downgrades a
+ * "done" to "here is what I did not build", while a false negative is the silent flat-blue
+ * map. Report generously; bind conservatively.
+ */
+const ENCODING_REQUEST_CUES: Readonly<Record<SymbolMapEncodingRole, string>> = {
+  size: String.raw`\b(?:siz(?:e|es|ed|ing)|bigger|larger|smaller|scaled?|proportional)\b`,
+  color: String.raw`\b(?:colou?rs?|colou?red|colou?ring|shad(?:e|es|ed|ing)|warm(?:er|est)?|hot(?:ter|test)?|heat|intensity|dark(?:er|est)?|light(?:er|est)?|hue|gradient)\b`,
+  tooltip: String.raw`\b(?:tooltips?|hover(?:s|ing)?|mouse\s?over|reveal)\b|\bshow\b(?=[^.!?;]*\bwhen\b)`,
+};
+
+/**
+ * Did the ask ask for this encoding at all? Masked against the schema so a field literally
+ * named "Warm" or "Hover" is read as a field, not as a request for color or a tooltip.
+ */
+function askRequestsSymbolMapEncoding(
+  ask: string,
+  role: SymbolMapEncodingRole,
+  summary: SchemaSummary,
+): boolean {
+  const cue = new RegExp(ENCODING_REQUEST_CUES[role], 'gi');
+  const fieldMaskedAsk = maskFieldNames(ask, summary);
+  return [...ask.matchAll(cue)].some((match) => {
+    const index = match.index ?? 0;
+    return fieldMaskedAsk.slice(index, index + match[0].length) === match[0];
+  });
+}
+
+const SYMBOL_MAP_TEMPLATES: ReadonlySet<string> = new Set([
+  LATLON_SYMBOL_MAP_TEMPLATE,
+  'spatial-symbol-map',
+]);
+
+function fieldFitsSymbolMapEncoding(role: SymbolMapEncodingRole, field: SchemaField): boolean {
+  return role === 'size' ? isMeasure(field) : isMeasure(field) || isCategorical(field);
+}
+
+function mostSpecificDirectedField(
+  clause: string,
+  summary: SchemaSummary,
+  candidates: SchemaField[],
+): SchemaField | null {
+  if (candidates.length < 2) return candidates[0] ?? null;
+  const exactNames = fieldExactNames(summary.fields);
+  const ranked = candidates.map((field) => {
+    const matchedNameLengths = [bareName(field.columnName), field.caption, field.name]
+      .filter((name): name is string => !!name && name.length > 0)
+      .filter((name) => fieldNameMatchInAsk(clause, name, exactNames) >= 0)
+      .map((name) => name.length);
+    return { field, length: Math.max(...matchedNameLengths, 0) };
+  });
+  const longest = Math.max(...ranked.map(({ length }) => length));
+  const mostSpecific = ranked.filter(({ length }) => length === longest);
+  if (longest === 0 || mostSpecific.length !== 1) return null;
+
+  const [winner] = mostSpecific;
+  const remainder = maskFieldNames(clause, {
+    datasource: summary.datasource,
+    fields: [winner.field],
+  });
+  const remainingSummary = {
+    datasource: summary.datasource,
+    fields: candidates.filter((candidate) => candidate !== winner.field),
+  };
+  return matchFieldsInAsk(remainder, remainingSummary).length === 0 ? winner.field : null;
+}
+
+/**
+ * Resolve the field named for an unfilled symbol-map encoding using the classifier's
+ * existing exact caption/token, plural, acronym, and business-synonym matching. The same
+ * longest-name disambiguation used by explicit encoding directives makes "Goals For" beat
+ * its overlapping "Goals" field, while two separately named fields remain ambiguous.
+ *
+ * Candidate order is the classifier's ask order. Callers can expose the bounded leading
+ * candidates when `field` is null instead of forcing another schema-orientation call.
+ */
+export function resolveEncodingFieldInAsk(
+  ask: string,
+  role: SymbolMapEncodingRole,
+  summary: SchemaSummary,
+): EncodingFieldResolution {
+  const matched = matchFieldsInAsk(ask, summary).filter((field) =>
+    fieldFitsSymbolMapEncoding(role, field),
+  );
+  const field = mostSpecificDirectedField(ask, summary, matched);
+  const project = (candidate: SchemaField): EncodingFieldCandidate => ({
+    name: candidate.name,
+    ...(candidate.caption ? { caption: candidate.caption } : {}),
+    column_ref: candidate.column_ref,
+  });
+  return {
+    field: field ? project(field) : null,
+    candidates: matched.map(project),
+  };
+}
+
+/**
+ * Extract one field from an explicit "<field> on <encoding>" clause. This is
+ * intentionally narrower than free-form shelf parsing: no cue or more than one
+ * compatible field leaves the slot unbound.
+ */
+function fieldDirectedToSymbolMapEncoding(
+  ask: string,
+  role: SymbolMapEncodingRole,
+  summary: SchemaSummary,
+  detailFields: ReadonlySet<string>,
+): SchemaField | null {
+  const cue = new RegExp(`\\b(?:on|for|as)\\s+(?:the\\s+)?${role}\\b`, 'gi');
+  const directed = new Set<SchemaField>();
+
+  for (const match of ask.matchAll(cue)) {
+    const beforeCue = ask.slice(0, match.index);
+    const boundaries = [
+      ...beforeCue.matchAll(/(?:^|[.;]|\b(?:put|place|use|using)\b)/gi),
+    ];
+    const boundary = boundaries.at(-1);
+    const clauseStart = boundary ? (boundary.index ?? 0) + boundary[0].length : 0;
+    const candidates = matchFieldsInAsk(beforeCue.slice(clauseStart), summary).filter((field) =>
+      fieldFitsSymbolMapEncoding(role, field),
+    );
+    const directedField = mostSpecificDirectedField(
+      beforeCue.slice(clauseStart),
+      summary,
+      candidates,
+    );
+    if (directedField) {
+      directed.add(directedField);
+      continue;
+    }
+    // One tooltip slot can carry only one field. If a tooltip list names one
+    // measure plus dimensions already represented by map detail, the measure is
+    // the unique extra value; any other multi-field shape remains ambiguous.
+    const measures = role === 'tooltip' ? candidates.filter(isMeasure) : [];
+    if (
+      measures.length !== 1 ||
+      candidates.some((candidate) => !isMeasure(candidate) && !detailFields.has(candidate.name))
+    ) {
+      return null;
+    }
+    directed.add(measures[0]);
+  }
+
+  if (directed.size !== 1) return null;
+  const [field] = directed;
+  return field ?? null;
+}
+
+function hasNaturalSymbolMapEncodingCue(
+  ask: string,
+  role: Exclude<SymbolMapEncodingRole, 'size'>,
+  summary: SchemaSummary,
+): boolean {
+  // Color cue also matches `color(ed)? = ...` / `color(ed)? : ...` directive forms in
+  // addition to `color(ed)? by ...`, so "color = <measure>" fills the color encoding
+  // instead of silently dropping (matched cue then falls back to reusing the size
+  // measure below when no explicit "colored by <field>" clause names one).
+  const cue =
+    role === 'color'
+      ? /\b(?:warm(?:er)?|hot(?:ter)?|heat|intensity)\b|\b(?:colou?r(?:ed)?|shad(?:e|ed))\b(?=\s*(?:=|:)|\s+by\b)/gi
+      : /\b(?:hover|reveal|tooltip)\b|\bshow\b(?=[^.!?;]*\bwhen\b)/gi;
+  const fieldMaskedAsk = maskFieldNames(ask, summary);
+  return [...ask.matchAll(cue)].some((match) => {
+    const index = match.index ?? 0;
+    return fieldMaskedAsk.slice(index, index + match[0].length) === match[0];
+  });
+}
+
+function naturallyDirectedColorField(
+  ask: string,
+  summary: SchemaSummary,
+): { namesField: boolean; field: SchemaField | null } {
+  const directed = new Set<SchemaField>();
+  let namesField = false;
+  for (const match of ask.matchAll(/\b(?:colou?r(?:ed)?|shad(?:e|ed))\s+by\b/gi)) {
+    const clauseStart = (match.index ?? 0) + match[0].length;
+    const clauseEndOffset = ask.slice(clauseStart).search(/[.;]/);
+    const clause =
+      clauseEndOffset < 0
+        ? ask.slice(clauseStart)
+        : ask.slice(clauseStart, clauseStart + clauseEndOffset);
+    const candidates = matchFieldsInAsk(clause, summary).filter((field) =>
+      fieldFitsSymbolMapEncoding('color', field),
+    );
+    if (candidates.length === 0) continue;
+    namesField = true;
+    const field = mostSpecificDirectedField(clause, summary, candidates);
+    if (!field || !isMeasure(field)) return { namesField, field: null };
+    directed.add(field);
+  }
+  if (directed.size !== 1) return { namesField, field: null };
+  const [field] = directed;
+  return { namesField, field: field ?? null };
+}
+
+function sizeMeasureFromSymbolMapBindings(
+  manifest: TemplateManifest,
+  summary: SchemaSummary,
+  bindings: ClassifiedBinding[],
+): SchemaField | null {
+  const sizeSlotIds = new Set(
+    manifest.slots.filter((slot) => slot.role.includes('size')).map((slot) => slot.slot_id),
+  );
+  const sizeBindings = bindings.filter((binding) => sizeSlotIds.has(binding.slot_id));
+  if (sizeBindings.length !== 1) return null;
+  const field = summary.fields.find((candidate) => candidate.name === sizeBindings[0].field);
+  return field && isMeasure(field) ? field : null;
+}
+
+/**
+ * The ask's uniquely-matched measure, for filling an OPTIONAL symbol-map size slot
+ * when no explicit "on/for/as size" directive names one — e.g. "sized by Goals For",
+ * or a plain "...at their latitude and longitude, by Goals For" naming the metric
+ * directly rather than through a shelf directive. This is how the lat/lon resolver
+ * (which has no required measure slot of its own) still fills size from a measure
+ * the ask names. Fields already consumed by a REQUIRED slot (the lat/lon resolver's
+ * Latitude/Longitude coordinate fields are themselves measures) are excluded first,
+ * so "sized by Goals For at its latitude and longitude" sees exactly one candidate,
+ * not three. Exactly one remaining matched measure only — two or more stays unbound
+ * rather than guessing (never invent a size measure the ask did not clearly name;
+ * see the "map the pins for each country" no-measure regression).
+ */
+function naturallyMatchedSizeMeasure(
+  matched: SchemaField[],
+  boundFieldNames: ReadonlySet<string>,
+): SchemaField | null {
+  const measures = matched.filter((f) => isMeasure(f) && !boundFieldNames.has(f.name));
+  return measures.length === 1 ? measures[0] : null;
+}
+
+/**
+ * Add optional symbol-map encoding bindings from explicit shelf directives or
+ * tightly-scoped natural color/hover/size cues.
+ * Existing required geo/coordinate bindings are inputs and are never modified.
+ * A field may intentionally be reused across size, color, and tooltip.
+ */
+function symbolMapEncodingBindings(
+  manifest: TemplateManifest,
+  ask: string,
+  summary: SchemaSummary,
+  bound: ClassifiedBinding[],
+  aggOverride: Derivation | null,
+  matched: SchemaField[],
+): { bindings: ClassifiedBinding[]; encodings: EncodingReport } {
+  const empty = { bindings: [], encodings: { filled: [], unfilled: [] } };
+  if (!SYMBOL_MAP_TEMPLATES.has(manifest.template)) return empty;
+  const boundIds = new Set(bound.map((binding) => binding.slot_id));
+  const boundFieldNames = new Set(bound.map((binding) => binding.field));
+  const detailFields = new Set(
+    bound
+      .filter((binding) =>
+        manifest.slots
+          .find((slot) => slot.slot_id === binding.slot_id)
+          ?.role.includes('lod'),
+      )
+      .map((binding) => binding.field),
+  );
+  const additions: ClassifiedBinding[] = [];
+
+  for (const role of ['size', 'color', 'tooltip'] as const) {
+    const slot = manifest.slots.find(
+      (candidate) =>
+        candidate.bindable &&
+        !candidate.required &&
+        candidate.role.includes(role) &&
+        !boundIds.has(candidate.slot_id),
+    );
+    if (!slot) continue;
+    const explicitField = fieldDirectedToSymbolMapEncoding(ask, role, summary, detailFields);
+    const sizeMeasure = sizeMeasureFromSymbolMapBindings(manifest, summary, [
+      ...bound,
+      ...additions,
+    ]);
+    const naturalColor = role === 'color' ? naturallyDirectedColorField(ask, summary) : null;
+    const naturalCue =
+      role !== 'size' && hasNaturalSymbolMapEncodingCue(ask, role, summary)
+        ? role === 'color'
+          ? naturalColor?.namesField
+            ? naturalColor.field
+            : sizeMeasure
+          : sizeMeasure
+        : null;
+    const naturalSize =
+      role === 'size' ? naturallyMatchedSizeMeasure(matched, boundFieldNames) : null;
+    const field = explicitField ?? naturalCue ?? naturalSize;
+    if (!field) continue;
+    additions.push({
+      slot_id: slot.slot_id,
+      field: field.name,
+      ...(aggOverride && isMeasure(field) ? { derivation: aggOverride } : {}),
+    });
+    boundIds.add(slot.slot_id);
+  }
+
+  // Report against EVERY binding, not just the additions above: a role carried by a
+  // REQUIRED slot (spatial-symbol-map binds size through its required measure slot) is
+  // filled, and must not be reported as missing just because this loop skipped it.
+  const rolesOf = (slotId: string): readonly string[] =>
+    manifest.slots.find((slot) => slot.slot_id === slotId)?.role ?? [];
+  const all = [...bound, ...additions];
+  const filled: SymbolMapEncodingRole[] = [];
+  const unfilled: SymbolMapEncodingRole[] = [];
+  for (const role of ['size', 'color', 'tooltip'] as const) {
+    if (all.some((binding) => rolesOf(binding.slot_id).includes(role))) {
+      filled.push(role);
+    } else if (askRequestsSymbolMapEncoding(ask, role, summary)) {
+      unfilled.push(role);
+    }
+  }
+
+  return { bindings: additions, encodings: { filled, unfilled } };
+}
+
+const MEASURE_BY_DIMENSION_TEMPLATE = 'magnitude-simple-bar';
+const BARE_MEASURE_KPI_TEMPLATE = 'kpi-text';
+
+const MEASURE_BY_DIMENSION_RESIDUAL_TOKENS: ReadonlySet<string> = new Set([
+  'show',
+  'display',
+  'plot',
+  'visualize',
+  'give',
+  'make',
+  'create',
+  'me',
+  'us',
+  'our',
+  'the',
+  'a',
+  'an',
+  'of',
+  'please',
+  'by',
+  'with',
+  'filter',
+  'total',
+  'sum',
+  'average',
+  'avg',
+  'mean',
+  'minimum',
+  'min',
+  'maximum',
+  'max',
+  'count',
+  'distinct',
+]);
+
+function resolveMeasureByDimensionBar(
+  manifest: TemplateManifest,
+  maskedAsk: string,
+  matched: SchemaField[],
+  aggOverride: Derivation | null,
+  schemaDims: SchemaField[],
+): Array<{ slot_id: string; field: string; derivation?: Derivation }> | null {
+  if (
+    manifest.template !== MEASURE_BY_DIMENSION_TEMPLATE ||
+    manifest.family !== 'magnitude'
+  ) {
+    return null;
+  }
+  const residual = nameTokens(maskedAsk);
+  if (
+    !residual.includes('by') ||
+    residual.some((token) => !MEASURE_BY_DIMENSION_RESIDUAL_TOKENS.has(token))
+  ) {
+    return null;
+  }
+  if (
+    askHasExplicitTimeIntent(maskedAsk) ||
+    [...CHART_NOUN_KEYWORDS].some((cue) => phraseIndexInAsk(maskedAsk, cue) >= 0)
+  ) {
+    return null;
+  }
+  if (matched.length !== 2) return null;
+  const measures = matched.filter(isMeasure);
+  const dimensions = matched.filter(isCategorical);
+  if (measures.length !== 1 || dimensions.length !== 1) return null;
+  if (isTemporal(dimensions[0]) || inferStringTemporal(dimensions[0]) !== null) return null;
+  if (
+    matchAvoidWhen(maskedAsk, manifest.avoid_when, manifest.intent_keywords).length > 0 ||
+    hasDeterministicPathBlockingHazard(manifest)
+  ) {
+    return null;
+  }
+  const bound = roleGreedyBind(manifest, matched, aggOverride, schemaDims);
+  if (!bound || bound.bindings.length !== 2 || bound.provenance.length !== 0) return null;
+  return bound.bindings;
+}
+
+/**
+ * Bind a KPI only when the complete semantic ask is one resolved measure, optionally
+ * preceded by the exact request preamble "show me". Any other residual token fails closed.
+ */
+function resolveBareMeasureKpi(
+  manifest: TemplateManifest,
+  maskedAsk: string,
+  matched: SchemaField[],
+  aggOverride: Derivation | null,
+  schemaDims: SchemaField[],
+): Array<{ slot_id: string; field: string; derivation?: Derivation }> | null {
+  if (manifest.template !== BARE_MEASURE_KPI_TEMPLATE || manifest.family !== 'kpi') return null;
+  const residual = nameTokens(maskedAsk);
+  if (
+    residual.length !== 0 &&
+    !(residual.length === 2 && residual[0] === 'show' && residual[1] === 'me')
+  ) {
+    return null;
+  }
+  if (matched.length !== 1 || !isMeasure(matched[0])) return null;
+  if (
+    matchAvoidWhen(maskedAsk, manifest.avoid_when, manifest.intent_keywords).length > 0 ||
+    hasDeterministicPathBlockingHazard(manifest)
+  ) {
+    return null;
+  }
+  const bound = roleGreedyBind(manifest, matched, aggOverride, schemaDims);
+  if (!bound || bound.bindings.length !== 1 || bound.provenance.length !== 0) return null;
+  return bound.bindings;
+}
+
+interface NoLlmClassification {
+  template: string;
+  bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>;
+  top_n?: number;
+  filters?: Array<{ field: string; context?: boolean }>;
+  /** Advisory provenance (e.g. a required geo slot auto-completed from the schema, W60). Present only when non-empty. */
+  notes?: string[];
+  /**
+   * Encodings the classifier analyzed, split by what the bind filled. Present whenever
+   * optional-encoding analysis ran, including empty arrays when no encoding cue was found.
+   */
+  encodings?: EncodingReport;
+}
+
+/**
+ * A clear "top N" phrase; zero and non-integers deliberately do not match.
+ * The current proposal contract carries only `top_n: integer` and the apply path
+ * therefore defaults to the top end. A clear bottom-N request is recognized but
+ * fails closed instead of being silently applied as the opposite ranking.
+ */
+function topNFromAsk(ask: string): number | undefined {
+  const match = /\b(top|bottom)\s+([1-9]\d*)\b/i.exec(ask);
+  return match?.[1].toLowerCase() === 'top' ? Number(match[2]) : undefined;
+}
+
+/**
+ * Dimensions explicitly paired with a filter cue. A field may follow the cue
+ * ("filter down to one Region", "filter by Region") or immediately precede it
+ * ("with a Region filter"). Returning every candidate lets the caller fail closed
+ * when an either/or phrase names more than one dimension.
+ */
+function filterDimensionsFromAsk(ask: string, summary: SchemaSummary): SchemaField[] {
+  const dimensions = summary.fields.filter((field) => field.role === 'dimension');
+  if (dimensions.length === 0) return [];
+  const dimensionSummary: SchemaSummary = { datasource: summary.datasource, fields: dimensions };
+  const exactNames = fieldExactNames(dimensions);
+  const found = new Set<SchemaField>();
+  const filterCue = /\bfilter(?:s|ed|ing)?\b/gi;
+
+  for (const cue of ask.matchAll(filterCue)) {
+    const cueIndex = cue.index;
+    const afterStart = cueIndex + cue[0].length;
+    const sentenceEndOffset = ask.slice(afterStart).search(/[.;]/);
+    const afterEnd =
+      sentenceEndOffset >= 0 ? afterStart + sentenceEndOffset : ask.length;
+    for (const field of matchFieldsInAsk(ask.slice(afterStart, afterEnd), dimensionSummary)) {
+      found.add(field);
+    }
+
+    const before = ask.slice(0, cueIndex);
+    for (const field of dimensions) {
+      const names = [bareName(field.columnName), field.caption, field.name].filter(
+        (name): name is string => !!name && name.length > 0,
+      );
+      if (
+        names.some((name) => {
+          const lower = name.toLowerCase();
+          const pluralSuffix =
+            !lower.endsWith('s') && !exactNames.has(`${lower}s`) ? 's?' : '';
+          const body = escapeRegex(lower).replace(/-/g, '[\\s-]+');
+          return new RegExp(
+            `(?:^|[^a-z0-9])(?:a|an|the|one)?\\s*${body}${pluralSuffix}\\s*$`,
+            'i',
+          ).test(before);
+        })
+      ) {
+        found.add(field);
+      }
+    }
+  }
+
+  return [...found];
+}
+
+/** Add ask modifiers only after template selection and required-slot binding succeeded. */
+function attachAskModifiers(
+  ask: string,
+  classification: NoLlmClassification,
+  filterCandidates: SchemaField[],
+): NoLlmClassification {
+  const topN = topNFromAsk(ask);
+  const boundFields = new Set(classification.bindings.map((binding) => binding.field));
+  const filter =
+    filterCandidates.length === 1 && !boundFields.has(filterCandidates[0].name)
+      ? filterCandidates[0]
+      : undefined;
+
+  return {
+    ...classification,
+    ...(topN !== undefined ? { top_n: topN } : {}),
+    ...(filter
+      ? {
+          filters: [
+            {
+              field: filter.name,
+              ...(topN !== undefined ? { context: true } : {}),
+            },
+          ],
+        }
+      : {}),
+  };
+}
+
+/**
  * No-LLM classification (design §3.5 + stage 2b within-family disambiguation).
  * Keyword-scores the eligible fast-path templates, selects a single template via
  * `selectWithinFamily` (sole-wrong-matcher guard for a lone winner; intra-family
@@ -1721,23 +3274,37 @@ export function classifyNoLlm(
   ask: string,
   manifests: Map<string, TemplateManifest>,
   summary: SchemaSummary,
-): {
-  template: string;
-  bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }>;
-  /** Advisory provenance (e.g. a required geo slot auto-completed from the schema, W60). Present only when non-empty. */
-  notes?: string[];
-} | null {
+): NoLlmClassification | null {
   // FAIL-CLOSED cost guard (M10 Finding 3): over the field cap, do NOT run the per-field
   // hot loop (maskFieldNames / matchFieldsInAsk) and do NOT classify a truncated subset —
   // return null so the orchestrator escalates rather than risk a silent wrong bind on a
   // partial view. Checked at the TOP, before any field is touched, so cost stays bounded.
   if (summary.fields.length > MAX_CLASSIFIABLE_FIELDS) return null;
 
+  // A business noun or bare dimension head with multiple caption candidates is materially
+  // ambiguous: deterministic binding could change the numbers. Fail closed before template
+  // selection; buildLlmInput ranks every candidate into the existing proposal field list.
+  const literalHits = literalFieldMatchesInAsk(ask, summary);
+  if (
+    businessSynonymCandidatesInAsk(ask, summary, literalHits).some(
+      ({ candidates }) => candidates.length > 1,
+    ) ||
+    dimensionHeadCandidatesInAsk(ask, summary, literalHits).some(
+      ({ candidates }) => candidates.length > 1,
+    )
+  ) {
+    return null;
+  }
+  if (grainMeasureMatchesInAsk(ask, summary, literalHits).some((match) => !match.winner)) {
+    return null;
+  }
+
   // Mask field names before scoring so a field NAME can't select a template or
   // read as an aggregation word; field↔slot matching still uses the raw ask.
   const maskedAsk = maskFieldNames(ask, summary);
   const aggOverride = detectAggregationOverride(maskedAsk);
   const matched = matchFieldsInAsk(ask, summary);
+  const filterCandidates = filterDimensionsFromAsk(ask, summary);
   // The full dimension pool a required geo slot widens into when the ask names no
   // affine candidate for it (W60 geo-slot completion).
   const schemaDims = summary.fields.filter((f) => f.role === 'dimension');
@@ -1747,11 +3314,31 @@ export function classifyNoLlm(
   // carries no measure and role-greedy binding cannot fill the coordinate axes by name.
   // It only fires for the eligible spatial-symbol-map-latlon template and is fail-closed
   // (returns null on any ambiguity), so a non-coordinate ask falls through to the generic path.
+  // Optional size/color/tooltip encodings (symbolMapEncodingBindings below) fill from the
+  // ask's own matched measure when present, so a coordinate ask that also names a measure
+  // ("...sized by Goals For") does not silently drop it — no separate skip-gate needed here.
   const latlon = manifests.get(LATLON_SYMBOL_MAP_TEMPLATE);
   if (latlon && latlon.fast_path_eligible) {
     const latlonBindings = resolveLatLonSymbolMap(latlon, ask, maskedAsk, summary);
     if (latlonBindings) {
-      return { template: latlon.template, bindings: latlonBindings };
+      const latlonEncodings = symbolMapEncodingBindings(
+        latlon,
+        ask,
+        summary,
+        latlonBindings,
+        aggOverride,
+        matched,
+      );
+      latlonBindings.push(...latlonEncodings.bindings);
+      return attachAskModifiers(
+        ask,
+        {
+          template: latlon.template,
+          bindings: latlonBindings,
+          encodings: latlonEncodings.encodings,
+        },
+        filterCandidates,
+      );
     }
   }
 
@@ -1763,12 +3350,48 @@ export function classifyNoLlm(
     const score = keywordScore(maskedAsk, m.intent_keywords);
     if (score > 0) scored.push({ m, score });
   }
-  if (scored.length === 0) return null;
+  if (scored.length === 0) {
+    const kpi = manifests.get(BARE_MEASURE_KPI_TEMPLATE);
+    if (kpi?.fast_path_eligible) {
+      const bindings = resolveBareMeasureKpi(kpi, maskedAsk, matched, aggOverride, schemaDims);
+      if (bindings) {
+        return attachAskModifiers(ask, { template: kpi.template, bindings }, filterCandidates);
+      }
+    }
+    const magnitudeBar = manifests.get(MEASURE_BY_DIMENSION_TEMPLATE);
+    if (magnitudeBar?.fast_path_eligible) {
+      const bindings = resolveMeasureByDimensionBar(
+        magnitudeBar,
+        maskedAsk,
+        filterCandidates.length === 1
+          ? matched.filter((field) => field !== filterCandidates[0])
+          : matched,
+        aggOverride,
+        schemaDims,
+      );
+      if (bindings) {
+        return attachAskModifiers(
+          ask,
+          { template: magnitudeBar.template, bindings },
+          filterCandidates,
+        );
+      }
+    }
+    return null;
+  }
 
   const maxScore = scored.reduce((mx, s) => Math.max(mx, s.score), 0);
   const top = scored.filter((s) => s.score === maxScore);
 
-  const chosen = selectWithinFamily(top, maskedAsk, matched, aggOverride, manifests, schemaDims);
+  const chosen = selectWithinFamily(
+    top,
+    ask,
+    maskedAsk,
+    matched,
+    aggOverride,
+    manifests,
+    schemaDims,
+  );
   if (!chosen) return null;
 
   // DEMOTE (family guard, W-23447710): a spatial-intent ask must never bind a
@@ -1783,7 +3406,18 @@ export function classifyNoLlm(
   // the model can WEIGH the caution rather than the zero-latency path committing
   // silently (the retrieval-without-adherence failure). Field names are masked
   // so a field literally named after a caution term can't force the demotion.
-  if (matchAvoidWhen(maskedAsk, chosen.avoid_when, chosen.intent_keywords).length > 0) return null;
+  const avoidMatches = matchAvoidWhen(maskedAsk, chosen.avoid_when, chosen.intent_keywords);
+  const sequenceField = summary.fields.find((field) =>
+    WATERFALL_ORDER_FIELD_RE.test(field.name),
+  );
+  const hasSequenceField = sequenceField !== undefined;
+  const waterfallCanOrderDeterministically =
+    chosen.template === WATERFALL_TEMPLATE_NAME && hasSequenceField;
+  const unresolvedAvoidMatches = avoidMatches.filter(
+    (entry) =>
+      !(waterfallCanOrderDeterministically && entry.toLowerCase().includes('order-dependent')),
+  );
+  if (unresolvedAvoidMatches.length > 0) return null;
 
   // DEMOTE on data-shape-parse hazards (W59): avoid_when only fires when the ASK
   // reveals the risk, but a data-shape hazard lives in the DATA, which no natural
@@ -1799,12 +3433,57 @@ export function classifyNoLlm(
   // the masked ask + full schema so a lone required date slot the ask did not name
   // can complete with the schema's single date field). selectWithinFamily's earlier
   // slot-fit probes deliberately omit this context (no completion during tie-break).
-  const rgb = roleGreedyBind(chosen, matched, aggOverride, schemaDims, {
+  let matchedForBinding = augmentGeoConceptMatches(
+    maskedAsk,
+    chosen,
+    matched,
+    schemaDims,
+  );
+  if (waterfallCanOrderDeterministically) {
+    // The selected sequence field is sort metadata; other sequence-like names may still be
+    // ask-named contribution measures. Goal-language P&L asks may name neither "amount" nor
+    // "line_item", so complete each missing required role only when the schema leaves exactly
+    // one eligible candidate. Period/time dimensions are context, not bridge-axis members;
+    // ambiguity among two or more genuine axis dimensions stays fail-closed.
+    matchedForBinding = matched.filter((field) => field !== sequenceField);
+    if (!matchedForBinding.some(isMeasure)) {
+      const measureCandidates = summary.fields.filter(
+        (field) =>
+          isMeasure(field) &&
+          field !== sequenceField &&
+          !WATERFALL_ANCHOR_FIELD_RE.test(field.name) &&
+          (!WATERFALL_ORDER_FIELD_RE.test(field.name) || matched.includes(field)),
+      );
+      if (measureCandidates.length !== 1) return null;
+      matchedForBinding.push(measureCandidates[0]);
+    }
+    if (!matchedForBinding.some(isCategorical)) {
+      const categoricalCandidates = summary.fields.filter(
+        (field) =>
+          isCategorical(field) &&
+          !WATERFALL_ORDER_FIELD_RE.test(field.name) &&
+          !WATERFALL_ANCHOR_FIELD_RE.test(field.name) &&
+          !isWaterfallPeriodField(field),
+      );
+      if (categoricalCandidates.length !== 1) return null;
+      matchedForBinding.push(categoricalCandidates[0]);
+    }
+  }
+  const rgb = roleGreedyBind(chosen, matchedForBinding, aggOverride, schemaDims, {
     maskedAsk,
     schemaFields: summary.fields,
   });
   if (!rgb) return null; // required slot unfilled → fail closed
   const bindings = rgb.bindings;
+  const symbolMapEncodings = symbolMapEncodingBindings(
+    chosen,
+    ask,
+    summary,
+    bindings,
+    aggOverride,
+    matched,
+  );
+  bindings.push(...symbolMapEncodings.bindings);
   // OPTIONAL small-multiples facet (W23-SM1): additively bind a simple-trellis facet
   // dim (a spare categorical placed AHEAD of the existing pill) ONLY when the ask
   // names/implies a by-<dim> facet AND a spare categorical remains. This never flips
@@ -1812,11 +3491,23 @@ export function classifyNoLlm(
   // no-spare ask returns the exact same {template, bindings} as before.
   const facet = facetBinding(chosen, bindings, matched, maskedAsk);
   if (facet) bindings.push(facet);
+  // A facet cue wins over series color. Otherwise inspect the full datasource, not
+  // only `matched` (which contains ask-named fields): e4 intentionally does not name
+  // its sole spare Product dimension. Exact-one cardinality keeps this fail-closed.
+  const colorSeries = facet ? null : colorSeriesBinding(chosen, bindings, summary.fields);
+  if (colorSeries) bindings.push(colorSeries);
   // Attach provenance (e.g. W60 geo auto-completion) only when non-empty, so a
   // non-geo / no-auto-complete ask returns the exact same {template, bindings} shape.
-  return rgb.provenance.length > 0
-    ? { template: chosen.template, bindings, notes: rgb.provenance }
-    : { template: chosen.template, bindings };
+  return attachAskModifiers(
+    ask,
+    {
+      template: chosen.template,
+      bindings,
+      ...(rgb.provenance.length > 0 ? { notes: rgb.provenance } : {}),
+      encodings: symbolMapEncodings.encodings,
+    },
+    filterCandidates,
+  );
 }
 
 /**
@@ -1904,8 +3595,11 @@ export function buildLlmInput(
   const withheld = summary.fields.length - narrowed.length;
 
   const exposeFieldIdentity = shouldExposeFieldIdentity(summary.fields);
+  const grainLabels = grainMeasureLabels(ask, summary);
+  const recommended = recommendedRankingDefault(ask, summary, narrowed, top[0]?.m);
   const result: LlmProposeInput = {
     ask,
+    ...(recommended ? { recommended } : {}),
     candidate_templates: top.map(({ m }) => ({
       template: m.template,
       description: m.description,
@@ -1919,11 +3613,15 @@ export function buildLlmInput(
           role: slot.role,
           kind: slot.kind,
           required: slot.required,
+          ...(slot.purpose ? { purpose: slot.purpose } : {}),
+          ...(slot.purpose && slot.examples && slot.examples.length > 0
+            ? { examples: slot.examples }
+            : {}),
           derivation: slot.derivation, // template default; override only if the ask differs
           ...(slot.temporal_from_string ? { temporal_from_string: true } : {}),
         })),
     })),
-    fields: narrowed.map((f) => proposeField(f, exposeFieldIdentity)),
+    fields: narrowed.map((f) => proposeField(f, exposeFieldIdentity, grainLabels.get(f))),
   };
 
   if (withheld > 0) {

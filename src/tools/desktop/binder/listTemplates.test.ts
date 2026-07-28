@@ -25,7 +25,6 @@ describe('listTemplatesTool', () => {
       fastPathOnly: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'List Bundled Chart Templates',
       readOnlyHint: true,
       openWorldHint: false,
     });
@@ -59,6 +58,27 @@ describe('listTemplatesTool', () => {
     // Templates come back sorted by name for a stable listing.
     const names = body.templates.map((t) => t.template);
     expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+  });
+
+  it('exposes slot purpose and examples together in template summaries', async () => {
+    const body = await getBody({});
+    const ranking = body.templates.find((t) => t.template === 'ranking-ordered-bar');
+    expect(ranking).toBeDefined();
+
+    expect(ranking!.slots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slot_id: 'region',
+          purpose: expect.stringContaining('ranked horizontal bar'),
+          examples: expect.arrayContaining(['Country', 'Product Line']),
+        }),
+        expect.objectContaining({
+          slot_id: 'sales',
+          purpose: expect.stringContaining('bar length'),
+          examples: expect.arrayContaining(['Points', 'Revenue']),
+        }),
+      ]),
+    );
   });
 
   it('filters to a single family when family is provided', async () => {
@@ -179,7 +199,14 @@ async function getBody(args: { family?: Family; fastPathOnly?: boolean }): Promi
     template: string;
     family: string;
     fast_path_eligible: boolean;
-    slots: Array<{ slot_id: string; kind: string; required: boolean; bindable: boolean }>;
+    slots: Array<{
+      slot_id: string;
+      kind: string;
+      required: boolean;
+      bindable: boolean;
+      purpose?: string;
+      examples?: string[];
+    }>;
   }>;
 }> {
   const result = await getToolResult(args);

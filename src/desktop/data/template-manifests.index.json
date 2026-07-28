@@ -507,6 +507,7 @@
       "intent_keywords": [
         "connected-scatterplot",
         "connected-scatter",
+        "scatterplot",
         "trajectory",
         "path",
         "relationship"
@@ -1126,6 +1127,7 @@
       ],
       "intent_keywords": [
         "scatter",
+        "scatterplot",
         "correlation",
         "relationship",
         "vs",
@@ -1167,7 +1169,7 @@
           ],
           "kind": "categorical",
           "bindable": true,
-          "required": true
+          "required": false
         },
         {
           "slot_id": "region",
@@ -1370,9 +1372,7 @@
       "family": "deviation",
       "readiness": "YELLOW",
       "fast_path_eligible": false,
-      "fast_path_blockers": [
-        "HARDCODED_FILTER_MEMBERS"
-      ],
+      "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "none"
@@ -1380,7 +1380,10 @@
       "datasource_placeholder": true,
       "placeholders": [
         "TITLE",
-        "DATASOURCE"
+        "DATASOURCE",
+        "field_base_1",
+        "field_base_2",
+        "field_base_3"
       ],
       "intent_keywords": [
         "diverging-bar",
@@ -1389,11 +1392,11 @@
         "above-below",
         "positive-negative"
       ],
-      "description": "A diverging bar chart: one Automatic bar per category (Sub-Category on rows) whose length is a signed Profit-Ratio template calc (SUM([Profit])/SUM([Sales])) on cols, so bars extend left/right of zero and are colored on a diverging orange-blue ramp; sorted DESC by the ratio. Shows deviation above/below a zero baseline. Structurally compiled, not render-verified; the source Region='Central' filter rides along verbatim (HARDCODED_FILTER_MEMBERS).",
+      "description": "A diverging bar chart: one bar per category whose length is a signed numerator-to-denominator template ratio, so bars extend left/right of zero and use a diverging orange-blue ramp; sorted descending by the ratio. The donor member filter was removed for data portability. Structurally compiled and not render-verified.",
       "slots": [
         {
           "slot_id": "sub_category",
-          "template_field": "Sub-Category",
+          "template_field": "{{field_base_1}}",
           "derivation": "none",
           "role": [
             "rows",
@@ -1402,11 +1405,17 @@
           "kind": "categorical",
           "bindable": true,
           "required": true,
-          "notes": "One bar per member on rows; computed-sort orders these DESC by the Profit-Ratio calc."
+          "purpose": "Categorical dimension that defines one diverging bar per member.",
+          "examples": [
+            "Product Line",
+            "Team",
+            "Cost Center"
+          ],
+          "notes": "One bar per member on rows; computed-sort orders these descending by the signed ratio calc."
         },
         {
           "slot_id": "profit",
-          "template_field": "Profit",
+          "template_field": "{{field_base_2}}",
           "derivation": "sum",
           "role": [
             "calc-input"
@@ -1414,11 +1423,17 @@
           "kind": "quantitative",
           "bindable": true,
           "required": true,
-          "notes": "Not on a shelf directly — feeds the Profit-Ratio template calc (numerator). replaceFieldReferences rewrites [Profit] inside the formula on bind."
+          "purpose": "Continuous measure used as the signed ratio numerator.",
+          "examples": [
+            "Goal Difference",
+            "Margin Change",
+            "Budget Variance"
+          ],
+          "notes": "Not on a shelf directly; feeds the template ratio numerator and is rewritten inside the formula on bind."
         },
         {
           "slot_id": "sales",
-          "template_field": "Sales",
+          "template_field": "{{field_base_3}}",
           "derivation": "sum",
           "role": [
             "calc-input"
@@ -1426,7 +1441,13 @@
           "kind": "quantitative",
           "bindable": true,
           "required": true,
-          "notes": "Not on a shelf directly — feeds the Profit-Ratio template calc (denominator). replaceFieldReferences rewrites [Sales] inside the formula on bind."
+          "purpose": "Continuous measure used as the signed ratio denominator.",
+          "examples": [
+            "Revenue",
+            "Target",
+            "Total Spend"
+          ],
+          "notes": "Not on a shelf directly; feeds the template ratio denominator and is rewritten inside the formula on bind."
         }
       ],
       "calcs": [
@@ -1442,10 +1463,10 @@
           "kind": "calc",
           "bindable": false,
           "required": true,
-          "formula": "SUM([Profit])/SUM([Sales])",
+          "formula": "SUM([{{field_base_2}}])/SUM([{{field_base_3}}])",
           "formula_refs": [
-            "Profit",
-            "Sales"
+            "{{field_base_2}}",
+            "{{field_base_3}}"
           ],
           "depends_on_slots": [
             "profit",
@@ -1454,14 +1475,14 @@
           "result_role": "measure",
           "inputs": [
             {
-              "ref": "Profit",
+              "ref": "{{field_base_2}}",
               "slot_id": "profit",
               "slot_kind": "quantitative",
               "required": true,
               "template_internal": false
             },
             {
-              "ref": "Sales",
+              "ref": "{{field_base_3}}",
               "slot_id": "sales",
               "slot_kind": "quantitative",
               "required": true,
@@ -1471,7 +1492,7 @@
           "prereqs": [
             "raw-formula-refs"
           ],
-          "notes": "The signed diverging measure: SUM([Profit])/SUM([Sales]) drives the bar length (cols), the diverging color, AND the computed-sort. A self-closing <calculation>, so parseTemplateCalcs sees it — a declared calc slot; both bare refs rewrite on bind."
+          "notes": "The signed numerator/denominator ratio drives bar length, diverging color, and computed-sort. Both placeholder refs rewrite on bind."
         }
       ],
       "hazards": [
@@ -1481,18 +1502,8 @@
           "xml": "deviation-diverging-bar.xml:68"
         },
         {
-          "code": "hardcoded-filter-blocking",
-          "detail": "The source workbook pins Region to a single INCLUSION member (function='member' Region='\"Central\"') kept on the Filters shelf (<slices>). This lane does NOT run the compile-time filter neutralizer (no XML edits), so the member rides along VERBATIM and is flagged HARDCODED_FILTER_MEMBERS: a bound dataset without a 'Central' region member renders empty. A follow-up can PARAMETERIZE it to unblock.",
-          "xml": "deviation-diverging-bar.xml:30-32"
-        },
-        {
-          "code": "hardcoded-member-inclusion",
-          "detail": "STRUCTURED hazard class read by the bind-time period guard (src/binder/period-guard.ts, W36-D-v1). The load-bearing filter here is a categorical MEMBER INCLUSION (Region='Central'), NOT a date-part period exclusion — so the incomplete-period guard deliberately DECLINES to veto this template on period grounds (it would be wrong to call a Region pin an 'incomplete period'). It stays ineligible via its HARDCODED_FILTER_MEMBERS blocker; its v2 path is member parameterization (collapse to level-members), not a period trim. Classified explicitly so the period guard's non-fire is auditable rather than incidental.",
-          "xml": "deviation-diverging-bar.xml:30-32"
-        },
-        {
           "code": "raw-formula-refs",
-          "detail": "The Profit-Ratio calc references the bare bindable [Profit]/[Sales]; templates.ts rewriteFormulaFieldRefs repairs them on bind ONLY because both are bindable bare-key slots (same pattern as correlation-scatter-plot-chart). Gate #6 asserts both are bound.",
+          "detail": "The signed-ratio calc references two bindable base placeholders; rewriteFormulaFieldRefs resolves both on bind, and Gate #6 asserts both slots are bound.",
           "xml": "deviation-diverging-bar.xml:19-20"
         }
       ]
@@ -1608,16 +1619,16 @@
       "readiness": "RED",
       "fast_path_eligible": false,
       "fast_path_blockers": [
-        "NO_DATASOURCE_PLACEHOLDER",
         "DATASET_SPECIFIC_FORMULA"
       ],
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "none"
       },
-      "datasource_placeholder": false,
+      "datasource_placeholder": true,
       "placeholders": [
-        "TITLE"
+        "TITLE",
+        "DATASOURCE"
       ],
       "intent_keywords": [
         "spine-chart",
@@ -1626,7 +1637,7 @@
         "two-component-split",
         "deviation"
       ],
-      "description": "A spine chart: one row per category (Nationality) split into two contrasting components that diverge left/right of a center line (e.g. Women | Men), each component a signed share-of-total template calc so the pair reads as a two-sided deviation. RED: the source worksheet has NO {{DATASOURCE}} placeholder (bound to a federated datasource id) and its component calcs bake dataset-specific member literals ([Gender]='Men'/'Women') — not injectable as-is.",
+      "description": "A spine chart: one row per category (Nationality) split into two contrasting components that diverge left/right of a center line (e.g. Women | Men), each component a signed share-of-total template calc so the pair reads as a two-sided deviation. RED: its component calcs bake dataset-specific member literals ([Gender]='Men'/'Women') and remain non-portable even though the computed sort now uses the datasource placeholder.",
       "slots": [
         {
           "slot_id": "nationality",
@@ -1732,11 +1743,6 @@
       ],
       "hazards": [
         {
-          "code": "no-datasource-placeholder",
-          "detail": "The worksheet has NO {{DATASOURCE}} placeholder: <datasources> and every field reference are bound to the literal federated datasource id 'federated.1ko0q9z0cybhx212227b819gayqi'. The inject/apply path fills {{DATASOURCE}} to retarget a template onto a new datasource — with none present the template cannot be retargeted and would carry the source datasource id verbatim. Flagged NO_DATASOURCE_PLACEHOLDER; a follow-up must re-parameterize the datasource id to make this template injectable.",
-          "xml": "deviation-spine-chart.xml:16-18"
-        },
-        {
           "code": "baked-member-literals",
           "detail": "The two component measures bake dataset-specific member literals into their formulas — SUM(if [Gender]='Men' ...) and -SUM(if [Gender]='Women' ...) — and reference bare [Value]/[Gender] that are NOT declared bindable slots (template-internal inputs). replaceFieldReferences cannot rewrite a string literal member ('Men'/'Women') and does not touch template-internal refs, so the calcs only compute on a dataset that literally carries Gender/Value with those members. Flagged DATASET_SPECIFIC_FORMULA (fail-closed): a portable spine would parameterize the split dimension + its two member values.",
           "xml": "deviation-spine-chart.xml:19-31"
@@ -1748,7 +1754,7 @@
         },
         {
           "code": "hardcoded-filter-members",
-          "detail": "Three categorical filters pin source members verbatim: Measure='\"Weighted Sample\"', a Measure-Names filter enumerating the two component measures, and the spine-label filter member='\"Women     |     Men\"'. These are source-specific pins kept on the Filters shelf (<slices>); on any other dataset they match nothing. Not separately blocked because the NO_DATASOURCE_PLACEHOLDER + DATASET_SPECIFIC_FORMULA blockers already gate this template far below fast-path.",
+          "detail": "Three categorical filters pin source members verbatim: Measure='\"Weighted Sample\"', a Measure-Names filter enumerating the two component measures, and the spine-label filter member='\"Women     |     Men\"'. These are source-specific pins kept on the Filters shelf (<slices>); on any other dataset they match nothing. Not separately blocked because DATASET_SPECIFIC_FORMULA already gates this template far below fast-path.",
           "xml": "deviation-spine-chart.xml:40-57"
         },
         {
@@ -2732,8 +2738,8 @@
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "live-2026-07-11",
-        "xml_sha256": "ef0503faa2dd6320f902335dcd721909f4cb161d315a7746f296dc2967c60a4c",
+        "render_verified": "live-2026-07-26",
+        "xml_sha256": "3ce7dfa8c7d8b6ebb54c53f0372589dce7e2c54d4e71fb17bdb59a840ef535b1",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-11",
@@ -2748,7 +2754,7 @@
             "caption-leak=pass"
           ],
           "run": "oracle-leg replay (W62 stamp batch): independent authored oracle on bundled Sample - Superstore; bind gate honestly escalated not-fast-path pre-stamp (recorded); apply via identity fill (native names, no rewrites); all 12 config facets green on the applied readback incl. computed-sort DESC survival (the sort NODE came through apply)",
-          "basis": "golden-parity gate run 2026-07-11 (oracle-leg): structural 0.97297 (5/5 critical, 3/3 high; sole miss = salience-1 resolved-title cosmetic), pixel 0.91667 (6 counted ROIs -- the template ships a layout-options subtitle + axis/zeroline trims the oracle deliberately omits, an expected cosmetic divergence), composite 95, binding-sanity sane via reconciled Copy>Data 3=3=EXPECTED_COUNT. Oracle authoring note: computed-sort requires the SortTagCleanup document-format flag (tactics/tree/twb-xml-grammar.md) -- omitted first emit failed Desktop load D2E8DA72, fixed in the generator.",
+          "basis": "golden-parity gate run 2026-07-11 (oracle-leg): structural 0.97297 (5/5 critical, 3/3 high; sole miss = salience-1 resolved-title cosmetic), pixel 0.91667 (6 counted ROIs -- the template ships a layout-options subtitle + axis/zeroline trims the oracle deliberately omits, an expected cosmetic divergence), composite 95, binding-sanity sane via reconciled Copy>Data 3=3=EXPECTED_COUNT. Oracle authoring note: computed-sort requires the SortTagCleanup document-format flag (tactics/tree/twb-xml-grammar.md) -- omitted first emit failed Desktop load D2E8DA72, fixed in the generator. | sort-param re-verify 2026-07-26 (claude/sortparam-restamp): parameterized computed-sort re-applied to the template bytes. Verified via two live e1 song legs (PASS 95 x2 @ ~8.5s, run-2026-07-26T16-58-57-574Z, sonnet-low, bundle from this branch) plus one direct bind+readback leg (verbatim e1 ask on a fresh e1 stage): applied:true and the readback XML carries computed-sort direction=DESC using SUM of the LIVE bound measure (revenue) over the live dimension (region) — donor Category/Sales refs fully rebound. Horizontal bar orientation confirmed (dimension on rows). NO pixel capture this round; pixel/composite scores in this block belong to the prior gate and the unchanged geometry.",
           "lane": "fable-direct stamp batch 2026-07-11 (orchestrator live gate run; oracle-stamp.mjs CONFIG=magbar PID=52932)",
           "pixel_oracle": "source render (same-geometry back-to-back captures on the live instance; 6 counted ROIs). Source and applied are two INDEPENDENT renders of the same data.",
           "gate_composite": 95
@@ -3288,11 +3294,11 @@
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "live-2026-07-06",
-        "xml_sha256": "a11963e06787ea973007a20d882712c3c8719efd43efd0a1ae03387ef79d984e",
+        "render_verified": "live-2026-07-26",
+        "xml_sha256": "085430fc1832e2433e5b48bfc5ebef6aee425ba96e180399c3b2c1a275f7c0bc",
         "render_evidence": {
           "method": "gate-composite",
-          "basis": "golden-parity gate run 2026-07-06 (source-anchor replay): structural 0.97297 (5/5 critical), pixel 1.0 (4 ROIs: whole-chart ink-colors + hue, left/right staircase clusters; same-geometry back-to-back captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 17=17 (Superstore Sub-Category) on source and applied renders; running total verified live (status bar Running Sum of SUM(Profit) 4,117,943) | style-delta re-verify 2026-07-07: CookBook dark theme removed (black table background; choropleth also re-enabled base map layers). STRUCTURE unchanged. Live re-verified: bind(no-LLM)->inject->apply->render on Sample - Superstore, marks correct, light theme + map layers visually confirmed (W60). Pixel parity vs the dark source golden intentionally diverges on background/base-layer attrs.",
+          "basis": "golden-parity gate run 2026-07-06 (source-anchor replay): structural 0.97297 (5/5 critical), pixel 1.0 (4 ROIs: whole-chart ink-colors + hue, left/right staircase clusters; same-geometry back-to-back captures), composite 98, binding-sanity sane via reconciled Copy>Data mark counts 17=17 (Superstore Sub-Category) on source and applied renders; running total verified live (status bar Running Sum of SUM(Profit) 4,117,943) | style-delta re-verify 2026-07-07: CookBook dark theme removed (black table background; choropleth also re-enabled base map layers). STRUCTURE unchanged. Live re-verified: bind(no-LLM)->inject->apply->render on Sample - Superstore, marks correct, light theme + map layers visually confirmed (W60). Pixel parity vs the dark source golden intentionally diverges on background/base-layer attrs. | presentation-delta re-verify 2026-07-26 (claude/template-restamp): Gain boolean color calc (SUM>=0, teal/red palette), SUM(measure) text labels (mark-labels-show), and parameterized computed-sort added. Verified via two independent live song legs (m1, sonnet-low, bundle from this branch): bind(no-LLM)->inject->apply->readback; judge lane confirmed GanttBar running total to the exact net income (1,664,000), boolean gain/loss color on marks, the computed-sort correctly rebound to the song's fields (that leg sorted by its explicit order column; the template default remains DESC by the bound measure), and the prior 'value labels are off' dock is gone. NO pixel capture this round (no screen-capture lane) — structural + computed-values verification only; every pixel/composite score and the lane/date fields in this block describe the 2026-07-06/07 gate and apply to the unchanged geometry, not to the 2026-07-26 presentation delta.",
           "lane": "fable-direct overnight stamp factory 2026-07-06 (orchestrator live gate run)",
           "date": "2026-07-06",
           "structural": 0.97297,
@@ -3320,7 +3326,7 @@
         "bridge",
         "contribution"
       ],
-      "description": "A waterfall (bridge) chart: GanttBar floating bars whose tops sit on a running total ([cum:sum:Profit:qk] on rows) and whose lengths are the negative per-category measure (-SUM([Profit]) on size), so each category shows its incremental contribution to a cumulative whole across an ordered categorical axis (Sub-Category on cols, sorted DESC by SUM(Profit)). Color is a continuous SUM(Profit) encoding. Factory-compiled from the CookBook 'Waterfall Viz' worksheet; structurally compiled and render-verified (live-2026-07-06).",
+      "description": "A waterfall (bridge) chart: GanttBar floating bars whose tops sit on a running total ([cum:sum:Profit:qk] on rows) and whose lengths are the negative per-category measure (-SUM([Profit]) on size), so each category shows its incremental contribution to a cumulative whole across an ordered categorical axis (Sub-Category on cols, sorted DESC by SUM(Profit)). Per-step labels show SUM(Profit), and a template-owned boolean calc colors gains separately from losses. Factory-compiled from the CookBook 'Waterfall Viz' worksheet; presentation defaults (gain/loss color, labels, sort parameterization) live-verified 2026-07-26.",
       "avoid_when": [
         "The ask is about a smooth trend or trajectory over continuous time — a line/area chart shows the running trajectory better than a waterfall's discrete running-total bars.",
         "The bound categorical has no meaningful order and you do not sort it by the measure — the running total is order-dependent, so an arbitrary member order yields an arbitrary cumulative path (this template sorts Sub-Category DESC by SUM(Profit); binding an unordered dimension without that sort breaks the bridge).",
@@ -3333,13 +3339,12 @@
           "derivation": "sum",
           "role": [
             "rows",
-            "color",
             "formula-input"
           ],
           "kind": "quantitative",
           "bindable": true,
           "required": true,
-          "notes": "The measure whose per-category contributions build the waterfall. Bound as SUM on color ([sum:Profit:qk]); the SAME base [Profit] also feeds the running-total [cum:sum:Profit:qk] on rows (a CumTotal table calc that rides along — hazard running-total-table-calc-rides-along) and the -SUM([Profit]) bar-length calc (calcs[0]). replaceFieldReferences rewrites every [Profit] instance on bind."
+          "notes": "The measure whose per-category contributions build the waterfall. SUM([Profit]) appears as each mark label and feeds the gain/loss color calc. The SAME base [Profit] also feeds the running-total [cum:sum:Profit:qk] on rows (a CumTotal table calc that rides along — hazard running-total-table-calc-rides-along) and the -SUM([Profit]) bar-length calc (calcs[0]). replaceFieldReferences rewrites every [Profit] instance on bind."
         },
         {
           "slot_id": "sub_category",
@@ -3395,6 +3400,35 @@
             }
           ],
           "notes": "Template-owned GanttBar length: -SUM([Profit]) sizes each floating bar downward from its running-total row anchor so the bar spans this category's delta. A self-closing <calculation>, so parseTemplateCalcs sees it — a declared calc slot. Its one input is the bindable 'profit' slot; replaceFieldReferences rewrites [Profit] on bind."
+        },
+        {
+          "slot_id": "profit_gain_color_calc",
+          "template_field": "Calculation_767019348535836687",
+          "derivation": "usr",
+          "role": [
+            "color"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "SUM([Profit]) >= 0",
+          "formula_refs": [
+            "Profit"
+          ],
+          "depends_on_slots": [
+            "profit"
+          ],
+          "result_role": "dimension",
+          "inputs": [
+            {
+              "ref": "Profit",
+              "slot_id": "profit",
+              "slot_kind": "quantitative",
+              "required": true,
+              "template_internal": false
+            }
+          ],
+          "notes": "Template-owned boolean color: true for a non-negative step and false for a loss. The categorical palette maps the two outcomes to distinct gain/loss colors instead of a continuous amount gradient."
         }
       ],
       "hazards": [
@@ -3405,8 +3439,8 @@
         },
         {
           "code": "datasource-style-dropped",
-          "detail": "The source workbook carries a datasource-level <style-rule element='mark'> value->hue/glyph map (3 color / 4 shape maps, factory-detected) referencing Sub-Category and other workbook-shared fields. It is NOT carried into this template (no datasource_style sidecar) because it is irrelevant to this waterfall: the color that matters is the continuous SUM(Profit) encoding fully contained in the worksheet (<color column='[sum:Profit:qk]'>), NOT a categorical Sub-Category hue. Carrying it would also splice customer member values + federated datasource IDs into the repo (licensing/sensitive-data wall) — the same decision L1 made for spatial-choropleth-map. No fidelity loss for this template; on apply only the in-worksheet encoding is applied.",
-          "xml": "part-to-whole-waterfall.xml:73"
+          "detail": "The source workbook carries a datasource-level <style-rule element='mark'> value->hue/glyph map (3 color / 4 shape maps, factory-detected) referencing Sub-Category and other workbook-shared fields. It is NOT carried into this template (no datasource_style sidecar) because the worksheet now owns its gain/loss palette through the boolean color calculation. Carrying the source style would also splice customer member values + federated datasource IDs into the repo (licensing/sensitive-data wall) — the same decision L1 made for spatial-choropleth-map.",
+          "xml": "part-to-whole-waterfall.xml:68-85"
         },
         {
           "code": "subtotals-mid-chain",
@@ -3726,9 +3760,9 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-04",
-        "xml_sha256": "f28c59df89a6c63ecb37e3715a3db37f50429c7b4d94574777211e0b7ff34f28",
+        "xml_sha256": "1492b037d695ccfa5de7e41881c5b273dfcb0ef598beffd88810955d4df021f4",
         "render_evidence": {
-          "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
+          "basis": "hand-stamp: live render + structural parity + human review; the placeholder-only source migration preserves byte-identical post-bind XML versus the stamped literal-token form, proven by templatePlaceholderPilots.test.ts",
           "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
           "structural": null,
           "critical_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
@@ -3740,7 +3774,10 @@
       "datasource_placeholder": true,
       "placeholders": [
         "TITLE",
-        "DATASOURCE"
+        "DATASOURCE",
+        "field_base_1",
+        "field_base_2",
+        "field_base_3"
       ],
       "intent_keywords": [
         "ranking",
@@ -3758,7 +3795,7 @@
       "slots": [
         {
           "slot_id": "region",
-          "template_field": "Region",
+          "template_field": "{{field_base_1}}",
           "derivation": "none",
           "role": [
             "rows",
@@ -3766,11 +3803,17 @@
           ],
           "kind": "categorical",
           "bindable": true,
-          "required": true
+          "required": true,
+          "purpose": "Categorical dimension that defines one ranked horizontal bar per member.",
+          "examples": [
+            "Country",
+            "Product Line",
+            "Team"
+          ]
         },
         {
           "slot_id": "sales",
-          "template_field": "Sales",
+          "template_field": "{{field_base_2}}",
           "derivation": "sum",
           "role": [
             "cols",
@@ -3778,11 +3821,17 @@
           ],
           "kind": "quantitative",
           "bindable": true,
-          "required": true
+          "required": true,
+          "purpose": "Continuous measure that controls bar length and descending rank order.",
+          "examples": [
+            "Points",
+            "Revenue",
+            "Goal Difference"
+          ]
         },
         {
           "slot_id": "facet_row",
-          "template_field": "Facet",
+          "template_field": "{{field_base_3}}",
           "derivation": "none",
           "role": [
             "rows"
@@ -3790,7 +3839,13 @@
           "kind": "categorical",
           "bindable": true,
           "required": false,
-          "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on rows AHEAD of the ranked category pill, trellising the ranking into stacked panes (one ranked bar set per member). Optional → EXCLUDED from the required-bindable fixture_bind set (only {region, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots — it never steals the ranked (region) dim, and a bare 'by <dim>' never facets (fail-closed). XML declares [Facet] as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the default sorted-bar render is byte-unchanged). Modeled on box-plot-chart's required:false facet."
+          "purpose": "Optional categorical dimension that partitions the ranking into row-oriented small multiples.",
+          "examples": [
+            "Season",
+            "Business Unit",
+            "League"
+          ],
+          "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on rows AHEAD of the ranked category pill, trellising the ranking into stacked panes (one ranked bar set per member). Optional → EXCLUDED from the required-bindable fixture_bind set (only {region, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots — it never steals the ranked (region) dim, and a bare 'by <dim>' never facets (fail-closed). XML declares {{field_base_3}} as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the default sorted-bar render is byte-unchanged). Modeled on box-plot-chart's required:false facet."
         }
       ],
       "calcs": [],
@@ -3810,10 +3865,10 @@
       "fast_path_blockers": [],
       "portability_evidence": {
         "fixture_bind": true,
-        "render_verified": "live-2026-07-05",
-        "xml_sha256": "d02eb152091e7594c27b1cc46a596c2ffd6fd6e8772f64bc1186e12e1197ac02",
+        "render_verified": "live-2026-07-26",
+        "xml_sha256": "afb71d90510a3df77c64fa4549df37cc3285dd15b1d2db603c90c53ba5c69856",
         "render_evidence": {
-          "basis": "hand-stamp: live render + structural parity + human review",
+          "basis": "hand-stamp: live render + structural parity + human review | sort-param re-verify 2026-07-26 (claude/sortparam-restamp): parameterized computed-sort re-applied to the template bytes. Verified via two direct bind+readback legs on fresh e1 stages (ask 'column chart of Revenue by Region', bundle from this branch): applied:true both legs, readback XML carries computed-sort direction=DESC using SUM of the LIVE bound measure (revenue) over the live dimension (region) — donor refs fully rebound; column orientation confirmed (measure on rows, dimension on cols). NO pixel capture this round; pixel/composite scores in this block belong to the prior gate and the unchanged geometry.",
           "lane": "W2-R008 live-verify 2026-07-05",
           "structural": 0.97297,
           "critical_pass": "5/5",
@@ -3841,7 +3896,7 @@
       "slots": [
         {
           "slot_id": "region",
-          "template_field": "Region",
+          "template_field": "Category",
           "derivation": "none",
           "role": [
             "cols",
@@ -3853,7 +3908,7 @@
         },
         {
           "slot_id": "sales",
-          "template_field": "Sales",
+          "template_field": "Measure",
           "derivation": "sum",
           "role": [
             "rows",
@@ -3868,7 +3923,7 @@
       "hazards": [
         {
           "code": "computed-sort-pill-coupling",
-          "detail": "computed-sort sorts [none:Region:nk] using [sum:Sales:qk]; both slots must bind or the sort dangles (both are required, so coverage satisfies this). [Region] has NO aggregate-role-from here, so GREEN stands (verification: AGREE).",
+          "detail": "computed-sort sorts [none:Category:nk] using [sum:Measure:qk]; both slots must bind or the sort dangles (both are required, so coverage satisfies this). [Category] has NO aggregate-role-from here, so GREEN stands (verification: AGREE).",
           "xml": "ranking-ordered-column.xml:24"
         }
       ]
@@ -4086,7 +4141,10 @@
       "datasource_placeholder": true,
       "placeholders": [
         "TITLE",
-        "DATASOURCE"
+        "DATASOURCE",
+        "field_base_1",
+        "field_base_2",
+        "field_base_3"
       ],
       "intent_keywords": [
         "latlon-symbol-map",
@@ -4101,7 +4159,7 @@
         "spatial",
         "map"
       ],
-      "description": "A real latitude/longitude point symbol map: Longitude and Latitude measure columns are placed on Cols/Rows as AVG continuous axes, one fixed-size, single-color Circle mark per detail dimension member. Measure-free (a static symbol map — no size/color encoding). Use for datasets that already carry real coordinate columns rather than Tableau-generated geocoding fields, when you just want to plot WHERE things are (e.g. office locations) without encoding a magnitude.",
+      "description": "A real latitude/longitude point symbol map: Longitude and Latitude measure columns are placed on Cols/Rows as AVG continuous axes, one Circle mark per detail dimension member. Size, color, and tooltip are optional and remain absent unless the ask explicitly assigns fields to those encodings. Use for datasets that already carry real coordinate columns rather than Tableau-generated geocoding fields.",
       "slots": [
         {
           "slot_id": "longitude",
@@ -4150,6 +4208,60 @@
           "bindable": true,
           "required": false,
           "notes": "Second grain dimension as [none:Detail2:nk]. OPTIONAL: bound when the data has a second non-coordinate dimension so no marks collapse (e.g. pm_name AND city — 26 offices stay 26 marks, not per-city AVG-centroids). When the data has only ONE dimension this slot is UNBOUND and pruned (bindable && !required && kind:'geo' && role:['lod'] — the exact optionalFieldPrunesFor predicate). Data with 3+ non-coordinate dims exceeds this template's capacity and fails closed to propose (dropping a dim would re-collapse marks)."
+        },
+        {
+          "slot_id": "size",
+          "template_field": "{{field_base_1}}",
+          "derivation": "sum",
+          "role": [
+            "size"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": false,
+          "purpose": "Optional measure that controls symbol size.",
+          "examples": [
+            "Points",
+            "Sales",
+            "Population"
+          ],
+          "notes": "OPTIONAL: binds only from an explicit size shelf instruction. When unbound, its datasource declaration and size encoding are removed byte-identically."
+        },
+        {
+          "slot_id": "color",
+          "template_field": "{{field_base_2}}",
+          "derivation": "sum",
+          "role": [
+            "color"
+          ],
+          "kind": "quantitative-or-categorical",
+          "bindable": true,
+          "required": false,
+          "purpose": "Optional measure or dimension that controls mark color.",
+          "examples": [
+            "Points",
+            "Region",
+            "Status"
+          ],
+          "notes": "OPTIONAL: binds only from an explicit color shelf instruction. Categorical fields use derivation none; measures use the requested or default sum aggregation."
+        },
+        {
+          "slot_id": "tooltip",
+          "template_field": "{{field_base_3}}",
+          "derivation": "sum",
+          "role": [
+            "tooltip"
+          ],
+          "kind": "quantitative-or-categorical",
+          "bindable": true,
+          "required": false,
+          "purpose": "Optional measure or dimension added to the mark tooltip.",
+          "examples": [
+            "Points",
+            "Country",
+            "Owner"
+          ],
+          "notes": "OPTIONAL: binds only from an explicit tooltip shelf instruction. Categorical fields use derivation none; measures use the requested or default sum aggregation."
         }
       ],
       "calcs": [],
@@ -4175,7 +4287,7 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-11",
-        "xml_sha256": "62243687240b11563ac5cea5a6ef31a6faf6a2320068999abe4dd31481fff3da",
+        "xml_sha256": "3354a9e5317a59e91462b27157cdba88e05af0c16ea6f2637fa8ccfbc7a236d1",
         "render_evidence": {
           "method": "gate-composite",
           "date": "2026-07-11",
@@ -4199,7 +4311,9 @@
       "datasource_placeholder": true,
       "placeholders": [
         "TITLE",
-        "DATASOURCE"
+        "DATASOURCE",
+        "field_base_1",
+        "field_base_2"
       ],
       "intent_keywords": [
         "symbol-map",
@@ -4261,6 +4375,42 @@
           "bindable": true,
           "required": true,
           "notes": "aggregated measure driving symbol size (proportional-symbol encoding)."
+        },
+        {
+          "slot_id": "color",
+          "template_field": "{{field_base_1}}",
+          "derivation": "sum",
+          "role": [
+            "color"
+          ],
+          "kind": "quantitative-or-categorical",
+          "bindable": true,
+          "required": false,
+          "purpose": "Optional measure or dimension that controls mark color.",
+          "examples": [
+            "Points",
+            "Region",
+            "Status"
+          ],
+          "notes": "OPTIONAL: binds only from an explicit color shelf instruction. Categorical fields use derivation none; measures use the requested or default sum aggregation."
+        },
+        {
+          "slot_id": "tooltip",
+          "template_field": "{{field_base_2}}",
+          "derivation": "sum",
+          "role": [
+            "tooltip"
+          ],
+          "kind": "quantitative-or-categorical",
+          "bindable": true,
+          "required": false,
+          "purpose": "Optional measure or dimension added to the mark tooltip.",
+          "examples": [
+            "Points",
+            "Country",
+            "Owner"
+          ],
+          "notes": "OPTIONAL: binds only from an explicit tooltip shelf instruction. Categorical fields use derivation none; measures use the requested or default sum aggregation."
         }
       ],
       "calcs": [],
@@ -4286,9 +4436,8 @@
       "portability_evidence": {
         "fixture_bind": true,
         "render_verified": "live-2026-07-04",
-        "xml_sha256": "724d015fcaf3c49a954ac9c0a2a2b777b735da5f6256bec32c61954f4b39c273",
         "render_evidence": {
-          "basis": "hand-stamp: live render + structural parity + human review (original generic-template stamp; no numeric structural-parity score was retained for this legacy stamp)",
+          "basis": "hand-stamp: live render + structural parity + human review; the normal real-date placeholder migration preserves byte-identical post-bind XML versus the stamped literal-token form, proven by templatePlaceholderPilots.test.ts",
           "lane": "generic-template live-verify 2026-07-04 (original four: kpi / part-to-whole / ranking / time-series)",
           "structural": null,
           "critical_pass": "not recorded (legacy hand-stamp; earned by human review, pass-list ratio not retained)",
@@ -4300,7 +4449,11 @@
       "datasource_placeholder": true,
       "placeholders": [
         "TITLE",
-        "DATASOURCE"
+        "DATASOURCE",
+        "field_base_1",
+        "field_base_2",
+        "field_base_3",
+        "field_base_4"
       ],
       "intent_keywords": [
         "trend",
@@ -4343,7 +4496,7 @@
       "slots": [
         {
           "slot_id": "order_date",
-          "template_field": "Order Date",
+          "template_field": "{{field_base_1}}",
           "derivation": "tmn",
           "role": [
             "cols"
@@ -4352,22 +4505,34 @@
           "bindable": true,
           "required": true,
           "temporal_from_string": true,
-          "notes": "XML instance is [tmn:Order Date:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim (no normalization). templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'. temporal_from_string:true — a date-like STRING (e.g. a 'YYYY-MM' month) is accepted here; the apply path injects a DATEPARSE calc and truncates it to a continuous month axis (dateparseTemporalAxis.ts)."
+          "purpose": "Temporal dimension that defines the continuous Month-Trunc x-axis.",
+          "examples": [
+            "Match Date",
+            "Invoice Month",
+            "Snapshot Time"
+          ],
+          "notes": "XML instance is [tmn:{{field_base_1}}:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim (no normalization). templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'. temporal_from_string:true — a date-like STRING (e.g. a 'YYYY-MM' month) is accepted here; the apply path injects a DATEPARSE calc and truncates it to a continuous month axis (dateparseTemporalAxis.ts)."
         },
         {
           "slot_id": "sales",
-          "template_field": "Sales",
+          "template_field": "{{field_base_2}}",
           "derivation": "sum",
           "role": [
             "rows"
           ],
           "kind": "quantitative",
           "bindable": true,
-          "required": true
+          "required": true,
+          "purpose": "Continuous measure plotted over time on the y-axis.",
+          "examples": [
+            "Active Users",
+            "Revenue",
+            "Points"
+          ]
         },
         {
           "slot_id": "facet_col",
-          "template_field": "Facet",
+          "template_field": "{{field_base_3}}",
           "derivation": "none",
           "role": [
             "cols"
@@ -4375,14 +4540,38 @@
           "kind": "categorical",
           "bindable": true,
           "required": false,
-          "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on cols AHEAD of the truncated date pill, trellising the trend into side-by-side panes (one line per member). Optional → EXCLUDED from the required-bindable fixture_bind set (only {order_date, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots — a bare 'by <dim>' never facets (fail-closed), and it never steals a slot-bound dim. XML declares [Facet] as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the un-faceted default render is byte-unchanged). Modeled on box-plot-chart's required:false facet."
+          "purpose": "Optional categorical dimension that partitions the trend into column-oriented small multiples.",
+          "examples": [
+            "Country",
+            "Product Line",
+            "Team"
+          ],
+          "notes": "OPTIONAL small-multiples facet (W23-SM1): a spare categorical dimension the binder places on cols AHEAD of the truncated date pill, trellising the trend into side-by-side panes (one line per member). Optional → EXCLUDED from the required-bindable fixture_bind set (only {order_date, sales} count), so fast_path_eligible does not move. Binds ONLY when the ask names/implies a by-<dim> facet (small multiples / trellis / per <dim> / for each) AND a spare categorical remains after the required slots — a bare 'by <dim>' never facets (fail-closed), and it never steals a slot-bound dim. XML declares {{field_base_3}} as a datasource-dependency column the field-swap injector renames to the bound dim; on-shelf pill placement for a bound facet is applied downstream (the un-faceted default render is byte-unchanged). Modeled on box-plot-chart's required:false facet."
+        },
+        {
+          "slot_id": "color_series",
+          "template_field": "{{field_base_4}}",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": false,
+          "purpose": "Optional categorical dimension that splits the trend into one colored line per member.",
+          "examples": [
+            "Team",
+            "Plan Tier",
+            "Channel"
+          ],
+          "notes": "OPTIONAL series split: when no facet is requested, the binder fills this slot only if exactly one spare categorical remains after required bindings. Zero or multiple candidates leave it unbound. The optional-field injector removes both its datasource declaration and color encoding when unbound, preserving the pre-series-split render byte-for-byte."
         }
       ],
       "calcs": [],
       "hazards": [
         {
           "code": "month-trunc-short-form-ruling",
-          "detail": "RULING (H3.2 tmn/tmo reconciliation): 'tmn' is the REAL Month-Trunc short-form live Tableau writes — confirmed in this template XML (derivation='Month-Trunc' name='[tmn:Order Date:qk]'), in real Tableau Public workbooks (data/twb-example-index.json: [sqlserver…].[tmn:Order Date:qk], [dataengine…].[tmn:DateTime (Days):ok]), in src/metadata/fields.ts:434, and in tactics/tree/column-instance-prefixes.md. The binder/manifests standardize on canonical 'tmn'; templates.ts derivationMap accepts BOTH 'tmn' and legacy 'tmo' as aliases → 'Month-Trunc'. XML is ground truth; no derivation normalization is applied.",
+          "detail": "RULING (H3.2 tmn/tmo reconciliation): 'tmn' is the REAL Month-Trunc short-form live Tableau writes — confirmed in this template XML (derivation='Month-Trunc' name='[tmn:{{field_base_1}}:qk]'), in real Tableau Public workbooks, in src/metadata/fields.ts, and in tactics/tree/column-instance-prefixes.md. The binder/manifests standardize on canonical 'tmn'; templates.ts derivationMap accepts BOTH 'tmn' and legacy 'tmo' as aliases → 'Month-Trunc'. XML is ground truth; no derivation normalization is applied.",
           "xml": "trend-line-chart.xml:13"
         },
         {

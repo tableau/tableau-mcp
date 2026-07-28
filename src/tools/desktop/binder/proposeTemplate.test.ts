@@ -66,7 +66,6 @@ describe('proposeTemplateTool', () => {
       ask: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Propose Chart Template Candidates for an Ask',
       readOnlyHint: true,
       openWorldHint: false,
     });

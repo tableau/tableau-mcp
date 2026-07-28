@@ -6,11 +6,6 @@ import { z } from 'zod';
 import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import { currentEpisodeId, emitEpisodeEvent } from '../../../desktop/episode-events.js';
-import {
-  buildApplyOverCapNote,
-  isOverInlineXmlCap,
-  xmlByteLength,
-} from '../../../desktop/inlineXmlCap.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { formatWorkbookPromiseCheck } from '../../../desktop/validation/promise-check.js';
 import {
@@ -26,9 +21,7 @@ import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
   session: z.string().optional(),
-  mode: z.enum(['file', 'inline']).optional().default('file'),
   workbookFile: z.string().optional(),
-  workbookXml: z.string().optional(),
 };
 
 const title = 'Apply Workbook';
@@ -42,55 +35,44 @@ export const getApplyWorkbookTool = (
     description: 'Apply modified workbook content to Tableau.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false, // writes cache files and updates workbook
       openWorldHint: false,
       destructiveHint: true, // updates active workbook
       idempotentHint: false, // each call creates a new cache file
     },
-    callback: async (
-      { session, mode, workbookFile, workbookXml },
-      extra,
-    ): Promise<CallToolResult> => {
+    callback: async ({ session, workbookFile }, extra): Promise<CallToolResult> => {
       return await applyWorkbookTool.logAndExecute({
         extra,
-        args: { session, mode, workbookFile, workbookXml },
+        args: { session, workbookFile },
         callback: async () => {
-          switch (mode) {
-            case 'inline': {
-              if (!workbookXml?.trim()) {
-                return new ArgsValidationError(
-                  'When mode=inline, non-empty workbook content is required.',
-                ).toErr();
-              }
-              break;
-            }
-            case 'file': {
-              if (!workbookFile?.trim()) {
-                return new ArgsValidationError(
-                  [
-                    'When mode=file, a non-empty workbook file path is required.',
-                    'The path can be determined using any of the tools that get or modify workbook content.',
-                  ].join(' '),
-                ).toErr();
-              }
+          // No inline document parameter: the cached file path IS the handle. Making the
+          // model retype a document cost ~190s of pure emission across six asks, and
+          // inline content carried no cache fingerprint, so it also skipped the
+          // cross-instance bleed guard below.
+          if (!workbookFile?.trim()) {
+            return new ArgsValidationError(
+              [
+                'A non-empty workbook file path is required.',
+                'Get one from resolve-field, edit it with read-cached-xml and',
+                'write-cached-xml, then pass that path here.',
+              ].join(' '),
+            ).toErr();
+          }
 
-              if (!existsSync(workbookFile)) {
-                return new WorkbookNotFoundError(
-                  [
-                    `Cached workbook file not found: ${workbookFile}`,
-                    'Provide a path determined by any of the tools that get or modify workbook content.',
-                  ].join(' '),
-                ).toErr();
-              }
+          if (!existsSync(workbookFile)) {
+            return new WorkbookNotFoundError(
+              [
+                `Cached workbook file not found: ${workbookFile}`,
+                'Provide a cached path returned by resolve-field.',
+              ].join(' '),
+            ).toErr();
+          }
 
-              try {
-                workbookXml = readFileSync(workbookFile, 'utf-8');
-              } catch (error) {
-                return new FileReadError(error).toErr();
-              }
-              break;
-            }
+          let workbookXml: string;
+          try {
+            workbookXml = readFileSync(workbookFile, 'utf-8');
+          } catch (error) {
+            return new FileReadError(error).toErr();
           }
 
           const sessionResult = resolveSession(session);
@@ -100,18 +82,18 @@ export const getApplyWorkbookTool = (
           const resolvedSession = sessionResult.value;
 
           // Cross-instance cache-bleed guard (W9): refuse a cache file produced by a
-          // different (or restarted) Desktop session before applying it — file mode only,
-          // since inline content carries no cache fingerprint.
-          if (mode === 'file' && workbookFile) {
-            const sidecar = checkSidecar(workbookFile, resolvedSession, 'workbook');
-            if (!sidecar.ok) {
-              return new CacheSessionMismatchError(sidecar.message!).toErr();
-            }
+          // different (or restarted) Desktop session before applying it. Now that every
+          // apply goes through a cache file, no payload can skip this check.
+          const sidecar = checkSidecar(workbookFile, resolvedSession, 'workbook');
+          if (!sidecar.ok) {
+            return new CacheSessionMismatchError(sidecar.message!).toErr();
           }
 
           const executor = await extra.getExecutor(resolvedSession);
+          // A whole-workbook apply names no single artifact, so give the user their sheet back.
           const result = await loadWorkbookXml({
             xml: workbookXml,
+            focus: { navigate: 'restore' },
             executor,
             signal: extra.signal,
           });
@@ -128,15 +110,6 @@ export const getApplyWorkbookTool = (
               }
             }
           }
-
-          // Applies are never rejected on size; if an inline payload was over the cap, just
-          // point at the cheaper file-mode workflow for next time (the token win is on GET).
-          const capBytes = extra.config.inlineXmlMaxBytes;
-          const inlineBytes = mode === 'inline' ? xmlByteLength(workbookXml ?? '') : 0;
-          const note =
-            mode === 'inline' && isOverInlineXmlCap(inlineBytes, capBytes)
-              ? `\n\n${buildApplyOverCapNote(inlineBytes, capBytes)}`
-              : '';
 
           // Host verification receipt (W-23447506): whole-workbook applies have
           // no structural readback, so say so honestly instead of implying
@@ -156,7 +129,7 @@ export const getApplyWorkbookTool = (
           }
 
           return new Ok({
-            message: `Successfully applied workbook update. The workbook has been updated.${note}${receipt}`,
+            message: `Successfully applied workbook update. The workbook has been updated.${receipt}`,
           });
         },
       });

@@ -7,6 +7,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  classifyBindProposalProgress,
+  MAX_BIND_RECOVERY_PROPOSAL_SIGNATURES,
   type RouteDeflection,
   serializeRouteReceipt,
   sessionRouteState,
@@ -27,6 +29,38 @@ function mkDeflection(over: Partial<RouteDeflection> = {}): RouteDeflection {
 
 describe('SessionRouteStateStore', () => {
   beforeEach(() => sessionRouteState.clear());
+
+  describe('authoring attempt state', () => {
+    it('records the first authoring attempt for a session', () => {
+      const store = new SessionRouteStateStore();
+
+      const state = store.recordAuthoringAttempt('S1', 'bind-template')!;
+
+      expect(state.firstAuthoringAttempt).toMatchObject({
+        tool: 'bind-template',
+        ts: expect.any(String),
+      });
+      expect(store.hasAuthoringAttempt('S1')).toBe(true);
+    });
+
+    it('keeps authoring attempts isolated by session and preserves the first attempt', () => {
+      const store = new SessionRouteStateStore();
+
+      store.recordAuthoringAttempt('S1', 'author-parameter');
+      store.recordAuthoringAttempt('S1', 'author-set');
+
+      expect(store.hasAuthoringAttempt('S1')).toBe(true);
+      expect(store.hasAuthoringAttempt('S2')).toBe(false);
+      expect(store.get('S1')?.firstAuthoringAttempt?.tool).toBe('author-parameter');
+    });
+
+    it('fails open when no session can be resolved', () => {
+      const store = new SessionRouteStateStore();
+
+      expect(store.recordAuthoringAttempt(undefined, 'bind-template')).toBeUndefined();
+      expect(store.hasAuthoringAttempt(undefined)).toBe(false);
+    });
+  });
 
   it('recordDeflection lazy-inits the session state and appends the deflection', () => {
     const store = new SessionRouteStateStore();
@@ -125,6 +159,46 @@ describe('SessionRouteStateStore', () => {
     // at-most-twice only for evicted asks.
     expect(store.hasDeflection('S1', 'ask-0')).toBe(false);
     expect(store.hasDeflection('S1', `ask-${cap + 2}`)).toBe(true);
+  });
+
+  describe('summary-data transient failure state', () => {
+    it('counts transient failures by session and signature without storing payloads', () => {
+      const store = new SessionRouteStateStore();
+
+      expect(store.recordSummaryDataTransientFailure('S1', 'signature-a')).toBe(1);
+      expect(store.recordSummaryDataTransientFailure('S1', 'signature-a')).toBe(2);
+      expect(store.recordSummaryDataTransientFailure('S1', 'signature-b')).toBe(1);
+      expect(store.recordSummaryDataTransientFailure('S2', 'signature-a')).toBe(1);
+      expect(store.recordSummaryDataTransientFailure(undefined, 'signature-a')).toBe(1);
+
+      expect(store.get('S1')?.summaryDataTransientFailures.get('signature-a')).toBe(2);
+      expect(store.get('S1')?.summaryDataTransientFailures.get('signature-b')).toBe(1);
+      expect(store.get('S2')?.summaryDataTransientFailures.get('signature-a')).toBe(1);
+    });
+
+    it('clears a signature after a success or genuine no-data outcome', () => {
+      const store = new SessionRouteStateStore();
+
+      store.recordSummaryDataTransientFailure('S1', 'signature-a');
+      store.recordSummaryDataTransientFailure('S1', 'signature-a');
+      expect(store.clearSummaryDataTransientFailure('S1', 'signature-a')).toBe(true);
+      expect(store.get('S1')?.summaryDataTransientFailures.has('signature-a')).toBe(false);
+      expect(store.clearSummaryDataTransientFailure('S1', 'signature-a')).toBe(false);
+      expect(store.clearSummaryDataTransientFailure(undefined, 'signature-a')).toBe(false);
+    });
+
+    it('keeps transient signatures LRU-bounded', () => {
+      const store = new SessionRouteStateStore();
+      const cap = SessionRouteStateStore.MAX_SUMMARY_DATA_FAILURE_SIGNATURES;
+
+      for (let i = 0; i < cap + 1; i++) {
+        store.recordSummaryDataTransientFailure('S1', `signature-${i}`);
+      }
+
+      expect(store.get('S1')?.summaryDataTransientFailures.size).toBe(cap);
+      expect(store.get('S1')?.summaryDataTransientFailures.has('signature-0')).toBe(false);
+      expect(store.get('S1')?.summaryDataTransientFailures.has(`signature-${cap}`)).toBe(true);
+    });
   });
 
   describe('current ask classification state', () => {
@@ -302,6 +376,91 @@ describe('SessionRouteStateStore', () => {
       expect(record.phase).toBe('retry-used');
       expect(record.lastProposalSignature).toBe('signature-2');
       expect(record.attempts.map((a) => a.consumesRetryBudget)).toEqual([false, false, true]);
+    });
+
+    it('allows each genuinely new corrected proposal but classifies repeated signatures as thrash', () => {
+      const store = new SessionRouteStateStore();
+
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+      for (const proposalSignature of ['signature-1', 'signature-2']) {
+        store.recordBindRecoveryAttempt('S1', 'ask A', {
+          outcome: 'escalate',
+          proposalSignature,
+        });
+      }
+
+      const afterFirstCorrection = store.getBindRecovery('S1', 'ask A')!;
+      expect(classifyBindProposalProgress(afterFirstCorrection, 'signature-3')).toBe('new');
+
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'escalate',
+        proposalSignature: 'signature-3',
+      });
+
+      const afterSecondCorrection = store.getBindRecovery('S1', 'ask A')!;
+      expect(afterSecondCorrection.phase).not.toBe('terminal');
+      expect(afterSecondCorrection.attempts.map((a) => a.consumesRetryBudget)).toEqual([
+        false,
+        false,
+        true,
+        true,
+      ]);
+      expect(classifyBindProposalProgress(afterSecondCorrection, 'signature-2')).toBe('repeat');
+      expect(classifyBindProposalProgress(afterSecondCorrection, 'signature-3')).toBe('repeat');
+    });
+
+    it('bounds genuinely new corrected proposals by distinct signature count', () => {
+      const store = new SessionRouteStateStore();
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+      for (let index = 0; index < MAX_BIND_RECOVERY_PROPOSAL_SIGNATURES; index++) {
+        store.recordBindRecoveryAttempt('S1', 'ask A', {
+          outcome: 'escalate',
+          proposalSignature: `signature-${index}`,
+        });
+      }
+
+      expect(
+        classifyBindProposalProgress(
+          store.getBindRecovery('S1', 'ask A')!,
+          'one-more-distinct-signature',
+        ),
+      ).toBe('limit');
+    });
+
+    it('stores and consumes one pre-dispatch retry allowance for the last proposal signature', () => {
+      const store = new SessionRouteStateStore();
+      store.recordBindRecoveryAttempt('S1', 'ask A', { outcome: 'propose' });
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'bound',
+        proposalSignature: 'signature-1',
+      });
+
+      expect(store.grantPreDispatchRetryAllowance('S1', 'ask A', 'different-signature')).toBe(
+        false,
+      );
+      expect(store.grantPreDispatchRetryAllowance('S1', 'ask A', 'signature-1')).toBe(true);
+      expect(store.consumePreDispatchRetryAllowance('S1', 'ask A', 'signature-1')).toBe(true);
+      expect(store.consumePreDispatchRetryAllowance('S1', 'ask A', 'signature-1')).toBe(false);
+      expect(store.grantPreDispatchRetryAllowance('S1', 'ask A', 'signature-1')).toBe(false);
+      expect(store.getBindRecovery('S1', 'ask A')?.preDispatchRetryAllowance).toEqual({
+        proposalSignature: 'signature-1',
+        remaining: 0,
+      });
+    });
+
+    it('drops a stale pre-dispatch allowance when the proposal signature changes', () => {
+      const store = new SessionRouteStateStore();
+      store.recordBindRecoveryAttempt('S1', 'ask A', {
+        outcome: 'bound',
+        proposalSignature: 'signature-1',
+      });
+      store.grantPreDispatchRetryAllowance('S1', 'ask A', 'signature-1');
+
+      store.reserveBindRecoveryAdmission('S1', 'ask A', {
+        proposalSignature: 'signature-2',
+      });
+
+      expect(store.getBindRecovery('S1', 'ask A')?.preDispatchRetryAllowance).toBeUndefined();
     });
 
     it('clears a recovery entry when the bind reaches terminal done', () => {

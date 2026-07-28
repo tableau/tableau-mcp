@@ -23,8 +23,13 @@ import type { OptionalFieldPruneSpec } from '../templates/optionalFieldPrune.js'
 import {
   buildLlmInput as buildCoreLlmInput,
   classifyNoLlm,
+  type EncodingFieldResolution,
+  type EncodingReport,
   type LlmProposeInput as CoreLlmProposeInput,
+  type LooseFieldReferenceResolution,
   MAX_CLASSIFIABLE_FIELDS,
+  resolveEncodingFieldInAsk,
+  resolveLooseFieldReference,
 } from './classify.js';
 import { escapeXml } from './escape.js';
 import type { BlockerCode, Derivation, TemplateManifest } from './manifest-types.js';
@@ -33,21 +38,34 @@ import {
   type BindingProposal,
   type Blocker,
   type EscalateReason,
+  type FilterSpec,
   resolveInSummary,
   validateBinding,
 } from './validate.js';
+import {
+  WATERFALL_ANCHOR_FIELD_RE,
+  WATERFALL_ORDER_FIELD_RE,
+  WATERFALL_TEMPLATE_NAME,
+} from './waterfall.js';
 
 // Re-exported as the binder's public surface. Bare (source-less) re-exports of the
 // locally-imported bindings — a single `export ... from './x.js'` alongside the
 // import above would trip the target's `no-duplicate-imports` (includeExports).
 export {
   classifyNoLlm,
+  type EncodingFieldResolution,
+  type EncodingReport,
+  type LooseFieldReferenceResolution,
   MAX_CLASSIFIABLE_FIELDS,
+  resolveEncodingFieldInAsk,
   resolveInSummary,
+  resolveLooseFieldReference,
   summarizeSchema,
   validateBinding,
+  WATERFALL_ANCHOR_FIELD_RE,
+  WATERFALL_ORDER_FIELD_RE,
 };
-export type { BindingProposal, Blocker, EscalateReason, SchemaField, SchemaSummary };
+export type { BindingProposal, Blocker, EscalateReason, FilterSpec, SchemaField, SchemaSummary };
 
 type ProposeField = CoreLlmProposeInput['fields'][number] & { semanticRole?: string };
 type FieldIdentity = Pick<ProposeField, 'name' | 'role' | 'type' | 'datatype'>;
@@ -58,13 +76,8 @@ type FieldIdentity = Pick<ProposeField, 'name' | 'role' | 'type' | 'datatype'>;
 // ADD the sort in a later step is fragile (live m1 receipts: it lands the sort only ~1/3 of
 // runs, otherwise settling for magnitude order). So the confident bind DEFAULTS the sort to
 // that column ascending when one exists and no sort was proposed — one coherent bind, no
-// fragile follow-up. Kept in sync with WATERFALL_ORDER_FIELD_RE in bindTemplate.ts (the hint
-// side); this is the deterministic apply side.
-const WATERFALL_TEMPLATE_NAME = 'part-to-whole-waterfall';
-// EXPORTED — one definition shared with bindTemplate.ts's discovery hint (the apply side is
-// here, the hint side imports this) so the two can never drift.
-export const WATERFALL_ORDER_FIELD_RE =
-  /(display|sort|step|row|item|line)[_\s-]?(order|no|num|number|index|rank|seq)|^(order|sequence|seq|ordinal|rank|step[_\s-]?order)$/i;
+// fragile follow-up. The shared constants live in waterfall.ts so classification and apply
+// use one definition without creating a classify ↔ binder cycle.
 // A P&L/bridge waterfall's running total double-counts subtotal/total rows unless they're
 // excluded via the anchor_category filter. Live m1 receipts: the singer lands the anchor only
 // ~half the runs (hedges or skips it), so — exactly like the sort default above — the confident
@@ -73,7 +86,6 @@ export const WATERFALL_ORDER_FIELD_RE =
 // it through the normal resolve/escape path into field_mapping['Anchor Category'], which drives
 // spliceWaterfallAnchorFilter. Same field-name heuristic as bindTemplate.ts's discovery hint.
 export const WATERFALL_ANCHOR_SLOT_ID = 'anchor_category';
-export const WATERFALL_ANCHOR_FIELD_RE = /categor|type|kind|class|flag|marker/i;
 
 export type LlmProposeInput = Omit<CoreLlmProposeInput, 'fields'> & {
   fields: ProposeField[];
@@ -132,6 +144,9 @@ export interface InjectTemplateArgs {
   field_mapping: Record<string, string>;
   sort?: { by: string; direction: 'asc' | 'desc' };
   top_n?: number;
+  /** Declarative interactive dimension filters (m7). A context:true filter is emitted at
+   * Tableau OoO step 3 so a Top-N within that dimension ranks within the selection. */
+  filters?: FilterSpec[];
   /** temporal_axis_from_string: when a temporal slot bound a date-like STRING, the
    * apply path injects a DATEPARSE calc for that slot (see dateparseTemporalAxis.ts). */
   dateparse_axis?: DateparseAxisSpec;
@@ -171,6 +186,13 @@ export type BinderResult =
       apply_instruction: string;
       /** Advisory avoid_when cautions matching the ask; present only when non-empty. Never blocks. */
       warnings?: string[];
+      /**
+       * Encodings the classifier analyzed, split by what this bind actually filled. The
+       * deterministic classifier always supplies this report, including empty arrays when
+       * the ask named no optional encodings. A caller that applies this bind must not report
+       * completion while `unfilled` is non-empty.
+       */
+      encodings?: EncodingReport;
     }
   | {
       status: 'propose';
@@ -261,6 +283,31 @@ export const PROPOSAL_OUTPUT_SCHEMA: Record<string, unknown> = {
       },
     },
     top_n: { type: 'integer', minimum: 1, description: 'Top N.' },
+    // Declarative interactive dimension filters (m7 order-of-operations). Set context:true to
+    // make a filter a CONTEXT filter (Tableau OoO step 3) so a Top-N within that dimension
+    // ranks WITHIN the selected member, not globally-then-filtered. Omit `values` for an
+    // interactive enumerate-all control (the m7 case: "let me filter down to one region").
+    filters: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['field'],
+        additionalProperties: false,
+        properties: {
+          field: { type: 'string', description: 'Field name to filter (from fields).' },
+          values: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional member values; omit for an interactive all-members control.',
+          },
+          context: {
+            type: 'boolean',
+            description:
+              'true = context filter (OoO step 3, before Top-N) so a Top-N within this dimension is scoped to the selection.',
+          },
+        },
+      },
+    },
   },
 };
 
@@ -285,7 +332,7 @@ export const TITLE_CONTROL_CHAR_RE = new RegExp(`[${XML_ILLEGAL_TITLE_CHARS}]`);
 export const TITLE_CONTROL_CHAR_MESSAGE =
   'title must not contain control characters (C0 block U+0000–U+001F or DEL U+007F), which are illegal in XML 1.0 even when escaped';
 
-function makeTitle(ask: string): string {
+export function makeTitle(ask: string): string {
   // Collapse whitespace FIRST so the XML-legal whitespace controls (TAB/LF/CR/FF/VT ∈ \s)
   // become a single space, THEN strip any remaining C0/DEL control chars (NUL etc.) — so
   // the Call-1 generated title is always XML-safe and agrees with proposalSchema's reject.
@@ -294,7 +341,14 @@ function makeTitle(ask: string): string {
     .replace(/\s+/g, ' ')
     .replace(new RegExp(TITLE_CONTROL_CHAR_RE.source, 'g'), '');
   if (!trimmed) return 'Untitled';
-  return trimmed.length > 80 ? trimmed.slice(0, 80) : trimmed;
+  if (trimmed.length <= 80) return trimmed;
+  // Cut on a word boundary and mark the cut. A hard 80-char slice named the live symbol map
+  // "...Goals For (bigger and", which reads like a finished description of a chart that was
+  // never built — the missing color encoding hid inside a sentence nobody could parse.
+  const head = trimmed.slice(0, 79);
+  const lastSpace = head.lastIndexOf(' ');
+  const kept = lastSpace >= 40 ? head.slice(0, lastSpace) : head;
+  return `${kept.replace(/[\s,;:.—–-]+$/, '')}…`;
 }
 
 /**
@@ -439,6 +493,39 @@ function validateAndBuild(
     };
   }
 
+  // Declarative interactive filters (m7). Resolve each filter.field the same way sort.by is
+  // resolved: keep only filters whose field is a real dimension in the schema, dropping the
+  // rest with a warning rather than escalating (a bad filter must never sink an otherwise-good
+  // bind). The apply-side splice (bindTemplate.applyProposalSplices) re-resolves the field to
+  // its CI, declares the dependency, and emits the context filter + shown card.
+  let filters = proposal.filters;
+  if (proposal.filters && proposal.filters.length > 0) {
+    const kept: FilterSpec[] = [];
+    for (const filter of proposal.filters) {
+      const r = resolveInSummary(summary, filter.field);
+      if (r.kind === 'ambiguous') {
+        warnings.push(
+          `filter field "${filter.field}" matches ${r.candidates?.length ?? 0} fields; ignoring this filter`,
+        );
+        continue;
+      }
+      if (r.kind === 'not_found' || !r.field) {
+        warnings.push(
+          `no filter field named "${filter.field}" in datasource(s); ignoring this filter`,
+        );
+        continue;
+      }
+      if (r.field.role !== 'dimension') {
+        warnings.push(
+          `filter field "${filter.field}" is a measure, not a dimension; ignoring this filter (interactive dimension filters only)`,
+        );
+        continue;
+      }
+      kept.push(filter);
+    }
+    filters = kept.length > 0 ? kept : undefined;
+  }
+
   if (proposal.confidence !== undefined && proposal.confidence < minConfidence) {
     return {
       status: 'escalate',
@@ -465,6 +552,7 @@ function validateAndBuild(
     field_mapping: v.field_mapping,
     ...(sort ? { sort } : {}),
     ...(proposal.top_n !== undefined ? { top_n: proposal.top_n } : {}),
+    ...(filters && filters.length > 0 ? { filters } : {}),
     ...(v.dateparse_axis ? { dateparse_axis: v.dateparse_axis } : {}),
     ...(v.optional_field_prunes ? { optional_field_prunes: v.optional_field_prunes } : {}),
   };
@@ -531,6 +619,8 @@ export async function bindTemplate(args: {
       template: cls.template,
       title: makeTitle(args.ask),
       bindings: cls.bindings,
+      ...(cls.top_n !== undefined ? { top_n: cls.top_n } : {}),
+      ...(cls.filters ? { filters: cls.filters } : {}),
     };
     const res = validateAndBuild(proposal, args.manifests, summary, minConfidence, false, args.ask);
     if (res.status === 'bound') {
@@ -539,6 +629,13 @@ export async function bindTemplate(args: {
       // the bound result's existing `warnings` channel — never a blocker.
       if (cls.notes && cls.notes.length > 0) {
         res.warnings = [...(res.warnings ?? []), ...cls.notes];
+      }
+      // Carry the classifier's own filled/unfilled encoding split to the caller. The binder
+      // is the only layer that knows an ask named an encoding it could not bind; a post-apply
+      // readback cannot recover it, because the XML it would read back never contained the
+      // node in the first place.
+      if (cls.encodings) {
+        res.encodings = cls.encodings;
       }
       return res;
     }

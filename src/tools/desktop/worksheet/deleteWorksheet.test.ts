@@ -252,7 +252,6 @@ describe('deleteWorksheetTool', () => {
       worksheetName: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Delete Worksheet',
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: true,

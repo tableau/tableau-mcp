@@ -37,7 +37,6 @@ describe('getAppInfoTool', () => {
     expect(tool.description).toBe('Identify the Desktop build when an endpoint 404s as too-new.');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
-      title: 'Get App Info',
       readOnlyHint: true,
       openWorldHint: false,
     });
@@ -74,6 +73,26 @@ describe('getAppInfoTool', () => {
       executor.stop();
       await server.close();
     }
+  });
+
+  it('returns unavailable status when the app endpoint returns no source fields', async () => {
+    const tool = getAppInfoTool(new DesktopMcpServer());
+    const callback = await Provider.from(tool.callback);
+    const extra = {
+      ...getMockRequestHandlerExtra(),
+      getExecutor: vi.fn().mockResolvedValue({
+        getApp: vi.fn().mockResolvedValue(Ok({})),
+      }),
+    };
+
+    const result = await callback({ session: undefined }, extra);
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      status: 'unavailable',
+      message: 'Desktop app info endpoint returned no application metadata fields.',
+    });
   });
 });
 

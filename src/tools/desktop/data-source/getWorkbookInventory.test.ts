@@ -47,7 +47,6 @@ describe('getWorkbookInventoryTool', () => {
     expect(tool.description).toContain('worksheet/dashboard/storyboard inventory');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
-      title: 'Get Workbook Inventory',
       readOnlyHint: true,
       openWorldHint: false,
     });

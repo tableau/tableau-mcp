@@ -25,7 +25,6 @@ export const getListFieldsTool = (server: DesktopMcpServer): DesktopTool<typeof 
     description: 'List fields on a worksheet.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

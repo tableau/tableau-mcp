@@ -41,7 +41,6 @@ describe('listSiteWorkbooksTool', () => {
     expect(tool.description).toBe('List workbooks published to the connected site.');
     expect(tool.paramsSchema).toMatchObject({ session: expect.any(Object) });
     expect(tool.annotations).toMatchObject({
-      title: 'List Site Workbooks',
       readOnlyHint: true,
       openWorldHint: false,
     });
@@ -90,7 +89,7 @@ describe('listSiteWorkbooksTool', () => {
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('does not serve the site workbooks endpoint');
-      expect(result.content[0].text).toContain('get-app-info');
+      expect(result.content[0].text).toContain('Desktop update enables it');
       expect(result.content[0].text).toContain('Do not retry');
     } finally {
       await harness.close();

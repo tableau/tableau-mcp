@@ -11,6 +11,7 @@ import {
 } from '../../../desktop/binder/explicit-bind.js';
 import { summarizeSchema } from '../../../desktop/binder/schema-summary.js';
 import { writeSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
+import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import { parseDatasourceQualifiedColumnRef } from '../../../desktop/metadata/field-resolver.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { buildInjectedWorkbookXml } from '../../../desktop/templates/injectTemplateCore.js';
@@ -25,16 +26,35 @@ import {
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
+// session is optional like the other 50 tools. Required + a pin the agent cannot name is an
+// impossible contract: pass the pinned pid and the guard says omit it, omit it and the
+// schema says required. resolveSession(undefined) falls back to the pin (or the sole running
+// Desktop), which is what the sidecar has always been stamped with anyway.
 const paramsSchema = {
-  session: z.string().describe(''),
-  workbookFile: z.string().describe(''),
-  templateName: z.string().describe(''),
-  title: z.string().describe(''),
-  sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe(''),
-  templateParameters: z.record(z.string()).optional().describe(''),
-  fieldMapping: z.record(z.string()).optional().describe(''),
-  insertPosition: z.enum(['end', 'before_sheet', 'after_sheet']).optional().describe(''),
-  relativeSheetName: z.string().optional().describe(''),
+  session: z
+    .string()
+    .optional()
+    .describe('Desktop process ID; omit to use the pinned or only running instance.'),
+  workbookFile: z.string().describe('Cached workbook path from field resolution.'),
+  templateName: z.string().describe('ID of an existing template.'),
+  title: z.string().describe('Name for the sheet this creates.'),
+  sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe('What the template builds.'),
+  templateParameters: z
+    .record(z.string())
+    .optional()
+    .describe('Placeholder values required by the selected template (e.g. DATASOURCE).'),
+  fieldMapping: z
+    .record(z.string())
+    .optional()
+    .describe('Slot to qualified ref from field resolution, never invented.'),
+  insertPosition: z
+    .enum(['end', 'before_sheet', 'after_sheet'])
+    .optional()
+    .describe('end (default), or before_sheet/after_sheet next to relativeSheetName.'),
+  relativeSheetName: z
+    .string()
+    .optional()
+    .describe('Existing sheet name; omit when insertPosition defaults to end.'),
 };
 
 function inferSingleDatasourceFromFieldMapping(
@@ -59,7 +79,6 @@ export const getInjectTemplateTool = (
     description: 'Inject a template.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
@@ -176,6 +195,7 @@ export const getInjectTemplateTool = (
               sheetType,
               templateParameters: appliedTemplateParameters,
               fieldMapping: appliedFieldMapping,
+              templateSlots: bundledIntelligenceProvider.getTemplateManifest(templateName)?.slots,
               insertPosition,
               relativeSheetName,
               applyNonce,
@@ -194,7 +214,7 @@ export const getInjectTemplateTool = (
               templateName,
               title,
               sheetType,
-              warnings: explicitTemplateWarnings,
+              warnings: [...explicitTemplateWarnings, ...(result.warnings ?? [])],
             });
           } catch (err) {
             return new FileReadError(err).toErr();

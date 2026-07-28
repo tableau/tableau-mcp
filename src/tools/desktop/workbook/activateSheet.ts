@@ -10,6 +10,11 @@ import {
   XmlModificationError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import {
+  prefillNextAction,
+  type WireStructuredContent,
+  wireStructuredContent,
+} from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 
 export { activateSheetWithValidatedGoto };
@@ -19,8 +24,10 @@ const paramsSchema = {
   sheetName: z.string().min(1).describe('Worksheet or dashboard name to make active.'),
 };
 
+// `focus_requested`, not `activated`: the inspection this returns is read BEFORE the
+// goto-sheet dispatch, so the tool knows it asked and does not know Tableau complied.
 type ActivateSheetToolResult = {
-  activated: true;
+  focus_requested: boolean;
   sheetName: string;
   message: string;
   previousSheet?: string;
@@ -29,22 +36,26 @@ type ActivateSheetToolResult = {
 
 class ActivateSheetNotFoundError extends McpToolError {
   readonly availableSheets: string[];
-  readonly structuredContent: { readonly availableSheets: string[] };
+  readonly structuredContent: WireStructuredContent;
 
   constructor(sheetName: string, availableSheets: string[]) {
+    const message = [
+      `Sheet "${sheetName}" was not found in the live workbook worksheet/dashboard list.`,
+      availableSheets.length > 0
+        ? `Available sheets: ${availableSheets.map((name) => `"${name}"`).join(', ')}.`
+        : 'The workbook has no activatable worksheets or dashboards.',
+      'Use list-worksheets or list-dashboards to confirm the current names.',
+    ].join(' ');
     super({
       type: 'sheet-not-found',
       statusCode: 404,
-      message: [
-        `Sheet "${sheetName}" was not found in the live workbook worksheet/dashboard list.`,
-        availableSheets.length > 0
-          ? `Available sheets: ${availableSheets.map((name) => `"${name}"`).join(', ')}.`
-          : 'The workbook has no activatable worksheets or dashboards.',
-        'Use list-worksheets or list-dashboards to confirm the current names.',
-      ].join(' '),
+      message,
     });
     this.availableSheets = availableSheets;
-    this.structuredContent = { availableSheets };
+    this.structuredContent = wireStructuredContent(
+      { message, availableSheets },
+      { nextAction: prefillNextAction('Choose an available sheet and retry') },
+    );
   }
 }
 
@@ -55,11 +66,11 @@ export const getActivateSheetTool = (
   const activateSheetTool = new DesktopTool({
     server,
     name: 'activate-sheet',
+    title,
     description:
       'Activate an existing worksheet or dashboard by exact name after validating it against a fresh live-workbook read.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,
@@ -92,11 +103,19 @@ export const getActivateSheetTool = (
               ).toErr();
             case 'not-found':
               return new ActivateSheetNotFoundError(sheetName, activation.availableSheets).toErr();
+            case 'already-active':
+              return new Ok({
+                focus_requested: false,
+                sheetName,
+                message: `Sheet "${sheetName}" was already the active sheet; nothing was dispatched.`,
+                previousSheet: activation.previousSheet,
+                availableSheets: activation.availableSheets,
+              });
             case 'activated':
               return new Ok({
-                activated: true,
+                focus_requested: true,
                 sheetName,
-                message: `Activated sheet "${sheetName}".`,
+                message: `Requested focus on sheet "${sheetName}".`,
                 ...(activation.previousSheet ? { previousSheet: activation.previousSheet } : {}),
                 availableSheets: activation.availableSheets,
               });

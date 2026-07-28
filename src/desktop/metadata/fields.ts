@@ -3,6 +3,12 @@
  * Note: Ordering matters for all field operations
  */
 
+import { resolveDerivation } from '../derivations.js';
+import {
+  forEachRelationColumn,
+  inferFieldTypeFromType,
+  inferRoleFromType,
+} from './field-builder.js';
 import { parseColumnInstanceRef, parseDatasourceQualifiedColumnRef } from './field-resolver.js';
 import { emitFieldRewrite } from './field-rewrite-listener.js';
 import { normalizeArray, parseXML, serializeXML } from './parser.js';
@@ -388,23 +394,61 @@ export function moveFieldInCols(worksheetXml: string, columnRef: string, newInde
 }
 
 /**
- * Internal helper to parse shelf value into array
+ * Parse a shelf value into pill refs. Shelf text uses "/" between pills, while field
+ * names can also contain "/" inside bracketed column-instance refs.
  */
-function parseShelfValue(value: string | string[] | undefined): string[] {
+export function parseShelfValue(value: string | string[] | undefined): string[] {
   if (!value) {
     return [];
   }
   if (typeof value === 'string') {
-    // Split by '/' separator (custom language format)
-    return value
-      .split('/')
-      .map((s) => s.trim())
-      .filter(Boolean);
+    return splitShelfString(value);
   }
   if (Array.isArray(value)) {
-    return value.map((v) => (typeof v === 'string' ? v.trim() : String(v).trim())).filter(Boolean);
+    return value.flatMap((v) => splitShelfString(typeof v === 'string' ? v : String(v)));
   }
   return [];
+}
+
+function splitShelfString(value: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let inBracketedName = false;
+
+  const pushCurrent = (): void => {
+    const trimmed = current.trim();
+    if (trimmed) {
+      parts.push(trimmed);
+    }
+    current = '';
+  };
+
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i];
+    if (char === '[' && !inBracketedName) {
+      inBracketedName = true;
+      current += char;
+      continue;
+    }
+    if (char === ']' && inBracketedName) {
+      if (value[i + 1] === ']') {
+        current += ']]';
+        i++;
+        continue;
+      }
+      inBracketedName = false;
+      current += char;
+      continue;
+    }
+    if (char === '/' && !inBracketedName) {
+      pushCurrent();
+      continue;
+    }
+    current += char;
+  }
+
+  pushCurrent();
+  return parts;
 }
 
 /**
@@ -416,42 +460,14 @@ function serializeShelfValue(fields: string[]): string {
 }
 
 /**
- * Map lowercase derivation abbreviations to proper-case derivation names
- * Column-instance names use lowercase (e.g., [ctd:Field:qk]) but derivation attributes use proper case (CountD)
+ * Map a lowercase derivation abbreviation to its canonical derivation name.
+ * Column-instance names use lowercase (e.g. [ctd:Field:qk]); derivation attributes
+ * use the canonical long form (CountD). Resolution lives in one table — see
+ * `src/desktop/derivations.ts` — and an unrecognized prefix throws rather than
+ * being echoed into the attribute.
  */
 function mapDerivationToProperCase(abbrev: string): string {
-  const derivationMap: Record<string, string> = {
-    none: 'None',
-    sum: 'Sum',
-    avg: 'Avg',
-    min: 'Min',
-    max: 'Max',
-    count: 'Count',
-    ctd: 'CountD', // Count Distinct
-    countd: 'CountD',
-    user: 'User',
-    median: 'Median',
-    stdev: 'Stdev',
-    stdevp: 'StdevP',
-    var: 'Var',
-    varp: 'VarP',
-    attr: 'Attr',
-    // Discrete date parts. Without these, a ref like [mn:Order Date:ok] was
-    // written with derivation="mn" (invalid), so Tableau silently coerced the
-    // pill back to a plain date — collapsing YoY/seasonal overlays into one line.
-    yr: 'Year',
-    qr: 'Quarter',
-    mn: 'Month',
-    wk: 'Week',
-    dy: 'Day',
-    // Truncated (continuous) date parts use the "<Part>-Trunc" form.
-    tyr: 'Year-Trunc',
-    tqr: 'Quarter-Trunc',
-    tmn: 'Month-Trunc',
-    twk: 'Week-Trunc',
-    tdy: 'Day-Trunc',
-  };
-  return derivationMap[abbrev.toLowerCase()] || abbrev;
+  return resolveDerivation(abbrev);
 }
 
 // Date-part derivations whose column-instance type must follow the ref's pivot
@@ -533,6 +549,102 @@ function getDatasourceCaption(
   }
 }
 
+/** A source declared this column; `datatype` is absent when it named no type. */
+type ColumnMatch = { datatype: string | undefined };
+
+/** Only a non-empty string is a type. An empty element parses to `{}`, not text. */
+function usableDatatype(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+/** First relation column with this name, at any nesting depth. */
+function matchRelationColumn(relations: any[], columnName: string): ColumnMatch | undefined {
+  let match: ColumnMatch | undefined;
+  forEachRelationColumn(relations, (col) => {
+    if (match) return;
+    const name = col['@_name'];
+    if (!name) return;
+    const bracketed = String(name).startsWith('[') ? String(name) : `[${String(name)}]`;
+    if (bracketed !== columnName) return;
+    match = { datatype: usableDatatype(col['@_datatype']) };
+  });
+  return match;
+}
+
+/** First `<metadata-record class="column">` with this local-name. */
+function matchMetadataRecord(connection: any, columnName: string): ColumnMatch | undefined {
+  for (const record of normalizeArray(connection['metadata-records']?.['metadata-record'])) {
+    if (record['@_class'] !== 'column') continue;
+    const localName = record['local-name'];
+    if (!localName) continue;
+    const bracketed = String(localName).startsWith('[')
+      ? String(localName)
+      : `[${String(localName)}]`;
+    if (bracketed !== columnName) continue;
+    return { datatype: usableDatatype(record['local-type']) };
+  }
+  return undefined;
+}
+
+function buildColumnFromDatatype(name: string, datatype: string | undefined): any {
+  return {
+    '@_name': name,
+    '@_datatype': datatype ?? 'string',
+    '@_role': inferRoleFromType(datatype),
+    '@_type': inferFieldTypeFromType(datatype),
+  };
+}
+
+/**
+ * Recover a column definition that exists only under <connection> — either in a
+ * relation's <columns> or in <metadata-records>. Mirrors the sources
+ * listAvailableFields reads, IN THE SAME ORDER: the reader keeps the first
+ * source that names a column and it reads relations before metadata-records, so
+ * a writer that read metadata-records first injected `date` for a field the
+ * reader had advertised as `datetime`.
+ */
+function getColumnFromConnection(ds: any, columnName: string): any {
+  const connection = ds.connection;
+  if (!connection) {
+    return undefined;
+  }
+
+  const fromRelation = matchRelationColumn(normalizeArray(connection.relation), columnName);
+  const fromMetadata = matchMetadataRecord(connection, columnName);
+
+  if (!fromRelation && !fromMetadata) {
+    return undefined;
+  }
+
+  // A source that names the column but no type must not shadow one that carries
+  // the real type — defaulting to `string` there is how a Month derivation
+  // landed on a date column. `string` stays only when no source names a type.
+  return buildColumnFromDatatype(columnName, fromRelation?.datatype ?? fromMetadata?.datatype);
+}
+
+/**
+ * True when the workbook declares this datasource. A miss means the caller keyed
+ * the datasource differently, not that the column is absent — so it must not be
+ * treated as proof the field does not exist.
+ */
+function workbookDeclaresDatasource(
+  workbookXml: string | undefined,
+  datasourceName: string,
+): boolean {
+  if (!workbookXml) {
+    return false;
+  }
+  try {
+    const workbook = parseXML(workbookXml).workbook;
+    if (!workbook) return false;
+    return normalizeArray(workbook.datasources?.datasource).some(
+      (d: any) => d['@_name'] === datasourceName,
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Look up column definition from workbook datasource
  * Returns the full column definition including calculation elements
@@ -563,7 +675,15 @@ function getColumnFromWorkbook(
     // Look for column in datasource
     const columns = normalizeArray(ds.column);
     const column = columns.find((col: any) => col['@_name'] === columnName);
-    return column;
+    if (column) {
+      return column;
+    }
+
+    // A field Tableau has never customized carries NO <column> element — it exists
+    // only under <connection>. listAvailableFields advertises those refs, so this
+    // lookup must read the same sources or a real field reads as missing and gets
+    // fabricated with a datatype guessed from the derivation prefix.
+    return getColumnFromConnection(ds, columnName);
   } catch {
     // If parsing fails, return undefined
     return undefined;
@@ -742,6 +862,16 @@ function ensureColumnInstanceInDependencies(
             }
           }
         }
+      } else if (workbookDeclaresDatasource(workbookXml, datasource)) {
+        // The workbook was available, the datasource matched, and the column is in
+        // none of its definitions. A fabricated column paints a blank or wrong view
+        // and Tableau reports no load error, so refuse rather than invent one.
+        throw new Error(
+          `Column ${parsedCorrected.column} does not exist in datasource "${datasource}". ` +
+            'Call list-available-fields with the session for a valid columnRef — it re-reads ' +
+            'the live workbook, so a field you just added in Desktop cannot be hidden by a ' +
+            'stale cache.',
+        );
       } else {
         // Fallback: create a basic column definition if not found in workbook
         // Infer type from derivation: Sum/Avg/Min/Max/Count/CountD/User → quantitative, None → nominal

@@ -68,7 +68,14 @@ export function injectTemplate(
   stripNavigationFlags(windowToInject);
 
   const wbRecord = wb as Record<string, unknown>;
-  if (!wbRecord[container]) wbRecord[container] = {};
+  const existingContainer = wbRecord[container];
+  if (
+    !existingContainer ||
+    typeof existingContainer !== 'object' ||
+    Array.isArray(existingContainer)
+  ) {
+    wbRecord[container] = {};
+  }
   const containerRecord = wbRecord[container] as Record<string, unknown>;
   const existingSheets = normalizeArray<unknown>(containerRecord[element]);
   existingSheets.push(sheetToInject);

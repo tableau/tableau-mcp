@@ -36,8 +36,15 @@
  * picks it up uniformly.
  */
 
-/** Template field name of the optional small-multiples facet slot (W27-B). */
-const FACET_FIELD = 'Facet';
+/** Minimal manifest slot shape needed to locate an optional facet generically. */
+export interface FacetSlotReference {
+  slot_id?: string;
+  template_field: string;
+  required: boolean;
+  bindable?: boolean;
+  kind?: string;
+  role?: readonly string[];
+}
 
 interface ParsedInstanceValue {
   deriv: string;
@@ -64,13 +71,97 @@ function typeForRole(role: string): string {
   return 'nominal';
 }
 
-/** The facet mapping value, from the bare `Facet` key or a `Facet@<deriv>` key. */
-function resolveFacetMappingValue(fieldMapping: Record<string, string>): string | null {
-  if (fieldMapping[FACET_FIELD] != null) return fieldMapping[FACET_FIELD];
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+interface ResolvedFacet {
+  templateField: string;
+  value: string;
+  shelf?: 'rows' | 'cols';
+}
+
+function mappingValue(
+  fieldMapping: Record<string, string>,
+  templateField: string,
+  slotId?: string,
+): string | null {
+  for (const key of [templateField, slotId]) {
+    if (key && fieldMapping[key] != null) return fieldMapping[key];
+  }
   for (const [k, v] of Object.entries(fieldMapping)) {
-    if (k === FACET_FIELD || k.startsWith(`${FACET_FIELD}@`)) return v;
+    if (k.startsWith(`${templateField}@`) || (slotId !== undefined && k.startsWith(`${slotId}@`))) {
+      return v;
+    }
   }
   return null;
+}
+
+/** Resolve the bound optional categorical facet from manifest metadata. */
+function resolveFacet(
+  fieldMapping: Record<string, string>,
+  slots?: readonly FacetSlotReference[],
+  templateXml?: string,
+): ResolvedFacet | null {
+  const candidates = (slots ?? [])
+    .filter(
+      (slot) =>
+        slot.bindable !== false &&
+        !slot.required &&
+        slot.kind === 'categorical' &&
+        (slot.role?.includes('rows') || slot.role?.includes('cols')),
+    )
+    .map((slot): ResolvedFacet | null => {
+      const value = mappingValue(fieldMapping, slot.template_field, slot.slot_id);
+      const shelf = slot.role?.includes('rows')
+        ? ('rows' as const)
+        : slot.role?.includes('cols')
+          ? ('cols' as const)
+          : undefined;
+      return value ? { templateField: slot.template_field, value, shelf } : null;
+    })
+    .filter((candidate): candidate is ResolvedFacet => candidate !== null);
+
+  if (candidates.length > 1) {
+    throw new Error('facet splice: multiple bound optional categorical facet slots are ambiguous');
+  }
+  if (candidates.length === 1) return candidates[0];
+
+  // Manifest-less direct callers can still identify the migrated facet
+  // structurally: it is the one mapped field placeholder declared as a
+  // dimension base column with no authored column-instance.
+  if (templateXml) {
+    const structuralCandidates = Object.entries(fieldMapping)
+      .map(([key, value]) => ({ key: key.replace(/@[A-Za-z][A-Za-z0-9-]*$/, ''), value }))
+      .filter(({ key }) => /^\{\{field_base_[1-9]\d*\}\}$/.test(key))
+      .filter(({ key }) => {
+        const escaped = escapeRegex(key);
+        return (
+          new RegExp(
+            `<column\\s[^>]*\\bname=['"]\\[${escaped}\\]['"][^>]*\\brole=['"]dimension['"]`,
+          ).test(templateXml) &&
+          !new RegExp(`<column-instance\\s[^>]*\\bcolumn=['"]\\[${escaped}\\]['"]`).test(
+            templateXml,
+          )
+        );
+      });
+    if (structuralCandidates.length > 1) {
+      throw new Error(
+        'facet splice: multiple structural placeholder facet candidates are ambiguous',
+      );
+    }
+    if (structuralCandidates.length === 1) {
+      return {
+        templateField: structuralCandidates[0].key,
+        value: structuralCandidates[0].value,
+      };
+    }
+  }
+
+  // Backward compatibility for unmigrated templates and direct callers that do
+  // not yet pass manifest slots.
+  const legacyValue = mappingValue(fieldMapping, 'Facet');
+  return legacyValue ? { templateField: 'Facet', value: legacyValue } : null;
 }
 
 /** Map base column inner-name → role, scanning `<column …>` decls (never `<column-instance>`). */
@@ -150,20 +241,28 @@ function shelfBearsDimension(
 export function spliceBoundFacet(
   templateXml: string,
   fieldMapping: Record<string, string>,
+  slots?: readonly FacetSlotReference[],
 ): string {
-  const facetValue = resolveFacetMappingValue(fieldMapping);
-  if (facetValue == null) return templateXml; // no facet bound → identity
+  const facet = resolveFacet(fieldMapping, slots, templateXml);
+  if (facet == null) return templateXml; // no facet bound → identity
+  const { templateField, value: facetValue } = facet;
+  const escapedTemplateField = escapeRegex(templateField);
 
-  // The template must actually declare the optional facet slot (`[Facet]` base
+  // The template must actually declare the optional facet slot base
   // column). Otherwise the mapping key is not for this template → identity.
-  if (!/<column\s[^>]*\bname=['"]\[Facet\]['"]/.test(templateXml)) return templateXml;
+  if (
+    !new RegExp(`<column\\s[^>]*\\bname=['"]\\[${escapedTemplateField}\\]['"]`).test(templateXml)
+  ) {
+    return templateXml;
+  }
 
   const rows = shelfContent(templateXml, 'rows');
   const cols = shelfContent(templateXml, 'cols');
 
   // Already-on-shelf (template wires its own facet, e.g. box-plot-chart) → let the
   // core rewrite handle it; splicing again would duplicate the pill.
-  if ((rows && /:Facet:/.test(rows)) || (cols && /:Facet:/.test(cols))) {
+  const facetInstanceToken = new RegExp(`:${escapedTemplateField}:`);
+  if ((rows && facetInstanceToken.test(rows)) || (cols && facetInstanceToken.test(cols))) {
     return templateXml;
   }
 
@@ -182,7 +281,8 @@ export function spliceBoundFacet(
   const colsDim = cols != null && shelfBearsDimension(cols, instToBase, roles);
 
   let shelf: 'rows' | 'cols';
-  if (rowsDim && !colsDim) shelf = 'rows';
+  if (facet.shelf) shelf = facet.shelf;
+  else if (rowsDim && !colsDim) shelf = 'rows';
   else if (colsDim && !rowsDim) shelf = 'cols';
   else {
     // Both or neither shelf bears a resolvable dimension → cannot place the facet
@@ -195,7 +295,7 @@ export function spliceBoundFacet(
   // The intermediate pill is written with the TEMPLATE field name `Facet`; the
   // deriv/role/type come from the bound value so the intermediate is coherent, and
   // the next-stage core rewrite finalizes name + derivation to the bound field.
-  const instName = `[${parsed.deriv}:${FACET_FIELD}:${parsed.role}]`;
+  const instName = `[${parsed.deriv}:${templateField}:${parsed.role}]`;
   const pill = `[{{DATASOURCE}}].${instName}`;
 
   let out = templateXml.replace(
@@ -209,17 +309,21 @@ export function spliceBoundFacet(
   // Add the facet column-instance declaration (after the `[Facet]` base column,
   // keeping base columns grouped) only if the template lacks one. `derivation`
   // is a placeholder — the core rewrite overwrites it with the bound long form.
-  if (!/<column-instance[^>]*\bcolumn=['"]\[Facet\]['"]/.test(out)) {
-    const decl = `<column-instance column='[Facet]' derivation='None' name='${instName}' pivot='key' type='${typeForRole(
+  if (
+    !new RegExp(`<column-instance[^>]*\\bcolumn=['"]\\[${escapedTemplateField}\\]['"]`).test(out)
+  ) {
+    const decl = `<column-instance column='[${templateField}]' derivation='None' name='${instName}' pivot='key' type='${typeForRole(
       parsed.role,
     )}' />`;
     const withDecl = out.replace(
-      /([ \t]*)(<column\s[^>]*\bname=['"]\[Facet\]['"][^>]*\/>)/,
+      new RegExp(
+        `([ \\t]*)(<column\\s[^>]*\\bname=['"]\\[${escapedTemplateField}\\]['"][^>]*\\/>)`,
+      ),
       (_whole, indent: string, colDecl: string) => `${indent}${colDecl}\n${indent}${decl}`,
     );
     if (withDecl === out) {
       throw new Error(
-        'facet splice: [Facet] base column declaration not found for instance insertion',
+        `facet splice: [${templateField}] base column declaration not found for instance insertion`,
       );
     }
     out = withDecl;

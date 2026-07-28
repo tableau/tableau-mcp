@@ -2,18 +2,24 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
+import {
+  BARE_COMMAND_FAILURE_GUIDANCE,
+  isBareCommandFailure,
+} from '../desktop/commands/workbook/applyFailureClassifier.js';
 import type { GetDashboardXmlError } from '../desktop/commands/workbook/getDashboardXml.js';
 import type { GetWorksheetXmlError } from '../desktop/commands/workbook/getWorksheetXml.js';
 import type { LoadDashboardXmlError } from '../desktop/commands/workbook/loadDashboardXml.js';
 import type { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWorkbookXml.js';
 import type { LoadWorksheetXmlError } from '../desktop/commands/workbook/loadWorksheetXml.js';
 import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor.js';
+import {
+  type StructuredResult,
+  type WireStructuredContent,
+  wireStructuredContent,
+} from '../tools/desktop/structuredContent.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
-// The load-*-xml error union carries Desktop's own rejection text on its message-bearing
-// variants (load-rejected / readback-failed), already formatted for the agent by
-// applyFailureClassifier. Surface that text directly instead of JSON.stringify-wrapping it;
-// fall back to JSON only for the structural variants that carry no message string.
+// Load XML errors preserve Desktop's message when present; otherwise serialize structural errors.
 function xmlLoadErrorMessage(
   error: LoadWorkbookXmlError | LoadWorksheetXmlError | LoadDashboardXmlError,
 ): string {
@@ -59,6 +65,36 @@ export class McpToolError extends Error {
 
   toErr(): Err<this> {
     return new Err(this);
+  }
+}
+
+/**
+ * Signals that a multi-step operation did not fully complete while preserving
+ * the complete machine-readable recovery payload in the MCP error body.
+ */
+export class IncompleteOperationError<T extends object> extends McpToolError {
+  readonly structuredContent?: WireStructuredContent;
+  private readonly recoveryPayload: StructuredResult<T>;
+
+  constructor(recoveryPayload: StructuredResult<T>) {
+    super({
+      type: 'incomplete-operation',
+      message: 'The requested operation did not complete.',
+      statusCode: 409,
+    });
+    this.recoveryPayload = recoveryPayload;
+    const { structuredContent, ...body } = recoveryPayload;
+    // A client that prefers structuredContent never reads getErrorText() below, so the
+    // recovery payload has to ride in the block too — otherwise the agent is told only
+    // "do this next" with no record of which asks failed or how far the operation got.
+    this.structuredContent = structuredContent
+      ? wireStructuredContent(body, structuredContent)
+      : undefined;
+  }
+
+  override getErrorText(): string {
+    const { structuredContent: _, ...body } = this.recoveryPayload;
+    return JSON.stringify(body);
   }
 }
 
@@ -308,9 +344,13 @@ function formatDesktopCommandExecutionError(error: ExecuteCommandError): string 
   }
 
   const tableauErrorCode = commandError['tableau-error-code'];
-  return typeof tableauErrorCode === 'string' && tableauErrorCode.length > 0
-    ? `${message}\ntableau-error-code: ${tableauErrorCode}`
-    : message;
+  const formattedMessage =
+    typeof tableauErrorCode === 'string' && tableauErrorCode.length > 0
+      ? `${message}\ntableau-error-code: ${tableauErrorCode}`
+      : message;
+  return isBareCommandFailure(message)
+    ? `${formattedMessage}\n${BARE_COMMAND_FAILURE_GUIDANCE}`
+    : formattedMessage;
 }
 
 export class WorkbookXmlLoadFailedError extends McpToolError {

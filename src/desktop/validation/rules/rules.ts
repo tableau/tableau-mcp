@@ -18,6 +18,7 @@ import { invalidDerivationStringRule } from './invalidDerivationString.js';
 import { malformedSetGroupfilterRule } from './malformedSetGroupfilter.js';
 import { malformedTopNFilterRule } from './malformedTopNFilter.js';
 import { mixedAggregationCalcRule } from './mixedAggregationCalc.js';
+import { nonPositiveFilterCountRule } from './nonPositiveFilterCount.js';
 import { parameterFieldOnShelfRule } from './parameterFieldOnShelf.js';
 import { placeholderDatasourceRefRule } from './placeholderDatasourceRef.js';
 import { qualifiedNameBracketsRule } from './qualifiedNameBrackets.js';
@@ -52,6 +53,7 @@ export const validationRules = [
   setCountMalformedParameterRule,
   malformedSetGroupfilterRule,
   malformedTopNFilterRule,
+  nonPositiveFilterCountRule,
   calcNameFieldCollisionRule,
   mixedAggregationCalcRule,
   aggregateCalcDerivationRule,

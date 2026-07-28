@@ -2,7 +2,10 @@ import {
   parseColumnInstanceRef,
   parseDatasourceQualifiedColumnRef,
 } from '../metadata/field-resolver.js';
-import type { OptionalFieldPruneSpec } from '../templates/optionalFieldPrune.js';
+import {
+  optionalFieldPrunesFor,
+  type OptionalFieldPruneSpec,
+} from '../templates/optionalFieldPrune.js';
 import { loadManifests } from './manifest.js';
 import type { Derivation, SlotSpec, TemplateManifest } from './manifest-types.js';
 import { bareName, type SchemaField, type SchemaSummary } from './schema-summary.js';
@@ -43,6 +46,8 @@ export type ExplicitBindResult =
       datasource: string;
       fieldMapping: Record<string, string>;
       fieldMetadata: Record<string, { datatype: string; type: string }>;
+      consumedFieldRefs: string[];
+      templateSlots: SlotSpec[];
       optionalFieldPrunes: OptionalFieldPruneSpec[];
       warnings: string[];
       passthrough: boolean;
@@ -64,6 +69,17 @@ interface ProposalBuild {
   proposal: BindingProposal;
   fieldBySlot: Map<string, SchemaField>;
   warnings: string[];
+}
+
+interface GreedyAssignment {
+  slot: SlotSpec;
+  field: SchemaField;
+  affinityPlaced: boolean;
+}
+
+interface CompatibleSourceSelection {
+  source: ResolvedSource;
+  affinityPlaced: boolean;
 }
 
 export function schemaSummaryFromAvailableFields(fields: AvailableFieldLike[]): SchemaSummary {
@@ -106,12 +122,15 @@ export function bindExplicitTemplate(
   }
 
   if (!manifest) {
+    const fieldMapping = Array.isArray(input) ? (opts.passthroughFieldMapping ?? {}) : input;
     return {
       ok: true,
       template: templateName,
       datasource: opts.datasource ?? schema.datasource,
-      fieldMapping: Array.isArray(input) ? (opts.passthroughFieldMapping ?? {}) : input,
+      fieldMapping,
       fieldMetadata: {},
+      consumedFieldRefs: Object.values(fieldMapping),
+      templateSlots: [],
       optionalFieldPrunes: [],
       warnings: [
         manifestLayerUnavailable
@@ -145,6 +164,8 @@ export function bindExplicitTemplate(
     datasource: rawDatasourceFor(built.fieldBySlot, opts.datasource ?? schema.datasource),
     fieldMapping: emitRawFieldMapping(manifest, built.fieldBySlot),
     fieldMetadata: fieldMetadataFor(manifest, built.fieldBySlot),
+    consumedFieldRefs: consumedFieldRefsFor(manifest, built.fieldBySlot),
+    templateSlots: manifest.slots,
     optionalFieldPrunes: optionalFieldPrunesFor(manifest, built.fieldBySlot),
     warnings: [...warnings, ...(validation.warnings ?? [])],
     passthrough: false,
@@ -188,21 +209,44 @@ function buildProposalFromOrderedRefs(
   const reusableByTemplateField = new Map<string, ResolvedSource>();
   const fieldBySlot = new Map<string, SchemaField>();
   const bindings: BindingProposal['bindings'] = [];
+  const greedyAssignments: GreedyAssignment[] = [];
 
-  for (const slot of manifest.slots) {
-    if (!slot.bindable) continue;
-    const source = takeCompatibleSource(slot, sources, used, reusableByTemplateField);
-    if (!source) continue;
+  const orderedSlots = manifest.slots.filter((slot) => slot.bindable);
+  for (const [index, slot] of orderedSlots.entries()) {
+    if (shouldReserveCategoricalSource(slot, orderedSlots.slice(index + 1), sources, used)) {
+      continue;
+    }
+    const selection = takeCompatibleSource(slot, sources, used, reusableByTemplateField);
+    if (!selection) continue;
+    const { source, affinityPlaced } = selection;
     reusableByTemplateField.set(slot.template_field, source);
     fieldBySlot.set(slot.slot_id, source.field);
     bindings.push({ slot_id: slot.slot_id, field: source.field.name });
+    greedyAssignments.push({ slot, field: source.field, affinityPlaced });
   }
+  appendCategoricalSwapWarning(warnings, greedyAssignments);
 
   return {
     proposal: { template: manifest.template, title: title ?? manifest.template, bindings },
     fieldBySlot,
     warnings,
   };
+}
+
+function shouldReserveCategoricalSource(
+  slot: SlotSpec,
+  laterSlots: SlotSpec[],
+  sources: ResolvedSource[],
+  used: Set<SchemaField>,
+): boolean {
+  if (slot.required || slot.kind !== 'categorical') return false;
+  const compatible = sources.filter(
+    (source) => !used.has(source.field) && kindCompatible(slot.kind, source.field),
+  );
+  const laterRequired = laterSlots.filter(
+    (candidate) => candidate.required && candidate.kind === 'categorical',
+  ).length;
+  return compatible.length <= laterRequired;
 }
 
 function buildProposalFromFieldMapping(
@@ -216,6 +260,7 @@ function buildProposalFromFieldMapping(
   const usedFields = new Set<SchemaField>();
   const fieldBySlot = new Map<string, SchemaField>();
   const bindings: BindingProposal['bindings'] = [];
+  const greedyAssignments: GreedyAssignment[] = [];
 
   for (const slot of manifest.slots) {
     if (!slot.bindable) continue;
@@ -243,12 +288,15 @@ function buildProposalFromFieldMapping(
 
   for (const slot of manifest.slots) {
     if (!slot.bindable || !slot.required || fieldBySlot.has(slot.slot_id)) continue;
-    const source = takeCompatibleSource(slot, remainingSources, usedFields, new Map());
-    if (!source) continue;
+    const selection = takeCompatibleSource(slot, remainingSources, usedFields, new Map());
+    if (!selection) continue;
+    const { source, affinityPlaced } = selection;
     usedFields.add(source.field);
     fieldBySlot.set(slot.slot_id, source.field);
     bindings.push({ slot_id: slot.slot_id, field: source.field.name });
+    greedyAssignments.push({ slot, field: source.field, affinityPlaced });
   }
+  appendCategoricalSwapWarning(warnings, greedyAssignments);
 
   return {
     proposal: { template: manifest.template, title: title ?? manifest.template, bindings },
@@ -262,18 +310,46 @@ function takeCompatibleSource(
   sources: ResolvedSource[],
   used: Set<SchemaField>,
   reusableByTemplateField: Map<string, ResolvedSource>,
-): ResolvedSource | null {
+): CompatibleSourceSelection | null {
   const reusable = reusableByTemplateField.get(slot.template_field);
-  if (reusable && kindCompatible(slot.kind, reusable.field)) return reusable;
+  if (reusable && kindCompatible(slot.kind, reusable.field)) {
+    return { source: reusable, affinityPlaced: false };
+  }
+
+  if (slot.kind === 'categorical') {
+    const affine = sources.filter(
+      (source) =>
+        !used.has(source.field) &&
+        kindCompatible(slot.kind, source.field) &&
+        fieldNameMatchesSlot(source.field, slot),
+    );
+    if (affine.length === 1) {
+      used.add(affine[0].field);
+      return { source: affine[0], affinityPlaced: true };
+    }
+  }
 
   for (const source of sources) {
     if (used.has(source.field)) continue;
     if (!kindCompatible(slot.kind, source.field)) continue;
     used.add(source.field);
-    return source;
+    return { source, affinityPlaced: false };
   }
 
   return null;
+}
+
+function fieldNameMatchesSlot(field: SchemaField, slot: SlotSpec): boolean {
+  if (slot.template_field.includes('{{')) return false;
+  const templateFieldName = normalizeComparableName(slot.template_field);
+  return [field.name, field.caption, bareName(field.columnName)]
+    .filter((name): name is string => typeof name === 'string')
+    .map(normalizeComparableName)
+    .some((name) => name === templateFieldName);
+}
+
+function normalizeComparableName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
 function mappingKeyForSlot(
@@ -366,6 +442,12 @@ function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
       return f.role === 'measure' || f.isAggregated;
     case 'categorical':
       return f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal');
+    case 'quantitative-or-categorical':
+      return (
+        f.role === 'measure' ||
+        f.isAggregated ||
+        (f.role === 'dimension' && (f.type === 'nominal' || f.type === 'ordinal'))
+      );
     case 'temporal':
       return TEMPORAL_DATATYPES.has(f.datatype);
     case 'geo':
@@ -373,6 +455,21 @@ function kindCompatible(kind: SlotSpec['kind'], f: SchemaField): boolean {
     default:
       return false;
   }
+}
+
+function appendCategoricalSwapWarning(warnings: string[], assignments: GreedyAssignment[]): void {
+  const categorical = assignments.filter(
+    ({ slot, field, affinityPlaced }) =>
+      !affinityPlaced && slot.kind === 'categorical' && field.role === 'dimension',
+  );
+  if (categorical.length < 2) return;
+
+  const landed = categorical
+    .map(({ slot, field }) => `field '${field.name}' landed on slot '${slot.slot_id}'`)
+    .join('; ');
+  warnings.push(
+    `Ambiguous categorical assignment: ${landed}. These categorical sources fit either slot and could swap when field order changes.`,
+  );
 }
 
 function suffixFor(derivation: Derivation, type: string): string {
@@ -391,7 +488,11 @@ function emitRawFieldMapping(
     if (!slot.bindable) continue;
     const field = fieldBySlot.get(slot.slot_id);
     if (!field) continue;
-    const deriv = field.isAggregated ? 'usr' : slot.derivation;
+    const deriv = field.isAggregated
+      ? 'usr'
+      : slot.kind === 'quantitative-or-categorical' && field.role === 'dimension'
+        ? 'none'
+        : slot.derivation;
     const key = slot.qualified_key_required
       ? `${slot.template_field}@${slot.derivation}`
       : slot.template_field;
@@ -417,24 +518,20 @@ function fieldMetadataFor(
   return metadata;
 }
 
-function optionalFieldPrunesFor(
+function consumedFieldRefsFor(
   manifest: TemplateManifest,
   fieldBySlot: Map<string, SchemaField>,
-): OptionalFieldPruneSpec[] {
-  return manifest.slots
-    .filter(
-      (slot) =>
-        slot.bindable &&
-        !slot.required &&
-        slot.kind === 'geo' &&
-        slot.role.includes('lod') &&
-        !fieldBySlot.has(slot.slot_id),
-    )
-    .map((slot) => ({
-      templateField: slot.template_field,
-      derivation: slot.derivation,
-      role: 'nk',
-    }));
+): string[] {
+  const refs: string[] = [];
+  const seen = new Set<string>();
+  for (const slot of manifest.slots) {
+    if (!slot.bindable) continue;
+    const ref = fieldBySlot.get(slot.slot_id)?.column_ref;
+    if (!ref || seen.has(ref)) continue;
+    seen.add(ref);
+    refs.push(ref);
+  }
+  return refs;
 }
 
 function rawDatasourceFor(fieldBySlot: Map<string, SchemaField>, fallback: string): string {

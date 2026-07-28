@@ -33,7 +33,6 @@ export const getReadCachedXmlTool = (
     description: 'Read cached content.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

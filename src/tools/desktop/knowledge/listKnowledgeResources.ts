@@ -19,7 +19,6 @@ export const getListKnowledgeResourcesTool = (
       'List expertise. For tasks prefer search-knowledge. Read by URI with read-knowledge-resource.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

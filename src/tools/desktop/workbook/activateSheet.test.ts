@@ -2,12 +2,8 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import {
-  activateSheetBestEffort,
-  activateSheetWithValidatedGoto,
-} from '../../../desktop/commands/workbook/activateSheet.js';
+import { activateSheetWithValidatedGoto } from '../../../desktop/commands/workbook/activateSheet.js';
 import type { ToolExecutor } from '../../../desktop/toolExecutor/toolExecutor.js';
-import * as loggerModule from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -55,7 +51,7 @@ function buildWorkbook({
 }
 
 const successSchema = z.object({
-  activated: z.literal(true),
+  focus_requested: z.boolean(),
   sheetName: z.string(),
   message: z.string(),
   previousSheet: z.string().optional(),
@@ -120,6 +116,26 @@ describe('activateSheetWithValidatedGoto', () => {
     expect(executeCommand).not.toHaveBeenCalled();
   });
 
+  it('dispatches nothing when the target window is already the maximized one', async () => {
+    const { executor, getWorkbookDocument, executeCommand } = makeExecutor({
+      xml: buildWorkbook({ activeSheetName: 'Beta' }),
+    });
+
+    const result = await activateSheetWithValidatedGoto({
+      sheetName: 'Beta',
+      executor,
+      signal,
+    });
+
+    expect(result).toEqual({
+      status: 'already-active',
+      previousSheet: 'Beta',
+      availableSheets: ['Alpha', 'Beta'],
+    });
+    expect(getWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
   it('accepts a dashboard found in the same fresh workbook read', async () => {
     const { executor, executeCommand } = makeExecutor({
       xml: buildWorkbook({ dashboardNames: ['Sales Dashboard'] }),
@@ -142,119 +158,6 @@ describe('activateSheetWithValidatedGoto', () => {
   });
 });
 
-describe('activateSheetBestEffort', () => {
-  const signal = new AbortController().signal;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('swallows a goto-sheet failure and logs the skipped activation', async () => {
-    const commandError = { type: 'command-timed-out' as const, error: 'activation timeout' };
-    const { executor } = makeExecutor({
-      executeResult: Err(commandError),
-    });
-    const logSpy = vi.spyOn(loggerModule, 'log').mockImplementation(() => undefined);
-
-    const activation = activateSheetBestEffort({
-      sheetName: 'Beta',
-      executor,
-      signal,
-    });
-
-    await vi.advanceTimersByTimeAsync(500);
-
-    await expect(activation).resolves.toBeUndefined();
-    expect(logSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        level: 'warning',
-        data: expect.objectContaining({ sheetName: 'Beta' }),
-      }),
-    );
-    logSpy.mockRestore();
-  });
-
-  it('does not navigate when validation cannot find the target', async () => {
-    const { executor, executeCommand } = makeExecutor({
-      xml: buildWorkbook({ worksheetNames: ['Alpha'] }),
-    });
-
-    const activation = activateSheetBestEffort({
-      sheetName: 'Beta',
-      executor,
-      signal,
-    });
-
-    await vi.advanceTimersByTimeAsync(500);
-
-    await expect(activation).resolves.toBeUndefined();
-    expect(executeCommand).not.toHaveBeenCalled();
-  });
-
-  it('waits for settle, verifies focus, and reissues goto-sheet once after snap-back', async () => {
-    const { executor, getWorkbookDocument, executeCommand } = makeExecutor({
-      xmlSequence: [
-        buildWorkbook({ activeSheetName: 'Alpha' }),
-        buildWorkbook({ activeSheetName: 'Alpha' }),
-        buildWorkbook({ activeSheetName: 'Alpha' }),
-      ],
-    });
-
-    const activation = activateSheetBestEffort({
-      sheetName: 'Beta',
-      executor,
-      signal,
-    });
-
-    await vi.advanceTimersByTimeAsync(499);
-    expect(executeCommand).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(1);
-    expect(executeCommand).toHaveBeenCalledTimes(1);
-    expect(executeCommand).toHaveBeenLastCalledWith(
-      expect.objectContaining({ command: 'goto-sheet', args: { Sheet: 'Beta' } }),
-    );
-
-    await vi.advanceTimersByTimeAsync(699);
-    expect(getWorkbookDocument).toHaveBeenCalledTimes(1);
-    expect(executeCommand).toHaveBeenCalledTimes(1);
-
-    await vi.advanceTimersByTimeAsync(1);
-    await expect(activation).resolves.toBeUndefined();
-    expect(getWorkbookDocument).toHaveBeenCalledTimes(2);
-    expect(executeCommand).toHaveBeenCalledTimes(2);
-    expect(executeCommand).toHaveBeenLastCalledWith(
-      expect.objectContaining({ command: 'goto-sheet', args: { Sheet: 'Beta' } }),
-    );
-  });
-
-  it('does not reissue goto-sheet when the verification read shows the target is focused', async () => {
-    const { executor, getWorkbookDocument, executeCommand } = makeExecutor({
-      xmlSequence: [
-        buildWorkbook({ activeSheetName: 'Alpha' }),
-        buildWorkbook({ activeSheetName: 'Beta' }),
-      ],
-    });
-
-    const activation = activateSheetBestEffort({
-      sheetName: 'Beta',
-      executor,
-      signal,
-    });
-
-    await vi.advanceTimersByTimeAsync(1200);
-
-    await expect(activation).resolves.toBeUndefined();
-    expect(getWorkbookDocument).toHaveBeenCalledTimes(2);
-    expect(executeCommand).toHaveBeenCalledTimes(1);
-  });
-});
-
 describe('activateSheetTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -269,12 +172,28 @@ describe('activateSheetTool', () => {
     invariant(result.content[0].type === 'text');
     const parsed = successSchema.parse(JSON.parse(result.content[0].text));
     expect(parsed.sheetName).toBe('Beta');
-    expect(parsed.message).toContain('Activated sheet "Beta"');
+    expect(parsed.focus_requested).toBe(true);
+    expect(parsed.message).toContain('Requested focus on sheet "Beta"');
     expect(parsed.previousSheet).toBe('Alpha');
     expect(parsed.availableSheets).toEqual(['Alpha', 'Beta']);
     expect(executeCommand).toHaveBeenCalledWith(
       expect.objectContaining({ command: 'goto-sheet', args: { Sheet: 'Beta' } }),
     );
+  });
+
+  it('reports focus_requested false when the sheet is already active', async () => {
+    const { executor, executeCommand } = makeExecutor({
+      xml: buildWorkbook({ activeSheetName: 'Beta' }),
+    });
+
+    const result = await getToolResult({ sheetName: 'Beta', executor });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = successSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.focus_requested).toBe(false);
+    expect(parsed.message).toContain('was already the active sheet');
+    expect(executeCommand).not.toHaveBeenCalled();
   });
 
   it('errors for an unknown sheet with the available sheets and issues no command', async () => {
@@ -288,7 +207,12 @@ describe('activateSheetTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Sheet "Missing" was not found');
     expect(result.structuredContent).toEqual({
+      message: result.content[0].text,
       availableSheets: ['Revenue "Q1"', 'Profit, YoY'],
+      nextAction: {
+        label: 'Choose an available sheet and retry',
+        kind: 'prefill',
+      },
     });
     expect(executeCommand).not.toHaveBeenCalled();
   });

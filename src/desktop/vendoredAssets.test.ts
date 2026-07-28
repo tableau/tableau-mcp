@@ -6,10 +6,13 @@
  * template's manifest without its XML, and the two loadable template dirs had
  * drifted. These tests make that drift class a CI failure instead of a live one.
  */
+import { createHash } from 'crypto';
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
 
 import { getDataRoot, getResourcesRoot } from './assets.js';
+
+type ContentManifestResource = { path: string; sha256: string; bytes: number };
 
 function listFileStems(dir: string, suffix: string): string[] {
   return readdirSync(dir, { withFileTypes: true })
@@ -33,6 +36,10 @@ function countFilesRecursively(dir: string, suffix: string): number {
 function diff(left: string[], right: string[]): string[] {
   const rightSet = new Set(right);
   return left.filter((name) => !rightSet.has(name));
+}
+
+function sha256(buffer: Buffer): string {
+  return createHash('sha256').update(buffer).digest('hex');
 }
 
 describe('desktop vendored assets', () => {
@@ -59,38 +66,78 @@ describe('desktop vendored assets', () => {
   it('keeps the two loadable template XML directories identical', () => {
     const templateXmlNames = listFileStems(templateXmlDir, '.xml');
     const legacyTemplateNames = listFileStems(legacyTemplatesDir, '.xml');
+    const commonNames = templateXmlNames.filter((name) => legacyTemplateNames.includes(name));
+    const byteMismatches = commonNames.flatMap((name) => {
+      const templateXml = readFileSync(join(templateXmlDir, `${name}.xml`));
+      const legacyTemplateXml = readFileSync(join(legacyTemplatesDir, `${name}.xml`));
+      return templateXml.equals(legacyTemplateXml)
+        ? []
+        : [
+            {
+              name,
+              dataVisualizationTemplatesXml: {
+                sha256: sha256(templateXml),
+                bytes: templateXml.byteLength,
+              },
+              templates: {
+                sha256: sha256(legacyTemplateXml),
+                bytes: legacyTemplateXml.byteLength,
+              },
+            },
+          ];
+    });
 
     expect({
       onlyInDataVisualizationTemplatesXml: diff(templateXmlNames, legacyTemplateNames),
       onlyInTemplates: diff(legacyTemplateNames, templateXmlNames),
-    }).toEqual({ onlyInDataVisualizationTemplatesXml: [], onlyInTemplates: [] });
+      byteMismatches,
+    }).toEqual({
+      onlyInDataVisualizationTemplatesXml: [],
+      onlyInTemplates: [],
+      byteMismatches: [],
+    });
   });
 
   it('declares every shipped template XML in content-manifest.json (regenerate on sync)', () => {
     // The provenance surface (BundledIntelligenceProvider.getContentManifest) must not
     // under-report shipped content: rerun buildTemplateManifests.ts after any vendor copy.
     const manifest = JSON.parse(readFileSync(join(dataRoot, 'content-manifest.json'), 'utf-8')) as {
-      resources: Array<{ path: string }>;
+      resources: ContentManifestResource[];
     };
     const declared = new Set(manifest.resources.map((r) => r.path));
     const undeclaredXml = listFileStems(templateXmlDir, '.xml')
       .map((name) => `data-visualization-templates-xml/${name}.xml`)
       .filter((p) => !declared.has(p));
+    const integrityMismatches = manifest.resources.flatMap((resource) => {
+      const bytes = readFileSync(join(dataRoot, resource.path));
+      const actual = { sha256: sha256(bytes), bytes: bytes.byteLength };
+      return actual.sha256 === resource.sha256 && actual.bytes === resource.bytes
+        ? []
+        : [{ path: resource.path, expected: resource, actual }];
+    });
 
-    expect(undeclaredXml).toEqual([]);
+    expect({ undeclaredXml, integrityMismatches }).toEqual({
+      undeclaredXml: [],
+      integrityMismatches: [],
+    });
   });
 
   it('ships template XML windows without focus-restoring active/maximized flags', () => {
-    const flaggedWindows = readdirSync(templateXmlDir, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && entry.name.endsWith('.xml'))
-      .flatMap((entry) => {
-        const xml = readFileSync(join(templateXmlDir, entry.name), 'utf-8');
-        return Array.from(xml.matchAll(/<windows\b[\s\S]*?<\/windows>/g)).flatMap((section) =>
-          Array.from(section[0].matchAll(/<window\b[^>]*(?:\bactive=|\bmaximized=)[^>]*>/g)).map(
-            (match) => `${entry.name}: ${match[0]}`,
-          ),
-        );
-      });
+    const flaggedWindows = [
+      ['data-visualization-templates-xml', templateXmlDir],
+      ['templates', legacyTemplatesDir],
+    ].flatMap(([label, dir]) =>
+      readdirSync(dir, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && entry.name.endsWith('.xml'))
+        .flatMap((entry) => {
+          const xml = readFileSync(join(dir, entry.name), 'utf-8');
+          return Array.from(xml.matchAll(/<windows\b[\s\S]*?<\/windows>/g)).flatMap((section) =>
+            Array.from(section[0].matchAll(/<window\b[^>]*(?:\bactive=|\bmaximized=)[^>]*>/g)).map(
+              (match) => `${label}/${entry.name}: ${match[0]}`,
+            ),
+          );
+        }),
+    );
 
     expect(flaggedWindows).toEqual([]);
   });

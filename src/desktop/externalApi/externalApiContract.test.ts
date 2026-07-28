@@ -39,7 +39,11 @@ import {
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
  *
  * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.1.0,
- * captured 2026-07-20.
+ * captured 2026-07-20 — PLUS one hand-applied edit: `DatasourceItem.luid`
+ * (["string","null"]) added ahead of the next capture, since the deployed spec
+ * had not yet surfaced the field when this shipped. Re-capture will replace it;
+ * if a future 0.1.x ever marks workbook `luid` required, this hand-edit would
+ * mask that until the next capture.
  */
 
 type SpecSchema = {

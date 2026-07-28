@@ -27,7 +27,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /** Bumped when the manifest/content SHAPE changes in a way consumers must react to. */
-const SCHEMA_VERSION = '1';
+const SCHEMA_VERSION = '2';
 const GENERATOR = 'src/scripts/buildTemplateManifests.ts';
 const RERUN = 'npx tsx src/scripts/buildTemplateManifests.ts';
 
@@ -83,6 +83,7 @@ console.log(`✅ Wrote ${relative(process.cwd(), INDEX_PATH)} (${templates.lengt
 // Hash every bundled authoring resource. Deterministic: files are enumerated in
 // sorted relative-path order, and `generated` is date-only so a same-day re-run
 // produces no spurious diff. content-manifest.json itself is excluded.
+// Flag-only windows-section edits can change XML hashes while leaving render-affecting bytes unchanged; retained render_verified evidence is deliberate.
 const resourcePaths = [
   ...manifestFiles.map((f) => join(MANIFESTS_DIR, f)),
   INDEX_PATH,

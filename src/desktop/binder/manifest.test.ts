@@ -11,6 +11,8 @@ import {
   loadManifests,
   MANIFEST_INDEX_PATH,
   MANIFESTS_DIR,
+  MAX_SLOT_EXAMPLE_CHARS,
+  MAX_SLOT_EXAMPLES,
   validateManifest,
 } from './manifest.js';
 import type { SlotSpec, TemplateManifest } from './manifest-types.js';
@@ -98,8 +100,59 @@ describe('binder/manifest — loader + shape', () => {
     badPredicate.fast_path_eligible = false;
     expect(validateManifest(badPredicate).join(' ')).toMatch(/fast_path_eligible/);
 
+    const badPurpose = structuredClone(base);
+    badPurpose.slots[0].purpose = '   ';
+    expect(validateManifest(badPurpose).join(' ')).toMatch(/purpose/);
+
+    const goodExamples = structuredClone(base);
+    goodExamples.slots[0].examples = ['Country', 'Product Line'];
+    expect(validateManifest(goodExamples)).toEqual([]);
+
+    const emptyExamples = structuredClone(base);
+    emptyExamples.slots[0].examples = [];
+    expect(validateManifest(emptyExamples).join(' ')).toMatch(/examples/);
+
+    const blankExample = structuredClone(base);
+    blankExample.slots[0].examples = ['Country', '   '];
+    expect(validateManifest(blankExample).join(' ')).toMatch(/examples/);
+
+    const tooManyExamples = structuredClone(base);
+    tooManyExamples.slots[0].examples = Array.from(
+      { length: MAX_SLOT_EXAMPLES + 1 },
+      (_, i) => `Example ${i}`,
+    );
+    expect(validateManifest(tooManyExamples).join(' ')).toMatch(/examples/);
+
+    const tooLongExample = structuredClone(base);
+    tooLongExample.slots[0].examples = ['x'.repeat(MAX_SLOT_EXAMPLE_CHARS + 1)];
+    expect(validateManifest(tooLongExample).join(' ')).toMatch(/examples/);
+
+    const examplesWithoutPurpose = structuredClone(base);
+    delete examplesWithoutPurpose.slots[0].purpose;
+    examplesWithoutPurpose.slots[0].examples = ['Country'];
+    expect(validateManifest(examplesWithoutPurpose).join(' ')).toMatch(/examples require purpose/);
+
+    const malformedPlaceholder = structuredClone(base);
+    malformedPlaceholder.slots[0].template_field = '{{field_1}}';
+    expect(validateManifest(malformedPlaceholder).join(' ')).toMatch(/template_field.*placeholder/);
+
     expect(validateManifest(null).length).toBeGreaterThan(0);
     expect(validateManifest({}).length).toBeGreaterThan(0);
+  });
+});
+
+describe('binder/manifest — migrated pilot slot examples', () => {
+  it('the three placeholder-migrated pilots carry examples on every bindable slot', () => {
+    for (const template of ['deviation-diverging-bar', 'ranking-ordered-bar', 'trend-line-chart']) {
+      const m = manifests.get(template);
+      expect(m, `${template} manifest present`).toBeDefined();
+      for (const slot of m!.slots.filter((candidate) => candidate.bindable)) {
+        expect(
+          slot.examples && slot.examples.length,
+          `${template}:${slot.slot_id} examples[] populated`,
+        ).toBeGreaterThanOrEqual(2);
+      }
+    }
   });
 });
 

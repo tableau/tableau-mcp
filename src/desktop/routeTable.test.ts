@@ -46,18 +46,65 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(rendered).toContain('Use search-commands ONLY for unlisted commands.');
   });
 
-  it('routes calc-derived-field asks through the dynamic-authoring verbs', () => {
-    const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
-    expect(rendered).toContain(
-      'or a calc/derived field the data lacks (ratio, running total, LOD)',
-    );
-    expect(rendered).toContain('author-calc');
-    expect(rendered).not.toMatch(/tabui:.*document/i);
+  // Live incident (v11 bundle): asked to move "warmer" onto color, the agent had no route
+  // for an encoding edit. refine-worksheet does top-N and sort only, so the edit-in-place
+  // route has to name the tool pair that can re-encode a sheet.
+  it('names add-field then apply-worksheet as the encoding edit path', () => {
+    const editInPlace = routes.find((route) => route.id === 'edit-in-place');
+
+    expect(editInPlace?.action).toContain('add-field');
+    expect(editInPlace?.action).toContain('apply-worksheet');
+    expect(editInPlace?.action).toContain('color');
+    expect(editInPlace?.toolSequence).toEqual([
+      'list-worksheets',
+      'list-dashboards',
+      'ask-user',
+      'refine-worksheet',
+      'add-field',
+      'apply-worksheet',
+      'bind-template',
+    ]);
   });
 
-  it('directs the agent to load the authoring skill before building', () => {
+  it('census scopes refine-worksheet to top-N/sort and names the encoding pair', () => {
     const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
-    expect(rendered).toContain('tableau-desktop-authoring');
+
+    expect(rendered).toContain('refine-worksheet edits top-N/sort');
+    expect(rendered).toContain('add-field + apply-worksheet change encodings.');
+  });
+
+  it('carves named derived metrics out of the dynamic-authoring route', () => {
+    const dynamicAuthoring = routes.find((route) => route.id === 'dynamic-authoring');
+
+    expect(dynamicAuthoring?.trigger).toBe(
+      'a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional name (a named ratio/margin/growth ask routes via calc-then-bind; examples here include running total and LOD)',
+    );
+    expect(dynamicAuthoring?.action).toContain('author-calc');
+  });
+
+  it('passes a noun-less derived metric through bind-template calcs in one call', () => {
+    const calcThenBind = routes.find((route) => route.id === 'calc-then-bind');
+
+    expect(calcThenBind?.trigger).toContain('no named chart type');
+    expect(calcThenBind?.action).toBe(
+      'FIRST pass its conventional calc in ONE bind-template(auto_apply:true) call via calcs[], binding its caption (for example, gross margin % = (SUM(Revenue)-SUM(COGS))/SUM(Revenue); a proposal still resolves via Call 2). Only after a formula/field-resolution failure, search-knowledge, then make ONE corrective bind-template call.',
+    );
+    expect(calcThenBind?.action).not.toContain('opex');
+    expect(calcThenBind?.toolSequence).toEqual(['bind-template', 'search-knowledge']);
+    expect(calcThenBind?.stopConditions).toEqual([
+      'ONE bind-template(auto_apply:true) call',
+      'Only after a formula/field-resolution failure',
+      'ONE corrective bind-template call',
+    ]);
+    expect(calcThenBind?.requiredEvidence).toEqual([
+      'authored_calcs returned by successful bind-template',
+    ]);
+  });
+
+  it('is self-contained and does not require skill loading', () => {
+    const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
+    expect(rendered).not.toContain('tableau-desktop-authoring');
+    expect(rendered).not.toContain('tableau-agent-debug');
   });
 
   it('caps targeted knowledge consultation at one read before authoring proceeds', () => {
@@ -77,14 +124,52 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(routeIds.indexOf('plain-chart')).toBeLessThan(routeIds.indexOf('knowledge-consult'));
   });
 
-  it('teaches plain-chart proposals may carry sort and top_n', () => {
+  it('names the full two-call bind sequence without manual authoring between calls', () => {
     const plainChart = routes.find((route) => route.id === 'plain-chart');
+    expect(plainChart?.action).toContain('Call 1');
+    expect(plainChart?.action).toContain('Call 2');
+    expect(plainChart?.action).toContain('same ask/target');
+    expect(plainChart?.action).toContain('auto_apply:true');
+    expect(plainChart?.action).toContain(
+      'Do not use manual authoring tools between Call 1 and Call 2',
+    );
     expect(plainChart?.action).toContain('proposals may carry sort and top_n.');
   });
 
-  it('names the debug skill by its exact slug so recovery does not rely on description-matching', () => {
-    const rendered = generateDesktopInstructions(DESKTOP_ROUTE_TABLE);
-    expect(rendered).toContain('tableau-agent-debug');
+  it('forbids orientation reads before the first bind attempt', () => {
+    const plainChart = routes.find((route) => route.id === 'plain-chart');
+
+    expect(plainChart?.action).toContain(
+      'Never call list-available-fields or get-worksheet-xml to orient before bind-template',
+    );
+    expect(plainChart?.action).toContain('reads schema');
+    expect(plainChart?.action).toContain('failed binds propose candidate fields');
+    expect(plainChart?.action).toContain(
+      'Never call list-available-fields or get-worksheet-xml to orient before bind-template',
+    );
+    expect(plainChart?.action).toContain('author-parameter/author-set may list fields first');
+  });
+
+  it('asks only when ambiguity changes written workbook content', () => {
+    const ambiguity = DESKTOP_ROUTE_TABLE.find((entry) => entry.id === 'ask-user-ambiguity');
+
+    expect(ambiguity).toMatchObject({
+      kind: 'prose',
+      text: expect.stringContaining('If ambiguity changes workbook content'),
+    });
+    expect(ambiguity?.kind === 'prose' ? ambiguity.text : '').toContain(
+      'call ask-user with urgency=blocking; stop.',
+    );
+  });
+
+  it('answers only from returned rows; terminal/retry policy lives in the tool description', () => {
+    const dataValueQuestion = routes.find((route) => route.id === 'data-value-question');
+
+    expect(dataValueQuestion).toMatchObject({
+      action: 'on a populated worksheet, call get-summary-data; answer only from returned rows.',
+      stopConditions: ['answer only from returned rows'],
+      requiredEvidence: ['get-summary-data returned rows or a discriminated status'],
+    });
   });
 
   it('states a plan-before-build gate with the MAGNITUDE/MEMBERSHIP classification', () => {

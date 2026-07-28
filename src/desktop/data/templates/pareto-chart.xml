@@ -22,7 +22,7 @@
         </column-instance>
         <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
       </datasource-dependencies>
-      <computed-sort column='[{{DATASOURCE}}].[none:Sub-Category:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:Sales:qk]' />
+      <computed-sort column='[{{DATASOURCE}}].[none:{{field_base_1}}:nk]' direction='DESC' using='[{{DATASOURCE}}].[sum:{{field_base_2}}:qk]' />
       <aggregation value='true' />
     </view>
     <style>

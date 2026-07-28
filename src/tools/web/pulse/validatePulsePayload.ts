@@ -59,6 +59,27 @@ export function validateBundleRequest(req: BundleRequest): string | null {
     );
   }
 
+  // specific_period is read by the service ONLY when range is RANGE_BY_CONFIG; in
+  // any other range it is silently ignored, which would return an insight for the
+  // wrong (today-relative) period instead of the requested span. Fail closed.
+  if (ms.measurement_period.specific_period && ms.measurement_period.range !== 'RANGE_BY_CONFIG') {
+    errors.push(
+      `measurement_period.specific_period is only honored when measurement_period.range is 'RANGE_BY_CONFIG' (got '${ms.measurement_period.range}'). ` +
+        "For a today-relative window drop specific_period; to analyze the explicit period/span set range to 'RANGE_BY_CONFIG'.",
+    );
+  }
+
+  // `options.now` (anchor a whole relative period) and `specific_period` (an
+  // explicit period/span under RANGE_BY_CONFIG) are two different ways to move the
+  // window, and their combined precedence at the service is unconfirmed. Reject
+  // setting both so a request can't depend on undefined precedence — pick one.
+  if (br.options.now && ms.measurement_period.specific_period) {
+    errors.push(
+      'options.now and measurement_period.specific_period cannot both be set — they are alternative ways to target a period. ' +
+        'Use options.now to anchor a relative whole period, or specific_period (with range RANGE_BY_CONFIG) for an explicit period/span.',
+    );
+  }
+
   const hasRangeAndComparison =
     ms.measurement_period.range &&
     ms.measurement_period.range !== 'RANGE_UNSPECIFIED' &&

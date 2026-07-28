@@ -16,15 +16,32 @@ const baseMapping = {
   Profit: `[${DS}].[sum:amount:qk]`,
   'Sub-Category': `[${DS}].[none:line_item:nk]`,
 };
+const slots = [
+  { template_field: 'Profit', required: true, bindable: true },
+  { template_field: 'Sub-Category', required: true, bindable: true },
+  { template_field: 'Anchor Category', required: false, bindable: true },
+];
 
 function apply(mapping: Record<string, string>): string {
-  const rewritten = rewriteFieldReferences(ensureUserNamespace(WATERFALL_XML), mapping, DS);
+  const rewritten = rewriteFieldReferences(
+    ensureUserNamespace(WATERFALL_XML),
+    mapping,
+    DS,
+    undefined,
+    { templateSlots: slots },
+  );
   return spliceWaterfallAnchorFilter(rewritten, mapping);
 }
 
 describe('spliceWaterfallAnchorFilter', () => {
   it('is identity when anchor_category is unbound', () => {
-    const rewritten = rewriteFieldReferences(ensureUserNamespace(WATERFALL_XML), baseMapping, DS);
+    const rewritten = rewriteFieldReferences(
+      ensureUserNamespace(WATERFALL_XML),
+      baseMapping,
+      DS,
+      undefined,
+      { templateSlots: slots },
+    );
 
     expect(spliceWaterfallAnchorFilter(rewritten, baseMapping)).toBe(rewritten);
     expect(apply(baseMapping)).toBe(rewritten);

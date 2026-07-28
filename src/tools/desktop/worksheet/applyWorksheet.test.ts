@@ -7,7 +7,6 @@ import * as loadWorksheetXmlModule from '../../../desktop/commands/workbook/load
 import * as episodeEvents from '../../../desktop/episode-events.js';
 import type { ReadbackFinding } from '../../../desktop/validation/readback-verify.js';
 import {
-  ArgsValidationError,
   DesktopCommandExecutionError,
   FileReadError,
   WorksheetXmlLoadFailedError,
@@ -57,12 +56,9 @@ describe('applyWorksheetTool', () => {
     expect(tool.paramsSchema).toMatchObject({
       session: expect.any(Object),
       worksheetName: expect.any(Object),
-      mode: expect.any(Object),
       worksheetFile: expect.any(Object),
-      worksheetXml: expect.any(Object),
     });
     expect(tool.annotations).toMatchObject({
-      title: 'Apply Worksheet',
       readOnlyHint: false,
       openWorldHint: false,
     });
@@ -79,7 +75,6 @@ describe('applyWorksheetTool', () => {
     const result = await getToolResult({
       session: '12345',
       worksheetName: 'Sheet 1',
-      mode: 'inline',
       worksheetXml: mockXml,
       mockExecutor,
     });
@@ -108,7 +103,6 @@ describe('applyWorksheetTool', () => {
     const result = await getToolResult({
       session: '12345',
       worksheetName: 'Sheet 1',
-      mode: 'file',
       worksheetFile: mockFilePath,
       mockExecutor,
     });
@@ -133,7 +127,6 @@ describe('applyWorksheetTool', () => {
     const result = await getToolResult({
       session: '12345',
       worksheetName: 'Sheet 1',
-      mode: 'inline',
       worksheetXml: mockXml,
       mockExecutor: vi.fn().mockResolvedValue({}),
     });
@@ -158,7 +151,6 @@ describe('applyWorksheetTool', () => {
     const result = await getToolResult({
       session: '12345',
       worksheetName: 'Sheet 1',
-      mode: 'file',
       worksheetFile: mockFilePath,
       mockExecutor: vi.fn().mockResolvedValue({}),
     });
@@ -183,7 +175,6 @@ describe('applyWorksheetTool', () => {
     const result = await getToolResult({
       session: '12345',
       worksheetName: 'Sheet 1',
-      mode: 'inline',
       worksheetXml: mockXml,
       mockExecutor: vi.fn().mockResolvedValue({}),
     });
@@ -206,7 +197,6 @@ describe('applyWorksheetTool', () => {
     const result = await getToolResult({
       session: '12345',
       worksheetName: 'Sheet 1',
-      mode: 'inline',
       worksheetXml: mockXml,
       mockExecutor: vi.fn().mockResolvedValue({}),
     });
@@ -228,36 +218,18 @@ describe('applyWorksheetTool', () => {
     );
   });
 
-  it('should return error when inline mode is used without worksheetXml', async () => {
+  it('should return error when no worksheetFile is given', async () => {
     const mockExecutor = vi.fn().mockResolvedValue({});
 
     const result = await getToolResult({
       session: '12345',
       worksheetName: 'Sheet 1',
-      mode: 'inline',
       mockExecutor,
     });
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe(
-      new ArgsValidationError('When mode=inline, non-empty worksheet content is required.').message,
-    );
-  });
-
-  it('should return error when file mode is used without worksheetFile', async () => {
-    const mockExecutor = vi.fn().mockResolvedValue({});
-
-    const result = await getToolResult({
-      session: '12345',
-      worksheetName: 'Sheet 1',
-      mode: 'file',
-      mockExecutor,
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('When mode=file, a non-empty worksheet file path');
+    expect(result.content[0].text).toContain('A non-empty worksheet file path is required');
   });
 
   it('should return error when worksheet file does not exist', async () => {
@@ -269,7 +241,6 @@ describe('applyWorksheetTool', () => {
     const result = await getToolResult({
       session: '12345',
       worksheetName: 'Sheet 1',
-      mode: 'file',
       worksheetFile: mockFilePath,
       mockExecutor,
     });
@@ -293,7 +264,6 @@ describe('applyWorksheetTool', () => {
     const result = await getToolResult({
       session: '12345',
       worksheetName: 'Sheet 1',
-      mode: 'file',
       worksheetFile: mockFilePath,
       mockExecutor,
     });
@@ -320,7 +290,6 @@ describe('applyWorksheetTool', () => {
     const result = await getToolResult({
       session: '12345',
       worksheetName: 'Sheet 1',
-      mode: 'inline',
       worksheetXml: mockXml,
       mockExecutor,
     });
@@ -344,7 +313,6 @@ describe('applyWorksheetTool', () => {
     const result = await getToolResult({
       session: '12345',
       worksheetName: 'Sheet 1',
-      mode: 'inline',
       worksheetXml: mockXml,
       mockExecutor,
     });
@@ -366,7 +334,6 @@ describe('applyWorksheetTool', () => {
     await getToolResult({
       session: '12345',
       worksheetName: 'Sheet 1',
-      mode: 'inline',
       worksheetXml: mockXml,
       mockExecutor,
       customSignal,
@@ -382,38 +349,9 @@ describe('applyWorksheetTool', () => {
   });
 });
 
-describe('applyWorksheetTool over-cap note', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('accepts an over-cap inline apply but appends the file-mode note', async () => {
-    const overCapXml = '<worksheet name="Sales">' + 'x'.repeat(20000) + '</worksheet>';
-    vi.spyOn(loadWorksheetXmlModule, 'loadWorksheetXml').mockResolvedValue(
-      Ok({ readbackWarnings: [] }),
-    );
-
-    const result = await getToolResult({
-      session: '12345',
-      worksheetName: 'Sales',
-      mode: 'inline',
-      worksheetXml: overCapXml,
-      mockExecutor: vi.fn().mockResolvedValue({}),
-    });
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    const message = JSON.parse(result.content[0].text).message as string;
-    expect(message).toContain('Successfully applied worksheet update');
-    expect(message).toContain('inline cap');
-    expect(message).toContain('mode=file');
-  });
-});
-
 async function getToolResult({
   session,
   worksheetName,
-  mode,
   worksheetFile,
   worksheetXml,
   mockExecutor,
@@ -422,13 +360,20 @@ async function getToolResult({
 }: {
   session: string;
   worksheetName: string;
-  mode: 'file' | 'inline';
   worksheetFile?: string;
   worksheetXml?: string;
   mockExecutor: TableauDesktopToolContext['getExecutor'];
   customSignal?: AbortSignal;
   configOverrides?: Partial<TableauDesktopToolContext['config']>;
 }): Promise<CallToolResult> {
+  // The tool no longer takes a document. Tests that supplied XML directly now get a
+  // synthetic cache path backed by the fs mock, so they still exercise the apply leg.
+  if (worksheetXml !== undefined && worksheetFile === undefined) {
+    worksheetFile = '/cache/synthetic-worksheet.xml';
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(worksheetXml);
+  }
+
   const tool = getApplyWorksheetTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
 
@@ -439,5 +384,5 @@ async function getToolResult({
   };
   extra.config = { ...extra.config, ...configOverrides };
 
-  return await callback({ session, worksheetName, mode, worksheetFile, worksheetXml }, extra);
+  return await callback({ session, worksheetName, worksheetFile }, extra);
 }

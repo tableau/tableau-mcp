@@ -47,7 +47,7 @@ import {
 export type ExternalApiClientOptions = {
   /** Injectable fetch — defaults to the global. Tests pass real HTTP to a mock server. */
   fetchFn?: typeof fetch;
-  /** Per-request timeout used when the caller does not supply an AbortSignal. */
+  /** Global ceiling for each request; health remains capped at its shorter route budget. */
   timeoutMs?: number;
 };
 
@@ -76,6 +76,7 @@ export type ImageExportQuery = {
 };
 
 const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_HEALTH_TIMEOUT_MS = 10_000;
 
 /**
  * Typed client for a single Tableau Desktop External Client API instance.
@@ -87,12 +88,12 @@ const DEFAULT_TIMEOUT_MS = 60_000;
 export class ExternalApiClient {
   private readonly instance: ExternalApiInstance;
   private readonly fetchFn: typeof fetch;
-  private readonly timeoutMs: number;
+  private readonly timeoutMs: number | undefined;
 
   constructor(instance: ExternalApiInstance, options: ExternalApiClientOptions = {}) {
     this.instance = instance;
     this.fetchFn = options.fetchFn ?? fetch;
-    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.timeoutMs = options.timeoutMs;
   }
 
   get baseUrl(): string {
@@ -382,7 +383,9 @@ export class ExternalApiClient {
       headers['content-type'] = options.contentType;
     }
 
-    const signal = options.signal ?? AbortSignal.timeout(this.timeoutMs);
+    // A caller signal is a cancellation channel, not a clock — compose, never replace. `??` here
+    // meant the default timeout never applied, because every desktop tool passes extra.signal.
+    const signal = composeWithTimeout(options.signal, timeoutMsForRoute(route, this.timeoutMs));
 
     try {
       const res = await this.fetchFn(this.url(route), {
@@ -393,13 +396,25 @@ export class ExternalApiClient {
       });
       return Ok(res);
     } catch (error) {
-      return Err({ type: 'network', error });
+      return Err({ type: 'network', error, aborted: signal.aborted });
     }
   }
 
   private url(route: string): string {
     return `${this.instance.baseUrl.replace(/\/$/, '')}${route}`;
   }
+}
+
+function composeWithTimeout(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
+function timeoutMsForRoute(route: string, configuredTimeoutMs: number | undefined): number {
+  const globalTimeoutMs = configuredTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+  return route === EXTERNAL_API_ROUTES.health
+    ? Math.min(globalTimeoutMs, DEFAULT_HEALTH_TIMEOUT_MS)
+    : globalTimeoutMs;
 }
 
 function buildWorksheetByIdRoute(worksheetId: string): string {

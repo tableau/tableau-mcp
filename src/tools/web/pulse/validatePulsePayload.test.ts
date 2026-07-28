@@ -1,8 +1,10 @@
+import { z } from 'zod';
+
+import { pulseBundleRequestSchema } from '../../../sdks/tableau/types/pulse.js';
 import { validateBriefRequest, validateBundleRequest } from './validatePulsePayload.js';
 
 describe('validateBundleRequest', () => {
-  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-  function makeValidBundleRequest() {
+  function makeValidBundleRequest(): z.infer<typeof pulseBundleRequestSchema> {
     return {
       bundle_request: {
         version: 1,
@@ -131,6 +133,42 @@ describe('validateBundleRequest', () => {
     expect(result).toContain('1.');
     expect(result).toContain('2.');
     expect(result).toContain('3.');
+  });
+
+  it('rejects specific_period when range is not RANGE_BY_CONFIG (silently ignored otherwise)', () => {
+    const req = makeValidBundleRequest();
+    // Builder defaults range to RANGE_LAST_COMPLETE, which the service does NOT
+    // honor specific_period under — the request would return the wrong period.
+    req.bundle_request.input.metric.metric_specification.measurement_period.specific_period = {
+      date: '2026-04-15',
+      end_date: '2026-04-20',
+    };
+    const result = validateBundleRequest(req);
+    expect(result).toContain('specific_period is only honored');
+    expect(result).toContain('RANGE_BY_CONFIG');
+  });
+
+  it('accepts specific_period when range is RANGE_BY_CONFIG', () => {
+    const req = makeValidBundleRequest();
+    req.bundle_request.input.metric.metric_specification.measurement_period.range =
+      'RANGE_BY_CONFIG';
+    req.bundle_request.input.metric.metric_specification.measurement_period.specific_period = {
+      date: '2026-04-15',
+      end_date: '2026-04-20',
+    };
+    expect(validateBundleRequest(req)).toBeNull();
+  });
+
+  it('rejects setting both options.now and specific_period (undefined precedence)', () => {
+    const req = makeValidBundleRequest();
+    req.bundle_request.options.now = '2026-05-31';
+    req.bundle_request.input.metric.metric_specification.measurement_period.range =
+      'RANGE_BY_CONFIG';
+    req.bundle_request.input.metric.metric_specification.measurement_period.specific_period = {
+      date: '2026-04-15',
+    };
+    const result = validateBundleRequest(req);
+    expect(result).toContain('cannot both be set');
   });
 });
 

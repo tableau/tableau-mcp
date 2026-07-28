@@ -32,7 +32,9 @@ describe('knowledge/search', { timeout: 30_000 }, () => {
     const [top, second] = searchKnowledge('dashboard', 5);
 
     expect(top.mustReadUri).toBe(top.uri);
-    expect(top.instruction).toBe('snippet is not the module — read this URI before authoring');
+    expect(top.instruction).toBe(
+      'snippet is not the module — read this URI before authoring; append #<section> from sections to read one section instead of the whole module',
+    );
     expect(second).not.toHaveProperty('mustReadUri');
     expect(second).not.toHaveProperty('instruction');
   });
@@ -71,6 +73,22 @@ describe('knowledge/search', { timeout: 30_000 }, () => {
         top3.some((hit) => hit.slug === expectedSlug),
         query,
       ).toBe(true);
+    }
+  });
+
+  it('ranks bind-first templates ahead of fallback mechanics for named composed charts', () => {
+    const queries = [
+      'build a waterfall chart',
+      'make a funnel chart',
+      'build a gantt chart',
+      'make a bullet chart',
+      'build a box plot',
+      'make a slope chart',
+      'build a bump chart',
+    ];
+
+    for (const query of queries) {
+      expect(searchKnowledge(query, 2)[0]?.slug, query).toBe('tactics/workflow/templates');
     }
   });
 

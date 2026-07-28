@@ -42,6 +42,7 @@ describe('DesktopConfig', () => {
     });
 
     it('should leave the discovery-dir override undefined by default', () => {
+      delete process.env.TABLEAU_EXTERNAL_API_DISCOVERY_DIR;
       expect(new Config().externalApiDiscoveryDir).toBeUndefined();
     });
   });

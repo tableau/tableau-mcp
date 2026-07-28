@@ -14,7 +14,7 @@ const MAX_RESULT_BYTES = 16 * 1024;
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID; optional if pinned or unique.'),
-  command: z.string().describe('namespace:command; use search-commands.'),
+  command: z.string().describe('Command ID from the command search results.'),
   args: z.record(z.any()).optional().describe('JSON command args.'),
 };
 
@@ -30,7 +30,6 @@ export const getExecuteTableauCommandTool = (
       'Execute a registered Tableau Desktop command. Use search-commands first; format namespace:command.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: false,
@@ -90,6 +89,10 @@ export const getExecuteTableauCommandTool = (
 
           return new Ok(payload);
         },
+        getSuccessResult: (payload): CallToolResult => ({
+          isError: hasOutputSerializationFailed(payload),
+          content: [{ type: 'text', text: JSON.stringify(payload) }],
+        }),
       });
     },
   });
@@ -112,8 +115,13 @@ function shapeCommandResult({
   envelopeWarnings: ExecuteCommandWarning[];
   guardWarnings: string[];
 }): ExecuteTableauCommandSuccess {
+  const outputSerializationFailed = envelopeWarnings.some(
+    (warning) => warning.code === 'output-serialization-failed',
+  );
   const payload: ExecuteTableauCommandSuccess = {
-    message: 'Command executed successfully.',
+    message: outputSerializationFailed
+      ? 'Command executed, but the requested result cannot be returned because Desktop reported output serialization failed; the command executed; state may have changed; do NOT retry - re-read state instead.'
+      : 'Command executed successfully.',
   };
 
   if (result !== undefined && result !== null) {
@@ -143,4 +151,10 @@ function shapeCommandResult({
   }
 
   return payload;
+}
+
+function hasOutputSerializationFailed(payload: ExecuteTableauCommandSuccess): boolean {
+  return (
+    payload.warnings?.some((warning) => warning.code === 'output-serialization-failed') ?? false
+  );
 }

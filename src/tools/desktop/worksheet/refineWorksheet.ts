@@ -11,13 +11,13 @@
 // under src/desktop/refine/refineWorksheet.ts; this file is the I/O wrapper + registration.
 
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { setTimeout as setTimeoutPromise } from 'timers/promises';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getWorksheetFragment } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import {
+  appliedSortByFieldDirection,
   confirmSortByFieldApplied,
   confirmSortDirectionApplied,
   confirmTopNApplied,
@@ -29,7 +29,7 @@ import {
 } from '../../../desktop/refine/refineWorksheet.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { ensureUserNamespace } from '../../../desktop/templates/injectTemplateCore.js';
-import { runValidation } from '../../../desktop/validation/registry.js';
+import { blockingValidationIssues, runValidation } from '../../../desktop/validation/registry.js';
 import { ValidationIssue } from '../../../desktop/validation/types.js';
 import { parseOuterElement } from '../../../desktop/xmlElement.js';
 import {
@@ -57,6 +57,31 @@ type RefineWorksheetToolResult =
 // elsewhere (list-worksheets/list-dashboards polling after new-worksheet/new-dashboard).
 const READBACK_POLL_MAX_ATTEMPTS = 8;
 const READBACK_POLL_INTERVAL_MS = 250;
+
+/**
+ * The readback poll sleep, on the GLOBAL timer. This used to be `timers/promises`, which vitest's
+ * fake timers do not fake — so the four tests that call `vi.useFakeTimers()` and advance the clock
+ * over this poll were sleeping for real and proving nothing about the timing they claim to drive
+ * (measured: `timers/promises` 804ms under fake timers, global `setTimeout` 1ms). Abort semantics
+ * are kept: an aborted signal rejects, before or during the wait.
+ */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason as Error);
+      return;
+    }
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(signal?.reason as Error);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
 
 /** A hand-back-to-the-standard-path refusal — not an error, so isError stays false. */
 function refusal(
@@ -115,7 +140,6 @@ export const getRefineWorksheetTool = (
     description: REFINE_WORKSHEET_DESCRIPTION,
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: true, // mutates the named worksheet
@@ -201,6 +225,11 @@ export const getRefineWorksheetTool = (
           let patched: string;
           let confirm: (readback: string) => boolean;
           let nodeLabel: string;
+          // For sort_by_field: when the sort node lands but with a DIFFERENT direction than
+          // requested (e.g. Desktop silently reverted DESC to ASC), produce a precise refusal
+          // instead of the generic "did not contain" async-settle message — a wrong-direction
+          // apply must never be reported as success, and the reason must say what went wrong.
+          let readbackMiss: ((readback: string) => string | null) | undefined;
 
           if (operation === 'top_n') {
             const plan = planTopN(sourceXml, {
@@ -227,8 +256,20 @@ export const getRefineWorksheetTool = (
             confirm = (rb) => confirmSortDirectionApplied(rb, col, dir);
             nodeLabel = `<computed-sort direction="${dir}">${col ? ` on ${col}` : ''}`;
           } else {
+            // Accept the model's natural nested shape sortDirection.direction ('ASC'/'DESC')
+            // as an alias for the flat lowercase `direction` on sort_by_field. Without this,
+            // a call passing only sortDirection silently dropped the requested direction and
+            // defaulted to ASC — then falsely confirmed success on the wrong direction. The
+            // flat param wins when both are present; the nested alias is normalized to lower.
+            const requestedDirection =
+              direction ??
+              (sortDirection?.direction ? sortDirection.direction.toLowerCase() : undefined);
             const sortByDirection =
-              direction === 'desc' ? 'DESC' : direction === 'asc' ? 'ASC' : undefined;
+              requestedDirection === 'desc'
+                ? 'DESC'
+                : requestedDirection === 'asc'
+                  ? 'ASC'
+                  : undefined;
             const plan = planSortByField(sourceXml, {
               targetField,
               sortByField: sortByField as string,
@@ -242,6 +283,14 @@ export const getRefineWorksheetTool = (
             const using = plan.using;
             const dir = plan.direction;
             confirm = (rb) => confirmSortByFieldApplied(rb, col, using, dir);
+            readbackMiss = (rb) => {
+              const landed = appliedSortByFieldDirection(rb, col, using);
+              return landed !== null && landed !== dir
+                ? `applied, but the sort direction is ${landed}, not the requested ${dir} — ` +
+                    'Desktop did not honor the direction change. Not retrying; fall back to ' +
+                    'the standard path.'
+                : null;
+            };
             nodeLabel = `<computed-sort direction="${dir}" column="${col}" using="${using}">`;
           }
 
@@ -250,11 +299,12 @@ export const getRefineWorksheetTool = (
 
           // 4. Preflight validation — an error-severity issue means we do NOT apply.
           const validation = runValidation(prepared, 'worksheet');
-          if (!validation.valid) {
+          const blockingIssues = blockingValidationIssues(validation.issues);
+          if (blockingIssues.length > 0) {
             return refusal(
               operation,
               canonicalWorksheetName,
-              `preflight validation failed — not applying. ${formatValidationErrors(validation.issues)}`,
+              `preflight validation failed — not applying. ${formatValidationErrors(blockingIssues)}`,
             );
           }
 
@@ -263,6 +313,7 @@ export const getRefineWorksheetTool = (
           const applied = await loadWorksheetXml({
             worksheetName: canonicalWorksheetName,
             xml: prepared,
+            focus: { navigate: 'artifact', sheetName: canonicalWorksheetName },
             executor,
             signal: extra.signal,
           });
@@ -283,6 +334,7 @@ export const getRefineWorksheetTool = (
           // 6. Read back and confirm the expected node landed durably. The apply is async
           // after SUCCEEDED, so poll rather than trusting one immediate readback — the
           // first read can race the settle and still show pre-apply XML.
+          let lastReadback = '';
           for (let attempt = 1; attempt <= READBACK_POLL_MAX_ATTEMPTS; attempt++) {
             const readback = await getWorksheetFragment({
               worksheetName: canonicalWorksheetName,
@@ -302,6 +354,7 @@ export const getRefineWorksheetTool = (
                 }
               }
             }
+            lastReadback = readback.value;
             if (confirm(readback.value)) {
               return new Ok({
                 refined: true,
@@ -311,10 +364,17 @@ export const getRefineWorksheetTool = (
               });
             }
             if (attempt < READBACK_POLL_MAX_ATTEMPTS) {
-              await setTimeoutPromise(READBACK_POLL_INTERVAL_MS, undefined, {
-                signal: extra.signal,
-              });
+              await sleep(READBACK_POLL_INTERVAL_MS, extra.signal);
             }
+          }
+
+          // The confirm never matched across the full poll budget. If the sort node DID land
+          // but with a direction other than requested (Desktop reverted DESC to ASC), report
+          // that precisely — the polling above already gave a correct-direction apply every
+          // chance to settle, so a mismatch now is durable, not a race.
+          const mismatchReason = readbackMiss?.(lastReadback);
+          if (mismatchReason) {
+            return refusal(operation, canonicalWorksheetName, mismatchReason);
           }
 
           return refusal(

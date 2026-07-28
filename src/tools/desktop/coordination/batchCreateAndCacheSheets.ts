@@ -22,6 +22,8 @@ import {
   WorkbookXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { IncompleteOperationError } from '../incompleteOperationError.js';
 import { DesktopTool } from '../tool.js';
 
 function isRouteGateResult(result: unknown): result is RouteGateResult {
@@ -41,6 +43,20 @@ function getSuccessResult(result: unknown): CallToolResult {
   };
 }
 
+type ArtifactFailure = { name: string; error: string };
+
+function fragmentFailureMessage(error: { type: string; error: unknown }): string {
+  if (
+    typeof error.error === 'object' &&
+    error.error !== null &&
+    'message' in error.error &&
+    typeof error.error.message === 'string'
+  ) {
+    return error.error.message;
+  }
+  return `${error.type}: ${JSON.stringify(error.error)}`;
+}
+
 const paramsSchema = {
   session: z.string().optional(),
   worksheetNames: z.array(z.string()),
@@ -58,7 +74,6 @@ export const getBatchCreateAndCacheSheetsTool = (
     description: 'Batch-create dashboard sheet caches.',
     paramsSchema,
     annotations: {
-      title: toolTitle,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,
@@ -105,7 +120,14 @@ export const getBatchCreateAndCacheSheetsTool = (
           workbookXml = addDashboard(workbookXml, dashboardName);
 
           // Apply modified workbook
-          const applyResult = await loadWorkbookXml({ xml: workbookXml, executor, signal });
+          // The sheets this creates are empty scaffolding for a later parallel build, not
+          // anything the user asked to look at, so put them back where they were.
+          const applyResult = await loadWorkbookXml({
+            xml: workbookXml,
+            focus: { navigate: 'restore' },
+            executor,
+            signal,
+          });
           if (applyResult.isErr()) {
             const { type, error } = applyResult.error;
             switch (type) {
@@ -131,52 +153,75 @@ export const getBatchCreateAndCacheSheetsTool = (
 
           // Fetch and cache all worksheet working copies.
           const worksheetFiles: Record<string, string> = {};
-          const worksheetWarnings: string[] = [];
+          const worksheetFailures: ArtifactFailure[] = [];
           for (const name of worksheetNames) {
             const wsResult = await getWorksheetFragment({ worksheetName: name, executor, signal });
             if (wsResult.isErr()) {
-              const { type, error } = wsResult.error;
-              if (type === 'get-worksheet-xml-error') {
-                worksheetWarnings.push(`${name}: ${error.message}`);
-              } else {
-                worksheetWarnings.push(`${name}: command error`);
-              }
+              worksheetFailures.push({
+                name,
+                error: fragmentFailureMessage(wsResult.error),
+              });
               continue;
             }
             const safeWsName = name.replace(/[^a-zA-Z0-9]/g, '_');
             const file = cache.getCacheFilePath({ prefix: 'worksheet', id: safeWsName });
-            writeFileSync(file, wsResult.value, 'utf-8');
-            writeSidecar(file, resolvedSession);
+            try {
+              writeFileSync(file, wsResult.value, 'utf-8');
+              writeSidecar(file, resolvedSession);
+            } catch (error) {
+              worksheetFailures.push({
+                name,
+                error: `cache write failed: ${getExceptionMessage(error)}`,
+              });
+              continue;
+            }
             worksheetFiles[name] = file;
           }
 
           // Fetch and cache the dashboard working copy.
           let dashboardFile: string | null = null;
+          const dashboardFailures: ArtifactFailure[] = [];
           const dashResult = await getDashboardFragment({ dashboardName, executor, signal });
           if (dashResult.isErr()) {
-            const { type, error } = dashResult.error;
-            if (type === 'get-dashboard-xml-error') {
-              worksheetWarnings.push(`dashboard "${dashboardName}": ${error.message}`);
-            }
+            dashboardFailures.push({
+              name: dashboardName,
+              error: fragmentFailureMessage(dashResult.error),
+            });
           } else {
             const safeDashName = dashboardName.replace(/[^a-zA-Z0-9]/g, '_');
-            dashboardFile = cache.getCacheFilePath({ prefix: 'dashboard', id: safeDashName });
-            writeFileSync(dashboardFile, dashResult.value, 'utf-8');
-            writeSidecar(dashboardFile, resolvedSession);
+            const file = cache.getCacheFilePath({ prefix: 'dashboard', id: safeDashName });
+            try {
+              writeFileSync(file, dashResult.value, 'utf-8');
+              writeSidecar(file, resolvedSession);
+              dashboardFile = file;
+            } catch (error) {
+              dashboardFailures.push({
+                name: dashboardName,
+                error: `cache write failed: ${getExceptionMessage(error)}`,
+              });
+            }
           }
 
           const worksheetFileLines = Object.entries(worksheetFiles)
             .map(([name, file]) => `  ${name} → ${file}`)
             .join('\n');
 
-          let msg = `Created and cached ${worksheetNames.length} worksheets + 1 dashboard\n\n`;
+          const hasArtifactFailures = worksheetFailures.length > 0 || dashboardFailures.length > 0;
+          let msg = hasArtifactFailures
+            ? `Phase 1 incomplete: cached ${Object.keys(worksheetFiles).length}/${worksheetNames.length} worksheets and ${dashboardFile ? '1/1' : '0/1'} dashboard.\n\n`
+            : `Created and cached ${worksheetNames.length} worksheets + 1 dashboard\n\n`;
           msg += `Worksheets:\n${worksheetFileLines || '  (none cached)'}\n\n`;
           msg += `Dashboard:\n  ${dashboardName} → ${dashboardFile || 'FAILED'}\n\n`;
           msg += `Workbook cache: ${workbookFile}`;
-          if (worksheetWarnings.length > 0) {
-            msg += `\n\nWarnings:\n${worksheetWarnings.map((w) => `  • ${w}`).join('\n')}`;
+          const failures = [...worksheetFailures, ...dashboardFailures];
+          if (failures.length > 0) {
+            msg += `\n\nFailed required artifacts:\n${failures
+              .map((failure) => `  • ${failure.name}: ${failure.error}`)
+              .join('\n')}`;
           }
-          msg += '\n\nReady for Phase 2 parallel execution.';
+          msg += hasArtifactFailures
+            ? '\n\nPhase 2 is not ready. Retry the failed fetch/cache steps before continuing.'
+            : '\n\nReady for Phase 2 parallel execution.';
           // Host verification receipt (W-23447506): this whole-workbook apply has
           // no structural readback, so say so honestly instead of implying full
           // re-verification happened.
@@ -194,12 +239,28 @@ export const getBatchCreateAndCacheSheetsTool = (
             });
           }
 
-          return new Ok({
+          const payload = {
             message: msg,
             worksheetFiles,
             dashboardFile,
             workbookFile,
-          });
+          };
+          if (hasArtifactFailures) {
+            return new IncompleteOperationError({
+              ...payload,
+              succeeded: {
+                worksheets: Object.keys(worksheetFiles),
+                dashboard: dashboardFile ? [dashboardName] : [],
+              },
+              failed: {
+                worksheets: worksheetFailures,
+                dashboard: dashboardFailures,
+              },
+              guidance:
+                'Do not start Phase 2 while required cache files are missing. Retry Phase 1 after resolving the named fetch/cache failures.',
+            }).toErr();
+          }
+          return new Ok(payload);
         },
       });
     },

@@ -22,7 +22,6 @@ export const getListSiteWorkbooksTool = (
     description: 'List workbooks published to the connected site.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,

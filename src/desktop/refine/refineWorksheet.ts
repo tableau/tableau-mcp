@@ -761,3 +761,24 @@ export function confirmSortByFieldApplied(
   );
   return sorts.some((s) => (s.getAttribute('direction') ?? '') === direction);
 }
+
+/**
+ * Report the `direction` of the readback computed-sort whose column+using match the plan,
+ * or null if no such node landed at all. Lets the tool tell "applied but the direction is
+ * wrong" (a precise, actionable refusal — e.g. Desktop silently reverted DESC to ASC) apart
+ * from "never landed" (an async-settle miss), so a wrong-direction apply can NEVER be
+ * reported as a success. Quote-agnostic (parses the DOM), same rule as the confirm helpers.
+ */
+export function appliedSortByFieldDirection(
+  readbackXml: string,
+  column: string,
+  using: string,
+): string | null {
+  const doc = parseXml(readbackXml);
+  if (!doc) return null;
+  const sorts = (xpath.select('//computed-sort', doc as unknown as Node) as Element[]).filter(
+    (s) => s.getAttribute('column') === column && s.getAttribute('using') === using,
+  );
+  if (sorts.length === 0) return null;
+  return sorts[0].getAttribute('direction') ?? '';
+}

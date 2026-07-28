@@ -30,6 +30,8 @@ interface SlotSummary {
   kind: string;
   required: boolean;
   bindable: boolean;
+  purpose?: string;
+  examples?: string[];
 }
 
 interface TemplateSummary {
@@ -88,6 +90,8 @@ function summarizeTemplate(m: TemplateManifest): TemplateSummary {
       kind: s.kind,
       required: s.required,
       bindable: s.bindable,
+      ...(s.purpose ? { purpose: s.purpose } : {}),
+      ...(s.purpose && s.examples && s.examples.length > 0 ? { examples: s.examples } : {}),
     })),
     calc_count: m.calcs.length,
   };
@@ -105,7 +109,6 @@ export const getListTemplatesTool = (
     description: 'List chart templates.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: true,
       openWorldHint: false,
       destructiveHint: false,

@@ -13,9 +13,9 @@
   <table>
     <view>
       <datasources>
-        <datasource caption='Looks vs Personality' name='federated.1ko0q9z0cybhx212227b819gayqi' />
+        <datasource caption='Looks vs Personality' name='{{DATASOURCE}}' />
       </datasources>
-      <datasource-dependencies datasource='federated.1ko0q9z0cybhx212227b819gayqi'>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
         <column caption='Men' datatype='real' name='[Calculation_2084392578408062979]' role='measure' type='quantitative'>
           <calculation class='tableau' formula='SUM(if [Gender]=&apos;Men&apos; THEN [Value]
 END)/SUM([Value])' />
@@ -37,34 +37,34 @@ END)/SUM([Value])' />
         <column-instance column='[Calculation_2084392578408062979]' derivation='User' name='[usr:Calculation_2084392578408062979:qk]' pivot='key' type='quantitative' />
         <column-instance column='[Men (copy)]' derivation='User' name='[usr:Men (copy):qk]' pivot='key' type='quantitative' />
       </datasource-dependencies>
-      <filter class='categorical' column='[federated.1ko0q9z0cybhx212227b819gayqi].[:Measure Names]'>
+      <filter class='categorical' column='[{{DATASOURCE}}].[:Measure Names]'>
         <groupfilter function='union' user:op='manual'>
-          <groupfilter function='member' level='[:Measure Names]' member='"[federated.1ko0q9z0cybhx212227b819gayqi].[usr:Calculation_2084392578408062979:qk]"' />
-          <groupfilter function='member' level='[:Measure Names]' member='"[federated.1ko0q9z0cybhx212227b819gayqi].[usr:Men (copy):qk]"' />
+          <groupfilter function='member' level='[:Measure Names]' member='"[{{DATASOURCE}}].[usr:Calculation_2084392578408062979:qk]"' />
+          <groupfilter function='member' level='[:Measure Names]' member='"[{{DATASOURCE}}].[usr:Men (copy):qk]"' />
         </groupfilter>
       </filter>
-      <filter class='categorical' column='[federated.1ko0q9z0cybhx212227b819gayqi].[none:Calculation_2084392578409873414:nk]'>
+      <filter class='categorical' column='[{{DATASOURCE}}].[none:Calculation_2084392578409873414:nk]'>
         <groupfilter function='member' level='[none:Calculation_2084392578409873414:nk]' member='"Women     |     Men"' user:ui-domain='relevant' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
       </filter>
-      <filter class='categorical' column='[federated.1ko0q9z0cybhx212227b819gayqi].[none:Measure:nk]'>
+      <filter class='categorical' column='[{{DATASOURCE}}].[none:Measure:nk]'>
         <groupfilter function='member' level='[none:Measure:nk]' member='"Weighted Sample"' user:ui-domain='relevant' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
       </filter>
-      <computed-sort column='[federated.1ko0q9z0cybhx212227b819gayqi].[none:Nationality:nk]' direction='ASC' using='[federated.1ko0q9z0cybhx212227b819gayqi].[usr:Men (copy):qk]' />
+      <computed-sort column='[{{DATASOURCE}}].[none:{{field_base_1}}:nk]' direction='ASC' using='[{{DATASOURCE}}].[usr:Men (copy):qk]' />
       <slices>
-        <column>[federated.1ko0q9z0cybhx212227b819gayqi].[none:Measure:nk]</column>
-        <column>[federated.1ko0q9z0cybhx212227b819gayqi].[:Measure Names]</column>
-        <column>[federated.1ko0q9z0cybhx212227b819gayqi].[none:Calculation_2084392578409873414:nk]</column>
+        <column>[{{DATASOURCE}}].[none:Measure:nk]</column>
+        <column>[{{DATASOURCE}}].[:Measure Names]</column>
+        <column>[{{DATASOURCE}}].[none:Calculation_2084392578409873414:nk]</column>
       </slices>
       <aggregation value='true' />
     </view>
     <style>
       <style-rule element='axis'>
-        <format attr='title' class='0' field='[federated.1ko0q9z0cybhx212227b819gayqi].[Multiple Values]' scope='cols' value='Response Rate' />
+        <format attr='title' class='0' field='[{{DATASOURCE}}].[Multiple Values]' scope='cols' value='Response Rate' />
       </style-rule>
       <style-rule element='label'>
-        <format attr='text-format' field='[federated.1ko0q9z0cybhx212227b819gayqi].[Multiple Values]' value='*#,##0%;#,##0%' />
-        <format attr='font-family' field='[federated.1ko0q9z0cybhx212227b819gayqi].[none:Calculation_2084392578409873414:nk]' value='Tableau Medium' />
-        <format attr='color' field='[federated.1ko0q9z0cybhx212227b819gayqi].[none:Calculation_2084392578409873414:nk]' value='#1b1b1b' />
+        <format attr='text-format' field='[{{DATASOURCE}}].[Multiple Values]' value='*#,##0%;#,##0%' />
+        <format attr='font-family' field='[{{DATASOURCE}}].[none:Calculation_2084392578409873414:nk]' value='Tableau Medium' />
+        <format attr='color' field='[{{DATASOURCE}}].[none:Calculation_2084392578409873414:nk]' value='#1b1b1b' />
       </style-rule>
       <style-rule element='worksheet'>
         <format attr='display-field-labels' scope='cols' value='false' />
@@ -78,12 +78,12 @@ END)/SUM([Value])' />
         </view>
         <mark class='Automatic' />
         <encodings>
-          <color column='[federated.1ko0q9z0cybhx212227b819gayqi].[:Measure Names]' />
+          <color column='[{{DATASOURCE}}].[:Measure Names]' />
         </encodings>
       </pane>
     </panes>
-    <rows>[federated.1ko0q9z0cybhx212227b819gayqi].[none:Nationality:nk]</rows>
-    <cols>[federated.1ko0q9z0cybhx212227b819gayqi].[Multiple Values]</cols>
+    <rows>[{{DATASOURCE}}].[none:Nationality:nk]</rows>
+    <cols>[{{DATASOURCE}}].[Multiple Values]</cols>
   </table>
   <simple-id uuid='00000000-0000-0000-0000-000000000001' />
 </worksheet>

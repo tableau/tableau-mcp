@@ -6,11 +6,6 @@ import { z } from 'zod';
 import { checkSidecar } from '../../../desktop/commands/workbook/cacheFingerprint.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import { emitWorksheetPromiseEvents } from '../../../desktop/episode-events.js';
-import {
-  buildApplyOverCapNote,
-  isOverInlineXmlCap,
-  xmlByteLength,
-} from '../../../desktop/inlineXmlCap.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
   classifyWorksheetPromiseOutcome,
@@ -31,9 +26,7 @@ import { DesktopTool } from '../tool.js';
 const paramsSchema = {
   session: z.string().optional(),
   worksheetName: z.string(),
-  mode: z.enum(['file', 'inline']).optional().default('file'),
   worksheetFile: z.string().optional(),
-  worksheetXml: z.string().optional(),
 };
 
 const title = 'Apply Worksheet';
@@ -48,55 +41,44 @@ export const getApplyWorksheetTool = (
       'Apply a modified cached worksheet file to Desktop — the apply leg of the manual build path.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false, // updates worksheet in workbook
       openWorldHint: false,
       destructiveHint: true, // updates active workbook
       idempotentHint: false,
     },
-    callback: async (
-      { session, worksheetName, mode, worksheetFile, worksheetXml },
-      extra,
-    ): Promise<CallToolResult> => {
+    callback: async ({ session, worksheetName, worksheetFile }, extra): Promise<CallToolResult> => {
       return await applyWorksheetTool.logAndExecute({
         extra,
-        args: { session, worksheetName, mode, worksheetFile, worksheetXml },
+        args: { session, worksheetName, worksheetFile },
         callback: async () => {
-          switch (mode) {
-            case 'inline': {
-              if (!worksheetXml?.trim()) {
-                return new ArgsValidationError(
-                  'When mode=inline, non-empty worksheet content is required.',
-                ).toErr();
-              }
-              break;
-            }
-            case 'file': {
-              if (!worksheetFile?.trim()) {
-                return new ArgsValidationError(
-                  [
-                    'When mode=file, a non-empty worksheet file path is required.',
-                    'The path can be determined using the worksheet structure retrieval tool.',
-                  ].join(' '),
-                ).toErr();
-              }
+          // No inline document parameter: the cached file path IS the handle. Making the
+          // model retype a document cost ~190s of pure emission across six asks, and
+          // inline content carried no cache fingerprint, so it also skipped the
+          // cross-instance bleed guard below.
+          if (!worksheetFile?.trim()) {
+            return new ArgsValidationError(
+              [
+                'A non-empty worksheet file path is required.',
+                'Get one from get-worksheet-xml, edit it with read-cached-xml and',
+                'write-cached-xml, then pass that path here.',
+              ].join(' '),
+            ).toErr();
+          }
 
-              if (!existsSync(worksheetFile)) {
-                return new WorksheetNotFoundError(
-                  [
-                    `Cached worksheet file not found: ${worksheetFile}`,
-                    'Provide a path determined by the worksheet structure retrieval tool.',
-                  ].join(' '),
-                ).toErr();
-              }
+          if (!existsSync(worksheetFile)) {
+            return new WorksheetNotFoundError(
+              [
+                `Cached worksheet file not found: ${worksheetFile}`,
+                'Provide a path returned by get-worksheet-xml.',
+              ].join(' '),
+            ).toErr();
+          }
 
-              try {
-                worksheetXml = readFileSync(worksheetFile, 'utf-8');
-              } catch (error) {
-                return new FileReadError(error).toErr();
-              }
-              break;
-            }
+          let worksheetXml: string;
+          try {
+            worksheetXml = readFileSync(worksheetFile, 'utf-8');
+          } catch (error) {
+            return new FileReadError(error).toErr();
           }
 
           const sessionResult = resolveSession(session);
@@ -106,19 +88,18 @@ export const getApplyWorksheetTool = (
           const resolvedSession = sessionResult.value;
 
           // Cross-instance cache-bleed guard (W9): refuse a cache file produced by a
-          // different (or restarted) Desktop session before applying it — file mode only,
-          // since inline content carries no cache fingerprint.
-          if (mode === 'file' && worksheetFile) {
-            const sidecar = checkSidecar(worksheetFile, resolvedSession, 'worksheet');
-            if (!sidecar.ok) {
-              return new CacheSessionMismatchError(sidecar.message!).toErr();
-            }
+          // different (or restarted) Desktop session before applying it. Now that every
+          // apply goes through a cache file, no payload can skip this check.
+          const sidecar = checkSidecar(worksheetFile, resolvedSession, 'worksheet');
+          if (!sidecar.ok) {
+            return new CacheSessionMismatchError(sidecar.message!).toErr();
           }
 
           const executor = await extra.getExecutor(resolvedSession);
           const result = await loadWorksheetXml({
             worksheetName,
             xml: worksheetXml,
+            focus: { navigate: 'artifact', sheetName: worksheetName },
             executor,
             signal: extra.signal,
           });
@@ -135,13 +116,6 @@ export const getApplyWorksheetTool = (
               }
             }
           }
-
-          const capBytes = extra.config.inlineXmlMaxBytes;
-          const inlineBytes = mode === 'inline' ? xmlByteLength(worksheetXml ?? '') : 0;
-          const note =
-            mode === 'inline' && isOverInlineXmlCap(inlineBytes, capBytes)
-              ? `\n\n${buildApplyOverCapNote(inlineBytes, capBytes)}`
-              : '';
 
           // Non-fatal post-apply readback warnings (e.g. a sort Tableau reshaped) ride
           // along so the agent can re-check the rendered chart before moving on (W4).
@@ -175,7 +149,7 @@ export const getApplyWorksheetTool = (
           const receipt = receiptInput ? formatWorksheetPromiseCheck(receiptInput) : '';
 
           return new Ok({
-            message: `Successfully applied worksheet update for "${worksheetName}". The worksheet has been updated.${note}${readbackWarning}${receipt}`,
+            message: `Successfully applied worksheet update for "${worksheetName}". The worksheet has been updated.${readbackWarning}${receipt}`,
           });
         },
       });

@@ -11,6 +11,7 @@ import path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { selectEligible } from './ask-router.js';
+import { classifyNoLlm, summarizeSchema } from './binder.js';
 import { loadManifests } from './manifest.js';
 import type { TemplateManifest } from './manifest-types.js';
 
@@ -72,10 +73,13 @@ describe('selectEligible — reuses the binder matcher, fail-closed on unproven/
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CHART_NOUN_KEYWORDS LOCKSTEP PARITY — the ask-router mirror MUST equal the
-// classify.ts table EXACTLY, and this file must keep importing NOTHING from classify.ts
-// (the hash-gated classifier stays byte-untouched).
-describe('ask-router — CHART_NOUN_KEYWORDS lockstep parity with classify.ts', () => {
+// CUE-LIST LOCKSTEP PARITY — vocabulary SET EQUALITY only (CHART_NOUN_KEYWORDS
+// here; SPATIAL_INTENT_ALIASES and SYMBOL_MAP_MARK_CUES below). The ask-router
+// mirror MUST equal the classify.ts table EXACTLY, and this file must keep
+// importing NOTHING from classify.ts (the hash-gated classifier stays
+// byte-untouched). This checks the WORD LISTS match, not that behavior matches —
+// see the "shared behavioral table" describe block below for that.
+describe('ask-router — cue-list lockstep parity with classify.ts (CHART_NOUN_KEYWORDS)', () => {
   const ASK_ROUTER_SRC = path.join(repoRoot, 'src', 'desktop', 'binder', 'ask-router.ts');
   const CLASSIFY_SRC = path.join(repoRoot, 'src', 'desktop', 'binder', 'classify.ts');
 
@@ -149,5 +153,73 @@ describe('ask-router — spatial-intent family guard (W-23447710)', () => {
       path.join(repoRoot, 'src', 'desktop', 'binder', 'classify.ts'),
     );
     expect([...askRouterAliases].sort()).toEqual([...classifyAliases].sort());
+  });
+
+  it('SYMBOL_MAP_MARK_CUES stays lockstep with classify.ts (set equality)', () => {
+    function extractMarkCues(file: string): Set<string> {
+      const src = fs.readFileSync(file, 'utf8');
+      const m = src.match(/const\s+SYMBOL_MAP_MARK_CUES[^=]*=\s*\[([\s\S]*?)\]/);
+      expect(m, `SYMBOL_MAP_MARK_CUES array literal not found in ${file}`).not.toBeNull();
+      const body = m![1].replace(/\/\/[^\n]*/g, '');
+      return new Set([...body.matchAll(/['"]([^'"]+)['"]/g)].map((x) => x[1].toLowerCase()));
+    }
+    const askRouterCues = extractMarkCues(
+      path.join(repoRoot, 'src', 'desktop', 'binder', 'ask-router.ts'),
+    );
+    const classifyCues = extractMarkCues(
+      path.join(repoRoot, 'src', 'desktop', 'binder', 'classify.ts'),
+    );
+    expect([...askRouterCues].sort()).toEqual([...classifyCues].sort());
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SHARED BEHAVIORAL TABLE — cue-list parity (above) only proves the two files
+// declare the SAME WORDS; it says nothing about whether they SELECT the same
+// template for a given ask. This table runs each ask through BOTH classifyNoLlm
+// (the real, schema-aware binder) and selectEligible (the schema-free route
+// selector) against the SAME schema/manifests and asserts identical outcomes, so
+// a future edit that changes one file's selection logic without the other shows
+// up here as a red test instead of silently drifting.
+//
+// Scoped to asks where the two are EXPECTED to agree: plain decisive
+// keyword-argmax winners, and the spatial mark-cue tie-break (which
+// selectEligible now mirrors). Deliberately excludes asks that only classify.ts
+// can resolve (the lat/lon coordinate resolver, which needs real Latitude/
+// Longitude schema fields and has no route-layer equivalent) and mark-cue asks
+// naming NO measure (classify.ts's fail-closed "never invent a size measure"
+// guard has no schema-free equivalent in selectEligible) — those are known,
+// accepted asymmetries between a schema-aware binder and a schema-free selector,
+// not drift.
+describe('ask-router — shared behavioral parity with classify.ts (selection outcomes)', () => {
+  const COMBO_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Combo'>
+      <column name='[Region]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Category]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Sub-Category]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Profit]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Country Code]' caption='Country Code' role='dimension' type='nominal' datatype='string' semantic-role='[Country].[ISO3166_2]' />
+      <column name='[Goals For]' caption='Goals For' role='measure' type='quantitative' datatype='integer' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+  it.each([
+    'bar chart of sales by region',
+    'gibberish asdf qwerty zxcv',
+    'Symbol map of Goals For by Country Code.',
+    'Map the countries by Goals For — bigger, warmer dots',
+    'Map the countries by Goals For with bigger warmer dots total',
+    'Map the countries by Goals For with bigger, warmer circles',
+    'Choropleth map of Goals For by Country Code.',
+    'waterfall of Profit by Sub-Category',
+  ])('classifyNoLlm and selectEligible pick the same template for: %s', (ask) => {
+    const manifestsMap = loadManifests();
+    const cls = classifyNoLlm(ask, manifestsMap, summarizeSchema(COMBO_WORKBOOK_XML));
+    const routed = selectEligible(ask, manifests, ask);
+    expect(routed?.template ?? null).toBe(cls?.template ?? null);
   });
 });
