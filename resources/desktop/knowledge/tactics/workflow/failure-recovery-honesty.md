@@ -7,7 +7,7 @@ These two rules cover the moments an agent is most tempted to report the wrong t
 ## When to Use
 
 - **A field or datasource lookup returns `not_found`** (from `resolve-field`, `list-available-fields`, or a field tool), *especially* right after the user changed the workbook — connected a new data source, renamed a field, swapped an extract, or added a sheet in Tableau.
-- **You are about to report a change is finished** after any apply-style call (`apply-worksheet`, `apply-workbook`, `apply-dashboard`, `apply-dashboard-with-viewpoints`, `build-and-apply-dashboard`, `dashboard-auto-apply`). Read the `HOST VERIFICATION` line *before* you narrate success.
+- **You are about to report a change is finished** after any apply-style call (`apply-worksheet`, `apply-workbook`, `apply-dashboard`, `apply-dashboard-with-viewpoints`, `build-and-apply-dashboard`, `dashboard-auto-apply`, `compose-dashboard`). Read the `HOST VERIFICATION` line *before* you narrate success.
 
 ## Best Practices
 
@@ -30,7 +30,7 @@ HOST VERIFICATION — <status>: <checks> . <claim guard>
 ```
 
 - `status` is one of **`verified`**, **`unverified`**, **`failed`**. **`verified` is the only status that backs a "done" claim.**
-- Worksheet applies get a real structural readback, so they can reach `verified`. **Whole-workbook and dashboard applies are `unverified` by construction** — there is no structural readback for them yet, so the receipt says so plainly.
+- Worksheet applies get a real structural readback, so they can reach `verified`. `compose-dashboard` can also reach `verified` when workbook-XML readback matches both its dashboard zone tree and all requested dashboard-window viewpoints (viewpoint order does not matter). Whole-workbook applies remain `unverified` by construction, and other dashboard paths remain unverified unless they perform equivalent structural readback.
 - If the receipt says `unverified` or `failed` for something you claimed — a sort, a filter, an encoding, or the change as a whole — **re-read the artifact and correct your answer before reporting completion**: `get-worksheet-xml` for a sheet, `get-dashboard-xml` for a dashboard, `get-workbook-xml` for the whole workbook (or worksheet-list readback / `check-for-user-changes` to confirm survival).
 - Never report success that contradicts the receipt. Report only the evidence the host gives you.
 
@@ -41,7 +41,7 @@ What does **NOT** work:
 - **Declaring "Tableau is unreachable" or "that datasource is gone" on the first `not_found`** without a session refresh. The far more common cause is a stale cache from before the user's change.
 - **Re-reading the same stale cache repeatedly** — calling `resolve-field` again against an un-refreshed `workbookFile` and expecting a different answer. `resolve-field` reads the file as-is; nothing changes until you refresh the file.
 - **Narrating success over a failed/unverified receipt** — e.g. answering "Done — sorted descending and filtered to Top 10" when the line reads `HOST VERIFICATION — failed: … readback FAILED (nodes dropped).` The nodes were dropped; the claim is false.
-- **Treating a whole-workbook or dashboard `unverified` receipt as confirmation.** `unverified` means "not re-verified," not "verified." Read the sheet back before claiming the intent landed.
+- **Treating a whole-workbook or dashboard `unverified` receipt as confirmation.** `unverified` means "not re-verified," not "verified." A `compose-dashboard` receipt is verified only after workbook XML confirms its zone tree and dashboard-window viewpoints.
 - **Inventing problems that nothing measured** when the receipt is `verified` — the guard text explicitly says not to report unlisted issues.
 
 ## Implementation
@@ -82,14 +82,14 @@ apply-worksheet({ ... }) →
 3. apply-worksheet(...) → HOST VERIFICATION — verified: … readback clean.       # only NOW report "done"
 ```
 
-For a whole-workbook or dashboard apply, the receipt is `unverified` by design:
+For a whole-workbook apply, or a dashboard path without structural readback, the receipt is `unverified` by design:
 
 ```
 HOST VERIFICATION — unverified: preflight clean · apply completed · full workbook intent NOT re-verified.
 Treat sheet-level state as unconfirmed until read back; do not report problems without host evidence.
 ```
 
-Read the affected sheets back (`get-worksheet-xml` / worksheet-list readback) before claiming the intent landed; report the apply as completed-but-unverified until you have that evidence.
+Read the affected artifact back before claiming the intent landed; report the apply as completed-but-unverified until you have that evidence. `compose-dashboard` does this itself and emits `verified` only when workbook XML confirms both the zone tree and all requested window viewpoints.
 
 ## Source and Confidence
 

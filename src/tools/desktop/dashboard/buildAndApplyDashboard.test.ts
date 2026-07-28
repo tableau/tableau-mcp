@@ -3,6 +3,8 @@ import { existsSync } from 'fs';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as applyFocusModule from '../../../desktop/commands/workbook/applyFocus.js';
+import * as applyMutexModule from '../../../desktop/commands/workbook/applyMutex.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as injectViewpointsModule from '../../../desktop/commands/workbook/injectViewpoints.js';
 import * as loadDashboardXmlModule from '../../../desktop/commands/workbook/loadDashboardXml.js';
@@ -15,6 +17,8 @@ import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getBuildAndApplyDashboardTool } from './buildAndApplyDashboard.js';
 
+vi.mock('../../../desktop/commands/workbook/applyFocus.js');
+vi.mock('../../../desktop/commands/workbook/applyMutex.js');
 vi.mock('../../../desktop/commands/workbook/getWorkbookXml.js');
 vi.mock('../../../desktop/commands/workbook/loadWorkbookXml.js');
 vi.mock('../../../desktop/commands/workbook/loadDashboardXml.js');
@@ -46,6 +50,7 @@ describe('buildAndApplyDashboardTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(applyMutexModule.withApplyLock).mockImplementation(async (fn) => await fn());
     vi.mocked(existsSync).mockReturnValue(true);
     vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(mockWorkbookXml));
     vi.spyOn(injectViewpointsModule, 'injectViewpoints').mockReturnValue(
@@ -87,7 +92,7 @@ describe('buildAndApplyDashboardTool', () => {
     expect(resultObj.viewpointCount).toBe(4);
   });
 
-  it('names the dashboard as the artifact on every write it makes', async () => {
+  it('defers focus until the viewpoint workbook apply', async () => {
     const mockLoad = vi
       .spyOn(loadDashboardXmlModule, 'loadDashboardXml')
       .mockResolvedValue(Ok({ validationWarnings: [] }));
@@ -101,16 +106,15 @@ describe('buildAndApplyDashboardTool', () => {
       expect.objectContaining({
         dashboardName: 'Sales Dashboard',
         xml: expect.stringContaining('<zone'),
-        focus: { navigate: 'artifact', sheetName: 'Sales Dashboard' },
+        focus: { navigate: 'none', reason: 'intermediate-leg' },
       }),
     );
-    // The viewpoint apply is skipped when the viewpoints are already present, so it names
-    // the same dashboard rather than relying on the write above having been the last one.
     expect(mockWorkbookLoad).toHaveBeenCalledWith(
       expect.objectContaining({
         focus: { navigate: 'artifact', sheetName: 'Sales Dashboard' },
       }),
     );
+    expect(applyFocusModule.dispatchApplyFocus).not.toHaveBeenCalled();
   });
 
   it('should include a title text zone when title is provided', async () => {
@@ -193,6 +197,13 @@ describe('buildAndApplyDashboardTool', () => {
       viewpointState: 'success-already-present',
     });
     expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
+    expect(applyMutexModule.withApplyLock).toHaveBeenCalledOnce();
+    expect(applyFocusModule.dispatchApplyFocus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        focus: { navigate: 'artifact', sheetName: 'Sales Dashboard' },
+        postedXml: mockWorkbookXmlWithAllViewpoints,
+      }),
+    );
   });
 
   it('should return error when workbook file does not exist', async () => {

@@ -27,11 +27,15 @@ const DISPOSITIONS: Readonly<Record<string, readonly string[]>> = {
   'src/tools/desktop/coordination/batchCreateAndCacheSheets.ts': ['loadWorkbookXml:restore'],
   'src/tools/desktop/dashboard/applyDashboard.ts': ['loadDashboardXml:artifact'],
   'src/tools/desktop/dashboard/applyDashboardWithViewpoints.ts': [
-    'loadDashboardXml:artifact',
+    'loadDashboardXml:none',
     'loadWorkbookXml:artifact',
   ],
   'src/tools/desktop/dashboard/buildAndApplyDashboard.ts': [
-    'loadDashboardXml:artifact',
+    'loadDashboardXml:none',
+    'loadWorkbookXml:artifact',
+  ],
+  'src/tools/desktop/dashboard/composeDashboard.ts': [
+    'loadDashboardXml:none',
     'loadWorkbookXml:artifact',
   ],
   'src/tools/desktop/dashboard/dashboardAutoApply.ts': [
