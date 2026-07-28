@@ -25,6 +25,7 @@ export const desktopToolNames = [
   'lookup-workbook-schema',
   'search-workbook-examples',
   'execute-tableau-command',
+  'execute-authoring-plan',
   'ask-user',
   'tableau-begin-episode',
   'tableau-end-episode',

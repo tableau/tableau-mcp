@@ -6,6 +6,7 @@ import { getReadCachedXmlTool } from './cache/readCachedXml.js';
 import { getValidateWorkbookXmlTool } from './cache/validateWorkbookXml.js';
 import { getValidateWorksheetXmlTool } from './cache/validateWorksheetXml.js';
 import { getWriteCachedXmlTool } from './cache/writeCachedXml.js';
+import { getExecuteAuthoringPlanTool } from './commands/executeAuthoringPlan.js';
 import { getExecuteTableauCommandTool } from './commands/executeTableauCommand.js';
 import { getBatchCreateAndCacheSheetsTool } from './coordination/batchCreateAndCacheSheets.js';
 import { getBuildAndApplyWorksheetTool } from './coordination/buildAndApplyWorksheet.js';
@@ -92,6 +93,7 @@ export const desktopToolFactories = [
   getLookupWorkbookSchemaTool,
   getSearchWorkbookExamplesTool,
   getExecuteTableauCommandTool,
+  getExecuteAuthoringPlanTool,
   getAskUserTool,
   getBindTemplateTool,
   getDashboardAutoApplyTool,

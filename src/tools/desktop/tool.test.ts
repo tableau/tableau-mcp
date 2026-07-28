@@ -247,6 +247,7 @@ describe('DesktopTool bind-first orientation gate', () => {
     'apply-worksheet',
     'refine-worksheet',
     'execute-tableau-command',
+    'execute-authoring-plan',
   ] as const)('records %s before its callback fails', async (name) => {
     await makeTool(name).logAndExecute({
       extra: getMockRequestHandlerExtra(),

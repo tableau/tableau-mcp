@@ -29,6 +29,7 @@ const AUTHORING_ATTEMPT_TOOLS: ReadonlySet<DesktopToolName> = new Set([
   'apply-worksheet',
   'refine-worksheet',
   'execute-tableau-command',
+  'execute-authoring-plan',
 ]);
 
 const BIND_FIRST_ORIENTATION_TOOLS: ReadonlySet<DesktopToolName> = new Set([
