@@ -4076,6 +4076,12 @@
         "Regions differ wildly in physical size — large, low-value areas visually dominate (area is not magnitude); consider a symbol/bubble map sized by the measure instead.",
         "The dimension has no geographic semantic-role (not a Country/State/etc.) — a choropleth needs fields Tableau can resolve to a filled geometry."
       ],
+      "at_least_one_of": [
+        [
+          "country",
+          "state"
+        ]
+      ],
       "slots": [
         {
           "slot_id": "country",
@@ -4086,7 +4092,7 @@
           ],
           "kind": "geo",
           "bindable": true,
-          "required": true,
+          "required": false,
           "notes": "Geographic dimension on level-of-detail (outer region). Binds to a Country/Region-class field; XML column-instance [none:Country:nk]."
         },
         {
@@ -4327,6 +4333,13 @@
         "map"
       ],
       "description": "A point (symbol) map: one Circle mark per geographic member, placed on generated Lat/Long, sized by a measure. Distinct from a choropleth (which fills regions); use when magnitude is encoded by symbol size rather than region shading.",
+      "at_least_one_of": [
+        [
+          "country",
+          "state",
+          "city"
+        ]
+      ],
       "slots": [
         {
           "slot_id": "country",
@@ -4337,7 +4350,7 @@
           ],
           "kind": "geo",
           "bindable": true,
-          "required": true,
+          "required": false,
           "notes": "template column carries semantic-role='[Country].[ISO3166_2]'; the LOD level drives generated Lat/Long. Portability is 'across the committed fixture classes + render-verified', not a blanket 'any dataset'."
         },
         {

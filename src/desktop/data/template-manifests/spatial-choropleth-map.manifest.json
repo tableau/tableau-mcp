@@ -48,6 +48,12 @@
     "Regions differ wildly in physical size — large, low-value areas visually dominate (area is not magnitude); consider a symbol/bubble map sized by the measure instead.",
     "The dimension has no geographic semantic-role (not a Country/State/etc.) — a choropleth needs fields Tableau can resolve to a filled geometry."
   ],
+  "at_least_one_of": [
+    [
+      "country",
+      "state"
+    ]
+  ],
   "slots": [
     {
       "slot_id": "country",
@@ -58,7 +64,7 @@
       ],
       "kind": "geo",
       "bindable": true,
-      "required": true,
+      "required": false,
       "notes": "Geographic dimension on level-of-detail (outer region). Binds to a Country/Region-class field; XML column-instance [none:Country:nk]."
     },
     {

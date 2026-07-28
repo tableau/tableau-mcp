@@ -2,11 +2,11 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.59.1+content.2026-07-27",
+  "content_version": "2.60.2+content.2026-07-28",
   "schema_version": "2",
-  "generated": "2026-07-27",
+  "generated": "2026-07-28",
   "engine_compat": {
-    "server_min": "2.59.1",
+    "server_min": "2.60.2",
     "node": ">=22.7.5"
   },
   "resources": [
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "9a72ff66a3a4b9720cf2309c2a7793129d8b6bee120ad202316a8b1d214f5255",
-      "bytes": 283278
+      "sha256": "ee51eb6743a0ef27d87d83b551968ac3f1d66a173ec4eeae57e7163daa4158fa",
+      "bytes": 283488
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -442,8 +442,8 @@
     },
     {
       "path": "template-manifests/spatial-choropleth-map.manifest.json",
-      "sha256": "5bf42e221bb01d867a01c442a762503195898c320377febf9f2b0cfa9e4048dc",
-      "bytes": 5914
+      "sha256": "bc5ca874ec4a2be267fafe41940ee431647149dd27678a55dc9db626a0c48fc9",
+      "bytes": 5986
     },
     {
       "path": "template-manifests/spatial-symbol-map-latlon.manifest.json",
@@ -452,8 +452,8 @@
     },
     {
       "path": "template-manifests/spatial-symbol-map.manifest.json",
-      "sha256": "2b82774cb6da6f6c17c8932963ffe237a75ca3dd41b64a0605d7ced2eab0baf7",
-      "bytes": 5862
+      "sha256": "4883a2c54b0b550f1de41c1ddee830ffb3cdbd540e83494af18c27fd965e3131",
+      "bytes": 5948
     },
     {
       "path": "template-manifests/trend-line-chart.manifest.json",
