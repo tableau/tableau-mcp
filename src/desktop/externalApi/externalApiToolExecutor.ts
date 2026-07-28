@@ -565,6 +565,7 @@ function mapClientError(error: ExternalApiError | NoInstance): ExecuteCommandErr
           code: error.code ?? String(error.status),
           message: error.detail ?? error.title ?? `External Client API problem (${error.status})`,
           recoverable: false,
+          ...(error.code ? { 'tableau-error-code': error.code } : {}),
         },
       };
     case 'unauthorized':

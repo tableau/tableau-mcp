@@ -262,6 +262,29 @@ export class AdminInsightsUnavailableError extends McpToolError {
   }
 }
 
+/**
+ * The image-render call exceeded its deadline. Distinct from client cancellation: the render
+ * hangs indefinitely when Tableau Desktop is showing a modal dialog that blocks rendering, so
+ * a blind retry just wedges Desktop again. The message steers toward dismissing the dialog or
+ * passing a filePath rather than retrying.
+ */
+export class ImageExportTimeoutError extends McpToolError {
+  constructor(label: string, timeoutMs: number) {
+    const seconds = Math.round(timeoutMs / 1000);
+    super({
+      type: 'image-export-timeout',
+      message: [
+        `${label} image export exceeded ${seconds}s and was aborted.`,
+        'Tableau Desktop may be showing a modal dialog (e.g. a save or error prompt) that ' +
+          'blocks rendering. Do not blindly retry — it will hang again.',
+        'Bring Tableau Desktop to the foreground and dismiss any open dialog, or pass a ' +
+          'filePath so Tableau writes the image to disk directly.',
+      ].join('\n'),
+      statusCode: 504,
+    });
+  }
+}
+
 export class DesktopCommandExecutionError extends McpToolError {
   constructor(error: ExecuteCommandError, fix?: string) {
     const message = formatDesktopCommandExecutionError(error);

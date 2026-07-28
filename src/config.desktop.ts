@@ -1,5 +1,8 @@
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
-import { DEFAULT_INLINE_IMAGE_MAX_BYTES } from './desktop/inlineImageCap.js';
+import {
+  DEFAULT_IMAGE_EXPORT_TIMEOUT_MS,
+  DEFAULT_INLINE_IMAGE_MAX_BYTES,
+} from './desktop/inlineImageCap.js';
 import { DEFAULT_INLINE_XML_MAX_BYTES } from './desktop/inlineXmlCap.js';
 import { parseNumber } from './utils/parseNumber.js';
 
@@ -20,6 +23,13 @@ export class Config extends BaseConfig {
    */
   inlineImageMaxBytes: number;
 
+  /**
+   * Deadline (ms) applied to the image-render call in the export-image tools. Bounds the
+   * unbounded hang seen when Tableau Desktop is showing a modal dialog that blocks rendering,
+   * converting it into a reportable timeout error. Env-overridable via IMAGE_EXPORT_TIMEOUT_MS.
+   */
+  imageExportTimeoutMs: number;
+
   /** Optional override for the External Client API discovery directory. */
   externalApiDiscoveryDir: string | undefined;
 
@@ -38,6 +48,7 @@ export class Config extends BaseConfig {
     const {
       INLINE_XML_MAX_BYTES: inlineXmlMaxBytes,
       INLINE_IMAGE_MAX_BYTES: inlineImageMaxBytes,
+      IMAGE_EXPORT_TIMEOUT_MS: imageExportTimeoutMs,
       TABLEAU_EXTERNAL_API_DISCOVERY_DIR: externalApiDiscoveryDir,
       TABLEAU_DESKTOP_SESSION_ID: desktopSessionId,
     } = cleansedVars;
@@ -57,6 +68,11 @@ export class Config extends BaseConfig {
 
     this.inlineImageMaxBytes = parseNumber(inlineImageMaxBytes, {
       defaultValue: DEFAULT_INLINE_IMAGE_MAX_BYTES,
+      minValue: 1,
+    });
+
+    this.imageExportTimeoutMs = parseNumber(imageExportTimeoutMs, {
+      defaultValue: DEFAULT_IMAGE_EXPORT_TIMEOUT_MS,
       minValue: 1,
     });
   }

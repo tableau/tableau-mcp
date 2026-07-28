@@ -26,6 +26,7 @@ export type MockOverride = {
   status: number;
   contentType?: string;
   body?: string;
+  hang?: boolean;
 };
 
 export type MockExternalApiServer = {
@@ -234,6 +235,9 @@ export async function startMockExternalApiServer(
     const overrideKey = `${method} ${path}`;
     const override = overrides.get(overrideKey);
     if (override) {
+      if (override.hang) {
+        return;
+      }
       res.writeHead(override.status, {
         'content-type': override.contentType ?? 'application/problem+json',
       });

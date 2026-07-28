@@ -6,6 +6,12 @@ import { log } from '../logging/logger.js';
 // config.desktop.ts `inlineImageMaxBytes` (env-overridable via INLINE_IMAGE_MAX_BYTES).
 export const DEFAULT_INLINE_IMAGE_MAX_BYTES = 1024 * 1024;
 
+// Deadline (ms) applied to the image-render call only (not the sheet-list call that precedes
+// it). The first image call after Desktop launches can hang forever when Desktop is showing a
+// modal dialog that blocks rendering; this bounds that hang into a reportable timeout error.
+// Default for config.desktop.ts `imageExportTimeoutMs` (env-overridable via IMAGE_EXPORT_TIMEOUT_MS).
+export const DEFAULT_IMAGE_EXPORT_TIMEOUT_MS = 30_000;
+
 /** Decoded byte length of a base64 payload (the on-disk / on-wire image size). */
 export function imageByteLength(imageBase64: string): number {
   return Buffer.from(imageBase64, 'base64').length;
@@ -30,6 +36,38 @@ export function inlineImageFootprintBytes(bytes: number, mimeType: string | unde
 /** Cache-file extension for an image MIME type. Everything non-SVG is written as `.png`. */
 export function imageExtensionForMimeType(mimeType: string | undefined): 'png' | 'svg' {
   return mimeType === 'image/svg+xml' ? 'svg' : 'png';
+}
+
+/**
+ * Sniffs decoded image bytes and returns the MIME type they actually are. The /v0 image
+ * contract silently falls back to `image/png` when an SVG render is declined and does NOT
+ * echo the format, so trusting the requested MIME type would decode PNG-as-UTF8 and mislabel
+ * the block. Only reports `image/svg+xml` when the bytes truly look like SVG/XML; everything
+ * else is treated as `image/png`.
+ */
+export function sniffImageMimeType(bytes: Buffer): 'image/png' | 'image/svg+xml' {
+  // PNG signature: 89 50 4E 47 0D 0A 1A 0A (check the leading 89 50 4E 47 = "\x89PNG").
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
+    return 'image/png';
+  }
+
+  // SVG/XML: after an optional UTF-8 BOM and leading whitespace, starts with "<svg" or "<?xml".
+  let text = bytes.toString('utf-8');
+  if (text.charCodeAt(0) === 0xfeff) {
+    text = text.slice(1);
+  }
+  const trimmed = text.replace(/^\s+/, '');
+  if (trimmed.startsWith('<svg') || trimmed.startsWith('<?xml')) {
+    return 'image/svg+xml';
+  }
+
+  return 'image/png';
 }
 
 /**

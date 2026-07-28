@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { ImageResult } from '../../../desktop/externalApi/types.js';
+import { ImageExportTimeoutError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { runExternalApiReadTool } from '../externalApiReadHarness.js';
 import { DesktopTool } from '../tool.js';
@@ -33,9 +34,9 @@ export const exportWorksheetImageTool = (
     paramsSchema,
     annotations: {
       title,
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     },
     callback: async (
@@ -68,11 +69,24 @@ export const exportWorksheetImageTool = (
                 return worksheetResult.error.toErr();
               }
 
-              return await read(
+              // Scope a deadline to the image call only (the list call rides extra.signal). The
+              // first render after Desktop launches can hang forever behind a modal dialog; this
+              // converts that into a reportable timeout instead of an unbounded wait. The harness
+              // read() always passes extra.signal into the closure, so pass `combined` explicitly.
+              const timeoutSignal = AbortSignal.timeout(extra.config.imageExportTimeoutMs);
+              const combined = AbortSignal.any([_signal, timeoutSignal]);
+              const imageResult = await read(
                 'worksheet image',
-                async (executor, signal) =>
-                  await executor.exportWorksheetImage(worksheetResult.value.id, query, signal),
+                async (executor) =>
+                  await executor.exportWorksheetImage(worksheetResult.value.id, query, combined),
               );
+              if (imageResult.isErr() && timeoutSignal.aborted && !_signal.aborted) {
+                return new ImageExportTimeoutError(
+                  'Worksheet',
+                  extra.config.imageExportTimeoutMs,
+                ).toErr();
+              }
+              return imageResult;
             },
           });
         },

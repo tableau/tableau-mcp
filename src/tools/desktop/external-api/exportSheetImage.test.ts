@@ -221,6 +221,88 @@ describe('export-image tools', () => {
     }
   });
 
+  it('renders a PNG single image block when an SVG was requested but Desktop returned PNG bytes', async () => {
+    // Desktop silently falls back to PNG when it declines an SVG render and does not echo the
+    // format. The result must sniff the bytes: a single image/png block, no SVG text block.
+    const harness = await startHarness(exportWorksheetImageTool, (server) => {
+      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
+        status: 200,
+        contentType: 'application/json',
+        // SAMPLE_IMAGE_BASE64 is a real 1x1 PNG (starts with the PNG magic bytes).
+        body: JSON.stringify({
+          imageBase64:
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
+          width: 640,
+          height: 480,
+        }),
+      });
+    });
+    try {
+      const result = await harness.callTool({
+        worksheet: 'sheet-sales',
+        mimeType: 'image/svg+xml',
+      });
+
+      expect(result.isError).toBe(false);
+      expect(result.content).toHaveLength(1);
+      invariant(result.content[0].type === 'image');
+      expect(result.content[0].mimeType).toBe('image/png');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('aborts a hung image render at the deadline and reports a timeout (not a cancellation)', async () => {
+    const harness = await startHarness(
+      exportWorksheetImageTool,
+      (server) => {
+        server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
+          status: 200,
+          hang: true,
+        });
+      },
+      { imageExportTimeoutMs: 1 },
+    );
+    try {
+      const result = await harness.callTool({ worksheet: 'sheet-sales' });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('image export exceeded');
+      expect(result.content[0].text).toContain('modal dialog');
+      expect(result.content[0].text).toContain('Do not blindly retry');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('surfaces the Problem code alongside the detail when the image endpoint returns a 500', async () => {
+    const harness = await startHarness(exportWorksheetImageTool, (server) => {
+      server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
+        status: 500,
+        body: JSON.stringify({
+          type: 'problem',
+          code: '0x8F2A4D91',
+          status: 500,
+          instance: '/v0/mock',
+          // A `detail` IS present, so the command-error message is the detail. The code must
+          // still be surfaced (via the appended `tableau-error-code` line) rather than dropped.
+          detail: 'Render failed',
+        }),
+      });
+    });
+    try {
+      const result = await harness.callTool({ worksheet: 'sheet-sales' });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Render failed');
+      expect(result.content[0].text).toContain('0x8F2A4D91');
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('surfaces a 409 viz-not-ready as a command error (not a too-new endpoint)', async () => {
     const harness = await startHarness(exportWorksheetImageTool, (server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
