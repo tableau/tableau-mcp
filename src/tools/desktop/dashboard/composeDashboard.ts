@@ -58,6 +58,7 @@ type ComposeDashboardResult =
     }
   | {
       dashboardName: string;
+      dashboardState: 'unknown';
       attemptedZones: WorksheetZoneReceipt[];
       verification: string;
     };
@@ -319,12 +320,16 @@ function attemptedZonesResult({
 }): Ok<ComposeDashboardResult> {
   return new Ok({
     dashboardName,
+    dashboardState: 'unknown',
     attemptedZones: worksheetZones,
     verification:
-      formatDashboardPromiseCheck(validationWarnings) +
-      ` Dashboard "${dashboardName}" exists because its dashboard apply completed; ` +
+      formatDashboardPromiseCheck(validationWarnings).replace(
+        'apply completed',
+        'apply request returned without an error',
+      ) +
+      ` Dashboard "${dashboardName}" existence is UNKNOWN because post-apply readback did not confirm it; ` +
       `the attempted zone tree and requested window viewpoints are NOT confirmed (${detail}). ` +
-      'Next call: activate-sheet to bring it into view; do not recreate the dashboard.',
+      'Next call: list-dashboards to check whether it exists before deciding whether to retry.',
   });
 }
 

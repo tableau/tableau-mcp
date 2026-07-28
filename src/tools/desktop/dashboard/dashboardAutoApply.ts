@@ -94,7 +94,7 @@ type DashboardAutoApplyRefusalResult = {
 type Replaced = { dashboard?: string; sheets: string[] };
 
 type DashboardAutoApplySuccessResult = {
-  applied: true;
+  applied: 'unverified';
   dashboard: string;
   sheets: Array<{ title: string; template_name: string }>;
   phase_ms: { read: number; bind: number; inject: number; apply: number };
@@ -103,7 +103,7 @@ type DashboardAutoApplySuccessResult = {
 };
 
 type DashboardAutoApplyPartialResult = {
-  applied: 'partial';
+  applied: 'unverified';
   dashboard: string;
   sheets: Array<{ title: string; template_name: string }>;
   zones:
@@ -462,10 +462,9 @@ export const getDashboardAutoApplyTool = (
             );
           }
           if (!zonesViaWorkbook) {
-            // Fallback mode (§2 "Probe fails"): the workbook (worksheets + minimal empty
-            // dashboard) is already live; a second dispatch lays in the real zones. A
-            // failure here is a REAL partial window (Q3) — the dashboard exists with a
-            // valid empty layout, coherent and recoverable via build-and-apply-dashboard.
+            // Fallback mode (§2 "Probe fails"): the first document request returned without
+            // an error, then a second dispatch lays in the real zones. Without readback, a
+            // second-leg failure cannot prove which first-leg artifacts reached Desktop.
             const realZones = computeZones(titleText, {
               kpis: [],
               charts: resolvedTitles,
@@ -498,15 +497,15 @@ export const getDashboardAutoApplyTool = (
               return new IncompleteOperationError(
                 withNextAction(
                   {
-                    applied: 'partial',
+                    applied: 'unverified',
                     dashboard: dashboardName,
                     sheets,
                     zones: zonesState,
                     apply_error: message,
                     guidance:
-                      `The workbook (sheets + an empty "${dashboardName}" dashboard) was applied, but laying ` +
-                      `in the zones failed (${message}). Re-issue the zones via build-and-apply-dashboard — the ` +
-                      'dashboard exists with a valid empty layout, nothing is corrupted.',
+                      `Desktop accepted the workbook request for the sheets and "${dashboardName}", but no ` +
+                      `readback confirmed those artifacts before the zone request failed (${message}). ` +
+                      'The live workbook outcome is unverified. Read the workbook and dashboard list before retrying.',
                     ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
                   },
                   prefillNextAction('Re-issue the zones'),
@@ -518,11 +517,11 @@ export const getDashboardAutoApplyTool = (
           const applyMs = Date.now() - applyStart;
 
           return new Ok({
-            applied: true,
+            applied: 'unverified',
             dashboard: dashboardName,
             sheets,
             phase_ms: { read: readMs, bind: bindMs, inject: injectMs, apply: applyMs },
-            guidance: `Applied "${dashboardName}" (${sheets.length} sheet(s)) to the live workbook (read ${readMs}ms, bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
+            guidance: `Desktop accepted the document request for "${dashboardName}" (${sheets.length} sheet(s)), but no readback after the apply confirmed the live workbook; outcome unverified (read ${readMs}ms, bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
             ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
           });
         },

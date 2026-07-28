@@ -1,9 +1,16 @@
+import * as os from 'os';
+import * as path from 'path';
 import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { log } from '../../logging/logger.js';
 import { GetCommandStatusResponse, GetEventsResponse } from '../../sdks/desktop/agentApi/types.js';
 import { desktopCallTimeoutMessage, isDesktopCallTimeout } from '../callDeadline.js';
+import {
+  type DesktopLogCursor,
+  readDesktopCommandError,
+  snapshotDesktopLogs,
+} from '../desktopLogError.js';
 import {
   ExecuteCommandArgs,
   ExecuteCommandError,
@@ -54,6 +61,8 @@ export type ExternalApiToolExecutorDeps = {
   pid?: number;
   /** Options forwarded to each {@link ExternalApiClient}. */
   clientOptions?: ExternalApiClientOptions;
+  /** Candidate Tableau Desktop log directories. Defaults to standard repositories. */
+  desktopLogDirs?: string[];
   /** Client factory — injectable for tests. Defaults to a real client. */
   createClient?: (
     instance: ExternalApiInstance,
@@ -73,6 +82,12 @@ type RawOutcome = {
   completedAt: string | undefined;
   operationId: string | undefined;
   apiVersion: string | undefined;
+};
+
+type CommandDiagnostic = {
+  cursor: DesktopLogCursor;
+  pid: number;
+  startedAt: Date;
 };
 
 /**
@@ -150,13 +165,28 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     >
   > {
     const resolvedArgs = args ?? {};
+    let diagnostic: CommandDiagnostic | undefined;
 
-    const outcomeResult = await this.withRescan((client) =>
-      this.callEndpoint(client, { namespace, command, args: resolvedArgs, signal }),
-    );
+    const outcomeResult = await this.withRescan((client) => {
+      const startedAt = new Date();
+      diagnostic = {
+        cursor: snapshotDesktopLogs({
+          pid: client.pid,
+          candidateDirs: this.deps.desktopLogDirs ?? defaultDesktopLogDirs(),
+        }),
+        pid: client.pid,
+        startedAt,
+      };
+      return this.callEndpoint(client, { namespace, command, args: resolvedArgs, signal });
+    });
 
     if (outcomeResult.isErr()) {
-      const mapped = mapClientError(outcomeResult.error, this.deps.pid);
+      const mapped = enrichCommandErrorFromDesktopLog(
+        mapClientError(outcomeResult.error, this.deps.pid),
+        diagnostic,
+        namespace,
+        command,
+      );
       log({
         message: `Failed to execute command ${namespace}:${command} via External Client API`,
         level: 'error',
@@ -168,13 +198,19 @@ export class ExternalApiToolExecutor extends ToolExecutor {
 
     const statusResult = buildCommandStatus(outcomeResult.value, { namespace, command });
     if (statusResult.isErr()) {
+      const enrichedError = enrichCommandErrorFromDesktopLog(
+        statusResult.error,
+        diagnostic,
+        namespace,
+        command,
+      );
       log({
         message: `Command ${namespace}:${command} failed`,
         level: 'error',
         logger: LOGGER,
-        data: statusResult.error,
+        data: enrichedError,
       });
-      return statusResult;
+      return Err(enrichedError);
     }
 
     const commandResult = statusResult.value;
@@ -511,20 +547,72 @@ function buildCommandStatus(
     });
   }
 
+  if (state !== 'succeeded' && state !== 'queued' && state !== 'running') {
+    return Err({
+      type: 'invalid-response',
+      error: new Error(
+        `External Client API returned nonterminal or unknown operation state ${JSON.stringify(outcome.state)} for ${namespace}:${command}.`,
+      ),
+    });
+  }
+
   const now = new Date().toISOString();
   const resultPayload =
     outcome.result !== undefined || supportsOperationResult(outcome.apiVersion)
       ? { result: outcome.result }
       : {};
+  const status: GetCommandStatusResponse['status'] =
+    state === 'succeeded' ? 'completed' : state === 'queued' ? 'queued' : 'running';
   return Ok({
     command_id: outcome.operationId ?? `ext_${namespace}:${command}_${Date.now()}`,
-    status: 'completed',
+    status,
     submitted_at: outcome.createdAt ?? now,
-    started_at: outcome.createdAt ?? now,
-    completed_at: outcome.completedAt ?? now,
+    ...(state !== 'queued' ? { started_at: outcome.createdAt ?? now } : {}),
+    ...(state === 'succeeded' ? { completed_at: outcome.completedAt ?? now } : {}),
     ...resultPayload,
     ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
   });
+}
+
+function defaultDesktopLogDirs(): string[] {
+  const documents = path.join(os.homedir(), 'Documents');
+  return [
+    path.join(documents, 'My Tableau Repository', 'Logs'),
+    path.join(documents, 'My Tableau Repository (Beta)', 'Logs'),
+  ];
+}
+
+function enrichCommandErrorFromDesktopLog(
+  error: ExecuteCommandError,
+  diagnostic: CommandDiagnostic | undefined,
+  namespace: string,
+  command: string,
+): ExecuteCommandError {
+  if (!diagnostic || error.type !== 'command-failed' || !error.error) return error;
+
+  const logRead = readDesktopCommandError({
+    cursor: diagnostic.cursor,
+    pid: diagnostic.pid,
+    namespace,
+    command,
+    startedAt: diagnostic.startedAt,
+  });
+  if (!logRead.detail) return error;
+
+  const detail = logRead.detail;
+  return {
+    type: 'command-failed',
+    error: {
+      ...error.error,
+      message: detail.message,
+      ...(detail.code ? { 'tableau-error-code': detail.code } : {}),
+      log_detail: {
+        source: detail.source,
+        file: path.basename(detail.logPath),
+        timestamp: detail.timestamp,
+      },
+    },
+  };
 }
 
 function getTableauErrorCode(error: OperationError | undefined): string | undefined {

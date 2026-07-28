@@ -258,12 +258,13 @@ describe('composeDashboardTool', () => {
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text)).toMatchObject({
       dashboardName: 'New Dashboard',
+      dashboardState: 'unknown',
       attemptedZones: expect.any(Array),
       verification: expect.stringMatching(
-        /Dashboard "New Dashboard" exists[\s\S]*NOT confirmed[\s\S]*activate-sheet/,
+        /existence is UNKNOWN[\s\S]*NOT confirmed[\s\S]*list-dashboards/,
       ),
     });
-    expect(result.content[0].text).toContain('do not recreate');
+    expect(result.content[0].text).not.toContain('do not recreate');
     expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
   });
 
@@ -283,10 +284,11 @@ describe('composeDashboardTool', () => {
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text)).toMatchObject({
       dashboardName: 'New Dashboard',
+      dashboardState: 'unknown',
       attemptedZones: expect.any(Array),
       verification: expect.stringContaining('NOT confirmed'),
     });
-    expect(result.content[0].text).toContain('activate-sheet');
+    expect(result.content[0].text).toContain('list-dashboards');
     expect(JSON.parse(result.content[0].text)).not.toHaveProperty('zones');
   });
 

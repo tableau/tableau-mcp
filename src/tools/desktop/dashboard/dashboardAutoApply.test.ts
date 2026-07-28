@@ -295,7 +295,9 @@ describe('dashboardAutoApplyTool happy path', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe(true);
+    expect(body.applied).toBe('unverified');
+    expect(body.guidance).toContain('accepted');
+    expect(body.guidance).toContain('unverified');
     expect(body.dashboard).toBe('Sales Dashboard');
     expect(body.sheets).toEqual([
       { title: 'Sales by Region', template_name: 'bar-basic' },
@@ -456,7 +458,7 @@ describe('dashboardAutoApplyTool happy path', () => {
 
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe(true);
+    expect(body.applied).toBe('unverified');
     expect(body.replaced).toEqual({ dashboard: 'Sales Dashboard', sheets: [] });
   });
 });
@@ -595,7 +597,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe(true);
+    expect(body.applied).toBe('unverified');
     expect(applyWorkbookDocument).toHaveBeenCalled();
   });
 
@@ -678,7 +680,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe('partial');
+    expect(body.applied).toBe('unverified');
     expect(body.dashboard).toBe('Sales Dashboard');
     expect(body.sheets).toEqual([
       { title: 'Sales by Region', template_name: 'bar-basic' },
@@ -725,7 +727,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe('partial');
+    expect(body.applied).toBe('unverified');
     expect(body.zones).toEqual({
       state: 'unknown',
       attempted: [
@@ -821,7 +823,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
 
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe(true);
+    expect(body.applied).toBe('unverified');
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
@@ -841,7 +843,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
 
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe(true);
+    expect(body.applied).toBe('unverified');
     expect(body.replaced.sheets).toEqual(['Sales by Region']);
   });
 });

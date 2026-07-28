@@ -231,6 +231,12 @@ const successSchema = z.object({
   guidance: z.string(),
 });
 
+const unverifiedSchema = z.object({
+  deleted: z.literal('unverified'),
+  worksheet: z.string(),
+  guidance: z.string(),
+});
+
 const refusalSchema = z.object({
   deleted: z.literal(false),
   reason: z.enum(['dashboard-referenced', 'last-worksheet', 'user-changed-workbook']),
@@ -263,7 +269,11 @@ describe('deleteWorksheetTool', () => {
       dashboards: [dashboardXml('Dash One', 'Alpha')],
       extraWindows: ["<window class='dashboard' name='Dash One'><viewpoints/></window>"],
     });
-    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(fixture));
+    const expected = removeWorksheetFromWorkbook(fixture, 'Beta');
+    invariant(expected.status === 'removed');
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml')
+      .mockResolvedValueOnce(Ok(fixture))
+      .mockResolvedValueOnce(Ok(expected.xml));
     const loadSpy = vi
       .spyOn(loadWorkbookXmlModule, 'loadWorkbookXml')
       .mockResolvedValue(Ok({ validationWarnings: [] }));
@@ -277,10 +287,30 @@ describe('deleteWorksheetTool', () => {
 
     // The applied XML is byte-identical to the pure core's output for the same
     // fixture — the tool adds nothing and loses nothing between core and dispatch.
-    const expected = removeWorksheetFromWorkbook(fixture, 'Beta');
-    invariant(expected.status === 'removed');
     expect(loadSpy).toHaveBeenCalledTimes(1);
     expect(loadSpy).toHaveBeenCalledWith(expect.objectContaining({ xml: expected.xml }));
+  });
+
+  it('reports deletion as unverified when post-apply readback is unavailable', async () => {
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml')
+      .mockResolvedValueOnce(Ok(buildWorkbook()))
+      .mockResolvedValueOnce(
+        Err({
+          type: 'command-failed',
+          error: { code: 'READ_FAILED', message: 'Read failed', recoverable: true },
+        }),
+      );
+    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Ok({ validationWarnings: [] }),
+    );
+
+    const result = await getToolResult({ worksheetName: 'Beta' });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = unverifiedSchema.parse(JSON.parse(result.content[0].text));
+    expect(parsed.guidance).toContain('outcome is unverified');
+    expect(parsed.guidance).not.toContain('Deleted worksheet');
   });
 
   it('refuses a dashboard-referenced sheet, names the dashboards, and dispatches nothing', async () => {
@@ -319,7 +349,12 @@ describe('deleteWorksheetTool', () => {
   });
 
   it('proceeds without the events gate on transports without event support', async () => {
-    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(buildWorkbook()));
+    const fixture = buildWorkbook();
+    const expected = removeWorksheetFromWorkbook(fixture, 'Beta');
+    invariant(expected.status === 'removed');
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml')
+      .mockResolvedValueOnce(Ok(fixture))
+      .mockResolvedValueOnce(Ok(expected.xml));
     const loadSpy = vi
       .spyOn(loadWorkbookXmlModule, 'loadWorkbookXml')
       .mockResolvedValue(Ok({ validationWarnings: [] }));
