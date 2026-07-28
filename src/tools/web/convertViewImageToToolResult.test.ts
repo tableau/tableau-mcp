@@ -38,6 +38,27 @@ describe('convertViewImageUrlToToolResult', () => {
     const result = convertViewImageUrlToToolResult(url, 'PNG');
     expect(result.content.some((c) => c.type === 'image')).toBe(false);
   });
+
+  it('emits a Slack image block pointing at the presigned URL for PNG', () => {
+    const result = convertViewImageUrlToToolResult(url, 'PNG');
+    expect(result._meta).toEqual({
+      slack: {
+        blocks: [{ type: 'image', image_url: url, alt_text: 'Tableau view image' }],
+      },
+    });
+  });
+
+  it('defaults an undefined format to a PNG Slack image block', () => {
+    const result = convertViewImageUrlToToolResult(url, undefined);
+    expect(result._meta?.slack).toMatchObject({
+      blocks: [{ type: 'image', image_url: url }],
+    });
+  });
+
+  it('does not emit a Slack image block for SVG', () => {
+    const result = convertViewImageUrlToToolResult(url, 'SVG');
+    expect(result._meta).toBeUndefined();
+  });
 });
 
 describe('convertViewImageToToolResult', () => {
