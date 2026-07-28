@@ -17,6 +17,8 @@ import {
   ExternalApiInstance,
   HEADER_APPLICATION_VERSION,
   HEADER_XSD_PAYLOAD_VERSION,
+  ImageResult,
+  imageResultSchema,
   OperationEnvelope,
   operationEnvelopeSchema,
   problemResponseSchema,
@@ -60,6 +62,17 @@ export type WorksheetSummaryDataQuery = {
   ignoreAliases?: boolean;
   ignoreSelection?: boolean;
   columnsToIncludeByFieldName?: string;
+};
+
+export type ImageExportQuery = {
+  /**
+   * Absolute path the Desktop host should persist the image to. When set, the response
+   * projects `filePath` instead of `imageBase64`. Desktop rejects a relative path or one
+   * containing `..` with a 400 before dispatching.
+   */
+  filePath?: string;
+  /** Image MIME type. Desktop defaults to `image/png`; `image/svg+xml` and raster formats accepted. */
+  mimeType?: string;
 };
 
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -264,6 +277,22 @@ export class ExternalApiClient {
     );
   }
 
+  async exportWorksheetImage(
+    worksheetId: string,
+    query: ImageExportQuery = {},
+    signal?: AbortSignal,
+  ): Promise<Result<ImageResult, ExternalApiError>> {
+    return this.getJson(buildWorksheetImageRoute(worksheetId, query), imageResultSchema, signal);
+  }
+
+  async exportDashboardImage(
+    dashboardId: string,
+    query: ImageExportQuery = {},
+    signal?: AbortSignal,
+  ): Promise<Result<ImageResult, ExternalApiError>> {
+    return this.getJson(buildDashboardImageRoute(dashboardId, query), imageResultSchema, signal);
+  }
+
   async listSiteDatasources(
     signal?: AbortSignal,
   ): Promise<Result<SiteDatasourceList, ExternalApiError>> {
@@ -434,6 +463,33 @@ function buildWorksheetSummaryDataRoute(
   return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(
     worksheetId,
   )}/summaryData${suffix}`;
+}
+
+// Builds the `?filePath=…&mimeType=…` suffix with encodeURIComponent (percent-encoding),
+// NOT URLSearchParams: URLSearchParams encodes a space as '+', which some servers decode
+// back to a space only for form bodies — for a path a stray '+' is ambiguous. Percent-encoding
+// (`%20`) round-trips a space unambiguously through the host's query decoder.
+function buildImageQuerySuffix(query: ImageExportQuery): string {
+  const parts: string[] = [];
+  if (query.filePath !== undefined) {
+    parts.push(`filePath=${encodeURIComponent(query.filePath)}`);
+  }
+  if (query.mimeType !== undefined) {
+    parts.push(`mimeType=${encodeURIComponent(query.mimeType)}`);
+  }
+  return parts.length > 0 ? `?${parts.join('&')}` : '';
+}
+
+function buildWorksheetImageRoute(worksheetId: string, query: ImageExportQuery): string {
+  return `${EXTERNAL_API_ROUTES.workbookWorksheets}/${encodeURIComponent(
+    worksheetId,
+  )}/image${buildImageQuerySuffix(query)}`;
+}
+
+function buildDashboardImageRoute(dashboardId: string, query: ImageExportQuery): string {
+  return `${EXTERNAL_API_ROUTES.workbookDashboards}/${encodeURIComponent(
+    dashboardId,
+  )}/image${buildImageQuerySuffix(query)}`;
 }
 
 async function mapErrorResponse(res: Response): Promise<ExternalApiError> {

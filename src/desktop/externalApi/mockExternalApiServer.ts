@@ -26,6 +26,7 @@ export type MockOverride = {
   status: number;
   contentType?: string;
   body?: string;
+  hang?: boolean;
 };
 
 export type MockExternalApiServer = {
@@ -193,6 +194,42 @@ const sendProblem = (res: ServerResponse, status: number, code: string, detail: 
   );
 };
 
+// A 1x1 PNG, base64-encoded — enough to exercise the inline-image decode path.
+const SAMPLE_IMAGE_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+
+// Models the image export contract: a relative or `..`-bearing filePath is a 400 before
+// dispatch; an absolute filePath returns the path (no bytes); otherwise the base64 bytes
+// ride in the envelope. width/height are always present.
+const sendImageExport = (
+  res: ServerResponse,
+  searchParams: Record<string, string>,
+  width: number,
+  height: number,
+): void => {
+  // The server declares the actual rendered format on every rendered response, on both the
+  // filePath and inline-bytes branches. The filePath branch writes the file in the requested
+  // format, so it echoes the requested mimeType (png default). The inline branch always returns
+  // SAMPLE_IMAGE_BASE64 (a PNG), so it always declares image/png to keep the envelope consistent.
+  const filePath = searchParams['filePath'];
+  if (filePath !== undefined && filePath.length > 0) {
+    const isAbsolute = filePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(filePath);
+    if (!isAbsolute || filePath.split(/[\\/]/).includes('..')) {
+      sendProblem(res, 400, 'invalid-query-parameter', `Invalid filePath: ${filePath}`);
+      return;
+    }
+    const effectiveMimeType = searchParams['mimeType'] || 'image/png';
+    sendJson(res, 200, { filePath, width, height, effectiveMimeType });
+    return;
+  }
+  sendJson(res, 200, {
+    imageBase64: SAMPLE_IMAGE_BASE64,
+    width,
+    height,
+    effectiveMimeType: 'image/png',
+  });
+};
+
 export async function startMockExternalApiServer(
   options: { token?: string; workbookXml?: string } = {},
 ): Promise<MockExternalApiServer> {
@@ -220,6 +257,9 @@ export async function startMockExternalApiServer(
     const overrideKey = `${method} ${path}`;
     const override = overrides.get(overrideKey);
     if (override) {
+      if (override.hang) {
+        return;
+      }
       res.writeHead(override.status, {
         'content-type': override.contentType ?? 'application/problem+json',
       });
@@ -374,6 +414,28 @@ export async function startMockExternalApiServer(
         return;
       }
       sendJson(res, 200, DEFAULT_SUMMARY_DATA);
+      return;
+    }
+
+    const worksheetImageMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)\/image$/);
+    if (method === 'GET' && worksheetImageMatch) {
+      const worksheetId = decodeURIComponent(worksheetImageMatch[1]);
+      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+        return;
+      }
+      sendImageExport(res, searchParams, 640, 480);
+      return;
+    }
+
+    const dashboardImageMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+)\/image$/);
+    if (method === 'GET' && dashboardImageMatch) {
+      const dashboardId = decodeURIComponent(dashboardImageMatch[1]);
+      if (!DEFAULT_DASHBOARDS.some((dashboard) => dashboard.id === dashboardId)) {
+        sendProblem(res, 404, 'sheet-not-found', `Dashboard not found: ${dashboardId}`);
+        return;
+      }
+      sendImageExport(res, searchParams, 1280, 720);
       return;
     }
 

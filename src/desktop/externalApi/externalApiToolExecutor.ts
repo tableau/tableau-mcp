@@ -19,6 +19,7 @@ import {
 import {
   ExternalApiClient,
   ExternalApiClientOptions,
+  ImageExportQuery,
   WorkbookDocument,
   WorksheetSummaryDataQuery,
 } from './externalApiClient.js';
@@ -30,6 +31,7 @@ import {
   DatasourceList,
   ExternalApiError,
   ExternalApiInstance,
+  ImageResult,
   OperationEnvelope,
   OperationError,
   OperationWarning,
@@ -337,6 +339,26 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     );
   }
 
+  async exportWorksheetImage(
+    worksheetId: string,
+    query: ImageExportQuery,
+    signal: AbortSignal,
+  ): Promise<Result<ImageResult, ExecuteCommandError>> {
+    return this.readExternalApi((client) =>
+      client.exportWorksheetImage(worksheetId, query, signal),
+    );
+  }
+
+  async exportDashboardImage(
+    dashboardId: string,
+    query: ImageExportQuery,
+    signal: AbortSignal,
+  ): Promise<Result<ImageResult, ExecuteCommandError>> {
+    return this.readExternalApi((client) =>
+      client.exportDashboardImage(dashboardId, query, signal),
+    );
+  }
+
   async validateWorkbookDocument(
     xml: string,
     signal: AbortSignal,
@@ -552,6 +574,7 @@ function mapClientError(
           code: error.code ?? String(error.status),
           message: error.detail ?? error.title ?? `External Client API problem (${error.status})`,
           recoverable: false,
+          ...(error.code ? { 'tableau-error-code': error.code } : {}),
         },
       };
     case 'unauthorized':

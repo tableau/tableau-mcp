@@ -28,6 +28,8 @@ import { getWorkbookInventoryTool } from './data-source/getWorkbookInventory.js'
 import { getListSiteDatasourcesTool } from './data-source/listSiteDatasources.js';
 import { getListSiteWorkbooksTool } from './data-source/listSiteWorkbooks.js';
 import { getListWorkbookDatasourcesTool } from './data-source/listWorkbookDatasources.js';
+import { exportDashboardImageTool } from './external-api/exportDashboardImage.js';
+import { exportWorksheetImageTool } from './external-api/exportWorksheetImage.js';
 import { getApiRootTool } from './external-api/getApiRoot.js';
 import { getDashboardInfoTool } from './external-api/getDashboardInfo.js';
 import { getHealthTool } from './external-api/getHealth.js';
@@ -115,6 +117,8 @@ export const desktopToolFactories = [
   getDashboardInfoTool,
   getStoryboardInfoTool,
   getSummaryDataTool,
+  exportWorksheetImageTool,
+  exportDashboardImageTool,
   getWorkbookInventoryTool,
   getListWorkbookDatasourcesTool,
   getListSiteDatasourcesTool,
