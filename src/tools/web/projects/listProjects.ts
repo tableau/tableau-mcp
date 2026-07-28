@@ -36,7 +36,8 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
     server,
     name: 'list-projects',
     description: `
-  Retrieves a list of projects on a Tableau site including their metadata such as name, description, parent project, content permissions, owner, and timestamps. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Default) for precise project discovery. Use this tool when a user requests to list, search, or filter Tableau projects on a site.
+  Retrieves a list of projects on a Tableau site including their metadata such as name, description, parent project, content permissions, owner, and timestamps. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Default) for precise project discovery.
+  To list results based on usage popularity or relevance, use the search-content tool instead.
 
   **Supported Filter Fields and Operators**
   | Field             | Operators            |
@@ -53,7 +54,6 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
   ${genericFilterDescription}
 
   **Example Usage:**
-  - List all projects on a site
   - List projects with the name "Default":
       filter: "name:eq:Default"
   - List top-level projects only:
@@ -66,7 +66,7 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
   **Pagination**
   This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1-based page to fetch (default 1).
   The response is a flat object \`{ data, totalAvailable }\`; to collect every project, keep incrementing \`pageNumber\` until you have gathered \`totalAvailable\` items.
-  To get just the count of projects matching the request, read \`totalAvailable\` from a single call (e.g. \`pageNumber: 1\`) without paging through every item.`,
+  To get just the count of projects matching a request, read \`totalAvailable\` from a single call (e.g. \`pageNumber: 1\`) without paging through every item.`,
     paramsSchema,
     annotations: {
       title: 'List Projects',

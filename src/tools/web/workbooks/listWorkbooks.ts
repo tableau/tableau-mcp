@@ -43,9 +43,8 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
     server,
     name: 'list-workbooks',
     description: `
-  Retrieves a list of workbooks on a Tableau site including their metadata such as name, description, and information about the views contained in the workbook. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Superstore) for precise and flexible workbook discovery. Use this tool when a user requests to list, search, or filter Tableau workbooks on a site.
-
-  This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1000-item page to fetch (1-based, default 1). The response is a flat object \`{ data, totalAvailable }\`; paginate by incrementing \`pageNumber\` until you have collected \`totalAvailable\` items. To get just the count of workbooks matching the request, read \`totalAvailable\` from a single call (e.g. \`pageNumber: 1\`) without paging through every item.
+  Retrieves a list of workbooks on a Tableau site including their metadata such as name, description, and information about the views contained in the workbook. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Superstore) for precise and flexible workbook discovery.
+  To list results based on usage popularity or relevance, use the search-content tool.
 
   **Supported Filter Fields and Operators**
   | Field             | Operators            |
@@ -70,7 +69,6 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
   ${genericFilterDescription}
 
   **Example Usage:**
-  - List all workbooks on a site
   - List workbooks with the name "Superstore":
       filter: "name:eq:Superstore"
   - List workbooks in the "Finance" project:
@@ -78,7 +76,12 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
   - List workbooks created after January 1, 2023:
       filter: "createdAt:gt:2023-01-01T00:00:00Z"
   - List workbooks with the name "Superstore" in the "Finance" project and created after January 1, 2023:
-      filter: "name:eq:Superstore,projectName:eq:Finance,createdAt:gt:2023-01-01T00:00:00Z"`,
+      filter: "name:eq:Superstore,projectName:eq:Finance,createdAt:gt:2023-01-01T00:00:00Z"
+      
+  **Pagination**
+  This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1000-item page to fetch (1-based, default 1).
+  The response is a flat object \`{ data, totalAvailable }\`; paginate by incrementing \`pageNumber\` until you have collected \`totalAvailable\` items.
+  To get just the count of workbooks matching a request, read \`totalAvailable\` from a single call (e.g. \`pageNumber: 1\`) without paging through every item.`,
     paramsSchema,
     annotations: {
       title: 'List Workbooks',

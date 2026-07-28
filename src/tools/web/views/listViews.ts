@@ -43,7 +43,8 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
     server,
     name: 'list-views',
     description: `
-  Retrieves a list of views on a Tableau site including their metadata such as name, owner, and the workbook they are found in. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Overview) for precise and flexible view discovery. Use this tool when a user requests to list, search, or filter Tableau views on a site.
+  Retrieves a list of views on a Tableau site including their metadata such as name, owner, and the workbook they are found in. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Overview) for precise and flexible view discovery.
+  To list results based on usage popularity or relevance, use the search-content tool instead.
 
   **Supported Filter Fields and Operators**
   | Field               | Operators            |
@@ -71,7 +72,6 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
   ${genericFilterDescription}
 
   **Example Usage:**
-  - List all views on a site
   - List views with the name "Overview":
       filter: "name:eq:Overview"
   - List views in the "Finance" project:
@@ -83,8 +83,8 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
 
   **Pagination**
   This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1000-item page to fetch (1-based, default 1).
-  Use \`limit\` to return fewer than a full page (at most 1000 items) from the requested page. The response is a flat object \`{ data, totalAvailable }\`; paginate by incrementing \`pageNumber\` until you have collected \`totalAvailable\` items.
-  To get just the count of views matching the request, read \`totalAvailable\` from a single call (e.g. \`pageNumber: 1\`) without paging through every item.`,
+  The response is a flat object \`{ data, totalAvailable }\`; paginate by incrementing \`pageNumber\` until you have collected \`totalAvailable\` items.
+  To get just the count of views matching a request, read \`totalAvailable\` from a single call (e.g. \`pageNumber: 1\`) without paging through every item.`,
     paramsSchema,
     annotations: {
       title: 'List Views',

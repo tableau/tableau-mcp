@@ -36,7 +36,8 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
     server,
     name: 'list-datasources',
     description: `
-  Retrieves a list of published data sources from a specified Tableau site using the Tableau REST API. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Views) for precise and flexible data source discovery. Use this tool when a user requests to list, search, or filter Tableau data sources on a site.
+  Retrieves a list of published data sources from a specified Tableau site using the Tableau REST API. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Views) for precise and flexible data source discovery.
+  To list results based on usage popularity or relevance, use the search-content tool instead.
 
   **Supported Filter Fields and Operators**
   | Field                  | Operators                                 |
@@ -75,7 +76,6 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
   ${genericFilterDescription}
 
   **Example Usage:**
-  - List all data sources on a site
   - List data sources with the name "Project Views":
       filter: "name:eq:Project Views"
   - List data sources in the "Finance" project:
@@ -86,9 +86,9 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
       filter: "name:eq:Project Views,projectName:eq:Finance,createdAt:gt:2023-01-01T00:00:00Z"
 
   **Pagination**
-  This tool returns a single page of up to 1000 data sources per call. Use \`pageNumber\` to select which 1000-item page to fetch (1-based, default 1).
-  The response is a flat object \`{ data, totalAvailable }\`. To collect all data sources, increment \`pageNumber\` (starting at 1) until you have collected \`totalAvailable\` items.
-  To get just the count of data sources matching the request, read \`totalAvailable\` from a single call (e.g. \`pageNumber: 1\`) without paging through every item.
+  This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1-based page to fetch (default 1).
+  The response is a flat object \`{ data, totalAvailable }\`; to collect every project, keep incrementing \`pageNumber\` until you have gathered \`totalAvailable\` items.
+  To get just the count of datasources matching a request, read \`totalAvailable\` from a single call (e.g. \`pageNumber: 1\`) without paging through every item.
   `,
     paramsSchema,
     annotations: {
