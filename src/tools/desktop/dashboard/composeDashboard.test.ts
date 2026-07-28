@@ -3,6 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import * as applyFocusModule from '../../../desktop/commands/workbook/applyFocus.js';
+import * as applyMutexModule from '../../../desktop/commands/workbook/applyMutex.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as listDashboardsModule from '../../../desktop/commands/workbook/listDashboards.js';
 import * as listWorksheetsModule from '../../../desktop/commands/workbook/listWorksheets.js';
@@ -16,6 +17,7 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getComposeDashboardTool } from './composeDashboard.js';
 
 vi.mock('../../../desktop/commands/workbook/applyFocus.js');
+vi.mock('../../../desktop/commands/workbook/applyMutex.js');
 vi.mock('../../../desktop/commands/workbook/getWorkbookXml.js');
 vi.mock('../../../desktop/commands/workbook/listDashboards.js');
 vi.mock('../../../desktop/commands/workbook/listWorksheets.js');
@@ -27,6 +29,7 @@ describe('composeDashboardTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(applyMutexModule.withApplyLock).mockImplementation(async (fn) => await fn());
     vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
       Ok({ count: 3, worksheets: ['Sales', 'Profit', 'Orders'] }),
     );
@@ -105,7 +108,18 @@ describe('composeDashboardTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      dashboardName: 'New Dashboard',
+      zones: [
+        { worksheet: 'Sales', position: { x: 0, y: 0, width: 50000, height: 100000 } },
+        { worksheet: 'Profit', position: { x: 50000, y: 0, width: 50000, height: 100000 } },
+      ],
+      verification: expect.stringContaining('HOST VERIFICATION — verified'),
+    });
+    expect(JSON.parse(result.content[0].text)).not.toHaveProperty('attemptedZones');
     expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
+    expect(applyMutexModule.withApplyLock).toHaveBeenCalledOnce();
     expect(applyFocusModule.dispatchApplyFocus).toHaveBeenCalledOnce();
     expect(applyFocusModule.dispatchApplyFocus).toHaveBeenCalledWith(
       expect.objectContaining({
