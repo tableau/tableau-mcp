@@ -160,17 +160,23 @@ export async function getPage<T>(args: GetPageArgs<T>): Promise<GetPageResult<T>
   // cap, not user input, so it is not validated here.
   getPageConfigSchema.parse({ pageNumber: args.pageNumber, limit: args.limit });
 
+  // paging variables
   const pageNumber = args.pageNumber ?? 1;
   const pageSize = MAX_PAGE_SIZE; // always request full page for stable offsets
+
+  // fetching page data
   const { pagination, data } = await args.getDataFn({ pageSize, pageNumber });
   const totalAvailable = pagination.totalAvailable;
-  const apiCount = data.length;
+  const totalItemsInPage = data.length;
   const maxResultLimit = args.maxResultLimit ?? null;
   const pageStartOffset = (pageNumber - 1) * pageSize; // 0-based abs index of first item on page
+  // checks if the total items paged goes beyond the max result limits
+  // and truncates results to fit the overall cap or evalutates to 0 for page numbers that go beyond cap.
   const serverAllowed =
     maxResultLimit == null
-      ? apiCount
-      : Math.max(0, Math.min(apiCount, maxResultLimit - pageStartOffset));
+      ? totalItemsInPage
+      : Math.max(0, Math.min(totalItemsInPage, maxResultLimit - pageStartOffset));
+  // applies limit requested for this page
   const callerCap = args.limit != null ? Math.min(args.limit, serverAllowed) : serverAllowed;
   const trimmed = data.slice(0, callerCap);
   // Cap the reported total to the server-side offset ceiling so the caller
