@@ -35,6 +35,49 @@ describe('connections-not-authorable rule', () => {
     expect(issues[0].message).not.toMatch(/^FIX/i);
   });
 
+  it('a published-datasource readback with a bare top-level sqlproxy connection passes', () => {
+    const xml = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource caption="My Published DS" inline="true" name="federated.mypubds01">
+      <connection class="sqlproxy" dbname="MyDatasourceContentUrl"
+        server="https://10az.online.tableau.com/" site="mysitename" />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const result = runValidation(xml, 'workbook');
+    const offenders = result.issues.filter((i) => i.ruleId === 'connections-not-authorable');
+    expect(offenders).toEqual([]);
+  });
+
+  it('deliberately permits a hand-authored bare sqlproxy connection with suspicious attributes', () => {
+    // Desktop accepted this live (PR #101, 2026-06-22; see nawar-sqlproxy-report);
+    // preflight is not the acceptance gate.
+    const xml = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource name="my-data">
+      <connection class="sqlproxy" dbname="guess" server="" />
+    </datasource>
+  </datasources>
+</workbook>`;
+    expect(connectionsNotAuthorableRule.validate(xml)).toEqual([]);
+  });
+
+  it('a top-level connection with no class attribute is rejected', () => {
+    const xml = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource name="my-data">
+      <connection />
+    </datasource>
+  </datasources>
+</workbook>`;
+    const issues = connectionsNotAuthorableRule.validate(xml);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].xpath).toContain("@class='(none)'");
+  });
+
   it('a federated wrapper with a fabricated (non-Desktop-minted) named-connection id is rejected', () => {
     const xml = `<?xml version="1.0"?>
 <workbook>

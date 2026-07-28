@@ -6,9 +6,9 @@
  * (~/.claude/state/w60-southard-containment-spec.md §3 layer 3, task card #2).
  *
  * WHY: Tableau Desktop only accepts the connection SHAPE it serializes itself on a
- * live readback — a modern datasource is `<connection class="federated">` wrapping
- * `<named-connections><named-connection name="<protocol>.<Desktop-minted-id>">` around
- * the real per-protocol `<connection class="excel-direct"|"hyper"|...>`. A model that
+ * live readback. The allowlist for a top-level `<connection>` is `federated` and
+ * `sqlproxy`: modern local datasources use a federated wrapper, while published
+ * datasources read back as a bare `<connection class="sqlproxy">`. A model that
  * hand-authors (or copies from a .tds) a bare `<connection class="excel-direct" .../>`
  * directly under `<datasource>` — or fabricates a `named-connection` name instead of
  * using Desktop's own minted id — produces XML that LOOKS plausible but fails at
@@ -66,8 +66,8 @@ export const connectionsNotAuthorableRule: ValidationRule = {
   id: 'connections-not-authorable',
   description:
     'Rejects hand-authored or structurally invalid <connection> XML with a terminal, ' +
-    'non-retryable error — only the exact shape Desktop itself serializes on a live ' +
-    'readback (federated + named-connection with a Desktop-minted id) ever applies.',
+    "non-retryable error — only Desktop's top-level readback allowlist (federated + " +
+    'sqlproxy) applies; named-connection ids must still be Desktop-minted.',
   contexts: ['workbook', 'datasource'],
 
   validate(xml: string): ValidationIssue[] {
@@ -86,11 +86,11 @@ export const connectionsNotAuthorableRule: ValidationRule = {
     // are authorable connection stanzas. Worksheet <view> datasource references and
     // datasource-dependencies are usage metadata, not connection rewrites.
     //
-    // 1. A bare/legacy top-level connection that is NOT the modern federated wrapper —
+    // 1. A top-level connection outside Desktop's federated/sqlproxy readback allowlist —
     // exactly the hand-authored-from-.tds shape (known-bad).
     const bareConnections = xpath.select(
-      "/workbook/datasources/datasource/connection[not(@class='federated')] | " +
-        "/datasource/connection[not(@class='federated')]",
+      "/workbook/datasources/datasource/connection[not(@class='federated' or @class='sqlproxy')] | " +
+        "/datasource/connection[not(@class='federated' or @class='sqlproxy')]",
       doc as unknown as Node,
     ) as Element[];
     for (const conn of bareConnections) {
