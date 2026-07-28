@@ -106,7 +106,7 @@ describe('searchContentTool', () => {
     const searchContentTool = getSearchContentTool(new WebMcpServer());
     expect(searchContentTool.name).toBe('search-content');
     expect(searchContentTool.description).toContain(
-      'free-text, relevance-ranked search across many Tableau content types',
+      'searches and ranks Tableau content across many content types',
     );
     expect(searchContentTool.paramsSchema).toMatchObject({
       terms: expect.any(Object),
