@@ -832,7 +832,9 @@ describe('planSortByFieldOnCategoricalAxis — anchor_category coexistence (wate
         ],
       },
     );
-    return spliceWaterfallAnchorFilter(rewritten, mapping);
+    const result = spliceWaterfallAnchorFilter(rewritten, mapping);
+    expect(result.ok).toBe(true);
+    return result.xml;
   };
 
   it('sorts the shelf axis even when an anchor_category filter adds a second dimension CI', () => {

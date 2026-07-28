@@ -695,6 +695,27 @@ describe('buildInjectedWorkbookXml — manifest slot finalization', () => {
     ]);
   });
 
+  it('returns a warning when a requested waterfall anchor filter cannot be spliced', () => {
+    const result = buildInjectedWorkbookXml({
+      workbookXml: EMPTY_WORKBOOK,
+      templateXml:
+        "<workbook><worksheets><worksheet name='{{TITLE}}'><table><view/><panes><pane><mark class='GanttBar'/></pane></panes><rows>[cum:sum:Profit:qk]</rows></table></worksheet></worksheets><windows><window class='worksheet' name='{{TITLE}}'/></windows></workbook>",
+      title: 'Waterfall',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'P&L Data' },
+      fieldMapping: {
+        'Anchor Category': '[P&L Data].[none:category:nk]',
+      },
+      applyNonce: 'waterfall-anchor-warning',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings).toEqual([
+      'waterfall anchor filter: datasource dependencies are missing',
+    ]);
+  });
+
   it('keeps fully mapped output byte-stable', () => {
     const common = {
       workbookXml: EMPTY_WORKBOOK,

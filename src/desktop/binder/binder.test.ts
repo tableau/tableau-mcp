@@ -1199,6 +1199,33 @@ describe('binder/bindTemplate — Call 1 no-LLM (bound)', () => {
   });
 });
 
+describe('binder/bindTemplate — resolved binding receipt data', () => {
+  it('returns resolved columns with differing proposal tokens as asked', async () => {
+    const res = await bindTemplate({
+      ask: 'bar chart of sales by region',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal: {
+        template: 'ranking-ordered-bar',
+        title: 'Sales by Region',
+        bindings: [
+          { slot_id: 'region', field: 'region' },
+          { slot_id: 'sales', field: 'sales' },
+        ],
+        confidence: 0.95,
+      },
+    });
+
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.applied_bindings).toEqual([
+        { slot_id: 'region', field: 'Region', asked: 'region' },
+        { slot_id: 'sales', field: 'Sales', asked: 'sales' },
+      ]);
+    }
+  });
+});
+
 describe('binder/bindTemplate — Call 1 miss (propose)', () => {
   // scatter is render-unverified post-gate; force it eligible to test the propose
   // payload shape (calc-excluded bindable slots) independent of the shrink.

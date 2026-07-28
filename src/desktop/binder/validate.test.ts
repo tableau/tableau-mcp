@@ -158,6 +158,28 @@ describe('binder/validate — gate 2: field resolution', () => {
     }
   });
 
+  it('records resolved column names and preserves caller tokens that differ', () => {
+    const m = manifests.get('ranking-ordered-bar')!;
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'region', field: 'region' },
+        { slot_id: 'sales', field: 'sales' },
+      ],
+    };
+
+    const r = validateBinding(m, p, SUMMARY);
+
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.resolved_bindings).toEqual([
+        { slot_id: 'region', field: 'Region', asked: 'region' },
+        { slot_id: 'sales', field: 'Sales', asked: 'sales' },
+      ]);
+    }
+  });
+
   it('fire: field present in >1 datasource → ambiguous-field', () => {
     const ambiguous: SchemaSummary = {
       datasource: 'Superstore',
@@ -235,7 +257,14 @@ describe('binder/validate — gate 2: field resolution', () => {
     };
     const r = validateBinding(m, p, captionExact);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.field_mapping['{{field_base_1}}']).toBe('[DS].[none:Country Code:nk]');
+    if (r.ok) {
+      expect(r.field_mapping['{{field_base_1}}']).toBe('[DS].[none:Country Code:nk]');
+      expect(r.resolved_bindings).toContainEqual({
+        slot_id: 'region',
+        field: 'Country Code',
+        asked: 'Country',
+      });
+    }
   });
 
   it('no-fire: unsuffixed near-duplicate beats the numeric-suffixed twin with a note', () => {

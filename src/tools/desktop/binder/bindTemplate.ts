@@ -1702,7 +1702,11 @@ async function performAutoApply({
   // enable a manual second call that never happens once the apply succeeds.
   const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, res.status);
   const receiptText = `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`;
-  const bound = res.applied_bindings?.map(({ slot_id, field }) => ({ slot_id, field }));
+  const bound = res.applied_bindings?.map(({ slot_id, field, asked }) => ({
+    slot_id,
+    field,
+    ...(asked !== undefined ? { asked } : {}),
+  }));
   const autoCompleted =
     res.applied_bindings === undefined
       ? undefined
@@ -1711,6 +1715,7 @@ async function performAutoApply({
     autoCompleted && autoCompleted.length > 0
       ? `\n${autoCompleted.map(autoCompletedMessageLine).join('\n')}`
       : '';
+  // Structured auto_completed returns once every filler emits provenance in a coordinated lockstep change.
   // Blake's spiral fix: the applied:true receipt is TERMINAL unless a genuine, named re-bind
   // slot is still unfilled (the m1 waterfall case). On INCOMPLETE we keep today's steer and
   // attach NO structuredContent (byte-for-byte identical to the pre-fix code). On COMPLETE we
@@ -1820,8 +1825,11 @@ async function performAutoApply({
                       'whether the applied sheet retained its intended structure or renders any marks — structural readback did not run',
                     ]),
               ],
-              ...(bound !== undefined ? { bound } : {}),
-              ...(autoCompleted !== undefined ? { auto_completed: autoCompleted } : {}),
+              ...(bound !== undefined
+                ? promiseOutcome === 'unverified'
+                  ? { attempted: bound }
+                  : { bound }
+                : {}),
             }),
           ),
         ),
@@ -2289,8 +2297,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
             throw e;
           }
-          // Post-try like the pre-receipt base: a summarize throw must not reach the bind
-          // catch above, whose clearCurrentAsk is scoped to a FAILED bind attempt.
           const schemaSummary = summarizeSchema(workbookXml);
           if (target_worksheet !== undefined && res.status === 'bound') {
             res = { ...res, args: { ...res.args, title: target_worksheet } };

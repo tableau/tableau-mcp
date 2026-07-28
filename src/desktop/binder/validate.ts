@@ -110,11 +110,18 @@ export interface Blocker {
   candidates?: string[];
 }
 
+export type ResolvedBinding = {
+  slot_id: string;
+  field: string;
+  asked?: string;
+};
+
 export type ValidateResult =
   | {
       ok: true;
       datasource: string;
       field_mapping: Record<string, string>;
+      resolved_bindings: ResolvedBinding[];
       warnings?: string[];
       /** temporal_axis_from_string: the apply-side DATEPARSE splice spec, when a temporal
        * slot accepted a date-like string source (undefined for every normal bind). */
@@ -739,10 +746,20 @@ export function validateBinding(
   // not used by the splice (it edits base columns, not qualified refs) but carried for
   // completeness/debuggability.
   const optionalFieldPrunes = optionalFieldPrunesFor(m, resolved);
+  const resolved_bindings = [...resolved].map(([slot_id, { field }]) => {
+    const asked = boundBySlot.get(slot_id);
+    const resolvedField = bareName(field.columnName);
+    return {
+      slot_id,
+      field: resolvedField,
+      ...(asked !== undefined && asked !== resolvedField ? { asked } : {}),
+    };
+  });
   const base = {
     ok: true as const,
     datasource: escapedDatasource,
     field_mapping,
+    resolved_bindings,
     ...(optionalFieldPrunes.length > 0 ? { optional_field_prunes: optionalFieldPrunes } : {}),
   };
   const withAxis = dateparseAxis ? { ...base, dateparse_axis: dateparseAxis } : base;

@@ -255,7 +255,9 @@ export function buildInjectedWorkbookXml({
     processed = rewrite.xml;
     rewriteWarnings.push(...rewrite.droppedOptionalElements);
     processed = ensureEncodingFieldDependencies(processed, workbookXml);
-    processed = spliceWaterfallAnchorFilter(processed, fieldMapping ?? {});
+    const anchorFilter = spliceWaterfallAnchorFilter(processed, fieldMapping ?? {});
+    processed = anchorFilter.xml;
+    if (!anchorFilter.ok) rewriteWarnings.push(anchorFilter.reason);
   }
 
   const modifiedXml = injectTemplate(

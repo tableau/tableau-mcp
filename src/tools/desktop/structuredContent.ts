@@ -11,7 +11,10 @@ export type NextActionLabel = string & { readonly [nextActionLabelBrand]: true }
 
 export type ReceiptBinding = {
   readonly slot_id: string;
+  /** Resolved workbook column, not the caller's token. */
   readonly field: string;
+  /** Caller token, present only when resolution changed it to `field`. */
+  readonly asked?: string;
 };
 
 /**
@@ -31,8 +34,10 @@ export type Receipt = {
   readonly did: readonly string[];
   readonly didNot: readonly string[];
   readonly unverified: readonly string[];
+  /** Resolved bindings the tool observed after structural readback. */
   readonly bound?: readonly ReceiptBinding[];
-  readonly auto_completed?: readonly string[];
+  /** Resolved bindings the tool intended to write when structural readback did not run. */
+  readonly attempted?: readonly ReceiptBinding[];
 } & { readonly [receiptBrand]: true };
 
 export type NextAction =
@@ -77,7 +82,7 @@ export function receipt(facts: {
   readonly didNot?: readonly string[];
   readonly unverified: readonly string[];
   readonly bound?: readonly ReceiptBinding[];
-  readonly auto_completed?: readonly string[];
+  readonly attempted?: readonly ReceiptBinding[];
 }): Receipt {
   if (facts.did.length === 0) {
     throw new RangeError('receipt.did must name at least one outcome the tool observed itself');
@@ -92,7 +97,7 @@ export function receipt(facts: {
     didNot: facts.didNot ?? [],
     unverified: facts.unverified,
     ...(facts.bound !== undefined ? { bound: facts.bound } : {}),
-    ...(facts.auto_completed !== undefined ? { auto_completed: facts.auto_completed } : {}),
+    ...(facts.attempted !== undefined ? { attempted: facts.attempted } : {}),
   } as Receipt;
 }
 

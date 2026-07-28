@@ -12,10 +12,9 @@ const boundReceipt = receipt({
   didNot: ['sort the bars'],
   unverified: ['whether the sheet renders any marks'],
   bound: [
-    { slot_id: 'region', field: 'Region' },
+    { slot_id: 'region', field: 'Region', asked: 'region' },
     { slot_id: 'sales', field: 'Sales' },
   ],
-  auto_completed: [],
 });
 
 describe('structuredContent helpers', () => {
@@ -52,10 +51,9 @@ describe('structuredContent helpers', () => {
           didNot: ['sort the bars'],
           unverified: ['whether the sheet renders any marks'],
           bound: [
-            { slot_id: 'region', field: 'Region' },
+            { slot_id: 'region', field: 'Region', asked: 'region' },
             { slot_id: 'sales', field: 'Sales' },
           ],
-          auto_completed: [],
         },
       },
     });

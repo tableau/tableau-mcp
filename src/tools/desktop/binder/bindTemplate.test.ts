@@ -2647,7 +2647,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     }
   });
 
-  it('fallback-path apply omits binding claims it cannot prove', async () => {
+  it('stops the Blake spiral on fallback-path apply without unprovable binding claims', async () => {
     // Blake's spiral: a completed auto-apply (symbol map, no unfilled re-bind slot) must
     // carry a terminal marker so the agent stops instead of burning 100s on search-commands
     // over an already-rendered chart. The prose stop-clause works with today's host; the
@@ -2724,14 +2724,14 @@ describe('bindTemplateTool auto_apply gate', () => {
       nextAction: {
         kind: 'done',
         receipt: {
-          bound: [
+          attempted: [
             { slot_id: 'region', field: 'Region' },
             { slot_id: 'sales', field: 'Sales' },
           ],
-          auto_completed: [],
         },
       },
     });
+    expect(result.structuredContent?.nextAction).not.toHaveProperty('receipt.auto_completed');
   });
 
   it('reports the waterfall anchor added after proposal classification', async () => {
@@ -2778,16 +2778,54 @@ describe('bindTemplateTool auto_apply gate', () => {
       nextAction: {
         kind: 'done',
         receipt: {
-          bound: [
+          attempted: [
             { slot_id: 'profit', field: 'amount' },
             { slot_id: 'sub_category', field: 'line_item' },
             { slot_id: 'anchor_category', field: 'category' },
           ],
-          auto_completed: [provenance],
         },
       },
     });
+    expect(result.structuredContent?.nextAction).not.toHaveProperty('receipt.auto_completed');
     expect(body.guidance).toContain(`Auto-filled: ${provenance}`);
+  });
+
+  it('formats primary auto-filled provenance while omitting the structured claim', async () => {
+    const provenance = "Using 'Country' for required geo slot 'country'";
+    const mocks = setupAutoApplyMocks({
+      bind: {
+        ...boundWithAppliedBindingsResult,
+        applied_bindings: [
+          { slot_id: 'region', field: 'Region', asked: 'region' },
+          { slot_id: 'sales', field: 'Sales' },
+        ],
+        warnings: [provenance],
+      },
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor: readbackExecutor(mocks),
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(body.guidance).toContain('Auto-filled: country <- Country');
+    expect(result.structuredContent).toMatchObject({
+      nextAction: {
+        kind: 'done',
+        receipt: {
+          bound: [
+            { slot_id: 'region', field: 'Region', asked: 'region' },
+            { slot_id: 'sales', field: 'Sales' },
+          ],
+        },
+      },
+    });
+    expect(result.structuredContent?.nextAction).not.toHaveProperty('receipt.auto_completed');
   });
 
   it('completes the P&L propose to valid Call 2 to applied sequence', async () => {
@@ -5165,12 +5203,20 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     did: string[];
     didNot: string[];
     unverified: string[];
+    bound?: Array<{ slot_id: string; field: string; asked?: string }>;
+    attempted?: Array<{ slot_id: string; field: string; asked?: string }>;
   } {
     const nextAction = (
       result.structuredContent as
         | {
             nextAction?: {
-              receipt?: { did: string[]; didNot: string[]; unverified: string[] };
+              receipt?: {
+                did: string[];
+                didNot: string[];
+                unverified: string[];
+                bound?: Array<{ slot_id: string; field: string; asked?: string }>;
+                attempted?: Array<{ slot_id: string; field: string; asked?: string }>;
+              };
             };
           }
         | undefined
@@ -5239,6 +5285,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
   it('an unreadable sheet adds no line rather than claiming a check that never ran', async () => {
     // The default executor has no listWorksheets, so the readback cannot run at all.
     const { getExecutor } = setupAutoApplyMocks({
+      bind: boundWithAppliedBindingsResult,
       inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
     });
 
@@ -5256,6 +5303,11 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     expect(applied.guidance).toContain('Done — no further tool calls needed');
     expect(receipt.unverified.join(' ')).not.toContain('readback compares XML structure');
     expect(receipt.unverified.join(' ')).toContain('structural readback did not run');
+    expect(receipt.bound).toBeUndefined();
+    expect(receipt.attempted).toEqual([
+      { slot_id: 'cat', field: 'Region' },
+      { slot_id: 'val', field: 'Sales' },
+    ]);
   });
 
   it('does not claim all encodings were bound when no encoding analysis ran', async () => {
@@ -5318,6 +5370,27 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     expect(warnings).toEqual([expect.stringContaining('filter splice skipped')]);
     expect(applied.guidance).not.toContain('requested filter is ALREADY applied');
     // A skipped request cannot have a terminal receipt: its warning is the unfinished work.
+    expect(applied.guidance).not.toContain('Done — no further tool calls needed');
+    expect(
+      (result.structuredContent as { nextAction?: { kind: string } } | undefined)?.nextAction?.kind,
+    ).not.toBe('done');
+  });
+
+  it('suppresses the done receipt when injection reports a waterfall anchor splice failure', async () => {
+    const warning = 'waterfall anchor filter: datasource dependencies are missing';
+    const { getExecutor } = setupAutoApplyMocks({
+      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML, warnings: [warning] },
+    });
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'bar chart of Sales by Region',
+      auto_apply: true,
+      getExecutor,
+    });
+    const applied = body(result);
+
+    expect(applied.warnings).toEqual([warning]);
     expect(applied.guidance).not.toContain('Done — no further tool calls needed');
     expect(
       (result.structuredContent as { nextAction?: { kind: string } } | undefined)?.nextAction?.kind,
