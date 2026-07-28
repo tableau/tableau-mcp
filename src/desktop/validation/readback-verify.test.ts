@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { verifyWorksheetReadback } from './readback-verify.js';
+import { formatReadbackVerificationError, verifyWorksheetReadback } from './readback-verify.js';
 
 const GEO_FIELD = '[DS].[none:State:nk]';
 const PROFIT_FIELD = '[DS].[sum:Profit:qk]';
@@ -26,6 +26,29 @@ function encodedWorksheet(extra = ''): string {
     <rows>${GEO_FIELD}</rows>
     <cols>${PROFIT_FIELD}</cols>
     ${extra}
+  `);
+}
+
+function filteredWorksheet({
+  members,
+  groupFunction = 'union',
+  enumeration = 'inclusive',
+}: {
+  members: string[];
+  groupFunction?: string;
+  enumeration?: string;
+}): string {
+  const memberNodes = members
+    .map((member) => `<groupfilter function="member" level="[none:Region:nk]" member="${member}"/>`)
+    .join('');
+  return worksheet(`
+    <view>
+      <filter class="categorical" column="[DS].[none:Region:nk]">
+        <groupfilter function="${groupFunction}" user:ui-enumeration="${enumeration}">
+          ${memberNodes}
+        </groupfilter>
+      </filter>
+    </view>
   `);
 }
 
@@ -66,6 +89,63 @@ describe('verifyWorksheetReadback', () => {
       intended: `<filter class="categorical" column="${GEO_FIELD}">`,
       readback: 'missing',
       severity: 'error',
+    });
+  });
+
+  it('flags a filter whose readback dropped an intended member', () => {
+    const intended = filteredWorksheet({ members: ['EMEA', 'AMER'] });
+    const readback = filteredWorksheet({ members: ['EMEA'] });
+
+    const findings = verifyWorksheetReadback(intended, readback);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      kind: 'filter',
+      node: 'filter',
+      column: '[DS].[none:Region:nk]',
+      readback: 'changed',
+      severity: 'error',
+      detail: 'members differ: expected AMER,EMEA; observed EMEA',
+    });
+    expect(formatReadbackVerificationError(findings)).toContain(
+      'members differ: expected AMER,EMEA; observed EMEA',
+    );
+  });
+
+  it('flags a filter whose inclusion mode changes to exclusion', () => {
+    const intended = filteredWorksheet({ members: ['EMEA'], enumeration: 'inclusive' });
+    const readback = filteredWorksheet({ members: ['EMEA'], enumeration: 'exclusive' });
+
+    const findings = verifyWorksheetReadback(intended, readback);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      kind: 'filter',
+      readback: 'changed',
+      severity: 'error',
+      detail: 'mode differs: expected include; observed exclude',
+    });
+  });
+
+  it('accepts identical filter members in a different XML order', () => {
+    const intended = filteredWorksheet({ members: ['EMEA', 'AMER'] });
+    const readback = filteredWorksheet({ members: ['AMER', 'EMEA'] });
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([]);
+  });
+
+  it('flags a changed groupfilter function', () => {
+    const intended = filteredWorksheet({ members: [], groupFunction: 'union' });
+    const readback = filteredWorksheet({ members: [], groupFunction: 'level-members' });
+
+    const findings = verifyWorksheetReadback(intended, readback);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      kind: 'filter',
+      readback: 'changed',
+      severity: 'error',
+      detail: 'function differs: expected union; observed level-members',
     });
   });
 

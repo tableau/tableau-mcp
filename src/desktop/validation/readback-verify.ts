@@ -16,6 +16,7 @@ export interface ReadbackFinding {
   node: string;
   column?: string;
   intended: string;
+  detail?: string;
   readback: 'missing' | 'changed';
   severity: ReadbackFindingSeverity;
 }
@@ -44,6 +45,9 @@ interface MarkSignature {
 interface FilterSignature {
   klass: string;
   column: string;
+  members: string[];
+  mode: string;
+  groupFunction: string;
 }
 
 interface SortSignature {
@@ -142,11 +146,41 @@ function collectMarks(worksheet: XmlRecord): MarkSignature[] {
   });
 }
 
+function normalizeFilterMode(value: string): string {
+  if (value === 'inclusive') return 'include';
+  if (value === 'exclusive') return 'exclude';
+  return value;
+}
+
+function filterSignature(element: XmlRecord): FilterSignature {
+  const groupfilters: XmlRecord[] = [];
+  walkElements(element, (tag, child) => {
+    if (tag === 'groupfilter') groupfilters.push(child);
+  });
+  const rootGroupfilter = directChildren(element, 'groupfilter')[0];
+  const enumeration =
+    (rootGroupfilter && attr(rootGroupfilter, 'user:ui-enumeration')) ||
+    attr(element, 'user:ui-enumeration') ||
+    groupfilters.map((groupfilter) => attr(groupfilter, 'user:ui-enumeration')).find(Boolean) ||
+    '';
+
+  return {
+    klass: attr(element, 'class'),
+    column: attr(element, 'column'),
+    members: groupfilters
+      .map((groupfilter) => attr(groupfilter, 'member'))
+      .filter(Boolean)
+      .sort(),
+    mode: normalizeFilterMode(enumeration),
+    groupFunction: rootGroupfilter ? attr(rootGroupfilter, 'function') : '',
+  };
+}
+
 function collectFilters(worksheet: XmlRecord): FilterSignature[] {
   const filters: FilterSignature[] = [];
   walkElements(worksheet, (tag, element) => {
     if (tag !== 'filter') return;
-    filters.push({ klass: attr(element, 'class'), column: attr(element, 'column') });
+    filters.push(filterSignature(element));
   });
   return filters;
 }
@@ -231,8 +265,38 @@ function sameEncoding(a: EncodingSignature, b: EncodingSignature): boolean {
   return a.paneIndex === b.paneIndex && a.tag === b.tag && a.column === b.column;
 }
 
+function sameMembers(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((member, index) => member === b[index]);
+}
+
 function sameFilter(a: FilterSignature, b: FilterSignature): boolean {
-  return a.klass === b.klass && a.column === b.column;
+  return (
+    a.klass === b.klass &&
+    a.column === b.column &&
+    sameMembers(a.members, b.members) &&
+    a.mode === b.mode &&
+    a.groupFunction === b.groupFunction
+  );
+}
+
+function formatMembers(members: string[]): string {
+  return members.length > 0 ? members.join(',') : '(none)';
+}
+
+function filterDifference(
+  intended: FilterSignature,
+  observed: FilterSignature,
+): string | undefined {
+  if (!sameMembers(intended.members, observed.members)) {
+    return `members differ: expected ${formatMembers(intended.members)}; observed ${formatMembers(observed.members)}`;
+  }
+  if (intended.mode !== observed.mode) {
+    return `mode differs: expected ${intended.mode || '(none)'}; observed ${observed.mode || '(none)'}`;
+  }
+  if (intended.groupFunction !== observed.groupFunction) {
+    return `function differs: expected ${intended.groupFunction || '(none)'}; observed ${observed.groupFunction || '(none)'}`;
+  }
+  return undefined;
 }
 
 function sameSort(a: SortSignature, b: SortSignature): boolean {
@@ -327,12 +391,17 @@ export function verifyWorksheetReadback(
 
   for (const filter of intended.filters) {
     if (readback.filters.some((candidate) => sameFilter(filter, candidate))) continue;
-    const related = readback.filters.some((candidate) => candidate.klass === filter.klass);
+    const sameIdentity = readback.filters.find(
+      (candidate) => candidate.klass === filter.klass && candidate.column === filter.column,
+    );
+    const related =
+      sameIdentity ?? readback.filters.find((candidate) => candidate.klass === filter.klass);
     findings.push({
       kind: 'filter',
       node: 'filter',
       column: filter.column || undefined,
       intended: filterIntended(filter),
+      detail: sameIdentity ? filterDifference(filter, sameIdentity) : undefined,
       readback: related ? 'changed' : 'missing',
       severity: 'error',
     });
@@ -357,7 +426,8 @@ export function verifyWorksheetReadback(
 
 export function formatReadbackFinding(finding: ReadbackFinding): string {
   const column = finding.column ? ` column="${finding.column}"` : '';
-  return `<${finding.node}${column}>`;
+  const detail = finding.detail ? ` (${finding.detail})` : '';
+  return `<${finding.node}${column}>${detail}`;
 }
 
 export function formatReadbackVerificationError(findings: ReadbackFinding[]): string {
