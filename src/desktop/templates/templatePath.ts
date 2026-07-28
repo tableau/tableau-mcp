@@ -65,3 +65,37 @@ export function readTemplate(templateName: string): string | null {
   }
   return readDataAsset(`templates/${templateName}.xml`);
 }
+
+/**
+ * Path to a template's bookmark (`.tbm`) source. Same directory + escape guard as
+ * getTemplatePath — the `.tbm` is the canonical stored format a user drops in / edits.
+ */
+export function getBookmarkPath(templateName: string): string {
+  validateTemplateName(templateName);
+  const templatesDir = resolve(getTemplatesDir());
+  const bookmarkPath = resolve(templatesDir, `${templateName}.tbm`);
+  if (bookmarkPath !== templatesDir && !bookmarkPath.startsWith(templatesDir + sep)) {
+    throw new Error(
+      `Invalid template name "${templateName}": resolves outside the templates directory.`,
+    );
+  }
+  return bookmarkPath;
+}
+
+/**
+ * Read a template's raw bookmark (`.tbm`) bytes, or null when none exists. Mirrors
+ * readTemplate's disk/SEA duality. Returns the bytes UNMODIFIED (the reader is
+ * read-only w.r.t. the user's file — normalization/tokenization happens downstream in
+ * bookmarkTemplate.ts, never on disk).
+ */
+export function readBookmark(templateName: string): string | null {
+  validateTemplateName(templateName);
+  if (process.env['TEMPLATES_DIR']) {
+    try {
+      return readFileSync(getBookmarkPath(templateName), 'utf-8');
+    } catch {
+      return null;
+    }
+  }
+  return readDataAsset(`templates/${templateName}.tbm`);
+}
