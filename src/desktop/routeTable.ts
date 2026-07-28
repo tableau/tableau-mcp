@@ -66,6 +66,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     requiredEvidence: ['bind-template applied result (auto-apply receipt)'],
   },
   {
+    kind: 'prose',
+    id: 'bind-miss-tail',
+    text: 'Only after a bind-template attempt returns without a terminal `done` receipt or with failed postconditions, author ONE ordered command plan and submit it in a single execute-authoring-plan call with `verify` and `summary_worksheet` readback. If its receipt names a failure, submit at most ONE corrective plan; then report verified success, partial completion, or terminal failure naming the failed step. Never fall back to per-primitive tool loops or XML repair; successful Call 1 binds do not enter this tail.',
+  },
+  {
     kind: 'route',
     id: 'calc-then-bind',
     trigger:

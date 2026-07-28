@@ -141,6 +141,8 @@ Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gr
 
 For any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.), FIRST use bind-template's two-call sequence. Call 1: bind-template(auto_apply:true), deterministic, ~0.3s; pass the user's message verbatim as \`ask\` (never paraphrase, reword, or expand it). If it proposes, Call 2: bind-template with the same ask/target, selected proposal, auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. Never call list-available-fields or get-worksheet-xml to orient before bind-template: it reads schema; failed binds propose candidate fields (author-parameter/author-set may list fields first). Named charts use this first, even calc-heavy or asking "how <X> changes"; do not author template-owned calcs (including waterfall running totals) before binding. author-parameter/author-set/author-action before charts; else search-commands.
 
+Only after a bind-template attempt returns without a terminal \`done\` receipt or with failed postconditions, author ONE ordered command plan and submit it in a single execute-authoring-plan call with \`verify\` and \`summary_worksheet\` readback. If its receipt names a failure, submit at most ONE corrective plan; then report verified success, partial completion, or terminal failure naming the failed step. Never fall back to per-primitive tool loops or XML repair; successful Call 1 binds do not enter this tail.
+
 For a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %), FIRST pass its conventional calc in ONE bind-template(auto_apply:true) call via calcs[], binding its caption (for example, gross margin % = (SUM(Revenue)-SUM(COGS))/SUM(Revenue); a proposal still resolves via Call 2). Only after a formula/field-resolution failure, search-knowledge, then make ONE corrective bind-template call.
 
 For an unfamiliar or non-trivial authoring ask (calc-heavy, uncertain which chart fits, formatting/design) only when no plain-chart binding path applies; a named chart type always takes plain-chart first, even with calc/formatting riders; chart-route escalation may still consult, FIRST search-knowledge; use read-knowledge-resource to read the top hit once, then proceed.
@@ -217,9 +219,10 @@ describe('desktop tools/list serialized surface', () => {
     // both surfaces — honest wire measurements 31,454 dynamic and 46,936 full. The FULL surface
     // now exceeds the 46k cliff; it is not served by default, and the pending removal of the
     // four legacy dashboard tools repays this before any full-profile serving. That removal is
-    // a merge condition for this branch.
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(31_470);
-    expect(fullSurfaceTotal).toBeLessThanOrEqual(46_950);
+    // a merge condition for this branch. The outcome-triggered tail instructions add 512 bytes:
+    // honest measurements are now 31,966 dynamic and 47,448 full, each with 16 bytes headroom.
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(31_982);
+    expect(fullSurfaceTotal).toBeLessThanOrEqual(47_464);
   });
 });
 
@@ -533,7 +536,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     // describe-stub squeeze. If this ever approaches 46k something is very wrong.
     // Raised with the signed-off bind-template describes (2026-07-27, #643 review fold).
     // Raised again 2026-07-28 with execute-authoring-plan (986 bytes, one-beat transaction spike).
-    expect(total).toBeLessThanOrEqual(31_470);
+    expect(total).toBeLessThanOrEqual(31_982);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {
