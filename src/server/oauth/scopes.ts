@@ -122,14 +122,9 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
-  // Publishes the exact bytes of an approved validate-workbook-package receipt (validationId) into a
-  // project (workbooks:create). No build/upload of caller HTML happens here, but the publish itself
-  // still creates content. An omitted projectId resolves the site's default project (content:read).
-  // workbooks:update is retained for the not-yet-enabled personal-space move (Update Workbook
-  // <location>) so re-enabling it needs no scope/consent change.
   'create-and-publish-workbook': {
     mcp: ['tableau:mcp:workbook:publish'],
-    api: new Set(['tableau:workbooks:create', 'tableau:workbooks:update', 'tableau:content:read']),
+    api: new Set(['tableau:workbooks:create', 'tableau:content:read']),
   },
   // Pure in-memory pre-flight: builds the .twbx and checks structure/size/asset-references WITHOUT
   // publishing. No Tableau REST API call, so no API scopes are required (empty set). It also needs no

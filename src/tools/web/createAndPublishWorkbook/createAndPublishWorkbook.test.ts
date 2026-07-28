@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   mockUseRestApi: vi.fn(),
   mockQueryProjects: vi.fn(),
   mockPublishWorkbook: vi.fn(),
+  mockGetPersonalSpace: vi.fn(),
   mockLog: vi.fn(),
 }));
 
@@ -51,7 +52,10 @@ describe('createAndPublishWorkbookTool', () => {
     mocks.mockUseRestApi.mockImplementation(async ({ callback }) =>
       callback({
         projectsMethods: { queryProjects: mocks.mockQueryProjects },
-        publishingMethods: { publishWorkbook: mocks.mockPublishWorkbook },
+        publishingMethods: {
+          publishWorkbook: mocks.mockPublishWorkbook,
+          getPersonalSpace: mocks.mockGetPersonalSpace,
+        },
         siteId: 'test-site-id',
         userId: 'test-user-id',
       }),
@@ -59,6 +63,7 @@ describe('createAndPublishWorkbookTool', () => {
     mocks.mockQueryProjects.mockResolvedValue({
       projects: [{ id: 'default-project-id', name: 'Default', topLevelProject: true }],
     });
+    mocks.mockGetPersonalSpace.mockResolvedValue({ luid: 'ps-luid-123' });
     mocks.mockPublishWorkbook.mockResolvedValue({
       id: 'wb-123',
       name: 'My Viz',
@@ -102,6 +107,7 @@ describe('createAndPublishWorkbookTool', () => {
     expect(tool.name).toBe('create-and-publish-workbook');
     expect(tool.paramsSchema).toHaveProperty('validationId');
     expect(tool.paramsSchema).toHaveProperty('projectId');
+    expect(tool.paramsSchema).toHaveProperty('publishToPersonalSpace');
     expect(tool.paramsSchema).toHaveProperty('showTabs');
     expect(tool.paramsSchema).toHaveProperty('overwrite');
     // The raw-build contract is gone.
@@ -181,6 +187,155 @@ describe('createAndPublishWorkbookTool', () => {
     );
   });
 
+  it('publishes to the personal space when publishToPersonalSpace is set', async () => {
+    mocks.mockPublishWorkbook.mockResolvedValue(personalSpaceLanding());
+    const validationId = await saveReceipt();
+    const result = await getToolResult({ validationId, publishToPersonalSpace: true });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetPersonalSpace).toHaveBeenCalledWith({ siteId: 'test-site-id' });
+    expect(mocks.mockQueryProjects).not.toHaveBeenCalled();
+    const call = mocks.mockPublishWorkbook.mock.calls[0][0];
+    expect(call).toMatchObject({
+      siteId: 'test-site-id',
+      location: { id: 'ps-luid-123', type: 'PersonalSpace' },
+      name: 'My Viz',
+    });
+    expect(call.projectId).toBeUndefined();
+  });
+
+  it('labels the card location as personalSpace and omits projectId', async () => {
+    mocks.mockPublishWorkbook.mockResolvedValue(personalSpaceLanding());
+    const validationId = await saveReceipt();
+    const result = await getToolResult({ validationId, publishToPersonalSpace: true });
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.location).toBe('personalSpace');
+    expect(payload.personalSpaceLuid).toBe('ps-luid-123');
+    expect(payload.projectId).toBeUndefined();
+  });
+
+  it('rejects supplying both projectId and publishToPersonalSpace before any REST call', async () => {
+    const validationId = await saveReceipt();
+    const result = await getToolResult({
+      validationId,
+      projectId: 'proj-abc',
+      publishToPersonalSpace: true,
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toMatch(/either projectId or publishToPersonalSpace/i);
+    expect(mocks.mockGetPersonalSpace).not.toHaveBeenCalled();
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+    // Pure input validation before the attempt begins — no audit is emitted.
+    expect(getAuditEntries()).toHaveLength(0);
+  });
+
+  it('fails honestly when the server ignores the personal-space destination and lands in a project', async () => {
+    mocks.mockPublishWorkbook.mockResolvedValue({
+      id: 'wb-123',
+      name: 'My Viz',
+      webpageUrl: 'https://test.tableau.com/#/workbooks/wb-123',
+      project: { id: 'default-project-id', name: 'Default' },
+      location: { id: 'default-project-id', type: 'Project', name: 'Default' },
+    });
+    const validationId = await saveReceipt();
+
+    const result = await getToolResult({ validationId, publishToPersonalSpace: true });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toMatch(/does not support personal-space publishing/i);
+    expect(result.content[0].text).toContain('"Default"');
+
+    const audits = getAuditEntries();
+    expect(audits).toHaveLength(1);
+    expect(audits[0].data).toMatchObject({
+      validationId,
+      targetType: 'personalSpace',
+      personalSpaceLuid: 'ps-luid-123',
+      outcome: 'failed',
+      failureCode: 'personal-space-not-available',
+    });
+  });
+
+  it('maps the personal-space "not enabled" gate (400 + code 400000 + detail) to a clean error and a bounded audit code', async () => {
+    const secret = 'Bearer personal-space-secret';
+    const axiosErr = Object.assign(new Error(`400 Bad Request ${secret}`), {
+      isAxiosError: true,
+      response: {
+        status: 400,
+        data: {
+          error: {
+            code: '400000',
+            summary: 'Bad Request',
+            detail: `Publishing a workbook directly to personal space is not enabled for this site. ${secret}`,
+          },
+        },
+      },
+    });
+    mocks.mockPublishWorkbook.mockRejectedValue(axiosErr);
+    const validationId = await saveReceipt();
+
+    const result = await getToolResult({ validationId, publishToPersonalSpace: true });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toMatch(/not enabled for this Tableau site/i);
+    expect(result.content[0].text).not.toContain(secret);
+
+    const audits = getAuditEntries();
+    expect(audits).toHaveLength(1);
+    expect(audits[0].data).toMatchObject({
+      validationId,
+      targetType: 'personalSpace',
+      personalSpaceLuid: 'ps-luid-123',
+      outcome: 'failed',
+      failureCode: 'personal-space-not-available',
+    });
+    expect(JSON.stringify(audits[0])).not.toContain(secret);
+  });
+
+  it('lets a content publish error (400011) fall through so the real failure surfaces', async () => {
+    const axiosErr = Object.assign(new Error('400 Bad Request'), {
+      isAxiosError: true,
+      response: {
+        status: 400,
+        data: { error: { code: '400011', detail: "There was a problem publishing the file 'x'." } },
+      },
+    });
+    mocks.mockPublishWorkbook.mockRejectedValue(axiosErr);
+    const validationId = await saveReceipt();
+
+    const result = await getToolResult({ validationId, publishToPersonalSpace: true });
+
+    expect(result.isError).toBe(true);
+    expect(getAuditEntries()[0].data).toMatchObject({
+      targetType: 'personalSpace',
+      outcome: 'failed',
+      failureCode: 'publish-workbook-failed',
+    });
+  });
+
+  it('records a bounded audit when the personal-space lookup itself fails', async () => {
+    const secret = 'password=ps-lookup-secret';
+    mocks.mockGetPersonalSpace.mockRejectedValue(new Error(`network failure ${secret}`));
+    const validationId = await saveReceipt();
+
+    const result = await getToolResult({ validationId, publishToPersonalSpace: true });
+
+    expect(result.isError).toBe(true);
+    expect(mocks.mockPublishWorkbook).not.toHaveBeenCalled();
+    const audits = getAuditEntries();
+    expect(audits).toHaveLength(1);
+    expect(audits[0].data).toMatchObject({
+      validationId,
+      targetType: 'personalSpace',
+      outcome: 'failed',
+      failureCode: 'personal-space-query-failed',
+    });
+    expect(JSON.stringify(audits[0])).not.toContain(secret);
+  });
+
   it('passes showTabs and overwrite through to the publish call', async () => {
     const validationId = await saveReceipt();
     await getToolResult({ validationId, projectId: 'proj-abc', showTabs: false, overwrite: true });
@@ -233,7 +388,13 @@ describe('createAndPublishWorkbookTool', () => {
     const tool = getCreateAndPublishWorkbookTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
     const result = await callback(
-      { validationId, projectId: undefined, showTabs: undefined, overwrite: undefined },
+      {
+        validationId,
+        projectId: undefined,
+        publishToPersonalSpace: undefined,
+        showTabs: undefined,
+        overwrite: undefined,
+      },
       extra,
     );
     expect(result.isError).toBe(true);
@@ -406,6 +567,16 @@ describe('createAndPublishWorkbookTool', () => {
   });
 });
 
+function personalSpaceLanding(): Record<string, unknown> {
+  return {
+    id: 'wb-123',
+    name: 'My Viz',
+    contentUrl: 'MyViz',
+    webpageUrl: 'https://test.tableau.com/#/workbooks/wb-123',
+    location: { id: 'ps-luid-123', type: 'PersonalSpace', name: 'Personal Space' },
+  };
+}
+
 function getAuditEntries(): Array<{ data: Record<string, unknown> }> {
   return mocks.mockLog.mock.calls
     .map(([entry]) => entry)
@@ -415,6 +586,7 @@ function getAuditEntries(): Array<{ data: Record<string, unknown> }> {
 async function getToolResult(args: {
   validationId: string;
   projectId?: string;
+  publishToPersonalSpace?: boolean;
   showTabs?: boolean;
   overwrite?: boolean;
 }): Promise<CallToolResult> {
@@ -424,6 +596,7 @@ async function getToolResult(args: {
     {
       validationId: args.validationId,
       projectId: args.projectId,
+      publishToPersonalSpace: args.publishToPersonalSpace,
       showTabs: args.showTabs,
       overwrite: args.overwrite,
     },

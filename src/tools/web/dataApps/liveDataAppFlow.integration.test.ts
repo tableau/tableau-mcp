@@ -420,7 +420,13 @@ async function publishReceipt(validationId: string): Promise<CallToolResult> {
   const tool = getCreateAndPublishWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return callback(
-    { validationId, projectId: undefined, showTabs: undefined, overwrite: undefined },
+    {
+      validationId,
+      projectId: undefined,
+      publishToPersonalSpace: undefined,
+      showTabs: undefined,
+      overwrite: undefined,
+    },
     getMockRequestHandlerExtra(),
   );
 }

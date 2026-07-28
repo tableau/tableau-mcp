@@ -7,13 +7,16 @@ import { getDataAppWorkspaceStore } from '../../../dataApps/init.js';
 import type { ValidatedPackage } from '../../../dataApps/types.js';
 import { McpToolError, PublishWorkbookError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { PublishedWorkbook } from '../../../sdks/tableau/methods/publishingMethods.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
 import {
   buildPublishActor,
   checkUnder64Mb,
   emitPublishAudit,
+  mapPersonalSpacePublishError,
   PublishResult,
+  PublishTarget,
   resolveTargetProject,
   toPublishResult,
 } from '../_lib/publishShared.js';
@@ -25,7 +28,7 @@ import { sanitizeFileNameBase } from './buildTwbx.js';
 // accepts HTML/assets/build params: those were consumed by validate-workbook-package, which stored
 // the exact validated bytes under an opaque, scoped, expiring `validationId`. projectId is an
 // explicit LUID (no projectName) — the resolver only understands an explicit LUID or the site
-// default.
+// default. projectId and publishToPersonalSpace are mutually exclusive (enforced in the callback).
 const paramsSchema = {
   validationId: z
     .string()
@@ -38,7 +41,15 @@ const paramsSchema = {
     .optional()
     .describe(
       'LUID of the project to publish into. If omitted, the workbook is published to the ' +
-        "site's default project.",
+        "site's default project. Mutually exclusive with publishToPersonalSpace.",
+    ),
+  publishToPersonalSpace: z
+    .boolean()
+    .optional()
+    .describe(
+      "Publish into the authenticated user's personal space instead of a project. Mutually " +
+        'exclusive with projectId. When the user asks for personal space, set this rather than ' +
+        'defaulting to a project; if the site has it disabled the tool returns a specific error.',
     ),
   showTabs: z
     .boolean()
@@ -86,13 +97,17 @@ Publishing content is a consequential action: obtain explicit human confirmation
 contract) before calling this tool. The validation receipt is server-authoritative evidence that a
 preflight actually ran; it does not replace human consent.
 
-**Target:**
-- **Default project (default):** omit \`projectId\` to publish into the site's default project.
+**Target** (pick one; \`projectId\` and \`publishToPersonalSpace\` are mutually exclusive):
+- **Default project (default):** omit both to publish into the site's default project.
 - **Project:** pass \`projectId\` to publish directly into that project.
+- **Personal space:** set \`publishToPersonalSpace: true\` to publish into the user's personal
+  space. If the user asks for personal space, use this flag — do not substitute a project. Only if
+  the site has it disabled does the tool return a specific error; fall back to a project then.
 
 **Parameters:**
 - \`validationId\` (required) – The receipt from \`validate-workbook-package\`.
 - \`projectId\` (optional) – Publish into this project instead of the site default.
+- \`publishToPersonalSpace\` (optional) – Publish into the user's personal space instead of a project.
 - \`showTabs\` (optional) – Show sheets as tabs. Defaults to true.
 - \`overwrite\` (optional) – Overwrite an existing workbook of the same name. Defaults to false.
 
@@ -162,50 +177,104 @@ report the workbook \`name\` and \`id\` instead.
           }
 
           const fileContents = Buffer.from(bytes);
-          const { projectId, showTabs, overwrite } = args;
+          const { projectId, publishToPersonalSpace, showTabs, overwrite } = args;
+
+          if (projectId !== undefined && publishToPersonalSpace) {
+            return new PublishWorkbookError(
+              'Specify either projectId or publishToPersonalSpace, not both. Omit projectId to ' +
+                "publish to the site's default project, pass projectId for a specific project, or " +
+                'set publishToPersonalSpace: true to publish to your personal space.',
+            ).toErr();
+          }
+
           const showTabsFlag = showTabs ?? true;
           const overwriteFlag = overwrite ?? false;
+          const fileName = `${sanitizeFileNameBase(workbookName)}.twbx`;
           const actor = buildPublishActor(extra);
-          let auditProjectId = projectId;
+          const targetType: 'project' | 'personalSpace' = publishToPersonalSpace
+            ? 'personalSpace'
+            : 'project';
+          let auditProjectId = publishToPersonalSpace ? undefined : projectId;
+          let auditPersonalSpaceLuid: string | undefined;
           let auditOutcome: 'published' | 'failed' = 'failed';
           let failureCode:
             | 'rest-api-setup-failed'
             | 'target-project-query-failed'
             | 'target-project-not-found'
+            | 'personal-space-query-failed'
+            | 'personal-space-not-available'
             | 'publish-workbook-failed' = 'rest-api-setup-failed';
 
-          // A valid receipt starts one publish attempt. Emit its terminal audit exactly once from
-          // this finally block, including failures before publishWorkbook (authentication/default
-          // project resolution). The stage-specific code is fixed and non-sensitive; raw exception
-          // messages never enter durable audit data.
+          // Emit the terminal audit exactly once from this finally block, including pre-publish
+          // failures. failureCode is a fixed classification; raw exceptions never enter the audit.
           try {
             return await useRestApi({
               ...extra,
               jwtScopes: createAndPublishWorkbookTool.requiredApiScopes,
               callback: async (restApi) => {
-                failureCode = 'target-project-query-failed';
-                const targetProject = await resolveTargetProject(restApi, projectId);
-                if (targetProject.isErr()) {
-                  failureCode = 'target-project-not-found';
-                  return targetProject;
-                }
-                const target = targetProject.value;
-                auditProjectId = target.id;
-                failureCode = 'publish-workbook-failed';
+                let target: PublishTarget;
+                let published: PublishedWorkbook;
 
-                const published = await restApi.publishingMethods.publishWorkbook({
-                  siteId: restApi.siteId,
-                  projectId: target.id,
-                  name: workbookName,
-                  // The .twbx base name becomes an on-disk filename when the server extracts the
-                  // package (Windows is the strict case), so it must be filesystem-safe. The display
-                  // `name` above stays verbatim. Same sanitizer as the inner .twb in buildTwbx.
-                  fileName: `${sanitizeFileNameBase(workbookName)}.twbx`,
-                  workbookType: 'twbx',
-                  fileContents,
-                  showTabs: showTabsFlag,
-                  overwrite: overwriteFlag,
-                });
+                if (publishToPersonalSpace) {
+                  failureCode = 'personal-space-query-failed';
+                  const { luid } = await restApi.publishingMethods.getPersonalSpace({
+                    siteId: restApi.siteId,
+                  });
+                  auditPersonalSpaceLuid = luid;
+                  target = { location: 'personalSpace', luid };
+                  failureCode = 'publish-workbook-failed';
+                  try {
+                    published = await restApi.publishingMethods.publishWorkbook({
+                      siteId: restApi.siteId,
+                      location: { id: luid, type: 'PersonalSpace' },
+                      name: workbookName,
+                      fileName,
+                      workbookType: 'twbx',
+                      fileContents,
+                      showTabs: showTabsFlag,
+                      overwrite: overwriteFlag,
+                    });
+                  } catch (error) {
+                    const mapped = mapPersonalSpacePublishError(error);
+                    if (mapped) {
+                      failureCode = 'personal-space-not-available';
+                      return mapped.toErr();
+                    }
+                    throw error;
+                  }
+                  if (published.location?.type !== 'PersonalSpace') {
+                    failureCode = 'personal-space-not-available';
+                    const landedProject = published.project?.name ?? published.location?.name;
+                    return new PublishWorkbookError(
+                      'This Tableau server published the workbook to ' +
+                        (landedProject ? `the "${landedProject}" project` : 'a project') +
+                        ' instead of your personal space — its REST API does not support ' +
+                        'personal-space publishing. Delete it there if unwanted, or publish to a ' +
+                        'project explicitly.',
+                    ).toErr();
+                  }
+                } else {
+                  failureCode = 'target-project-query-failed';
+                  const targetProject = await resolveTargetProject(restApi, projectId);
+                  if (targetProject.isErr()) {
+                    failureCode = 'target-project-not-found';
+                    return targetProject;
+                  }
+                  const resolved = targetProject.value;
+                  auditProjectId = resolved.id;
+                  target = { location: 'project', id: resolved.id, name: resolved.name };
+                  failureCode = 'publish-workbook-failed';
+                  published = await restApi.publishingMethods.publishWorkbook({
+                    siteId: restApi.siteId,
+                    projectId: resolved.id,
+                    name: workbookName,
+                    fileName,
+                    workbookType: 'twbx',
+                    fileContents,
+                    showTabs: showTabsFlag,
+                    overwrite: overwriteFlag,
+                  });
+                }
 
                 auditOutcome = 'published';
                 return new Ok({
@@ -227,7 +296,9 @@ report the workbook \`name\` and \`id\` instead.
               validationId: args.validationId,
               digest,
               workbookName,
+              targetType,
               projectId: auditProjectId,
+              personalSpaceLuid: auditPersonalSpaceLuid,
               showTabs: showTabsFlag,
               overwrite: overwriteFlag,
               outcome: auditOutcome,

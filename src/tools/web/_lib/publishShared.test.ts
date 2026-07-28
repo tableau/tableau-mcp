@@ -2,6 +2,7 @@ import { PublishedWorkbook } from '../../../sdks/tableau/methods/publishingMetho
 import {
   buildPublishActor,
   emitPublishAudit,
+  mapPersonalSpacePublishError,
   toPublishResult,
   toWorkbookViewsUrl,
 } from './publishShared.js';
@@ -65,15 +66,28 @@ describe('toPublishResult', () => {
     }) as PublishedWorkbook;
 
   it('surfaces the /views URL on `url` and keeps webpageUrl verbatim', () => {
-    const result = toPublishResult(published(), { id: 'proj-1', name: 'Default' });
+    const result = toPublishResult(published(), {
+      location: 'project',
+      id: 'proj-1',
+      name: 'Default',
+    });
     expect(result.url).toBe('https://test.tableau.com/#/workbooks/wb-123/views');
     expect(result.webpageUrl).toBe('https://test.tableau.com/#/workbooks/wb-123');
   });
 
   it('leaves `url` undefined when the server returned no webpageUrl', () => {
-    const result = toPublishResult(published({ webpageUrl: undefined }), { id: 'proj-1' });
+    const result = toPublishResult(published({ webpageUrl: undefined }), {
+      location: 'project',
+      id: 'proj-1',
+    });
     expect(result.url).toBeUndefined();
     expect(result.webpageUrl).toBeUndefined();
+  });
+
+  it('shapes a personal-space target with its LUID and no project', () => {
+    const result = toPublishResult(published(), { location: 'personalSpace', luid: 'ps-1' });
+    expect(result).toMatchObject({ location: 'personalSpace', personalSpaceLuid: 'ps-1' });
+    expect(result).not.toHaveProperty('projectId');
   });
 });
 
@@ -89,6 +103,7 @@ describe('emitPublishAudit', () => {
     validationId: 'b'.repeat(32),
     digest: 'c'.repeat(64),
     workbookName: 'My Viz',
+    targetType: 'project' as const,
     projectId: 'proj-1',
     showTabs: true,
     overwrite: false,
@@ -146,5 +161,72 @@ describe('emitPublishAudit', () => {
 
     expect(() => emitPublishAudit({ ...base, outcome: 'published' })).not.toThrow();
     expect(mocks.mockLog).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('mapPersonalSpacePublishError', () => {
+  function axios400(body: unknown): unknown {
+    return Object.assign(new Error('400 Bad Request'), {
+      isAxiosError: true,
+      response: { status: 400, data: body },
+    });
+  }
+
+  it('maps the FF-off gate (400 + code 400000 + a "personal space" detail) to a fixed, leak-free error', () => {
+    const secret = 'Bearer do-not-leak';
+    const mapped = mapPersonalSpacePublishError(
+      axios400({
+        error: {
+          code: '400000',
+          summary: 'Bad Request',
+          detail: `Publishing a workbook directly to personal space is not enabled for this site. ${secret}`,
+        },
+      }),
+    );
+
+    expect(mapped).not.toBeNull();
+    expect(mapped!.message).toMatch(/not enabled for this Tableau site/i);
+    expect(mapped!.message).not.toContain(secret);
+    expect(mapped!.message).not.toContain('directly to personal space');
+  });
+
+  it('is case-insensitive on the detail substring', () => {
+    const mapped = mapPersonalSpacePublishError(
+      axios400({ error: { code: '400000', detail: 'Publishing to Personal Space is disabled.' } }),
+    );
+    expect(mapped).not.toBeNull();
+  });
+
+  it('falls through (null) on code 400000 whose detail does NOT mention personal space', () => {
+    const mapped = mapPersonalSpacePublishError(
+      axios400({ error: { code: '400000', detail: "A workbook named 'X' already exists." } }),
+    );
+    expect(mapped).toBeNull();
+  });
+
+  it('falls through (null) on a content publishing error (code 400011)', () => {
+    const mapped = mapPersonalSpacePublishError(
+      axios400({
+        error: { code: '400011', detail: "There was a problem publishing the file 'x'." },
+      }),
+    );
+    expect(mapped).toBeNull();
+  });
+
+  it('falls through (null) on a non-400 status even if the code matches', () => {
+    const err = Object.assign(new Error('403 Forbidden'), {
+      isAxiosError: true,
+      response: { status: 403, data: { error: { code: '400000', detail: 'personal space' } } },
+    });
+    expect(mapPersonalSpacePublishError(err)).toBeNull();
+  });
+
+  it('falls through (null) on a non-axios error', () => {
+    expect(mapPersonalSpacePublishError(new Error('boom personal space'))).toBeNull();
+  });
+
+  it('falls through (null) when the 400 body is missing or malformed', () => {
+    expect(mapPersonalSpacePublishError(axios400(undefined))).toBeNull();
+    expect(mapPersonalSpacePublishError(axios400({ error: {} }))).toBeNull();
   });
 });

@@ -13,18 +13,15 @@ const CHECK_SVG =
   'stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 // The publish tool returns a flat CreateAndPublishResult; the client reads only these fields. `url`
-// is optional: publishing can succeed even when the server returns no webpageUrl (see
-// publishShared.ts), and that is still a successful publish — the card renders name/id/project as a
-// non-clickable card rather than falling back to plain JSON. `id` is the workbook LUID, shown as a
-// fallback identifier when there is no link to click. `projectName` is the human-readable
-// destination project (e.g. "Default"); we render it in the meta row so the card names where the
-// workbook landed. `projectId` (the LUID) is kept only as a presence signal for the fallback label.
-// See createAndPublishWorkbook.ts / publishShared.ts.
+// is optional (a publish with no webpageUrl still renders a non-clickable card). `location` names
+// the destination — 'personalSpace' → "Personal Space", else `projectName`; it is optional for
+// backward compatibility (absent → project publish). See createAndPublishWorkbook.ts.
 const publishedWorkbookSchema = z.object({
   appView: z.literal('published-workbook-card'),
   name: z.string(),
   id: z.string().optional(),
   url: z.string().url().optional(),
+  location: z.enum(['project', 'personalSpace']).optional(),
   projectId: z.string().optional(),
   projectName: z.string().optional(),
   // Non-fatal builder advisories carried over from validation (e.g. "that .parquet asset may 404").
@@ -128,10 +125,10 @@ export function renderPublishedWorkbookCard(app: App, data: PublishedWorkbookRes
 
   const project = document.createElement('span');
   project.className = 'pub-card-project';
-  // Name the actual destination when we have it (e.g. "Default"). Fall back to a generic label only
-  // when projectName is absent: an omitted projectId means the site default project; a present LUID
-  // with no name means an explicit project we couldn't name. See publishShared.ts.
-  project.textContent = data.projectName ?? (data.projectId ? 'Project' : 'Default project');
+  project.textContent =
+    data.location === 'personalSpace'
+      ? 'Personal Space'
+      : (data.projectName ?? (data.projectId ? 'Project' : 'Default project'));
 
   meta.append(badge, dot, project);
   body.append(title, meta);

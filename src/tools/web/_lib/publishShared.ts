@@ -5,6 +5,7 @@ import { PublishWorkbookError } from '../../../errors/mcpToolError.js';
 import { AUDIT_LOGGER, log } from '../../../logging/logger.js';
 import { PublishedWorkbook } from '../../../sdks/tableau/methods/publishingMethods.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { isAxiosError } from '../../../utils/axios.js';
 import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 
 // The single-request publish endpoint accepts files up to 64 MB. Larger files require the File
@@ -20,15 +21,9 @@ export const MAX_SINGLE_REQUEST_BYTES = 64 * 1024 * 1024;
 // case we recover the name from the publish response instead. See toPublishResult.
 export type ResolvedProject = { id: string; name?: string };
 
-export type PublishResult = {
+type PublishResultBase = {
   id: string;
   name: string;
-  location: 'project';
-  projectId: string;
-  // Human-readable name of the project we published into (e.g. "Default"), for display. Prefer this
-  // over projectId for any user-facing label. Omitted only when neither the resolver nor the publish
-  // response supplied a name.
-  projectName?: string;
   // The canonical clickable workbook URL — bind links (prose or a UI card's href) to this. It is
   // the server's webpageUrl with the `/views` segment appended so it lands on the workbook's Views
   // tab (the bare .../#/workbooks/{id} page is not a reliable landing route); omitted when the
@@ -37,6 +32,21 @@ export type PublishResult = {
   contentUrl?: string;
   webpageUrl?: string;
 };
+
+export type PublishResult =
+  | (PublishResultBase & {
+      location: 'project';
+      projectId: string;
+      projectName?: string;
+    })
+  | (PublishResultBase & {
+      location: 'personalSpace';
+      personalSpaceLuid: string;
+    });
+
+export type PublishTarget =
+  | { location: 'project'; id: string; name?: string }
+  | { location: 'personalSpace'; luid: string };
 
 // Returns the precondition error to surface, or null when the size is acceptable. Callers turn a
 // non-null result into a returned Err (never a throw) so it renders as a clean tool error.
@@ -51,8 +61,7 @@ export function checkUnder64Mb(sizeBytes: number): PublishWorkbookError | null {
 }
 
 // Resolve the project to publish into: the caller's projectId, or the site's default project when
-// none is given. (Personal-space publish is not yet supported by the REST API in a single call, so
-// an omitted projectId lands in the default project for now.)
+// none is given. Personal-space publish bypasses this resolver entirely.
 export async function resolveTargetProject(
   restApi: RestApi,
   projectId: string | undefined,
@@ -115,7 +124,10 @@ const publishAuditRecordSchema = z.object({
   validationId: z.string(),
   digest: z.string(),
   workbookName: z.string().optional(),
+  // Destination: 'project' pairs with projectId, 'personalSpace' with personalSpaceLuid.
+  targetType: z.enum(['project', 'personalSpace']),
   projectId: z.string().optional(),
+  personalSpaceLuid: z.string().optional(),
   showTabs: z.boolean(),
   overwrite: z.boolean(),
   outcome: z.enum(['published', 'failed']),
@@ -126,6 +138,8 @@ const publishAuditRecordSchema = z.object({
       'rest-api-setup-failed',
       'target-project-query-failed',
       'target-project-not-found',
+      'personal-space-query-failed',
+      'personal-space-not-available',
       'publish-workbook-failed',
     ])
     .optional(),
@@ -189,32 +203,51 @@ export function rebaseUrlOrigin(rawUrl: string, serverOrigin: string | undefined
   }
 }
 
-// Map the SDK's PublishedWorkbook onto the tool result. projectId is the *resolved* target we
-// published into (not published.project?.id). `url` is the canonical clickable workbook URL: the
-// server's webpageUrl rebased onto the configured SERVER origin (so it's reachable through the same
-// address the client connects with — some servers advertise an internal gateway host/IP) and then
-// pointed at the Views tab (see toWorkbookViewsUrl). The raw server value is preserved verbatim on
-// `webpageUrl`. Both are omitted when the server returned no webpageUrl — better an absent link than
-// a fabricated one.
+// Map the SDK's PublishedWorkbook onto the tool result for the resolved `target`. `url` is the raw
+// webpageUrl rebased onto the configured SERVER origin and pointed at the Views tab; `webpageUrl`
+// keeps the raw value. Both are omitted (never fabricated) when the server returned no webpageUrl.
 export function toPublishResult(
   published: PublishedWorkbook,
-  target: ResolvedProject,
+  target: PublishTarget,
   serverOrigin?: string,
 ): PublishResult {
   const url =
     published.webpageUrl !== undefined
       ? toWorkbookViewsUrl(rebaseUrlOrigin(published.webpageUrl, serverOrigin))
       : undefined;
-  return {
+  const base: PublishResultBase = {
     id: published.id,
     name: published.name,
+    url,
+    contentUrl: published.contentUrl,
+    webpageUrl: published.webpageUrl,
+  };
+  if (target.location === 'personalSpace') {
+    return { ...base, location: 'personalSpace', personalSpaceLuid: target.luid };
+  }
+  return {
+    ...base,
     location: 'project',
     projectId: target.id,
     // Prefer the name the resolver knew (default-project path); otherwise recover it from the
     // publish response (explicit-projectId path). Undefined only if neither supplied one.
     projectName: target.name ?? published.project?.name,
-    url,
-    contentUrl: published.contentUrl,
-    webpageUrl: published.webpageUrl,
   };
+}
+
+// Map the server's "personal-space publish is disabled for this site" gate to a clean tool error, or
+// null for anything else so the caller rethrows to the generic handler.
+export function mapPersonalSpacePublishError(error: unknown): PublishWorkbookError | null {
+  if (!isAxiosError(error) || error.response?.status !== 400) {
+    return null;
+  }
+  const body = error.response.data as { error?: { code?: string; detail?: string } } | undefined;
+  const detail = (body?.error?.detail ?? '').toLowerCase();
+  if (body?.error?.code === '400000' && detail.includes('personal space')) {
+    return new PublishWorkbookError(
+      'Publishing directly to a personal space is not enabled for this Tableau site. Publish to a ' +
+        'project instead, or ask a site administrator to enable personal-space publishing.',
+    );
+  }
+  return null;
 }
