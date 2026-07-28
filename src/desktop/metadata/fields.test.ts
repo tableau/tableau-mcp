@@ -3,6 +3,7 @@ import {
   addFieldToCols,
   addFieldToEncoding,
   addFieldToRows,
+  ensureEncodingFieldDependencies,
   listFields,
   moveFieldInCols,
   moveFieldInEncoding,
@@ -43,6 +44,33 @@ const WORKSHEET_XML = `<?xml version="1.0" encoding="UTF-8"?>
     </panes>
   </table>
 </worksheet>`;
+
+describe('ensureEncodingFieldDependencies', () => {
+  it('returns byte-identical XML when every encoding instance is already declared', () => {
+    expect(ensureEncodingFieldDependencies(WORKSHEET_XML)).toBe(WORKSHEET_XML);
+  });
+
+  it('returns byte-identical XML for a non-worksheet fragment', () => {
+    const dashboardXml = '<dashboard name="Dashboard 1"><zones /></dashboard>';
+
+    expect(ensureEncodingFieldDependencies(dashboardXml)).toBe(dashboardXml);
+  });
+
+  it('adds one declaration for repeated references to the same missing instance', () => {
+    const missingRepeatedXml = WORKSHEET_XML.replace(
+      '        <column-instance name="[none:Category:nk]" column="[Category]" derivation="None" pivot="key" type="nominal"/>\n',
+      '',
+    ).replace(
+      '          <color column="[Sample].[none:Category:nk]"/>',
+      '          <color column="[Sample].[none:Category:nk]"/>\n' +
+        '          <tooltip column="[Sample].[none:Category:nk]"/>',
+    );
+
+    const result = ensureEncodingFieldDependencies(missingRepeatedXml);
+
+    expect(result.match(/name="\[none:Category:nk\]"/g)).toHaveLength(1);
+  });
+});
 
 describe('listFields', () => {
   it('should return fields from all locations', () => {
