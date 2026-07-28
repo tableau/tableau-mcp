@@ -1,8 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { writeFileSync } from 'fs';
+import { Result } from 'ts-results-es';
 
 import { Config } from '../../../config.desktop.js';
 import { DesktopCache } from '../../../desktop/cache.js';
+import { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import { ImageResult } from '../../../desktop/externalApi/types.js';
 import {
   buildInlineImageCapFileMessage,
@@ -11,6 +13,9 @@ import {
   isOverInlineImageCap,
   logInlineImageCapHit,
 } from '../../../desktop/inlineImageCap.js';
+import { ExecuteCommandError } from '../../../desktop/toolExecutor/toolExecutor.js';
+import { ImageExportTimeoutError, McpToolError } from '../../../errors/mcpToolError.js';
+import { ExternalApiRead } from '../externalApiReadHarness.js';
 
 type BuildSheetImageToolResultArgs = {
   /** Tool name for cap-hit audit logging. */
@@ -142,4 +147,46 @@ export function resolveImageExportQuery(args: { filePath?: string; mimeType?: st
   return {
     query: { filePath, mimeType },
   };
+}
+
+/**
+ * Runs an image-render call under a deadline scoped to that call only (the sheet-list call that
+ * precedes it rides `signal`, the request's own signal). The first render after Desktop launches
+ * can hang forever behind a modal dialog; this converts that into a reportable timeout instead of
+ * an unbounded wait. The harness `read()` always passes the request signal into the closure, so
+ * `doExport` receives the `combined` signal explicitly and must forward it to the executor.
+ *
+ * A timeout is distinguished from a caller cancellation: only when the timeout fired AND the
+ * request signal did not is the failure reported as {@link ImageExportTimeoutError}; a cancelled
+ * request keeps its original error. Shared by the worksheet and dashboard export tools, whose only
+ * differences are the label, endpoint name, and executor method.
+ */
+export async function exportSheetImageWithDeadline({
+  label,
+  endpoint,
+  timeoutMs,
+  signal,
+  read,
+  doExport,
+}: {
+  label: string;
+  endpoint: string;
+  timeoutMs: number;
+  signal: AbortSignal;
+  read: ExternalApiRead;
+  doExport: (
+    executor: ExternalApiToolExecutor,
+    combined: AbortSignal,
+  ) => Promise<Result<ImageResult, ExecuteCommandError>>;
+}): Promise<Result<ImageResult, McpToolError>> {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const combined = AbortSignal.any([signal, timeoutSignal]);
+  const imageResult = await read<ImageResult>(
+    endpoint,
+    async (executor) => await doExport(executor, combined),
+  );
+  if (imageResult.isErr() && timeoutSignal.aborted && !signal.aborted) {
+    return new ImageExportTimeoutError(label, timeoutMs).toErr();
+  }
+  return imageResult;
 }

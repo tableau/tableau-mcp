@@ -35,6 +35,44 @@ describe('DesktopConfig', () => {
     expect(config.inlineXmlMaxBytes).toBe(16 * 1024);
   });
 
+  it('should default inlineImageMaxBytes to 1 MiB', () => {
+    const config = new Config();
+    expect(config.inlineImageMaxBytes).toBe(1024 * 1024);
+  });
+
+  it('should override inlineImageMaxBytes from INLINE_IMAGE_MAX_BYTES', () => {
+    vi.stubEnv('INLINE_IMAGE_MAX_BYTES', '2048');
+
+    const config = new Config();
+    expect(config.inlineImageMaxBytes).toBe(2048);
+  });
+
+  it('should fall back to the default inlineImageMaxBytes for a non-number', () => {
+    vi.stubEnv('INLINE_IMAGE_MAX_BYTES', 'not-a-number');
+
+    const config = new Config();
+    expect(config.inlineImageMaxBytes).toBe(1024 * 1024);
+  });
+
+  it('should default imageExportTimeoutMs to 30 seconds', () => {
+    const config = new Config();
+    expect(config.imageExportTimeoutMs).toBe(30_000);
+  });
+
+  it('should override imageExportTimeoutMs from IMAGE_EXPORT_TIMEOUT_MS', () => {
+    vi.stubEnv('IMAGE_EXPORT_TIMEOUT_MS', '5000');
+
+    const config = new Config();
+    expect(config.imageExportTimeoutMs).toBe(5000);
+  });
+
+  it('should fall back to the default imageExportTimeoutMs for a non-number', () => {
+    vi.stubEnv('IMAGE_EXPORT_TIMEOUT_MS', 'not-a-number');
+
+    const config = new Config();
+    expect(config.imageExportTimeoutMs).toBe(30_000);
+  });
+
   describe('External Client API discovery', () => {
     it('should expose an optional discovery-dir override', () => {
       vi.stubEnv('TABLEAU_EXTERNAL_API_DISCOVERY_DIR', '/custom/discovery');

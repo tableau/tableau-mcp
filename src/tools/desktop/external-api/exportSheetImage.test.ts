@@ -455,6 +455,50 @@ describe('export-image tools', () => {
       }
     },
   );
+
+  it.each([
+    {
+      label: 'a relative worksheet filePath',
+      makeTool: exportWorksheetImageTool,
+      args: { worksheet: 'sheet-sales', filePath: 'relative/report.png' },
+      imagePath: '/v0/workbook/worksheets/sheet-sales/image',
+    },
+    {
+      label: 'a ..-bearing worksheet filePath',
+      makeTool: exportWorksheetImageTool,
+      args: { worksheet: 'sheet-sales', filePath: '/tmp/../etc/report.png' },
+      imagePath: '/v0/workbook/worksheets/sheet-sales/image',
+    },
+    {
+      label: 'a relative dashboard filePath',
+      makeTool: exportDashboardImageTool,
+      args: { dashboard: 'dash-exec', filePath: 'relative/dash.png' },
+      imagePath: '/v0/workbook/dashboards/dash-exec/image',
+    },
+  ])(
+    'forwards the raw path and surfaces the Desktop 400 for $label (no client-side refine)',
+    async ({ makeTool, args, imagePath }) => {
+      // The tool boundary passes filePath through raw — Desktop is the authoritative path
+      // boundary (a client-side refine would have to duplicate OS-specific absolute-path
+      // semantics and risk rejecting valid Windows/UNC paths). This pins that the raw path
+      // reaches the image endpoint and the resulting 400 (code + detail) surfaces to the model.
+      const harness = await startHarness(makeTool);
+      try {
+        const result = await harness.callTool(args);
+
+        expect(result.isError).toBe(true);
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('Invalid filePath');
+        expect(result.content[0].text).toContain('invalid-query-parameter');
+        const lastRequest = harness.server.requests.at(-1);
+        expect(lastRequest?.path).toBe(imagePath);
+        expect(lastRequest?.searchParams.filePath).toBe(args.filePath);
+        expect(vi.mocked(writeFileSync)).not.toHaveBeenCalled();
+      } finally {
+        await harness.close();
+      }
+    },
+  );
 });
 
 async function startHarness(

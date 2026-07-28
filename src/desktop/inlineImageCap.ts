@@ -12,11 +12,6 @@ export const DEFAULT_INLINE_IMAGE_MAX_BYTES = 1024 * 1024;
 // Default for config.desktop.ts `imageExportTimeoutMs` (env-overridable via IMAGE_EXPORT_TIMEOUT_MS).
 export const DEFAULT_IMAGE_EXPORT_TIMEOUT_MS = 30_000;
 
-/** Decoded byte length of a base64 payload (the on-disk / on-wire image size). */
-export function imageByteLength(imageBase64: string): number {
-  return Buffer.from(imageBase64, 'base64').length;
-}
-
 /** True when the image exceeds the cap. Equal-to-cap stays under (inclusive floor). */
 export function isOverInlineImageCap(bytes: number, capBytes: number): boolean {
   return bytes > capBytes;

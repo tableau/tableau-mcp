@@ -2,11 +2,14 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { ImageResult } from '../../../desktop/externalApi/types.js';
-import { ImageExportTimeoutError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { runExternalApiReadTool } from '../externalApiReadHarness.js';
 import { DesktopTool } from '../tool.js';
-import { buildSheetImageToolResult, resolveImageExportQuery } from './exportSheetImageResult.js';
+import {
+  buildSheetImageToolResult,
+  exportSheetImageWithDeadline,
+  resolveImageExportQuery,
+} from './exportSheetImageResult.js';
 import { resolveItemByNameOrId } from './externalApiToolUtils.js';
 
 const paramsSchema = {
@@ -33,9 +36,8 @@ export const exportWorksheetImageTool = (
     description: 'Render one worksheet as an image.',
     paramsSchema,
     annotations: {
-      title,
       readOnlyHint: false,
-      destructiveHint: true,
+      destructiveHint: true, // a caller-supplied filePath can overwrite an existing file at that path
       idempotentHint: false,
       openWorldHint: false,
     },
@@ -69,24 +71,15 @@ export const exportWorksheetImageTool = (
                 return worksheetResult.error.toErr();
               }
 
-              // Scope a deadline to the image call only (the list call rides extra.signal). The
-              // first render after Desktop launches can hang forever behind a modal dialog; this
-              // converts that into a reportable timeout instead of an unbounded wait. The harness
-              // read() always passes extra.signal into the closure, so pass `combined` explicitly.
-              const timeoutSignal = AbortSignal.timeout(extra.config.imageExportTimeoutMs);
-              const combined = AbortSignal.any([_signal, timeoutSignal]);
-              const imageResult = await read(
-                'worksheet image',
-                async (executor) =>
-                  await executor.exportWorksheetImage(worksheetResult.value.id, query, combined),
-              );
-              if (imageResult.isErr() && timeoutSignal.aborted && !_signal.aborted) {
-                return new ImageExportTimeoutError(
-                  'Worksheet',
-                  extra.config.imageExportTimeoutMs,
-                ).toErr();
-              }
-              return imageResult;
+              return await exportSheetImageWithDeadline({
+                label: 'Worksheet',
+                endpoint: 'worksheet image',
+                timeoutMs: extra.config.imageExportTimeoutMs,
+                signal: _signal,
+                read,
+                doExport: (executor, combined) =>
+                  executor.exportWorksheetImage(worksheetResult.value.id, query, combined),
+              });
             },
           });
         },
