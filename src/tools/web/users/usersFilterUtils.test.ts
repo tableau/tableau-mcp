@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { User } from '../../../sdks/tableau/types/user.js';
 import {
   applyUserFilters,
+  buildUserFilterPredicate,
   exportedForTesting,
   parseAndValidateUsersFilterString,
 } from './usersFilterUtils.js';
@@ -314,6 +315,72 @@ describe('usersFilterUtils', () => {
       );
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe('user-456');
+    });
+  });
+
+  // buildUserFilterPredicate is the single source of truth (the pagination-loop
+  // filterFn uses it directly); applyUserFilters is now a thin wrapper over it.
+  // These guards prove the wrapper did NOT change behavior — the predicate and
+  // the wrapper must agree on every user across a representative filter matrix.
+  describe('buildUserFilterPredicate ⇄ applyUserFilters equivalence', () => {
+    const neverLoggedIn: User = {
+      id: 'user-never',
+      name: 'nlogin',
+      siteRole: 'Creator',
+      email: 'never.login@example.com',
+    };
+    const users: User[] = [
+      mockUser,
+      {
+        id: 'user-456',
+        name: 'asmith',
+        siteRole: 'Viewer',
+        email: 'alice.smith@example.com',
+        fullName: 'Alice Smith',
+        lastLogin: '2026-05-15T08:00:00Z',
+      },
+      {
+        id: 'user-789',
+        name: 'bjones',
+        siteRole: 'Unlicensed',
+        email: 'bob.jones@example.com',
+        fullName: 'Bob Jones',
+        lastLogin: '2024-12-01T12:00:00Z',
+      },
+      neverLoggedIn,
+    ];
+
+    const filterStrings = [
+      undefined,
+      '',
+      'siteRole:eq:Creator',
+      'siteRole:in:Creator|Viewer',
+      'email:eq:alice.smith@example.com',
+      'lastLogin:lt:2025-01-01T00:00:00Z',
+      'lastLogin:gt:2025-01-01T00:00:00Z',
+      'lastLogin:gt:2025-01-01T00:00:00Z,lastLogin:lt:2026-05-20T00:00:00Z',
+      'siteRole:eq:Unlicensed,lastLogin:lt:2025-01-01T00:00:00Z',
+      'fullName:eq:Alice Smith',
+    ];
+
+    it.each(filterStrings)(
+      'predicate applied per-user matches applyUserFilters for filter %s',
+      (filter) => {
+        const predicate = buildUserFilterPredicate(filter);
+        const viaPredicate = users.filter(predicate);
+        const viaWrapper = applyUserFilters(users, filter);
+        expect(viaPredicate).toEqual(viaWrapper);
+      },
+    );
+
+    it('predicate accepts every user when the filter string is falsy', () => {
+      expect(users.every(buildUserFilterPredicate(undefined))).toBe(true);
+      expect(users.every(buildUserFilterPredicate(''))).toBe(true);
+    });
+
+    it('predicate throws on an invalid field (same validation as the wrapper)', () => {
+      expect(() => buildUserFilterPredicate('authSetting:eq:SAML')).toThrow(/authSetting/);
+      expect(() => buildUserFilterPredicate('id:gt:123')).toThrow(/not allowed/);
     });
   });
 });

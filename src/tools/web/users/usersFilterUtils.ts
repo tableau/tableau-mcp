@@ -46,13 +46,26 @@ export function parseAndValidateUsersFilterString(filterString: string): string 
 }
 
 /**
- * Apply client-side filtering to users based on filter expressions.
- * Supports field:operator:value syntax (e.g., "siteRole:eq:Creator")
- * Supports multiple conditions on the same field (e.g., "lastLogin:gt:X,lastLogin:lt:Y" for date ranges)
+ * Build a reusable per-user predicate from a filter string. This is the single
+ * source of truth for the client-side filter logic: both {@link applyUserFilters}
+ * (used to filter an already-fetched array) and the pagination-loop `filterFn`
+ * in listUsers.ts build on it, so `limit` can bound POST-filter matches without
+ * duplicating the parse/match logic.
+ *
+ * Parses/validates the filter string ONCE (throwing on invalid field/operator),
+ * then returns a predicate that evaluates every parsed expression against a
+ * single user with AND logic. When `filterString` is falsy the predicate accepts
+ * every user (matching the "no filter → all users" behavior).
+ *
+ * Supports field:operator:value syntax (e.g., "siteRole:eq:Creator") and
+ * multiple conditions on the same field (e.g., "lastLogin:gt:X,lastLogin:lt:Y"
+ * for date ranges).
  */
-export function applyUserFilters(users: User[], filterString: string | undefined): User[] {
+export function buildUserFilterPredicate(
+  filterString: string | undefined,
+): (user: User) => boolean {
   if (!filterString) {
-    return users;
+    return () => true;
   }
 
   // Parse filter expressions directly to preserve duplicate fields (e.g., date ranges)
@@ -79,12 +92,21 @@ export function applyUserFilters(users: User[], filterString: string | undefined
     };
   });
 
-  return users.filter((user) => {
-    return filters.every(({ field, operator, value }) => {
+  return (user: User): boolean =>
+    filters.every(({ field, operator, value }) => {
       const fieldValue = getFieldValue(user, field);
       return matchesFilter(fieldValue, operator, value, field);
     });
-  });
+}
+
+/**
+ * Apply client-side filtering to users based on filter expressions. Thin wrapper
+ * over {@link buildUserFilterPredicate} kept for callers that filter an
+ * already-materialized array.
+ */
+export function applyUserFilters(users: User[], filterString: string | undefined): User[] {
+  const predicate = buildUserFilterPredicate(filterString);
+  return users.filter(predicate);
 }
 
 function getFieldValue(user: User, field: FilterField): string | number | undefined {
