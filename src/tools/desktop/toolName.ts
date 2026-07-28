@@ -14,6 +14,7 @@ export const desktopToolNames = [
   'apply-dashboard',
   'apply-dashboard-with-viewpoints',
   'build-and-apply-dashboard',
+  'compose-dashboard',
   'list-available-fields',
   'list-fields',
   'add-field',

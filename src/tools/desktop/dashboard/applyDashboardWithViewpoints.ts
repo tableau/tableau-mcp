@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { dispatchApplyFocus } from '../../../desktop/commands/workbook/applyFocus.js';
+import { withApplyLock } from '../../../desktop/commands/workbook/applyMutex.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { injectViewpoints } from '../../../desktop/commands/workbook/injectViewpoints.js';
 import { loadDashboardXml } from '../../../desktop/commands/workbook/loadDashboardXml.js';
@@ -85,12 +87,12 @@ export const getApplyDashboardWithViewpointsTool = (
 
           // Apply the dashboard first. A new dashboard has no dashboard window in the
           // pre-apply workbook, so injecting viewpoints before this step is a silent no-op.
-          // Both writes in this call produce the same dashboard, and the viewpoint apply
-          // below returns early when the viewpoints are already present, so each one names it.
+          // The later viewpoint apply names the dashboard once its window exists. If that
+          // apply is skipped, the already-present branch below explicitly names it instead.
           const dashboardApplyResult = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,
-            focus: { navigate: 'artifact', sheetName: dashboardName },
+            focus: { navigate: 'none', reason: 'intermediate-leg' },
             executor,
             signal: extra.signal,
           });
@@ -160,6 +162,14 @@ export const getApplyDashboardWithViewpointsTool = (
           }
 
           if (viewpointAccounting.state === 'success-already-present') {
+            await withApplyLock(() =>
+              dispatchApplyFocus({
+                focus: { navigate: 'artifact', sheetName: dashboardName },
+                postedXml: workbookResult.value,
+                executor,
+                signal: extra.signal,
+              }),
+            );
             return new Ok({
               message: `Dashboard "${dashboardName}" already had ${viewpointAccounting.landed.length} requested viewpoint(s).`,
               dashboardName,

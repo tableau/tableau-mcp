@@ -479,6 +479,24 @@ const missingCountryEscalateResult: BinderResult = {
   ],
   proposal: missingCountryProposal,
 };
+const missingSpatialGroupProposal: BindingProposal & { confidence: number } = {
+  template: 'spatial-choropleth-map',
+  title: 'Profit map',
+  bindings: [{ slot_id: 'profit', field: 'Profit' }],
+  confidence: 0.9,
+};
+const missingSpatialGroupEscalateResult: BinderResult = {
+  status: 'escalate',
+  reason: 'missing-required-slot',
+  blockers: [
+    {
+      code: 'missing-required-slot',
+      slot_id: 'country',
+      detail: 'at least one of slots [country, state] must have a binding',
+    },
+  ],
+  proposal: missingSpatialGroupProposal,
+};
 
 // A Call-2 proposal that validated into a bound result is marked used_llm:true.
 // The auto-apply gate should preserve that field on non-applied results, but it no
@@ -1707,6 +1725,26 @@ describe('bindTemplateTool bind recovery gate', () => {
     });
     expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(2);
     expect(binderModule.bindTemplate).toHaveBeenCalledTimes(2);
+  });
+
+  it('mints a repair allowance for an unsatisfied spatial slot group', async () => {
+    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
+    vi.spyOn(getWorkbookXmlModule, 'getWorkbookXml').mockResolvedValue(Ok(XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValueOnce(missingSpatialGroupEscalateResult);
+    const ask = 'choropleth of Profit';
+
+    const result = await getToolResult({ session: '1', ask });
+
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).reason).toBe('missing-required-slot');
+    expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toMatchObject({
+      phase: 'terminal',
+      terminalRepairAllowance: {
+        template: 'spatial-choropleth-map',
+        slotId: 'country',
+        remaining: 1,
+      },
+    });
   });
 
   it('keeps the ask terminal when an admitted Tier-2 repair proposes again', async () => {

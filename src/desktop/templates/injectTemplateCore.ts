@@ -12,6 +12,7 @@
 // inject-template tool passes agent-supplied raw strings; bind-template passes the
 // binder's args as-is (matching what the manual inject-template call would receive).
 
+import { ensureEncodingFieldDependencies } from '../metadata/fields.js';
 import { normalizeArray, parseXML, serializeXML } from '../metadata/parser.js';
 import { ParsedWindow, ParsedWorkbook, ParsedWorksheet } from '../metadata/types.js';
 import { wellFormedXmlRule } from '../validation/rules/wellFormedXml.js';
@@ -253,6 +254,7 @@ export function buildInjectedWorkbookXml({
     );
     processed = rewrite.xml;
     rewriteWarnings.push(...rewrite.droppedOptionalElements);
+    processed = ensureEncodingFieldDependencies(processed, workbookXml);
     processed = spliceWaterfallAnchorFilter(processed, fieldMapping ?? {});
   }
 

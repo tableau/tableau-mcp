@@ -94,14 +94,15 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'route',
     id: 'dashboard',
-    trigger: 'a dashboard ask with 2-6 vizzes',
+    trigger: 'a dashboard ask',
     action:
-      'build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; search-commands only for commands the census does not list.',
+      'build sheets with bind-template (author calcs/params/sets first), then compose with dashboard-auto-apply (2-6 plain charts, one call) or plan-dashboard-creation -> build-and-apply-dashboard; compose-dashboard takes 2-12 EXISTING sheets; search-commands only for commands the census does not list.',
     toolSequence: [
       'bind-template',
       'dashboard-auto-apply',
       'plan-dashboard-creation',
       'build-and-apply-dashboard',
+      'compose-dashboard',
       'search-commands',
     ],
     stopConditions: ['search-commands only for commands the census does not list'],

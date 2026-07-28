@@ -155,7 +155,7 @@ describe('portability-lane — geo semantic-role picks (W2, the Territory-class 
     expect(cls!.template).toBe('spatial-choropleth-map');
     const byId = Object.fromEntries(cls!.bindings.map((b) => [b.slot_id, b.field]));
     expect(byId.state).toBe('Territory');
-    expect(byId.country).toBe('Country');
+    expect(byId.country).toBeUndefined();
   });
 
   it('a Country map ask stays country-level instead of auto-completing optional state', () => {

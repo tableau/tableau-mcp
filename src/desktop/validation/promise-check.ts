@@ -6,8 +6,8 @@
  *
  * Schema-decay rule: the model fills NOTHING here. Every field derives from
  * validation issues and readback verification already computed on the apply
- * path. Dashboard/whole-workbook intent is honestly labeled unverified — only
- * worksheet readback proves structural survival.
+ * path. Whole-workbook intent remains honestly unverified; worksheet and
+ * dashboard receipts report verified only after structural readback.
  *
  * Ported from agent-to-tableau-desktop.
  */
@@ -105,12 +105,19 @@ export function formatWorkbookPromiseCheck(validationWarnings: ValidationIssue[]
   return `\n\nHOST VERIFICATION — unverified: ${parts.join(' · ')}. Treat sheet-level state as unconfirmed until read back; do not report problems without host evidence.`;
 }
 
-/** Dashboard applies likewise have no structural readback — honest by construction. */
-export function formatDashboardPromiseCheck(validationWarnings: ValidationIssue[]): string {
+/** Dashboard applies remain unverified unless the caller completed structural readback. */
+export function formatDashboardPromiseCheck(
+  validationWarnings: ValidationIssue[],
+  structuralReadbackMatched = false,
+): string {
   const parts = [
     formatPreflight(validationWarnings),
     'apply completed',
-    'full dashboard intent NOT re-verified',
+    structuralReadbackMatched
+      ? 'dashboard zone tree and window viewpoints matched workbook-XML readback'
+      : 'full dashboard intent NOT re-verified',
   ];
-  return `\n\nHOST VERIFICATION — unverified: ${parts.join(' · ')}. Treat dashboard state as unconfirmed until read back; do not report problems without host evidence.`;
+  return structuralReadbackMatched
+    ? `\n\nHOST VERIFICATION — verified: ${parts.join(' · ')}. No host evidence of any dashboard problem beyond the findings listed above — do not report unlisted issues.`
+    : `\n\nHOST VERIFICATION — unverified: ${parts.join(' · ')}. Treat dashboard state as unconfirmed until read back; do not report problems without host evidence.`;
 }

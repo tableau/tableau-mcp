@@ -19,6 +19,7 @@
 import Fuse from 'fuse.js';
 
 import { calcForcedSlotIds } from './calc-derivation.js';
+import { fieldSatisfiesSlotConstraint } from './manifest-validation.js';
 import type { Derivation, SlotKind, TemplateManifest } from './manifest-types.js';
 import { inferStringTemporal } from './stringTemporal.js';
 import {
@@ -34,7 +35,8 @@ import {
  * and a byte-identical copy resolves entirely within the shared lockstep-core set.
  * These MIRROR the schema module's exported `SchemaField`/`SchemaSummary` structurally;
  * the PRODUCER (`summarizeSchema`) still lives there — only the read-only shapes the
- * classifier consumes are declared here.
+ * classifier consumes are declared here. Group constraint evidence is shared with
+ * fixture binding through the equally-pure `manifest-validation.ts`.
  */
 interface SchemaField {
   name: string; // friendly name: caption ?? bare column name
@@ -2052,8 +2054,12 @@ function augmentGeoConceptMatches(
   schemaDims: SchemaField[],
 ): SchemaField[] {
   const augmented = [...matched];
+  const constrainedSlotIds = new Set((manifest.at_least_one_of ?? []).flat());
   const geoSlots = manifest.slots.filter(
-    (slot) => slot.bindable && slot.required && slot.kind === 'geo',
+    (slot) =>
+      slot.bindable &&
+      (slot.required || constrainedSlotIds.has(slot.slot_id)) &&
+      slot.kind === 'geo',
   );
 
   for (const slot of geoSlots) {
@@ -2242,6 +2248,7 @@ function roleGreedyBind(
 } | null {
   const used = new Set<SchemaField>();
   const bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }> = [];
+  const boundFieldsBySlot = new Map<string, SchemaField>();
   // A REQUIRED calc forces its bindable input slots to bind even when the slot is
   // authored optional (H3) — otherwise the calc's formula ref would dangle and the
   // no-LLM path would needlessly escalate.
@@ -2479,6 +2486,23 @@ function roleGreedyBind(
     };
     if (slot.kind === 'quantitative' && aggOverride) binding.derivation = aggOverride;
     bindings.push(binding);
+    boundFieldsBySlot.set(slot.slot_id, chosen);
+  }
+
+  if (
+    (m.at_least_one_of ?? []).some(
+      (group) =>
+        !group.some((slotId) => {
+          const field = boundFieldsBySlot.get(slotId);
+          if (!field) return false;
+          const slot = m.slots.find((candidate) => candidate.slot_id === slotId);
+          return slot
+            ? fieldSatisfiesSlotConstraint(slotId, slot.kind, field)
+            : false;
+        }),
+    )
+  ) {
+    return null;
   }
 
   // Surface any geo slot AUTO-COMPLETED from the full schema (W60) as provenance, so the
@@ -3496,14 +3520,32 @@ export function classifyNoLlm(
   // its sole spare Product dimension. Exact-one cardinality keeps this fail-closed.
   const colorSeries = facet ? null : colorSeriesBinding(chosen, bindings, summary.fields);
   if (colorSeries) bindings.push(colorSeries);
-  // Attach provenance (e.g. W60 geo auto-completion) only when non-empty, so a
-  // non-geo / no-auto-complete ask returns the exact same {template, bindings} shape.
+  const appliedFieldNames = new Set([
+    ...bindings.map((binding) => binding.field),
+    ...filterCandidates.map((field) => field.name),
+  ]);
+  const droppedSpatialDimensions =
+    chosen.family === 'spatial'
+      ? matched.filter(
+          (field) => field.role === 'dimension' && !appliedFieldNames.has(field.name),
+        )
+      : [];
+  const notes = [...rgb.provenance];
+  if (droppedSpatialDimensions.length > 0) {
+    notes.push(
+      `Did not apply ask-named field${droppedSpatialDimensions.length === 1 ? '' : 's'} ` +
+        `${droppedSpatialDimensions.map((field) => `'${field.name}'`).join(', ')} because ` +
+        `the selected spatial template has no compatible open slot.`,
+    );
+  }
+  // Attach provenance and dropped-input warnings only when non-empty, so a clean
+  // non-spatial/no-auto-complete ask returns the same {template, bindings} shape.
   return attachAskModifiers(
     ask,
     {
       template: chosen.template,
       bindings,
-      ...(rgb.provenance.length > 0 ? { notes: rgb.provenance } : {}),
+      ...(notes.length > 0 ? { notes } : {}),
       encodings: symbolMapEncodings.encodings,
     },
     filterCandidates,

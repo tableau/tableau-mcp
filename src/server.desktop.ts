@@ -134,6 +134,9 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'plan-dashboard-creation',
     'batch-create-and-cache-sheets',
     'build-and-apply-dashboard',
+    // Composes a dashboard from sheets that already exist — the verb the four tools
+    // above lack (they rebuild from asks, and error or livelock on existing sheets).
+    'compose-dashboard',
     'execute-tableau-command',
     'search-commands',
     // Atomic navigation fallback: switch the workbook active window without exposing the
