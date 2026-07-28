@@ -295,8 +295,9 @@ describe('export-image tools', () => {
   });
 
   it('defaults to a single image/png block when effectiveMimeType is absent (accepted no-fallback default)', async () => {
-    // Pre-monolith builds omit effectiveMimeType. With no byte-sniff fallback, SVG-looking bytes
-    // and no declaration are labelled image/png — the documented degradation on such builds.
+    // Older Desktop builds that predate the effectiveMimeType field omit it. With no byte-sniff
+    // fallback, SVG-looking bytes and no declaration are labelled image/png — the documented
+    // degradation on such builds.
     const svgBase64 = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString('base64');
     const harness = await startHarness(exportWorksheetImageTool, (server) => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/image', {
