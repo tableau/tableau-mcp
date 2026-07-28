@@ -10,7 +10,6 @@ import {
   bindTemplate,
   type Blocker,
   buildLlmInput,
-  classifyNoLlm,
   DERIVATION_OVERRIDE_INSTRUCTION,
   type EncodingReport,
   type EscalateReason,
@@ -90,7 +89,6 @@ import {
   type NextAction,
   prefillNextAction,
   receipt,
-  type ReceiptBinding,
   type StructuredResult,
   withNextAction,
 } from '../structuredContent.js';
@@ -224,20 +222,11 @@ type StructuredBindTemplateToolResult = StructuredResult<BindTemplateToolResult>
 type Call2Contract = BindRecoveryProposalContext;
 type TerminalRepairAllowance = NonNullable<BindRecoveryRecord['terminalRepairAllowance']>;
 
-function receiptBindings(
-  bindings: readonly Pick<BindingProposal['bindings'][number], 'slot_id' | 'field'>[],
-  schemaSummary: SchemaSummary,
-): ReceiptBinding[] {
-  const bySlot = new Map<string, string>();
-  for (const binding of bindings) {
-    const resolved = resolveInSummary(schemaSummary, binding.field);
-    bySlot.set(binding.slot_id, resolved.field?.caption ?? resolved.field?.name ?? binding.field);
-  }
-  return [...bySlot].map(([slot_id, field]) => ({ slot_id, field }));
-}
-
 function isAutoCompletedProvenance(value: string): boolean {
-  return /\brequired (?:geo|temporal) slot\b/i.test(value);
+  return (
+    /\brequired (?:geo|temporal) slot\b/i.test(value) ||
+    /\bwaterfall auto-bound anchor_category="/i.test(value)
+  );
 }
 
 function autoCompletedMessageLine(provenance: string): string {
@@ -1502,7 +1491,6 @@ async function performAutoApply({
   schemaSummary,
   manifest,
   appliedDefault,
-  bindings,
 }: {
   res: BoundResult;
   base: BindTemplateToolResultBase;
@@ -1517,7 +1505,6 @@ async function performAutoApply({
   schemaSummary: SchemaSummary;
   manifest: TemplateManifest;
   appliedDefault?: AppliedDefault;
-  bindings: readonly Pick<BindingProposal['bindings'][number], 'slot_id' | 'field'>[];
 }): Promise<{
   result: StructuredBindTemplateToolResult;
   failureDisposition?: AutoApplyFailureDisposition;
@@ -1715,10 +1702,15 @@ async function performAutoApply({
   // enable a manual second call that never happens once the apply succeeds.
   const calcPrefix = renderAuthoredCalcPrefix(base.authored_calcs, res.status);
   const receiptText = `${calcPrefix}Applied "${literalTitle}" to the live workbook (bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`;
-  const bound = receiptBindings(bindings, schemaSummary);
-  const autoCompleted = (res.warnings ?? []).filter(isAutoCompletedProvenance);
+  const bound = res.applied_bindings?.map(({ slot_id, field }) => ({ slot_id, field }));
+  const autoCompleted =
+    res.applied_bindings === undefined
+      ? undefined
+      : (res.warnings ?? []).filter(isAutoCompletedProvenance);
   const autoCompletedMessage =
-    autoCompleted.length > 0 ? `\n${autoCompleted.map(autoCompletedMessageLine).join('\n')}` : '';
+    autoCompleted && autoCompleted.length > 0
+      ? `\n${autoCompleted.map(autoCompletedMessageLine).join('\n')}`
+      : '';
   // Blake's spiral fix: the applied:true receipt is TERMINAL unless a genuine, named re-bind
   // slot is still unfilled (the m1 waterfall case). On INCOMPLETE we keep today's steer and
   // attach NO structuredContent (byte-for-byte identical to the pre-fix code). On COMPLETE we
@@ -1828,8 +1820,8 @@ async function performAutoApply({
                       'whether the applied sheet retained its intended structure or renders any marks — structural readback did not run',
                     ]),
               ],
-              bound,
-              auto_completed: autoCompleted,
+              ...(bound !== undefined ? { bound } : {}),
+              ...(autoCompleted !== undefined ? { auto_completed: autoCompleted } : {}),
             }),
           ),
         ),
@@ -2226,8 +2218,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
           }
 
-          const schemaSummary = summarizeSchema(workbookXml);
-          let bindingsForReceipt: BindingProposal['bindings'] = proposal?.bindings ?? [];
           let res: BinderResult;
           let appliedDefault: AppliedDefault | undefined;
           try {
@@ -2254,7 +2244,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 ...(minConfidence !== undefined ? { minConfidence } : {}),
               });
               if (res.status === 'bound') {
-                bindingsForReceipt = recommendedProposal.bindings;
                 appliedDefault = appliedDefaultFrom(recommended);
               }
             } else if (
@@ -2289,20 +2278,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
                 /* fail-open: bind stands, garnish skipped */
               }
             }
-            if (
-              proposal === undefined &&
-              res.status === 'bound' &&
-              bindingsForReceipt.length === 0
-            ) {
-              try {
-                const classified = classifyNoLlm(ask, manifests, schemaSummary);
-                if (classified?.template === res.args.template_name) {
-                  bindingsForReceipt = classified.bindings;
-                }
-              } catch {
-                /* fail-open: receipt enrichment must not disturb a working bind */
-              }
-            }
           } catch (e) {
             // A THROWN bind has no recordable outcome; clear the pending record (only if
             // it is still this ask's) so the gate can never read "no bind attempt yet"
@@ -2314,6 +2289,9 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             }
             throw e;
           }
+          // Post-try like the pre-receipt base: a summarize throw must not reach the bind
+          // catch above, whose clearCurrentAsk is scoped to a FAILED bind attempt.
+          const schemaSummary = summarizeSchema(workbookXml);
           if (target_worksheet !== undefined && res.status === 'bound') {
             res = { ...res, args: { ...res.args, title: target_worksheet } };
           }
@@ -2484,7 +2462,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             schemaSummary,
             manifest,
             appliedDefault,
-            bindings: bindingsForReceipt,
           });
           const appliedResult = autoApplyResult.result;
           // Only a bind the binder called FINISHED may be replayed as "already built" on

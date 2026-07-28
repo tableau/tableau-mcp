@@ -133,8 +133,6 @@ const COMPLETE_BIND_NEXT_ACTION = {
   receipt: {
     did: expect.arrayContaining([expect.stringContaining('Desktop accepted the document')]),
     didNot: [],
-    bound: [],
-    auto_completed: [],
     // This fixture has no binder encoding report, and structural readback never sees pixels.
     // Both gaps must remain explicit instead of becoming successful claims by omission.
     unverified: expect.arrayContaining([
@@ -485,7 +483,14 @@ const missingCountryEscalateResult: BinderResult = {
 // A Call-2 proposal that validated into a bound result is marked used_llm:true.
 // The auto-apply gate should preserve that field on non-applied results, but it no
 // longer blocks server-side auto-apply by itself.
-const boundViaProposalResult: BinderResult = { ...boundResult, used_llm: true };
+const boundWithAppliedBindingsResult: BinderResult = {
+  ...boundResult,
+  applied_bindings: sampleProposal.bindings,
+};
+const boundViaProposalResult: BinderResult = {
+  ...boundWithAppliedBindingsResult,
+  used_llm: true,
+};
 const boundWithSortResult: BinderResult = {
   ...boundViaProposalResult,
   args: {
@@ -575,6 +580,10 @@ const boundM7TopNContextFilterResult: BinderResult = {
 };
 const boundWaterfallResult: BinderResult = {
   ...boundViaProposalResult,
+  applied_bindings: [
+    { slot_id: 'profit', field: 'amount' },
+    { slot_id: 'sub_category', field: 'line_item' },
+  ],
   args: {
     template_name: 'part-to-whole-waterfall',
     title: 'P&amp;L Waterfall',
@@ -595,6 +604,11 @@ const boundWaterfallWithSortResult: BinderResult = {
 };
 const boundWaterfallWithAnchorResult: BinderResult = {
   ...boundWaterfallResult,
+  applied_bindings: [
+    { slot_id: 'profit', field: 'amount' },
+    { slot_id: 'sub_category', field: 'line_item' },
+    { slot_id: 'anchor_category', field: 'category' },
+  ],
   args: {
     ...boundWaterfallResult.args,
     field_mapping: {
@@ -2595,7 +2609,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     }
   });
 
-  it('applied:true non-waterfall bind is terminal: guidance says done and nextAction.kind is "done"', async () => {
+  it('fallback-path apply omits binding claims it cannot prove', async () => {
     // Blake's spiral: a completed auto-apply (symbol map, no unfilled re-bind slot) must
     // carry a terminal marker so the agent stops instead of burning 100s on search-commands
     // over an already-rendered chart. The prose stop-clause works with today's host; the
@@ -2615,6 +2629,8 @@ describe('bindTemplateTool auto_apply gate', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.guidance).toContain('no further tool calls');
     expectStructuredBlock(result, COMPLETE_BIND_NEXT_ACTION);
+    expect(result.structuredContent?.nextAction).not.toHaveProperty('receipt.bound');
+    expect(result.structuredContent?.nextAction).not.toHaveProperty('receipt.auto_completed');
     // structuredContent lives on the envelope, not in the JSON body.
     expect(Object.keys(body).sort()).toEqual([
       'applied',
@@ -2628,15 +2644,24 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect((body.guidance as string).length).toBeLessThan(400);
   });
 
-  it('auto_apply=true applies a validated Call-2 proposal bind with the events anchor', async () => {
+  it('Call-1 confident bind reports the binder-applied bindings without reclassification', async () => {
+    const actualBinder = await vi.importActual<typeof import('../../../desktop/binder/binder.js')>(
+      '../../../desktop/binder/binder.js',
+    );
+    const bind = await actualBinder.bindTemplate({
+      ask: 'bar chart of Sales by Region',
+      workbookXml: CURRENCY_WORKBOOK_XML,
+      manifests: loadManifests(),
+    });
+    invariant(bind.status === 'bound');
     const { applyWorkbookDocument, getEvents, getExecutor } = setupAutoApplyMocks({
-      bind: boundViaProposalResult,
+      bind,
+      workbookReads: [CURRENCY_WORKBOOK_XML],
     });
 
     const result = await getToolResult({
       session: '1',
       ask: 'bar chart of Sales by Region',
-      proposal: sampleProposal,
       auto_apply: true,
       getExecutor,
     });
@@ -2648,6 +2673,7 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.used_llm).toBeUndefined();
     expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(1);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(binderModule.bindTemplate).toHaveBeenCalledTimes(1);
     expect(getEvents).toHaveBeenCalledTimes(3);
     expect(getEvents).toHaveBeenNthCalledWith(2, {
       signal: expect.any(AbortSignal),
@@ -2661,8 +2687,8 @@ describe('bindTemplateTool auto_apply gate', () => {
         kind: 'done',
         receipt: {
           bound: [
-            { slot_id: 'cat', field: 'Region' },
-            { slot_id: 'val', field: 'Sales' },
+            { slot_id: 'region', field: 'Region' },
+            { slot_id: 'sales', field: 'Sales' },
           ],
           auto_completed: [],
         },
@@ -2670,24 +2696,40 @@ describe('bindTemplateTool auto_apply gate', () => {
     });
   });
 
-  it('surfaces temporal auto-completion provenance in the receipt and message', async () => {
-    const provenance =
-      "Using 'Date Of Birth' for required temporal slot 'order_date' because it is the only date field in the datasource.";
-    const { getExecutor } = setupAutoApplyMocks({
-      bind: { ...boundViaProposalResult, warnings: [provenance] },
-    });
-    const temporalProposal = {
-      ...sampleProposal,
+  it('reports the waterfall anchor added after proposal classification', async () => {
+    const actualBinder = await vi.importActual<typeof import('../../../desktop/binder/binder.js')>(
+      '../../../desktop/binder/binder.js',
+    );
+    const proposal: BindingProposal & { confidence: number } = {
+      template: 'part-to-whole-waterfall',
+      title: 'P&L Waterfall',
       bindings: [
-        { slot_id: 'order_date', field: 'Date Of Birth' },
-        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'profit', field: 'amount' },
+        { slot_id: 'sub_category', field: 'line_item' },
       ],
+      confidence: 0.95,
     };
+    const bind = await actualBinder.bindTemplate({
+      ask: 'P&L waterfall',
+      workbookXml: P_AND_L_WORKBOOK_XML,
+      manifests: loadManifests(),
+      proposal,
+    });
+    invariant(bind.status === 'bound');
+    const provenance = bind.warnings?.find((warning) =>
+      warning.includes('waterfall auto-bound anchor_category='),
+    );
+    invariant(provenance);
+    const { getExecutor } = setupAutoApplyMocks({
+      bind,
+      inject: { ok: true, xml: INJECTED_WATERFALL_WORKBOOK_XML },
+      workbookReads: [P_AND_L_WORKBOOK_XML],
+    });
 
     const result = await getToolResult({
       session: '1',
-      ask: 'trend of Sales',
-      proposal: temporalProposal,
+      ask: 'P&L waterfall',
+      proposal,
       auto_apply: true,
       getExecutor,
     });
@@ -2699,14 +2741,15 @@ describe('bindTemplateTool auto_apply gate', () => {
         kind: 'done',
         receipt: {
           bound: [
-            { slot_id: 'order_date', field: 'Date Of Birth' },
-            { slot_id: 'sales', field: 'Sales' },
+            { slot_id: 'profit', field: 'amount' },
+            { slot_id: 'sub_category', field: 'line_item' },
+            { slot_id: 'anchor_category', field: 'category' },
           ],
           auto_completed: [provenance],
         },
       },
     });
-    expect(body.guidance).toContain('Auto-filled: order_date <- Date Of Birth');
+    expect(body.guidance).toContain(`Auto-filled: ${provenance}`);
   });
 
   it('completes the P&L propose to valid Call 2 to applied sequence', async () => {
