@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import * as getDashboardXmlModule from '../../../desktop/commands/workbook/getDashboardXml.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as listDashboardsModule from '../../../desktop/commands/workbook/listDashboards.js';
 import * as listWorksheetsModule from '../../../desktop/commands/workbook/listWorksheets.js';
@@ -15,7 +14,6 @@ import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getComposeDashboardTool } from './composeDashboard.js';
 
-vi.mock('../../../desktop/commands/workbook/getDashboardXml.js');
 vi.mock('../../../desktop/commands/workbook/getWorkbookXml.js');
 vi.mock('../../../desktop/commands/workbook/listDashboards.js');
 vi.mock('../../../desktop/commands/workbook/listWorksheets.js');
@@ -23,6 +21,8 @@ vi.mock('../../../desktop/commands/workbook/loadDashboardXml.js');
 vi.mock('../../../desktop/commands/workbook/loadWorkbookXml.js');
 
 describe('composeDashboardTool', () => {
+  const emptyWorkbookXml = '<workbook><windows/></workbook>';
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(listWorksheetsModule.listWorksheets).mockResolvedValue(
@@ -34,19 +34,28 @@ describe('composeDashboardTool', () => {
     vi.mocked(loadDashboardXmlModule.loadDashboardXml).mockResolvedValue(
       Ok({ validationWarnings: [] }),
     );
-    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(
-      Ok(
-        '<workbook><windows><window class="dashboard" name="New Dashboard"/></windows></workbook>',
-      ),
-    );
     vi.mocked(loadWorkbookXmlModule.loadWorkbookXml).mockResolvedValue(
       Ok({ validationWarnings: [] }),
     );
-    vi.mocked(getDashboardXmlModule.getDashboardFragment).mockImplementation(async () => {
-      const appliedXml = vi
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockImplementation(async () => {
+      const appliedWorkbookXml = vi
+        .mocked(loadWorkbookXmlModule.loadWorkbookXml)
+        .mock.calls.at(-1)?.[0].xml;
+      if (!appliedWorkbookXml) return Ok(emptyWorkbookXml);
+
+      const dashboardXml = vi
         .mocked(loadDashboardXmlModule.loadDashboardXml)
         .mock.calls.at(-1)?.[0].xml;
-      return Ok(appliedXml ?? '<dashboard/>');
+      const dashboardName =
+        /<window\b[^>]*\bclass="dashboard"[^>]*\bname="([^"]+)"/.exec(appliedWorkbookXml)?.[1] ??
+        'New Dashboard';
+      const viewpointNames = [...appliedWorkbookXml.matchAll(/<viewpoint name="([^"]+)"\/>/g)]
+        .map((match) => match[1])
+        .sort();
+      const viewpoints = viewpointNames.map((name) => `<viewpoint name="${name}"/>`).join('');
+      return Ok(
+        `<workbook><dashboards>${dashboardXml ?? '<dashboard/>'}</dashboards><windows><window class="dashboard" name="${dashboardName}"><viewpoints>${viewpoints}</viewpoints><active id="-1"/></window></windows></workbook>`,
+      );
     });
   });
 
@@ -72,7 +81,7 @@ describe('composeDashboardTool', () => {
     );
     expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenCalledWith(
       expect.objectContaining({
-        xml: expect.stringContaining('<viewpoint name="Sales">'),
+        xml: expect.stringContaining('<viewpoint name="Sales"/>'),
         focus: { navigate: 'artifact', sheetName: 'New Dashboard' },
       }),
     );
@@ -193,33 +202,11 @@ describe('composeDashboardTool', () => {
     });
   });
 
-  it('returns a terminal error when the viewpoint workbook apply fails', async () => {
+  it('returns attempted zones when the viewpoint workbook apply fails', async () => {
     vi.mocked(loadWorkbookXmlModule.loadWorkbookXml).mockResolvedValue(
       Err({
         type: 'load-workbook-xml-error',
         error: { type: 'load-rejected', message: 'Rejected viewpoints' },
-      }),
-    );
-
-    const result = await getToolResult();
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain(
-      'Dashboard "New Dashboard" exists but is NOT confirmed visible',
-    );
-    expect(result.content[0].text).toContain('Next call:');
-    expect(getDashboardXmlModule.getDashboardFragment).not.toHaveBeenCalled();
-  });
-
-  it('reports attempted zones when dashboard readback is unavailable', async () => {
-    vi.mocked(getDashboardXmlModule.getDashboardFragment).mockResolvedValue(
-      Err({
-        type: 'execute-command-error',
-        error: {
-          type: 'command-failed',
-          error: { code: 'READ_FAILED', message: 'Read failed', recoverable: true },
-        },
       }),
     );
 
@@ -230,9 +217,113 @@ describe('composeDashboardTool', () => {
     expect(JSON.parse(result.content[0].text)).toMatchObject({
       dashboardName: 'New Dashboard',
       attemptedZones: expect.any(Array),
+      verification: expect.stringMatching(
+        /Dashboard "New Dashboard" exists[\s\S]*NOT confirmed[\s\S]*activate-sheet/,
+      ),
+    });
+    expect(result.content[0].text).toContain('do not recreate');
+    expect(getWorkbookXmlModule.getWorkbookXml).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports attempted zones when dashboard readback is unavailable', async () => {
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml)
+      .mockResolvedValueOnce(Ok(emptyWorkbookXml))
+      .mockResolvedValueOnce(
+        Err({
+          type: 'command-failed',
+          error: { code: 'READ_FAILED', message: 'Read failed', recoverable: true },
+        }),
+      );
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      dashboardName: 'New Dashboard',
+      attemptedZones: expect.any(Array),
       verification: expect.stringContaining('NOT confirmed'),
     });
+    expect(result.content[0].text).toContain('activate-sheet');
     expect(JSON.parse(result.content[0].text)).not.toHaveProperty('zones');
+  });
+
+  it('verifies workbook readback with reordered zones and alphabetized viewpoints', async () => {
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml)
+      .mockResolvedValueOnce(Ok(emptyWorkbookXml))
+      .mockResolvedValueOnce(
+        Ok(`<workbook>
+          <dashboards>
+            <dashboard name="New Dashboard"><zones>
+              <zone name="Profit" x="50000" y="0" w="50000" h="100000"/>
+              <zone name="Sales" x="0" y="0" w="50000" h="100000"/>
+              <zone x="0" y="0" w="100000" h="100000"/>
+            </zones></dashboard>
+          </dashboards>
+          <windows><window class="dashboard" name="New Dashboard">
+            <viewpoints><viewpoint name="Profit"/><viewpoint name="Sales"/></viewpoints>
+            <active id="-1"/>
+          </window></windows>
+        </workbook>`),
+      );
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      dashboardName: 'New Dashboard',
+      zones: expect.any(Array),
+      verification: expect.stringContaining('HOST VERIFICATION — verified'),
+    });
+  });
+
+  it('does not verify readback without the dashboard window and requested viewpoints', async () => {
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml)
+      .mockResolvedValueOnce(Ok(emptyWorkbookXml))
+      .mockResolvedValueOnce(
+        Ok(`<workbook>
+          <dashboards><dashboard name="New Dashboard"><zones>
+            <zone name="Sales" x="0" y="0" w="50000" h="100000"/>
+            <zone name="Profit" x="50000" y="0" w="50000" h="100000"/>
+          </zones></dashboard></dashboards>
+          <windows/>
+        </workbook>`),
+      );
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      attemptedZones: expect.any(Array),
+      verification: expect.stringContaining('NOT confirmed'),
+    });
+  });
+
+  it('does not treat a missing zero-valued coordinate as a zone match', async () => {
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml)
+      .mockResolvedValueOnce(Ok(emptyWorkbookXml))
+      .mockResolvedValueOnce(
+        Ok(`<workbook>
+          <dashboards><dashboard name="New Dashboard"><zones>
+            <zone name="Sales" y="0" w="50000" h="100000"/>
+            <zone name="Profit" x="50000" y="0" w="50000" h="100000"/>
+          </zones></dashboard></dashboards>
+          <windows><window class="dashboard" name="New Dashboard">
+            <viewpoints><viewpoint name="Profit"/><viewpoint name="Sales"/></viewpoints>
+          </window></windows>
+        </workbook>`),
+      );
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      attemptedZones: expect.any(Array),
+      verification: expect.stringContaining('NOT confirmed'),
+    });
   });
 });
 

@@ -114,10 +114,10 @@ export function formatDashboardPromiseCheck(
     formatPreflight(validationWarnings),
     'apply completed',
     structuralReadbackMatched
-      ? 'dashboard zone tree matched structural readback'
+      ? 'dashboard zone tree and window viewpoints matched workbook-XML readback'
       : 'full dashboard intent NOT re-verified',
   ];
   return structuralReadbackMatched
-    ? `\n\nHOST VERIFICATION — verified: ${parts.join(' · ')}. No host evidence of any dashboard problem; do not report unlisted issues.`
+    ? `\n\nHOST VERIFICATION — verified: ${parts.join(' · ')}. No host evidence of any dashboard problem beyond the findings listed above — do not report unlisted issues.`
     : `\n\nHOST VERIFICATION — unverified: ${parts.join(' · ')}. Treat dashboard state as unconfirmed until read back; do not report problems without host evidence.`;
 }

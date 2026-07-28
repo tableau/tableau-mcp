@@ -1,9 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { DOMParser } from '@xmldom/xmldom';
+import { DOMParser, Element as XmlElement, Node as XmlNode } from '@xmldom/xmldom';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getDashboardFragment } from '../../../desktop/commands/workbook/getDashboardXml.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { injectViewpoints } from '../../../desktop/commands/workbook/injectViewpoints.js';
 import { listDashboards } from '../../../desktop/commands/workbook/listDashboards.js';
@@ -190,11 +189,27 @@ export const getComposeDashboardTool = (
             ).toErr();
           }
           const validationWarnings = [...applyResult.value.validationWarnings];
+          const worksheetZones: WorksheetZoneReceipt[] = zones
+            .filter((zone) => zone.kind === 'worksheet')
+            .map((zone) => ({
+              worksheet: zone.name,
+              position: {
+                x: zone.x,
+                y: zone.y,
+                width: zone.w,
+                height: zone.h,
+              },
+            }));
 
           const workbookResult = await getWorkbookXml({ executor, signal: extra.signal });
           if (workbookResult.isErr()) {
             const detail = new DesktopCommandExecutionError(workbookResult.error).message;
-            return viewpointTerminalError(dashboardName, detail);
+            return attemptedZonesResult({
+              dashboardName,
+              worksheetZones,
+              validationWarnings,
+              detail: `workbook XML was unavailable before viewpoint apply: ${detail}`,
+            });
           }
 
           const updatedWorkbookXml = injectViewpoints(
@@ -210,10 +225,12 @@ export const getComposeDashboardTool = (
           });
           if (viewpointAccounting.state === 'failed') {
             const failed = viewpointAccounting.failed.map((name) => `"${name}"`).join(', ');
-            return viewpointTerminalError(
+            return attemptedZonesResult({
               dashboardName,
-              `viewpoint injection did not land for ${failed}`,
-            );
+              worksheetZones,
+              validationWarnings,
+              detail: `viewpoint injection did not land for ${failed}`,
+            });
           }
 
           if (viewpointAccounting.state !== 'success-already-present') {
@@ -228,38 +245,40 @@ export const getComposeDashboardTool = (
                 viewpointApplyResult.error.type === 'execute-command-error'
                   ? new DesktopCommandExecutionError(viewpointApplyResult.error.error).message
                   : new WorkbookXmlLoadFailedError(viewpointApplyResult.error.error).message;
-              return viewpointTerminalError(dashboardName, detail);
+              return attemptedZonesResult({
+                dashboardName,
+                worksheetZones,
+                validationWarnings,
+                detail: `viewpoint workbook apply failed: ${detail}`,
+              });
             }
             validationWarnings.push(...viewpointApplyResult.value.validationWarnings);
           }
 
-          const worksheetZones: WorksheetZoneReceipt[] = zones
-            .filter((zone) => zone.kind === 'worksheet')
-            .map((zone) => ({
-              worksheet: zone.name,
-              position: {
-                x: zone.x,
-                y: zone.y,
-                width: zone.w,
-                height: zone.h,
-              },
-            }));
-
-          const readbackResult = await getDashboardFragment({
-            dashboardName,
-            executor,
-            signal: extra.signal,
-          });
-          if (
-            readbackResult.isErr() ||
-            !readbackConfirmsZones(readbackResult.value, worksheetZones)
-          ) {
-            return new Ok({
+          const readbackResult = await getWorkbookXml({ executor, signal: extra.signal });
+          if (readbackResult.isErr()) {
+            const detail = new DesktopCommandExecutionError(readbackResult.error).message;
+            return attemptedZonesResult({
               dashboardName,
-              attemptedZones: worksheetZones,
-              verification:
-                formatDashboardPromiseCheck(validationWarnings) +
-                ' Attempted dashboard zones are NOT confirmed because structural readback was unavailable or did not match.',
+              worksheetZones,
+              validationWarnings,
+              detail: `workbook XML readback was unavailable: ${detail}`,
+            });
+          }
+          if (
+            !readbackConfirmsDashboard(
+              readbackResult.value,
+              dashboardName,
+              worksheetZones,
+              canonicalWorksheets,
+            )
+          ) {
+            return attemptedZonesResult({
+              dashboardName,
+              worksheetZones,
+              validationWarnings,
+              detail:
+                'workbook XML readback did not confirm both the dashboard zone tree and all requested window viewpoints',
             });
           }
 
@@ -276,56 +295,143 @@ export const getComposeDashboardTool = (
   return tool;
 };
 
-function viewpointTerminalError(
-  dashboardName: string,
-  detail: string,
-): ReturnType<McpToolError['toErr']> {
-  return terminalError(
-    `Dashboard "${dashboardName}" exists but is NOT confirmed visible (${detail}). ` +
+function attemptedZonesResult({
+  dashboardName,
+  worksheetZones,
+  validationWarnings,
+  detail,
+}: {
+  dashboardName: string;
+  worksheetZones: WorksheetZoneReceipt[];
+  validationWarnings: Parameters<typeof formatDashboardPromiseCheck>[0];
+  detail: string;
+}): Ok<ComposeDashboardResult> {
+  return new Ok({
+    dashboardName,
+    attemptedZones: worksheetZones,
+    verification:
+      formatDashboardPromiseCheck(validationWarnings) +
+      ` Dashboard "${dashboardName}" exists because its dashboard apply completed; ` +
+      `the attempted zone tree and requested window viewpoints are NOT confirmed (${detail}). ` +
       'Next call: activate-sheet to bring it into view; do not recreate the dashboard.',
-    'compose-dashboard-viewpoint-error',
-  ).toErr();
+  });
 }
 
-function readbackConfirmsZones(
-  dashboardXml: string,
+function readbackConfirmsDashboard(
+  workbookXml: string,
+  dashboardName: string,
   expectedZones: WorksheetZoneReceipt[],
+  requestedViewpoints: string[],
 ): boolean {
   const document = new DOMParser({ errorHandler: () => {} }).parseFromString(
-    dashboardXml.trim(),
+    workbookXml.trim(),
     'text/xml',
   );
   if (document.getElementsByTagName('parsererror').length > 0) return false;
 
+  const dashboard = findNamedElement(document.getElementsByTagName('dashboard'), dashboardName);
+  if (!dashboard) return false;
+
   const actualZones: WorksheetZoneReceipt[] = [];
-  const zoneElements = document.getElementsByTagName('zone');
+  const zoneElements = dashboard.getElementsByTagName('zone');
   for (let index = 0; index < zoneElements.length; index++) {
     const zone = zoneElements.item(index);
     const worksheet = zone?.getAttribute('name');
     if (!zone || worksheet == null) continue;
+    const x = readCoordinate(zone, 'x');
+    const y = readCoordinate(zone, 'y');
+    const width = readCoordinate(zone, 'w');
+    const height = readCoordinate(zone, 'h');
+    if (x == null || y == null || width == null || height == null) continue;
     actualZones.push({
       worksheet,
-      position: {
-        x: Number(zone.getAttribute('x')),
-        y: Number(zone.getAttribute('y')),
-        width: Number(zone.getAttribute('w')),
-        height: Number(zone.getAttribute('h')),
-      },
+      position: { x, y, width, height },
     });
   }
 
-  return (
-    actualZones.length === expectedZones.length &&
-    actualZones.every((actual, index) => {
-      const expected = expectedZones[index];
-      if (expected === undefined) return false;
-      return (
+  if (!zonesMatchAsMultiset(actualZones, expectedZones)) return false;
+
+  const dashboardWindow = findDashboardWindow(document, dashboardName);
+  if (!dashboardWindow) return false;
+  const actualViewpoints = directViewpointNames(dashboardWindow);
+  return requestedViewpoints.every((requestedName) =>
+    actualViewpoints.some((actualName) => xmlNamesEqual(actualName, requestedName)),
+  );
+}
+
+function findNamedElement(
+  elements: ReturnType<XmlElement['getElementsByTagName']>,
+  name: string,
+): XmlElement | null {
+  for (let index = 0; index < elements.length; index++) {
+    const element = elements.item(index);
+    if (element && xmlNamesEqual(element.getAttribute('name') ?? '', name)) return element;
+  }
+  return null;
+}
+
+function readCoordinate(zone: XmlElement, attribute: string): number | null {
+  if (!zone.hasAttribute(attribute)) return null;
+  const raw = zone.getAttribute(attribute);
+  if (raw == null || raw.trim() === '') return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+function zonesMatchAsMultiset(
+  actualZones: WorksheetZoneReceipt[],
+  expectedZones: WorksheetZoneReceipt[],
+): boolean {
+  if (actualZones.length !== expectedZones.length) return false;
+  const unmatched = [...actualZones];
+  for (const expected of expectedZones) {
+    const matchIndex = unmatched.findIndex(
+      (actual) =>
         xmlNamesEqual(actual.worksheet, expected.worksheet) &&
         actual.position.x === expected.position.x &&
         actual.position.y === expected.position.y &&
         actual.position.width === expected.position.width &&
-        actual.position.height === expected.position.height
-      );
-    })
-  );
+        actual.position.height === expected.position.height,
+    );
+    if (matchIndex === -1) return false;
+    unmatched.splice(matchIndex, 1);
+  }
+  return unmatched.length === 0;
+}
+
+function findDashboardWindow(
+  document: ReturnType<DOMParser['parseFromString']>,
+  dashboardName: string,
+): XmlElement | null {
+  const windows = document.getElementsByTagName('window');
+  for (let index = 0; index < windows.length; index++) {
+    const window = windows.item(index);
+    if (
+      window &&
+      window.getAttribute('class') === 'dashboard' &&
+      xmlNamesEqual(window.getAttribute('name') ?? '', dashboardName)
+    ) {
+      return window;
+    }
+  }
+  return null;
+}
+
+function directViewpointNames(dashboardWindow: XmlElement): string[] {
+  const names: string[] = [];
+  for (let index = 0; index < dashboardWindow.childNodes.length; index++) {
+    const child = dashboardWindow.childNodes.item(index);
+    if (!isElementNamed(child, 'viewpoints')) continue;
+    for (let viewpointIndex = 0; viewpointIndex < child.childNodes.length; viewpointIndex++) {
+      const viewpoint = child.childNodes.item(viewpointIndex);
+      if (!isElementNamed(viewpoint, 'viewpoint')) continue;
+      const name = viewpoint.getAttribute('name');
+      if (name) names.push(name);
+    }
+  }
+  return names;
+}
+
+function isElementNamed(node: XmlNode | null, tagName: string): node is XmlElement {
+  return node?.nodeType === 1 && (node as XmlElement).tagName === tagName;
 }
