@@ -133,6 +133,8 @@ const COMPLETE_BIND_NEXT_ACTION = {
   receipt: {
     did: expect.arrayContaining([expect.stringContaining('Desktop accepted the document')]),
     didNot: [],
+    bound: [],
+    auto_completed: [],
     // This fixture has no binder encoding report, and structural readback never sees pixels.
     // Both gaps must remain explicit instead of becoming successful claims by omission.
     unverified: expect.arrayContaining([
@@ -2654,6 +2656,57 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(getEvents).toHaveBeenNthCalledWith(3, {
       signal: expect.any(AbortSignal),
     });
+    expect(result.structuredContent).toMatchObject({
+      nextAction: {
+        kind: 'done',
+        receipt: {
+          bound: [
+            { slot_id: 'cat', field: 'Region' },
+            { slot_id: 'val', field: 'Sales' },
+          ],
+          auto_completed: [],
+        },
+      },
+    });
+  });
+
+  it('surfaces temporal auto-completion provenance in the receipt and message', async () => {
+    const provenance =
+      "Using 'Date Of Birth' for required temporal slot 'order_date' because it is the only date field in the datasource.";
+    const { getExecutor } = setupAutoApplyMocks({
+      bind: { ...boundViaProposalResult, warnings: [provenance] },
+    });
+    const temporalProposal = {
+      ...sampleProposal,
+      bindings: [
+        { slot_id: 'order_date', field: 'Date Of Birth' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+    };
+
+    const result = await getToolResult({
+      session: '1',
+      ask: 'trend of Sales',
+      proposal: temporalProposal,
+      auto_apply: true,
+      getExecutor,
+    });
+
+    invariant(result.content[0].type === 'text');
+    const body = JSON.parse(result.content[0].text);
+    expect(result.structuredContent).toMatchObject({
+      nextAction: {
+        kind: 'done',
+        receipt: {
+          bound: [
+            { slot_id: 'order_date', field: 'Date Of Birth' },
+            { slot_id: 'sales', field: 'Sales' },
+          ],
+          auto_completed: [provenance],
+        },
+      },
+    });
+    expect(body.guidance).toContain('Auto-filled: order_date <- Date Of Birth');
   });
 
   it('completes the P&L propose to valid Call 2 to applied sequence', async () => {

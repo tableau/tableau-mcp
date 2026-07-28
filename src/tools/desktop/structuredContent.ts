@@ -9,6 +9,11 @@ export type NextActionKind = 'execute' | 'prefill' | 'done';
 
 export type NextActionLabel = string & { readonly [nextActionLabelBrand]: true };
 
+export type ReceiptBinding = {
+  readonly slot_id: string;
+  readonly field: string;
+};
+
 /**
  * What a tool can honestly say about work it is calling finished, split three ways:
  * `did` — outcomes the tool OBSERVED for itself; `didNot` — requested work it knowingly
@@ -26,6 +31,8 @@ export type Receipt = {
   readonly did: readonly string[];
   readonly didNot: readonly string[];
   readonly unverified: readonly string[];
+  readonly bound?: readonly ReceiptBinding[];
+  readonly auto_completed?: readonly string[];
 } & { readonly [receiptBrand]: true };
 
 export type NextAction =
@@ -69,6 +76,8 @@ export function receipt(facts: {
   readonly did: readonly string[];
   readonly didNot?: readonly string[];
   readonly unverified: readonly string[];
+  readonly bound?: readonly ReceiptBinding[];
+  readonly auto_completed?: readonly string[];
 }): Receipt {
   if (facts.did.length === 0) {
     throw new RangeError('receipt.did must name at least one outcome the tool observed itself');
@@ -82,6 +91,8 @@ export function receipt(facts: {
     did: facts.did,
     didNot: facts.didNot ?? [],
     unverified: facts.unverified,
+    ...(facts.bound !== undefined ? { bound: facts.bound } : {}),
+    ...(facts.auto_completed !== undefined ? { auto_completed: facts.auto_completed } : {}),
   } as Receipt;
 }
 
