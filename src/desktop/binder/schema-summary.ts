@@ -29,6 +29,8 @@ export interface SchemaField {
   type: string; // "quantitative" | "nominal" | "ordinal" | ...
   datatype: string; // "string" | "real" | "integer" | "date" | "datetime" | ...
   semanticRole?: string; // Tableau geo semantic role, e.g. "[State].[Name]"
+  /** Tableau's own distinct-count estimate, when the connection publishes one. Absent ⇒ unknown. */
+  approxCount?: number;
   datasource: string;
   isAggregated: boolean;
   column_ref: string; // straight from listAvailableFields, e.g. "[Superstore].[sum:Sales:qk]"
@@ -65,6 +67,7 @@ export function summarizeSchema(workbookXml: string): SchemaSummary {
       type: f.type,
       datatype: f.datatype ?? '',
       semanticRole: f.semanticRole,
+      ...(f.approxCount !== undefined ? { approxCount: f.approxCount } : {}),
       datasource: f.datasource,
       isAggregated: !!f.isAggregated,
       column_ref: f.column_ref,

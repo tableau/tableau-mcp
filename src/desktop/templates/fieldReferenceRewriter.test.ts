@@ -426,3 +426,154 @@ describe('rewriteFieldReferences — per-apply calc namespacing (opt-in, determi
     expect(noNonce).not.toMatch(/_tpl_/);
   });
 });
+
+describe('rewriteFieldReferences — semantic-role reconciliation (empty-map regression)', () => {
+  // Live defect, tbm-test.pptx: spatial-symbol-map's donor geo columns were renamed to
+  // World Indicators string dimensions but KEPT the donor's semantic-role, so the sheet
+  // asserted `[City].[Name]` on "Hours to do Tax" — a field that datasource never
+  // geocodes. Rows/cols are the GENERATED Lat/Long those roles produce, so the map
+  // rendered with ZERO marks while its size/color legends populated normally.
+  const geoTemplate =
+    '<?xml version="1.0"?><worksheet><table><view>' +
+    "<datasource-dependencies datasource='{{DATASOURCE}}'>" +
+    "<column datatype='string' name='[City]' role='dimension' semantic-role='[City].[Name]' type='nominal' />" +
+    "<column-instance column='[City]' derivation='None' name='[none:City:nk]' pivot='key' type='nominal' />" +
+    '</datasource-dependencies>' +
+    '<rows>[{{DATASOURCE}}].[Latitude (generated)]</rows>' +
+    '</view></table></worksheet>';
+
+  it('DROPS the donor geo role when the bound field has none', () => {
+    const out = rewriteFieldReferences(
+      geoTemplate,
+      { City: '[World Indicators].[none:Hours to do Tax:nk]' },
+      'World Indicators',
+      { City: { datatype: 'string', type: 'nominal' } },
+    );
+    expect(out).toContain('[Hours to do Tax]');
+    expect(out).not.toContain('semantic-role');
+  });
+
+  it('REPLACES the donor geo role with the role the bound field actually carries', () => {
+    const out = rewriteFieldReferences(
+      geoTemplate,
+      { City: '[World Indicators].[none:Country/Region:nk]' },
+      'World Indicators',
+      { City: { datatype: 'string', type: 'nominal', semanticRole: '[Country].[ISO3166_2]' } },
+    );
+    expect(out).toContain('semantic-role="[Country].[ISO3166_2]"');
+    expect(out).not.toContain('[City].[Name]');
+  });
+
+  it('drops the donor role when no metadata is supplied at all (assert nothing, never the donor)', () => {
+    const out = rewriteFieldReferences(
+      geoTemplate,
+      { City: '[World Indicators].[none:Business Tax Rate:nk]' },
+      'World Indicators',
+    );
+    expect(out).toContain('[Business Tax Rate]');
+    expect(out).not.toContain('semantic-role');
+  });
+
+  it('leaves an UNMAPPED geo column untouched — reconciliation is scoped to renames', () => {
+    const out = rewriteFieldReferences(geoTemplate, {}, 'World Indicators');
+    expect(out).toContain('semantic-role="[City].[Name]"');
+  });
+
+  it('finds metadata under a derivation-qualified key', () => {
+    const out = rewriteFieldReferences(
+      geoTemplate,
+      { City: '[World Indicators].[none:Country/Region:nk]' },
+      'World Indicators',
+      { 'City@none': { datatype: 'string', type: 'nominal', semanticRole: '[State].[Name]' } },
+    );
+    expect(out).toContain('semantic-role="[State].[Name]"');
+  });
+
+  it('a semanticRole-only entry does not blank the template datatype/type', () => {
+    const out = rewriteFieldReferences(
+      geoTemplate,
+      { City: '[World Indicators].[none:Country/Region:nk]' },
+      'World Indicators',
+      { City: { semanticRole: '[Country].[Name]' } },
+    );
+    expect(out).toContain('datatype="string"');
+    expect(out).toContain('type="nominal"');
+    expect(out).toContain('semantic-role="[Country].[Name]"');
+  });
+});
+
+describe('rewriteFieldReferences — calc SOURCE-FIELD attribute (<calculation column=...>)', () => {
+  // Shape taken verbatim from the probe's failing case B23815: a `[State_Group]`
+  // categorical-bin (group) whose source field is named on `@column`, not in a
+  // formula. §3b only rewrites `@formula`, so before this fix the donor name /
+  // live token survived and the residue guard threw the whole inject.
+  const groupXml = (sourceField: string): string =>
+    '<?xml version="1.0"?><worksheet><table><view>' +
+    "<datasource-dependencies datasource='{{DATASOURCE}}'>" +
+    `<column datatype='string' name='[${sourceField}]' role='dimension' type='nominal' />` +
+    // The group column carries its OWN name, independent of the source field — that
+    // is what makes `@column` the only place the source field is referenced.
+    "<column datatype='string' name='[Territory Group]' role='dimension' type='nominal'>" +
+    `<calculation class='categorical-bin' column='[${sourceField}]' default='&quot;Texas&quot;'>` +
+    "<bin value='&quot;West&quot;'><value>&quot;California&quot;</value></bin>" +
+    '</calculation></column>' +
+    '</datasource-dependencies>' +
+    `<rows>[{{DATASOURCE}}].[none:${sourceField}:nk]</rows>` +
+    '</view></table></worksheet>';
+
+  it('rewrites the group source ref when the bound field is the group base', () => {
+    const out = rewriteFieldReferences(groupXml('State'), { State: '[DS].[none:Region:nk]' }, 'DS');
+    expect(out).toContain('column="[Region]"');
+    // No donor spelling of the source field survives on the calc.
+    expect(out).not.toContain("column='[State]'");
+    expect(out).not.toContain('column="[State]"');
+  });
+
+  it('rewrites a live {{field_base_N}} token, the residue that threw the inject', () => {
+    const out = rewriteFieldReferences(
+      groupXml('{{field_base_1}}'),
+      { '{{field_base_1}}': '[DS].[none:Category:nk]' },
+      'DS',
+    );
+    expect(out).toContain('column="[Category]"');
+    // The whole point: zero `{{...}}` residue reaches the emitted sheet.
+    expect(out).not.toContain('{{field_base_1}}');
+  });
+
+  it('leaves the group source ref alone when that field was not remapped', () => {
+    // Only `Sales` is bound; the group is over `State`, which keeps its own name.
+    const out = rewriteFieldReferences(
+      groupXml('State').replace('<rows>', '<cols>[{{DATASOURCE}}].[sum:Sales:qk]</cols><rows>'),
+      { Sales: '[DS].[sum:Profit:qk]' },
+      'DS',
+    );
+    expect(out).toContain('column="[State]"');
+  });
+
+  it('does NOT rewrite a <connection><calculations> column DECLARATION', () => {
+    // 109 of the 146 corpus occurrences are this form: it DECLARES a column in the
+    // donor connection's namespace rather than referencing a sheet field. A template
+    // never injects a connection, so renaming it would rename a declaration nothing
+    // points at. Pinned so the XPath can't be loosened to `//calculation` later.
+    const xml =
+      '<?xml version="1.0"?><worksheet><table><view>' +
+      "<datasource-dependencies datasource='{{DATASOURCE}}'>" +
+      "<connection class='hyper'><calculations>" +
+      "<calculation column='[Region]' formula='1' />" +
+      '</calculations></connection>' +
+      "<column datatype='string' name='[Region]' role='dimension' type='nominal' />" +
+      "<column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />" +
+      '</datasource-dependencies>' +
+      '<rows>[{{DATASOURCE}}].[none:Region:nk]</rows>' +
+      '</view></table></worksheet>';
+
+    const out = rewriteFieldReferences(xml, { Region: '[DS].[none:Segment:nk]' }, 'DS');
+    // The sheet-level refs ARE rewritten…
+    expect(out).toContain('[DS].[none:Segment:nk]');
+    expect(out).toContain('name="[Segment]"');
+    // …while the connection-level declaration keeps its own name.
+    expect(out).toContain(
+      '<calculations><calculation column="[Region]" formula="1"/></calculations>',
+    );
+  });
+});

@@ -36,7 +36,31 @@ const paramsSchema = {
   fieldMapping: z.record(z.string()).optional().describe(''),
   insertPosition: z.enum(['end', 'before_sheet', 'after_sheet']).optional().describe(''),
   relativeSheetName: z.string().optional().describe(''),
+  // LEG 4 (DELIVER): an agent can either apply the filled worksheet to the workbook
+  // ('inject', default — writes the file and expects a follow-up apply-workbook) or
+  // receive the filled worksheet XML directly ('xml' — returns the injected workbook
+  // XML as tool content, writes NOTHING). Both modes run the SAME build + residue
+  // guards (they live inside buildInjectedWorkbookXml → rewriteFieldReferences), so
+  // 'xml' can never stream a worksheet carrying live {{field_base_N}} tokens or an
+  // unresolved required slot. Default preserves every existing caller's behavior.
+  output: z.enum(['inject', 'xml']).default('inject').describe(''),
 };
+
+/**
+ * Success payload shared by both output modes so `logAndExecute<T>` infers a single
+ * `T` (a union of literal `mode`s would otherwise lock onto whichever branch it sees
+ * first). `mode` discriminates in getSuccessResult; `xml` is always the built workbook
+ * XML (streamed back in 'xml' mode, carried but unused in 'inject' mode).
+ */
+interface InjectSuccess {
+  mode: 'inject' | 'xml';
+  workbookFile: string;
+  templateName: string;
+  title: string;
+  sheetType: 'worksheet' | 'dashboard' | 'story';
+  warnings: string[];
+  xml: string;
+}
 
 function inferSingleDatasourceFromFieldMapping(
   fieldMapping?: Record<string, string>,
@@ -77,6 +101,7 @@ export const getInjectTemplateTool = (
         fieldMapping,
         insertPosition,
         relativeSheetName,
+        output,
       },
       extra,
     ): Promise<CallToolResult> => {
@@ -92,6 +117,7 @@ export const getInjectTemplateTool = (
           fieldMapping,
           insertPosition,
           relativeSheetName,
+          output,
         },
         callback: async () => {
           const sessionResult = resolveSession(session);
@@ -188,33 +214,74 @@ export const getInjectTemplateTool = (
               return new XmlValidationError(result.issues).toErr();
             }
 
+            // LEG 4 fork. 'xml' streams the filled worksheet XML back to the agent and
+            // touches nothing on disk; 'inject' (default) writes the workbook + sidecar
+            // exactly as before. The residue/well-formedness guards already ran inside
+            // buildInjectedWorkbookXml, so the streamed XML carries no live tokens.
+            if (output === 'xml') {
+              return new Ok<InjectSuccess>({
+                mode: 'xml',
+                workbookFile,
+                templateName,
+                title,
+                sheetType,
+                warnings: explicitTemplateWarnings,
+                xml: result.xml,
+              });
+            }
+
             writeFileSync(resolve(workbookFile), result.xml, 'utf-8');
             writeSidecar(resolve(workbookFile), resolvedSession);
 
-            return new Ok({
+            return new Ok<InjectSuccess>({
+              mode: 'inject',
               workbookFile,
               templateName,
               title,
               sheetType,
               warnings: explicitTemplateWarnings,
+              xml: result.xml,
             });
           } catch (err) {
             return new FileReadError(err).toErr();
           }
         },
-        getSuccessResult: ({ workbookFile, templateName, title, sheetType, warnings }) => ({
-          content: [
-            {
-              type: 'text',
-              text:
-                `Injected template "${templateName}" as "${title}" (${sheetType}).` +
-                (warnings.length > 0
-                  ? `\n\nTemplate advisory warnings:\n${warnings.map((w) => `  - ${w}`).join('\n')}`
-                  : '') +
-                `\n\nUpdated file: ${workbookFile}\n\nUse apply-workbook to apply changes to Tableau.`,
-            },
-          ],
-        }),
+        getSuccessResult: (value) => {
+          const { templateName, title, sheetType, warnings } = value;
+          const advisory =
+            warnings.length > 0
+              ? `\n\nTemplate advisory warnings:\n${warnings.map((w) => `  - ${w}`).join('\n')}`
+              : '';
+
+          if (value.mode === 'xml') {
+            // Return the filled worksheet XML as the tool payload; the workbook file
+            // is untouched (the agent chose to receive the XML, not apply it).
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text:
+                    `Built template "${templateName}" as "${title}" (${sheetType}). ` +
+                    'The workbook file was NOT modified. The filled worksheet XML follows.' +
+                    advisory +
+                    `\n\n${value.xml}`,
+                },
+              ],
+            };
+          }
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text:
+                  `Injected template "${templateName}" as "${title}" (${sheetType}).` +
+                  advisory +
+                  `\n\nUpdated file: ${value.workbookFile}\n\nUse apply-workbook to apply changes to Tableau.`,
+              },
+            ],
+          };
+        },
       });
     },
   });

@@ -450,14 +450,121 @@ describe('binder/validate — gate 3: kind/role compatibility', () => {
     }
   });
 
-  it("no-fire: an untagged dimension keeps today's geo-slot acceptance", () => {
+  // Gate 3c: on a template that plots Tableau's GENERATED Latitude/Longitude, an
+  // untagged dimension is no longer accepted. It used to be — gate 3 proves only
+  // role==dimension and gate 3b fires only when BOTH concepts are known — and that
+  // hole shipped the tbm-test.pptx empty map: three plain `string` dimensions from
+  // World Indicators (Business Tax Rate / Ease of Business / Hours to do Tax) filled
+  // the geo slots and the sheet rendered zero marks with fully populated legends,
+  // because the generated coordinates only materialize for a geocoded field.
+  it('fire: an untagged dimension cannot bind a geo slot on a generated-Lat/Long map', () => {
     const m = manifests.get('spatial-choropleth-map')!;
-    expect(validateBinding(m, geoProposal(m), geoSummary(undefined)).ok).toBe(true);
+    const r = validateBinding(m, geoProposal(m), geoSummary(undefined));
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const blocker = r.blockers.find(
+        (b) => b.code === 'geo-not-geocodable' && b.slot_id === 'state',
+      );
+      expect(blocker).toBeDefined();
+      expect(blocker!.detail).toContain('no geographic semantic-role');
+      // The agent is handed the fields that WOULD work rather than just a refusal.
+      expect(blocker!.candidates).toContain('Country');
+    }
+  });
+
+  // The gate is scoped to the manifest's own `generated-geo-required` hazard, NOT to
+  // `kind: 'geo'` at large. Two templates use geo slots without needing geocoding and
+  // must keep binding untagged dimensions: distribution-bar-code-chart puts them on
+  // detail, and spatial-symbol-map-latlon plots real coordinate measures.
+  it('no-fire: a non-map template still binds untagged dimensions to its geo slots', () => {
+    const m = manifests.get('distribution-bar-code-chart')!;
+    expect(m.hazards.some((h) => h.code === 'generated-geo-required')).toBe(false);
+    const p: BindingProposal = {
+      template: m.template,
+      title: 't',
+      bindings: [
+        { slot_id: 'country_region', field: 'Country' },
+        { slot_id: 'state_province', field: 'Region' },
+        ...m.slots
+          .filter(
+            (s) =>
+              s.bindable &&
+              s.required &&
+              s.slot_id !== 'country_region' &&
+              s.slot_id !== 'state_province',
+          )
+          .map((s) => ({
+            slot_id: s.slot_id,
+            field: s.kind === 'quantitative' ? 'Profit' : 'Region',
+          })),
+      ],
+    };
+    const r = validateBinding(m, p, geoSummary(undefined));
+    if (!r.ok) {
+      expect(r.blockers.some((b) => b.code === 'geo-not-geocodable')).toBe(false);
+    }
   });
 
   it('no-fire: a matching State-tagged dimension binds the state geo slot', () => {
     const m = manifests.get('spatial-choropleth-map')!;
     expect(validateBinding(m, geoProposal(m), geoSummary('[State].[Name]')).ok).toBe(true);
+  });
+
+  // The tbm-test.pptx repro, verbatim from the injected TWB: `World Indicators`
+  // declares a geo role on [Country/Region] ONLY, and the three string dimensions
+  // that merely READ like quantities were bound to the symbol map's geo slots.
+  it('fire: the World Indicators repro is blocked and names the one geocodable field', () => {
+    const m = manifests.get('spatial-symbol-map')!;
+    const worldIndicators: SchemaSummary = {
+      datasource: 'World Indicators',
+      fields: [
+        field({
+          columnName: '[Country/Region]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+          semanticRole: '[Country].[ISO3166_2]',
+        }),
+        // datatype string, but 186 distinct continuous-looking members.
+        field({
+          columnName: '[Business Tax Rate]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+        }),
+        field({
+          columnName: '[Hours to do Tax]',
+          role: 'dimension',
+          type: 'nominal',
+          datatype: 'string',
+        }),
+        field({
+          columnName: '[Birth Rate]',
+          role: 'measure',
+          type: 'quantitative',
+          datatype: 'real',
+        }),
+      ],
+    };
+    const p: BindingProposal = {
+      template: m.template,
+      title: 'P2 Symbol Map',
+      bindings: [
+        { slot_id: 'country', field: 'Business Tax Rate' },
+        { slot_id: 'city', field: 'Hours to do Tax' },
+        ...m.slots
+          .filter((s) => s.bindable && s.required && s.kind === 'quantitative')
+          .map((s) => ({ slot_id: s.slot_id, field: 'Birth Rate' })),
+      ],
+    };
+    const r = validateBinding(m, p, worldIndicators);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const geo = r.blockers.filter((b) => b.code === 'geo-not-geocodable');
+      expect(geo.map((b) => b.slot_id).sort()).toEqual(['city', 'country']);
+      // Only [Country/Region] carries a role, so it is the only candidate offered.
+      expect(geo[0].candidates).toEqual(['Country/Region']);
+    }
   });
 });
 

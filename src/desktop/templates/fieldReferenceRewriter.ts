@@ -88,6 +88,23 @@ export interface RewriteFieldReferencesOptions {
   templateSlots?: readonly TemplateSlotReference[];
 }
 
+/**
+ * Per-field metadata the rewriter writes onto a renamed base `<column>`.
+ *
+ * `semanticRole` is the BOUND field's own Tableau geo role, carried separately from
+ * datatype/type because the donor's role must never survive a rename: a template's
+ * `<column name='[City]' semantic-role='[City].[Name]'>` renamed to a field with no geo
+ * role would otherwise assert a geocodable city that the target datasource does not
+ * declare. Undefined means "the bound field has no geo role" — the donor's attribute is
+ * then REMOVED, not kept.
+ */
+export interface FieldMetadataOverride {
+  /** Omitted when the entry exists only to carry a semantic role; the template's own value stands. */
+  datatype?: string;
+  type?: string;
+  semanticRole?: string;
+}
+
 /** Minimal, repo-agnostic manifest slot shape needed by the rewrite guard. */
 export interface TemplateSlotReference {
   /** Stable manifest/proposal identity; accepted as a field-mapping alias. */
@@ -156,6 +173,8 @@ const DERIVATION_SHORT_TO_LONG: Readonly<Record<string, string>> = {
  *   whose template derivation matches, letting one base field carry several derivations independently. Values are RAW.
  * @param datasourceName - Actual (RAW) datasource name to substitute for `{{DATASOURCE}}`.
  * @param fieldMetadata - Optional datatype/type overrides applied to renamed base `<column>` definitions.
+ *   `semanticRole` is the BOUND field's own Tableau geo role (absent when it has none); see the
+ *   semantic-role reconciliation in step 1.
  * @param options - Per-apply options; see {@link RewriteFieldReferencesOptions}.
  * @returns Modified XML with datasource and field references replaced (escaped once via serialization).
  */
@@ -163,7 +182,7 @@ export function rewriteFieldReferences(
   templateXml: string,
   fieldMapping: Record<string, string>,
   datasourceName: string,
-  fieldMetadata?: Record<string, { datatype: string; type: string }>,
+  fieldMetadata?: Record<string, FieldMetadataOverride>,
   options?: RewriteFieldReferencesOptions,
 ): string {
   // Parse with a silent error handler — the upstream caller validates the
@@ -247,6 +266,22 @@ export function rewriteFieldReferences(
     return bareKeyInfo[field];
   };
 
+  // Metadata lookup mirroring resolveFieldInfo's key handling: the binder keys
+  // fieldMetadata by `template_field` OR `template_field@derivation` (whichever the
+  // field_mapping used), so a qualified-key slot must still find its own metadata.
+  // All derivations of one template field resolve to one base column (enforced
+  // below), so any qualified entry for that field describes the same column.
+  const resolveFieldMetadata = (field: string): FieldMetadataOverride | undefined => {
+    if (!fieldMetadata) return undefined;
+    const bare = fieldMetadata[field];
+    if (bare) return bare;
+    for (const [key, value] of Object.entries(fieldMetadata)) {
+      const atIdx = key.lastIndexOf('@');
+      if (atIdx > 0 && key.substring(0, atIdx) === field) return value;
+    }
+    return undefined;
+  };
+
   // Single target BASE column name per mapped template field. All derivations of
   // one field must rename its base <column> to the SAME target; a caller mapping
   // qualifiers of one field to different base columns is a corruption — fail loud.
@@ -294,10 +329,29 @@ export function rewriteFieldReferences(
         col.setAttribute('datatype', isDimension ? 'string' : 'real');
       }
 
-      if (fieldMetadata && fieldMetadata[templateFieldName]) {
-        const meta = fieldMetadata[templateFieldName];
-        if (col.hasAttribute('datatype')) col.setAttribute('datatype', meta.datatype);
-        if (col.hasAttribute('type')) col.setAttribute('type', meta.type);
+      const meta = resolveFieldMetadata(templateFieldName);
+      if (meta) {
+        if (meta.datatype && col.hasAttribute('datatype'))
+          col.setAttribute('datatype', meta.datatype);
+        if (meta.type && col.hasAttribute('type')) col.setAttribute('type', meta.type);
+      }
+
+      // SEMANTIC-ROLE RECONCILIATION. `semantic-role` asserts that Tableau's geocoder
+      // recognizes this column, and a map template's rows/cols are the GENERATED
+      // Latitude/Longitude those roles produce. Renaming the column without
+      // reconciling the role transplants the donor's geography onto the bound field:
+      // a `[City]` slot bound to a plain string measure-like dimension emits
+      // `semantic-role='[City].[Name]'` for a field the target datasource never
+      // geocodes, and the sheet renders an empty map with populated legends.
+      //
+      // The target datasource is the authority, so the donor attribute is REPLACED
+      // when the bound field has its own role and REMOVED when it has none. Removing
+      // is safe: Desktop mirrors the datasource-level declaration onto the sheet, so
+      // a genuinely geocodable field keeps working via its datasource role. Absence
+      // of metadata therefore means "assert nothing", never "keep the donor's".
+      if (col.hasAttribute('semantic-role')) {
+        if (meta?.semanticRole) col.setAttribute('semantic-role', meta.semanticRole);
+        else col.removeAttribute('semantic-role');
       }
     }
   }
@@ -371,6 +425,36 @@ export function rewriteFieldReferences(
           }
         }
       }
+    }
+  }
+
+  // 3b-i. Rewrite a calc's SOURCE-FIELD attribute: <calculation column='[State]'>.
+  //   A `categorical-bin` (group) calc names its source field on `@column` rather
+  //   than in a formula, so §3b's formula rewrite never sees it. When that source
+  //   field is the bound field, the donor name — or a live `{{field_base_N}}` token —
+  //   survives into the emitted sheet and the residue guard throws. This was the sole
+  //   remaining injection failure across the 74-bookmark probe (case B23815, a
+  //   `[State_Group]` group over `[State]`).
+  //
+  //   The XPath is deliberately `//column/calculation`, not `//calculation`. Measured
+  //   across the 1,620-bookmark corpus, `calculation@column` appears in exactly two
+  //   parents: 37 under `<column>` (the group/bin source reference rewritten here) and
+  //   109 under `<connection><calculations>` (`<calculation column='[Number of Records]'
+  //   formula='1'/>`), which DECLARES a column in the donor connection's own namespace.
+  //   A template never injects a connection, so rewriting that second form would rename
+  //   a declaration nothing in the sheet points at. Only the field-reference form is
+  //   in scope.
+  //
+  //   Only the simple `[Name]` spelling is matched — same shape §2 uses for
+  //   `column-instance@column` — so a qualified or derived value is left verbatim.
+  const calcSourceRefs = selectElements('//column/calculation[@column]', doc);
+  for (const calc of calcSourceRefs) {
+    const columnValue = calc.getAttribute('column');
+    if (!columnValue) continue;
+    const simpleMatch = columnValue.match(/^\[([^\]:]+)\]$/);
+    if (simpleMatch && mappedFields.has(simpleMatch[1])) {
+      const target = baseTarget[simpleMatch[1]];
+      if (target) calc.setAttribute('column', `[${target}]`);
     }
   }
 

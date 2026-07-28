@@ -299,6 +299,9 @@ function nextActionForEscalation(reason: EscalateReason): NextAction {
   if (reason === 'low-confidence') {
     return prefillNextAction('Pick a higher-confidence proposal');
   }
+  if (reason === 'geo-not-geocodable') {
+    return prefillNextAction('Rebind the geo slot to a geocodable field, or pick a non-map template');
+  }
   if (TIER2_REASONS.has(reason)) {
     return prefillNextAction('Build via build-and-apply-worksheet');
   }
@@ -330,6 +333,12 @@ function renderEscalationGuidance(reason: EscalateReason, blockers: Blocker[]): 
   } else if (reason === 'low-confidence') {
     next =
       'Confidence was below the floor. Re-examine the candidate template(s), pick the best fit, and re-propose with higher confidence.';
+  } else if (reason === 'geo-not-geocodable') {
+    next =
+      'This template plots generated Latitude/Longitude, which Tableau materializes ONLY for a field ' +
+      'the datasource geocodes. Re-propose the geo slot with a field that carries a geographic ' +
+      'semantic-role (the blocker lists the geocodable candidates), or pick a non-map template for ' +
+      'these fields. Binding a plain dimension would produce a map with zero marks and populated legends.';
   } else if (TIER2_REASONS.has(reason)) {
     next =
       'No fast-path template fits this ask/data - build it directly: build-and-apply-worksheet ' +

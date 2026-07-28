@@ -643,3 +643,200 @@ describe('classifyWorksheetReplaceTarget', () => {
     expect(classifyWorksheetReplaceTarget('<workbook', 'Loose Sheet')).toBe('not-found');
   });
 });
+
+describe('buildInjectedWorkbookXml — semantic-role reconciliation from the TARGET workbook', () => {
+  const SYMBOL_TEMPLATE = readFileSync(
+    join(__dirname, '../data/templates/spatial-symbol-map.xml'),
+    'utf-8',
+  );
+  const SYMBOL_SLOTS = loadManifests().get('spatial-symbol-map')!.slots;
+
+  // Mirrors the World Indicators shape that produced the empty map in tbm-test.pptx:
+  // ONE geocodable field (Country/Region) and string dimensions that merely READ like
+  // quantities ("Business Tax Rate" is datatype string, 186 distinct members).
+  const WORLD_INDICATORS =
+    "<?xml version='1.0'?><workbook><datasources>" +
+    "<datasource inline='true' name='World Indicators'><connection><relation/></connection>" +
+    "<column datatype='string' name='[Country/Region]' role='dimension' " +
+    "semantic-role='[Country].[ISO3166_2]' type='nominal' />" +
+    "<column datatype='string' name='[Business Tax Rate]' role='dimension' type='nominal' />" +
+    "<column datatype='string' name='[Hours to do Tax]' role='dimension' type='nominal' />" +
+    "<column datatype='real' name='[Birth Rate]' role='measure' type='quantitative' />" +
+    '</datasource></datasources><worksheets/><windows/></workbook>';
+
+  it('does NOT transplant the donor geo role onto a non-geocodable bound field', () => {
+    const result = buildInjectedWorkbookXml({
+      workbookXml: WORLD_INDICATORS,
+      templateXml: SYMBOL_TEMPLATE,
+      title: 'P2 Symbol Map',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'World Indicators' },
+      fieldMapping: {
+        'Country/Region': '[World Indicators].[none:Business Tax Rate:nk]',
+        City: '[World Indicators].[none:Hours to do Tax:nk]',
+        Sales: '[World Indicators].[sum:Birth Rate:qk]',
+      },
+      optionalFieldPrunes: [{ templateField: 'State/Province', derivation: 'none', role: 'nk' }],
+      templateSlots: SYMBOL_SLOTS,
+      applyNonce: 'no-transplant',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // The two bound string dimensions must carry NO geo role: the target datasource
+    // does not geocode them, and asserting one yields a map with zero marks.
+    expect(result.xml).not.toMatch(/<column[^>]*name="\[Business Tax Rate\]"[^>]*semantic-role/);
+    expect(result.xml).not.toMatch(/<column[^>]*name="\[Hours to do Tax\]"[^>]*semantic-role/);
+    expect(result.xml).not.toContain('[City].[Name]');
+  });
+
+  it('carries the TARGET workbook role through when the bound field IS geocodable', () => {
+    const result = buildInjectedWorkbookXml({
+      workbookXml: WORLD_INDICATORS,
+      templateXml: SYMBOL_TEMPLATE,
+      title: 'Country Symbol Map',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'World Indicators' },
+      fieldMapping: {
+        'Country/Region': '[World Indicators].[none:Country/Region:nk]',
+        Sales: '[World Indicators].[sum:Birth Rate:qk]',
+      },
+      optionalFieldPrunes: [
+        { templateField: 'State/Province', derivation: 'none', role: 'nk' },
+        { templateField: 'City', derivation: 'none', role: 'nk' },
+      ],
+      templateSlots: SYMBOL_SLOTS,
+      applyNonce: 'geocodable',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Same field name in and out, so the donor role happens to equal the true role —
+    // the point is that it survives rather than being stripped indiscriminately.
+    expect(result.xml).toMatch(
+      /<column[^>]*name="\[Country\/Region\]"[^>]*semantic-role="\[Country\].\[ISO3166_2\]"/,
+    );
+  });
+
+  it('drops the donor role when the target workbook declares no geo roles at all', () => {
+    const NO_GEO =
+      "<?xml version='1.0'?><workbook><datasources>" +
+      "<datasource inline='true' name='Plain'><connection><relation/></connection>" +
+      "<column datatype='string' name='[Label]' role='dimension' type='nominal' />" +
+      "<column datatype='real' name='[Amount]' role='measure' type='quantitative' />" +
+      '</datasource></datasources><worksheets/><windows/></workbook>';
+
+    const result = buildInjectedWorkbookXml({
+      workbookXml: NO_GEO,
+      templateXml: SYMBOL_TEMPLATE,
+      title: 'Plain Symbol Map',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'Plain' },
+      fieldMapping: {
+        'Country/Region': '[Plain].[none:Label:nk]',
+        Sales: '[Plain].[sum:Amount:qk]',
+      },
+      optionalFieldPrunes: [
+        { templateField: 'State/Province', derivation: 'none', role: 'nk' },
+        { templateField: 'City', derivation: 'none', role: 'nk' },
+      ],
+      templateSlots: SYMBOL_SLOTS,
+      applyNonce: 'no-geo',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xml).not.toMatch(/<column[^>]*name="\[Label\]"[^>]*semantic-role/);
+  });
+});
+
+describe('buildInjectedWorkbookXml — bound categorical-bin GROUP survives inject end-to-end', () => {
+  // The REAL shipped box-plot template — its [Facet] slot binds a categorical dimension.
+  const BOX_PLOT_TEMPLATE = readFileSync(
+    join(__dirname, '../data/templates/box-plot-chart.xml'),
+    'utf-8',
+  );
+  const BOX_PLOT_SLOTS = loadManifests().get('box-plot-chart')!.slots;
+
+  // A TARGET workbook whose datasource dictionary defines [Product Name (group)] as a
+  // categorical-bin group over [Product Name] — the shape a Desktop-saved workbook carries.
+  const TARGET_WITH_GROUP = [
+    "<?xml version='1.0' encoding='utf-8' ?>",
+    '<workbook><worksheets/><windows/>',
+    '<datasources>',
+    "  <datasource name='Sample - Superstore' caption='Superstore'>",
+    "    <column datatype='string' name='[Product Name]' role='dimension' type='nominal' />",
+    "    <column caption='Manufacturer' datatype='string' name='[Product Name (group)]' role='dimension' type='nominal'>",
+    "      <calculation class='categorical-bin' column='[Product Name]' new-bin='true'>",
+    "        <bin default-name='Acme' value='&quot;Acme&quot;'>",
+    '          <value>&quot;Acme Corp Stapler&quot;</value>',
+    '        </bin>',
+    '      </calculation>',
+    '    </column>',
+    "    <column datatype='string' name='[Customer Name]' role='dimension' type='nominal' />",
+    "    <column datatype='real' name='[Profit]' role='measure' type='quantitative' />",
+    '  </datasource>',
+    '</datasources></workbook>',
+  ].join('\n');
+
+  it('materializes the categorical-bin body when [Facet] binds a group, so Tableau will not strip it', () => {
+    const result = buildInjectedWorkbookXml({
+      workbookXml: TARGET_WITH_GROUP,
+      templateXml: BOX_PLOT_TEMPLATE,
+      title: 'Profit distribution by manufacturer',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'Sample - Superstore' },
+      // fieldMapping is keyed by template_field; Facet binds the GROUP.
+      fieldMapping: {
+        Facet: '[Sample - Superstore].[none:Product Name (group):nk]',
+        Level: '[Sample - Superstore].[none:Customer Name:nk]',
+        Measure: '[Sample - Superstore].[sum:Profit:qk]',
+      },
+      templateSlots: BOX_PLOT_SLOTS,
+      applyNonce: 'group-e2e',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const xml = result.xml;
+
+    // 1) The renamed group column now carries its categorical-bin body inline — NOT hollow.
+    expect(xml).toMatch(/class=["']categorical-bin["']/);
+    expect(xml).toContain('&quot;Acme Corp Stapler&quot;');
+    // 2) The base column the calc references is declared so the group resolves.
+    expect(xml).toMatch(/<column[^>]*\bname=["']\[Product Name\]["']/);
+    // 3) The group column is no longer the hollow, body-less form the rewriter left behind.
+    expect(xml).not.toMatch(/name=["']\[Product Name \(group\)\]["'][^>]*><\/column>/);
+    expect(xml).not.toMatch(/name=["']\[Product Name \(group\)\]["'][^>]*\/>/);
+    // 4) The other slots still bound normally (splice is scoped to the group).
+    expect(xml).toContain('sum:Profit:qk');
+    expect(xml).toContain('none:Customer Name:nk');
+  });
+
+  it('is untouched when the bound facet is a plain dimension (no group in the target)', () => {
+    const plainTarget = TARGET_WITH_GROUP.replace(
+      /<column caption='Manufacturer'[\s\S]*?<\/column>/,
+      "<column datatype='string' name='[Segment]' role='dimension' type='nominal' />",
+    );
+    const result = buildInjectedWorkbookXml({
+      workbookXml: plainTarget,
+      templateXml: BOX_PLOT_TEMPLATE,
+      title: 'Profit distribution by segment',
+      sheetType: 'worksheet',
+      templateParameters: { DATASOURCE: 'Sample - Superstore' },
+      fieldMapping: {
+        Facet: '[Sample - Superstore].[none:Segment:nk]',
+        Level: '[Sample - Superstore].[none:Customer Name:nk]',
+        Measure: '[Sample - Superstore].[sum:Profit:qk]',
+      },
+      templateSlots: BOX_PLOT_SLOTS,
+      applyNonce: 'plain-e2e',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // No group was bound, so no categorical-bin body is introduced.
+    expect(result.xml).not.toContain('categorical-bin');
+    expect(result.xml).toContain('none:Segment:nk');
+  });
+});

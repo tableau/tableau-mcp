@@ -34,6 +34,7 @@ import Fuse from 'fuse.js';
 import { COLUMN_REF_REGEX } from '../metadata/field-resolver.js';
 import type { DateparseAxisSpec } from '../templates/dateparseTemporalAxis.js';
 import type { OptionalFieldPruneSpec } from '../templates/optionalFieldPrune.js';
+import { cardinalityAdvice } from './cardinality.js';
 import { matchAvoidWhen } from './classify.js';
 import { escapeXml } from './escape.js';
 import type {
@@ -90,6 +91,10 @@ export type EscalateReason =
   | 'ambiguous-field'
   | 'field-not-found'
   | 'kind-mismatch'
+  // A geo slot on a generated-Lat/Long template got a field the datasource does
+  // not geocode. Distinct from 'kind-mismatch' because the field IS a dimension
+  // and the fix is to rebind a geocodable field, not to abandon the template.
+  | 'geo-not-geocodable'
   | 'derivation-illegal'
   | 'base-column-conflict'
   | 'cross-datasource-binding'
@@ -229,6 +234,43 @@ function geoConceptMismatch(
   const fieldConcept = geoConceptFromSemanticRole(f.semanticRole);
   if (!slotConcept || !fieldConcept || slotConcept === fieldConcept) return null;
   return { slotConcept, fieldConcept };
+}
+
+/**
+ * The manifest hazard that marks a template whose rows/cols are Tableau's
+ * GENERATED Latitude/Longitude (and, for a choropleth, generated Geometry).
+ * Those columns materialize only for a field the target datasource actually
+ * geocodes, so on these templates a geo slot needs a genuinely geocodable field
+ * — not merely a dimension.
+ */
+const GENERATED_GEO_HAZARD = 'generated-geo-required';
+
+function requiresGeocodableGeo(m: TemplateManifest): boolean {
+  return (m.hazards ?? []).some((h) => h.code === GENERATED_GEO_HAZARD);
+}
+
+/**
+ * A geo slot on a generated-Lat/Long template bound to a field the datasource
+ * does not geocode. `kindCompatible` only proves `role === 'dimension'` — the
+ * residual the `geo-bind-not-geocodable` hazard documents — and
+ * `geoConceptMismatch` fires only when BOTH concepts are known, so an UNTAGGED
+ * field passed every gate.
+ *
+ * That is the tbm-test.pptx empty-map failure: `Business Tax Rate` /
+ * `Ease of Business` / `Hours to do Tax` are plain `string` dimensions in
+ * `World Indicators`, they bound the three geo slots of spatial-symbol-map, and
+ * the sheet rendered zero marks with fully populated size and color legends —
+ * the generated coordinates were empty because nothing was geocoded.
+ *
+ * Scoped to the hazard rather than to `kind: 'geo'` at large, because two
+ * templates use geo slots WITHOUT needing geocoding and must keep binding
+ * untagged dimensions: distribution-bar-code-chart (geo slots are plain detail
+ * pills) and spatial-symbol-map-latlon (real coordinate measures on the axes,
+ * and its manifest states the emitted lod carries no semantic-role).
+ */
+function geoNotGeocodable(m: TemplateManifest, slot: SlotSpec, f: SchemaField): boolean {
+  if (slot.kind !== 'geo' || !requiresGeocodableGeo(m)) return false;
+  return !f.semanticRole;
 }
 
 /** Column-instance type suffix (field-resolver.ts:107-112 / field-builder.ts:408-410). */
@@ -564,6 +606,26 @@ export function validateBinding(
       continue;
     }
 
+    // Gate 3c: on a generated-Lat/Long template, a geo slot needs a field the
+    // datasource GEOCODES. Gate 3 proved role==dimension and gate 3b only fires
+    // when both concepts are known, so an untagged dimension reached the inject
+    // and rendered an empty map with populated legends (tbm-test.pptx).
+    if (geoNotGeocodable(m, slot, f)) {
+      const geocodable = s.fields
+        .filter((c) => c.semanticRole && c.role === 'dimension')
+        .map((c) => c.name);
+      blockers.push({
+        code: 'geo-not-geocodable',
+        slot_id: slotId,
+        detail:
+          `slot '${slotId}' plots Tableau's GENERATED Latitude/Longitude, which exist only for a field ` +
+          `the datasource geocodes, but "${fieldQuery}" carries no geographic semantic-role ` +
+          `(role=${f.role}, datatype=${f.datatype}). Binding it renders a map with zero marks.`,
+        ...(geocodable.length > 0 ? { candidates: geocodable } : {}),
+      });
+      continue;
+    }
+
     // Gate 4: derivation legality per datatype, evaluated on the EFFECTIVE
     // derivation (an optional per-slot override, else the manifest default). An
     // aggregated calc forces `usr` (handled in gate 7) and bypasses legality
@@ -730,8 +792,24 @@ export function validateBinding(
   // as WARNINGS on the bound result. These NEVER block — the model (or the
   // no-LLM path that reached here) has already committed to this template; the
   // warning rides along so the caller sees the anti-pattern it chose.
+  //
+  // Cardinality advice rides the SAME advisory channel for the same reason: a
+  // 397-member string dimension on a categorical rows slot is legal (it IS a string
+  // dimension) but illegible (397 bars). Per explicit product direction this hints
+  // what cardinality is likely ideal and leaves the agent free to bind anyway, so it
+  // is a warning by construction — `cardinalityAdvice` cannot produce a blocker, and
+  // stays silent when the connection publishes no distinct-count to compare against.
+  const cardinalityNotes: string[] = [];
+  for (const slot of m.slots) {
+    const entry = resolved.get(slot.slot_id);
+    if (!entry) continue;
+    const advice = cardinalityAdvice(slot, entry.field);
+    if (advice) cardinalityNotes.push(advice);
+  }
+
   const warnings = [
     ...resolutionNotes,
+    ...cardinalityNotes,
     ...(ask ? matchAvoidWhen(ask, m.avoid_when, m.intent_keywords) : []),
   ];
   // The datasource is workbook-controlled and flows verbatim into {{DATASOURCE}} (an XML

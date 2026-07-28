@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { idealCardinality } from '../../../desktop/binder/cardinality.js';
 import { FAMILY_VALUES } from '../../../desktop/binder/manifest.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
@@ -32,6 +33,21 @@ interface SlotSummary {
   bindable: boolean;
   purpose?: string;
   examples?: string[];
+  /**
+   * Structural, donor-free additions (see the projection note above `summarizeTemplate`):
+   * WHERE the field lands in the chart and at WHAT derivation, plus the advisory
+   * cardinality band that position implies.
+   *
+   * `ideal_cardinality` counts what the READER SEES — ticks, legend entries, marks —
+   * which equals the field's distinct-value count only when `derivation` is `none`.
+   * On a truncating derivation (`yr`, `mn`, `tmn`, …) a 1,200-day date field renders
+   * ~4 year ticks, so read the band against the rendered grain, not the raw column.
+   * It is advice about legibility and never a restriction: a bind that exceeds it
+   * still succeeds, carrying a warning.
+   */
+  role?: string[];
+  derivation?: string;
+  ideal_cardinality?: { ideal_max: number; workable_max: number; rationale: string };
 }
 
 interface TemplateSummary {
@@ -75,6 +91,17 @@ export function deriveFastPathBlockers(
 // the same fidelity rule bind-template follows for the binder's `args`. Only
 // tool-authored params/aggregates (fastPathOnly, fastPathCount) are camelCase per
 // AGENTS.md.
+//
+// PROJECTION BOUNDARY — why `role`/`derivation` are added and `notes`/`template_field`
+// are NOT. A template must never advertise the concrete fields its donor workbook
+// happened to use; the agent is choosing fields for a DIFFERENT dataset, and a donor
+// name is both a leak and an anchoring bias. Measured against the shipped manifests:
+// of 142 bindable slots, `template_field` is a `{{field_base_N}}` token on only 15 and
+// a concrete donor name on 127, and 36 `notes` embed concrete column-instances
+// (`[sum:Profit:qk]`, `SUM([Actual])`, `[avg:Longitude:qk]`). Both fields are therefore
+// excluded. `role` and `derivation` are closed structural vocabularies — shelf positions
+// and Tableau derivation short-forms — that describe the SLOT, never the donor, so they
+// widen what the agent knows without leaking anything.
 function summarizeTemplate(m: TemplateManifest): TemplateSummary {
   return {
     template: m.template,
@@ -85,14 +112,20 @@ function summarizeTemplate(m: TemplateManifest): TemplateSummary {
     description: m.description,
     intent_keywords: m.intent_keywords,
     ...(m.avoid_when ? { avoid_when: m.avoid_when } : {}),
-    slots: m.slots.map((s) => ({
-      slot_id: s.slot_id,
-      kind: s.kind,
-      required: s.required,
-      bindable: s.bindable,
-      ...(s.purpose ? { purpose: s.purpose } : {}),
-      ...(s.purpose && s.examples && s.examples.length > 0 ? { examples: s.examples } : {}),
-    })),
+    slots: m.slots.map((s) => {
+      const band = idealCardinality(s);
+      return {
+        slot_id: s.slot_id,
+        kind: s.kind,
+        required: s.required,
+        bindable: s.bindable,
+        ...(s.purpose ? { purpose: s.purpose } : {}),
+        ...(s.purpose && s.examples && s.examples.length > 0 ? { examples: s.examples } : {}),
+        ...(s.role.length > 0 ? { role: s.role } : {}),
+        derivation: s.derivation,
+        ...(band ? { ideal_cardinality: band } : {}),
+      };
+    }),
     calc_count: m.calcs.length,
   };
 }

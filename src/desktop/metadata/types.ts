@@ -41,6 +41,13 @@ export interface FieldReference {
   role: string;
   datatype?: string;
   semanticRole?: string; // Tableau geo semantic role, e.g. "[State].[Name]"
+  /**
+   * Tableau's OWN distinct-count estimate for this column, read verbatim from the
+   * connection's `<metadata-record><approx-count>`. Undefined when the connection
+   * publishes none (live connections often don't; extracts do), so a consumer must
+   * treat "absent" as "unknown", never as "low". Measured, not name-guessed.
+   */
+  approxCount?: number;
   caption?: string;
   isAggregated?: boolean;
   formula?: string;
