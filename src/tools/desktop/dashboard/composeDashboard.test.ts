@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as applyFocusModule from '../../../desktop/commands/workbook/applyFocus.js';
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as listDashboardsModule from '../../../desktop/commands/workbook/listDashboards.js';
 import * as listWorksheetsModule from '../../../desktop/commands/workbook/listWorksheets.js';
@@ -14,6 +15,7 @@ import { TableauDesktopToolContext } from '../toolContext.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getComposeDashboardTool } from './composeDashboard.js';
 
+vi.mock('../../../desktop/commands/workbook/applyFocus.js');
 vi.mock('../../../desktop/commands/workbook/getWorkbookXml.js');
 vi.mock('../../../desktop/commands/workbook/listDashboards.js');
 vi.mock('../../../desktop/commands/workbook/listWorksheets.js');
@@ -76,13 +78,39 @@ describe('composeDashboardTool', () => {
       expect.objectContaining({
         dashboardName: 'New Dashboard',
         xml: expect.stringContaining('name="Sales"'),
-        focus: { navigate: 'artifact', sheetName: 'New Dashboard' },
+        focus: { navigate: 'none', reason: 'intermediate-leg' },
       }),
     );
     expect(loadWorkbookXmlModule.loadWorkbookXml).toHaveBeenCalledWith(
       expect.objectContaining({
         xml: expect.stringContaining('<viewpoint name="Sales"/>'),
         focus: { navigate: 'artifact', sheetName: 'New Dashboard' },
+      }),
+    );
+    expect(applyFocusModule.dispatchApplyFocus).not.toHaveBeenCalled();
+  });
+
+  it('activates the dashboard when its viewpoints are already present', async () => {
+    const alreadyPresentXml = `<workbook>
+      <dashboards><dashboard name="New Dashboard"><zones>
+        <zone name="Sales" x="0" y="0" w="50000" h="100000"/>
+        <zone name="Profit" x="50000" y="0" w="50000" h="100000"/>
+      </zones></dashboard></dashboards>
+      <windows><window class="dashboard" name="New Dashboard">
+        <viewpoints><viewpoint name="Sales"/><viewpoint name="Profit"/></viewpoints>
+      </window></windows>
+    </workbook>`;
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(alreadyPresentXml));
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    expect(loadWorkbookXmlModule.loadWorkbookXml).not.toHaveBeenCalled();
+    expect(applyFocusModule.dispatchApplyFocus).toHaveBeenCalledOnce();
+    expect(applyFocusModule.dispatchApplyFocus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        focus: { navigate: 'artifact', sheetName: 'New Dashboard' },
+        postedXml: alreadyPresentXml,
       }),
     );
   });

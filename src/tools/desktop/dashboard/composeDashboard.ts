@@ -3,6 +3,7 @@ import { DOMParser, Element as XmlElement, Node as XmlNode } from '@xmldom/xmldo
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { dispatchApplyFocus } from '../../../desktop/commands/workbook/applyFocus.js';
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { injectViewpoints } from '../../../desktop/commands/workbook/injectViewpoints.js';
 import { listDashboards } from '../../../desktop/commands/workbook/listDashboards.js';
@@ -173,7 +174,7 @@ export const getComposeDashboardTool = (
           const applyResult = await loadDashboardXml({
             dashboardName,
             xml: dashboardXml,
-            focus: { navigate: 'artifact', sheetName: dashboardName },
+            focus: { navigate: 'none', reason: 'intermediate-leg' },
             executor,
             signal: extra.signal,
           });
@@ -233,7 +234,14 @@ export const getComposeDashboardTool = (
             });
           }
 
-          if (viewpointAccounting.state !== 'success-already-present') {
+          if (viewpointAccounting.state === 'success-already-present') {
+            await dispatchApplyFocus({
+              focus: { navigate: 'artifact', sheetName: dashboardName },
+              postedXml: workbookResult.value,
+              executor,
+              signal: extra.signal,
+            });
+          } else {
             const viewpointApplyResult = await loadWorkbookXml({
               xml: updatedWorkbookXml,
               focus: { navigate: 'artifact', sheetName: dashboardName },
