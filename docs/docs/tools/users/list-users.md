@@ -47,8 +47,8 @@ See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
 | `filter` | string | No | Client-side filter string with format `field:operator:value`. Multiple filters are comma-separated (AND logic). |
-| `pageSize` | number | No | Number of results per page (client-side pagination after filtering) |
-| `limit` | number | No | Maximum total results to return (client-side limit after filtering) |
+| `pageSize` | number | No | Number of users to fetch from the API per page (default 100, max 1000) |
+| `limit` | number | No | Maximum number of **matching** users to return. `limit` bounds results **after** `filter` is applied — the tool keeps paging until it has `limit` filter-matches (or the site is exhausted), so `limit:5` with an inactivity filter returns the first 5 matching users, never 5 pre-filter rows that all get filtered away. |
 
 :::note[API Limitation]
 The Tableau REST API does not support server-side filtering or pagination for users. All users are fetched and filtering is performed client-side by this tool.
@@ -95,7 +95,9 @@ Common values for `siteRole`:
 
 ## Response structure
 
-Each user includes:
+Returns a JSON object `{ users: [...], mcp: { resultInfo: {...} } }`.
+
+Each user in `users` includes:
 
 - `id` – user ID (LUID)
 - `name` – username (login name)
@@ -104,6 +106,18 @@ Each user includes:
 - `fullName` – user's full display name
 - `lastLogin` – timestamp of last login (ISO 8601 format)
 
+`mcp.resultInfo` is present on every non-empty result and reports the completeness of the (filtered) list (a filter matching zero users returns a plain message instead of this object):
+
+- `returnedCount` – number of users in `users`.
+- `truncated` – `false` means `users` is the **complete** set matching the filter; `true` means more matching users exist server-side than were returned.
+- `truncationReason` (present only when `truncated` is `true`):
+  - `"requested-limit"` – the `limit` you passed cut the result short. Call again with a higher `limit` (or omit it) to get more.
+  - `"admin-cap"` – a site-administrator per-call cap (`MAX_RESULT_LIMIT[S]`) cut the result short. `limit` cannot raise it, so either narrow the `filter` so the matching set fits, or ask an administrator to raise the cap.
+
+:::note[`limit` bounds matches, not fetched rows]
+Because filtering is client-side, `limit` bounds the number of users that **match the filter**, not the number of raw rows fetched from the API. The tool keeps paging until it has collected `limit` matching users (or the site is exhausted). A limit-truncated filtered list is reported via `mcp.resultInfo.truncated: true` rather than silently appearing complete.
+:::
+
 :::note[Output fields]
 This tool returns a lean, fixed field set: `id`, `name`, `fullName`, `siteRole`, `email`, and `lastLogin`. Tableau's REST API may return additional attributes (such as `authSetting`, `locale`, `language`), but the tool strips them from its output; only the six fields above appear.
 :::
@@ -111,32 +125,41 @@ This tool returns a lean, fixed field set: `id`, `name`, `fullName`, `siteRole`,
 ## Example result
 
 ```json
-[
-  {
-    "id": "user-abc123",
-    "name": "jsmith",
-    "siteRole": "Creator",
-    "email": "john.smith@example.com",
-    "fullName": "John Smith",
-    "lastLogin": "2026-05-20T10:30:00Z"
-  },
-  {
-    "id": "user-def456",
-    "name": "asmith",
-    "siteRole": "Viewer",
-    "email": "alice.smith@example.com",
-    "fullName": "Alice Smith",
-    "lastLogin": "2026-05-15T08:00:00Z"
-  },
-  {
-    "id": "user-ghi789",
-    "name": "bjones",
-    "siteRole": "Unlicensed",
-    "email": "bob.jones@example.com",
-    "fullName": "Bob Jones",
-    "lastLogin": "2024-12-01T12:00:00Z"
+{
+  "users": [
+    {
+      "id": "user-abc123",
+      "name": "jsmith",
+      "siteRole": "Creator",
+      "email": "john.smith@example.com",
+      "fullName": "John Smith",
+      "lastLogin": "2026-05-20T10:30:00Z"
+    },
+    {
+      "id": "user-def456",
+      "name": "asmith",
+      "siteRole": "Viewer",
+      "email": "alice.smith@example.com",
+      "fullName": "Alice Smith",
+      "lastLogin": "2026-05-15T08:00:00Z"
+    },
+    {
+      "id": "user-ghi789",
+      "name": "bjones",
+      "siteRole": "Unlicensed",
+      "email": "bob.jones@example.com",
+      "fullName": "Bob Jones",
+      "lastLogin": "2024-12-01T12:00:00Z"
+    }
+  ],
+  "mcp": {
+    "resultInfo": {
+      "returnedCount": 3,
+      "truncated": true,
+      "truncationReason": "requested-limit"
+    }
   }
-]
+}
 ```
 
 ## Empty result

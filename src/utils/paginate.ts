@@ -17,6 +17,20 @@ type PageConfig = z.infer<typeof pageConfigSchema>;
 type PaginateArgs<T> = {
   pageConfig: PageConfig;
   getDataFn: (pagination: PageConfig) => Promise<{ pagination: Pagination; data: Array<T> }>;
+  /**
+   * OPT-IN client-side predicate. When provided, {@link paginateWithMetadata}
+   * fetches pages by `pageSize` (the raw `limit` is deliberately NOT threaded
+   * into the fetch), applies this predicate to every fetched row, and counts
+   * ONLY passing rows toward `limit`. `limit` therefore bounds POST-filter
+   * matches, and `truncatedByLimit` reflects POST-filter truncation.
+   *
+   * When omitted, the pagination behavior is byte-for-byte identical to the
+   * original implementation (raw `limit` bounds the fetch and the returned
+   * slice). This invariant is load-bearing: existing callers (`list-flows`,
+   * `list-flow-runs`, `list-projects`, …) rely on the no-filter path and must
+   * not change. See the explicit no-filter branch in {@link paginateWithMetadata}.
+   */
+  filterFn?: (item: T) => boolean;
 };
 
 export const MAX_PAGE_SIZE = 1000;
@@ -31,10 +45,16 @@ export const MAX_PAGE_SIZE = 1000;
  *   query (across all pages, ignoring `limit`). For multi-page paginations
  *   this is the value Tableau returned on the last page actually fetched;
  *   Tableau returns the same value on every page response, so for the loops
- *   we run it's stable.
- * - `truncatedByLimit` — `true` iff `items.length < totalAvailable`. When
- *   `true`, the caller can confidently surface a "more results available,
- *   but a limit cut you off" signal (e.g. an MCP warning).
+ *   we run it's stable. NOTE: when a `filterFn` is supplied this is the
+ *   server's RAW, PRE-filter count — it is NOT a count of matching rows and
+ *   cannot be (the server does no filtering). With a filter, callers should
+ *   rely on `truncatedByLimit` (not `totalAvailable`) as the "more matches
+ *   exist server-side" signal.
+ * - `truncatedByLimit` — `true` iff more rows exist server-side beyond the
+ *   returned (limited) set. Without a filter this is `items.length <
+ *   totalAvailable`. With a filter it means more MATCHING rows exist beyond the
+ *   `limit` returned. When `true`, the caller can confidently surface a "more
+ *   results available, but a limit cut you off" signal (e.g. an MCP warning).
  */
 export type PaginateResult<T> = {
   items: Array<T>;
@@ -56,9 +76,62 @@ export type PaginateResult<T> = {
 export async function paginateWithMetadata<T>({
   pageConfig,
   getDataFn,
+  filterFn,
 }: PaginateArgs<T>): Promise<PaginateResult<T>> {
   const { pageSize, limit } = pageConfigSchema.parse(pageConfig);
   const effectivePageSize = pageSize ? Math.min(pageSize, MAX_PAGE_SIZE) : pageSize;
+
+  // --- Filtered path (opt-in) ---------------------------------------------
+  // When a predicate is supplied, `limit` must bound POST-filter matches, not
+  // the fetch. So we page by `pageSize` (deliberately NOT threading raw `limit`
+  // into getDataFn) and count only rows that PASS toward `limit`. To set
+  // `truncatedByLimit` HONESTLY we collect until we have `limit + 1` matches —
+  // one past the limit proves more matches exist server-side — or the server's
+  // pages are exhausted. `totalAvailable` here is the server's RAW pre-filter
+  // count (the server does no filtering); with a filter the truncation SIGNAL,
+  // not `totalAvailable`, is what tells the model "more matches exist".
+  if (filterFn) {
+    const first = await getDataFn({
+      pageSize: effectivePageSize,
+      pageNumber: pageConfig.pageNumber,
+    });
+    let { totalAvailable, pageNumber } = first.pagination;
+    let rawFetched = first.data.length;
+    const matches = first.data.filter(filterFn);
+
+    while (totalAvailable > rawFetched && (!limit || matches.length <= limit)) {
+      const { pagination: nextPagination, data: nextData } = await getDataFn({
+        pageSize: effectivePageSize,
+        pageNumber: pageNumber + 1,
+      });
+
+      if (nextData.length === 0) {
+        throw new Error(
+          `No more data available. Last fetched page number: ${pageNumber}, Total available: ${totalAvailable}, Total fetched: ${rawFetched}`,
+        );
+      }
+
+      ({ totalAvailable, pageNumber } = nextPagination);
+      rawFetched += nextData.length;
+      for (const item of nextData) {
+        if (filterFn(item)) {
+          matches.push(item);
+        }
+      }
+    }
+
+    const truncatedByLimit = limit !== undefined && matches.length > limit;
+    if (truncatedByLimit) {
+      matches.length = limit;
+    }
+
+    return { items: matches, totalAvailable, truncatedByLimit };
+  }
+
+  // --- No-filter path -------------------------------------------------------
+  // INVARIANT: behavior below MUST stay byte-for-byte identical to the original
+  // implementation. Other callers (list-flows, list-flow-runs, list-projects,
+  // …) depend on it; do NOT alter this branch when touching the filtered path.
   const { pagination, data } = await getDataFn({ ...pageConfig, pageSize: effectivePageSize });
   const items = [...data];
 

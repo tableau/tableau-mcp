@@ -24,6 +24,15 @@ import { McpClient } from '../mcpClient.js';
 const listUsersResultSchema = z.object({
   users: z.array(userSchema),
   totalAvailable: z.number().optional(),
+  mcp: z
+    .object({
+      resultInfo: z.object({
+        returnedCount: z.number(),
+        truncated: z.boolean(),
+        truncationReason: z.enum(['requested-limit', 'admin-cap']).optional(),
+      }),
+    })
+    .optional(),
 });
 
 describe('list-users', () => {
@@ -110,11 +119,13 @@ describe('list-users', () => {
     // `gt` excludes never-logged-in users (undefined lastLogin), so any row returned here MUST
     // have a real lastLogin — this is a stronger proof that lastLogin is populated end-to-end.
     // The site's admin PAT owner has logged in well after 2020 and appears in the first page, so
-    // this is guaranteed non-empty. Bound to one page — client-side filtering otherwise fetches
-    // all ~27k users first (the filter is applied after pagination) and blows the timeout.
+    // this is guaranteed non-empty. Keep `limit` small: post-W-23600028 the filter is applied
+    // DURING pagination and `limit` bounds POST-filter matches, so a large limit against a site
+    // with sparse `lastLogin` matches (seeded sites are almost all never-logged-in users) would
+    // page the entire population to prove it can't reach the limit and blow the timeout.
     const result = await client.callTool('list-users', {
       schema: listUsersResultSchema,
-      toolArgs: { pageSize: 1000, limit: 1000, filter: 'lastLogin:gt:2020-01-01T00:00:00Z' },
+      toolArgs: { pageSize: 1000, limit: 5, filter: 'lastLogin:gt:2020-01-01T00:00:00Z' },
     });
 
     expect(result.users.length).toBeGreaterThan(0);
@@ -125,6 +136,49 @@ describe('list-users', () => {
         new Date('2020-01-01T00:00:00Z').getTime(),
       );
     }
+  });
+
+  it('W-23600028: a small limit + an inactivity filter returns `limit` matching users, not 0', async () => {
+    if (!toolsAvailable) {
+      return;
+    }
+
+    // THE BUG: `limit` was applied to the FETCH before the client-side filter
+    // ran. On the live site (~18,008 users) the first `limit` fetched rows are
+    // typically active admins/service accounts that FAIL an inactivity filter,
+    // so `limit:5` + `lastLogin:lt:<recent cutoff>` returned 0 users even though
+    // thousands matched. After the fix `limit` bounds POST-filter matches: the
+    // tool pages until it has 5 filter-matches, so this returns exactly 5 users.
+    //
+    // Use a large pageSize so the 5 matches are found in as few sequential REST
+    // calls as possible. The cutoff is recent (2026-07-01) so the vast majority
+    // of the 18,008 users — anyone who has not logged in since then, plus every
+    // never-logged-in user — match; 5 matches are found on the very first page.
+    const result = await client.callTool('list-users', {
+      schema: listUsersResultSchema,
+      toolArgs: { pageSize: 1000, limit: 5, filter: 'lastLogin:lt:2026-07-01T00:00:00Z' },
+    });
+
+    // The regression assertion: NON-empty, and exactly `limit` matching users.
+    expect(result.users.length).toBe(5);
+
+    // Every returned user actually satisfies the filter: either an inactive
+    // lastLogin strictly before the cutoff, or a never-logged-in user (no
+    // lastLogin — the most-inactive class, which MUST match `lt`).
+    const cutoff = new Date('2026-07-01T00:00:00Z').getTime();
+    for (const user of result.users) {
+      if (user.lastLogin === undefined) {
+        continue; // never-logged-in: correctly included by lt
+      }
+      expect(new Date(user.lastLogin).getTime()).toBeLessThan(cutoff);
+    }
+
+    // resultInfo must report the limit-truncation honestly: far more than 5
+    // users match on an 18,008-user site, so truncated:true with
+    // truncationReason 'requested-limit' (the caller's own limit was binding).
+    expect(result.mcp?.resultInfo.returnedCount).toBe(5);
+    expect(result.mcp?.resultInfo.truncated).toBe(true);
+    expect(result.mcp?.resultInfo.truncationReason).toBe('requested-limit');
   });
 
   it('should reject a filter on a now-removed field (authSetting) with an enum error, not silent-empty', async () => {
