@@ -34,7 +34,7 @@ const paramsSchema = {
     .max(MAX_PAGE_SIZE)
     .optional()
     .describe(
-      'The maximum number of workbooks to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants.',
+      'The maximum number of workbooks to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants, or `limit: 1` when you only need the `totalAvailable` count and want to minimize the response payload.',
     ),
 };
 
@@ -81,7 +81,7 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
   **Pagination**
   This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1000-item page to fetch (1-based, default 1).
   The response is a flat object \`{ data, totalAvailable }\`; paginate by incrementing \`pageNumber\` until you have collected \`totalAvailable\` items.
-  To get just the count of workbooks matching a request, read \`totalAvailable\` from a single call (e.g. \`pageNumber: 1\`) without paging through every item.`,
+  To get just the count of workbooks matching a request, read \`totalAvailable\` from a single call with \`limit: 1\` — the count is returned regardless of page size, and a small \`limit\` keeps the response tiny.`,
     paramsSchema,
     annotations: {
       title: 'List Workbooks',
