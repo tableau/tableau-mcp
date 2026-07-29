@@ -242,6 +242,28 @@ describe('addFieldToRows user derivations', () => {
     );
     expect(modified).not.toContain('derivation="usr"');
   });
+
+  it('does not rewrite a FIXED LOD calculation to a usr derivation', () => {
+    const worksheetXml = `<worksheet name="Sheet 1">
+      <table>
+        <view>
+          <datasources><datasource name="Sample"/></datasources>
+          <datasource-dependencies datasource="Sample">
+            <column name="[Goals Band]" datatype="real" role="measure" type="quantitative">
+              <calculation class="tableau" formula="FLOOR({FIXED [Team Name] : SUM([Goals])} / 25) * 25"/>
+            </column>
+          </datasource-dependencies>
+        </view>
+      </table>
+    </worksheet>`;
+
+    const modified = addFieldToRows(worksheetXml, '[Sample].[sum:Goals Band:qk]');
+
+    expect(modified).toContain(
+      '<column-instance name="[sum:Goals Band:qk]" column="[Goals Band]" derivation="Sum"',
+    );
+    expect(modified).not.toContain('[usr:Goals Band:qk]');
+  });
 });
 
 describe('addFieldToRows date-part derivations', () => {

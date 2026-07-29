@@ -1,3 +1,7 @@
+import {
+  stripBracketedIdentifiers,
+  stripStringsAndComments,
+} from '../../metadata/calculation-classifier.js';
 import type { ValidationIssue, ValidationRule } from '../types.js';
 
 const AGG_FUNC_NAMES = [
@@ -61,82 +65,25 @@ function stripLodBlocks(formula: string): string {
   return out;
 }
 
-function stripStringsAndComments(formula: string): string {
-  const src = String(formula ?? '');
-  let out = '';
-  let inSingle = false;
-  let inDouble = false;
-  let inLineComment = false;
-  let inBlockComment = false;
-
-  for (let i = 0; i < src.length; i += 1) {
-    const c = src[i];
-    const next = i + 1 < src.length ? src[i + 1] : '';
-
-    if (inLineComment) {
-      if (c === '\n') {
-        inLineComment = false;
-        out += c;
-      }
-      continue;
-    }
-    if (inBlockComment) {
-      if (c === '*' && next === '/') {
-        inBlockComment = false;
-        i += 1;
-      }
-      continue;
-    }
-    if (inSingle) {
-      if (c === "'" && src[i - 1] !== '\\') inSingle = false;
-      out += ' ';
-      continue;
-    }
-    if (inDouble) {
-      if (c === '"' && src[i - 1] !== '\\') inDouble = false;
-      out += ' ';
-      continue;
-    }
-
-    if (c === '/' && next === '/') {
-      inLineComment = true;
-      i += 1;
-      continue;
-    }
-    if (c === '/' && next === '*') {
-      inBlockComment = true;
-      i += 1;
-      continue;
-    }
-    if (c === "'") {
-      inSingle = true;
-      out += ' ';
-      continue;
-    }
-    if (c === '"') {
-      inDouble = true;
-      out += ' ';
-      continue;
-    }
-
-    out += c;
-  }
-
-  return out;
-}
-
 function stripAggregateCalls(formula: string): string {
-  let prev: string;
   let out = formula;
-  do {
-    prev = out;
-    out = out.replace(AGG_CALL_RE, ' ');
-  } while (out !== prev);
-  return out;
+  let searchable = stripBracketedIdentifiers(formula);
+
+  while (true) {
+    const matches = [...searchable.matchAll(AGG_CALL_RE)];
+    if (matches.length === 0) return out;
+
+    for (const match of matches) {
+      const start = match.index;
+      const spaces = ' '.repeat(match[0].length);
+      out = out.slice(0, start) + spaces + out.slice(start + match[0].length);
+      searchable = searchable.slice(0, start) + spaces + searchable.slice(start + match[0].length);
+    }
+  }
 }
 
 function hasAggregateInExpression(expr: string): boolean {
-  const upper = stripLodBlocks(expr).toUpperCase();
+  const upper = stripBracketedIdentifiers(stripLodBlocks(expr)).toUpperCase();
   const re = /\b([A-Z_][A-Z0-9_]*)\s*\(/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(upper))) {
