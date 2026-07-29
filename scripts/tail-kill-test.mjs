@@ -140,7 +140,9 @@ function parsePositiveInteger(value, option) {
 function createMcpEnvironment(session) {
   return {
     TOOL_PROFILE: 'dynamic-authoring',
-    TABLEAU_SESSION: session,
+    // The bundle reads TABLEAU_DESKTOP_SESSION_ID (src/config.desktop.ts); r4 proved
+    // TABLEAU_SESSION is read by nothing and left every leg unpinned across 8 instances.
+    TABLEAU_DESKTOP_SESSION_ID: session,
   };
 }
 
@@ -1026,7 +1028,7 @@ async function runDry() {
   const assertions = [
     [config.mcpServers.tableau.args[0] === DESKTOP_ENTRY, 'desktop entry'],
     [config.mcpServers.tableau.env.TOOL_PROFILE === 'dynamic-authoring', 'tool profile'],
-    [config.mcpServers.tableau.env.TABLEAU_SESSION === 'dry-session', 'session'],
+    [config.mcpServers.tableau.env.TABLEAU_DESKTOP_SESSION_ID === 'dry-session', 'session'],
     [defaultOptions.failureMode === undefined, 'default both failure modes'],
     [runtimeOptions.failureMode === 'runtime', 'failure-mode parser'],
     [KILL_LIMIT_MS === WALL_LIMIT_MS * 2, 'two-times kill limit'],
