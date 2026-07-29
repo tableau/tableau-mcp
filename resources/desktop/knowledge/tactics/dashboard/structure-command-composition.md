@@ -8,8 +8,8 @@ Use Tableau structure commands to create and rename a dashboard and place alread
 - Authoring outcome improved: create, compose, validate
 - In-scope reason: Provides a proven fallback for assembling verified worksheets when the higher-level dashboard tools are not suitable.
 - Out-of-scope risk: Structure commands do not build worksheet marks, shelves, calculations, or encodings.
-- Tags: dashboard, composition, worksheets, structure-commands, rename-sheet, add-sheet, tiled-layout
-- Relevant user prompts/search terms: "build a dashboard", "compose a dashboard", "put sheets on a dashboard", "add worksheets to dashboard", "rename dashboard", "dashboard"
+- Tags: composition, worksheets, structure-commands, rename-sheet, add-sheet, tiled-layout
+- Relevant user prompts/search terms: "add-sheet-to-dashboard", "dashboard shell", "place existing sheets", "rename-sheet", "tiled-layout"
 
 ## When to Use
 

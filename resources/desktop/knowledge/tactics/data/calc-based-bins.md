@@ -13,9 +13,9 @@ When the workbook has no native bin field, derive bins from the data and use the
 
 ## When to Use
 
-Use this when the user asks for a histogram and no native bin key is available. Read an existing worksheet or source summary to establish the measure range, choose a defensible width, author a bin calculation and count measure, then build the histogram through a cached worksheet document.
+Use this when the user asks for a histogram and no native bin key is available. First try the two-call `bind-template` proposal route with the shipped distribution-histogram template.
 
-This is a fallback after `bind-template` does not provide a usable histogram path. Do not guess a bin width or fabricate field references.
+The template's bin width is baked in (`size='283'`) and does not recompute on bind. When the bound measure's observed range makes that width inappropriate, read an existing worksheet or source summary, choose a defensible width, author a bin calculation and count measure, then build the histogram through a cached worksheet document. Do not guess a bin width or fabricate field references.
 
 ## Best Practices
 
@@ -32,7 +32,7 @@ This is a fallback after `bind-template` does not provide a usable histogram pat
 1. Choosing a bin width without inspecting the data range.
 2. Declaring success because a worksheet rendered while the bin dimension is absent.
 3. Using a generic `build-and-apply-worksheet` result without checking requested field coverage. In the observed source path, the bin dimension was dropped. This product now reports dropped-field coverage, but that gate is not evidence that the generic histogram path works.
-4. Citing a `bind-template` refusal as part of this exact proof. A related earlier run observed refusals; this recipe's successful run skipped that lane.
+4. Assuming the distribution-histogram template's baked bin width is appropriate for every measure range.
 5. Passing an arbitrary temporary path to `apply-worksheet`. Use a cache path produced by this server's worksheet tools.
 
 ## Implementation
@@ -82,7 +82,7 @@ For an entity-level Goals histogram:
 ### What does not work or remains scoped
 
 - The observed generic worksheet build dropped the bin dimension; do not use its render alone as proof.
-- A related run observed repeated template refusals, but this successful recipe did not retest that behavior.
+- Use the calculation lane only when the bound measure's range makes the distribution-histogram template's baked bin width inappropriate.
 - A histogram without the bin dimension in readback is not a successful result.
 
 ## Source and Confidence

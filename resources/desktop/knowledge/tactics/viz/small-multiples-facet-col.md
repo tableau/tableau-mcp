@@ -89,7 +89,7 @@ The observed structural readback had a Line mark, Goals on Rows, and Group Name 
 
 ### What is confirmed working
 
-- `facet_col` on the trend template creates visible side-by-side panes.
+- `facet_col` produces the expected 12-pane cols crossing in worksheet readback.
 - The successful proposal used day-grain Snapshot Time, Goals, and Group Name.
 - A minimal cached XML touch-up can change Automatic to Line.
 - The observed readback confirmed a 12-pane structure and the expected shelf crossing.

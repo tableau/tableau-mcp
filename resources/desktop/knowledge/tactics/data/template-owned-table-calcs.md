@@ -30,7 +30,7 @@ Check available fields before creating a likely duplicate calculation. The prove
 
 1. Creating `Goal Difference` when the datasource already contains `goal_difference`. The observed caption collision failed.
 2. Duplicating running-total responsibility in both a calculation and the template.
-3. Calling summary rows "marks." Summary readback does not observe rendered marks.
+3. Treating summary rows as proof of the rendered structure. Summary rows prove values exist; they do not prove mark type, shelf placement, or sort order.
 4. Claiming datasource-authored `RUNNING_SUM` fails. That route was not tested.
 
 ## Implementation
@@ -91,7 +91,7 @@ After apply, use `get-summary-data` for numeric readback and `get-worksheet-xml`
 
 - A calculation prelude that duplicates an existing datasource field caption failed with a collision.
 - Creating `RUNNING_SUM` as a datasource calculation was not tested; do not claim it fails.
-- Summary-data rows do not prove the rendered mark structure.
+- Summary rows prove values exist; they do not prove mark type, shelf placement, or sort order.
 
 ## Source and Confidence
 
