@@ -1209,6 +1209,12 @@ function ensureFilterColumnDependency(
   };
 }
 
+function formatCategoricalMemberLiteral(value: string): string {
+  const isNumeric = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value);
+  const isBoolean = value === 'true' || value === 'false';
+  return isNumeric || isBoolean || value === '%null%' ? value : `"${value}"`;
+}
+
 /**
  * Emit an interactive dimension filter node (m7). A `context:true` filter carries
  * `context='true'` — Tableau order-of-operations step 3, which runs BEFORE the Top-N
@@ -1229,7 +1235,7 @@ function buildInteractiveFilterNode(p: {
     const members = p.values
       .map(
         (v) =>
-          `<groupfilter function='member' level='${level}' member='${escapeXmlAttribute(v)}' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />`,
+          `<groupfilter function='member' level='${level}' member='${escapeXmlAttribute(formatCategoricalMemberLiteral(v))}' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />`,
       )
       .join('');
     return (
