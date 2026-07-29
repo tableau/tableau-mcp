@@ -574,7 +574,7 @@ function refusedCapability(name: string, reason: string): Result<never, McpToolE
   return new IncompleteOperationError(
     withNextAction(
       {
-        message: `Plan refused during preflight: requires uncensused capability '${name}': ${reason}. No step ran.`,
+        message: `Plan refused during preflight: requires uncensused capability '${name}': ${reason} No step ran.`,
         steps: [],
       },
       prefillNextAction('Revise the plan to use admitted capabilities'),
