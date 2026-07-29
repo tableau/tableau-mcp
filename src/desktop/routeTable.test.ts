@@ -140,14 +140,14 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     const plainChart = routes.find((route) => route.id === 'plain-chart');
 
     expect(plainChart?.action).toContain(
-      'Never call list-available-fields or get-worksheet-xml to orient before bind-template',
+      'Never call get-worksheet-xml to orient before bind-template',
     );
     expect(plainChart?.action).toContain('reads schema');
     expect(plainChart?.action).toContain('failed binds propose candidate fields');
     expect(plainChart?.action).toContain(
-      'Never call list-available-fields or get-worksheet-xml to orient before bind-template',
+      'list-available-fields is allowed but not needed to orient',
     );
-    expect(plainChart?.action).toContain('author-parameter/author-set may list fields first');
+    expect(plainChart?.action).not.toContain('Never call list-available-fields');
   });
 
   it('asks only when ambiguity changes written workbook content', () => {

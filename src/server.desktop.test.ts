@@ -139,7 +139,7 @@ describe('DESKTOP_INSTRUCTIONS (generated from DESKTOP_ROUTE_TABLE)', () => {
 
 Before dashboards, plan MAGNITUDE vs MEMBERSHIP; MEMBERSHIP uses buckets, not gradients. State plan, build.
 
-For any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.), FIRST use bind-template's two-call sequence. Call 1: bind-template(auto_apply:true), deterministic, ~0.3s; pass the user's message verbatim as \`ask\` (never paraphrase, reword, or expand it). If it proposes, Call 2: bind-template with the same ask/target, selected proposal, auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. Never call list-available-fields or get-worksheet-xml to orient before bind-template: it reads schema; failed binds propose candidate fields (author-parameter/author-set may list fields first). Named charts use this first, even calc-heavy or asking "how <X> changes"; do not author template-owned calcs (including waterfall running totals) before binding. author-parameter/author-set/author-action before charts; else search-commands.
+For any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.), FIRST use bind-template's two-call sequence. Call 1: bind-template(auto_apply:true), deterministic, ~0.3s; pass the user's message verbatim as \`ask\` (never paraphrase, reword, or expand it). If it proposes, Call 2: bind-template with the same ask/target, selected proposal, auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. Never call get-worksheet-xml to orient before bind-template; list-available-fields is allowed but not needed to orient: bind-template reads schema; failed binds propose candidate fields. Named charts use this first, even calc-heavy or asking "how <X> changes"; do not author template-owned calcs (including waterfall running totals) before binding. author-parameter/author-set/author-action before charts; else search-commands.
 
 For a clear derived-metric ask with no named chart type (margin %, ratio/rate/per, growth/change %), FIRST pass its conventional calc in ONE bind-template(auto_apply:true) call via calcs[], binding its caption (for example, gross margin % = (SUM(Revenue)-SUM(COGS))/SUM(Revenue); a proposal still resolves via Call 2). Only after a formula/field-resolution failure, search-knowledge, then make ONE corrective bind-template call.
 
@@ -364,7 +364,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     desktopToolFactories.map((toolFactory) => toolFactory(new DesktopMcpServer()));
 
   it.each(['', 'dynamic-authoring', 'demo', 'spec-loop', 'full', 'combined-lean'])(
-    'keeps both bind-first orientation tools registered in profile "%s"',
+    'keeps field listing and the gated repair read registered in profile "%s"',
     (profile) => {
       const names = selectToolsForProfile(allTools(), profile).map((tool) => tool.name);
 
@@ -373,14 +373,14 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     },
   );
 
-  it('gates the full-profile orientation tool identically to the default profile', async () => {
+  it('gates the full-profile repair read identically to the default profile', async () => {
     sessionRouteState.clear();
     const tools = allTools();
     const defaultTool = selectToolsForProfile(tools, '').find(
-      (tool) => tool.name === 'list-available-fields',
+      (tool) => tool.name === 'get-worksheet-xml',
     )!;
     const fullTool = selectToolsForProfile(tools, 'full').find(
-      (tool) => tool.name === 'list-available-fields',
+      (tool) => tool.name === 'get-worksheet-xml',
     )!;
     const extra = { ...getMockRequestHandlerExtra(), getExecutor: vi.fn() };
     type OrientationCallback = (

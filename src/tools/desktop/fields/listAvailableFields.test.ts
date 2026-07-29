@@ -11,7 +11,6 @@ import { FileReadError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { BIND_FIRST_ORIENTATION_REDIRECT } from '../tool.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getListAvailableFieldsTool } from './listAvailableFields.js';
 
@@ -78,7 +77,6 @@ describe('listAvailableFieldsTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionRouteState.clear();
-    sessionRouteState.recordAuthoringAttempt(SESSION, 'bind-template');
   });
 
   it('should create a tool instance with correct properties', async () => {
@@ -100,25 +98,6 @@ describe('listAvailableFieldsTool', () => {
     expect(tool.annotations).toMatchObject({
       readOnlyHint: false,
     });
-  });
-
-  it('redirects before the first authoring attempt without invoking the host', async () => {
-    sessionRouteState.clear();
-    const extra = {
-      ...getMockRequestHandlerExtra(),
-      getExecutor: vi.fn(),
-    };
-
-    const result = await getResult({ session: SESSION, extra });
-
-    expect(result.isError).toBe(false);
-    expect(result.content).toEqual([{ type: 'text', text: BIND_FIRST_ORIENTATION_REDIRECT }]);
-    expect(result.structuredContent).toMatchObject({
-      message: BIND_FIRST_ORIENTATION_REDIRECT,
-      nextAction: { kind: 'prefill' },
-    });
-    expect(extra.getExecutor).not.toHaveBeenCalled();
-    expect(getWorkbookXmlModule.getWorkbookXml).not.toHaveBeenCalled();
   });
 
   it('should return helpful error when workbook file does not exist', async () => {
@@ -215,7 +194,7 @@ describe('listAvailableFieldsTool', () => {
     expect(metadataModule.listAvailableFields).toHaveBeenCalledWith(LIVE_XML);
   });
 
-  it('without workbookFile reads fields from the resolved live session workbook', async () => {
+  it('before authoring reads fields from the resolved live session workbook', async () => {
     vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(LIVE_XML));
     vi.mocked(metadataModule.listAvailableFields).mockReturnValue(mockLiveFields as any);
     const mockExecutor = {} as any;
@@ -240,6 +219,7 @@ describe('listAvailableFieldsTool', () => {
       signal: extra.signal,
     });
     expect(metadataModule.listAvailableFields).toHaveBeenCalledWith(LIVE_XML);
+    expect(sessionRouteState.hasAuthoringAttempt(SESSION)).toBe(false);
   });
 
   it('without session preserves cache-only behavior', async () => {

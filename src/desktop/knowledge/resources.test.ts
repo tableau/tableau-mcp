@@ -65,4 +65,17 @@ describe('desktop knowledge resources', () => {
     expect(content).toContain('Number (whole)');
     expect(content).toContain('True/False');
   });
+
+  it('does not claim field listing requires an authoring attempt', () => {
+    const uri = 'expertise://tableau/personalization/discovery-first-authoring';
+    const content = readKnowledgeResource(uri);
+
+    expect(content).toContain('`list-available-fields` has no authoring prerequisite');
+    expect(content).not.toContain(
+      '`list-available-fields` and `get-worksheet-xml` unlock after an attempt',
+    );
+    expect(content).not.toContain(
+      'Calling `list-available-fields` or `get-worksheet-xml` before a chart attempt',
+    );
+  });
 });

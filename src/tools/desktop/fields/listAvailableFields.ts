@@ -112,7 +112,7 @@ export const getListAvailableFieldsTool = (
     title,
     description: [
       'List datasource fields for exploration/field questions/non-template authoring.',
-      'Not needed before bind-template.',
+      'Available anytime; not needed before bind-template.',
       'Full gives column_ref; slim ref parts.',
     ].join(' '),
     paramsSchema,

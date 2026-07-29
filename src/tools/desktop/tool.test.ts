@@ -117,7 +117,7 @@ describe('DesktopTool bind-first orientation gate', () => {
     const begin = await beginEpisode(extra.config, { sessionId: 'S1' });
     const gatedCallback = vi.fn(async () => new Ok({ fields: [] }));
 
-    const result = await makeTool('list-available-fields').logAndExecute({
+    const result = await makeTool('get-worksheet-xml').logAndExecute({
       extra,
       args: { session: 'S1' },
       callback: gatedCallback,
@@ -136,13 +136,13 @@ describe('DesktopTool bind-first orientation gate', () => {
         type: 'tool_start',
         session_id: 'S1',
         episode_id: begin.episode_id,
-        tool: 'list-available-fields',
+        tool: 'get-worksheet-xml',
       },
       {
         type: 'tool_end',
         session_id: 'S1',
         episode_id: begin.episode_id,
-        tool: 'list-available-fields',
+        tool: 'get-worksheet-xml',
         success: false,
         outcome: 'refused_by_gate',
       },
@@ -154,7 +154,7 @@ describe('DesktopTool bind-first orientation gate', () => {
   it('redirects a pre-bind orientation call without invoking the executor seam', async () => {
     const getExecutor = vi.fn();
     const extra = { ...getMockRequestHandlerExtra(), getExecutor };
-    const tool = makeTool('list-available-fields');
+    const tool = makeTool('get-worksheet-xml');
 
     const result = await tool.logAndExecute({
       extra,
@@ -188,7 +188,7 @@ describe('DesktopTool bind-first orientation gate', () => {
     });
     const orientationCallback = vi.fn(async () => new Ok({ fields: [] }));
 
-    const orientation = await makeTool('list-available-fields').logAndExecute({
+    const orientation = await makeTool('get-worksheet-xml').logAndExecute({
       extra,
       args: { session: 'S1' },
       callback: orientationCallback,
@@ -226,7 +226,7 @@ describe('DesktopTool bind-first orientation gate', () => {
     });
     const orientationCallback = vi.fn(async () => new Ok({ fields: [] }));
 
-    const result = await makeTool('list-available-fields').logAndExecute({
+    const result = await makeTool('get-worksheet-xml').logAndExecute({
       extra,
       args: { session: 'S2' },
       callback: orientationCallback,
@@ -235,6 +235,20 @@ describe('DesktopTool bind-first orientation gate', () => {
     expect(result.isError).toBe(false);
     expect(result.content).toEqual([{ type: 'text', text: BIND_FIRST_ORIENTATION_REDIRECT }]);
     expect(orientationCallback).not.toHaveBeenCalled();
+  });
+
+  it('allows list-available-fields before an authoring attempt', async () => {
+    const callback = vi.fn(async () => new Ok({ fields: [] }));
+
+    const result = await makeTool('list-available-fields').logAndExecute({
+      extra: getMockRequestHandlerExtra(),
+      args: { session: 'S1' },
+      callback,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(callback).toHaveBeenCalledOnce();
+    expect(sessionRouteState.hasAuthoringAttempt('S1')).toBe(false);
   });
 
   it.each([

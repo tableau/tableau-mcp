@@ -49,11 +49,11 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     trigger:
       'any named chart type or common viz ask, including composed charts (waterfall/bridge, funnel, gantt, bullet, box plot, slope/bump, control, dual-axis, etc.)',
     action:
-      'FIRST use bind-template\'s two-call sequence. Call 1: bind-template(auto_apply:true), deterministic, ~0.3s; pass the user\'s message verbatim as `ask` (never paraphrase, reword, or expand it). If it proposes, Call 2: bind-template with the same ask/target, selected proposal, auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. Never call list-available-fields or get-worksheet-xml to orient before bind-template: it reads schema; failed binds propose candidate fields (author-parameter/author-set may list fields first). Named charts use this first, even calc-heavy or asking "how <X> changes"; do not author template-owned calcs (including waterfall running totals) before binding. author-parameter/author-set/author-action before charts; else search-commands.',
+      'FIRST use bind-template\'s two-call sequence. Call 1: bind-template(auto_apply:true), deterministic, ~0.3s; pass the user\'s message verbatim as `ask` (never paraphrase, reword, or expand it). If it proposes, Call 2: bind-template with the same ask/target, selected proposal, auto_apply:true; proposals may carry sort and top_n. Do not use manual authoring tools between Call 1 and Call 2. Never call get-worksheet-xml to orient before bind-template; list-available-fields is allowed but not needed to orient: bind-template reads schema; failed binds propose candidate fields. Named charts use this first, even calc-heavy or asking "how <X> changes"; do not author template-owned calcs (including waterfall running totals) before binding. author-parameter/author-set/author-action before charts; else search-commands.',
     toolSequence: [
       'bind-template',
-      'list-available-fields',
       'get-worksheet-xml',
+      'list-available-fields',
       'author-parameter',
       'author-set',
       'author-action',
