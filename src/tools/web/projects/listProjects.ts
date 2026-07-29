@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { recordActivityLogEvent } from '../../../activityLog/index.js';
 import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -80,7 +81,7 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
       const validatedFilter = filter ? parseAndValidateProjectsFilterString(filter) : undefined;
       const maxResultLimit = configWithOverrides.getMaxResultLimit(listProjectsTool.name);
 
-      return await listProjectsTool.logAndExecute({
+      const result = await listProjectsTool.logAndExecute({
         extra,
         args: {},
         callback: async () => {
@@ -136,6 +137,20 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
           };
         },
       });
+
+      // Example ActivityLog wiring — the copyable pattern for instrumenting a tool.
+      // Placed AFTER logAndExecute so the identity LUIDs are populated: sign-in runs
+      // inside it and sets them (see restApiInstance setSiteLuid/setUserLuid), matching
+      // how product telemetry reads them (tool.ts finally). Reading earlier yields empty
+      // LUIDs for PAT/UAT/direct-trust auth. No-ops unless ACTIVITY_LOG_ENABLED=true;
+      // never throws. See src/activityLog/.
+      recordActivityLogEvent(extra.config, {
+        siteLuid: extra.getSiteLuid(),
+        userLuid: extra.getUserLuid(),
+        toolName: listProjectsTool.name,
+      });
+
+      return result;
     },
   });
 

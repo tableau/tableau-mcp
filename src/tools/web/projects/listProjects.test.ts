@@ -20,6 +20,7 @@ const mockProjectsResponse = {
 
 const mocks = vi.hoisted(() => ({
   mockQueryProjects: vi.fn(),
+  mockRecordActivityLogEvent: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -31,6 +32,10 @@ vi.mock('../../../restApiInstance.js', () => ({
       siteId: 'test-site-id',
     }),
   ),
+}));
+
+vi.mock('../../../activityLog/index.js', () => ({
+  recordActivityLogEvent: mocks.mockRecordActivityLogEvent,
 }));
 
 describe('listProjectsTool', () => {
@@ -196,6 +201,33 @@ describe('listProjectsTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
+  });
+
+  it('records an ActivityLog event with the tool-call context', async () => {
+    mocks.mockQueryProjects.mockResolvedValue(mockProjectsResponse);
+    await getToolResult({ filter: 'name:eq:Samples' });
+
+    expect(mocks.mockRecordActivityLogEvent).toHaveBeenCalledTimes(1);
+    expect(mocks.mockRecordActivityLogEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        siteLuid: 'test-site-luid',
+        userLuid: 'test-user-luid',
+        toolName: 'list-projects',
+      }),
+    );
+  });
+
+  it('records the ActivityLog event after REST execution so identity LUIDs are resolved', async () => {
+    mocks.mockQueryProjects.mockResolvedValue(mockProjectsResponse);
+    await getToolResult({ filter: 'name:eq:Samples' });
+
+    // Sign-in (inside logAndExecute/useRestApi) populates the site/user LUIDs, so the
+    // event must be recorded AFTER the REST call — not before, where the LUIDs would be
+    // empty for PAT/UAT/direct-trust auth.
+    const [recordOrder] = mocks.mockRecordActivityLogEvent.mock.invocationCallOrder;
+    const [queryOrder] = mocks.mockQueryProjects.mock.invocationCallOrder;
+    expect(recordOrder).toBeGreaterThan(queryOrder);
   });
 
   describe('constrainProjects', () => {
