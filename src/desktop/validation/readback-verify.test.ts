@@ -37,6 +37,29 @@ function encodedWorksheet(extra = ''): string {
   `);
 }
 
+function filteredWorksheet({
+  members,
+  groupFunction = 'union',
+  enumeration = 'inclusive',
+}: {
+  members: string[];
+  groupFunction?: string;
+  enumeration?: string;
+}): string {
+  const memberNodes = members
+    .map((member) => `<groupfilter function="member" level="[none:Region:nk]" member="${member}"/>`)
+    .join('');
+  return worksheet(`
+    <view>
+      <filter class="categorical" column="[DS].[none:Region:nk]">
+        <groupfilter function="${groupFunction}" user:ui-enumeration="${enumeration}">
+          ${memberNodes}
+        </groupfilter>
+      </filter>
+    </view>
+  `);
+}
+
 describe('verifyWorksheetReadback', () => {
   it('flags intended lod encodings that Tableau silently strips on readback', () => {
     const readback = encodedWorksheet().replace(`<lod column="${GEO_FIELD}"/>`, '');
@@ -74,6 +97,115 @@ describe('verifyWorksheetReadback', () => {
       intended: `<filter class="categorical" column="${GEO_FIELD}">`,
       readback: 'missing',
       severity: 'error',
+    });
+  });
+
+  it('flags a filter whose readback dropped an intended member', () => {
+    const intended = filteredWorksheet({ members: ['EMEA', 'AMER'] });
+    const readback = filteredWorksheet({ members: ['EMEA'] });
+
+    const findings = verifyWorksheetReadback(intended, readback);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      kind: 'filter',
+      node: 'filter',
+      column: '[DS].[none:Region:nk]',
+      readback: 'changed',
+      severity: 'error',
+      detail: 'members differ: expected AMER,EMEA; observed EMEA',
+    });
+    expect(formatReadbackVerificationError(findings)).toContain(
+      'members differ: expected AMER,EMEA; observed EMEA',
+    );
+  });
+
+  it('flags a filter whose inclusion mode changes to exclusion', () => {
+    const intended = filteredWorksheet({ members: ['EMEA'], enumeration: 'inclusive' });
+    const readback = filteredWorksheet({ members: ['EMEA'], enumeration: 'exclusive' });
+
+    const findings = verifyWorksheetReadback(intended, readback);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      kind: 'filter',
+      readback: 'changed',
+      severity: 'error',
+      detail: 'mode differs: expected include; observed exclude',
+    });
+  });
+
+  it('accepts identical filter members in a different XML order', () => {
+    const intended = filteredWorksheet({ members: ['EMEA', 'AMER'] });
+    const readback = filteredWorksheet({ members: ['AMER', 'EMEA'] });
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([]);
+  });
+
+  it('accepts a readback that omits the default inclusive enumeration', () => {
+    const intended = filteredWorksheet({ members: ['Consumer'] });
+    const readback = intended.replace(' user:ui-enumeration="inclusive"', '');
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([]);
+  });
+
+  it('accepts the Desktop exclude serialization documented in the filter corpus', () => {
+    const intended = worksheet(`<view>
+      <filter class="categorical" column="[Sample - Superstore].[none:Segment:nk]">
+        <groupfilter function="except" user:ui-enumeration="exclusive">
+          <groupfilter function="level-members" level="[none:Segment:nk]"/>
+          <groupfilter function="union">
+            <groupfilter function="member" level="[none:Segment:nk]" member="Home Office"/>
+          </groupfilter>
+        </groupfilter>
+      </filter>
+    </view>`);
+    const readbackFilter = `<filter column="[Sample - Superstore].[none:Segment:nk]" class="categorical">
+  <groupfilter function="except"
+               user:ui-domain="relevant"
+               user:ui-enumeration="exclusive"
+               user:ui-marker="enumerate">
+    <groupfilter function="level-members" level="[none:Segment:nk]" />
+    <groupfilter function="union">
+      <groupfilter function="member" level="[none:Segment:nk]" member="Home Office" />
+    </groupfilter>
+  </groupfilter>
+</filter>`;
+    const readback = worksheet(`<view>${readbackFilter}</view>`);
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([]);
+  });
+
+  it('accepts a bare-member Desktop readback for an authored union', () => {
+    const intended = filteredWorksheet({ members: ['2024'] }).replace(
+      '[DS].[none:Region:nk]',
+      '[Sample - Superstore].[yr:Order Date:ok]',
+    );
+    const readbackFilter = `<filter column="[Sample - Superstore].[yr:Order Date:ok]" class="categorical">
+  <groupfilter user:ui-marker="enumerate"
+               user:ui-domain="database"
+               function="member"
+               user:ui-enumeration="inclusive"
+               member="2024"
+               level="[yr:Order Date:ok]" />
+</filter>`;
+    const readback = worksheet(`<view>${readbackFilter}</view>`);
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([]);
+  });
+
+  it('flags a changed groupfilter function', () => {
+    const intended = filteredWorksheet({ members: [], groupFunction: 'union' });
+    const readback = filteredWorksheet({ members: [], groupFunction: 'level-members' });
+
+    const findings = verifyWorksheetReadback(intended, readback);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      kind: 'filter',
+      readback: 'changed',
+      severity: 'error',
+      detail: 'function differs: expected union; observed level-members',
     });
   });
 
