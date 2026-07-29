@@ -231,6 +231,24 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:flows:read');
     });
 
+    it('should include tableau:flows:download when flowToolsEnabled is true', async () => {
+      mockGetConfig.mockReturnValue({
+        flowToolsEnabled: true,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).toContain('tableau:flows:download');
+    });
+
+    it('should exclude tableau:flows:download when flowToolsEnabled is false', async () => {
+      mockGetConfig.mockReturnValue({
+        flowToolsEnabled: false,
+      } as any);
+
+      const scopes = await getSupportedApiScopes();
+      expect(scopes).not.toContain('tableau:flows:download');
+    });
+
     it('should include tableau:users:update when adminToolsEnabled is true', async () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,

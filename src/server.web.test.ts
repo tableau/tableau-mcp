@@ -142,6 +142,7 @@ describe('server', () => {
     expect(registeredToolNames).not.toContain('get-flow');
     expect(registeredToolNames).not.toContain('list-flow-runs');
     expect(registeredToolNames).not.toContain('list-flow-tasks');
+    expect(registeredToolNames).not.toContain('describe-flow');
     // ...while unrelated tools stay registered.
     expect(registeredToolNames).toContain('list-datasources');
   });
@@ -160,6 +161,7 @@ describe('server', () => {
     expect(registeredToolNames).toContain('get-flow');
     expect(registeredToolNames).toContain('list-flow-runs');
     expect(registeredToolNames).toContain('list-flow-tasks');
+    expect(registeredToolNames).toContain('describe-flow');
     // ...alongside the unrelated tools.
     expect(registeredToolNames).toContain('list-datasources');
   });

@@ -463,6 +463,7 @@ Controls whether the Tableau Prep flow tools are registered.
 - Set to `true` to enable the Tableau Prep flow tools:
   - [`list-flows`](../../tools/flows/list-flows.md)
   - [`get-flow`](../../tools/flows/get-flow.md)
+  - [`describe-flow`](../../tools/flows/describe-flow.md)
 - Only the exact value `true` enables them; any other value (or leaving it unset) keeps them
   disabled.
 - When enabled, individual flow tools can still be excluded via
