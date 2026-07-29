@@ -94,7 +94,7 @@ type DashboardAutoApplyRefusalResult = {
 type Replaced = { dashboard?: string; sheets: string[] };
 
 type DashboardAutoApplySuccessResult = {
-  applied: true;
+  applied: 'unverified';
   dashboard: string;
   sheets: Array<{ title: string; template_name: string }>;
   phase_ms: { read: number; bind: number; inject: number; apply: number };
@@ -103,7 +103,7 @@ type DashboardAutoApplySuccessResult = {
 };
 
 type DashboardAutoApplyPartialResult = {
-  applied: 'partial';
+  applied: 'unverified';
   dashboard: string;
   sheets: Array<{ title: string; template_name: string }>;
   zones:
@@ -137,6 +137,37 @@ function describeApplyError(
     return 'invalid workbook content';
   }
   return `workbook load command failed: ${JSON.stringify(error.error)}`;
+}
+
+function describeApplyFailure(
+  error:
+    | { type: 'execute-command-error'; error: ExecuteCommandError }
+    | { type: 'load-workbook-xml-error'; error: LoadWorkbookXmlError },
+): { guidance: string; nextAction: NextAction } {
+  const detail = describeApplyError(error);
+  const fallback =
+    "fall back to the per-viz bind-template(auto_apply:true) flow using each ask's bound args.";
+
+  if (error.type === 'load-workbook-xml-error' && error.error.type === 'validation-failed') {
+    return {
+      guidance: `Server-side auto-apply did not complete (${detail}). Nothing was applied — ${fallback}`,
+      nextAction: prefillNextAction('Fall back to per-viz auto-apply'),
+    };
+  }
+
+  if (error.type === 'load-workbook-xml-error' && error.error.type === 'invalid-xml') {
+    return {
+      guidance: `Server-side auto-apply did not complete (${detail}). The invalid document was not sent to Desktop — ${fallback}`,
+      nextAction: prefillNextAction('Fall back to per-viz auto-apply'),
+    };
+  }
+
+  return {
+    guidance:
+      `Server-side auto-apply did not complete (${detail}). The document reached Desktop, but the ` +
+      `live outcome is unverified. Read the workbook before falling back: ${fallback}`,
+    nextAction: prefillNextAction('Read the workbook before falling back'),
+  };
 }
 
 function refusal(
@@ -452,20 +483,18 @@ export const getDashboardAutoApplyTool = (
             signal: extra.signal,
           });
           if (applyResult.isErr()) {
+            const failure = describeApplyFailure(applyResult.error);
             return refusal(
               outcomes,
-              `Server-side auto-apply did not complete (${describeApplyError(applyResult.error)}). Nothing ` +
-                'was applied — fall back to the per-viz bind-template(auto_apply:true) flow using each ' +
-                "ask's bound args.",
+              failure.guidance,
               describeApplyError(applyResult.error),
-              prefillNextAction('Fall back to per-viz auto-apply'),
+              failure.nextAction,
             );
           }
           if (!zonesViaWorkbook) {
-            // Fallback mode (§2 "Probe fails"): the workbook (worksheets + minimal empty
-            // dashboard) is already live; a second dispatch lays in the real zones. A
-            // failure here is a REAL partial window (Q3) — the dashboard exists with a
-            // valid empty layout, coherent and recoverable via build-and-apply-dashboard.
+            // Fallback mode (§2 "Probe fails"): the first document request returned without
+            // an error, then a second dispatch lays in the real zones. Without readback, a
+            // second-leg failure cannot prove which first-leg artifacts reached Desktop.
             const realZones = computeZones(titleText, {
               kpis: [],
               charts: resolvedTitles,
@@ -498,18 +527,18 @@ export const getDashboardAutoApplyTool = (
               return new IncompleteOperationError(
                 withNextAction(
                   {
-                    applied: 'partial',
+                    applied: 'unverified',
                     dashboard: dashboardName,
                     sheets,
                     zones: zonesState,
                     apply_error: message,
                     guidance:
-                      `The workbook (sheets + an empty "${dashboardName}" dashboard) was applied, but laying ` +
-                      `in the zones failed (${message}). Re-issue the zones via build-and-apply-dashboard — the ` +
-                      'dashboard exists with a valid empty layout, nothing is corrupted.',
+                      `Desktop accepted the workbook request for the sheets and "${dashboardName}", but no ` +
+                      `readback confirmed those artifacts before the zone request failed (${message}). ` +
+                      'The live workbook outcome is unverified. Read the workbook and dashboard list before retrying.',
                     ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
                   },
-                  prefillNextAction('Re-issue the zones'),
+                  prefillNextAction('Read the workbook before retrying'),
                 ),
               ).toErr();
             }
@@ -517,14 +546,23 @@ export const getDashboardAutoApplyTool = (
 
           const applyMs = Date.now() - applyStart;
 
-          return new Ok({
-            applied: true,
-            dashboard: dashboardName,
-            sheets,
-            phase_ms: { read: readMs, bind: bindMs, inject: injectMs, apply: applyMs },
-            guidance: `Applied "${dashboardName}" (${sheets.length} sheet(s)) to the live workbook (read ${readMs}ms, bind ${bindMs}ms, inject ${injectMs}ms, apply ${applyMs}ms).`,
-            ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
-          });
+          return new Ok(
+            withNextAction(
+              {
+                applied: 'unverified',
+                dashboard: dashboardName,
+                sheets,
+                phase_ms: { read: readMs, bind: bindMs, inject: injectMs, apply: applyMs },
+                guidance:
+                  `Desktop accepted the document request for "${dashboardName}" (${sheets.length} sheet(s)), ` +
+                  'but no readback after the apply confirmed the live workbook; outcome unverified. Read the ' +
+                  `workbook to verify before retrying or reporting completion (read ${readMs}ms, bind ${bindMs}ms, ` +
+                  `inject ${injectMs}ms, apply ${applyMs}ms).`,
+                ...(replaced.dashboard || replaced.sheets.length > 0 ? { replaced } : {}),
+              },
+              prefillNextAction('Read the workbook to verify'),
+            ),
+          );
         },
         getSuccessResult: (result) => jsonToolResult(result, { isError: false }),
       });

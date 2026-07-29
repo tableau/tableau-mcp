@@ -1,3 +1,6 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
 import * as logger from '../../logging/logger.js';
 import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
 import { MockExternalApiServer, startMockExternalApiServer } from './mockExternalApiServer.js';
@@ -154,6 +157,117 @@ describe('ExternalApiToolExecutor', () => {
       expect(error.type).toBe('command-failed');
       if (error.type === 'command-failed') {
         expect(error.error?.code).toBe('operation-failed');
+      }
+    });
+
+    it('preserves a running operation instead of reporting it completed', async () => {
+      server.setOverride('POST /v0/app:invokeCommand', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-running-1',
+          kind: 'command.invoke',
+          state: 'RUNNING',
+          createdAt: '2026-07-28T16:33:30.000Z',
+        }),
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'undo',
+        signal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap()).toMatchObject({
+        command_id: 'op-running-1',
+        status: 'running',
+        submitted_at: '2026-07-28T16:33:30.000Z',
+      });
+      expect(result.unwrap().completed_at).toBeUndefined();
+    });
+
+    it('enriches a failed operation with bounded Desktop-log detail', async () => {
+      const logDir = fs.mkdtempSync(path.join(process.cwd(), '.executor-log-error-test-'));
+      const logPath = path.join(logDir, 'log_2.txt');
+      fs.writeFileSync(logPath, '');
+      server.setOverride('POST /v0/app:invokeCommand', {
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'op-fail-log-1',
+          kind: 'command.invoke',
+          state: 'FAILED',
+          error: { code: 'operation-failed', message: 'Command execution failed' },
+        }),
+      });
+      const fetchFn: typeof fetch = async (input, init) => {
+        const response = await fetch(input, init);
+        const timestamp = new Date().toISOString();
+        fs.appendFileSync(
+          logPath,
+          [
+            JSON.stringify({
+              ts: timestamp,
+              pid: 999,
+              k: 'begin-commands-controller.invoke-command',
+              a: { id: 'command-id' },
+              v: { name: 'tabdoc:edit-calc', args: 'tabdoc:edit-calc field-name="A"' },
+            }),
+            JSON.stringify({
+              ts: timestamp,
+              pid: 999,
+              k: 'msg',
+              v: "Error in parameters for command 'edit-calc'\nmissing: fn\n",
+            }),
+            JSON.stringify({
+              ts: timestamp,
+              pid: 999,
+              k: 'begin-commands-controller.invoke-command',
+              a: { sponsor: 'command-id' },
+              v: {
+                name: 'tabdoc:show-detailed-error-dialog',
+                args: 'tabdoc:show-detailed-error-dialog error-short-message="bad calc" error-help-link="https://help.tableau.com/?errorcode=47bf7751"',
+              },
+            }),
+          ].join('\n') + '\n',
+        );
+        return response;
+      };
+
+      try {
+        const executor = new ExternalApiToolExecutor({
+          discover: () => [instanceFor(server)],
+          clientOptions: { fetchFn },
+          desktopLogDirs: [logDir],
+        });
+        await executor.start();
+
+        const result = await executor.executeCommand({
+          namespace: 'tabdoc',
+          command: 'edit-calc',
+          signal,
+        });
+
+        const error = result.unwrapErr();
+        expect(error.type).toBe('command-failed');
+        if (error.type === 'command-failed') {
+          expect(error.error).toMatchObject({
+            code: 'operation-failed',
+            message: 'Command execution failed',
+            recoverable: false,
+            'tableau-error-code': '47BF7751',
+            log_detail: {
+              message: "Error in parameters for command 'edit-calc'\nmissing: fn",
+              source: 'tableau-desktop-log',
+              file: 'log_2.txt',
+            },
+          });
+        }
+      } finally {
+        fs.rmSync(logDir, { recursive: true, force: true });
       }
     });
 
@@ -483,6 +597,56 @@ describe('ExternalApiToolExecutor', () => {
 
       expect(result.unwrapErr().type).toBe('command-timed-out');
       expect(discover).toHaveBeenCalledTimes(1);
+    });
+
+    it('appends matching Desktop-log detail to the original timeout message', async () => {
+      const logDir = fs.mkdtempSync(path.join(process.cwd(), '.executor-timeout-log-test-'));
+      const logPath = path.join(logDir, 'log_2.txt');
+      fs.writeFileSync(logPath, '');
+      const fetchFn = ((_url: string, init?: RequestInit): Promise<Response> =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => {
+              fs.appendFileSync(
+                logPath,
+                `${JSON.stringify({
+                  ts: new Date().toISOString(),
+                  pid: 999,
+                  k: 'msg',
+                  v: "Error in parameters for command 'undo': blocking dialog",
+                })}\n`,
+              );
+              reject(init.signal?.reason);
+            },
+            { once: true },
+          );
+        })) as unknown as typeof fetch;
+
+      try {
+        const executor = new ExternalApiToolExecutor({
+          discover: () => [instanceFor(server)],
+          clientOptions: { fetchFn, timeoutMs: 60 },
+          desktopLogDirs: [logDir],
+        });
+        await executor.start();
+
+        const result = await executor.executeCommand({
+          namespace: 'tabdoc',
+          command: 'undo',
+          signal,
+        });
+
+        const error = result.unwrapErr();
+        expect(error.type).toBe('command-timed-out');
+        if (error.type === 'command-timed-out') {
+          expect(error.error).toContain('The operation was aborted due to timeout');
+          expect(error.error).toContain('blocking dialog');
+          expect(error.error).toContain('Desktop log (log_2.txt');
+        }
+      } finally {
+        fs.rmSync(logDir, { recursive: true, force: true });
+      }
     });
 
     it('respects caller aborts and maps them to command-timed-out', async () => {

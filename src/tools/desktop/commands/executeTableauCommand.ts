@@ -7,6 +7,7 @@ import { guardCommand } from '../../../desktop/commands/externalApiCommandGuard.
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import type { ExecuteCommandWarning } from '../../../desktop/toolExecutor/toolExecutor.js';
 import { ArgsValidationError, DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
+import type { GetCommandStatusResponse } from '../../../sdks/desktop/agentApi/types.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
@@ -82,6 +83,7 @@ export const getExecuteTableauCommandTool = (
           }
 
           const payload = shapeCommandResult({
+            status: result.value.status,
             result: result.value.result,
             envelopeWarnings: result.value.warnings ?? [],
             guardWarnings: commandGuardWarnings,
@@ -107,10 +109,12 @@ type ExecuteTableauCommandSuccess = {
 };
 
 function shapeCommandResult({
+  status,
   result,
   envelopeWarnings,
   guardWarnings,
 }: {
+  status: GetCommandStatusResponse['status'];
   result: Record<string, unknown> | null | undefined;
   envelopeWarnings: ExecuteCommandWarning[];
   guardWarnings: string[];
@@ -118,10 +122,16 @@ function shapeCommandResult({
   const outputSerializationFailed = envelopeWarnings.some(
     (warning) => warning.code === 'output-serialization-failed',
   );
+  const completionMessage =
+    status === 'completed'
+      ? 'Command executed successfully.'
+      : `Command accepted; Desktop reports status '${status}'. Completion was not observed.`;
   const payload: ExecuteTableauCommandSuccess = {
     message: outputSerializationFailed
-      ? 'Command executed, but the requested result cannot be returned because Desktop reported output serialization failed; the command executed; state may have changed; do NOT retry - re-read state instead.'
-      : 'Command executed successfully.',
+      ? status === 'completed'
+        ? 'Command executed, but the requested result cannot be returned because Desktop reported output serialization failed; the command executed; state may have changed; do NOT retry - re-read state instead.'
+        : `${completionMessage} The requested result cannot be returned because Desktop reported output serialization failed; state may have changed; do NOT retry - re-read state instead.`
+      : completionMessage,
   };
 
   if (result !== undefined && result !== null) {
@@ -132,7 +142,7 @@ function shapeCommandResult({
       const previewBytes = Buffer.byteLength(preview, 'utf-8');
       payload.result = `${preview}\n...`;
       payload.message =
-        `Command executed successfully. result truncated: ${previewBytes} of ${totalBytes} bytes - ` +
+        `${completionMessage} result truncated: ${previewBytes} of ${totalBytes} bytes - ` +
         're-run with a narrower command if you need the rest.';
     } else {
       payload.result = result;

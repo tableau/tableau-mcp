@@ -8,6 +8,7 @@ import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js
 import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import * as injectViewpointsModule from '../../../desktop/commands/workbook/injectViewpoints.js';
 import * as loadDashboardXmlModule from '../../../desktop/commands/workbook/loadDashboardXml.js';
+import * as loadWorkbookXmlModule from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import * as xmlToJsonModule from '../../../desktop/libraries/workbook-serialization-converter/index.js';
@@ -295,7 +296,14 @@ describe('dashboardAutoApplyTool happy path', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe(true);
+    expect(body.applied).toBe('unverified');
+    expect(body.guidance).toContain('accepted');
+    expect(body.guidance).toContain('unverified');
+    expect(body.guidance).toContain('Read the workbook to verify');
+    expect(result.structuredContent).toEqual({
+      ...body,
+      nextAction: { label: 'Read the workbook to verify', kind: 'prefill' },
+    });
     expect(body.dashboard).toBe('Sales Dashboard');
     expect(body.sheets).toEqual([
       { title: 'Sales by Region', template_name: 'bar-basic' },
@@ -456,7 +464,7 @@ describe('dashboardAutoApplyTool happy path', () => {
 
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe(true);
+    expect(body.applied).toBe('unverified');
     expect(body.replaced).toEqual({ dashboard: 'Sales Dashboard', sheets: [] });
   });
 });
@@ -595,7 +603,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe(true);
+    expect(body.applied).toBe('unverified');
     expect(applyWorkbookDocument).toHaveBeenCalled();
   });
 
@@ -634,7 +642,40 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
     expect(String(body.apply_error)).toContain('preflight validation failed');
+    expect(String(body.guidance)).toContain('Nothing was applied');
+    expect(String(body.guidance)).toContain('fall back to the per-viz');
+    expect(result.structuredContent).toEqual({
+      ...body,
+      nextAction: { label: 'Fall back to per-viz auto-apply', kind: 'prefill' },
+    });
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
+  });
+
+  it('invalid XML keeps the pre-dispatch fallback action', async () => {
+    const { getExecutor } = setupMocks();
+    const loadSpy = vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Err({
+        type: 'load-workbook-xml-error',
+        error: { type: 'invalid-xml' },
+      }),
+    );
+
+    try {
+      const result = await getToolResult({
+        session: '1',
+        asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+        getExecutor,
+      });
+
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(result.structuredContent).toEqual({
+        ...body,
+        nextAction: { label: 'Fall back to per-viz auto-apply', kind: 'prefill' },
+      });
+    } finally {
+      loadSpy.mockRestore();
+    }
   });
 
   it('failed workbook apply is an error with every ask outcome preserved', async () => {
@@ -657,6 +698,48 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       { index: 1, ask: 'line chart of Profit by Month', result: boundB },
     ]);
     expect(String(body.apply_error)).toContain('command-timed-out');
+    expect(String(body.guidance)).toContain('The document reached Desktop');
+    expect(String(body.guidance)).toContain('live outcome is unverified');
+    expect(String(body.guidance)).toContain('Read the workbook before falling back');
+    expect(String(body.guidance)).toContain('fall back to the per-viz');
+    expect(String(body.guidance)).not.toContain('Nothing was applied');
+    expect(result.structuredContent).toEqual({
+      ...body,
+      nextAction: { label: 'Read the workbook before falling back', kind: 'prefill' },
+    });
+  });
+
+  it('load rejection reports the live outcome as unverified before fallback', async () => {
+    const { getExecutor } = setupMocks();
+    const loadSpy = vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(
+      Err({
+        type: 'load-workbook-xml-error',
+        error: { type: 'load-rejected', message: 'Desktop rejected the document' },
+      }),
+    );
+
+    try {
+      const result = await getToolResult({
+        session: '1',
+        asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
+        getExecutor,
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      const body = JSON.parse(result.content[0].text);
+      expect(String(body.apply_error)).toContain('Desktop rejected the document');
+      expect(String(body.guidance)).toContain('The document reached Desktop');
+      expect(String(body.guidance)).toContain('Read the workbook before falling back');
+      expect(String(body.guidance)).toContain('fall back to the per-viz');
+      expect(String(body.guidance)).not.toContain('Nothing was applied');
+      expect(result.structuredContent).toEqual({
+        ...body,
+        nextAction: { label: 'Read the workbook before falling back', kind: 'prefill' },
+      });
+    } finally {
+      loadSpy.mockRestore();
+    }
   });
 
   it('zone apply failure reports an error naming failed zones and landed artifacts', async () => {
@@ -678,7 +761,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe('partial');
+    expect(body.applied).toBe('unverified');
     expect(body.dashboard).toBe('Sales Dashboard');
     expect(body.sheets).toEqual([
       { title: 'Sales by Region', template_name: 'bar-basic' },
@@ -703,6 +786,10 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
       failed: expectedZones,
     });
     expect(String(body.apply_error)).toContain('zone load failed');
+    expect(result.structuredContent).toEqual({
+      ...body,
+      nextAction: { label: 'Read the workbook before retrying', kind: 'prefill' },
+    });
   });
 
   it('zone transport timeout reports unknown zone state with complete attempted specs', async () => {
@@ -725,7 +812,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe('partial');
+    expect(body.applied).toBe('unverified');
     expect(body.zones).toEqual({
       state: 'unknown',
       attempted: [
@@ -821,7 +908,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
 
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe(true);
+    expect(body.applied).toBe('unverified');
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
   });
 
@@ -841,7 +928,7 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
 
     invariant(result.content[0].type === 'text');
     const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe(true);
+    expect(body.applied).toBe('unverified');
     expect(body.replaced.sheets).toEqual(['Sales by Region']);
   });
 });

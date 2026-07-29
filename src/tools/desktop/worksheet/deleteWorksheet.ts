@@ -151,6 +151,7 @@ type DeleteWorksheetRefusalReason =
 
 type DeleteWorksheetToolResult =
   | { deleted: true; worksheet: string; guidance: string }
+  | { deleted: 'unverified'; worksheet: string; guidance: string }
   | {
       deleted: false;
       reason: DeleteWorksheetRefusalReason;
@@ -297,12 +298,34 @@ export const getDeleteWorksheetTool = (
             }
           }
 
+          const readbackResult = await getWorkbookXml({ executor, signal: extra.signal });
+          if (readbackResult.isErr()) {
+            return new Ok({
+              deleted: 'unverified',
+              worksheet: worksheetName,
+              guidance:
+                `Desktop accepted the document request that omitted worksheet "${worksheetName}", ` +
+                'but post-apply readback failed; the deletion outcome is unverified. ' +
+                'Call list-worksheets before retrying.',
+            });
+          }
+          const readbackRemoval = removeWorksheetFromWorkbook(readbackResult.value, worksheetName);
+          if (readbackRemoval.status !== 'not-found') {
+            return new Ok({
+              deleted: 'unverified',
+              worksheet: worksheetName,
+              guidance:
+                `Post-apply readback did not confirm that worksheet "${worksheetName}" is absent; ` +
+                'the deletion outcome is unverified. Call list-worksheets before retrying.',
+            });
+          }
+
           return new Ok({
             deleted: true,
             worksheet: worksheetName,
             guidance:
-              `Deleted worksheet "${worksheetName}" (worksheet node + window entry) from the ` +
-              'live workbook.',
+              `Deleted worksheet "${worksheetName}" (worksheet node + window entry); ` +
+              'post-apply workbook readback confirmed the worksheet is absent.',
           });
         },
       });

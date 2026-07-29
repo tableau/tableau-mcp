@@ -157,7 +157,9 @@ describe('executeTableauCommandTool', () => {
     const commandResult = { some_key: 'some_value' };
     const executeCommand = vi
       .fn()
-      .mockResolvedValue(new Ok({ command_id: 'c1', result: commandResult }));
+      .mockResolvedValue(
+        new Ok({ command_id: 'c1', status: 'completed', submitted_at: '', result: commandResult }),
+      );
     const extra = makeExtra(executeCommand);
 
     const result = await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
@@ -191,6 +193,8 @@ describe('executeTableauCommandTool', () => {
     const executeCommand = vi.fn().mockResolvedValue(
       new Ok({
         command_id: 'c1',
+        status: 'completed',
+        submitted_at: '',
         result: { ok: true },
         warnings: [
           {
@@ -226,7 +230,11 @@ describe('executeTableauCommandTool', () => {
   });
 
   it('is silent about missing output when a command succeeds without result data', async () => {
-    const executeCommand = vi.fn().mockResolvedValue(new Ok({ command_id: 'c1', result: null }));
+    const executeCommand = vi
+      .fn()
+      .mockResolvedValue(
+        new Ok({ command_id: 'c1', status: 'completed', submitted_at: '', result: null }),
+      );
     const extra = makeExtra(executeCommand);
 
     const result = await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
@@ -237,6 +245,25 @@ describe('executeTableauCommandTool', () => {
     expect(payload.message).toBe('Command executed successfully.');
     expect(payload.result).toBeUndefined();
     expect(payload.message).not.toContain('no result data');
+  });
+
+  it('does not claim success when Desktop reports a non-completed status', async () => {
+    const executeCommand = vi
+      .fn()
+      .mockResolvedValue(
+        new Ok({ command_id: 'c1', status: 'running', submitted_at: '', result: null }),
+      );
+    const extra = makeExtra(executeCommand);
+
+    const result = await getResult({ session: SESSION, command: 'tabdoc:save' }, extra);
+
+    expect(result.isError).toBeFalsy();
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toBe(
+      "Command accepted; Desktop reports status 'running'. Completion was not observed.",
+    );
+    expect(payload.message).not.toContain('success');
   });
 
   it('surfaces command failure message and tableau-error-code extension', async () => {
@@ -495,9 +522,14 @@ describe('executeTableauCommandTool', () => {
     });
 
     it('does not inspect the workbook after generate-viz-from-notional-spec succeeds', async () => {
-      const executeCommand = vi
-        .fn()
-        .mockResolvedValue(new Ok({ command_id: 'generate-1', result: null }));
+      const executeCommand = vi.fn().mockResolvedValue(
+        new Ok({
+          command_id: 'generate-1',
+          status: 'completed',
+          submitted_at: '',
+          result: null,
+        }),
+      );
       const extra = makeExtra(executeCommand);
 
       const result = await getResult(
