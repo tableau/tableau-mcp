@@ -14,9 +14,12 @@ export const webToolNames = [
   'get-datasource-metadata',
   'resolve-datasource-luid',
   'get-embed-token',
+  'record-event',
   'get-workbook',
   'get-view',
   'get-flow',
+  'list-flow-runs',
+  'list-flow-tasks',
   'get-view-data',
   'get-view-image',
   'get-custom-view-data',
@@ -36,6 +39,7 @@ export const webToolNames = [
   'update-user',
   'delete-content',
   'confirm-delete-content',
+  'render-interactive-viz',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
@@ -52,6 +56,7 @@ export const webToolGroupNames = [
   'jobs',
   'users',
   'token-management',
+  'mcp-apps',
   'admin-insights',
   'content',
 ] as const;
@@ -75,7 +80,7 @@ export const webToolGroups = {
     'get-custom-view-data',
     'get-custom-view-image',
   ],
-  flow: ['list-flows', 'get-flow'],
+  flow: ['list-flows', 'get-flow', 'list-flow-runs', 'list-flow-tasks'],
   pulse: [
     'list-all-pulse-metric-definitions',
     'list-pulse-metric-definitions-from-definition-ids',
@@ -94,7 +99,8 @@ export const webToolGroups = {
   ],
   jobs: ['list-jobs'],
   users: ['list-users', 'update-user'],
-  'token-management': ['get-embed-token', 'revoke-access-token', 'reset-consent'],
+  'token-management': ['revoke-access-token', 'reset-consent'],
+  'mcp-apps': ['get-embed-token', 'record-event', 'render-interactive-viz'],
   'admin-insights': ['query-admin-insights'],
   content: ['delete-content', 'confirm-delete-content'],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;

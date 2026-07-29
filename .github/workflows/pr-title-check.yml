@@ -4,19 +4,58 @@ on:
   pull_request:
     branches:
       - main
-    types: [opened, edited, synchronize, reopened]
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
 
 jobs:
   check-title:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
     steps:
-      - name: Check PR title format
+      - name: Ensure skip-title-check label exists
         if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const name = 'skip-title-check';
+            try {
+              await github.rest.issues.getLabel({ ...context.repo, name });
+            } catch (error) {
+              if (error.status === 404) {
+                try {
+                  await github.rest.issues.createLabel({
+                    ...context.repo,
+                    name,
+                    color: 'ededed',
+                    description: 'Bypass the PR title @W- work item check',
+                  });
+                } catch (createError) {
+                  // 422 = already exists (e.g., concurrent workflow run)
+                  if (createError.status !== 422) {
+                    throw createError;
+                  }
+                }
+              } else {
+                throw error;
+              }
+            }
+
+      - name: Check PR title format
+        if: >-
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.actor != 'dependabot[bot]' &&
+          !contains(github.event.pull_request.labels.*.name, 'skip-title-check')
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
+          if [[ "${PR_TITLE,,}" =~ ^docs: ]]; then
+            echo "✅ Docs PR - skipping work item number check"
+            exit 0
+          fi
+
           if [[ ! "$PR_TITLE" =~ ^@W-[0-9]+ ]]; then
             echo "❌ PR title must match the pattern '@W-<digits>' (e.g., @W-123456)"
+            echo "   To bypass: prefix the title with 'docs:' or add the 'skip-title-check' label."
             exit 1
           fi
 

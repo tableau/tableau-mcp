@@ -16,6 +16,7 @@ import {
 } from './adminInsightsToolBase.js';
 import {
   _buildProjectIdWarnings,
+  _buildRowCapWarning,
   _buildSiteContentQuery,
   _resolveProjectIdsToNames,
   _resolveProjectScopeIds,
@@ -194,10 +195,32 @@ Datasource LUIDs are resolved automatically; callers do not pass \`datasourceLui
                 const today = new Date();
                 const rows = computeStaleRows({ universe, thresholdDays, today });
 
+                const totalStaleItems = rows.length;
+                const totalStaleSizeBytes = rows.reduce((sum, r) => sum + (r.size ?? 0), 0);
+
+                // Server-side row cap (STALE_CONTENT_MAX_ROWS). Above the cap we withhold the row
+                // payload — a model that ignores the prompt's soft guard still cannot receive a huge
+                // actionable set (F1) — but return a structured SUCCESS (NOT a thrown error) carrying
+                // the TRUE totals plus a ROW_CAP_EXCEEDED warning. The stale-content prompts branch on
+                // that warning before their empty-rows rule so they report the true totals + narrow-
+                // scope guidance rather than a false "No stale items found".
+                const maxRows = configWithOverrides.staleContentMaxRows;
+                if (totalStaleItems > maxRows) {
+                  return new Ok({
+                    thresholdDays,
+                    totalStaleItems,
+                    totalStaleSizeBytes,
+                    rows: [] as StaleContentRow[],
+                    mcp: {
+                      warnings: [...warnings, _buildRowCapWarning({ totalStaleItems, maxRows })],
+                    },
+                  });
+                }
+
                 return new Ok({
                   thresholdDays,
-                  totalStaleItems: rows.length,
-                  totalStaleSizeBytes: rows.reduce((sum, r) => sum + (r.size ?? 0), 0),
+                  totalStaleItems,
+                  totalStaleSizeBytes,
                   rows,
                   ...(warnings.length > 0 ? { mcp: { warnings } } : {}),
                 });

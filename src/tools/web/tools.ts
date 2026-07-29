@@ -8,7 +8,9 @@ import { getConfirmUpdateCloudExtractRefreshTaskTool } from './extractRefreshTas
 import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/updateCloudExtractRefreshTask.js';
 import { getGetFlowTool } from './flows/getFlow/getFlow.js';
+import { getListFlowRunsTool } from './flows/listFlowRuns/listFlowRuns.js';
 import { getListFlowsTool } from './flows/listFlows/listFlows.js';
+import { getListFlowTasksTool } from './flows/listFlowTasks/listFlowTasks.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getEmbedTokenTool } from './getEmbedToken/getEmbedToken.js';
 import { getListJobsTool } from './jobs/listJobs.js';
@@ -22,6 +24,8 @@ import { getListPulseMetricsFromMetricDefinitionIdTool } from './pulse/listMetri
 import { getListPulseMetricsFromMetricIdsTool } from './pulse/listMetricsFromMetricIds/listPulseMetricsFromMetricIds.js';
 import { getListPulseMetricSubscriptionsTool } from './pulse/listMetricSubscriptions/listPulseMetricSubscriptions.js';
 import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
+import { getRecordEventTool } from './recordEvent/recordEvent.js';
+import { getRenderInteractiveVizTool } from './renderInteractiveViz/renderInteractiveViz.js';
 import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
 import { getListUsersTool } from './users/listUsers.js';
@@ -39,6 +43,8 @@ import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 export const webToolFactories = [
   getGetDatasourceMetadataTool,
   getEmbedTokenTool,
+  getRecordEventTool,
+  getRenderInteractiveVizTool,
   getListDatasourcesTool,
   getResolveDatasourceLuidTool,
   getListExtractRefreshTasksTool,
@@ -50,6 +56,8 @@ export const webToolFactories = [
   getQueryDatasourceTool,
   getListFlowsTool,
   getGetFlowTool,
+  getListFlowRunsTool,
+  getListFlowTasksTool,
   getListAllPulseMetricDefinitionsTool,
   getListPulseMetricDefinitionsFromDefinitionIdsTool,
   getListPulseMetricsFromMetricDefinitionIdTool,

@@ -53,6 +53,7 @@ export type TableauApiScope =
   | 'tableau:datasource_tags:update'
   | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
+  | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
   | 'tableau:users:update';
 
@@ -119,6 +120,18 @@ export const GET_FLOW_BASE_API_SCOPES: ReadonlyArray<TableauApiScope> = [
 ];
 export const GET_FLOW_CONNECTIONS_API_SCOPE: TableauApiScope = 'tableau:flow_connections:read';
 export const GET_FLOW_RUNS_API_SCOPE: TableauApiScope = 'tableau:flow_runs:read';
+
+/**
+ * Per-call scopes for `list-flow-runs`. The run fetch is the primary result and
+ * must not request the optional Query Flow scope used only to build a
+ * best-effort failure-insight link. The static tool scope map remains the
+ * maximum surface and is composed from these constants.
+ */
+export const LIST_FLOW_RUNS_PRIMARY_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:flow_runs:read',
+  'tableau:mcp_site_settings:read',
+];
+export const LIST_FLOW_RUNS_FAILURE_INSIGHT_API_SCOPE: TableauApiScope = 'tableau:flows:read';
 
 /**
  * Validates that a scope string is a valid MCP scope
@@ -193,6 +206,17 @@ const toolScopeMap: Record<
       GET_FLOW_CONNECTIONS_API_SCOPE,
       GET_FLOW_RUNS_API_SCOPE,
     ]),
+  },
+  'list-flow-runs': {
+    mcp: ['tableau:mcp:flow:read'],
+    // `flows:read` is needed in addition to `flow_runs:read` because, when the
+    // returned window contains a Failed run, the tool resolves one flow's
+    // `webpageUrl` (Query Flow) to build a run-history deep link for the caller.
+    api: new Set([...LIST_FLOW_RUNS_PRIMARY_API_SCOPES, LIST_FLOW_RUNS_FAILURE_INSIGHT_API_SCOPE]),
+  },
+  'list-flow-tasks': {
+    mcp: ['tableau:mcp:flow:read'],
+    api: new Set(['tableau:flow_tasks:read', 'tableau:mcp_site_settings:read']),
   },
   'query-datasource': {
     mcp: ['tableau:mcp:datasource:read'],
@@ -297,6 +321,15 @@ const toolScopeMap: Record<
     mcp: [],
     api: new Set<TableauApiScope>(),
   },
+  // MCP-app event telemetry relay: no Tableau REST API calls, no content scope required.
+  'record-event': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  'render-interactive-viz': {
+    mcp: ['tableau:mcp:view:read', 'tableau:mcp:workbook:read'],
+    api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
   // Dispatches on `kind` to ts-events, site-content, job-performance (raw VDS) or stale-content
   // (server-side anti-join). Union of the scopes required by all four kinds.
   'query-admin-insights': {
@@ -362,6 +395,8 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   // human-gesture confirm steps for their preview tools and only exist when the iframe can render.
   if (!mcpAppsEnabled) {
     enabledTools.delete('get-embed-token');
+    enabledTools.delete('record-event');
+    enabledTools.delete('render-interactive-viz');
     enabledTools.delete('confirm-update-cloud-extract-refresh-task');
     enabledTools.delete('confirm-delete-content');
   }
@@ -372,6 +407,8 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
   if (!config.flowToolsEnabled) {
     enabledTools.delete('list-flows');
     enabledTools.delete('get-flow');
+    enabledTools.delete('list-flow-runs');
+    enabledTools.delete('list-flow-tasks');
   }
 
   return enabledTools;

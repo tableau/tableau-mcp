@@ -167,6 +167,15 @@ Overrides the default threshold (in days) used by the `get-stale-content-report`
 | `restricted` | Override value must be a valid integer in the range `1`–`3650`. |
 | `unrestricted` | Override value must be a valid integer in the range `1`–`3650`. |
 
+### [`STALE_CONTENT_MAX_ROWS`](env-vars.md#stale_content_max_rows)
+
+Overrides the maximum number of stale-content rows the `query-admin-insights` tool (`kind: "stale-content"`) will return in one call. Above this cap the tool withholds the row payload and returns a `ROW_CAP_EXCEEDED` warning with the true total count. Override value must be an integer in the range `1`–`10000`. Empty string reverts to the default (`100`).
+
+| Restriction Type | Behavior |
+|---|---|
+| `restricted` | Override value must be a valid integer in the range `1`–`10000`. |
+| `unrestricted` | Override value must be a valid integer in the range `1`–`10000`. |
+
 ## Override Hierarchy
 
 Request overrides are applied on top of site overrides and environment variables in the following order of precedence (highest to lowest):

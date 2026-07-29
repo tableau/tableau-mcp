@@ -1,6 +1,8 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { extractToolErrorMessage } from '../../../../utils/extractToolErrorMessage.js';
+import { showError } from '../shared/showError.js';
 import {
   isDeleteDatasourceConfirmResult,
   renderDeleteDatasourceConfirm,
@@ -13,7 +15,6 @@ import {
   isDeleteWorkbookConfirmResult,
   renderDeleteWorkbookConfirm,
 } from './deleteWorkbookConfirmClient.js';
-import { showError } from './showError.js';
 import {
   isUpdateCloudExtractRefreshTaskConfirmResult,
   renderUpdateCloudExtractRefreshTaskConfirm,
@@ -29,7 +30,8 @@ import {
  */
 export function handleConfirmResult(app: App, result: CallToolResult): void {
   if (!result || result.isError) {
-    showError('TOOL_ERROR');
+    const cause = result ? extractToolErrorMessage(result) : undefined;
+    showError('TOOL_ERROR', cause, app);
     return;
   }
 
@@ -51,5 +53,5 @@ export function handleConfirmResult(app: App, result: CallToolResult): void {
   }
 
   // No known confirm-panel shape matched — surface the error UI rather than silently doing nothing.
-  showError('TOOL_ERROR');
+  showError('TOOL_ERROR', undefined, app);
 }

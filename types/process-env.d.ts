@@ -80,6 +80,7 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   INSIGHTS_TOOLS_ENABLED: string | undefined;
   ADMIN_GATE_CACHE_TTL_MINUTES: string | undefined;
   STALE_CONTENT_MIN_AGE_DAYS: string | undefined;
+  STALE_CONTENT_MAX_ROWS: string | undefined;
 }
 
 export interface ProcessEnvDesktop extends ProcessEnvBase {

@@ -10,6 +10,7 @@ coverage/
 test-logs/
 config.json
 env.list
+*.env.list
 manifest.json
 sea-prep.blob
 tableau-mcp
@@ -39,3 +40,9 @@ src/web/apps/dist/
 .work/reports/*.md
 !.work/specs/TEMPLATE.md
 !.work/**/.gitkeep
+
+.worktrees/
+
+# Loose local report / probe artifacts (never commit)
+*.tsv
+stale-*.md

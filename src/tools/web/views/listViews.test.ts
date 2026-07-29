@@ -2,13 +2,14 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { OverridableConfig } from '../../../overridableConfig.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { stubDefaultEnvVars } from '../../../testShared.js';
 import { getCombinationsOfBoundedContextInputs } from '../../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../../utils/invariant.js';
 import { MAX_PAGE_SIZE } from '../../../utils/paginate.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { constrainViews, getListViewsTool } from './listViews.js';
-import { mockView } from './mockView.js';
+import { mockView, mockView2 } from './mockView.js';
 
 const mockViews = {
   pagination: {
@@ -24,6 +25,7 @@ const mockFlattenedView = { ...mockViewWithoutUsage, totalViewCount: 42 };
 
 const mocks = vi.hoisted(() => ({
   mockQueryViewsForSiteData: vi.fn(),
+  mockGetView: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -31,6 +33,7 @@ vi.mock('../../../restApiInstance.js', () => ({
     callback({
       viewsMethods: {
         queryViewsForSite: mocks.mockQueryViewsForSiteData,
+        getView: mocks.mockGetView,
       },
       siteId: 'test-site-id',
     }),
@@ -40,6 +43,12 @@ vi.mock('../../../restApiInstance.js', () => ({
 describe('listViewsTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -203,6 +212,120 @@ describe('listViewsTool', () => {
     expect(result.content[0].text).toContain(errorMessage);
   });
 
+  describe('INCLUDE_VIEW_IDS fast path (fetch by ID)', () => {
+    function makeAxiosError(status: number): Error {
+      return Object.assign(new Error(`Request failed with status code ${status}`), {
+        isAxiosError: true,
+        response: { status },
+      });
+    }
+
+    it('should fetch views by ID when INCLUDE_VIEW_IDS is set and no filter is provided', async () => {
+      vi.stubEnv('INCLUDE_VIEW_IDS', `${mockView.id},${mockView2.id}`);
+      mocks.mockGetView.mockImplementation(async ({ viewId }: { viewId: string }) =>
+        viewId === mockView.id ? mockView : mockView2,
+      );
+
+      const result = await getToolResult({});
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockGetView).toHaveBeenCalledTimes(2);
+      expect(mocks.mockGetView).toHaveBeenCalledWith({
+        siteId: 'test-site-id',
+        viewId: mockView.id,
+        includeUsageStatistics: true,
+      });
+      expect(mocks.mockQueryViewsForSiteData).not.toHaveBeenCalled();
+
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(`${result.content[0].text}`);
+      expect(parsed.data.map((v: { id: string }) => v.id).sort()).toEqual(
+        [mockView.id, mockView2.id].sort(),
+      );
+    });
+
+    it('should silently omit views that return 403 or 404', async () => {
+      vi.stubEnv('INCLUDE_VIEW_IDS', `${mockView.id},not-allowed,missing`);
+      mocks.mockGetView.mockImplementation(async ({ viewId }: { viewId: string }) => {
+        if (viewId === 'not-allowed') {
+          throw makeAxiosError(403);
+        }
+        if (viewId === 'missing') {
+          throw makeAxiosError(404);
+        }
+        return mockView;
+      });
+
+      const result = await getToolResult({});
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(`${result.content[0].text}`);
+      expect(parsed.data).toHaveLength(1);
+      expect(parsed.data[0].id).toBe(mockView.id);
+    });
+
+    it('should propagate non-403/404 errors', async () => {
+      vi.stubEnv('INCLUDE_VIEW_IDS', `${mockView.id},boom`);
+      mocks.mockGetView.mockImplementation(async ({ viewId }: { viewId: string }) => {
+        if (viewId === 'boom') {
+          throw makeAxiosError(500);
+        }
+        return mockView;
+      });
+
+      const result = await getToolResult({});
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('500');
+    });
+
+    it('should use the slow path when a filter is provided alongside INCLUDE_VIEW_IDS', async () => {
+      vi.stubEnv('INCLUDE_VIEW_IDS', mockView.id);
+      mocks.mockQueryViewsForSiteData.mockResolvedValue(mockViews);
+
+      const result = await getToolResult({ filter: 'name:eq:Overview' });
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledTimes(1);
+      expect(mocks.mockGetView).not.toHaveBeenCalled();
+    });
+
+    it('should still apply coexisting bounds (e.g. project) to fetched views', async () => {
+      vi.stubEnv('INCLUDE_VIEW_IDS', `${mockView.id},${mockView2.id}`);
+      // Only mockView's project is allowed; mockView2 must be filtered out by constrainViews.
+      vi.stubEnv('INCLUDE_PROJECT_IDS', mockView.project.id);
+      mocks.mockGetView.mockImplementation(async ({ viewId }: { viewId: string }) =>
+        viewId === mockView.id ? mockView : mockView2,
+      );
+
+      const result = await getToolResult({});
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(`${result.content[0].text}`);
+      expect(parsed.data).toHaveLength(1);
+      expect(parsed.data[0].id).toBe(mockView.id);
+    });
+
+    it('should slice fetched views to the effective limit', async () => {
+      vi.stubEnv('INCLUDE_VIEW_IDS', `${mockView.id},${mockView2.id}`);
+      mocks.mockGetView.mockImplementation(async ({ viewId }: { viewId: string }) =>
+        viewId === mockView.id ? mockView : mockView2,
+      );
+
+      const result = await getToolResult({ limit: 1 });
+
+      expect(result.isError).toBe(false);
+      // All allowed views are fetched before slicing, then trimmed to the limit.
+      expect(mocks.mockGetView).toHaveBeenCalledTimes(2);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(`${result.content[0].text}`);
+      expect(parsed.data).toHaveLength(1);
+    });
+  });
+
   describe('constrainViews', () => {
     it('should return empty result when no views are found', () => {
       const result = constrainViews({
@@ -298,7 +421,7 @@ describe('listViewsTool', () => {
 });
 
 async function getToolResult(params: {
-  filter: string;
+  filter?: string;
   pageNumber?: number;
   limit?: number;
   maxResultLimit?: number | null;

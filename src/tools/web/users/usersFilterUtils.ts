@@ -10,18 +10,11 @@ import {
 // === Field and Operator Definitions ===
 // Client-side filtering for users (API doesn't support server-side filtering)
 
-const FilterFieldSchema = z.enum([
-  'id',
-  'name',
-  'siteRole',
-  'email',
-  'fullName',
-  'lastLogin',
-  'authSetting',
-  'locale',
-  'language',
-  'externalAuthUserId',
-]);
+// Only fields we actually request from Tableau (see listUsers.ts `fields`) are
+// filterable. Filtering on an un-fetched field would silently match nothing —
+// the same class of bug as the original lastLogin defect — so unsupported
+// fields are rejected at parse time with a clear validation error instead.
+const FilterFieldSchema = z.enum(['id', 'name', 'siteRole', 'email', 'fullName', 'lastLogin']);
 
 type FilterField = z.infer<typeof FilterFieldSchema>;
 
@@ -32,10 +25,6 @@ const allowedOperatorsByField: Record<FilterField, FilterOperator[]> = {
   email: ['eq', 'in'],
   fullName: ['eq', 'in'],
   lastLogin: ['eq', 'gt', 'gte', 'lt', 'lte'],
-  authSetting: ['eq', 'in'],
-  locale: ['eq', 'in'],
-  language: ['eq', 'in'],
-  externalAuthUserId: ['eq', 'in'],
 };
 
 const dateFields: Set<FilterField> = new Set(['lastLogin']);
@@ -112,14 +101,6 @@ function getFieldValue(user: User, field: FilterField): string | number | undefi
       return user.fullName;
     case 'lastLogin':
       return user.lastLogin;
-    case 'authSetting':
-      return user.authSetting;
-    case 'locale':
-      return user.locale;
-    case 'language':
-      return user.language;
-    case 'externalAuthUserId':
-      return user.externalAuthUserId;
     default:
       return undefined;
   }
@@ -132,6 +113,18 @@ function matchesFilter(
   field: FilterField,
 ): boolean {
   if (fieldValue === undefined || fieldValue === null) {
+    // A missing date field means the event never happened. For `lastLogin`,
+    // Tableau emits no value for users who have never signed in. Such users are
+    // the *most* inactive, and the user-license-reclamation prompt explicitly
+    // treats them as reclamation candidates, so an "older than X" filter must
+    // include them:
+    //   - lt / lte (older than / on-or-before X)  → MATCH  (never < any date)
+    //   - gt / gte (newer than / on-or-after X)    → NO MATCH (they logged in after nothing)
+    //   - eq (equals a specific date)              → NO MATCH (no date to equal)
+    // Non-date fields keep the original "missing → no match" behavior.
+    if (dateFields.has(field)) {
+      return operator === 'lt' || operator === 'lte';
+    }
     return false;
   }
 

@@ -4,6 +4,9 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../shared/recordEventClient.js');
+
+import { recordEvent } from '../shared/recordEventClient.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
 
 describe('setupOpenInTableauLink', () => {
@@ -109,6 +112,23 @@ describe('setupOpenInTableauLink', () => {
     linkElement.dispatchEvent(clickEvent);
 
     expect(preventDefaultSpy).toHaveBeenCalled();
+  });
+
+  it('should call recordEvent with MCP_APP_CLICKED when link is clicked', async () => {
+    const url = 'https://tableau.example.com/views/workbook/view';
+
+    setupOpenInTableauLink(mockApp, url, container);
+
+    const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
+    expect(linkElement).not.toBeNull();
+
+    // Click the link
+    linkElement.click();
+
+    // Wait for async handler
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(vi.mocked(recordEvent)).toHaveBeenCalledWith(mockApp, 'MCP_APP_CLICKED', url);
   });
 
   it('should show inline error when openLink returns isError true', async () => {

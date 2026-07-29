@@ -49,17 +49,29 @@ const siteContentRowSchema = z
 
 type SiteContentRow = z.infer<typeof siteContentRowSchema>;
 
-// Structured warning attached to a successful result when some requested projectIds were
-// ignored. Follows the `mcp.warnings` convention established by query-datasource
-// (see ContextFilterWarning in validators/validateContextFilters.ts). At most two entries
-// are produced — one per `reason`.
-type StaleReportWarning = {
-  type: 'PROJECT_IDS_IGNORED';
-  severity: 'WARNING';
-  message: string;
-  ignoredProjectIds: string[];
-  reason: 'unknown-on-site' | 'not-permitted-by-config';
-};
+// Structured warning attached to a successful result. Follows the `mcp.warnings` convention
+// established by query-datasource (see ContextFilterWarning in validators/validateContextFilters.ts).
+//
+// - PROJECT_IDS_IGNORED: some requested projectIds were ignored (at most two entries, one per
+//   `reason`).
+// - ROW_CAP_EXCEEDED: the stale-row count exceeded the server-side STALE_CONTENT_MAX_ROWS cap, so
+//   the row payload was withheld (rows: []) while the true totals are still reported.
+type StaleReportWarning =
+  | {
+      type: 'PROJECT_IDS_IGNORED';
+      severity: 'WARNING';
+      message: string;
+      ignoredProjectIds: string[];
+      reason: 'unknown-on-site' | 'not-permitted-by-config';
+    }
+  | {
+      type: 'ROW_CAP_EXCEEDED';
+      severity: 'ERROR';
+      message: string;
+      totalStaleItems: number;
+      maxRows: number;
+      reason: 'over-row-cap';
+    };
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -179,8 +191,12 @@ async function resolveProjectIdsToNames({
 
 // Lazy-initialized cache to avoid module-level parseNumber call.
 // Mirrors the pattern in `adminGate.ts`: ExpiringMap with env-var-configurable TTL,
-// keyed by `${siteId}:${projectId}` -> project name. Full optimization
-// (size limits, eviction policy, telemetry) tracked in W-22551424.
+// keyed by `${siteId}:${projectId}` -> project name.
+//
+// W-22551424: the shared ExpiringMap now supports an optional size cap (see resolver.ts, which opts
+// in). This project-name cache is intentionally left unbounded — it relies on TTL + siteId-keying
+// for invalidation, matching the adminGate cache; add a maxSize here only if project-name volume
+// becomes a memory concern.
 let projectNameCache: ExpiringMap<string, string> | null = null;
 
 function getProjectNameCache(): ExpiringMap<string, string> {
@@ -271,6 +287,31 @@ function buildProjectIdWarnings({
   }
 
   return warnings;
+}
+
+// Builds the ERROR-severity warning attached when the stale-row count exceeds the server-side
+// STALE_CONTENT_MAX_ROWS cap. The row payload is withheld (rows: []) to keep a model from acting on
+// an unreviewed mass set, but `totalStaleItems` still carries the TRUE pre-cap count so read-only
+// `inform` callers can report the magnitude and steer the user to narrow scope.
+function buildRowCapWarning({
+  totalStaleItems,
+  maxRows,
+}: {
+  totalStaleItems: number;
+  maxRows: number;
+}): StaleReportWarning {
+  return {
+    type: 'ROW_CAP_EXCEEDED',
+    severity: 'ERROR',
+    message:
+      `Found ${totalStaleItems} stale items, which exceeds the server-configured cap of ${maxRows} ` +
+      '(STALE_CONTENT_MAX_ROWS). The row payload was withheld to prevent acting on an unreviewed ' +
+      'mass set; totalStaleItems reflects the true count. Narrow the scope (e.g. a specific ' +
+      'projectIds subset or a higher minAgeDays) and re-run to receive rows.',
+    totalStaleItems,
+    maxRows,
+    reason: 'over-row-cap',
+  };
 }
 
 export function computeStaleRows({
@@ -375,12 +416,14 @@ export const exportedForTesting = {
   resolveProjectScopeIds,
   resolveProjectIdsToNames,
   buildProjectIdWarnings,
+  buildRowCapWarning,
   parseSize,
 };
 
 // Exported for reuse by query-admin-insights (kind=stale-content).
 export {
   buildProjectIdWarnings as _buildProjectIdWarnings,
+  buildRowCapWarning as _buildRowCapWarning,
   buildSiteContentQuery as _buildSiteContentQuery,
   resolveProjectIdsToNames as _resolveProjectIdsToNames,
   resolveProjectScopeIds as _resolveProjectScopeIds,

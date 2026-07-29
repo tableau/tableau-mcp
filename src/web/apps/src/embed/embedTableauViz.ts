@@ -1,8 +1,7 @@
 /**
  * @file Tableau Embedding utilities
  */
-
-export const TABLEAU_VIZ_CONTAINER_ID = 'tableauVizContainer';
+import { TABLEAU_VIZ_CONTAINER_ID } from '../shared/vizContainer.js';
 
 /**
  * Creates and configures a Tableau viz element for embedding
