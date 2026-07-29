@@ -41,6 +41,7 @@ const llmInput: LlmProposeInput = {
       slots: [{ slot_id: 'cat', role: ['dimension'], kind: 'categorical', required: true }],
     },
   ],
+  withheld_templates: [],
   fields: [{ name: 'Region', role: 'dimension', type: 'nominal', datatype: 'string' }],
 };
 

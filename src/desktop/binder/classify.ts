@@ -19,7 +19,10 @@
 import Fuse from 'fuse.js';
 
 import { calcForcedSlotIds } from './calc-derivation.js';
-import { fieldSatisfiesSlotConstraint } from './manifest-validation.js';
+import {
+  deriveFastPathBlockers,
+  fieldSatisfiesSlotConstraint,
+} from './manifest-validation.js';
 import type { Derivation, SlotKind, TemplateManifest } from './manifest-types.js';
 import { inferStringTemporal } from './stringTemporal.js';
 import {
@@ -104,6 +107,8 @@ export interface LlmProposeInput {
       temporal_from_string?: boolean;
     }>;
   }>;
+  /** Matching templates kept out of auto-binding, with the manifest-backed reason. */
+  withheld_templates: Array<{ template: string; why: string }>;
   fields: Array<{
     name: string;
     role: 'dimension' | 'measure';
@@ -3552,6 +3557,55 @@ export function classifyNoLlm(
   );
 }
 
+function scoreWithheldTemplates(
+  maskedAsk: string,
+  manifests: Map<string, TemplateManifest>,
+  useFuseFallback: boolean,
+): LlmProposeInput['withheld_templates'] {
+  const withheld = [...manifests.values()].filter(
+    (manifest) => !manifest.fast_path_eligible && manifest.source !== 'local',
+  );
+  let matches = withheld
+    .map((manifest) => ({
+      manifest,
+      score: keywordScore(maskedAsk, manifest.intent_keywords),
+    }))
+    .filter(({ score }) => score > 0);
+
+  if (matches.length === 0 && useFuseFallback) {
+    const fuse = new Fuse(withheld, {
+      keys: ['intent_keywords', 'description'],
+      threshold: 0.5,
+    });
+    const hits = fuse.search(maskedAsk).map((result) => result.item);
+    matches = hits.map((manifest) => ({ manifest, score: 0 }));
+  }
+
+  return matches
+    .sort(
+      (a, b) =>
+        b.score - a.score || a.manifest.template.localeCompare(b.manifest.template),
+    )
+    .map(({ manifest }) => ({
+      template: manifest.template,
+      why: deriveFastPathBlockers(manifest).join('; '),
+    }));
+}
+
+/**
+ * Match withheld templates without changing their eligibility or routability.
+ * Auto-bind warnings use exact intent matches; proposal payloads opt into the
+ * same Fuse fallback used for routable candidates.
+ */
+export function matchWithheldTemplates(
+  ask: string,
+  manifests: Map<string, TemplateManifest>,
+  summary: SchemaSummary,
+  useFuseFallback = false,
+): LlmProposeInput['withheld_templates'] {
+  return scoreWithheldTemplates(maskFieldNames(ask, summary), manifests, useFuseFallback);
+}
+
 /**
  * Build the compact LLM input (design §3.3): keyword-ranked fast-path candidates
  * (Fuse fallback when no exact hit), each with its BINDABLE slots only, plus the
@@ -3577,6 +3631,10 @@ export function buildLlmInput(
   // CLS-001): the propose shortlist must not let a field literally named "Pie"
   // surface the pie family — the same leak masking exists to stop on the fast path.
   const maskedAsk = maskFieldNames(ask, summary);
+  // Visibility is not eligibility: unproven bundled templates remain excluded from
+  // candidate_templates and cannot bind. This separate channel only makes a matching
+  // withheld chart and its reason visible; most have no live render verification.
+  const withheldTemplates = scoreWithheldTemplates(maskedAsk, manifests, true);
 
   let candidates = routable
     .map((m) => ({ m, score: keywordScore(maskedAsk, m.intent_keywords) }))
@@ -3663,6 +3721,7 @@ export function buildLlmInput(
           ...(slot.temporal_from_string ? { temporal_from_string: true } : {}),
         })),
     })),
+    withheld_templates: withheldTemplates,
     fields: narrowed.map((f) => proposeField(f, exposeFieldIdentity, grainLabels.get(f))),
   };
 

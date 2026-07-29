@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { FAMILY_VALUES } from '../../../desktop/binder/manifest.js';
+import { deriveFastPathBlockers, FAMILY_VALUES } from '../../../desktop/binder/manifest.js';
 import type { TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -45,30 +45,6 @@ interface TemplateSummary {
   avoid_when?: string[];
   slots: SlotSummary[];
   calc_count: number;
-}
-
-/**
- * HONEST DERIVATION (Finding 7): the shipped manifests carry `fast_path_blockers: []`
- * for every template — even GREEN ones with `fast_path_eligible: false` — so a caller
- * scanning for WHY a template is a dead end gets zero signal from the raw data. We do NOT
- * hand-edit the compiled manifests (that creates drift). Instead, when a template is
- * ineligible AND its explicit blocker list is empty, derive ONE honest blocker string
- * mechanically from a manifest field the repo already ships: `render_verified === 'none'`
- * means the template carries no live-render-verification stamp — the necessary-but-missing
- * portability proof that gates fast_path_eligible (see PortabilityEvidence). A manifest
- * that DOES carry explicit blockers passes them through untouched; an eligible template
- * has none. Traceable to a field, never fabricated.
- */
-export function deriveFastPathBlockers(
-  m: Pick<TemplateManifest, 'fast_path_eligible' | 'fast_path_blockers' | 'portability_evidence'>,
-): string[] {
-  if (m.fast_path_eligible || m.fast_path_blockers.length > 0) {
-    return m.fast_path_blockers;
-  }
-  if (m.portability_evidence.render_verified === 'none') {
-    return ['not-live-render-verified: this template has no live render verification stamp'];
-  }
-  return [];
 }
 
 // Field names here mirror the manifest's serialized (snake_case) data contract —

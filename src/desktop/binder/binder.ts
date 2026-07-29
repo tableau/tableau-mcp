@@ -27,6 +27,7 @@ import {
   type EncodingReport,
   type LlmProposeInput as CoreLlmProposeInput,
   type LooseFieldReferenceResolution,
+  matchWithheldTemplates,
   MAX_CLASSIFIABLE_FIELDS,
   resolveEncodingFieldInAsk,
   resolveLooseFieldReference,
@@ -628,6 +629,17 @@ export async function bindTemplate(args: {
     };
     const res = validateAndBuild(proposal, args.manifests, summary, minConfidence, false, args.ask);
     if (res.status === 'bound') {
+      const withheld = matchWithheldTemplates(args.ask, args.manifests, summary);
+      if (withheld.length > 0) {
+        res.warnings = [
+          ...(res.warnings ?? []),
+          ...withheld.map(
+            ({ template, why }) =>
+              `The request also matches withheld template '${template}', but it was not ` +
+              `auto-bound. ${why} Auto-bound '${cls.template}' instead.`,
+          ),
+        ];
+      }
       // Surface the classifier's advisory provenance (e.g. a required geo slot
       // auto-completed from the schema, W60) alongside any avoid_when warnings, using
       // the bound result's existing `warnings` channel — never a blocker.
@@ -653,9 +665,21 @@ export async function bindTemplate(args: {
     // else fall through — the no-LLM guess didn't validate.
   }
 
+  const input = buildLlmInput(args.ask, args.manifests, summary);
+  if (input.withheld_templates.length > 0) {
+    const withheld = input.withheld_templates
+      .map(({ template, why }) => `'${template}' (${why})`)
+      .join('; ');
+    declineReason = {
+      ...declineReason,
+      detail:
+        `${declineReason.detail}; the request matched withheld ` +
+        `template${input.withheld_templates.length === 1 ? '' : 's'} ${withheld}`,
+    };
+  }
+
   // ── Miss. Eval-only injected LLM closes the loop in-process ───────
   if (args.llmPropose) {
-    const input = buildLlmInput(args.ask, args.manifests, summary);
     const proposal = await args.llmPropose(input);
     return validateAndBuild(proposal, args.manifests, summary, minConfidence, true, args.ask);
   }
@@ -664,7 +688,7 @@ export async function bindTemplate(args: {
   return {
     status: 'propose',
     decline_reason: declineReason,
-    llm_input: buildLlmInput(args.ask, args.manifests, summary),
+    llm_input: input,
     output_schema: PROPOSAL_OUTPUT_SCHEMA,
   };
 }

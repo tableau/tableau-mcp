@@ -55,6 +55,49 @@ export function isRenderVerifiedLive(rv: string): boolean {
   return /^live-\d{4}-\d{2}-\d{2}$/.test(rv);
 }
 
+/**
+ * User-facing explanations for the closed blocker-code taxonomy. Keep the enum
+ * internal: callers need to know what is missing and whether they can remedy it.
+ */
+const BLOCKER_REASONS: Readonly<Record<BlockerCode, string>> = {
+  HARDCODED_FILTER_MEMBERS:
+    'This template contains fixed filter values that may not exist in the current data.',
+  GENERATED_GEO_REQUIRED:
+    'This template requires Tableau-generated geographic fields that the binder cannot create.',
+  PSEUDO_FIELD_REQUIRED:
+    'This template requires a Tableau-generated pseudo-field that the binder cannot bind.',
+  PARAMETER_REQUIRED:
+    'This template requires a workbook parameter that the binder cannot create or bind.',
+  NO_DATASOURCE_PLACEHOLDER:
+    'This template has no datasource placeholder that can be replaced safely.',
+  DATASET_SPECIFIC_FORMULA:
+    'This template contains a formula tied to a specific dataset and cannot be safely reused automatically.',
+};
+
+/**
+ * Explain every manifest field that actually makes a template ineligible. An
+ * inconsistent `fast_path_eligible: false` with no such field returns no reason;
+ * callers and contract tests can then fail instead of publishing invented prose.
+ */
+export function deriveFastPathBlockers(
+  manifest: Pick<
+    TemplateManifest,
+    'readiness' | 'fast_path_eligible' | 'fast_path_blockers' | 'portability_evidence'
+  >,
+): string[] {
+  if (manifest.fast_path_eligible) return [];
+
+  const reasons = manifest.fast_path_blockers.map((code) => BLOCKER_REASONS[code]);
+  if (manifest.readiness === 'RED') reasons.push('This template is marked not ready for use.');
+  if (!manifest.portability_evidence.fixture_bind) {
+    reasons.push('This template could not bind all required fields in the portability test.');
+  }
+  if (!isRenderVerifiedLive(manifest.portability_evidence.render_verified)) {
+    reasons.push('This template has not passed live render verification.');
+  }
+  return reasons;
+}
+
 const SLOT_KINDS: ReadonlySet<SlotKind> = new Set<SlotKind>([
   'quantitative',
   'categorical',

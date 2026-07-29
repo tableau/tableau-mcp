@@ -1,13 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { loadManifests } from '../../../desktop/binder/manifest.js';
+import { deriveFastPathBlockers, loadManifests } from '../../../desktop/binder/manifest.js';
 import type { Family, TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { deriveFastPathBlockers, getListTemplatesTool } from './listTemplates.js';
+import { getListTemplatesTool } from './listTemplates.js';
 
 // Exercises the tool against the REAL bundled provider (the data ships in-repo, so this
 // stays hermetic) — proving list-templates is a genuine consumer of the milestone-1
@@ -102,42 +102,84 @@ describe('listTemplatesTool', () => {
   });
 
   it('derives an honest fast_path_blocker for ineligible templates the manifest left empty', async () => {
-    // A GREEN template that is fast_path_eligible: false with an EMPTY explicit blocker
-    // list would otherwise report `[]` — no signal. render_verified 'none' yields the
-    // single derived, manifest-traceable blocker (Finding 7).
     const ineligibleEmpty: Pick<
       TemplateManifest,
-      'fast_path_eligible' | 'fast_path_blockers' | 'portability_evidence'
+      'readiness' | 'fast_path_eligible' | 'fast_path_blockers' | 'portability_evidence'
     > = {
+      readiness: 'YELLOW',
       fast_path_eligible: false,
       fast_path_blockers: [],
       portability_evidence: { fixture_bind: true, render_verified: 'none' },
     };
     expect(deriveFastPathBlockers(ineligibleEmpty)).toEqual([
-      'not-live-render-verified: this template has no live render verification stamp',
+      'This template has not passed live render verification.',
     ]);
   });
 
-  it('passes explicit manifest blockers through untouched (no derivation)', () => {
-    const withBlockers: Pick<
-      TemplateManifest,
-      'fast_path_eligible' | 'fast_path_blockers' | 'portability_evidence'
-    > = {
-      fast_path_eligible: false,
-      fast_path_blockers: ['GENERATED_GEO_REQUIRED', 'PARAMETER_REQUIRED'],
-      portability_evidence: { fixture_bind: false, render_verified: 'none' },
-    };
-    expect(deriveFastPathBlockers(withBlockers)).toEqual([
-      'GENERATED_GEO_REQUIRED',
-      'PARAMETER_REQUIRED',
-    ]);
+  it('translates every explicit blocker code into user-facing guidance', () => {
+    const reasons = {
+      HARDCODED_FILTER_MEMBERS:
+        'This template contains fixed filter values that may not exist in the current data.',
+      GENERATED_GEO_REQUIRED:
+        'This template requires Tableau-generated geographic fields that the binder cannot create.',
+      PSEUDO_FIELD_REQUIRED:
+        'This template requires a Tableau-generated pseudo-field that the binder cannot bind.',
+      PARAMETER_REQUIRED:
+        'This template requires a workbook parameter that the binder cannot create or bind.',
+      NO_DATASOURCE_PLACEHOLDER:
+        'This template has no datasource placeholder that can be replaced safely.',
+      DATASET_SPECIFIC_FORMULA:
+        'This template contains a formula tied to a specific dataset and cannot be safely reused automatically.',
+    } as const;
+
+    for (const [code, reason] of Object.entries(reasons)) {
+      expect(
+        deriveFastPathBlockers({
+          readiness: 'YELLOW',
+          fast_path_eligible: false,
+          fast_path_blockers: [code as TemplateManifest['fast_path_blockers'][number]],
+          portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-06' },
+        }),
+      ).toEqual([reason]);
+    }
+  });
+
+  it('derives fixture-bind and readiness causes recorded by the manifest', () => {
+    expect(
+      deriveFastPathBlockers({
+        readiness: 'YELLOW',
+        fast_path_eligible: false,
+        fast_path_blockers: [],
+        portability_evidence: { fixture_bind: false, render_verified: 'live-2026-07-06' },
+      }),
+    ).toEqual(['This template could not bind all required fields in the portability test.']);
+    expect(
+      deriveFastPathBlockers({
+        readiness: 'RED',
+        fast_path_eligible: false,
+        fast_path_blockers: [],
+        portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-06' },
+      }),
+    ).toEqual(['This template is marked not ready for use.']);
+  });
+
+  it('returns no invented reason when an ineligible flag has no recorded cause', () => {
+    expect(
+      deriveFastPathBlockers({
+        readiness: 'YELLOW',
+        fast_path_eligible: false,
+        fast_path_blockers: [],
+        portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-06' },
+      }),
+    ).toEqual([]);
   });
 
   it('derives no blocker for a fast-path-eligible template', () => {
     const eligible: Pick<
       TemplateManifest,
-      'fast_path_eligible' | 'fast_path_blockers' | 'portability_evidence'
+      'readiness' | 'fast_path_eligible' | 'fast_path_blockers' | 'portability_evidence'
     > = {
+      readiness: 'GREEN',
       fast_path_eligible: true,
       fast_path_blockers: [],
       portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-06' },
@@ -145,31 +187,18 @@ describe('listTemplatesTool', () => {
     expect(deriveFastPathBlockers(eligible)).toEqual([]);
   });
 
-  it('every bundled ineligible template surfaces a non-empty honest blocker (W26-B re-snapshot set)', () => {
-    // W26-B closed the 17 → 39 gap. Every one of the 29 ineligible templates must surface a
-    // non-empty, honest fast_path_blocker through the EXISTING deriveFastPathBlockers mechanism —
-    // no ineligible template may be a zero-signal dead end. Two honest branches, both covered:
-    //   - render_verified 'none' with no explicit factory blocker → the derived not-live-render-
-    //     verified string (the bulk of the newly-added propose-only templates), and
-    //   - explicit factory BlockerCodes (e.g. HARDCODED_FILTER_MEMBERS, PARAMETER_REQUIRED) →
-    //     passed through untouched.
+  it('every bundled ineligible template has a recorded or derivable cause', () => {
     const ineligible = allManifests.filter((m) => !m.fast_path_eligible);
     expect(ineligible.length).toBeGreaterThan(0);
     for (const m of ineligible) {
       const blockers = deriveFastPathBlockers(m);
       expect(blockers.length, `${m.template} must surface a blocker`).toBeGreaterThan(0);
-      if (m.fast_path_blockers.length === 0) {
-        // The derived blocker is only honest when the manifest truly carries no live stamp.
-        expect(m.portability_evidence.render_verified, `${m.template} render_verified`).toBe(
-          'none',
-        );
-        expect(blockers, `${m.template} derived blocker`).toEqual([
-          'not-live-render-verified: this template has no live render verification stamp',
-        ]);
-      } else {
-        // Explicit factory blocker codes travel through unchanged (no derivation).
-        expect(blockers, `${m.template} explicit blockers`).toEqual(m.fast_path_blockers);
-      }
+      expect(
+        blockers.some((reason) =>
+          m.fast_path_blockers.includes(reason as TemplateManifest['fast_path_blockers'][number]),
+        ),
+        `${m.template} must not expose a raw blocker code`,
+      ).toBe(false);
     }
   });
 
