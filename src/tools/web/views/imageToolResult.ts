@@ -34,7 +34,7 @@ export type ImageToolResult =
  * presigned-URL result and the Slack `_meta` block it carries (emitted in
  * `convertViewImageUrlToToolResult`) only exist on the `kind: 'url'` branch, so
  * disabling the flag keeps both behind the gate and preserves the original
- * inline-base64 behavior. The `imageS3.enabled` check still guards against a
+ * inline-base64 behavior. The `bucketS3.enabled` check still guards against a
  * missing bucket so an enabled flag without config doesn't attempt a doomed
  * upload on every request.
  *
@@ -58,7 +58,7 @@ export async function buildImageToolResult({
   toolName: string;
   keyPrefixSegment: string;
 }): Promise<ImageToolResult> {
-  if (!config.imageS3.enabled || !(await getFeatureGate().isFeatureEnabled('view-file-mode'))) {
+  if (!config.bucketS3.enabled || !(await getFeatureGate().isFeatureEnabled('view-file-mode'))) {
     return { kind: 'inline', imageData, format };
   }
 
@@ -67,8 +67,8 @@ export async function buildImageToolResult({
       format: format ?? 'PNG',
       resourceId,
       config: {
-        ...config.imageS3,
-        keyPrefix: joinImageS3Prefix(config.imageS3.keyPrefix, keyPrefixSegment),
+        ...config.bucketS3,
+        keyPrefix: joinImageS3Prefix(config.bucketS3.keyPrefix, keyPrefixSegment),
       },
     });
     return { kind: 'url', url, format };

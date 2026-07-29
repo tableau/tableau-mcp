@@ -2,9 +2,9 @@ import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 import {
+  BucketS3Config,
   buildImageS3Key,
   exportedForTesting,
-  ImageS3Config,
   joinImageS3Prefix,
   uploadImageToS3,
 } from './uploadImageToS3.js';
@@ -24,7 +24,7 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: mocks.getSignedUrl,
 }));
 
-const baseConfig: ImageS3Config = {
+const baseConfig: BucketS3Config = {
   bucket: 'tableau-images',
   region: 'us-east-1',
   keyPrefix: 'view-images/',
