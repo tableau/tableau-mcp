@@ -31,10 +31,7 @@ const AUTHORING_ATTEMPT_TOOLS: ReadonlySet<DesktopToolName> = new Set([
   'execute-tableau-command',
 ]);
 
-const BIND_FIRST_ORIENTATION_TOOLS: ReadonlySet<DesktopToolName> = new Set([
-  'list-available-fields',
-  'get-worksheet-xml',
-]);
+const BIND_FIRST_ORIENTATION_TOOLS: ReadonlySet<DesktopToolName> = new Set(['get-worksheet-xml']);
 
 export const BIND_FIRST_ORIENTATION_REDIRECT =
   "Bind first: call bind-template with the user's verbatim ask (it reads the schema itself), or start with author-parameter/author-set for parameter/set asks. This tool unlocks after the first attempt, for repair and edits.";
