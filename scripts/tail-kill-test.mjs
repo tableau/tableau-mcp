@@ -869,7 +869,11 @@ async function executeRun({ run, session, failureMode, outDir, stage }) {
   await writeFile(settingsPath, '{}\n', 'utf8');
   let processResult;
   try {
-    processResult = await runClaudeWithLaunchRetry(configPath, settingsPath, buildPrompt(failureMode));
+    processResult = await runClaudeWithLaunchRetry(
+      configPath,
+      settingsPath,
+      buildPrompt(failureMode),
+    );
   } finally {
     await unlink(configPath).catch(() => undefined);
     await unlink(settingsPath).catch(() => undefined);
