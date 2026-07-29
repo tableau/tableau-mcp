@@ -621,3 +621,84 @@ CSP_ALLOWED_DOMAINS=https://*.mycompany.tableau.com,https://*.online.tableau.com
 ```
 
 This allows embedding Tableau visualizations from custom Tableau Server domains in addition to the default Tableau Cloud domains.
+
+<hr />
+
+## `MCP_S3_BUCKET`
+
+Enables offloading rendered view images to Amazon S3. When set, the `get-view-image` and
+`get-custom-view-image` tools upload the rendered image to this bucket and return a short-lived
+presigned URL (as a `resource_link` content block) instead of inlining the image as base64. The
+client fetches the image bytes directly from S3, so the image never streams back through the MCP
+server on read.
+
+- Requires the `view-file-mode` feature flag to be enabled (see `features.json`). When the flag is
+  disabled, this variable has no effect and the tools return inline base64.
+- Default: unset (feature disabled — tools return inline base64, the original behavior).
+- When set, must be a valid S3 bucket name (lowercase letters, numbers, dots, and hyphens only).
+- AWS credentials are resolved via the default AWS SDK credential chain (IAM role / instance
+  profile / standard `AWS_*` environment variables); no credentials are read from the MCP config.
+- If an upload fails, the tool falls back to returning inline base64 and logs a warning, so image
+  retrieval never hard-fails.
+
+**Example:**
+
+```bash
+MCP_S3_BUCKET=tableau-images
+```
+
+<hr />
+
+## `AWS_DEFAULT_REGION`
+
+The AWS region of the S3 bucket used for image offload.
+
+- Default: unset. If not set, the AWS SDK resolves the region from the environment via its standard
+  credential/region chain.
+- Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
+
+**Example:**
+
+```bash
+AWS_DEFAULT_REGION=us-east-1
+```
+
+<hr />
+
+## `MCP_IMAGE_PREFIX`
+
+The base key prefix (folder path) under which uploaded images are stored in the bucket. Each
+view-image tool appends its own segment to this base, so images are namespaced per tool. Slashes are
+normalized automatically.
+
+- Default: unset (empty). When unset, each tool uses only its own segment.
+- Per-tool segments: `get-view-image` → `view-images/`, `get-custom-view-image` →
+  `custom-view-images/`.
+- Objects are keyed as `<base><tool-segment><resourceId>/<uuid>.<ext>`. For example, with
+  `MCP_IMAGE_PREFIX=tableau/`, a view image is keyed under `tableau/view-images/...` and a custom
+  view image under `tableau/custom-view-images/...`. Unset, they are keyed under `view-images/...`
+  and `custom-view-images/...` respectively.
+- Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
+
+**Example:**
+
+```bash
+MCP_IMAGE_PREFIX=tableau/
+```
+
+<hr />
+
+## `IMAGE_PRESIGN_TTL`
+
+The lifetime of the presigned GET URL returned to the client. The value is in seconds. The link
+should be fetched promptly rather than stored.
+
+- Default: `30` (30 seconds).
+- Clamped to the range `5`–`900` (5 seconds–15 minutes).
+- Only relevant when [`MCP_S3_BUCKET`](#mcp_s3_bucket) is set.
+
+**Example:**
+
+```bash
+IMAGE_PRESIGN_TTL=30
+```

@@ -7,6 +7,11 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
+import {
+  buildDataToolResult,
+  DataToolResult,
+  dataToolResultToCallToolResult,
+} from './dataToolResult.js';
 
 const paramsSchema = {
   viewId: z.string(),
@@ -22,6 +27,7 @@ export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsS
     name: 'get-view-data',
     description: [
       "Retrieves comma-separated value (CSV) data for the specified view in a Tableau workbook, including the user's filters.",
+      "If the request is for a dashboard, only data for the dashboard's first view is returned.",
       'Requires the view LUID from the content URL (not the published view id).',
       'For custom views, use the tool to get custom view data by custom view id instead.',
     ].join(' '),
@@ -34,7 +40,7 @@ export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsS
       openWorldHint: false,
     },
     callback: async ({ viewId, viewFilters }, extra): Promise<CallToolResult> => {
-      return await getViewDataTool.logAndExecute<string>({
+      return await getViewDataTool.logAndExecute<DataToolResult>({
         extra,
         args: { viewId, viewFilters },
         callback: async () => {
@@ -47,26 +53,38 @@ export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsS
             return new ViewNotAllowedError(isViewAllowedResult.message).toErr();
           }
 
+          const csv = await useRestApi({
+            ...extra,
+            jwtScopes: getViewDataTool.requiredApiScopes,
+            callback: async (restApi) => {
+              return await restApi.viewsMethods.queryViewData({
+                viewId,
+                siteId: restApi.siteId,
+                viewFilters,
+              });
+            },
+          });
+
+          // Offload to S3 (returning a presigned URL) when configured, otherwise
+          // carry the raw CSV for an inline text result. Falls back to inline on
+          // any S3 failure.
           return new Ok(
-            await useRestApi({
-              ...extra,
-              jwtScopes: getViewDataTool.requiredApiScopes,
-              callback: async (restApi) => {
-                return await restApi.viewsMethods.queryViewData({
-                  viewId,
-                  siteId: restApi.siteId,
-                  viewFilters,
-                });
-              },
+            await buildDataToolResult({
+              csv,
+              resourceId: viewId,
+              config: extra.config,
+              toolName: getViewDataTool.name,
+              keyPrefixSegment: 'view-data/',
             }),
           );
         },
-        constrainSuccessResult: (viewData) => {
+        constrainSuccessResult: (dataToolResult) => {
           return {
             type: 'success',
-            result: viewData,
+            result: dataToolResult,
           };
         },
+        getSuccessResult: (dataToolResult) => dataToolResultToCallToolResult(dataToolResult),
       });
     },
   });
