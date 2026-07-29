@@ -155,7 +155,7 @@ export class Config extends BaseConfig {
       MCP_S3_BUCKET: bucketS3Bucket,
       AWS_DEFAULT_REGION: awsDefaultRegion,
       MCP_IMAGE_PREFIX: bucketS3KeyPrefix,
-      IMAGE_PRESIGN_TTL: bucketS3PresignTtlSeconds,
+      FILE_TTL: bucketS3PresignTtlSeconds,
     } = cleansedVars;
 
     let jwtUsername = '';
