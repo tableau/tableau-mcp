@@ -16,6 +16,24 @@ const WORKBOOK_XML = `<?xml version="1.0" encoding="UTF-8"?>
       <column name="[Profit Ratio]" datatype="real" role="measure" type="quantitative" caption="Profit Ratio">
         <calculation class="tableau" formula="SUM([Profit])/SUM([Sales])"/>
       </column>
+      <column name="[Goals Band]" datatype="real" role="measure" type="quantitative" caption="Goals Band">
+        <calculation class="tableau" formula="FLOOR({FIXED [Team Name] : SUM([Goals])} / 25) * 25"/>
+      </column>
+      <column name="[Running Sales]" datatype="real" role="measure" type="quantitative" caption="Running Sales">
+        <calculation class="tableau" formula="RUNNING_SUM(SUM([Sales]))"/>
+      </column>
+      <column name="[Attr Category]" datatype="string" role="dimension" type="nominal" caption="Attr Category">
+        <calculation class="tableau" formula="ATTR([Category])"/>
+      </column>
+      <column name="[Sales Correlation]" datatype="real" role="measure" type="quantitative" caption="Sales Correlation">
+        <calculation class="tableau" formula="CORR([Sales], [Sales])"/>
+      </column>
+      <column name="[Sales Population Covariance]" datatype="real" role="measure" type="quantitative" caption="Sales Population Covariance">
+        <calculation class="tableau" formula="COVARP([Sales], [Sales])"/>
+      </column>
+      <column name="[Sales Sample Covariance]" datatype="real" role="measure" type="quantitative" caption="Sales Sample Covariance">
+        <calculation class="tableau" formula="COVAR([Sales], [Sales])"/>
+      </column>
     </datasource>
   </datasources>
   <worksheets>
@@ -159,6 +177,39 @@ describe('listAvailableFields', () => {
     expect(profitRatio).toBeDefined();
     expect(profitRatio?.isAggregated).toBe(true);
     expect(profitRatio?.formula).toBeDefined();
+  });
+
+  it('keeps a FIXED LOD calculation on a non-usr derivation', () => {
+    const fields = listAvailableFields(WORKBOOK_XML);
+    const goalsBand = fields.find((f) => f.columnName === '[Goals Band]');
+
+    expect(goalsBand?.isAggregated).toBe(false);
+    expect(goalsBand?.derivation).toBe(AggregationType.Sum);
+    expect(goalsBand?.columnInstanceName).toBe('[sum:Goals Band:qk]');
+  });
+
+  it('classifies a table calculation as aggregated with a usr derivation', () => {
+    const fields = listAvailableFields(WORKBOOK_XML);
+    const runningSales = fields.find((f) => f.columnName === '[Running Sales]');
+
+    expect(runningSales?.isAggregated).toBe(true);
+    expect(runningSales?.derivation).toBe(AggregationType.User);
+    expect(runningSales?.columnInstanceName).toBe('[usr:Running Sales:qk]');
+  });
+
+  it.each([
+    ['Attr Category', 'nk'],
+    ['Sales Correlation', 'qk'],
+    ['Sales Population Covariance', 'qk'],
+    ['Sales Sample Covariance', 'qk'],
+  ])('classifies %s as aggregated with a usr derivation', (fieldName, typeSuffix) => {
+    const field = listAvailableFields(WORKBOOK_XML).find(
+      (candidate) => candidate.columnName === `[${fieldName}]`,
+    );
+
+    expect(field?.isAggregated).toBe(true);
+    expect(field?.derivation).toBe(AggregationType.User);
+    expect(field?.columnInstanceName).toBe(`[usr:${fieldName}:${typeSuffix}]`);
   });
 
   it('should return an empty array when the workbook has no datasources', () => {

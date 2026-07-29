@@ -36,6 +36,18 @@ describe('mixed-aggregation-calc rule', () => {
     expect(mixedAggregationCalcRule.validate(wb(formula))).toHaveLength(0);
   });
 
+  it('does not treat an aggregate-looking bracketed field as an aggregate call', () => {
+    const formula = 'IF [Region]="West" THEN [Total (USD)] ELSE 0 END';
+    expect(checkFormula(formula)).toBe(false);
+    expect(mixedAggregationCalcRule.validate(wb(formula))).toHaveLength(0);
+  });
+
+  it('preserves an aggregate-looking bare field in a condition', () => {
+    const formula = 'IF [Total (USD)] > 0 THEN SUM([Sales]) ELSE 0 END';
+    expect(checkFormula(formula)).toBe(true);
+    expect(mixedAggregationCalcRule.validate(wb(formula))).toHaveLength(1);
+  });
+
   it('flags IIF with a bare-field condition and aggregate branches', () => {
     const formula = "IIF([Profit Tier] = 'Everyone Else', SUM([Profit]), SUM([Profit]) / 2)";
     expect(checkFormula(formula)).toBe(true);
