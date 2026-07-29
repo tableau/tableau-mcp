@@ -4,6 +4,7 @@
  */
 
 import { resolveDerivation } from '../derivations.js';
+import { isAggregateOrTableCalc } from './calculation-classifier.js';
 import {
   forEachRelationColumn,
   inferFieldTypeFromType,
@@ -834,21 +835,7 @@ function ensureColumnInstanceInDependencies(
   // If it's a calculated field with aggregation, we need to use usr prefix
   if (existingBaseColumn?.calculation?.['@_formula']) {
     const formula = existingBaseColumn.calculation['@_formula'];
-    const aggFunctions = [
-      'SUM(',
-      'AVG(',
-      'MIN(',
-      'MAX(',
-      'COUNT(',
-      'COUNTD(',
-      'STDEV(',
-      'STDEVP(',
-      'VAR(',
-      'VARP(',
-      'MEDIAN(',
-      'PERCENTILE(',
-    ];
-    const hasAggregation = aggFunctions.some((fn) => formula.toUpperCase().includes(fn));
+    const hasAggregation = isAggregateOrTableCalc(formula);
 
     if (hasAggregation && parsed.derivation !== 'User') {
       correctedInstanceName = `[usr:${parsed.localFieldName}:${parsed.pivot}]`;
@@ -1004,21 +991,7 @@ function ensureColumnInstanceInDependencies(
     let actualColumnInstanceName = correctedInstanceName;
     if (baseColumn?.calculation?.['@_formula']) {
       const formula = baseColumn.calculation['@_formula'];
-      const aggFunctions = [
-        'SUM(',
-        'AVG(',
-        'MIN(',
-        'MAX(',
-        'COUNT(',
-        'COUNTD(',
-        'STDEV(',
-        'STDEVP(',
-        'VAR(',
-        'VARP(',
-        'MEDIAN(',
-        'PERCENTILE(',
-      ];
-      const hasAggregation = aggFunctions.some((fn) => formula.toUpperCase().includes(fn));
+      const hasAggregation = isAggregateOrTableCalc(formula);
 
       if (hasAggregation && parsedCorrected.derivation !== 'User') {
         // This calculated field already has aggregation - use User derivation to prevent double aggregation

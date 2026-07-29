@@ -71,7 +71,7 @@ export function formatWorksheetPromiseCheck(input: WorksheetReceiptInput): strin
       parts.push('readback warnings (listed above)');
       break;
     case 'failed':
-      parts.push('readback FAILED (nodes dropped)');
+      parts.push('readback did not match the intended nodes (listed above)');
       break;
     case 'skipped':
     default:

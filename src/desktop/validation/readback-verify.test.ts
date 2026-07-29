@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatReadbackVerificationError, verifyWorksheetReadback } from './readback-verify.js';
+import {
+  formatReadbackVerificationError,
+  formatReadbackVerificationWarnings,
+  verifyWorksheetReadback,
+} from './readback-verify.js';
 
 const GEO_FIELD = '[DS].[none:State:nk]';
 const PROFIT_FIELD = '[DS].[sum:Profit:qk]';
 const SALES_FIELD = '[DS].[sum:Sales:qk]';
+const GROUP_FIELD = '[DS].[none:Group Name:nk]';
+const SNAPSHOT_FIELD = 'Day-Trunc([DS].[Snapshot Time])';
+const TEAM_FIELD = '[DS].[none:Team:nk]';
+const BINARY_COPY_FIELD = '[DS].[none:Binary (copy):nk]';
 
 function worksheet(inner: string): string {
   return `<worksheet name="Blank Map"><table>${inner}</table></worksheet>`;
@@ -247,6 +255,96 @@ describe('verifyWorksheetReadback', () => {
     );
   });
 
+  it.each([
+    {
+      shelf: 'cols',
+      intended: GROUP_FIELD,
+      readback: `(${GROUP_FIELD})`,
+    },
+    {
+      shelf: 'cols',
+      intended: `${GROUP_FIELD} / ${SNAPSHOT_FIELD}`,
+      readback: `( ${SNAPSHOT_FIELD} * ${GROUP_FIELD} )`,
+    },
+    {
+      shelf: 'cols',
+      intended: `${GROUP_FIELD} / ${SNAPSHOT_FIELD} / ${TEAM_FIELD}`,
+      readback: `( ${GROUP_FIELD} * ( ${SNAPSHOT_FIELD} * ${TEAM_FIELD} ) )`,
+    },
+    {
+      shelf: 'rows',
+      intended: GROUP_FIELD,
+      readback: `(${GROUP_FIELD})`,
+    },
+    {
+      shelf: 'rows',
+      intended: `${GROUP_FIELD} / ${SNAPSHOT_FIELD}`,
+      readback: `(${GROUP_FIELD}*${SNAPSHOT_FIELD})`,
+    },
+    {
+      shelf: 'rows',
+      intended: `${GROUP_FIELD} / ${SNAPSHOT_FIELD} / ${TEAM_FIELD}`,
+      readback: `((${TEAM_FIELD} * ${GROUP_FIELD})*${SNAPSHOT_FIELD})`,
+    },
+  ])(
+    'compares the declared field set for $shelf shelf expressions',
+    ({ shelf, intended, readback }) => {
+      const intendedXml = worksheet(`<${shelf}>${intended}</${shelf}>`);
+      const readbackXml = worksheet(`<${shelf}>${readback}</${shelf}>`);
+
+      expect(verifyWorksheetReadback(intendedXml, readbackXml)).toEqual([]);
+    },
+  );
+
+  it('still flags a field genuinely absent from a combined shelf expression', () => {
+    const intended = worksheet(`<cols>(${GROUP_FIELD} * ${SNAPSHOT_FIELD})</cols>`);
+    const readback = worksheet(`<cols>${GROUP_FIELD}</cols>`);
+
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual({
+      kind: 'shelf',
+      node: 'cols',
+      column: SNAPSHOT_FIELD,
+      intended: SNAPSHOT_FIELD,
+      readback: 'changed',
+      severity: 'error',
+    });
+  });
+
+  it('displays the raw field name while matching shelves by normalized value', () => {
+    const intended = worksheet(`<cols>${BINARY_COPY_FIELD}</cols>`);
+    const readback = worksheet('<cols></cols>');
+
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual({
+      kind: 'shelf',
+      node: 'cols',
+      column: BINARY_COPY_FIELD,
+      intended: BINARY_COPY_FIELD,
+      readback: 'missing',
+      severity: 'error',
+    });
+  });
+
+  it('ignores spacing differences around plus shelf expressions', () => {
+    const intended = worksheet(`<cols>(${PROFIT_FIELD} + ${SALES_FIELD})</cols>`);
+    const readback = worksheet(`<cols>(${PROFIT_FIELD}+${SALES_FIELD})</cols>`);
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([]);
+  });
+
+  it('does not deduplicate a repeated field in a plus shelf expression', () => {
+    const intended = worksheet(`<cols>(${SALES_FIELD} + ${SALES_FIELD})</cols>`);
+    const readback = worksheet(`<cols>${SALES_FIELD}</cols>`);
+
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual({
+      kind: 'shelf',
+      node: 'cols',
+      column: `${SALES_FIELD} + ${SALES_FIELD}`,
+      intended: `${SALES_FIELD} + ${SALES_FIELD}`,
+      readback: 'changed',
+      severity: 'error',
+    });
+  });
+
   it('does not flag an authored Automatic mark that Tableau resolved to a concrete class', () => {
     const intended = encodedWorksheet().replace(
       '<mark class="Shape"/>',
@@ -289,6 +387,42 @@ describe('verifyWorksheetReadback', () => {
   });
 });
 
+describe('readback finding messages', () => {
+  it('describes the missing readback evidence without asserting chart failure', () => {
+    const findings = [
+      {
+        kind: 'shelf',
+        node: 'cols',
+        column: SNAPSHOT_FIELD,
+        intended: SNAPSHOT_FIELD,
+        readback: 'missing',
+        severity: 'error',
+      },
+    ] as const;
+
+    expect(formatReadbackVerificationError([...findings])).toBe(
+      `Readback had no exact match for intended <cols column="${SNAPSHOT_FIELD}">. Inspect the readback XML and rendered chart before relying on the result.`,
+    );
+  });
+
+  it('describes the unmatched sort evidence in the warning', () => {
+    const findings = [
+      {
+        kind: 'sort',
+        node: 'computed-sort',
+        column: GEO_FIELD,
+        intended: '<computed-sort>',
+        readback: 'changed',
+        severity: 'warning',
+      },
+    ] as const;
+
+    expect(formatReadbackVerificationWarnings([...findings])).toBe(
+      `\n\n⚠️ Readback verification warning — readback had no exact match for intended <computed-sort column="${GEO_FIELD}">. Inspect the readback XML and rendered chart before relying on the result.`,
+    );
+  });
+});
+
 describe('verifyWorksheetReadback — column-instance co-dependency (RT finding RB-03)', () => {
   const withDeps = (deps: string): string =>
     `<worksheet name="Map"><table>
@@ -326,5 +460,28 @@ describe('verifyWorksheetReadback — column-instance co-dependency (RT finding 
 
   it('does not fire when the intended XML never declared the instance either', () => {
     expect(verifyWorksheetReadback(withDeps(''), withDeps(''))).toHaveLength(0);
+  });
+
+  it('flags a surviving shelf pill whose column-instance declaration was dropped', () => {
+    const binField = '[DS].[bin:Sales:qk]';
+    const binCI =
+      '<column-instance column="[Sales]" derivation="Bin" name="[bin:Sales:qk]" pivot="key" type="quantitative"/>';
+    const intended = withDeps(binCI).replace(
+      '<rows>[DS].[avg:Latitude:qk]</rows>',
+      `<rows>${binField}</rows>`,
+    );
+    const readback = withDeps('').replace(
+      '<rows>[DS].[avg:Latitude:qk]</rows>',
+      `<rows>${binField}</rows>`,
+    );
+
+    expect(verifyWorksheetReadback(intended, readback)).toContainEqual({
+      kind: 'encoding',
+      node: 'column-instance',
+      column: '[bin:Sales:qk]',
+      intended: '<column-instance name="[bin:Sales:qk]">',
+      readback: 'missing',
+      severity: 'error',
+    });
   });
 });

@@ -2,6 +2,7 @@
  * Field builder utilities for constructing column references from user-friendly names
  */
 
+import { isAggregateOrTableCalc } from './calculation-classifier.js';
 import { normalizeArray, parseXML } from './parser.js';
 import {
   AggregationType,
@@ -409,21 +410,7 @@ export function listAvailableFields(
 
         if (column.calculation && column.calculation['@_formula']) {
           formula = column.calculation['@_formula'];
-          const aggFunctions = [
-            'SUM(',
-            'AVG(',
-            'MIN(',
-            'MAX(',
-            'COUNT(',
-            'COUNTD(',
-            'STDEV(',
-            'STDEVP(',
-            'VAR(',
-            'VARP(',
-            'MEDIAN(',
-            'PERCENTILE(',
-          ];
-          isAggregated = aggFunctions.some((fn) => formula!.toUpperCase().includes(fn));
+          isAggregated = isAggregateOrTableCalc(formula!);
         }
 
         if (column['@_hidden'] === 'true') continue;

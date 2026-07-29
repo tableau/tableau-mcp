@@ -59,11 +59,16 @@ interface SortSignature {
   field: string;
 }
 
+interface ShelfFieldSignature {
+  normalized: string;
+  raw: string;
+}
+
 interface WorksheetSignature {
   encodings: EncodingSignature[];
   shelves: {
-    rows: string[];
-    cols: string[];
+    rows: Map<string, string>;
+    cols: Map<string, string>;
   };
   marks: MarkSignature[];
   filters: FilterSignature[];
@@ -114,11 +119,82 @@ function walkElements(node: unknown, visit: (tag: string, element: XmlRecord) =>
   }
 }
 
-function shelfValues(value: unknown): string[] {
-  return normalizeArray(value)
-    .flatMap((item) => textValue(item).split('/'))
-    .map((item) => item.trim())
-    .filter(Boolean);
+function stripEnclosingParentheses(value: string): string {
+  if (!value.startsWith('(') || !value.endsWith(')')) return value;
+
+  let parentheses = 0;
+  let brackets = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === '[') brackets += 1;
+    if (character === ']' && brackets > 0) brackets -= 1;
+    if (brackets > 0) continue;
+    if (character === '(') parentheses += 1;
+    if (character === ')') parentheses -= 1;
+    if (parentheses === 0 && index < value.length - 1) return value;
+  }
+
+  return parentheses === 0 ? value.slice(1, -1).trim() : value;
+}
+
+function normalizeShelfField(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/\s*\(\s*/g, '(')
+    .replace(/\s*\)\s*/g, ')');
+  let out = '';
+  let brackets = 0;
+  for (let index = 0; index < normalized.length; index += 1) {
+    const character = normalized[index];
+    if (character === '[') brackets += 1;
+    if (character === ']' && brackets > 0) brackets -= 1;
+    if (character !== '+' || brackets > 0) {
+      out += character;
+      continue;
+    }
+    out = out.trimEnd() + '+';
+    while (normalized[index + 1] === ' ') index += 1;
+  }
+  return out;
+}
+
+function declaredShelfFields(expression: string): ShelfFieldSignature[] {
+  const unwrapped = stripEnclosingParentheses(expression.trim());
+  const parts: string[] = [];
+  let start = 0;
+  let parentheses = 0;
+  let brackets = 0;
+
+  for (let index = 0; index < unwrapped.length; index += 1) {
+    const character = unwrapped[index];
+    if (character === '[') brackets += 1;
+    if (character === ']' && brackets > 0) brackets -= 1;
+    if (brackets > 0) continue;
+    if (character === '(') parentheses += 1;
+    if (character === ')') parentheses -= 1;
+    if (parentheses === 0 && (character === '*' || character === '/')) {
+      parts.push(unwrapped.slice(start, index));
+      start = index + 1;
+    }
+  }
+
+  if (parts.length === 0) {
+    const raw = unwrapped.trim();
+    const normalized = normalizeShelfField(raw);
+    return normalized ? [{ normalized, raw }] : [];
+  }
+
+  parts.push(unwrapped.slice(start));
+  return parts.flatMap(declaredShelfFields);
+}
+
+function shelfValues(value: unknown): Map<string, string> {
+  return new Map(
+    normalizeArray(value)
+      .flatMap((item) => declaredShelfFields(textValue(item)))
+      .map(({ normalized, raw }) => [normalized, raw]),
+  );
 }
 
 function collectEncodings(worksheet: XmlRecord): EncodingSignature[] {
@@ -365,14 +441,31 @@ export function verifyWorksheetReadback(
   }
 
   for (const shelf of ['rows', 'cols'] as const) {
-    for (const value of intended.shelves[shelf]) {
-      if (readback.shelves[shelf].includes(value)) continue;
+    for (const [normalized, raw] of intended.shelves[shelf]) {
+      if (readback.shelves[shelf].has(normalized)) continue;
       findings.push({
         kind: 'shelf',
         node: shelf,
-        column: value,
-        intended: value,
-        readback: readback.shelves[shelf].length > 0 ? 'changed' : 'missing',
+        column: raw,
+        intended: raw,
+        readback: readback.shelves[shelf].size > 0 ? 'changed' : 'missing',
+        severity: 'error',
+      });
+    }
+  }
+
+  for (const shelf of ['rows', 'cols'] as const) {
+    for (const [normalized, raw] of intended.shelves[shelf]) {
+      const instanceName = instanceNameFromColumnRef(raw);
+      if (!instanceName || !intended.declaredInstances.has(instanceName)) continue;
+      if (readback.declaredInstances.has(instanceName)) continue;
+      if (!readback.shelves[shelf].has(normalized)) continue; // shelf loss already reported above
+      findings.push({
+        kind: 'encoding',
+        node: 'column-instance',
+        column: instanceName,
+        intended: `<column-instance name="${instanceName}">`,
+        readback: 'missing',
         severity: 'error',
       });
     }
@@ -439,11 +532,7 @@ export function formatReadbackFinding(finding: ReadbackFinding): string {
 export function formatReadbackVerificationError(findings: ReadbackFinding[]): string {
   const errors = findings.filter((finding) => finding.severity === 'error');
   if (errors.length === 0) return '';
-  return (
-    `apply succeeded but Tableau silently dropped: ${errors.map(formatReadbackFinding).join(', ')}. ` +
-    'The rendered chart does NOT match the intent — likely an invalid/unsupported node. ' +
-    'Fix the worksheet XML to use Tableau-supported shelf, mark, filter, and encoding nodes, then re-apply.'
-  );
+  return `Readback had no exact match for intended ${errors.map(formatReadbackFinding).join(', ')}. Inspect the readback XML and rendered chart before relying on the result.`;
 }
 
 export function formatReadbackVerificationStatus(
@@ -456,5 +545,5 @@ export function formatReadbackVerificationStatus(
 export function formatReadbackVerificationWarnings(findings: ReadbackFinding[]): string {
   const warnings = findings.filter((finding) => finding.severity === 'warning');
   if (warnings.length === 0) return '';
-  return `\n\n⚠️ Readback verification warning — Tableau changed or dropped: ${warnings.map(formatReadbackFinding).join(', ')}. Re-check the rendered chart before moving on.`;
+  return `\n\n⚠️ Readback verification warning — readback had no exact match for intended ${warnings.map(formatReadbackFinding).join(', ')}. Inspect the readback XML and rendered chart before relying on the result.`;
 }
