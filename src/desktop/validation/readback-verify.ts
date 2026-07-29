@@ -147,6 +147,8 @@ function collectMarks(worksheet: XmlRecord): MarkSignature[] {
 }
 
 function normalizeFilterMode(value: string): string {
+  // Tableau omits ui-enumeration for its default inclusive categorical-filter mode.
+  if (value === '') return 'include';
   if (value === 'inclusive') return 'include';
   if (value === 'exclusive') return 'exclude';
   return value;
@@ -269,13 +271,17 @@ function sameMembers(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((member, index) => member === b[index]);
 }
 
+function sameGroupFunction(a: string, b: string): boolean {
+  return a === b || (['member', 'union'].includes(a) && ['member', 'union'].includes(b));
+}
+
 function sameFilter(a: FilterSignature, b: FilterSignature): boolean {
   return (
     a.klass === b.klass &&
     a.column === b.column &&
     sameMembers(a.members, b.members) &&
     a.mode === b.mode &&
-    a.groupFunction === b.groupFunction
+    sameGroupFunction(a.groupFunction, b.groupFunction)
   );
 }
 
@@ -293,7 +299,7 @@ function filterDifference(
   if (intended.mode !== observed.mode) {
     return `mode differs: expected ${intended.mode || '(none)'}; observed ${observed.mode || '(none)'}`;
   }
-  if (intended.groupFunction !== observed.groupFunction) {
+  if (!sameGroupFunction(intended.groupFunction, observed.groupFunction)) {
     return `function differs: expected ${intended.groupFunction || '(none)'}; observed ${observed.groupFunction || '(none)'}`;
   }
   return undefined;

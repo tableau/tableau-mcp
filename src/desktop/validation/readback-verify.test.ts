@@ -134,6 +134,58 @@ describe('verifyWorksheetReadback', () => {
     expect(verifyWorksheetReadback(intended, readback)).toEqual([]);
   });
 
+  it('accepts a readback that omits the default inclusive enumeration', () => {
+    const intended = filteredWorksheet({ members: ['Consumer'] });
+    const readback = intended.replace(' user:ui-enumeration="inclusive"', '');
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([]);
+  });
+
+  it('accepts the Desktop exclude serialization documented in the filter corpus', () => {
+    const intended = worksheet(`<view>
+      <filter class="categorical" column="[Sample - Superstore].[none:Segment:nk]">
+        <groupfilter function="except" user:ui-enumeration="exclusive">
+          <groupfilter function="level-members" level="[none:Segment:nk]"/>
+          <groupfilter function="union">
+            <groupfilter function="member" level="[none:Segment:nk]" member="Home Office"/>
+          </groupfilter>
+        </groupfilter>
+      </filter>
+    </view>`);
+    const readbackFilter = `<filter column="[Sample - Superstore].[none:Segment:nk]" class="categorical">
+  <groupfilter function="except"
+               user:ui-domain="relevant"
+               user:ui-enumeration="exclusive"
+               user:ui-marker="enumerate">
+    <groupfilter function="level-members" level="[none:Segment:nk]" />
+    <groupfilter function="union">
+      <groupfilter function="member" level="[none:Segment:nk]" member="Home Office" />
+    </groupfilter>
+  </groupfilter>
+</filter>`;
+    const readback = worksheet(`<view>${readbackFilter}</view>`);
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([]);
+  });
+
+  it('accepts a bare-member Desktop readback for an authored union', () => {
+    const intended = filteredWorksheet({ members: ['2024'] }).replace(
+      '[DS].[none:Region:nk]',
+      '[Sample - Superstore].[yr:Order Date:ok]',
+    );
+    const readbackFilter = `<filter column="[Sample - Superstore].[yr:Order Date:ok]" class="categorical">
+  <groupfilter user:ui-marker="enumerate"
+               user:ui-domain="database"
+               function="member"
+               user:ui-enumeration="inclusive"
+               member="2024"
+               level="[yr:Order Date:ok]" />
+</filter>`;
+    const readback = worksheet(`<view>${readbackFilter}</view>`);
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([]);
+  });
+
   it('flags a changed groupfilter function', () => {
     const intended = filteredWorksheet({ members: [], groupFunction: 'union' });
     const readback = filteredWorksheet({ members: [], groupFunction: 'level-members' });
