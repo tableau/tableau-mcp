@@ -795,6 +795,7 @@ function expectCapabilityRefusal(result: CallToolResult, capability: string): vo
   expect(payload.steps).toEqual([]);
   expect(payload.message).toContain(`requires uncensused capability '${capability}'`);
   expect(payload.message).toContain('No step ran');
+  expect(payload.message).not.toContain('.. No step ran');
 }
 
 function expectEveryExecutorMethodUntouched(executor: MockExecutor): void {

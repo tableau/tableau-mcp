@@ -1,3 +1,4 @@
+import { knownCommands } from '../../../desktop/commandRegistry.js';
 import { checkAuthoringCapabilityCensus } from './authoringCapabilityCensus.js';
 
 const SAFE_PLAN = { steps: [{ command: 'tabdoc:save' }] };
@@ -52,6 +53,35 @@ describe('checkAuthoringCapabilityCensus', () => {
     expect(result.outcomes.every(({ reason }) => !reason.includes('\n'))).toBe(true);
   });
 
+  it('names the required arguments on recovery doors', () => {
+    const reasons = new Map(
+      checkAuthoringCapabilityCensus(SAFE_PLAN).outcomes.map(({ name, reason }) => [name, reason]),
+    );
+
+    expect(reasons.get('worksheet-lifecycle')).toContain(
+      'tabdoc:new-worksheet {NewSheet, ActivateNew: true}',
+    );
+    expect(reasons.get('bin-spec')).toContain(
+      "author-calc {role: 'dimension', datatype: 'integer'}",
+    );
+    expect(reasons.get('bin-spec')).toContain('COUNTD([row-level key])');
+    expect(reasons.get('fiscal-calendar')).toContain("author-calc {datatype: 'date'}");
+    expect(reasons.get('relative-date-window')).toContain("author-calc {datatype: 'boolean'}");
+  });
+
+  it('keeps every prescribed tabdoc command in the bundled command census', () => {
+    const commands = knownCommands();
+    if (commands === null) throw new Error('Bundled Tableau command census is unavailable');
+    const prescribedCommands = new Set(
+      checkAuthoringCapabilityCensus(SAFE_PLAN).outcomes.flatMap(
+        ({ reason }) => reason.match(/\btabdoc:[a-z0-9-]+/g) ?? [],
+      ),
+    );
+
+    expect(prescribedCommands.size).toBeGreaterThan(0);
+    expect([...prescribedCommands].filter((command) => !commands.has(command))).toEqual([]);
+  });
+
   it('leaves a fully censused plan admitted', () => {
     const result = checkAuthoringCapabilityCensus(SAFE_PLAN);
 
@@ -66,7 +96,7 @@ describe('checkAuthoringCapabilityCensus', () => {
 
     expect(result.missing).toMatchObject({
       name: 'tabdoc:add-binned-axis',
-      reason: expect.stringContaining('absent from the bundled Tableau command census'),
+      reason: expect.stringContaining('search-commands'),
     });
   });
 });

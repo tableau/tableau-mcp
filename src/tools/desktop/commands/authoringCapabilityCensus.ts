@@ -20,7 +20,7 @@ const CENSUS = [
   {
     name: 'bin-spec',
     reason:
-      'No command key exists for bin field, width, or origin. Use author-calc or bind-template with calcs[] to author FLOOR([measure] / width) * width as an integer dimension, add COUNTD, then build the bar.',
+      "No command key exists for bin field, width, or origin. Use author-calc {role: 'dimension', datatype: 'integer'} or bind-template with calcs[] to author FLOOR([measure] / width) * width, add COUNTD([row-level key]), then build the bar.",
     detect: (plan: CensusPlan) => argsHaveKey(plan, BIN_KEYS),
   },
   {
@@ -32,7 +32,7 @@ const CENSUS = [
   {
     name: 'worksheet-lifecycle',
     reason:
-      'Plan commands cannot create, name, or activate a worksheet in one step. Use tabdoc:new-worksheet {}, tabdoc:rename-sheet {Sheet,NewSheet}, and activate-sheet {sheetName}; placing fields on the new worksheet still has no command.',
+      'Use tabdoc:new-worksheet {NewSheet, ActivateNew: true} to create, name, and activate a worksheet in one step. If those arguments fail, use tabdoc:new-worksheet {}, tabdoc:rename-sheet {Sheet,NewSheet}, and activate-sheet {sheetName}; placing fields on the new worksheet still has no command.',
     detect: 'route-prose',
   },
   {
@@ -62,13 +62,13 @@ const CENSUS = [
   {
     name: 'fiscal-calendar',
     reason:
-      'There is no fiscal-year-start or current-period command key. Use author-calc to author a fiscal-period date-arithmetic field, then bind it.',
+      "There is no fiscal-year-start or current-period command key. Use author-calc {datatype: 'date'} to author a fiscal-period date-arithmetic field, then bind it.",
     detect: (plan: CensusPlan) => argsHaveKey(plan, FISCAL_KEYS),
   },
   {
     name: 'relative-date-window',
     reason:
-      'There is no current-plus-previous-N-quarters plan semantic. Use author-calc to author a date-window field comparing dates against {MAX([Date])}, then bind it.',
+      "There is no current-plus-previous-N-quarters plan semantic. Use author-calc {datatype: 'boolean'} to author a date-window field comparing dates against {MAX([Date])}, then bind it.",
     detect: 'route-prose',
   },
   {
@@ -111,7 +111,8 @@ export function checkAuthoringCapabilityCensus(plan: CensusPlan): CensusResult {
     (uncensusedCommand
       ? {
           name: uncensusedCommand,
-          reason: 'the command is absent from the bundled Tableau command census',
+          reason:
+            'No bundled Tableau command matches this name. Use search-commands to find the correct command name, then resubmit the plan.',
         }
       : undefined);
 
