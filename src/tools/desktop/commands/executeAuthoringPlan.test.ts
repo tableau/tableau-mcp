@@ -37,8 +37,27 @@ const WORKSHEET_XML = `<worksheet name="Sales by Region"><table><panes><pane>
 </pane></panes></table></worksheet>`;
 const DASHBOARD_XML =
   '<dashboard name="Executive Overview"><zones><zone name="Sales by Region"/></zones></dashboard>';
+const WORKBOOK_XML = `<workbook><datasources>
+  <datasource name="sample" caption="Sample - Superstore">
+    <column name="[Region]" datatype="string" role="dimension" type="nominal"/>
+    <column name="[Sales]" datatype="real" role="measure" type="quantitative"/>
+  </datasource>
+</datasources></workbook>`;
 
 describe('executeAuthoringPlanTool', () => {
+  it('presents plan submission as the capability and field preflight', async () => {
+    const tool = getExecuteAuthoringPlanTool(new DesktopMcpServer());
+    const description = await Provider.from(tool.description);
+
+    expect(description).toMatch(
+      /^Submitting the plan is the capability and field check: preflight validates every step and field reference before any run/,
+    );
+    expect(description).toContain('No step ran');
+    expect(description).toContain('Do not pre-verify fields with resolve-field');
+    expect(description).toContain('scan search-commands');
+    expect(description).toContain('submit the plan and read the refusal');
+  });
+
   it('executes three completed steps in order and returns requested readback', async () => {
     const executor = makeExecutor();
     const extra = makeExtra(executor);
@@ -233,6 +252,56 @@ describe('executeAuthoringPlanTool', () => {
     expectCapabilityRefusal(result, name);
     expect(extra.getExecutor).not.toHaveBeenCalled();
     expectEveryExecutorMethodUntouched(executor);
+  });
+
+  it('refuses a command absent from the census before any plan step runs', async () => {
+    const executor = makeExecutor();
+    const extra = makeExtra(executor);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [{ command: 'tabdoc:save' }, { command: 'tabdoc:add-binned-axis' }],
+      },
+      extra,
+    );
+
+    expectCapabilityRefusal(result, 'tabdoc:add-binned-axis');
+    expect(extra.getExecutor).not.toHaveBeenCalled();
+    expectEveryExecutorMethodUntouched(executor);
+  });
+
+  it('refuses unresolved notional-spec fields before any plan step runs', async () => {
+    const executor = makeExecutor();
+    const extra = makeExtra(executor);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [
+          { command: 'tabdoc:save' },
+          {
+            command: 'tabdoc:generate-viz-from-notional-spec',
+            args: {
+              NotionalSpecJson: JSON.stringify({
+                version: '0.2.0',
+                fields: [{ caption: 'Missing Revenue' }],
+              }),
+            },
+          },
+        ],
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.steps).toEqual([]);
+    expect(payload.message).toContain('Unresolved field reference(s): "Missing Revenue"');
+    expect(payload.message).toContain('No step ran');
+    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executor.executeCommand).not.toHaveBeenCalled();
   });
 
   it('compiles a fully admitted plan without dispatch or readback', async () => {
@@ -593,6 +662,7 @@ describe('executeAuthoringPlanTool', () => {
 type MockExecutor = {
   executeCommand: ReturnType<typeof vi.fn>;
   getWorkbook: ReturnType<typeof vi.fn>;
+  getWorkbookDocument: ReturnType<typeof vi.fn>;
   getWorksheetDocument: ReturnType<typeof vi.fn>;
   getDashboardDocument: ReturnType<typeof vi.fn>;
   listWorksheets: ReturnType<typeof vi.fn>;
@@ -602,6 +672,7 @@ type MockExecutor = {
 function makeExecutor(): MockExecutor {
   return {
     executeCommand: vi.fn().mockResolvedValue(new Ok(COMPLETED)),
+    getWorkbookDocument: vi.fn().mockResolvedValue(new Ok({ xml: WORKBOOK_XML })),
     getWorkbook: vi.fn().mockResolvedValue(
       new Ok({
         title: 'Book',

@@ -296,7 +296,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['plan-dashboard-creation', 1383], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1430], // ratcheted down in the CODA funding trim; do not grow
     ['validate-proposal', 1510], // ratcheted down with compact shared proposal descriptions; 46k stays green
-    ['execute-authoring-plan', 2445], // capability admission plus compile/execute mode
+    ['execute-authoring-plan', 2441], // capability admission plus compile/execute mode
     // The template parameter is a z.enum over the real template vocabulary, so its cost
     // is the vocabulary itself, not prose. Agents invented 13 template ids against 47
     // real ones and burned 188s discovering it; the enum makes that unrepresentable.

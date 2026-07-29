@@ -1,3 +1,5 @@
+import { knownCommands } from '../../../desktop/commandRegistry.js';
+
 type CensusPlan = {
   steps: ReadonlyArray<{ command: string; args?: Record<string, unknown> }>;
   summaryWorksheet?: string | readonly string[];
@@ -94,7 +96,17 @@ export function checkAuthoringCapabilityCensus(plan: CensusPlan): CensusResult {
   const capabilitiesUsed = CENSUS.filter(
     (entry) => typeof entry.detect === 'function' && entry.detect(plan),
   ).map(({ name }) => name);
-  const missing = CENSUS.find(({ name }) => capabilitiesUsed.includes(name));
+  const missingCapability = CENSUS.find(({ name }) => capabilitiesUsed.includes(name));
+  const commandCensus = knownCommands();
+  const uncensusedCommand = plan.steps.find(({ command }) => !commandCensus?.has(command))?.command;
+  const missing =
+    missingCapability ??
+    (uncensusedCommand
+      ? {
+          name: uncensusedCommand,
+          reason: 'the command is absent from the bundled Tableau command census',
+        }
+      : undefined);
 
   return {
     capabilitiesUsed,
