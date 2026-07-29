@@ -196,6 +196,117 @@ describe('executeAuthoringPlanTool', () => {
     expect(payload.message).toContain('No step ran');
   });
 
+  it.each([
+    {
+      name: 'multi-summary-readback',
+      args: { summary_worksheet: ['Sales by Region', 'Profit by Segment'] },
+    },
+    {
+      name: 'calc-authoring',
+      args: { steps: [{ command: 'tabdoc:save', args: { formula: 'SUM([Sales])' } }] },
+    },
+    {
+      name: 'bin-spec',
+      args: { steps: [{ command: 'tabdoc:save', args: { binWidth: 10 } }] },
+    },
+    {
+      name: 'fiscal-calendar',
+      args: { steps: [{ command: 'tabdoc:save', args: { fiscalYearStart: 7 } }] },
+    },
+    {
+      name: 'goto-sheet-contract',
+      args: { steps: [{ command: 'tabdoc:goto-sheet', args: { WindowLocator: 'Sheet 1' } }] },
+    },
+  ])('refuses detectable $name plans during preflight', async ({ name, args }) => {
+    const executor = makeExecutor();
+    const extra = makeExtra(executor);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [{ command: 'tabdoc:save' }],
+        ...args,
+      },
+      extra,
+    );
+
+    expectCapabilityRefusal(result, name);
+    expect(extra.getExecutor).not.toHaveBeenCalled();
+    expectEveryExecutorMethodUntouched(executor);
+  });
+
+  it('compiles a fully admitted plan without dispatch or readback', async () => {
+    const executor = makeExecutor();
+    const extra = makeExtra(executor);
+    const expectReceipt = {
+      kind: 'worksheet-exists' as const,
+      name: 'Sales by Region',
+    };
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        mode: 'compile',
+        steps: [{ command: 'tabdoc:save', expect: expectReceipt }],
+        verify: ['Sales by Region'],
+        summary_worksheet: 'Sales by Region',
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      compiled: true,
+      message: 'Plan compiled, nothing executed.',
+      steps: [{ command: 'tabdoc:save', args: {}, expect: expectReceipt }],
+      capabilities_used: [],
+      would_verify: [
+        { kind: 'postcondition', step: 1, expect: expectReceipt },
+        { kind: 'name-exists', target: 'Sales by Region' },
+        { kind: 'summary-data', worksheet: 'Sales by Region', max_rows: 200 },
+      ],
+    });
+    expect(extra.getExecutor).not.toHaveBeenCalled();
+    expectEveryExecutorMethodUntouched(executor);
+  });
+
+  it('refuses an uncensused plan identically in compile and execute modes', async () => {
+    const compileExecutor = makeExecutor();
+    const executeExecutor = makeExecutor();
+    const plan = {
+      session: SESSION,
+      steps: [{ command: 'tabdoc:save', args: { calculatedFieldFormula: '[Sales] / [Profit]' } }],
+    };
+
+    const compiled = await getResult({ ...plan, mode: 'compile' }, makeExtra(compileExecutor));
+    const executed = await getResult({ ...plan, mode: 'execute' }, makeExtra(executeExecutor));
+
+    expect(compiled.isError).toBe(true);
+    expect(executed.isError).toBe(true);
+    invariant(compiled.content[0].type === 'text');
+    invariant(executed.content[0].type === 'text');
+    expect(JSON.parse(compiled.content[0].text).message).toBe(
+      JSON.parse(executed.content[0].text).message,
+    );
+    expectCapabilityRefusal(compiled, 'calc-authoring');
+    expectEveryExecutorMethodUntouched(compileExecutor);
+    expectEveryExecutorMethodUntouched(executeExecutor);
+  });
+
+  it('executes a fully censused plan unchanged by admission', async () => {
+    const executor = makeExecutor();
+
+    const result = await getResult(
+      { session: SESSION, mode: 'execute', steps: [{ command: 'tabdoc:save' }] },
+      makeExtra(executor),
+    );
+
+    expect(result.isError).toBe(false);
+    expect(executor.executeCommand).toHaveBeenCalledTimes(1);
+  });
+
   it('stops at the first non-completed status because completion was not observed', async () => {
     const executor = makeExecutor();
     executor.executeCommand.mockResolvedValueOnce(new Ok(COMPLETED)).mockResolvedValueOnce(
@@ -544,6 +655,7 @@ function makeExtra(executor: MockExecutor): ReturnType<typeof getMockRequestHand
 async function getResult(
   args: {
     session: string;
+    mode?: 'compile' | 'execute';
     steps: Array<{
       command: string;
       args?: Record<string, unknown>;
@@ -562,13 +674,22 @@ async function getResult(
         | { kind: 'dashboard-contains'; dashboard: string; worksheet: string };
     }>;
     verify?: string[];
-    summary_worksheet?: string;
+    summary_worksheet?: string | string[];
   },
   extra: ReturnType<typeof getMockRequestHandlerExtra>,
 ): Promise<CallToolResult> {
   const tool = getExecuteAuthoringPlanTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
-  return await callback({ verify: undefined, summary_worksheet: undefined, ...args }, extra);
+  return await callback(
+    {
+      session: args.session,
+      mode: args.mode ?? 'execute',
+      steps: args.steps,
+      verify: args.verify,
+      summary_worksheet: args.summary_worksheet,
+    },
+    extra,
+  );
 }
 
 function expectPostconditionFailure(
@@ -594,4 +715,19 @@ function expectIncompleteReadback(result: CallToolResult, message: string): void
   const payload = JSON.parse(result.content[0].text);
   expect(payload.message).toContain(message);
   expect(payload.message).not.toContain('Plan done');
+}
+
+function expectCapabilityRefusal(result: CallToolResult, capability: string): void {
+  expect(result.isError).toBe(true);
+  invariant(result.content[0].type === 'text');
+  const payload = JSON.parse(result.content[0].text);
+  expect(payload.steps).toEqual([]);
+  expect(payload.message).toContain(`requires uncensused capability '${capability}'`);
+  expect(payload.message).toContain('No step ran');
+}
+
+function expectEveryExecutorMethodUntouched(executor: MockExecutor): void {
+  for (const method of Object.values(executor)) {
+    expect(method).toHaveBeenCalledTimes(0);
+  }
 }

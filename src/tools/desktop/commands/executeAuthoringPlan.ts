@@ -35,6 +35,7 @@ import {
   withNextAction,
 } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
+import { checkAuthoringCapabilityCensus } from './authoringCapabilityCensus.js';
 
 const DEFAULT_MAX_ROWS = 200;
 
@@ -72,12 +73,19 @@ type PlanPostcondition = z.infer<typeof postconditionSchema>;
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID if not pinned.'),
+  mode: z
+    .enum(['compile', 'execute'])
+    .default('execute')
+    .describe('Compile validates only; execute dispatches.'),
   steps: z.array(stepSchema).min(1).max(24).describe('1-24 ordered steps.'),
   verify: z
     .array(z.string())
     .optional()
     .describe('Sheet/dashboard names to verify after the plan.'),
-  summary_worksheet: z.string().optional().describe('Worksheet to read summary rows from.'),
+  summary_worksheet: z
+    .union([z.string(), z.array(z.string()).min(2)])
+    .optional()
+    .describe('Worksheet to read; multiple names are refused.'),
 };
 
 type PreparedStep = {
@@ -120,12 +128,30 @@ type PostconditionReadback = {
   observed: string;
 };
 
-type PlanResultBody = {
+type ExecutePlanResultBody = {
   message: string;
   steps: PlanStepResult[];
   readback?: PlanReadback;
 };
 
+type CompilePlanResultBody = {
+  message: 'Plan compiled, nothing executed.';
+  compiled: true;
+  steps: Array<{
+    command: string;
+    args: Record<string, unknown>;
+    expect?: PlanPostcondition;
+  }>;
+  capabilities_used: string[];
+  would_verify: PlannedVerification[];
+};
+
+type PlannedVerification =
+  | { kind: 'postcondition'; step: number; expect: PlanPostcondition }
+  | { kind: 'name-exists'; target: string }
+  | { kind: 'summary-data'; worksheet: string; max_rows: number };
+
+type PlanResultBody = ExecutePlanResultBody | CompilePlanResultBody;
 type PlanResult = StructuredResult<PlanResultBody>;
 
 const title = 'Execute Authoring Plan';
@@ -146,16 +172,39 @@ export const getExecuteAuthoringPlanTool = (
       openWorldHint: false,
     },
     callback: async (
-      { session, steps, verify, summary_worksheet },
+      { session, mode = 'execute', steps, verify, summary_worksheet },
       extra,
     ): Promise<CallToolResult> => {
       return await tool.logAndExecute({
         extra,
-        args: { session, steps, verify, summary_worksheet },
+        args: { session, mode, steps, verify, summary_worksheet },
         callback: async (): Promise<Result<PlanResult, McpToolError>> => {
-          const preparedResult = prepareSteps(steps);
+          const preparedResult = prepareSteps(steps, summary_worksheet);
           if (preparedResult.isErr()) {
             return preparedResult;
+          }
+          const normalizedSummaryWorksheet = normalizeSummaryWorksheet(summary_worksheet);
+          if (mode === 'compile') {
+            return new Ok(
+              withNextAction(
+                {
+                  message: 'Plan compiled, nothing executed.',
+                  compiled: true,
+                  steps: preparedResult.value.steps.map(({ command, dispatchArgs, expect }) => ({
+                    command,
+                    args: dispatchArgs,
+                    ...(expect ? { expect } : {}),
+                  })),
+                  capabilities_used: preparedResult.value.capabilitiesUsed,
+                  would_verify: plannedVerifications(
+                    preparedResult.value.steps,
+                    verify,
+                    normalizedSummaryWorksheet,
+                  ),
+                },
+                prefillNextAction('Execute the compiled plan when ready'),
+              ),
+            );
           }
 
           const sessionResult = resolveSession(session);
@@ -166,7 +215,7 @@ export const getExecuteAuthoringPlanTool = (
           const executor = await extra.getExecutor(resolvedSession);
           const stepResults: PlanStepResult[] = [];
 
-          for (const step of preparedResult.value) {
+          for (const step of preparedResult.value.steps) {
             const result = await executor.executeCommand({
               namespace: step.namespace,
               command: step.cmd,
@@ -205,10 +254,10 @@ export const getExecuteAuthoringPlanTool = (
             }
           }
 
-          const expectations = preparedResult.value.flatMap(({ step, expect }) =>
+          const expectations = preparedResult.value.steps.flatMap(({ step, expect }) =>
             expect ? [{ step, expect }] : [],
           );
-          if (!hasReadbackRequest(verify, summary_worksheet, expectations)) {
+          if (!hasReadbackRequest(verify, normalizedSummaryWorksheet, expectations)) {
             return new Ok(
               withNextAction(
                 {
@@ -225,7 +274,7 @@ export const getExecuteAuthoringPlanTool = (
             session: resolvedSession,
             extra,
             callback: async (_executor, _signal, read) =>
-              await performReadback(verify, summary_worksheet, expectations, read),
+              await performReadback(verify, normalizedSummaryWorksheet, expectations, read),
           });
           if (readbackResult.isErr()) {
             return incompletePlan(
@@ -260,7 +309,7 @@ export const getExecuteAuthoringPlanTool = (
               readbackValue,
             );
           }
-          if (summary_worksheet !== undefined && !readbackValue.summary_data) {
+          if (normalizedSummaryWorksheet !== undefined && !readbackValue.summary_data) {
             return incompletePlan(
               'Requested summary readback is absent. The plan outcome is unverified.',
               stepResults,
@@ -304,8 +353,12 @@ function prepareSteps(
     args?: Record<string, unknown>;
     expect?: PlanPostcondition;
   }>,
-): Result<PreparedStep[], McpToolError> {
-  const prepared: PreparedStep[] = [];
+  summaryWorksheet: string | string[] | undefined,
+): Result<{ steps: PreparedStep[]; capabilitiesUsed: string[] }, McpToolError> {
+  const parsedCommands: Array<{
+    namespace: 'tabui' | 'tabdoc';
+    cmd: string;
+  }> = [];
   for (const [index, step] of steps.entries()) {
     const stepNumber = index + 1;
     const parts = step.command.split(':');
@@ -325,6 +378,28 @@ function prepareSteps(
         `Invalid namespace "${namespace}". Expected 'tabui' or 'tabdoc'.`,
       );
     }
+    parsedCommands.push({ namespace, cmd });
+  }
+
+  const census = checkAuthoringCapabilityCensus({ steps, summaryWorksheet });
+  if (census.missing) {
+    return refusedCapability(census.missing.name, census.missing.reason);
+  }
+
+  const prepared: PreparedStep[] = [];
+  for (const [index, step] of steps.entries()) {
+    const stepNumber = index + 1;
+    const { namespace, cmd } = parsedCommands[index];
+    const parsedPostcondition = postconditionSchema.safeParse(step.expect);
+    if (step.expect !== undefined && !parsedPostcondition.success) {
+      return refusedPlan(
+        stepNumber,
+        step.command,
+        `Invalid postcondition: ${parsedPostcondition.error.issues
+          .map(({ message }) => message)
+          .join('; ')}.`,
+      );
+    }
 
     const commandGuard = guardCommand({
       namespace,
@@ -342,17 +417,17 @@ function prepareSteps(
       namespace,
       cmd,
       dispatchArgs: commandGuard.dispatchArgs,
-      expect: step.expect,
+      expect: parsedPostcondition.success ? parsedPostcondition.data : undefined,
     });
   }
-  return new Ok(prepared);
+  return new Ok({ steps: prepared, capabilitiesUsed: census.capabilitiesUsed });
 }
 
 function refusedPlan(
   stepNumber: number,
   command: string,
   reason: string,
-): Result<PreparedStep[], McpToolError> {
+): Result<never, McpToolError> {
   return new IncompleteOperationError(
     withNextAction(
       {
@@ -360,6 +435,18 @@ function refusedPlan(
         steps: [],
       },
       prefillNextAction('Correct the refused step before running the plan'),
+    ),
+  ).toErr();
+}
+
+function refusedCapability(name: string, reason: string): Result<never, McpToolError> {
+  return new IncompleteOperationError(
+    withNextAction(
+      {
+        message: `Plan refused during preflight: requires uncensused capability '${name}': ${reason}. No step ran.`,
+        steps: [],
+      },
+      prefillNextAction('Revise the plan to use admitted capabilities'),
     ),
   ).toErr();
 }
@@ -390,6 +477,28 @@ function hasReadbackRequest(
   expectations: Array<{ step: number; expect: PlanPostcondition }>,
 ): boolean {
   return (verify?.length ?? 0) > 0 || summaryWorksheet !== undefined || expectations.length > 0;
+}
+
+function normalizeSummaryWorksheet(
+  summaryWorksheet: string | string[] | undefined,
+): string | undefined {
+  return Array.isArray(summaryWorksheet) ? summaryWorksheet[0] : summaryWorksheet;
+}
+
+function plannedVerifications(
+  steps: PreparedStep[],
+  verify: string[] | undefined,
+  summaryWorksheet: string | undefined,
+): PlannedVerification[] {
+  return [
+    ...steps.flatMap(({ step, expect }) =>
+      expect ? [{ kind: 'postcondition' as const, step, expect }] : [],
+    ),
+    ...(verify ?? []).map((target) => ({ kind: 'name-exists' as const, target })),
+    ...(summaryWorksheet
+      ? [{ kind: 'summary-data' as const, worksheet: summaryWorksheet, max_rows: DEFAULT_MAX_ROWS }]
+      : []),
+  ];
 }
 
 async function performReadback(
