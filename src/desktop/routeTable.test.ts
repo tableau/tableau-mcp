@@ -144,6 +144,9 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     );
     expect(plainChart?.action).toContain('reads schema');
     expect(plainChart?.action).toContain('failed binds propose candidate fields');
+    expect(plainChart?.action).toContain(
+      'list-available-fields is allowed but not needed to orient',
+    );
     expect(plainChart?.action).not.toContain('Never call list-available-fields');
   });
 
