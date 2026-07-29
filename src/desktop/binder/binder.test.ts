@@ -1341,6 +1341,48 @@ describe('binder/bindTemplate — Call 1 miss (propose)', () => {
     }
   });
 
+  it('names a matching withheld template and why it cannot auto-bind', async () => {
+    const res = await bindTemplate({
+      ask: 'histogram of Profit',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(res.status).toBe('propose');
+    if (res.status === 'propose') {
+      expect(res.llm_input.withheld_templates).toContainEqual({
+        template: 'distribution-histogram',
+        why: 'This template contains a formula tied to a specific dataset and cannot be safely reused automatically.',
+      });
+      expect(res.decline_reason.detail).toContain(
+        "'distribution-histogram' (This template contains a formula tied to a specific dataset and cannot be safely reused automatically.)",
+      );
+    }
+  });
+
+  it('warns when an area-chart ask auto-binds the eligible line template', async () => {
+    const res = await bindTemplate({
+      ask: 'area chart of Sales over time by Order Date',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+    });
+
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.template_name).toBe('trend-line-chart');
+      expect(res.warnings?.join(' ')).toContain("'change-over-time-area-chart'");
+      expect(res.warnings?.join(' ')).toContain('has not passed live render verification');
+    }
+  });
+
+  it('uses fuzzy matching to surface a withheld template when no keyword matches exactly', () => {
+    const input = buildLlmInput('histgram', manifests, summarizeSchema(WORKBOOK_XML));
+
+    expect(input.withheld_templates.map(({ template }) => template)).toContain(
+      'distribution-histogram',
+    );
+  });
+
   it('every propose candidate exposes only bindable slots', async () => {
     const forced = scatterManifests();
     const res = await bindTemplate({

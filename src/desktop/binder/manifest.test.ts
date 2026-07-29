@@ -2,10 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { buildLlmInput } from './classify.js';
 import {
   computeFastPathEligible,
   computeFixtureBind,
   DERIVATIONS,
+  deriveFastPathBlockers,
   isRenderVerifiedLive,
   loadBinderFixture,
   loadManifests,
@@ -504,6 +506,50 @@ describe('binder/manifest — portability evidence gate (attacks 5+10)', () => {
         'ww-ou-arrow',
       ].sort(),
     );
+  });
+});
+
+describe('binder/manifest — template reachability', () => {
+  it('requires every ineligible template to record a real withholding cause', () => {
+    const unexplained = [...manifests.values()]
+      .filter((manifest) => !manifest.fast_path_eligible)
+      .filter((manifest) => deriveFastPathBlockers(manifest).length === 0)
+      .map((manifest) => manifest.template);
+
+    expect(unexplained, 'ineligible templates without a recorded or derivable cause').toEqual([]);
+  });
+
+  it('surfaces every intent keyword through an eligible carrier or withheld template', () => {
+    const carriers = new Map<string, TemplateManifest[]>();
+    for (const manifest of manifests.values()) {
+      for (const keyword of manifest.intent_keywords) {
+        const keywordCarriers = carriers.get(keyword) ?? [];
+        keywordCarriers.push(manifest);
+        carriers.set(keyword, keywordCarriers);
+      }
+    }
+
+    const missing: string[] = [];
+    for (const [keyword, keywordCarriers] of carriers) {
+      if (keywordCarriers.some((manifest) => manifest.fast_path_eligible)) continue;
+
+      const input = buildLlmInput(keyword, manifests, { datasource: '', fields: [] });
+      const withheld = input.withheld_templates;
+      const surfaced = withheld.filter((entry) =>
+        keywordCarriers.some((manifest) => manifest.template === entry.template),
+      );
+      if (
+        !surfaced.some((entry) => {
+          const carrier = keywordCarriers.find((manifest) => manifest.template === entry.template);
+          const recorded = carrier ? deriveFastPathBlockers(carrier) : [];
+          return recorded.length > 0 && entry.why === recorded.join('; ');
+        })
+      ) {
+        missing.push(keyword);
+      }
+    }
+
+    expect(missing, `${missing.length} intent keywords have no visible carrier`).toEqual([]);
   });
 });
 
