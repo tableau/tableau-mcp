@@ -1,9 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { OverridableConfig } from '../../../overridableConfig.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import { getCombinationsOfBoundedContextInputs } from '../../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../../utils/invariant.js';
+import { MAX_PAGE_SIZE } from '../../../utils/paginate.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { constrainViews, getListViewsTool } from './listViews.js';
@@ -17,6 +19,9 @@ const mockViews = {
   },
   views: [mockView],
 };
+
+const { usage: _mockViewUsage, ...mockViewWithoutUsage } = mockView;
+const mockFlattenedView = { ...mockViewWithoutUsage, totalViewCount: 42 };
 
 const mocks = vi.hoisted(() => ({
   mockQueryViewsForSiteData: vi.fn(),
@@ -60,17 +65,142 @@ describe('listViewsTool', () => {
     const result = await getToolResult({ filter: 'name:eq:Overview' });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    const { usage: _usage, ...mockViewWithoutUsage } = mockView;
-    expect(JSON.parse(`${result.content[0].text}`)).toMatchObject([
-      { ...mockViewWithoutUsage, totalViewCount: 42 },
-    ]);
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed.data).toMatchObject([mockFlattenedView]);
+    expect(parsed.totalAvailable).toBe(mockViews.pagination.totalAvailable);
     expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filter: 'name:eq:Overview',
       includeUsageStatistics: true,
-      pageNumber: undefined,
-      pageSize: undefined,
+      pageNumber: 1,
+      pageSize: 1000,
     });
+  });
+
+  it('fetches only a single page and does not loop', async () => {
+    const manyViews = Array.from({ length: MAX_PAGE_SIZE }, (_, i) => ({
+      ...mockView,
+      id: `view-${i}`,
+    }));
+    mocks.mockQueryViewsForSiteData.mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: MAX_PAGE_SIZE, totalAvailable: 2600 },
+      views: manyViews,
+    });
+
+    const result = await getToolResult({ filter: 'name:eq:Overview' });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed.data.length).toBeLessThanOrEqual(MAX_PAGE_SIZE);
+    expect(parsed.data.length).toBe(MAX_PAGE_SIZE);
+    expect(parsed.totalAvailable).toBe(2600);
+    // Single-page semantics: the REST method is called exactly once (no looping).
+    expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes pageNumber through to the REST method', async () => {
+    mocks.mockQueryViewsForSiteData.mockResolvedValue({
+      pagination: { pageNumber: 3, pageSize: MAX_PAGE_SIZE, totalAvailable: 2600 },
+      views: [mockView],
+    });
+
+    await getToolResult({ filter: 'name:eq:Overview', pageNumber: 3 });
+
+    expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      filter: 'name:eq:Overview',
+      includeUsageStatistics: true,
+      pageNumber: 3,
+      pageSize: 1000,
+    });
+  });
+
+  it('trims the page to the caller limit without capping totalAvailable', async () => {
+    const manyViews = Array.from({ length: MAX_PAGE_SIZE }, (_, i) => ({
+      ...mockView,
+      id: `view-${i}`,
+    }));
+    mocks.mockQueryViewsForSiteData.mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: MAX_PAGE_SIZE, totalAvailable: 2600 },
+      views: manyViews,
+    });
+
+    const result = await getToolResult({ filter: 'name:eq:Overview', limit: 600 });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed.data.length).toBe(600);
+    expect(parsed.totalAvailable).toBe(2600);
+    // Still always requests a full page from the API regardless of caller limit.
+    expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledWith(
+      expect.objectContaining({ pageSize: 1000, pageNumber: 1 }),
+    );
+    expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledTimes(1);
+  });
+
+  it('caps totalAvailable and trims the page when the server maxResultLimit is smaller than the page', async () => {
+    const manyViews = Array.from({ length: MAX_PAGE_SIZE }, (_, i) => ({
+      ...mockView,
+      id: `view-${i}`,
+    }));
+    mocks.mockQueryViewsForSiteData.mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: MAX_PAGE_SIZE, totalAvailable: 2600 },
+      views: manyViews,
+    });
+
+    const result = await getToolResult({
+      filter: 'name:eq:Overview',
+      maxResultLimit: 700,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed.data.length).toBe(700);
+    expect(parsed.totalAvailable).toBe(700);
+    expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a page-exceeds-limit error without fetching when the page is past the cap', async () => {
+    // Cap of 2700: page 3 (offset 2000) is reachable, page 4 (offset 3000) is not.
+    const result = await getToolResult({
+      filter: 'name:eq:Overview',
+      pageNumber: 4,
+      maxResultLimit: 2700,
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('The requested page (4) exceeds the response limit');
+    expect(result.content[0].text).toContain('the highest page you can request is 3');
+    expect(mocks.mockQueryViewsForSiteData).not.toHaveBeenCalled();
+  });
+
+  it('still fetches the last reachable page under a cap that trims it', async () => {
+    const manyViews = Array.from({ length: MAX_PAGE_SIZE }, (_, i) => ({
+      ...mockView,
+      id: `view-${i}`,
+    }));
+    mocks.mockQueryViewsForSiteData.mockResolvedValue({
+      pagination: { pageNumber: 3, pageSize: MAX_PAGE_SIZE, totalAvailable: 2800 },
+      views: manyViews,
+    });
+
+    // Page 3 starts at offset 2000; cap 2700 leaves 700 reachable items and
+    // caps the reported total (min(2800, 2700)).
+    const result = await getToolResult({
+      filter: 'name:eq:Overview',
+      pageNumber: 3,
+      maxResultLimit: 2700,
+    });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed.data.length).toBe(700);
+    expect(parsed.totalAvailable).toBe(2700);
+    expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledTimes(1);
   });
 
   it('should handle API errors gracefully', async () => {
@@ -108,8 +238,8 @@ describe('listViewsTool', () => {
       expect(mocks.mockQueryViewsForSiteData).not.toHaveBeenCalled();
 
       invariant(result.content[0].type === 'text');
-      const views = JSON.parse(`${result.content[0].text}`);
-      expect(views.map((v: { id: string }) => v.id).sort()).toEqual(
+      const parsed = JSON.parse(`${result.content[0].text}`);
+      expect(parsed.data.map((v: { id: string }) => v.id).sort()).toEqual(
         [mockView.id, mockView2.id].sort(),
       );
     });
@@ -130,9 +260,9 @@ describe('listViewsTool', () => {
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
-      const views = JSON.parse(`${result.content[0].text}`);
-      expect(views).toHaveLength(1);
-      expect(views[0].id).toBe(mockView.id);
+      const parsed = JSON.parse(`${result.content[0].text}`);
+      expect(parsed.data).toHaveLength(1);
+      expect(parsed.data[0].id).toBe(mockView.id);
     });
 
     it('should propagate non-403/404 errors', async () => {
@@ -174,9 +304,9 @@ describe('listViewsTool', () => {
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
-      const views = JSON.parse(`${result.content[0].text}`);
-      expect(views).toHaveLength(1);
-      expect(views[0].id).toBe(mockView.id);
+      const parsed = JSON.parse(`${result.content[0].text}`);
+      expect(parsed.data).toHaveLength(1);
+      expect(parsed.data[0].id).toBe(mockView.id);
     });
 
     it('should slice fetched views to the effective limit', async () => {
@@ -191,8 +321,8 @@ describe('listViewsTool', () => {
       // All allowed views are fetched before slicing, then trimmed to the limit.
       expect(mocks.mockGetView).toHaveBeenCalledTimes(2);
       invariant(result.content[0].type === 'text');
-      const views = JSON.parse(`${result.content[0].text}`);
-      expect(views).toHaveLength(1);
+      const parsed = JSON.parse(`${result.content[0].text}`);
+      expect(parsed.data).toHaveLength(1);
     });
   });
 
@@ -290,11 +420,28 @@ describe('listViewsTool', () => {
   });
 });
 
-async function getToolResult(params: { filter?: string; limit?: number }): Promise<CallToolResult> {
+async function getToolResult(params: {
+  filter?: string;
+  pageNumber?: number;
+  limit?: number;
+  maxResultLimit?: number | null;
+}): Promise<CallToolResult> {
   const listViewsTool = getListViewsTool(new WebMcpServer());
   const callback = await Provider.from(listViewsTool.callback);
+
+  const extra = getMockRequestHandlerExtra();
+  if (params.maxResultLimit !== undefined) {
+    const config = new OverridableConfig({});
+    vi.spyOn(config, 'getMaxResultLimit').mockReturnValue(params.maxResultLimit);
+    extra.getConfigWithOverrides = vi.fn().mockResolvedValue(config);
+  }
+
   return await callback(
-    { filter: params.filter, pageSize: undefined, limit: params.limit },
-    getMockRequestHandlerExtra(),
+    {
+      filter: params.filter,
+      pageNumber: params.pageNumber,
+      limit: params.limit,
+    },
+    extra,
   );
 }

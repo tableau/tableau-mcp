@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -15,15 +16,33 @@ import { View } from '../../../sdks/tableau/types/view.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { isAxiosError } from '../../../utils/axios.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { paginate } from '../../../utils/paginate.js';
+import {
+  getPage,
+  getPageExceedsLimitMessage,
+  GetPageResult,
+  MAX_PAGE_SIZE,
+} from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateViewsFilterString } from './viewsFilterUtils.js';
 
 const paramsSchema = {
   filter: z.string().optional(),
-  pageSize: z.number().gt(0).optional(),
-  limit: z.number().gt(0).optional(),
+  pageNumber: z
+    .number()
+    .int()
+    .gt(0)
+    .optional()
+    .describe('Which 1000-item page to fetch (1-based, default 1).'),
+  limit: z
+    .number()
+    .int()
+    .gt(0)
+    .max(MAX_PAGE_SIZE)
+    .optional()
+    .describe(
+      'The maximum number of views to return from the requested page (must be <= 1000). Use this to fetch fewer than a full page, e.g. the final partial page a client wants.',
+    ),
 };
 
 export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
@@ -31,7 +50,8 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
     server,
     name: 'list-views',
     description: `
-  Retrieves a list of views on a Tableau site including their metadata such as name, owner, and the workbook they are found in. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Overview) for precise and flexible view discovery. Use this tool when a user requests to list, search, or filter Tableau views on a site.
+  Retrieves a list of views on a Tableau site including their metadata such as name, owner, and the workbook they are found in. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Overview) for precise and flexible view discovery.
+  To list results based on usage popularity or relevance, use the search-content tool instead.
 
   **Supported Filter Fields and Operators**
   | Field               | Operators            |
@@ -59,7 +79,6 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
   ${genericFilterDescription}
 
   **Example Usage:**
-  - List all views on a site
   - List views with the name "Overview":
       filter: "name:eq:Overview"
   - List views in the "Finance" project:
@@ -67,7 +86,12 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
   - List views created after January 1, 2023:
       filter: "createdAt:gt:2023-01-01T00:00:00Z"
   - List views with the name "Overview" in the "Finance" project and created after January 1, 2023:
-      filter: "name:eq:Overview,projectName:eq:Finance,createdAt:gt:2023-01-01T00:00:00Z"`,
+      filter: "name:eq:Overview,projectName:eq:Finance,createdAt:gt:2023-01-01T00:00:00Z"
+
+  **Pagination**
+  This tool returns a single 1000-item page per call. Use \`pageNumber\` to select which 1000-item page to fetch (1-based, default 1).
+  The response is a flat object \`{ data, totalAvailable }\`; paginate by incrementing \`pageNumber\` until you have collected \`totalAvailable\` items.
+  To get just the count of views matching a request, read \`totalAvailable\` from a single call (e.g. \`pageNumber: 1\`) without paging through every item.`,
     paramsSchema,
     annotations: {
       title: 'List Views',
@@ -76,67 +100,84 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {
+    callback: async ({ filter, pageNumber, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateViewsFilterString(filter) : undefined;
+      const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
 
       return await listViewsTool.logAndExecute({
         extra,
         args: {},
         callback: async () => {
+          const pageExceedsLimitMessage = getPageExceedsLimitMessage({
+            pageNumber,
+            maxResultLimit,
+          });
+          if (pageExceedsLimitMessage) {
+            return new PageExceedsLimitError(pageExceedsLimitMessage).toErr();
+          }
+
           return new Ok(
             await useRestApi({
               ...extra,
               jwtScopes: listViewsTool.requiredApiScopes,
               callback: async (restApi) => {
-                const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
-                const effectiveLimit = maxResultLimit
-                  ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
-                  : limit;
-
                 // Fast path: when results are scoped to a specific set of view IDs and the user
                 // hasn't supplied a filter, fetch those views directly instead of paging the whole
                 // site. Query Views for Site has no view-ID filter, so the slow path would fetch
                 // every view only to discard all but the allowed ones. A user filter forces the
                 // slow path since Get View can't apply server-side filtering.
                 const viewIds = configWithOverrides.boundedContext.viewIds;
-                const views =
-                  viewIds !== null && !filter
-                    ? await fetchAllowedViewsById({ restApi, viewIds, limit: effectiveLimit })
-                    : await paginate({
-                        pageConfig: {
+                let page: GetPageResult<View>;
+                if (viewIds !== null && !validatedFilter) {
+                  const effectiveLimit = maxResultLimit
+                    ? Math.min(maxResultLimit, limit ?? MAX_PAGE_SIZE)
+                    : limit;
+                  const views = await fetchAllowedViewsById({
+                    restApi,
+                    viewIds,
+                    limit: effectiveLimit,
+                  });
+                  page = { data: views, totalAvailable: views.length };
+                } else {
+                  page = await getPage({
+                    pageNumber,
+                    limit,
+                    maxResultLimit,
+                    getDataFn: async ({ pageSize, pageNumber }) => {
+                      const { pagination, views: data } =
+                        await restApi.viewsMethods.queryViewsForSite({
+                          siteId: restApi.siteId,
+                          filter: validatedFilter ?? '',
+                          includeUsageStatistics: true,
                           pageSize,
-                          limit: effectiveLimit,
-                        },
-                        getDataFn: async (pageConfig) => {
-                          const { pagination, views: data } =
-                            await restApi.viewsMethods.queryViewsForSite({
-                              siteId: restApi.siteId,
-                              filter: validatedFilter ?? '',
-                              includeUsageStatistics: true,
-                              pageSize: pageConfig.pageSize,
-                              pageNumber: pageConfig.pageNumber,
-                            });
+                          pageNumber,
+                        });
 
-                          return { pagination, data };
-                        },
-                      });
+                      return { pagination, data };
+                    },
+                  });
+                }
 
+                const views = page.data;
                 if (configWithOverrides.disableMetadataApiRequests || views.length === 0) {
-                  return flattenViewUsage(views);
+                  return { ...page, data: flattenViewUsage(views) };
                 }
 
                 try {
                   const response = await restApi.metadataMethods.graphql(
                     getViewLineageQuery(views.map((view) => view.id)),
                   );
-                  return flattenViewUsage(
-                    mergeViewLineage(
-                      views,
-                      getViewLineageByLuid(response),
-                      configWithOverrides.boundedContext.datasourceIds,
+                  return {
+                    ...page,
+                    data: flattenViewUsage(
+                      mergeViewLineage(
+                        views,
+                        getViewLineageByLuid(response),
+                        configWithOverrides.boundedContext.datasourceIds,
+                      ),
                     ),
-                  );
+                  };
                 } catch (error) {
                   log(
                     {
@@ -147,14 +188,28 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
                     },
                     extra,
                   );
-                  return flattenViewUsage(views);
+                  return { ...page, data: flattenViewUsage(views) };
                 }
               },
             }),
           );
         },
-        constrainSuccessResult: (views) =>
-          constrainViews({ views, boundedContext: configWithOverrides.boundedContext }),
+        constrainSuccessResult: (page) => {
+          const constrained = constrainViews({
+            views: page.data,
+            boundedContext: configWithOverrides.boundedContext,
+          });
+          if (constrained.type !== 'success') {
+            return constrained;
+          }
+          return {
+            type: 'success',
+            result: {
+              data: constrained.result,
+              totalAvailable: page.totalAvailable,
+            },
+          };
+        },
       });
     },
   });
