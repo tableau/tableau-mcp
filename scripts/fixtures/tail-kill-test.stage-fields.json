@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"count\":6,\"datasources\":[{\"datasource\":\"World Cup\",\"fields\":[{\"caption\":\"Country Code\"},{\"caption\":\"Goals\"},{\"caption\":\"Snapshot Time\"},{\"caption\":\"Won\"},{\"caption\":\"Played\"},{\"caption\":\"Team Name\"}]}]}"
+    }
+  ],
+  "isError": false
+}

@@ -1,3 +1,4 @@
+{"type":"system","subtype":"init","session_id":"preflight-session"}
 {"type":"assistant","message":{"content":[{"type":"tool_use","id":"preflight-baseline","name":"mcp__tableau__get-workbook-inventory","input":{"session":"preflight-session"}}]}}
 {"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"preflight-baseline","content":[{"type":"text","text":"{\"title\":\"World Cup\",\"worksheets\":[{\"id\":\"ws-0\",\"name\":\"Data\"}],\"dashboards\":[],\"storyboards\":[]}"}]}]}}
 {"type":"assistant","message":{"content":[{"type":"tool_use","id":"preflight-plan","name":"mcp__tableau__execute-authoring-plan","input":{"session":"preflight-session","steps":[{"command":"tabdoc:generate-viz-from-notional-spec"},{"command":"killtest:invalid-command"}]}}]}}

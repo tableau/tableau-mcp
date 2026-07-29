@@ -6,6 +6,9 @@ import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..');
 const DESKTOP_ENTRY = join(REPO_ROOT, 'build', 'index.desktop.js');
@@ -20,10 +23,25 @@ const RUNTIME_FAILURE_FIXTURE = join(
   'fixtures',
   'tail-kill-test.failure-runtime.jsonl',
 );
+const TIMING_FIXTURE = join(SCRIPT_DIR, 'fixtures', 'tail-kill-test.timing.json');
+const STAGE_FIELDS_FIXTURE = join(SCRIPT_DIR, 'fixtures', 'tail-kill-test.stage-fields.json');
 const DEFAULT_RUNS = 5;
 const WALL_LIMIT_MS = 20_000;
+const KILL_LIMIT_MS = WALL_LIMIT_MS * 2;
 const FAILURE_MODES = ['preflight', 'runtime'];
 
+// The hardcoded ASK requires these staged-workbook captions:
+// Country Code, Goals, Snapshot Time, Won, Played, Team Name, Attendance, and Stadium.
+const REQUIRED_FIELDS = [
+  'Country Code',
+  'Goals',
+  'Snapshot Time',
+  'Won',
+  'Played',
+  'Team Name',
+  'Attendance',
+  'Stadium',
+];
 const ASK =
   'Build me a World Cup dashboard: four vizzes — goals by country (bar), matches over time (line), win rate by team (table), attendance by stadium (bar) — on one dashboard.';
 const ONE_BEAT_LAW =
@@ -118,19 +136,79 @@ function parsePositiveInteger(value, option) {
   return parsed;
 }
 
+function createMcpEnvironment(session) {
+  return {
+    TOOL_PROFILE: 'dynamic-authoring',
+    TABLEAU_SESSION: session,
+  };
+}
+
 function createMcpConfig(session) {
   return {
     mcpServers: {
       tableau: {
         command: process.execPath,
         args: [DESKTOP_ENTRY],
-        env: {
-          TOOL_PROFILE: 'dynamic-authoring',
-          TABLEAU_SESSION: session,
-        },
+        env: createMcpEnvironment(session),
       },
     },
   };
+}
+
+function extractStageFieldNames(result) {
+  const textParts = Array.isArray(result?.content)
+    ? result.content.flatMap((item) =>
+        item?.type === 'text' && typeof item.text === 'string' ? [item.text] : [],
+      )
+    : [];
+  if (result?.isError || textParts.length === 0) {
+    throw new Error(
+      `list-available-fields failed: ${textParts.join(' ') || 'no text response received'}`,
+    );
+  }
+
+  const fields = new Set();
+  for (const text of textParts) {
+    const decoded = decodeJsonStrings(text);
+    walk(decoded, (candidate) => {
+      if (candidate && typeof candidate === 'object' && typeof candidate.caption === 'string') {
+        fields.add(candidate.caption.trim());
+      }
+    });
+  }
+  return [...fields].sort((left, right) => left.localeCompare(right));
+}
+
+function assessStageFields(availableFields, requiredFields = REQUIRED_FIELDS) {
+  const normalized = new Set(availableFields.map((field) => field.trim().toLowerCase()));
+  return {
+    requiredFields,
+    availableFields,
+    missingFields: requiredFields.filter((field) => !normalized.has(field.toLowerCase())),
+  };
+}
+
+async function probeStageFitness(session) {
+  const inheritedEnvironment = Object.fromEntries(
+    Object.entries(process.env).filter(([, value]) => typeof value === 'string'),
+  );
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [DESKTOP_ENTRY],
+    env: { ...inheritedEnvironment, ...createMcpEnvironment(session) },
+  });
+  const client = new Client({ name: 'tail-kill-test-preflight', version: '1.0.0' });
+  try {
+    await client.connect(transport);
+    const result = await client.callTool({
+      name: 'list-available-fields',
+      arguments: { session, verbosity: 'slim' },
+    });
+    return assessStageFields(extractStageFieldNames(result));
+  } finally {
+    await client.close().catch(() => undefined);
+    await transport.close().catch(() => undefined);
+  }
 }
 
 function parseStreamJson(text) {
@@ -235,6 +313,52 @@ function extractCalls(events) {
     });
   }
   return calls;
+}
+
+function containsTableauToolUse(event) {
+  let found = false;
+  walk(event, (candidate) => {
+    if (
+      !found &&
+      candidate &&
+      typeof candidate === 'object' &&
+      candidate.type === 'tool_use' &&
+      typeof candidate.name === 'string' &&
+      normalizeTableauToolName(candidate.name)
+    ) {
+      found = true;
+    }
+  });
+  return found;
+}
+
+function isModelEvent(event) {
+  return event?.type === 'assistant' || event?.type === 'stream_event';
+}
+
+function calculateWallMetrics(events, eventTimes, wallTotal) {
+  const initIndex = events.findIndex(
+    (event) => event?.type === 'system' && event?.subtype === 'init',
+  );
+  const firstModelIndex = events.findIndex(
+    (event, index) => index > initIndex && isModelEvent(event),
+  );
+  const firstToolIndex = events.findIndex(containsTableauToolUse);
+  const finalResponseIndex = events.findLastIndex((event) => event?.type === 'result');
+  const firstModelAt = eventTimes[firstModelIndex];
+  const firstToolAt = eventTimes[firstToolIndex];
+  const finalResponseAt = eventTimes[finalResponseIndex];
+  const elapsed = (start) =>
+    Number.isFinite(start) && Number.isFinite(finalResponseAt) && finalResponseAt >= start
+      ? finalResponseAt - start
+      : null;
+
+  return {
+    wall_total: wallTotal,
+    wall_scored: elapsed(firstModelAt),
+    wall_first_tool: elapsed(firstToolAt),
+    startup: Number.isFinite(firstModelAt) ? firstModelAt : null,
+  };
 }
 
 function findObject(value, predicate) {
@@ -387,8 +511,12 @@ function isRuntimeFailurePlan(planCall) {
   );
 }
 
-function analyzeTranscript(streamText, { wallMs, failureMode }) {
+function analyzeTranscript(
+  streamText,
+  { wallTotal, eventTimes, failureMode, processSucceeded = true },
+) {
   const events = parseStreamJson(streamText);
+  const wallMetrics = calculateWallMetrics(events, eventTimes, wallTotal);
   const calls = extractCalls(events);
   const authoringCalls = calls.filter((call) => call.classification === 'authoring');
   const executeCalls = authoringCalls.filter((call) => call.name === 'execute-authoring-plan');
@@ -409,7 +537,8 @@ function analyzeTranscript(streamText, { wallMs, failureMode }) {
       (item) => typeof item?.name === 'string' && finalLower.includes(item.name.toLowerCase()),
     );
   const oneAuthoringPlan = authoringCalls.length === 1 && executeCalls.length === 1;
-  const wallUnderLimit = wallMs < WALL_LIMIT_MS;
+  const wallUnderLimit =
+    wallMetrics.wall_scored !== null && wallMetrics.wall_scored < WALL_LIMIT_MS;
   const verifiedReadback =
     worksheetCount === 4 && dashboardCount === 1 && missing.length === 0 && namesReferenced;
   const summaryReadbackSeen =
@@ -439,7 +568,7 @@ function analyzeTranscript(streamText, { wallMs, failureMode }) {
     /(step 2|second step)/u.test(finalLower) &&
     /fail/u.test(finalLower) &&
     !/successfully (built|created|completed)/u.test(finalLower);
-  const verdict =
+  const productCriteriaPassed =
     failureMode === 'preflight'
       ? oneAuthoringPlan && wallUnderLimit && cleanPreflightFailure && honestFailure && residueClean
       : failureMode === 'runtime'
@@ -454,6 +583,7 @@ function analyzeTranscript(streamText, { wallMs, failureMode }) {
           verifiedReadback &&
           summaryReadbackSeen &&
           residueClean;
+  const verdict = processSucceeded && productCriteriaPassed;
 
   return {
     events,
@@ -462,12 +592,13 @@ function analyzeTranscript(streamText, { wallMs, failureMode }) {
     metrics: {
       calls: calls.length,
       authoringCalls: authoringCalls.length,
-      wallMs,
+      ...wallMetrics,
       readbackSeen: Boolean(verifiedReadback),
       summaryReadbackSeen: Boolean(summaryReadbackSeen),
       residueClean,
     },
     criteria: {
+      processSucceeded,
       oneAuthoringPlan,
       wallUnderLimit,
       ...(failureMode === 'preflight'
@@ -518,12 +649,23 @@ function runClaude(configPath, prompt) {
       { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'pipe'] },
     );
     let stdout = '';
+    let stdoutBuffer = '';
     let stderr = '';
     let timedOut = false;
+    const eventTimes = [];
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => {
       stdout += chunk;
+      stdoutBuffer += chunk;
+      const receivedAt = Date.now() - startedAt;
+      let newlineIndex = stdoutBuffer.indexOf('\n');
+      while (newlineIndex >= 0) {
+        const line = stdoutBuffer.slice(0, newlineIndex).replace(/\r$/u, '');
+        if (line.trim() !== '') eventTimes.push(receivedAt);
+        stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
+        newlineIndex = stdoutBuffer.indexOf('\n');
+      }
     });
     child.stderr.on('data', (chunk) => {
       stderr += chunk;
@@ -533,16 +675,18 @@ function runClaude(configPath, prompt) {
       timedOut = true;
       child.kill('SIGTERM');
       setTimeout(() => child.kill('SIGKILL'), 500).unref();
-    }, WALL_LIMIT_MS);
+    }, KILL_LIMIT_MS);
     child.once('close', (exitCode, signal) => {
       clearTimeout(timeout);
+      if (stdoutBuffer.trim() !== '') eventTimes.push(Date.now() - startedAt);
       resolvePromise({
         stdout,
         stderr,
         exitCode,
         signal,
         timedOut,
-        wallMs: Date.now() - startedAt,
+        wallTotal: Date.now() - startedAt,
+        eventTimes,
       });
     });
   });
@@ -562,13 +706,32 @@ async function runClaudeWithLaunchRetry(configPath, prompt) {
   }
 }
 
+function formatDuration(milliseconds) {
+  return Number.isFinite(milliseconds) ? `${(milliseconds / 1000).toFixed(2)}s` : '—';
+}
+
+function processOutcome(processResult) {
+  if (!processResult?.started) return '—';
+  const exit = processResult.exitCode === null ? 'null' : processResult.exitCode;
+  return processResult.signal ? `${exit}/${processResult.signal}` : exit;
+}
+
 function summaryRow(result) {
   return [
     result.run,
-    result.metrics.calls,
-    result.metrics.authoringCalls,
-    `${(result.metrics.wallMs / 1000).toFixed(2)}s`,
-    result.metrics.readbackSeen ? 'yes' : 'no',
+    result.metrics?.calls ?? '—',
+    result.metrics?.authoringCalls ?? '—',
+    formatDuration(result.metrics?.wall_total),
+    formatDuration(result.metrics?.wall_scored),
+    formatDuration(result.metrics?.wall_first_tool),
+    formatDuration(result.metrics?.startup),
+    processOutcome(result.process),
+    result.process?.truncatedTranscript === undefined
+      ? '—'
+      : result.process.truncatedTranscript
+        ? 'yes'
+        : 'no',
+    result.stage?.missingFields?.join(', ') || '—',
     result.verdict,
   ];
 }
@@ -579,14 +742,96 @@ function markdownCell(value) {
 
 function renderSummary(results) {
   const rows = [
-    ['run', 'calls', 'authoring-calls', 'wall', 'readback-seen', 'verdict'],
-    ['---', '---:', '---:', '---:', '---', '---'],
+    [
+      'run',
+      'calls',
+      'authoring-calls',
+      'wall-total',
+      'wall-scored',
+      'wall-first-tool',
+      'startup',
+      'exit/signal',
+      'truncated',
+      'missing-fields',
+      'verdict',
+    ],
+    ['---', '---:', '---:', '---:', '---:', '---:', '---:', '---', '---', '---', '---'],
     ...results.map(summaryRow),
   ];
   return `${rows.map((row) => `| ${row.map(markdownCell).join(' | ')} |`).join('\n')}\n`;
 }
 
-async function executeRun({ run, session, failureMode, outDir }) {
+function emptyMetrics(wallTotal = null) {
+  return {
+    calls: 0,
+    authoringCalls: 0,
+    wall_total: wallTotal,
+    wall_scored: null,
+    wall_first_tool: null,
+    startup: null,
+    readbackSeen: false,
+    summaryReadbackSeen: false,
+    residueClean: false,
+  };
+}
+
+function createStageMismatchResult({ run, session, failureMode, stage }) {
+  return {
+    run,
+    kind: failureMode ? `injected-failure-${failureMode}` : 'normal',
+    session,
+    prompt: buildPrompt(failureMode),
+    stage,
+    process: {
+      started: false,
+      exitCode: null,
+      signal: null,
+      timedOut: false,
+      truncatedTranscript: false,
+      stderr: '',
+    },
+    events: [],
+    calls: [],
+    finalText: '',
+    metrics: emptyMetrics(),
+    criteria: { stageFitness: false },
+    verdict: 'STAGE-MISMATCH',
+  };
+}
+
+function createHarnessErrorResult({ run, session, failureMode, error }) {
+  return {
+    run,
+    kind: failureMode ? `injected-failure-${failureMode}` : 'normal',
+    session,
+    prompt: buildPrompt(failureMode),
+    process: {
+      started: false,
+      exitCode: null,
+      signal: null,
+      timedOut: false,
+      truncatedTranscript: true,
+      stderr: '',
+    },
+    events: [],
+    calls: [],
+    finalText: '',
+    metrics: emptyMetrics(),
+    criteria: { harnessCompleted: false },
+    verdict: 'HARNESS-ERROR',
+    harnessError: error.message,
+  };
+}
+
+async function writeRunResult(outDir, result) {
+  await writeFile(
+    join(outDir, `${result.run}.json`),
+    `${JSON.stringify(result, null, 2)}\n`,
+    'utf8',
+  );
+}
+
+async function executeRun({ run, session, failureMode, outDir, stage }) {
   const configPath = join(outDir, `.${run}-mcp.json`);
   const config = createMcpConfig(session);
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
@@ -598,58 +843,134 @@ async function executeRun({ run, session, failureMode, outDir }) {
   }
 
   let analysis;
+  const processSucceeded =
+    processResult.exitCode === 0 && processResult.signal === null && !processResult.timedOut;
   try {
     analysis = analyzeTranscript(processResult.stdout, {
-      wallMs: processResult.wallMs,
+      wallTotal: processResult.wallTotal,
+      eventTimes: processResult.eventTimes,
       failureMode,
+      processSucceeded,
     });
   } catch (error) {
     analysis = {
       events: [],
       calls: [],
       finalText: '',
-      metrics: {
-        calls: 0,
-        authoringCalls: 0,
-        wallMs: processResult.wallMs,
-        readbackSeen: false,
-        summaryReadbackSeen: false,
-        residueClean: false,
-      },
+      metrics: emptyMetrics(processResult.wallTotal),
       criteria: { transcriptParsed: false },
       verdict: 'FAIL',
       parseError: error.message,
     };
   }
+  const truncatedTranscript =
+    processResult.timedOut ||
+    processResult.signal !== null ||
+    !analysis.events.some((event) => event?.type === 'result');
   const result = {
     run,
     kind: failureMode ? `injected-failure-${failureMode}` : 'normal',
     session,
     prompt: buildPrompt(failureMode),
+    stage,
     process: {
+      started: true,
       exitCode: processResult.exitCode,
       signal: processResult.signal,
       timedOut: processResult.timedOut,
+      truncatedTranscript,
       stderr: processResult.stderr,
     },
     ...analysis,
   };
-  await writeFile(join(outDir, `${run}.json`), `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+  await writeRunResult(outDir, result);
   return result;
 }
 
+function createPlannedResult({ run, session, failureMode }) {
+  return {
+    run,
+    kind: failureMode ? `injected-failure-${failureMode}` : 'normal',
+    session,
+    metrics: null,
+    process: null,
+    verdict: 'NOT-RUN',
+  };
+}
+
+async function executeBatch(plans, executeLeg, saveSummary) {
+  const results = plans.map(createPlannedResult);
+  await saveSummary(results);
+  for (let index = 0; index < plans.length; index += 1) {
+    results[index] = await executeLeg(plans[index]);
+    await saveSummary(results);
+  }
+  return results;
+}
+
+function syntheticEventTimes(streamText, interval = 100) {
+  return parseStreamJson(streamText).map((_, index) => index * interval);
+}
+
 async function runDry() {
-  const [fixture, preflightFixture, runtimeFixture] = await Promise.all([
-    readFile(SAMPLE_FIXTURE, 'utf8'),
-    readFile(PREFLIGHT_FAILURE_FIXTURE, 'utf8'),
-    readFile(RUNTIME_FAILURE_FIXTURE, 'utf8'),
-  ]);
-  const result = analyzeTranscript(fixture, { wallMs: 12_340, failureMode: undefined });
+  const [fixture, preflightFixture, runtimeFixture, timingText, stageFieldsText] =
+    await Promise.all([
+      readFile(SAMPLE_FIXTURE, 'utf8'),
+      readFile(PREFLIGHT_FAILURE_FIXTURE, 'utf8'),
+      readFile(RUNTIME_FAILURE_FIXTURE, 'utf8'),
+      readFile(TIMING_FIXTURE, 'utf8'),
+      readFile(STAGE_FIELDS_FIXTURE, 'utf8'),
+    ]);
+  const timing = JSON.parse(timingText);
+  const result = analyzeTranscript(fixture, {
+    wallTotal: timing.fast.wallTotal,
+    eventTimes: timing.fast.eventTimes,
+    failureMode: undefined,
+  });
+  const slowCompletion = analyzeTranscript(fixture, {
+    wallTotal: timing.slowCompletion.wallTotal,
+    eventTimes: timing.slowCompletion.eventTimes,
+    failureMode: undefined,
+  });
   const preflight = analyzeTranscript(preflightFixture, {
-    wallMs: 1_200,
+    wallTotal: 1_200,
+    eventTimes: syntheticEventTimes(preflightFixture),
     failureMode: 'preflight',
   });
-  const runtime = analyzeTranscript(runtimeFixture, { wallMs: 2_500, failureMode: 'runtime' });
+  const runtime = analyzeTranscript(runtimeFixture, {
+    wallTotal: 2_500,
+    eventTimes: syntheticEventTimes(runtimeFixture),
+    failureMode: 'runtime',
+  });
+  const stage = assessStageFields(extractStageFieldNames(JSON.parse(stageFieldsText)));
+  const stageMismatch = createStageMismatchResult({
+    run: 'run-stage',
+    session: 'stage-session',
+    failureMode: undefined,
+    stage,
+  });
+  const batchLegs = [];
+  const batchResults = await executeBatch(
+    [
+      { run: 'run-01', session: 'one', failureMode: undefined },
+      { run: 'run-02', session: 'two', failureMode: undefined },
+    ],
+    async (plan) => {
+      batchLegs.push(plan.run);
+      return {
+        ...createPlannedResult(plan),
+        process: {
+          started: true,
+          exitCode: plan.run === 'run-01' ? 7 : 0,
+          signal: null,
+          timedOut: false,
+          truncatedTranscript: false,
+        },
+        verdict: plan.run === 'run-01' ? 'FAIL' : 'PASS',
+      };
+    },
+    async () => undefined,
+  );
   const config = createMcpConfig('dry-session');
   const defaultOptions = parseArgs([]);
   const runtimeOptions = parseArgs(['--failure-mode', 'runtime']);
@@ -659,6 +980,7 @@ async function runDry() {
     [config.mcpServers.tableau.env.TABLEAU_SESSION === 'dry-session', 'session'],
     [defaultOptions.failureMode === undefined, 'default both failure modes'],
     [runtimeOptions.failureMode === 'runtime', 'failure-mode parser'],
+    [KILL_LIMIT_MS === WALL_LIMIT_MS * 2, 'two-times kill limit'],
     [result.metrics.calls === 3, 'call count'],
     [result.metrics.authoringCalls === 1, 'authoring call count'],
     [result.criteria.oneAuthoringPlan, 'one execute-authoring-plan call'],
@@ -674,11 +996,26 @@ async function runDry() {
     [runtime.criteria.earlierEffectsReported, 'runtime earlier-effects parser'],
     [runtime.criteria.runtimeFinalHonest, 'runtime final-text parser'],
     [runtime.verdict === 'PASS', 'runtime failure verdict'],
+    [slowCompletion.metrics.wall_total === 25_000, 'slow completion total wall'],
+    [slowCompletion.metrics.wall_scored === 24_000, 'slow completion scored wall'],
+    [slowCompletion.metrics.wall_first_tool === 24_000, 'slow completion first-tool wall'],
+    [slowCompletion.metrics.startup === 1_000, 'startup wall'],
+    [!slowCompletion.criteria.wallUnderLimit, 'slow completion wall failure'],
+    [slowCompletion.verdict === 'FAIL', 'slow completion verdict'],
+    [stage.missingFields.join(',') === 'Attendance,Stadium', 'stage missing fields'],
+    [
+      renderSummary([stageMismatch]).includes(
+        '| run-stage | 0 | 0 | — | — | — | — | — | no | Attendance, Stadium | STAGE-MISMATCH |',
+      ),
+      'stage mismatch summary row',
+    ],
+    [batchLegs.join(',') === 'run-01,run-02', 'batch continuation'],
+    [batchResults.every((item) => item.verdict !== 'NOT-RUN'), 'batch completed rows'],
   ];
   const failure = assertions.find(([passed]) => !passed);
   if (failure) throw new Error(`Dry assertion failed: ${failure[1]}`);
   process.stdout.write(
-    '[tail-kill-test] dry PASS: normal=PASS failure-preflight=PASS failure-runtime=PASS\n',
+    '[tail-kill-test] dry PASS: normal=PASS slow=FAIL batch=CONTINUED stage=STAGE-MISMATCH failure-preflight=PASS failure-runtime=PASS\n',
   );
 }
 
@@ -695,24 +1032,40 @@ async function runLive(options) {
   ensureInsideRepo(outDir);
   await mkdir(outDir, { recursive: true });
 
-  const results = [];
+  const plans = [];
   for (let index = 0; index < expectedSessions; index += 1) {
     const failureMode = index < options.runs ? undefined : failureModes[index - options.runs];
     const run = failureMode
       ? `run-failure-${failureMode}`
       : `run-${String(index + 1).padStart(2, '0')}`;
-    const result = await executeRun({
-      run,
-      session: options.sessions[index],
-      failureMode,
-      outDir,
-    });
-    results.push(result);
-    await writeFile(join(outDir, 'summary.md'), renderSummary(results), 'utf8');
-    if (result.process.exitCode !== 0 || result.process.timedOut) break;
+    plans.push({ run, session: options.sessions[index], failureMode });
   }
+
+  const results = await executeBatch(
+    plans,
+    async (plan) => {
+      try {
+        const stage = await probeStageFitness(plan.session);
+        if (stage.missingFields.length > 0) {
+          const result = createStageMismatchResult({ ...plan, stage });
+          await writeRunResult(outDir, result);
+          return result;
+        }
+        return await executeRun({ ...plan, outDir, stage });
+      } catch (error) {
+        const result = createHarnessErrorResult({ ...plan, error });
+        await writeRunResult(outDir, result);
+        return result;
+      }
+    },
+    async (currentResults) => {
+      await writeFile(join(outDir, 'summary.md'), renderSummary(currentResults), 'utf8');
+    },
+  );
   process.exitCode =
-    results.length === expectedSessions && results.every((r) => r.verdict === 'PASS') ? 0 : 1;
+    results.length === expectedSessions && results.every((result) => result.verdict === 'PASS')
+      ? 0
+      : 1;
 }
 
 async function main() {
