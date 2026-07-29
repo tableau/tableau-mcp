@@ -76,6 +76,12 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
     // it returns no additional data and would cause false positives.
     const activityLookbackDays = Math.min(inactiveDays, TS_EVENTS_LOOKBACK_MAX_DAYS);
 
+    // A single `lastLogin:lt` filter already captures never-signed-in users:
+    // `list-users` treats an undefined `lastLogin` as matching `lt`/`lte` (see
+    // usersFilterUtils `matchesFilter`), so they come back as the most-inactive
+    // candidates. Do NOT add a second `list-users` call to fetch null-`lastLogin`
+    // users separately — it would re-return the same rows and inflate the
+    // rendered "total candidates" count (double-count).
     const listUsersFilter = `siteRole:in:${roles.join('|')},lastLogin:lt:${cutoffIso}`;
 
     // Field captions verified against live TS Events VDS schema (2026-07-19).
@@ -117,7 +123,7 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
       '',
       `This returns users with site roles [${roles.join(', ')}] whose \`lastLogin\` is before ${cutoffIso} (inactive ≥ ${inactiveDays} days).`,
       '',
-      'Then call `list-users` a second time with the same `siteRole` filter but **without** the `lastLogin` filter, and include only users whose `lastLogin` is empty/null (never signed in). These are also reclamation candidates — licensed users who were provisioned but never logged in.',
+      'This single call **also** includes users who have never signed in (empty/null `lastLogin`): the `lastLogin:lt` filter treats them as the most-inactive candidates. Do not issue a second `list-users` call for them — they are already in these results. Render never-signed-in users with Days Inactive = "Never".',
       '',
       '## Step 2 — Cross-reference recent activity',
       '',
@@ -132,7 +138,7 @@ export const getUserLicenseReclamationInformPrompt: WebPromptFactory = () => ({
       '## Step 3 — Render the report',
       '',
       '1. Print a header line: `License reclamation candidates (threshold = <inactiveDays> days, roles = [<roles>], total candidates = <count>)`.',
-      '2. Render the final candidates (those NOT seen in TS Events) as a Markdown table with columns: `User Name | Email | Site Role | Last Login | Days Inactive | Auth Setting`.',
+      '2. Render the final candidates (those NOT seen in TS Events) as a Markdown table with columns: `User Name | Email | Site Role | Last Login | Days Inactive`.',
       '   - Sort by Days Inactive descending. Users with null `lastLogin` (never signed in) go at the top with Days Inactive = "Never".',
       '   - Days Inactive = number of days between now and their `lastLogin`, or "Never" if null.',
       '3. If no candidates remain after the TS Events cross-reference, state: "No reclamation candidates found above the threshold." and stop.',

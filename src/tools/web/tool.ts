@@ -6,6 +6,7 @@ import { ZodiosValidationError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
 import { WebMcpServer } from '../../server.web.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../../server/oauth/scopes.js';
+import { getAuthTypeForTelemetry } from '../../telemetry/authType.js';
 import {
   getClientDisplayName,
   sanitizeClientIdForTelemetry,
@@ -246,6 +247,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
         oauth_client_id: sanitizeClientIdForTelemetry(oauthClientId),
         oauth_client_display_name:
           getClientDisplayName(oauthClientId) ?? sanitizeClientIdForTelemetry(oauthClientId),
+        auth_type: getAuthTypeForTelemetry(config, tableauAuthInfo),
       });
       // Record custom metric for this tool call
       const telemetry = getTelemetryProvider();

@@ -66,7 +66,9 @@ describe('authorization code flow', () => {
     expect(location.searchParams.get('redirect_uri')).toBe('http://127.0.0.1:3927/Callback');
     expect(location.searchParams.get('state')).not.toBeNull();
     expect(location.searchParams.get('state')).toContain(':');
-    expect(location.searchParams.get('device_id')).not.toBeNull();
+    expect(location.searchParams.get('device_id')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
     expect(location.searchParams.get('target_site')).toBe('mcp-test');
     expect(location.searchParams.get('device_name')).toBe('tableau-mcp (Unknown agent)');
     expect(location.searchParams.get('client_type')).toBe('tableau-mcp');
