@@ -20,60 +20,67 @@ const CENSUS = [
   {
     name: 'bin-spec',
     reason:
-      'the host has no command key for bin field, width, or origin; histogram auto-binning is undocumented',
+      'No command key exists for bin field, width, or origin. Use author-calc or bind-template with calcs[] to author FLOOR([measure] / width) * width as an integer dimension, add COUNTD, then build the bar.',
     detect: (plan: CensusPlan) => argsHaveKey(plan, BIN_KEYS),
   },
   {
     name: 'calc-authoring',
     reason:
-      'the host has no guarded command contract for creating a calculated field; authoring is host-file-only today',
+      'Calculated fields are unavailable in plan command args. Use author-calc or bind-template with calcs[]; put aggregation inside the formula.',
     detect: (plan: CensusPlan) => argsHaveKey(plan, CALC_KEYS),
   },
   {
     name: 'worksheet-lifecycle',
-    reason: 'the host has no create, name, or activate worksheet command',
+    reason:
+      'Plan commands cannot create, name, or activate a worksheet in one step. Use tabdoc:new-worksheet {}, tabdoc:rename-sheet {Sheet,NewSheet}, and activate-sheet {sheetName}; placing fields on the new worksheet still has no command.',
     detect: 'route-prose',
   },
   {
     name: 'dashboard-composition',
-    reason: 'the host has no dashboard create or compose command step',
+    reason:
+      'The plan grammar cannot compose a dashboard directly. Use tabdoc:new-dashboard {}, then tabdoc:add-sheet-to-dashboard {Dashboard,Worksheet,AddAsFloating:false}.',
     detect: 'route-prose',
   },
   {
     name: 'multi-summary-readback',
-    reason: 'the host accepts at most one summary worksheet per plan',
+    reason:
+      'A plan reads one summary worksheet. Submit one plan per summary worksheet, or use get-summary-data with each additional worksheet after the plan.',
     detect: (plan: CensusPlan) =>
       Array.isArray(plan.summaryWorksheet) && plan.summaryWorksheet.length > 1,
   },
   {
     name: 'summary-rows-beyond-200',
-    reason: 'the host readback is capped at 200 summary rows',
+    reason: 'Plan summary readback is capped at 200 rows. Aggregate or filter before readback.',
     detect: 'route-prose',
   },
   {
     name: 'structural-verify',
     reason:
-      'UNKNOWN: structural targets beyond the declared typed expectations have not been verified on the host surface',
+      'UNKNOWN: structural targets beyond the declared typed expectations are not live-verified. Use only the declared typed expectations.',
     detect: 'route-prose',
   },
   {
     name: 'fiscal-calendar',
-    reason: 'the host has no fiscal-year-start or current-period command key',
+    reason:
+      'There is no fiscal-year-start or current-period command key. Use author-calc to author a fiscal-period date-arithmetic field, then bind it.',
     detect: (plan: CensusPlan) => argsHaveKey(plan, FISCAL_KEYS),
   },
   {
     name: 'relative-date-window',
-    reason: 'the host has no current-plus-previous-N-quarters semantic',
+    reason:
+      'There is no current-plus-previous-N-quarters plan semantic. Use author-calc to author a date-window field comparing dates against {MAX([Date])}, then bind it.',
     detect: 'route-prose',
   },
   {
     name: 'filter-identity-readback',
-    reason: 'the host omits members, mode, and function from filter identity',
+    reason:
+      'Filter readback omits members, mode, and function, so it cannot identify the filter. Use get-summary-data values to verify the filter effect.',
     detect: 'route-prose',
   },
   {
     name: 'goto-sheet-contract',
-    reason: 'the host goto-sheet argument contract is unverified live',
+    reason:
+      'The tabdoc:goto-sheet argument contract is not live-verified. Use activate-sheet {sheetName}.',
     detect: (plan: CensusPlan) => plan.steps.some(({ command }) => command === 'tabdoc:goto-sheet'),
   },
 ] as const satisfies ReadonlyArray<{
