@@ -7,6 +7,7 @@ import * as getWorkbookXmlModule from '../../../desktop/commands/workbook/getWor
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import * as externalDiscovery from '../../../desktop/externalApi/discovery.js';
 import { bundledIntelligenceProvider } from '../../../desktop/intelligence/provider.js';
+import { findWorksheet, normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
 import { sessionRouteState } from '../../../desktop/route/route-state.js';
 import {
   buildInjectedWorkbookXml,
@@ -81,8 +82,8 @@ const UNFILTERED_KPI_WORKSHEET_XML = `<worksheet name='${SHEET}' xmlns:user='htt
 
 const FILTER_XML = `<filter class='categorical' column='${REGION_COLUMN}'>
   <groupfilter function='union' user:ui-enumeration='inclusive' user:ui-marker='enumerate'>
-    <groupfilter function='member' level='[none:Region:nk]' member='EMEA' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
-    <groupfilter function='member' level='[none:Region:nk]' member='AMER' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
+    <groupfilter function='member' level='[none:Region:nk]' member='&quot;EMEA&quot;' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
+    <groupfilter function='member' level='[none:Region:nk]' member='&quot;AMER&quot;' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />
   </groupfilter>
 </filter>`;
 
@@ -167,23 +168,60 @@ function captureExecutor(initialXml: string): {
   return { executor, applyWorkbookDocument };
 }
 
-function expectCategoricalFilter(postBody: string): void {
-  expect(postBody).toMatch(
-    new RegExp(
-      `<filter[^>]*class=["']categorical["'][^>]*column=["']${escapeRegex(REGION_COLUMN)}["']`,
-    ),
-  );
-  expect(postBody).toMatch(/<groupfilter[^>]*member=["']EMEA["']/);
-  expect(postBody).toMatch(/<groupfilter[^>]*member=["']AMER["']/);
-  expect(postBody).toMatch(/<column[^>]*name=["']\[Region\]["'][^>]*role=["']dimension["']/);
-  expect(postBody).toMatch(
-    /<column-instance[^>]*column=["']\[Region\]["'][^>]*name=["']\[none:Region:nk\]["']/,
-  );
-  expect(postBody).toContain(`<column>${REGION_COLUMN}</column>`);
-}
+function expectCategoricalFilter(
+  postBody: string,
+  expectedMembers: string[] = ['"EMEA"', '"AMER"'],
+): void {
+  const parsed = parseXML(postBody);
+  const worksheet = findWorksheet(parsed, SHEET);
+  expect(worksheet).not.toBeNull();
 
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const view = worksheet?.table?.view as Record<string, unknown> | undefined;
+  const filterNodes = view?.filter as
+    | Record<string, unknown>
+    | Record<string, unknown>[]
+    | undefined;
+  const filter = normalizeArray(filterNodes).find(
+    (candidate) =>
+      candidate['@_class'] === 'categorical' && candidate['@_column'] === REGION_COLUMN,
+  );
+  expect(filter).toBeDefined();
+
+  const union = filter?.groupfilter as Record<string, unknown> | undefined;
+  expect(union?.['@_function']).toBe('union');
+  const memberNodes = union?.groupfilter as
+    | Record<string, unknown>
+    | Record<string, unknown>[]
+    | undefined;
+  const members = normalizeArray(memberNodes).map((member) => member['@_member']);
+  expect(new Set(members)).toEqual(new Set(expectedMembers));
+
+  const datasource = normalizeArray<Record<string, unknown>>(
+    parsed.workbook?.datasources?.datasource,
+  ).find((candidate) => candidate['@_name'] === DATASOURCE);
+  expect(normalizeArray(datasource?.column)).toContainEqual(
+    expect.objectContaining({
+      '@_name': '[Region]',
+      '@_role': 'dimension',
+    }),
+  );
+
+  const dependencyNodes = view?.['datasource-dependencies'] as
+    | Record<string, unknown>
+    | Record<string, unknown>[]
+    | undefined;
+  const dependencies = normalizeArray(dependencyNodes).find(
+    (candidate) => candidate['@_datasource'] === DATASOURCE,
+  );
+  expect(normalizeArray(dependencies?.['column-instance'])).toContainEqual(
+    expect.objectContaining({
+      '@_column': '[Region]',
+      '@_name': '[none:Region:nk]',
+    }),
+  );
+
+  const slices = view?.slices as Record<string, unknown> | undefined;
+  expect(normalizeArray(slices?.column)).toContain(REGION_COLUMN);
 }
 
 beforeEach(() => {
@@ -217,6 +255,7 @@ describe('categorical filter persistence in whole-workbook POST bodies', () => {
     });
 
     const tool = getBindTemplateTool(new DesktopMcpServer());
+    tool.notifyInvocation = vi.fn();
     const callback = await Provider.from(tool.callback);
     const result = await callback(
       {
@@ -237,6 +276,56 @@ describe('categorical filter persistence in whole-workbook POST bodies', () => {
     expect(result.isError).toBe(false);
     expect(applyWorkbookDocument).toHaveBeenCalledOnce();
     expectCategoricalFilter(applyWorkbookDocument.mock.calls[0][0] as string);
+  });
+
+  it('binder auto-apply keeps numeric categorical members bare', async () => {
+    const { executor, applyWorkbookDocument } = captureExecutor(LIVE_WORKBOOK_XML);
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(LIVE_WORKBOOK_XML));
+    vi.mocked(binderModule.bindTemplate).mockResolvedValue({
+      ...BOUND_RESULT,
+      args: {
+        ...BOUND_RESULT.args,
+        filters: [{ field: 'Region', values: ['2025'] }],
+      },
+    });
+    vi.spyOn(bundledIntelligenceProvider, 'listTemplateManifests').mockReturnValue([
+      {
+        template: 'text-kpi',
+        fast_path_eligible: true,
+        slots: [],
+      } as unknown as TemplateManifest,
+    ]);
+    vi.mocked(readTemplate).mockReturnValue('<worksheet />');
+    vi.mocked(buildInjectedWorkbookXml).mockReturnValue({
+      ok: true,
+      xml: INJECTED_WORKBOOK_XML,
+    });
+
+    const tool = getBindTemplateTool(new DesktopMcpServer());
+    tool.notifyInvocation = vi.fn();
+    const callback = await Provider.from(tool.callback);
+    const result = await callback(
+      {
+        session: '1',
+        ask: 'Show amount_usd for 2025',
+        proposal: {
+          ...PROPOSAL,
+          filters: [{ field: 'Region', values: ['2025'] }],
+        },
+        auto_apply: true,
+        minConfidence: undefined,
+        target_worksheet: undefined,
+        calcs: undefined,
+      },
+      {
+        ...getMockRequestHandlerExtra(),
+        getExecutor: vi.fn().mockResolvedValue(executor),
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(applyWorkbookDocument).toHaveBeenCalledOnce();
+    expectCategoricalFilter(applyWorkbookDocument.mock.calls[0][0] as string, ['2025']);
   });
 
   it('manual loadWorksheetXml emits the authored Region member union', async () => {

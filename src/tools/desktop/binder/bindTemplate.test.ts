@@ -3344,7 +3344,7 @@ describe('bindTemplateTool auto_apply gate', () => {
       "<filter class='categorical' column='[M7].[none:region:nk]' context='true'>",
     );
     expect(xml).toContain(
-      "<groupfilter function='member' level='[none:region:nk]' member='East' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />",
+      "<groupfilter function='member' level='[none:region:nk]' member='&quot;East&quot;' user:ui-enumeration='inclusive' user:ui-marker='enumerate' />",
     );
     // top-N unaffected.
     expect(xml).toMatch(/function='end'\s+end='top'\s+count='10'/);
