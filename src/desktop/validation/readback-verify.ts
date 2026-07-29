@@ -72,18 +72,6 @@ export interface WorksheetSignature {
   declaredInstances: Set<string>;
 }
 
-export interface FilterSignatureExpectation {
-  column: string;
-  members: string[];
-  mode: 'include' | 'exclude';
-  function?: string;
-}
-
-export interface FilterSignatureMatch {
-  matched: boolean;
-  observed: FilterSignature[];
-}
-
 function isRecord(value: unknown): value is XmlRecord {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -250,25 +238,6 @@ export function readWorksheetSignature(xml: string): WorksheetSignature | null {
   } catch {
     return null;
   }
-}
-
-export function matchWorksheetFilterSignature(
-  xml: string,
-  expected: FilterSignatureExpectation,
-): FilterSignatureMatch | null {
-  const worksheet = readWorksheetSignature(xml);
-  if (!worksheet) return null;
-  const observed = worksheet.filters.filter((candidate) => candidate.column === expected.column);
-  const members = [...expected.members].sort();
-  return {
-    matched: observed.some(
-      (candidate) =>
-        sameMembers(candidate.members, members) &&
-        candidate.mode === expected.mode &&
-        (expected.function === undefined || candidate.groupFunction === expected.function),
-    ),
-    observed,
-  };
 }
 
 function encodingIntended(sig: EncodingSignature): string {

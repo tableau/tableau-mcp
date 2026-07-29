@@ -5,6 +5,7 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import type { PlanPostcondition } from './executeAuthoringPlan.intentDigest.js';
 import { getExecuteAuthoringPlanTool } from './executeAuthoringPlan.js';
 
 const SESSION = 'session-1';
@@ -15,7 +16,7 @@ const COMPLETED = {
   result: null,
 };
 const STEPS = [
-  { command: 'tabdoc:new-worksheet' },
+  { command: 'tabdoc:new-worksheet', args: { NewSheet: 'Sales by Region' } },
   {
     command: 'tabdoc:generate-viz-from-notional-spec',
     args: {
@@ -36,13 +37,41 @@ const WORKSHEET_XML = `<worksheet name="Sales by Region"><table><panes><pane>
   </filter>
 </pane></panes></table></worksheet>`;
 const DASHBOARD_XML =
-  '<dashboard name="Executive Overview"><zones><zone name="Sales by Region"/></zones></dashboard>';
+  '<dashboard name="Executive Overview"><zones><zone name="Sales by Region" type="worksheet"/></zones></dashboard>';
 const WORKBOOK_XML = `<workbook><datasources>
   <datasource name="sample" caption="Sample - Superstore">
     <column name="[Region]" datatype="string" role="dimension" type="nominal"/>
     <column name="[Sales]" datatype="real" role="measure" type="quantitative"/>
+    <column name="[Profit Ratio]" caption="Profit Ratio" datatype="real" role="measure" type="quantitative">
+      <calculation formula="SUM([Profit]) / SUM([Sales])"/>
+    </column>
   </datasource>
 </datasources></workbook>`;
+const BASELINE_INVENTORY = {
+  title: 'Book',
+  unsavedChanges: false,
+  worksheets: [],
+  dashboards: [],
+};
+const CURRENT_INVENTORY = {
+  title: 'Book',
+  unsavedChanges: true,
+  worksheets: [
+    {
+      id: 'worksheet-1',
+      name: 'Sales by Region',
+      hidden: false,
+      datasources: ['Sample - Superstore'],
+    },
+  ],
+  dashboards: [
+    {
+      id: 'dashboard-1',
+      name: 'Executive Overview',
+      hidden: false,
+    },
+  ],
+};
 
 describe('executeAuthoringPlanTool', () => {
   it('presents plan submission as the capability and field preflight', async () => {
@@ -86,10 +115,9 @@ describe('executeAuthoringPlanTool', () => {
       { step: 2, command: 'tabdoc:generate-viz-from-notional-spec', status: 'completed' },
       { step: 3, command: 'tabdoc:save', status: 'completed' },
     ]);
-    expect(payload.message).toContain('Readback observed worksheet "Sales by Region"');
-    expect(payload.message).toContain('dashboard "Executive Overview"');
+    expect(payload.message).toBe('Plan done: final intent diff is empty.');
     expect(payload.message).not.toContain('success');
-    expect(payload.readback).toEqual({
+    expect(payload.readback).toMatchObject({
       verified: {
         requested: ['Sales by Region', 'Executive Overview'],
         observed: [
@@ -279,7 +307,7 @@ describe('executeAuthoringPlanTool', () => {
       {
         session: SESSION,
         steps: [
-          { command: 'tabdoc:save' },
+          { command: 'tabdoc:new-worksheet', args: { NewSheet: 'Sales by Region' } },
           {
             command: 'tabdoc:generate-viz-from-notional-spec',
             args: {
@@ -332,11 +360,134 @@ describe('executeAuthoringPlanTool', () => {
       steps: [{ command: 'tabdoc:save', args: {}, expect: expectReceipt }],
       capabilities_used: [],
       would_verify: [
-        { kind: 'postcondition', step: 1, expect: expectReceipt },
+        {
+          kind: 'intent-assertion',
+          id: expect.stringMatching(/^assertion-1-/),
+          step: 1,
+          checkpoint: 'final',
+          expect: expectReceipt,
+        },
         { kind: 'name-exists', target: 'Sales by Region' },
         { kind: 'summary-data', worksheet: 'Sales by Region', max_rows: 200 },
       ],
     });
+    expect(extra.getExecutor).not.toHaveBeenCalled();
+    expectEveryExecutorMethodUntouched(executor);
+  });
+
+  it('compiles a complete derived digest and dependency DAG before execution', async () => {
+    const executor = makeExecutor();
+    const extra = makeExtra(executor);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        mode: 'compile',
+        steps: STEPS,
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.intent_digest).toMatchObject({
+      schemaVersion: 1,
+      sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      assertions: [
+        {
+          id: expect.stringMatching(/^assertion-1-/),
+          introducedByStep: 1,
+          checkpoint: 'immediate',
+          expect: { kind: 'worksheet-exists', name: 'Sales by Region' },
+        },
+        {
+          id: expect.stringMatching(/^assertion-2-/),
+          introducedByStep: 2,
+          checkpoint: 'final',
+          expect: { kind: 'mark-type', worksheet: 'Sales by Region', mark: 'Bar' },
+        },
+      ],
+    });
+    expect(payload.dependency_edges).toEqual([
+      {
+        fromStep: 1,
+        toStep: 2,
+        symbol: { kind: 'worksheet', identity: 'Sales by Region' },
+      },
+    ]);
+    expect(payload.would_verify).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'intent-assertion',
+          checkpoint: 'immediate',
+          expect: { kind: 'worksheet-exists', name: 'Sales by Region' },
+        }),
+        expect.objectContaining({
+          kind: 'intent-assertion',
+          checkpoint: 'final',
+          expect: { kind: 'mark-type', worksheet: 'Sales by Region', mark: 'Bar' },
+        }),
+      ]),
+    );
+    expect(extra.getExecutor).toHaveBeenCalledTimes(1);
+    expect(executor.getWorkbookDocument).toHaveBeenCalledTimes(1);
+    expect(executor.executeCommand).not.toHaveBeenCalled();
+    expect(executor.getWorkbook).not.toHaveBeenCalled();
+    expect(executor.getWorksheetDocument).not.toHaveBeenCalled();
+    expect(executor.getDashboardDocument).not.toHaveBeenCalled();
+    expect(executor.getWorksheetSummaryData).not.toHaveBeenCalled();
+  });
+
+  it('refuses an unclassified mutation before resolving a session or dispatching', async () => {
+    const executor = makeExecutor();
+    const extra = makeExtra(executor);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [{ command: 'tabdoc:delete-sheet', args: { Sheet: 'Sales by Region' } }],
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toContain('unclassified command "tabdoc:delete-sheet"');
+    expect(payload.message).toContain('No step ran');
+    expect(extra.getExecutor).not.toHaveBeenCalled();
+    expectEveryExecutorMethodUntouched(executor);
+  });
+
+  it('refuses an unobservable field derivation before resolving a session or dispatching', async () => {
+    const executor = makeExecutor();
+    const extra = makeExtra(executor);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [
+          {
+            command: 'tabdoc:save',
+            expect: {
+              kind: 'field-binding',
+              worksheet: 'Sales by Region',
+              placement: 'rows',
+              field: '[Sample].[sum:Sales:qk]',
+              derivation: 'Sum',
+            },
+          },
+        ],
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toContain('worksheet readback cannot observe field derivation');
+    expect(payload.message).toContain('No step ran');
     expect(extra.getExecutor).not.toHaveBeenCalled();
     expectEveryExecutorMethodUntouched(executor);
   });
@@ -405,6 +556,81 @@ describe('executeAuthoringPlanTool', () => {
     expect(payload.message).not.toContain('success');
   });
 
+  it('stops before a downstream consumer when its producer checkpoint mismatches', async () => {
+    const executor = makeExecutor();
+    executor.getWorkbook.mockResolvedValue(
+      new Ok({ title: 'Book', unsavedChanges: true, worksheets: [], dashboards: [] }),
+    );
+    const extra = makeExtra(executor);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: STEPS.slice(0, 2),
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(executor.executeCommand).toHaveBeenCalledTimes(1);
+    expect(executor.getWorkbook).toHaveBeenCalledTimes(2);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toContain('Checkpoint mismatch');
+    expect(payload.message).toContain('tabdoc:new-worksheet');
+    expect(payload.message).toContain('assertion-1-');
+    expect(payload.message).toContain('No later step ran');
+    expect(payload.message).not.toContain('Plan done');
+    expect(payload.intent_digest_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(payload.readback.final_diff).toHaveLength(1);
+    expect(payload.readback.final_diff[0]).toMatchObject({
+      introducedByStep: 1,
+      status: 'mismatch',
+      expected: { kind: 'worksheet-exists', name: 'Sales by Region' },
+      delta: { kind: 'mismatch' },
+    });
+  });
+
+  it('does not credit the plan for a worksheet that existed before step one', async () => {
+    const executor = makeExecutor();
+    executor.getWorkbook.mockResolvedValue(new Ok(CURRENT_INVENTORY));
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [{ command: 'tabdoc:new-worksheet', args: { NewSheet: 'Sales by Region' } }],
+      },
+      makeExtra(executor),
+    );
+
+    expectPostconditionFailure(result, 1, 'worksheet-exists', 'mismatch');
+    expect(executor.executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not open an immediate readback for a final-only assertion', async () => {
+    const executor = makeExecutor();
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [
+          {
+            command: 'tabdoc:save',
+            expect: { kind: 'mark-type', worksheet: 'Sales by Region', mark: 'Bar' },
+          },
+        ],
+      },
+      makeExtra(executor),
+    );
+
+    expect(result.isError).toBe(false);
+    expect(executor.executeCommand).toHaveBeenCalledTimes(1);
+    expect(executor.getWorkbook).toHaveBeenCalledTimes(1);
+    expect(executor.executeCommand.mock.invocationCallOrder[0]).toBeLessThan(
+      executor.getWorkbook.mock.invocationCallOrder[0],
+    );
+  });
+
   it('attributes a dropped worksheet postcondition to its declaring step', async () => {
     const executor = makeExecutor();
     executor.getWorkbook.mockResolvedValue(
@@ -415,7 +641,7 @@ describe('executeAuthoringPlanTool', () => {
       {
         session: SESSION,
         steps: [
-          STEPS[0],
+          { command: 'tabdoc:save' },
           {
             ...STEPS[2],
             expect: { kind: 'worksheet-exists', name: 'Dropped Sheet' },
@@ -457,6 +683,37 @@ describe('executeAuthoringPlanTool', () => {
     );
 
     expectPostconditionFailure(result, 1, 'filter-signature', 'mismatch');
+  });
+
+  it('accepts an observed filter function when the assertion omits it', async () => {
+    const executor = makeExecutor();
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [
+          {
+            command: 'tabdoc:save',
+            expect: {
+              kind: 'filter-signature',
+              worksheet: 'Sales by Region',
+              column: FIELD,
+              members: ['West', 'East'],
+              mode: 'include',
+            },
+          },
+        ],
+      },
+      makeExtra(executor),
+    );
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.readback.assertions[0]).toMatchObject({
+      status: 'passed',
+      expected: { kind: 'filter-signature', function: null },
+    });
   });
 
   it('fails closed when filter members mutate', async () => {
@@ -566,6 +823,101 @@ describe('executeAuthoringPlanTool', () => {
     expectPostconditionFailure(result, 2, 'dashboard-contains', 'mismatch');
   });
 
+  it('refuses datasource existence during compilation without executor calls', async () => {
+    const executor = makeExecutor();
+    const extra = makeExtra(executor);
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        mode: 'compile',
+        steps: [
+          {
+            command: 'tabdoc:save',
+            expect: { kind: 'datasource-exists', name: 'Sample - Superstore' },
+          },
+        ],
+      },
+      extra,
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toContain('no admitted command can create a datasource');
+    expect(payload.message).toContain('No step ran');
+    expect(extra.getExecutor).not.toHaveBeenCalled();
+    expectEveryExecutorMethodUntouched(executor);
+  });
+
+  it.each<{ name: string; assertion: PlanPostcondition }>([
+    {
+      name: 'calculation-signature',
+      assertion: {
+        kind: 'calculation-signature',
+        datasource: 'Sample - Superstore',
+        name: 'Profit Ratio',
+        formula: 'SUM([Profit]) / SUM([Sales])',
+        datatype: 'real',
+        role: 'measure',
+      },
+    },
+    {
+      name: 'datasource-binding',
+      assertion: {
+        kind: 'datasource-binding',
+        worksheet: 'Sales by Region',
+        datasource: 'Sample - Superstore',
+      },
+    },
+    {
+      name: 'field-binding',
+      assertion: {
+        kind: 'field-binding',
+        worksheet: 'Sales by Region',
+        placement: 'color',
+        field: FIELD,
+      },
+    },
+    {
+      name: 'dashboard-zone',
+      assertion: {
+        kind: 'dashboard-zone',
+        dashboard: 'Executive Overview',
+        worksheet: 'Sales by Region',
+        zoneType: 'worksheet',
+        multiplicity: 1,
+      },
+    },
+    {
+      name: 'summary-signature',
+      assertion: {
+        kind: 'summary-signature',
+        worksheet: 'Sales by Region',
+        columns: ['Region', 'SUM(Sales)'],
+        rows: [['West', 100]],
+      },
+    },
+  ])('evaluates $name assertions against host evidence', async ({ assertion }) => {
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [{ command: 'tabdoc:save', expect: assertion }],
+      },
+      makeExtra(makeExecutor()),
+    );
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.readback.assertions).toEqual([
+      expect.objectContaining({
+        status: 'passed',
+        expected: assertion,
+      }),
+    ]);
+  });
+
   it('reports done only after every declared postcondition passes', async () => {
     const executor = makeExecutor();
     const result = await getResult(
@@ -627,9 +979,45 @@ describe('executeAuthoringPlanTool', () => {
     ).toBe(true);
     expect(payload.readback.verified.missing).toEqual([]);
     expect(payload.readback.summary_data.rows).toHaveLength(1);
-    expect(executor.getWorkbook).toHaveBeenCalledTimes(1);
+    expect(executor.getWorkbook).toHaveBeenCalledTimes(3);
     expect(executor.getWorksheetDocument).toHaveBeenCalledTimes(1);
     expect(executor.getDashboardDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs the existing final readback for derived assertions and returns an empty diff', async () => {
+    const executor = makeExecutor();
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: STEPS.slice(0, 2),
+      },
+      makeExtra(executor),
+    );
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toBe('Plan done: final intent diff is empty.');
+    expect(payload.readback.final_diff).toEqual([]);
+    expect(payload.readback.assertions).toEqual([
+      expect.objectContaining({
+        introducedByStep: 1,
+        checkpoint: 'immediate',
+        status: 'passed',
+        expected: { kind: 'worksheet-exists', name: 'Sales by Region' },
+        delta: { kind: 'none', expected: null, observed: null },
+      }),
+      expect.objectContaining({
+        introducedByStep: 2,
+        checkpoint: 'final',
+        status: 'passed',
+        expected: { kind: 'mark-type', worksheet: 'Sales by Region', mark: 'Bar' },
+        delta: { kind: 'none', expected: null, observed: null },
+      }),
+    ]);
+    expect(executor.getWorkbook).toHaveBeenCalledTimes(3);
+    expect(executor.getWorksheetDocument).toHaveBeenCalledTimes(1);
   });
 
   it('attributes an unavailable readback to the first step with an expectation', async () => {
@@ -645,7 +1033,7 @@ describe('executeAuthoringPlanTool', () => {
       {
         session: SESSION,
         steps: [
-          STEPS[0],
+          { command: 'tabdoc:save' },
           {
             ...STEPS[2],
             expect: { kind: 'mark-type', worksheet: 'Sales by Region', mark: 'Bar' },
@@ -670,30 +1058,17 @@ type MockExecutor = {
 };
 
 function makeExecutor(): MockExecutor {
+  const executeCommand = vi.fn().mockResolvedValue(new Ok(COMPLETED));
   return {
-    executeCommand: vi.fn().mockResolvedValue(new Ok(COMPLETED)),
+    executeCommand,
     getWorkbookDocument: vi.fn().mockResolvedValue(new Ok({ xml: WORKBOOK_XML })),
-    getWorkbook: vi.fn().mockResolvedValue(
-      new Ok({
-        title: 'Book',
-        unsavedChanges: true,
-        worksheets: [
-          {
-            id: 'worksheet-1',
-            name: 'Sales by Region',
-            hidden: false,
-            datasources: ['Sample - Superstore'],
-          },
-        ],
-        dashboards: [
-          {
-            id: 'dashboard-1',
-            name: 'Executive Overview',
-            hidden: false,
-          },
-        ],
-      }),
-    ),
+    getWorkbook: vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(
+          new Ok(executeCommand.mock.calls.length === 0 ? BASELINE_INVENTORY : CURRENT_INVENTORY),
+        ),
+      ),
     getWorksheetDocument: vi.fn().mockResolvedValue(new Ok({ xml: WORKSHEET_XML })),
     getDashboardDocument: vi.fn().mockResolvedValue(new Ok({ xml: DASHBOARD_XML })),
     listWorksheets: vi.fn().mockResolvedValue(
@@ -730,19 +1105,7 @@ async function getResult(
     steps: Array<{
       command: string;
       args?: Record<string, unknown>;
-      expect?:
-        | { kind: 'worksheet-exists'; name: string }
-        | {
-            kind: 'filter-signature';
-            worksheet: string;
-            column: string;
-            members: string[];
-            mode: 'include' | 'exclude';
-            function?: string;
-          }
-        | { kind: 'mark-type'; worksheet: string; mark: string }
-        | { kind: 'encoding'; worksheet: string; channel: string; field: string }
-        | { kind: 'dashboard-contains'; dashboard: string; worksheet: string };
+      expect?: PlanPostcondition;
     }>;
     verify?: string[];
     summary_worksheet?: string | string[];

@@ -14,10 +14,7 @@ import {
 import { resolveField } from '../../../desktop/metadata/field-resolver.js';
 import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
-import {
-  matchWorksheetFilterSignature,
-  readWorksheetSignature,
-} from '../../../desktop/validation/readback-verify.js';
+import { readWorksheetSignature } from '../../../desktop/validation/readback-verify.js';
 import {
   DesktopCommandExecutionError,
   IncompleteOperationError,
@@ -38,40 +35,46 @@ import {
 } from '../structuredContent.js';
 import { DesktopTool } from '../tool.js';
 import { checkAuthoringCapabilityCensus } from './authoringCapabilityCensus.js';
+import {
+  type AssertionReadback,
+  type CompiledPlan,
+  compileIntentPlan,
+  type IntentAssertion,
+  type IntentAssertionRecord,
+  IntentDigestCompileError,
+  type PlanPostcondition,
+  postconditionSchema,
+} from './executeAuthoringPlan.intentDigest.js';
 
 const DEFAULT_MAX_ROWS = 200;
 
-const postconditionSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('worksheet-exists'), name: z.string() }),
-  z.object({
-    kind: z.literal('filter-signature'),
-    worksheet: z.string(),
-    column: z.string(),
-    members: z.array(z.string()),
-    mode: z.enum(['include', 'exclude']),
-    function: z.string().optional(),
-  }),
-  z.object({ kind: z.literal('mark-type'), worksheet: z.string(), mark: z.string() }),
-  z.object({
-    kind: z.literal('encoding'),
-    worksheet: z.string(),
-    channel: z.string(),
-    field: z.string(),
-  }),
-  z.object({
-    kind: z.literal('dashboard-contains'),
-    dashboard: z.string(),
-    worksheet: z.string(),
-  }),
-]);
+const postconditionInputSchema = z
+  .object({
+    kind: z.enum([
+      'worksheet-exists',
+      'dashboard-exists',
+      'datasource-exists',
+      'calculation-signature',
+      'datasource-binding',
+      'field-binding',
+      'filter-signature',
+      'mark-type',
+      'encoding',
+      'dashboard-contains',
+      'dashboard-zone',
+      'summary-signature',
+    ]),
+  })
+  .passthrough()
+  .describe(
+    'Optional step assertion fields: worksheet-exists, dashboard-exists {name; each asserts the sheet was created by this plan (baseline-diffed)}; datasource-exists {name}; calculation-signature {datasource,name,formula,datatype,role}; datasource-binding {worksheet,datasource}; field-binding {worksheet,placement,field}; filter-signature {worksheet,column,members:string[],mode:include|exclude,function?}; mark-type {worksheet,mark}; encoding {worksheet,channel,field}; dashboard-contains {dashboard,worksheet}; dashboard-zone {dashboard,worksheet,zoneType,multiplicity}; summary-signature {worksheet,columns:string[],rows:scalar[][]}. Summary scalars: string, number, boolean, or null. Missing filter function is accepted for compatibility and normalized to null. Assertions use strict mechanical equality at readback; unavailable evidence is unobservable.',
+  );
 
 const stepSchema = z.object({
   command: z.string().describe('Command ID.'),
   args: z.record(z.unknown()).optional(),
-  expect: postconditionSchema.optional(),
+  expect: postconditionInputSchema.optional(),
 });
-
-type PlanPostcondition = z.infer<typeof postconditionSchema>;
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID.'),
@@ -107,7 +110,9 @@ type NamedReadback = {
 
 type PlanReadback = {
   verified?: NamedReadback;
-  postconditions?: PostconditionReadback[];
+  assertions?: AssertionReadback[];
+  final_diff?: AssertionReadback[];
+  postconditions?: LegacyPostconditionReadback[];
   summary_data?: {
     worksheet: { id: string; name: string };
     max_rows: number;
@@ -116,7 +121,7 @@ type PlanReadback = {
   };
 };
 
-type PostconditionReadback = {
+type LegacyPostconditionReadback = {
   step: number;
   kind: PlanPostcondition['kind'];
   status: 'passed' | 'mismatch' | 'unobservable';
@@ -124,9 +129,14 @@ type PostconditionReadback = {
   observed: string;
 };
 
+type IntentBaseline = {
+  inventory: WorkbookInventory;
+};
+
 type ExecutePlanResultBody = {
   message: string;
   steps: PlanStepResult[];
+  intent_digest_sha256?: string;
   readback?: PlanReadback;
 };
 
@@ -139,11 +149,19 @@ type CompilePlanResultBody = {
     expect?: PlanPostcondition;
   }>;
   capabilities_used: string[];
+  intent_digest: CompiledPlan<PreparedStep>['digest'];
+  dependency_edges: CompiledPlan<PreparedStep>['dependencyEdges'];
   would_verify: PlannedVerification[];
 };
 
 type PlannedVerification =
-  | { kind: 'postcondition'; step: number; expect: PlanPostcondition }
+  | {
+      kind: 'intent-assertion';
+      id: string;
+      step: number;
+      checkpoint: IntentAssertionRecord['checkpoint'];
+      expect: IntentAssertion;
+    }
   | { kind: 'name-exists'; target: string }
   | { kind: 'summary-data'; worksheet: string; max_rows: number };
 
@@ -179,6 +197,15 @@ export const getExecuteAuthoringPlanTool = (
           if (preparedResult.isErr()) {
             return preparedResult;
           }
+          let compiledPlan: CompiledPlan<PreparedStep>;
+          try {
+            compiledPlan = compileIntentPlan(preparedResult.value.steps);
+          } catch (error) {
+            if (error instanceof IntentDigestCompileError) {
+              return refusedPlan(error.step, error.command, error.message);
+            }
+            throw error;
+          }
           const normalizedSummaryWorksheet = normalizeSummaryWorksheet(summary_worksheet);
           const fieldReferences = collectPlannedFieldReferences(preparedResult.value.steps);
           if (mode === 'compile') {
@@ -208,8 +235,10 @@ export const getExecuteAuthoringPlanTool = (
                     ...(expect ? { expect } : {}),
                   })),
                   capabilities_used: preparedResult.value.capabilitiesUsed,
+                  intent_digest: compiledPlan.digest,
+                  dependency_edges: compiledPlan.dependencyEdges,
                   would_verify: plannedVerifications(
-                    preparedResult.value.steps,
+                    compiledPlan.digest.assertions,
                     verify,
                     normalizedSummaryWorksheet,
                   ),
@@ -233,6 +262,20 @@ export const getExecuteAuthoringPlanTool = (
           if (fieldPreflight.isErr()) {
             return fieldPreflight;
           }
+          const baselineResult = await captureIntentBaseline(
+            compiledPlan.digest.assertions,
+            executor,
+            extra.signal,
+          );
+          if (baselineResult.isErr()) {
+            const firstStep = preparedResult.value.steps[0];
+            return refusedPlan(
+              firstStep.step,
+              firstStep.command,
+              `Could not capture the pre-plan baseline: ${baselineResult.error.getErrorText()}`,
+            );
+          }
+          const intentBaseline = baselineResult.value;
           const stepResults: PlanStepResult[] = [];
 
           for (const step of preparedResult.value.steps) {
@@ -272,12 +315,64 @@ export const getExecuteAuthoringPlanTool = (
                 'Read workbook state before deciding how to continue',
               );
             }
+
+            const checkpointIds =
+              compiledPlan.immediateAssertionIdsByProducingStep[step.step] ?? [];
+            if (checkpointIds.length > 0) {
+              const checkpointAssertions = compiledPlan.digest.assertions.filter(({ id }) =>
+                checkpointIds.includes(id),
+              );
+              const checkpointResult = await runExternalApiReadTool({
+                session: resolvedSession,
+                extra,
+                callback: async (_executor, _signal, read) =>
+                  await performReadback(
+                    undefined,
+                    undefined,
+                    checkpointAssertions,
+                    read,
+                    intentBaseline,
+                  ),
+              });
+              if (checkpointResult.isErr()) {
+                return incompletePlan(
+                  `Checkpoint readback failed after step ${step.step} (${step.command}) for digest ${compiledPlan.digest.sha256}: ${checkpointResult.error.getErrorText()} Executed prefix: ${formatExecutedSteps(
+                    stepResults,
+                  )}. Skipped suffix: ${formatSkippedSteps(
+                    preparedResult.value.steps,
+                    step.step,
+                  )}. No later step ran.`,
+                  stepResults,
+                  'Repair the readback probe before deciding whether to continue',
+                  undefined,
+                  compiledPlan.digest.sha256,
+                );
+              }
+              const checkpointReadback = checkpointResult.value;
+              const firstCheckpointFailure = checkpointReadback.final_diff?.[0];
+              if (firstCheckpointFailure) {
+                return incompletePlan(
+                  formatAssertionFailure({
+                    phase: 'Checkpoint',
+                    failure: firstCheckpointFailure,
+                    digestSha256: compiledPlan.digest.sha256,
+                    command: step.command,
+                    executed: stepResults,
+                    skipped: preparedResult.value.steps.filter(
+                      ({ step: candidate }) => candidate > step.step,
+                    ),
+                  }),
+                  stepResults,
+                  'Repair or extend the readback probe; do not repeat the write',
+                  checkpointReadback,
+                  compiledPlan.digest.sha256,
+                );
+              }
+            }
           }
 
-          const expectations = preparedResult.value.steps.flatMap(({ step, expect }) =>
-            expect ? [{ step, expect }] : [],
-          );
-          if (!hasReadbackRequest(verify, normalizedSummaryWorksheet, expectations)) {
+          const assertions = compiledPlan.digest.assertions;
+          if (!hasReadbackRequest(verify, normalizedSummaryWorksheet, assertions)) {
             return new Ok(
               withNextAction(
                 {
@@ -294,31 +389,44 @@ export const getExecuteAuthoringPlanTool = (
             session: resolvedSession,
             extra,
             callback: async (_executor, _signal, read) =>
-              await performReadback(verify, normalizedSummaryWorksheet, expectations, read),
+              await performReadback(
+                verify,
+                normalizedSummaryWorksheet,
+                assertions,
+                read,
+                intentBaseline,
+              ),
           });
           if (readbackResult.isErr()) {
             return incompletePlan(
               `All ${stepResults.length} steps reported completed, but readback failed: ${readbackResult.error.getErrorText()} The outcome is unverified.`,
               stepResults,
               'Correct the readback request before claiming completion',
+              undefined,
+              compiledPlan.digest.sha256,
             );
           }
 
           const readbackValue = readbackResult.value;
-          const firstFailure = readbackValue.postconditions?.find(
-            ({ status }) => status !== 'passed',
-          );
+          const firstFailure = readbackValue.final_diff?.[0];
           if (firstFailure) {
             const unavailable = firstFailure.status === 'unobservable';
             return incompletePlan(
               `Postcondition ${unavailable ? 'could not be observed' : 'mismatch'} at step ${
-                firstFailure.step
-              } (${firstFailure.kind}). Expected ${firstFailure.expected}; ${
-                unavailable ? 'observed unavailable' : `observed ${firstFailure.observed}`
-              }.`,
+                firstFailure.introducedByStep
+              } (${firstFailure.expected.kind}), assertion ${firstFailure.id}, digest ${
+                compiledPlan.digest.sha256
+              }. Expected ${JSON.stringify(firstFailure.expected)}; ${
+                unavailable
+                  ? 'observed unavailable'
+                  : `observed ${JSON.stringify(firstFailure.observed)}`
+              }; delta ${JSON.stringify(firstFailure.delta)}.`,
               stepResults,
-              'Correct failed postcondition before claiming completion',
+              unavailable
+                ? 'Repair the readback probe before another write'
+                : 'Correct failed postcondition before claiming completion',
               readbackValue,
+              compiledPlan.digest.sha256,
             );
           }
           if (readbackValue.verified && readbackValue.verified.missing.length > 0) {
@@ -327,6 +435,7 @@ export const getExecuteAuthoringPlanTool = (
               stepResults,
               'Correct missing verify targets before claiming completion',
               readbackValue,
+              compiledPlan.digest.sha256,
             );
           }
           if (normalizedSummaryWorksheet !== undefined && !readbackValue.summary_data) {
@@ -335,6 +444,7 @@ export const getExecuteAuthoringPlanTool = (
               stepResults,
               'Correct summary readback before claiming completion',
               readbackValue,
+              compiledPlan.digest.sha256,
             );
           }
           if (readbackValue.summary_data?.rows.length === 0) {
@@ -343,16 +453,21 @@ export const getExecuteAuthoringPlanTool = (
               stepResults,
               'Correct summary readback before claiming completion',
               readbackValue,
+              compiledPlan.digest.sha256,
             );
           }
           return new Ok(
             withNextAction(
               {
                 message:
-                  expectations.length > 0
-                    ? `Plan done: all ${expectations.length} declared postcondition(s) passed.`
+                  assertions.length > 0
+                    ? assertions.length ===
+                      preparedResult.value.steps.filter(({ expect }) => expect !== undefined).length
+                      ? `Plan done: all ${assertions.length} declared postcondition(s) passed.`
+                      : 'Plan done: final intent diff is empty.'
                     : describeReadback(readbackValue),
                 steps: stepResults,
+                intent_digest_sha256: compiledPlan.digest.sha256,
                 readback: readbackValue,
               },
               prefillNextAction('Review observed readback before claiming completion'),
@@ -371,7 +486,7 @@ function prepareSteps(
   steps: Array<{
     command: string;
     args?: Record<string, unknown>;
-    expect?: PlanPostcondition;
+    expect?: unknown;
   }>,
   summaryWorksheet: string | string[] | undefined,
 ): Result<{ steps: PreparedStep[]; capabilitiesUsed: string[] }, McpToolError> {
@@ -587,10 +702,16 @@ function incompletePlan(
   steps: PlanStepResult[],
   nextAction: string,
   readback?: PlanReadback,
+  intentDigestSha256?: string,
 ): Result<PlanResult, McpToolError> {
   return new IncompleteOperationError<PlanResultBody>(
     withNextAction(
-      { message, steps, ...(readback ? { readback } : {}) },
+      {
+        message,
+        steps,
+        ...(intentDigestSha256 ? { intent_digest_sha256: intentDigestSha256 } : {}),
+        ...(readback ? { readback } : {}),
+      },
       prefillNextAction(nextAction),
     ),
   ).toErr();
@@ -602,12 +723,48 @@ function formatExecutedSteps(steps: PlanStepResult[]): string {
     : 'none';
 }
 
+function formatSkippedSteps(steps: PreparedStep[], completedStep: number): string {
+  const skipped = steps.filter(({ step }) => step > completedStep);
+  return skipped.length > 0
+    ? skipped.map(({ step, command }) => `${step} (${command})`).join(', ')
+    : 'none';
+}
+
+function formatAssertionFailure({
+  phase,
+  failure,
+  digestSha256,
+  command,
+  executed,
+  skipped,
+}: {
+  phase: 'Checkpoint' | 'Final';
+  failure: AssertionReadback;
+  digestSha256: string;
+  command: string;
+  executed: PlanStepResult[];
+  skipped: PreparedStep[];
+}): string {
+  const status = failure.status === 'unobservable' ? 'unobservable' : 'mismatch';
+  return `${phase} ${status} after step ${failure.introducedByStep} (${command}), assertion ${
+    failure.id
+  }, digest ${digestSha256}. Expected ${JSON.stringify(
+    failure.expected,
+  )}; observed ${JSON.stringify(failure.observed)}; delta ${JSON.stringify(
+    failure.delta,
+  )}. Executed prefix: ${formatExecutedSteps(executed)}. Skipped suffix: ${
+    skipped.length > 0
+      ? skipped.map(({ step, command: skippedCommand }) => `${step} (${skippedCommand})`).join(', ')
+      : 'none'
+  }. No later step ran.`;
+}
+
 function hasReadbackRequest(
   verify: string[] | undefined,
   summaryWorksheet: string | undefined,
-  expectations: Array<{ step: number; expect: PlanPostcondition }>,
+  assertions: IntentAssertionRecord[],
 ): boolean {
-  return (verify?.length ?? 0) > 0 || summaryWorksheet !== undefined || expectations.length > 0;
+  return (verify?.length ?? 0) > 0 || summaryWorksheet !== undefined || assertions.length > 0;
 }
 
 function normalizeSummaryWorksheet(
@@ -617,14 +774,18 @@ function normalizeSummaryWorksheet(
 }
 
 function plannedVerifications(
-  steps: PreparedStep[],
+  assertions: IntentAssertionRecord[],
   verify: string[] | undefined,
   summaryWorksheet: string | undefined,
 ): PlannedVerification[] {
   return [
-    ...steps.flatMap(({ step, expect }) =>
-      expect ? [{ kind: 'postcondition' as const, step, expect }] : [],
-    ),
+    ...assertions.map(({ id, introducedByStep, checkpoint, expect }) => ({
+      kind: 'intent-assertion' as const,
+      id,
+      step: introducedByStep,
+      checkpoint,
+      expect,
+    })),
     ...(verify ?? []).map((target) => ({ kind: 'name-exists' as const, target })),
     ...(summaryWorksheet
       ? [{ kind: 'summary-data' as const, worksheet: summaryWorksheet, max_rows: DEFAULT_MAX_ROWS }]
@@ -632,53 +793,84 @@ function plannedVerifications(
   ];
 }
 
+async function captureIntentBaseline(
+  assertions: IntentAssertionRecord[],
+  executor: ExternalApiToolExecutor,
+  signal: AbortSignal,
+): Promise<Result<IntentBaseline | undefined, McpToolError>> {
+  const existenceAssertions = assertions.filter(({ expect }) =>
+    ['worksheet-exists', 'dashboard-exists'].includes(expect.kind),
+  );
+  if (existenceAssertions.length === 0) return new Ok(undefined);
+
+  const inventoryResult = await executor.getWorkbook(signal);
+  if (inventoryResult.isErr()) {
+    return new DesktopCommandExecutionError(inventoryResult.error).toErr();
+  }
+
+  return new Ok({ inventory: inventoryResult.value });
+}
+
 async function performReadback(
   verify: string[] | undefined,
   summaryWorksheet: string | undefined,
-  expectations: Array<{ step: number; expect: PlanPostcondition }>,
+  assertions: IntentAssertionRecord[],
   read: ExternalApiRead,
+  baseline: IntentBaseline | undefined,
 ): Promise<Result<PlanReadback, McpToolError>> {
   const output: PlanReadback = {};
-  if ((verify?.length ?? 0) > 0 || expectations.length > 0) {
+  const summaryCache = new Map<string, Promise<Result<WorksheetSummaryData, McpToolError>>>();
+  const readSummary = (worksheet: string): Promise<Result<WorksheetSummaryData, McpToolError>> => {
+    const cached = summaryCache.get(worksheet);
+    if (cached) return cached;
+    const requested = (async (): Promise<Result<WorksheetSummaryData, McpToolError>> => {
+      const result = await fetchWorksheetSummaryData({
+        read,
+        worksheet,
+        maxRows: DEFAULT_MAX_ROWS,
+      });
+      return result.isErr() ? result.error.error.toErr() : result;
+    })();
+    summaryCache.set(worksheet, requested);
+    return requested;
+  };
+
+  if ((verify?.length ?? 0) > 0 || assertions.length > 0) {
     const inventoryResult = await read(
       'workbook inventory',
       async (executor, signal) => await executor.getWorkbook(signal),
     );
     if (inventoryResult.isErr()) {
-      if (expectations.length === 0) return inventoryResult;
+      if (assertions.length === 0) return inventoryResult;
       const observed = inventoryResult.error.getErrorText();
-      output.postconditions = expectations.map(({ step, expect }) => ({
-        step,
-        kind: expect.kind,
-        status: 'unobservable',
-        expected: JSON.stringify(expect),
-        observed,
-      }));
+      output.assertions = assertions.map((assertion) =>
+        assertionOutcome(assertion, 'unobservable', observed),
+      );
     } else {
       if ((verify?.length ?? 0) > 0) {
         output.verified = matchNamedItems(verify ?? [], inventoryResult.value);
       }
-      if (expectations.length > 0) {
-        output.postconditions = await evaluatePostconditions(
-          expectations,
+      if (assertions.length > 0) {
+        output.assertions = await evaluateAssertions(
+          assertions,
           inventoryResult.value,
           read,
+          readSummary,
+          baseline,
         );
       }
+    }
+    if (output.assertions) {
+      output.final_diff = output.assertions.filter(({ status }) => status !== 'passed');
+      output.postconditions = legacyPostconditions(output.assertions);
     }
   }
 
   if (summaryWorksheet) {
     const maxRows = DEFAULT_MAX_ROWS;
-    const summaryResult = await fetchWorksheetSummaryData({
-      read,
-      worksheet: summaryWorksheet,
-      maxRows,
-    });
+    const summaryResult = await readSummary(summaryWorksheet);
     if (summaryResult.isErr()) {
-      return summaryResult.error.type === 'worksheet'
-        ? summaryResult.error.error.toErr()
-        : summaryResult.error.error.toErr();
+      return summaryResult;
     }
     output.summary_data = shapeSummaryReadback(summaryResult.value, maxRows);
   }
@@ -712,14 +904,17 @@ function matchNamedItems(requested: string[], inventory: WorkbookInventory): Nam
   };
 }
 
-async function evaluatePostconditions(
-  expectations: Array<{ step: number; expect: PlanPostcondition }>,
+async function evaluateAssertions(
+  assertions: IntentAssertionRecord[],
   inventory: WorkbookInventory,
   read: ExternalApiRead,
-): Promise<PostconditionReadback[]> {
+  readSummary: (worksheet: string) => Promise<Result<WorksheetSummaryData, McpToolError>>,
+  baseline: IntentBaseline | undefined,
+): Promise<AssertionReadback[]> {
   const worksheetDocuments = new Map<string, Promise<Result<WorkbookDocument, McpToolError>>>();
   const dashboardDocuments = new Map<string, Promise<Result<WorkbookDocument, McpToolError>>>();
-  const outcomes: PostconditionReadback[] = [];
+  let workbookDocument: Promise<Result<WorkbookDocument, McpToolError>> | undefined;
+  const outcomes: AssertionReadback[] = [];
 
   const worksheetDocument = (
     worksheet: WorksheetItem,
@@ -745,88 +940,259 @@ async function evaluatePostconditions(
     dashboardDocuments.set(dashboard.id, requested);
     return requested;
   };
+  const getWorkbookDocument = (): Promise<Result<WorkbookDocument, McpToolError>> => {
+    workbookDocument ??= read(
+      'workbook document',
+      async (executor, signal) => await executor.getWorkbookDocument(signal),
+    );
+    return workbookDocument;
+  };
 
-  for (const { step, expect } of expectations) {
-    const expected = JSON.stringify(expect);
+  for (const assertion of assertions) {
+    const { expect } = assertion;
     if (expect.kind === 'worksheet-exists') {
-      const matched = findWorksheet(inventory, expect.name);
-      outcomes.push({
-        step,
-        kind: expect.kind,
-        status: matched ? 'passed' : 'mismatch',
-        expected,
-        observed: JSON.stringify((inventory.worksheets ?? []).map(({ name }) => name)),
-      });
+      if (!baseline) {
+        outcomes.push(
+          assertionOutcome(assertion, 'unobservable', 'pre-plan workbook baseline is unavailable'),
+        );
+        continue;
+      }
+      const observed = (inventory.worksheets ?? []).map(({ id, name }) => ({ id, name }));
+      const before = (baseline.inventory.worksheets ?? []).map(({ id, name }) => ({ id, name }));
+      const matched = observed.filter(({ id, name }) => id === expect.name || name === expect.name);
+      const existedBefore = before.some(
+        ({ id, name }) => id === expect.name || name === expect.name,
+      );
+      outcomes.push(
+        assertionOutcome(
+          assertion,
+          matched.length === 1 && !existedBefore ? 'passed' : 'mismatch',
+          { before, after: observed },
+        ),
+      );
+      continue;
+    }
+
+    if (expect.kind === 'dashboard-exists') {
+      if (!baseline) {
+        outcomes.push(
+          assertionOutcome(assertion, 'unobservable', 'pre-plan workbook baseline is unavailable'),
+        );
+        continue;
+      }
+      const observed = (inventory.dashboards ?? []).map(({ id, name }) => ({ id, name }));
+      const before = (baseline.inventory.dashboards ?? []).map(({ id, name }) => ({ id, name }));
+      const matched = observed.filter(({ id, name }) => id === expect.name || name === expect.name);
+      const existedBefore = before.some(
+        ({ id, name }) => id === expect.name || name === expect.name,
+      );
+      outcomes.push(
+        assertionOutcome(
+          assertion,
+          matched.length === 1 && !existedBefore ? 'passed' : 'mismatch',
+          { before, after: observed },
+        ),
+      );
+      continue;
+    }
+
+    if (expect.kind === 'calculation-signature') {
+      const document = await getWorkbookDocument();
+      if (document.isErr()) {
+        outcomes.push(assertionOutcome(assertion, 'unobservable', document.error.getErrorText()));
+        continue;
+      }
+      const observed = readCalculationSignatures(document.value.xml).filter(
+        ({ datasource, name }) => datasource === expect.datasource && name === expect.name,
+      );
+      const matched = observed.some(
+        ({ formula, datatype, role }) =>
+          formula === expect.formula && datatype === expect.datatype && role === expect.role,
+      );
+      outcomes.push(assertionOutcome(assertion, matched ? 'passed' : 'mismatch', observed));
+      continue;
+    }
+
+    if (expect.kind === 'summary-signature') {
+      const summary = await readSummary(expect.worksheet);
+      if (summary.isErr()) {
+        outcomes.push(assertionOutcome(assertion, 'unobservable', summary.error.getErrorText()));
+        continue;
+      }
+      const columns = summary.value.columns.map(summaryColumnName);
+      if (columns.some((column) => column === null)) {
+        outcomes.push(
+          assertionOutcome(assertion, 'unobservable', 'summary column names are unavailable'),
+        );
+        continue;
+      }
+      const observed = { columns, rows: summary.value.rows };
+      const matched =
+        JSON.stringify(columns) === JSON.stringify(expect.columns) &&
+        JSON.stringify(summary.value.rows) === JSON.stringify(expect.rows);
+      outcomes.push(assertionOutcome(assertion, matched ? 'passed' : 'mismatch', observed));
       continue;
     }
 
     if (expect.kind === 'dashboard-contains') {
       const dashboard = findDashboard(inventory, expect.dashboard);
       if (!dashboard) {
-        outcomes.push(unobservable(step, expect, `dashboard "${expect.dashboard}" not observed`));
+        outcomes.push(
+          assertionOutcome(
+            assertion,
+            'unobservable',
+            `dashboard "${expect.dashboard}" not observed`,
+          ),
+        );
         continue;
       }
       const document = await dashboardDocument(dashboard);
       if (document.isErr()) {
-        outcomes.push(unobservable(step, expect, document.error.getErrorText()));
+        outcomes.push(assertionOutcome(assertion, 'unobservable', document.error.getErrorText()));
         continue;
       }
       const zoneNames = readDashboardZoneNames(document.value.xml);
       if (!zoneNames) {
-        outcomes.push(unobservable(step, expect, 'dashboard document could not be parsed'));
+        outcomes.push(
+          assertionOutcome(assertion, 'unobservable', 'dashboard document could not be parsed'),
+        );
         continue;
       }
-      outcomes.push({
-        step,
-        kind: expect.kind,
-        status: zoneNames.includes(expect.worksheet) ? 'passed' : 'mismatch',
-        expected,
-        observed: JSON.stringify(zoneNames),
-      });
+      outcomes.push(
+        assertionOutcome(
+          assertion,
+          zoneNames.includes(expect.worksheet) ? 'passed' : 'mismatch',
+          zoneNames,
+        ),
+      );
+      continue;
+    }
+
+    if (expect.kind === 'dashboard-zone') {
+      const dashboard = findDashboard(inventory, expect.dashboard);
+      if (!dashboard) {
+        outcomes.push(
+          assertionOutcome(
+            assertion,
+            'unobservable',
+            `dashboard "${expect.dashboard}" not observed`,
+          ),
+        );
+        continue;
+      }
+      const document = await dashboardDocument(dashboard);
+      if (document.isErr()) {
+        outcomes.push(assertionOutcome(assertion, 'unobservable', document.error.getErrorText()));
+        continue;
+      }
+      const zones = readDashboardZones(document.value.xml);
+      if (!zones) {
+        outcomes.push(
+          assertionOutcome(assertion, 'unobservable', 'dashboard document could not be parsed'),
+        );
+        continue;
+      }
+      const observed = zones.filter(({ worksheet }) => worksheet === expect.worksheet);
+      if (observed.some(({ zoneType }) => zoneType === null)) {
+        outcomes.push(
+          assertionOutcome(assertion, 'unobservable', 'dashboard zone type is unavailable'),
+        );
+        continue;
+      }
+      outcomes.push(
+        assertionOutcome(
+          assertion,
+          observed.length === expect.multiplicity &&
+            observed.every(({ zoneType }) => zoneType === expect.zoneType)
+            ? 'passed'
+            : 'mismatch',
+          observed,
+        ),
+      );
       continue;
     }
 
     const worksheet = findWorksheet(inventory, expect.worksheet);
     if (!worksheet) {
-      outcomes.push(unobservable(step, expect, `worksheet "${expect.worksheet}" not observed`));
+      outcomes.push(
+        assertionOutcome(assertion, 'unobservable', `worksheet "${expect.worksheet}" not observed`),
+      );
       continue;
     }
+
+    if (expect.kind === 'datasource-binding') {
+      const observed = worksheet.datasources ?? [];
+      outcomes.push(
+        assertionOutcome(
+          assertion,
+          observed.filter((datasource) => datasource === expect.datasource).length === 1
+            ? 'passed'
+            : 'mismatch',
+          observed,
+        ),
+      );
+      continue;
+    }
+
     const document = await worksheetDocument(worksheet);
     if (document.isErr()) {
-      outcomes.push(unobservable(step, expect, document.error.getErrorText()));
+      outcomes.push(assertionOutcome(assertion, 'unobservable', document.error.getErrorText()));
       continue;
     }
 
     if (expect.kind === 'filter-signature') {
-      const match = matchWorksheetFilterSignature(document.value.xml, expect);
-      if (!match) {
-        outcomes.push(unobservable(step, expect, 'worksheet document could not be parsed'));
+      const signature = readWorksheetSignature(document.value.xml);
+      if (!signature) {
+        outcomes.push(
+          assertionOutcome(assertion, 'unobservable', 'worksheet document could not be parsed'),
+        );
         continue;
       }
-      outcomes.push({
-        step,
-        kind: expect.kind,
-        status: match.matched ? 'passed' : 'mismatch',
-        expected,
-        observed: JSON.stringify(match.observed),
-      });
+      const observed = signature.filters.filter(({ column }) => column === expect.column);
+      const members = [...expect.members].sort();
+      const matched = observed.some(
+        (candidate) =>
+          JSON.stringify(candidate.members) === JSON.stringify(members) &&
+          candidate.mode === expect.mode &&
+          (expect.function === null || candidate.groupFunction === expect.function),
+      );
+      outcomes.push(assertionOutcome(assertion, matched ? 'passed' : 'mismatch', observed));
       continue;
     }
 
     const signature = readWorksheetSignature(document.value.xml);
     if (!signature) {
-      outcomes.push(unobservable(step, expect, 'worksheet document could not be parsed'));
+      outcomes.push(
+        assertionOutcome(assertion, 'unobservable', 'worksheet document could not be parsed'),
+      );
       continue;
     }
     if (expect.kind === 'mark-type') {
       const observed = signature.marks.map(({ klass }) => klass);
-      outcomes.push({
-        step,
-        kind: expect.kind,
-        status: observed.includes(expect.mark) ? 'passed' : 'mismatch',
-        expected,
-        observed: JSON.stringify(observed),
-      });
+      outcomes.push(
+        assertionOutcome(
+          assertion,
+          observed.includes(expect.mark) ? 'passed' : 'mismatch',
+          observed,
+        ),
+      );
+      continue;
+    }
+
+    if (expect.kind === 'field-binding') {
+      const observed =
+        expect.placement === 'rows' || expect.placement === 'cols'
+          ? signature.shelves[expect.placement]
+          : signature.encodings
+              .filter(({ tag }) => tag === expect.placement)
+              .map(({ column }) => column);
+      outcomes.push(
+        assertionOutcome(
+          assertion,
+          observed.includes(expect.field) ? 'passed' : 'mismatch',
+          observed,
+        ),
+      );
       continue;
     }
 
@@ -834,34 +1200,47 @@ async function evaluatePostconditions(
       channel: tag,
       field: column,
     }));
-    outcomes.push({
-      step,
-      kind: expect.kind,
-      status: observed.some(
-        ({ channel, field }) => channel === expect.channel && field === expect.field,
-      )
-        ? 'passed'
-        : 'mismatch',
-      expected,
-      observed: JSON.stringify(observed),
-    });
+    outcomes.push(
+      assertionOutcome(
+        assertion,
+        observed.some(({ channel, field }) => channel === expect.channel && field === expect.field)
+          ? 'passed'
+          : 'mismatch',
+        observed,
+      ),
+    );
   }
 
   return outcomes;
 }
 
-function unobservable(
-  step: number,
-  expect: PlanPostcondition,
-  observed: string,
-): PostconditionReadback {
+function assertionOutcome(
+  assertion: IntentAssertionRecord,
+  status: AssertionReadback['status'],
+  observed: unknown,
+): AssertionReadback {
   return {
-    step,
-    kind: expect.kind,
-    status: 'unobservable',
-    expected: JSON.stringify(expect),
+    id: assertion.id,
+    introducedByStep: assertion.introducedByStep,
+    checkpoint: assertion.checkpoint,
+    status,
+    expected: assertion.expect,
     observed,
+    delta:
+      status === 'passed'
+        ? { kind: 'none', expected: null, observed: null }
+        : { kind: status, expected: assertion.expect, observed },
   };
+}
+
+function legacyPostconditions(assertions: AssertionReadback[]): LegacyPostconditionReadback[] {
+  return assertions.map(({ introducedByStep, expected, status, observed }) => ({
+    step: introducedByStep,
+    kind: expected.kind,
+    status,
+    expected: JSON.stringify(expected),
+    observed: typeof observed === 'string' ? observed : JSON.stringify(observed),
+  }));
 }
 
 function findWorksheet(inventory: WorkbookInventory, target: string): WorksheetItem | undefined {
@@ -872,18 +1251,99 @@ function findDashboard(inventory: WorkbookInventory, target: string): DashboardI
   return (inventory.dashboards ?? []).find(({ id, name }) => id === target || name === target);
 }
 
-function readDashboardZoneNames(xml: string): string[] | null {
+type CalculationSignature = {
+  datasource: string;
+  name: string;
+  formula: string;
+  datatype: string;
+  role: string;
+};
+
+function readCalculationSignatures(xml: string): CalculationSignature[] {
   try {
-    const names: string[] = [];
-    walkXml(parseXML(xml), (tag, node) => {
-      if (tag === 'zone' && typeof node['@_name'] === 'string') {
-        names.push(node['@_name']);
+    const signatures: CalculationSignature[] = [];
+    collectCalculationSignatures(parseXML(xml), undefined, signatures);
+    return signatures;
+  } catch {
+    return [];
+  }
+}
+
+function collectCalculationSignatures(
+  node: unknown,
+  datasource: string | undefined,
+  output: CalculationSignature[],
+): void {
+  if (!node || typeof node !== 'object' || Array.isArray(node)) return;
+  for (const [tag, value] of Object.entries(node)) {
+    if (tag.startsWith('@_') || tag === '#text') continue;
+    for (const child of normalizeArray(value)) {
+      if (!child || typeof child !== 'object' || Array.isArray(child)) continue;
+      const record = child as Record<string, unknown>;
+      const nestedDatasource =
+        tag === 'datasource'
+          ? typeof record['@_caption'] === 'string'
+            ? record['@_caption']
+            : typeof record['@_name'] === 'string'
+              ? record['@_name']
+              : datasource
+          : datasource;
+      if (tag === 'column' && nestedDatasource) {
+        const calculation = normalizeArray(record.calculation).find(
+          (candidate): candidate is Record<string, unknown> =>
+            typeof candidate === 'object' && candidate !== null && !Array.isArray(candidate),
+        );
+        const name =
+          typeof record['@_caption'] === 'string'
+            ? record['@_caption']
+            : typeof record['@_name'] === 'string'
+              ? record['@_name']
+              : undefined;
+        const formula =
+          calculation && typeof calculation['@_formula'] === 'string'
+            ? calculation['@_formula']
+            : undefined;
+        if (name && formula) {
+          output.push({
+            datasource: nestedDatasource,
+            name,
+            formula,
+            datatype: typeof record['@_datatype'] === 'string' ? record['@_datatype'] : '',
+            role: typeof record['@_role'] === 'string' ? record['@_role'] : '',
+          });
+        }
       }
+      collectCalculationSignatures(record, nestedDatasource, output);
+    }
+  }
+}
+
+type DashboardZoneObservation = {
+  worksheet: string;
+  zoneType: string | null;
+};
+
+function readDashboardZones(xml: string): DashboardZoneObservation[] | null {
+  try {
+    const zones: DashboardZoneObservation[] = [];
+    walkXml(parseXML(xml), (tag, node) => {
+      if (tag !== 'zone' || typeof node['@_name'] !== 'string') return;
+      const zoneType =
+        typeof node['@_type'] === 'string'
+          ? node['@_type']
+          : typeof node['@_zone-type'] === 'string'
+            ? node['@_zone-type']
+            : null;
+      zones.push({ worksheet: node['@_name'], zoneType });
     });
-    return names;
+    return zones;
   } catch {
     return null;
   }
+}
+
+function readDashboardZoneNames(xml: string): string[] | null {
+  return readDashboardZones(xml)?.map(({ worksheet }) => worksheet) ?? null;
 }
 
 function walkXml(node: unknown, visit: (tag: string, node: Record<string, unknown>) => void): void {
@@ -908,6 +1368,12 @@ function shapeSummaryReadback(
     columns: summary.columns,
     rows: summary.rows,
   };
+}
+
+function summaryColumnName(column: unknown): string | null {
+  if (typeof column === 'string') return column;
+  if (!isRecord(column)) return null;
+  return typeof column.name === 'string' ? column.name : null;
 }
 
 function describeReadback(readback: PlanReadback): string {
