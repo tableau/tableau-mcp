@@ -86,7 +86,7 @@ describe('promise check receipt (W-23447506)', () => {
       readback: { ok: false, status: 'failed' },
     });
     expect(text).toContain('HOST VERIFICATION — failed');
-    expect(text).toContain('readback FAILED');
+    expect(text).toContain('readback did not match the intended nodes (listed above)');
   });
 
   it('escalates promised computed-sort loss from warning to failed', () => {
