@@ -221,8 +221,9 @@ describe('desktop tools/list serialized surface', () => {
     // four legacy dashboard tools repays this before any full-profile serving. That removal is
     // a merge condition for this branch. The outcome-triggered tail instructions add 512 bytes:
     // honest measurements are now 31,966 dynamic and 47,448 full, each with 16 bytes headroom.
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(31_982);
-    expect(fullSurfaceTotal).toBeLessThanOrEqual(47_464);
+    // The receipt gate adds 1,231 bytes (34 description): 33,213 dynamic and 48,679 full.
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(33_229);
+    expect(fullSurfaceTotal).toBeLessThanOrEqual(48_695);
   });
 });
 
@@ -292,6 +293,7 @@ describe('desktop tools/list per-tool byte accounting', () => {
     ['plan-dashboard-creation', 1383], // ratcheted down in the author-set/action/format-labels funding trim (CODA, empty describe stubs); do not grow
     ['build-and-apply-dashboard', 1430], // ratcheted down in the CODA funding trim; do not grow
     ['validate-proposal', 1510], // ratcheted down with compact shared proposal descriptions; 46k stays green
+    ['execute-authoring-plan', 2233], // typed per-step receipt union; 34-byte description delta
     // The template parameter is a z.enum over the real template vocabulary, so its cost
     // is the vocabulary itself, not prose. Agents invented 13 template ids against 47
     // real ones and burned 188s discovering it; the enum makes that unrepresentable.
@@ -536,7 +538,8 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     // describe-stub squeeze. If this ever approaches 46k something is very wrong.
     // Raised with the signed-off bind-template describes (2026-07-27, #643 review fold).
     // Raised again 2026-07-28 with execute-authoring-plan (986 bytes, one-beat transaction spike).
-    expect(total).toBeLessThanOrEqual(31_982);
+    // Receipt gate measurement: 33,213 bytes; 16 bytes headroom.
+    expect(total).toBeLessThanOrEqual(33_229);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {

@@ -31,18 +31,18 @@ export interface ReadbackVerificationResult {
 
 type XmlRecord = Record<string, any>;
 
-interface EncodingSignature {
+export interface EncodingSignature {
   paneIndex: number;
   tag: string;
   column: string;
 }
 
-interface MarkSignature {
+export interface MarkSignature {
   paneIndex: number;
   klass: string;
 }
 
-interface FilterSignature {
+export interface FilterSignature {
   klass: string;
   column: string;
   members: string[];
@@ -59,7 +59,7 @@ interface SortSignature {
   field: string;
 }
 
-interface WorksheetSignature {
+export interface WorksheetSignature {
   encodings: EncodingSignature[];
   shelves: {
     rows: string[];
@@ -70,6 +70,18 @@ interface WorksheetSignature {
   sorts: SortSignature[];
   /** column-instance names declared in datasource-dependencies, e.g. "[none:Location:nk]". */
   declaredInstances: Set<string>;
+}
+
+export interface FilterSignatureExpectation {
+  column: string;
+  members: string[];
+  mode: 'include' | 'exclude';
+  function?: string;
+}
+
+export interface FilterSignatureMatch {
+  matched: boolean;
+  observed: FilterSignature[];
 }
 
 function isRecord(value: unknown): value is XmlRecord {
@@ -217,7 +229,7 @@ function collectSorts(worksheet: XmlRecord): SortSignature[] {
   return sorts;
 }
 
-function signature(xml: string): WorksheetSignature | null {
+export function readWorksheetSignature(xml: string): WorksheetSignature | null {
   try {
     const parsed = parseXML(xml) as XmlRecord;
     const worksheet = worksheetRoot(parsed);
@@ -236,6 +248,25 @@ function signature(xml: string): WorksheetSignature | null {
   } catch {
     return null;
   }
+}
+
+export function matchWorksheetFilterSignature(
+  xml: string,
+  expected: FilterSignatureExpectation,
+): FilterSignatureMatch | null {
+  const worksheet = readWorksheetSignature(xml);
+  if (!worksheet) return null;
+  const observed = worksheet.filters.filter((candidate) => candidate.column === expected.column);
+  const members = [...expected.members].sort();
+  return {
+    matched: observed.some(
+      (candidate) =>
+        sameMembers(candidate.members, members) &&
+        candidate.mode === expected.mode &&
+        (expected.function === undefined || candidate.groupFunction === expected.function),
+    ),
+    observed,
+  };
 }
 
 function encodingIntended(sig: EncodingSignature): string {
@@ -318,8 +349,8 @@ export function verifyWorksheetReadback(
   intendedXml: string,
   readbackXml: string,
 ): ReadbackFinding[] {
-  const intended = signature(intendedXml);
-  const readback = signature(readbackXml);
+  const intended = readWorksheetSignature(intendedXml);
+  const readback = readWorksheetSignature(readbackXml);
   if (!intended || !readback) return [];
 
   const findings: ReadbackFinding[] = [];

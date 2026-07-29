@@ -4,12 +4,18 @@ import { z } from 'zod';
 
 import { knownLiveFailureFixFor } from '../../../desktop/commandPolicy.js';
 import { guardCommand } from '../../../desktop/commands/externalApiCommandGuard.js';
+import type { WorkbookDocument } from '../../../desktop/externalApi/externalApiClient.js';
 import {
   DashboardItem,
   WorkbookInventory,
   WorksheetItem,
 } from '../../../desktop/externalApi/types.js';
+import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
+import {
+  matchWorksheetFilterSignature,
+  readWorksheetSignature,
+} from '../../../desktop/validation/readback-verify.js';
 import {
   DesktopCommandExecutionError,
   IncompleteOperationError,
@@ -32,10 +38,37 @@ import { DesktopTool } from '../tool.js';
 
 const DEFAULT_MAX_ROWS = 200;
 
+const postconditionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('worksheet-exists'), name: z.string() }),
+  z.object({
+    kind: z.literal('filter-signature'),
+    worksheet: z.string(),
+    column: z.string(),
+    members: z.array(z.string()),
+    mode: z.enum(['include', 'exclude']),
+    function: z.string().optional(),
+  }),
+  z.object({ kind: z.literal('mark-type'), worksheet: z.string(), mark: z.string() }),
+  z.object({
+    kind: z.literal('encoding'),
+    worksheet: z.string(),
+    channel: z.string(),
+    field: z.string(),
+  }),
+  z.object({
+    kind: z.literal('dashboard-contains'),
+    dashboard: z.string(),
+    worksheet: z.string(),
+  }),
+]);
+
 const stepSchema = z.object({
   command: z.string().describe("'namespace:command' ID."),
   args: z.record(z.unknown()).optional(),
+  expect: postconditionSchema.optional(),
 });
+
+type PlanPostcondition = z.infer<typeof postconditionSchema>;
 
 const paramsSchema = {
   session: z.string().optional().describe('Session ID if not pinned.'),
@@ -53,6 +86,7 @@ type PreparedStep = {
   namespace: 'tabui' | 'tabdoc';
   cmd: string;
   dispatchArgs: Record<string, unknown>;
+  expect?: PlanPostcondition;
 };
 
 type PlanStepResult = {
@@ -69,12 +103,21 @@ type NamedReadback = {
 
 type PlanReadback = {
   verified?: NamedReadback;
+  postconditions?: PostconditionReadback[];
   summary_data?: {
     worksheet: { id: string; name: string };
     max_rows: number;
     columns: unknown[];
     rows: unknown[][];
   };
+};
+
+type PostconditionReadback = {
+  step: number;
+  kind: PlanPostcondition['kind'];
+  status: 'passed' | 'mismatch' | 'unobservable';
+  expected: string;
+  observed: string;
 };
 
 type PlanResultBody = {
@@ -94,7 +137,7 @@ export const getExecuteAuthoringPlanTool = (
     name: 'execute-authoring-plan',
     title,
     description:
-      'Runs an ordered plan of guarded Tableau commands in one call; stops at first failure; optional readback after the last step.',
+      'Runs an ordered plan of guarded Tableau commands in one call; stops at first failure; optional readback and typed per-step postconditions after the last step.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -162,7 +205,10 @@ export const getExecuteAuthoringPlanTool = (
             }
           }
 
-          if (!hasReadbackRequest(verify, summary_worksheet)) {
+          const expectations = preparedResult.value.flatMap(({ step, expect }) =>
+            expect ? [{ step, expect }] : [],
+          );
+          if (!hasReadbackRequest(verify, summary_worksheet, expectations)) {
             return new Ok(
               withNextAction(
                 {
@@ -179,7 +225,7 @@ export const getExecuteAuthoringPlanTool = (
             session: resolvedSession,
             extra,
             callback: async (_executor, _signal, read) =>
-              await performReadback(verify, summary_worksheet, read),
+              await performReadback(verify, summary_worksheet, expectations, read),
           });
           if (readbackResult.isErr()) {
             return incompletePlan(
@@ -190,10 +236,29 @@ export const getExecuteAuthoringPlanTool = (
           }
 
           const readbackValue = readbackResult.value;
+          const firstFailure = readbackValue.postconditions?.find(
+            ({ status }) => status !== 'passed',
+          );
+          if (firstFailure) {
+            const unavailable = firstFailure.status === 'unobservable';
+            return incompletePlan(
+              `Postcondition ${unavailable ? 'could not be observed' : 'mismatch'} at step ${
+                firstFailure.step
+              } (${firstFailure.kind}). Expected ${firstFailure.expected}; ${
+                unavailable ? 'observed unavailable' : `observed ${firstFailure.observed}`
+              }.`,
+              stepResults,
+              'Correct failed postcondition before claiming completion',
+              readbackValue,
+            );
+          }
           return new Ok(
             withNextAction(
               {
-                message: describeReadback(readbackValue),
+                message:
+                  expectations.length > 0
+                    ? `Plan done: all ${expectations.length} declared postcondition(s) passed.`
+                    : describeReadback(readbackValue),
                 steps: stepResults,
                 readback: readbackValue,
               },
@@ -210,7 +275,11 @@ export const getExecuteAuthoringPlanTool = (
 };
 
 function prepareSteps(
-  steps: Array<{ command: string; args?: Record<string, unknown> }>,
+  steps: Array<{
+    command: string;
+    args?: Record<string, unknown>;
+    expect?: PlanPostcondition;
+  }>,
 ): Result<PreparedStep[], McpToolError> {
   const prepared: PreparedStep[] = [];
   for (const [index, step] of steps.entries()) {
@@ -249,6 +318,7 @@ function prepareSteps(
       namespace,
       cmd,
       dispatchArgs: commandGuard.dispatchArgs,
+      expect: step.expect,
     });
   }
   return new Ok(prepared);
@@ -274,9 +344,13 @@ function incompletePlan(
   message: string,
   steps: PlanStepResult[],
   nextAction: string,
+  readback?: PlanReadback,
 ): Result<PlanResult, McpToolError> {
   return new IncompleteOperationError<PlanResultBody>(
-    withNextAction({ message, steps }, prefillNextAction(nextAction)),
+    withNextAction(
+      { message, steps, ...(readback ? { readback } : {}) },
+      prefillNextAction(nextAction),
+    ),
   ).toErr();
 }
 
@@ -289,25 +363,45 @@ function formatExecutedSteps(steps: PlanStepResult[]): string {
 function hasReadbackRequest(
   verify: string[] | undefined,
   summaryWorksheet: string | undefined,
+  expectations: Array<{ step: number; expect: PlanPostcondition }>,
 ): boolean {
-  return (verify?.length ?? 0) > 0 || Boolean(summaryWorksheet);
+  return (verify?.length ?? 0) > 0 || Boolean(summaryWorksheet) || expectations.length > 0;
 }
 
 async function performReadback(
   verify: string[] | undefined,
   summaryWorksheet: string | undefined,
+  expectations: Array<{ step: number; expect: PlanPostcondition }>,
   read: ExternalApiRead,
 ): Promise<Result<PlanReadback, McpToolError>> {
   const output: PlanReadback = {};
-  if ((verify?.length ?? 0) > 0) {
+  if ((verify?.length ?? 0) > 0 || expectations.length > 0) {
     const inventoryResult = await read(
       'workbook inventory',
       async (executor, signal) => await executor.getWorkbook(signal),
     );
     if (inventoryResult.isErr()) {
-      return inventoryResult;
+      if (expectations.length === 0) return inventoryResult;
+      const observed = inventoryResult.error.getErrorText();
+      output.postconditions = expectations.map(({ step, expect }) => ({
+        step,
+        kind: expect.kind,
+        status: 'unobservable',
+        expected: JSON.stringify(expect),
+        observed,
+      }));
+    } else {
+      if ((verify?.length ?? 0) > 0) {
+        output.verified = matchNamedItems(verify ?? [], inventoryResult.value);
+      }
+      if (expectations.length > 0) {
+        output.postconditions = await evaluatePostconditions(
+          expectations,
+          inventoryResult.value,
+          read,
+        );
+      }
     }
-    output.verified = matchNamedItems(verify ?? [], inventoryResult.value);
   }
 
   if (summaryWorksheet) {
@@ -352,6 +446,192 @@ function matchNamedItems(requested: string[], inventory: WorkbookInventory): Nam
     observed,
     missing: requested.filter((target) => !observedKeys.has(target.trim())),
   };
+}
+
+async function evaluatePostconditions(
+  expectations: Array<{ step: number; expect: PlanPostcondition }>,
+  inventory: WorkbookInventory,
+  read: ExternalApiRead,
+): Promise<PostconditionReadback[]> {
+  const worksheetDocuments = new Map<string, Promise<Result<WorkbookDocument, McpToolError>>>();
+  const dashboardDocuments = new Map<string, Promise<Result<WorkbookDocument, McpToolError>>>();
+  const outcomes: PostconditionReadback[] = [];
+
+  const worksheetDocument = (
+    worksheet: WorksheetItem,
+  ): Promise<Result<WorkbookDocument, McpToolError>> => {
+    const cached = worksheetDocuments.get(worksheet.id);
+    if (cached) return cached;
+    const requested = read(
+      `worksheet "${worksheet.name}" document`,
+      async (executor, signal) => await executor.getWorksheetDocument(worksheet.id, signal),
+    );
+    worksheetDocuments.set(worksheet.id, requested);
+    return requested;
+  };
+  const dashboardDocument = (
+    dashboard: DashboardItem,
+  ): Promise<Result<WorkbookDocument, McpToolError>> => {
+    const cached = dashboardDocuments.get(dashboard.id);
+    if (cached) return cached;
+    const requested = read(
+      `dashboard "${dashboard.name}" document`,
+      async (executor, signal) => await executor.getDashboardDocument(dashboard.id, signal),
+    );
+    dashboardDocuments.set(dashboard.id, requested);
+    return requested;
+  };
+
+  for (const { step, expect } of expectations) {
+    const expected = JSON.stringify(expect);
+    if (expect.kind === 'worksheet-exists') {
+      const matched = findWorksheet(inventory, expect.name);
+      outcomes.push({
+        step,
+        kind: expect.kind,
+        status: matched ? 'passed' : 'mismatch',
+        expected,
+        observed: JSON.stringify((inventory.worksheets ?? []).map(({ name }) => name)),
+      });
+      continue;
+    }
+
+    if (expect.kind === 'dashboard-contains') {
+      const dashboard = findDashboard(inventory, expect.dashboard);
+      if (!dashboard) {
+        outcomes.push(unobservable(step, expect, `dashboard "${expect.dashboard}" not observed`));
+        continue;
+      }
+      const document = await dashboardDocument(dashboard);
+      if (document.isErr()) {
+        outcomes.push(unobservable(step, expect, document.error.getErrorText()));
+        continue;
+      }
+      const zoneNames = readDashboardZoneNames(document.value.xml);
+      if (!zoneNames) {
+        outcomes.push(unobservable(step, expect, 'dashboard document could not be parsed'));
+        continue;
+      }
+      outcomes.push({
+        step,
+        kind: expect.kind,
+        status: zoneNames.includes(expect.worksheet) ? 'passed' : 'mismatch',
+        expected,
+        observed: JSON.stringify(zoneNames),
+      });
+      continue;
+    }
+
+    const worksheet = findWorksheet(inventory, expect.worksheet);
+    if (!worksheet) {
+      outcomes.push(unobservable(step, expect, `worksheet "${expect.worksheet}" not observed`));
+      continue;
+    }
+    const document = await worksheetDocument(worksheet);
+    if (document.isErr()) {
+      outcomes.push(unobservable(step, expect, document.error.getErrorText()));
+      continue;
+    }
+
+    if (expect.kind === 'filter-signature') {
+      const match = matchWorksheetFilterSignature(document.value.xml, expect);
+      if (!match) {
+        outcomes.push(unobservable(step, expect, 'worksheet document could not be parsed'));
+        continue;
+      }
+      outcomes.push({
+        step,
+        kind: expect.kind,
+        status: match.matched ? 'passed' : 'mismatch',
+        expected,
+        observed: JSON.stringify(match.observed),
+      });
+      continue;
+    }
+
+    const signature = readWorksheetSignature(document.value.xml);
+    if (!signature) {
+      outcomes.push(unobservable(step, expect, 'worksheet document could not be parsed'));
+      continue;
+    }
+    if (expect.kind === 'mark-type') {
+      const observed = signature.marks.map(({ klass }) => klass);
+      outcomes.push({
+        step,
+        kind: expect.kind,
+        status: observed.includes(expect.mark) ? 'passed' : 'mismatch',
+        expected,
+        observed: JSON.stringify(observed),
+      });
+      continue;
+    }
+
+    const observed = signature.encodings.map(({ tag, column }) => ({
+      channel: tag,
+      field: column,
+    }));
+    outcomes.push({
+      step,
+      kind: expect.kind,
+      status: observed.some(
+        ({ channel, field }) => channel === expect.channel && field === expect.field,
+      )
+        ? 'passed'
+        : 'mismatch',
+      expected,
+      observed: JSON.stringify(observed),
+    });
+  }
+
+  return outcomes;
+}
+
+function unobservable(
+  step: number,
+  expect: PlanPostcondition,
+  observed: string,
+): PostconditionReadback {
+  return {
+    step,
+    kind: expect.kind,
+    status: 'unobservable',
+    expected: JSON.stringify(expect),
+    observed,
+  };
+}
+
+function findWorksheet(inventory: WorkbookInventory, target: string): WorksheetItem | undefined {
+  return (inventory.worksheets ?? []).find(({ id, name }) => id === target || name === target);
+}
+
+function findDashboard(inventory: WorkbookInventory, target: string): DashboardItem | undefined {
+  return (inventory.dashboards ?? []).find(({ id, name }) => id === target || name === target);
+}
+
+function readDashboardZoneNames(xml: string): string[] | null {
+  try {
+    const names: string[] = [];
+    walkXml(parseXML(xml), (tag, node) => {
+      if (tag === 'zone' && typeof node['@_name'] === 'string') {
+        names.push(node['@_name']);
+      }
+    });
+    return names;
+  } catch {
+    return null;
+  }
+}
+
+function walkXml(node: unknown, visit: (tag: string, node: Record<string, unknown>) => void): void {
+  if (!node || typeof node !== 'object' || Array.isArray(node)) return;
+  for (const [tag, value] of Object.entries(node)) {
+    if (tag.startsWith('@_') || tag === '#text') continue;
+    for (const child of normalizeArray(value)) {
+      if (!child || typeof child !== 'object' || Array.isArray(child)) continue;
+      visit(tag, child as Record<string, unknown>);
+      walkXml(child, visit);
+    }
+  }
 }
 
 function shapeSummaryReadback(

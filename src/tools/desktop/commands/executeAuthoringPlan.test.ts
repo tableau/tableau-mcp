@@ -26,6 +26,17 @@ const STEPS = [
   },
   { command: 'tabdoc:save' },
 ];
+const FIELD = '[Sample].[none:Region:nk]';
+const WORKSHEET_XML = `<worksheet name="Sales by Region"><table><panes><pane>
+  <mark class="Bar"/>
+  <encodings><color column="${FIELD}"/></encodings>
+  <filter class="categorical" column="${FIELD}" user:ui-enumeration="inclusive">
+    <groupfilter function="member" member="East"/>
+    <groupfilter function="member" member="West"/>
+  </filter>
+</pane></panes></table></worksheet>`;
+const DASHBOARD_XML =
+  '<dashboard name="Executive Overview"><zones><zone name="Sales by Region"/></zones></dashboard>';
 
 describe('executeAuthoringPlanTool', () => {
   it('executes three completed steps in order and returns requested readback', async () => {
@@ -165,11 +176,262 @@ describe('executeAuthoringPlanTool', () => {
     expect(payload.message).toContain('No later step ran');
     expect(payload.message).not.toContain('success');
   });
+
+  it('attributes a dropped worksheet postcondition to its declaring step', async () => {
+    const executor = makeExecutor();
+    executor.getWorkbook.mockResolvedValue(
+      new Ok({ title: 'Book', unsavedChanges: true, worksheets: [], dashboards: [] }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [
+          STEPS[0],
+          {
+            ...STEPS[2],
+            expect: { kind: 'worksheet-exists', name: 'Dropped Sheet' },
+          },
+        ],
+      },
+      makeExtra(executor),
+    );
+
+    expectPostconditionFailure(result, 2, 'worksheet-exists', 'mismatch');
+  });
+
+  it('fails closed when a filter is dropped from worksheet readback', async () => {
+    const executor = makeExecutor();
+    executor.getWorksheetDocument.mockResolvedValue(
+      new Ok({
+        xml: '<worksheet name="Sales by Region"><table><panes><pane/></panes></table></worksheet>',
+      }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [
+          {
+            ...STEPS[0],
+            expect: {
+              kind: 'filter-signature',
+              worksheet: 'Sales by Region',
+              column: FIELD,
+              members: ['West', 'East'],
+              mode: 'include',
+              function: 'member',
+            },
+          },
+        ],
+      },
+      makeExtra(executor),
+    );
+
+    expectPostconditionFailure(result, 1, 'filter-signature', 'mismatch');
+  });
+
+  it('fails closed when filter members mutate', async () => {
+    const executor = makeExecutor();
+    executor.getWorksheetDocument.mockResolvedValue(
+      new Ok({ xml: WORKSHEET_XML.replace('member="West"', 'member="Central"') }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [
+          STEPS[0],
+          {
+            ...STEPS[2],
+            expect: {
+              kind: 'filter-signature',
+              worksheet: 'Sales by Region',
+              column: FIELD,
+              members: ['West', 'East'],
+              mode: 'include',
+              function: 'member',
+            },
+          },
+        ],
+      },
+      makeExtra(executor),
+    );
+
+    expectPostconditionFailure(result, 2, 'filter-signature', 'mismatch');
+  });
+
+  it('fails closed when Tableau changes the expected mark type', async () => {
+    const executor = makeExecutor();
+    executor.getWorksheetDocument.mockResolvedValue(
+      new Ok({ xml: WORKSHEET_XML.replace('class="Bar"', 'class="Circle"') }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [
+          STEPS[0],
+          {
+            ...STEPS[2],
+            expect: { kind: 'mark-type', worksheet: 'Sales by Region', mark: 'Bar' },
+          },
+        ],
+      },
+      makeExtra(executor),
+    );
+
+    expectPostconditionFailure(result, 2, 'mark-type', 'mismatch');
+  });
+
+  it('fails closed when an expected encoding is dropped', async () => {
+    const executor = makeExecutor();
+    executor.getWorksheetDocument.mockResolvedValue(
+      new Ok({ xml: WORKSHEET_XML.replace(`<color column="${FIELD}"/>`, '') }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [
+          {
+            ...STEPS[0],
+            expect: {
+              kind: 'encoding',
+              worksheet: 'Sales by Region',
+              channel: 'color',
+              field: FIELD,
+            },
+          },
+        ],
+      },
+      makeExtra(executor),
+    );
+
+    expectPostconditionFailure(result, 1, 'encoding', 'mismatch');
+  });
+
+  it('fails closed when a dashboard contains the wrong worksheet', async () => {
+    const executor = makeExecutor();
+    executor.getDashboardDocument.mockResolvedValue(
+      new Ok({ xml: DASHBOARD_XML.replace('Sales by Region', 'Profit by Segment') }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [
+          STEPS[0],
+          {
+            ...STEPS[2],
+            expect: {
+              kind: 'dashboard-contains',
+              dashboard: 'Executive Overview',
+              worksheet: 'Sales by Region',
+            },
+          },
+        ],
+      },
+      makeExtra(executor),
+    );
+
+    expectPostconditionFailure(result, 2, 'dashboard-contains', 'mismatch');
+  });
+
+  it('reports done only after every declared postcondition passes', async () => {
+    const executor = makeExecutor();
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [
+          {
+            ...STEPS[0],
+            expect: { kind: 'worksheet-exists', name: 'Sales by Region' },
+          },
+          {
+            ...STEPS[1],
+            expect: {
+              kind: 'filter-signature',
+              worksheet: 'Sales by Region',
+              column: FIELD,
+              members: ['West', 'East'],
+              mode: 'include',
+              function: 'member',
+            },
+          },
+          {
+            ...STEPS[2],
+            expect: { kind: 'mark-type', worksheet: 'Sales by Region', mark: 'Bar' },
+          },
+          {
+            ...STEPS[2],
+            expect: {
+              kind: 'encoding',
+              worksheet: 'Sales by Region',
+              channel: 'color',
+              field: FIELD,
+            },
+          },
+          {
+            ...STEPS[2],
+            expect: {
+              kind: 'dashboard-contains',
+              dashboard: 'Executive Overview',
+              worksheet: 'Sales by Region',
+            },
+          },
+        ],
+      },
+      makeExtra(executor),
+    );
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.message).toContain('Plan done');
+    expect(payload.readback.postconditions).toHaveLength(5);
+    expect(
+      payload.readback.postconditions.every(
+        ({ status }: { status: string }) => status === 'passed',
+      ),
+    ).toBe(true);
+    expect(executor.getWorkbook).toHaveBeenCalledTimes(1);
+    expect(executor.getWorksheetDocument).toHaveBeenCalledTimes(1);
+    expect(executor.getDashboardDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('attributes an unavailable readback to the first step with an expectation', async () => {
+    const executor = makeExecutor();
+    executor.getWorkbook.mockResolvedValue(
+      new Err({
+        type: 'command-failed',
+        error: { code: 'READBACK_DOWN', message: 'readback unavailable', recoverable: true },
+      }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [
+          STEPS[0],
+          {
+            ...STEPS[2],
+            expect: { kind: 'mark-type', worksheet: 'Sales by Region', mark: 'Bar' },
+          },
+        ],
+      },
+      makeExtra(executor),
+    );
+
+    expectPostconditionFailure(result, 2, 'mark-type', 'could not be observed');
+  });
 });
 
 type MockExecutor = {
   executeCommand: ReturnType<typeof vi.fn>;
   getWorkbook: ReturnType<typeof vi.fn>;
+  getWorksheetDocument: ReturnType<typeof vi.fn>;
+  getDashboardDocument: ReturnType<typeof vi.fn>;
   listWorksheets: ReturnType<typeof vi.fn>;
   getWorksheetSummaryData: ReturnType<typeof vi.fn>;
 };
@@ -198,6 +460,8 @@ function makeExecutor(): MockExecutor {
         ],
       }),
     ),
+    getWorksheetDocument: vi.fn().mockResolvedValue(new Ok({ xml: WORKSHEET_XML })),
+    getDashboardDocument: vi.fn().mockResolvedValue(new Ok({ xml: DASHBOARD_XML })),
     listWorksheets: vi.fn().mockResolvedValue(
       new Ok({
         worksheets: [
@@ -228,7 +492,23 @@ function makeExtra(executor: MockExecutor): ReturnType<typeof getMockRequestHand
 async function getResult(
   args: {
     session: string;
-    steps: Array<{ command: string; args?: Record<string, unknown> }>;
+    steps: Array<{
+      command: string;
+      args?: Record<string, unknown>;
+      expect?:
+        | { kind: 'worksheet-exists'; name: string }
+        | {
+            kind: 'filter-signature';
+            worksheet: string;
+            column: string;
+            members: string[];
+            mode: 'include' | 'exclude';
+            function?: string;
+          }
+        | { kind: 'mark-type'; worksheet: string; mark: string }
+        | { kind: 'encoding'; worksheet: string; channel: string; field: string }
+        | { kind: 'dashboard-contains'; dashboard: string; worksheet: string };
+    }>;
     verify?: string[];
     summary_worksheet?: string;
   },
@@ -237,4 +517,21 @@ async function getResult(
   const tool = getExecuteAuthoringPlanTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback({ verify: undefined, summary_worksheet: undefined, ...args }, extra);
+}
+
+function expectPostconditionFailure(
+  result: CallToolResult,
+  step: number,
+  kind: string,
+  failure: 'mismatch' | 'could not be observed',
+): void {
+  expect(result.isError).toBe(true);
+  invariant(result.content[0].type === 'text');
+  const payload = JSON.parse(result.content[0].text);
+  expect(payload.message).toContain(`step ${step}`);
+  expect(payload.message).toContain(kind);
+  expect(payload.message).toContain(failure);
+  expect(payload.message).toContain('Expected');
+  expect(payload.message).toContain(failure === 'mismatch' ? 'observed' : 'observed unavailable');
+  expect(payload.message).not.toContain('Plan done');
 }
