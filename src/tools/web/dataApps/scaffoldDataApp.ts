@@ -73,8 +73,12 @@ const paramsSchema = {
     .min(1)
     .max(8)
     .describe(
-      'The published datasource(s) the app queries live. The viz-extension host worksheet is wired ' +
-        'to depend on all of them so none is pruned and the app can query them at runtime.',
+      'The published datasource(s) the app queries live. The first is the primary, wired into the ' +
+        'viz-extension host worksheet; each additional datasource gets its own visible "wire" worksheet ' +
+        '(one field on Rows) so it is used by a worksheet and therefore reachable via ' +
+        'getAllDataSourcesAsync at runtime (a worksheet cannot depend on >1 datasource without a blend, ' +
+        'which Tableau rejects on publish; and a hidden worksheet is excluded from the "used" set). ' +
+        'Multi-datasource apps therefore show one extra tab per additional datasource.',
     ),
   template: z
     .literal(LIVE_EXTENSION_TEMPLATE)
@@ -172,9 +176,12 @@ the Tableau Extensions API library then \`src/app.js\`), \`src/app.js\` (a live 
 there is NO embedded data snapshot.
 
 Provide the target published \`datasources\` up front. Scaffold makes lightweight REST + VizQL Data
-Service calls to resolve each datasource's identity and to wire the viz-extension host worksheet so it
-depends on all of them (this keeps every datasource from being pruned at publish; the app reaches them
-at runtime via \`workbook.getAllDataSourcesAsync()\`). It does NOT embed data or write query logic — author that in
+Service calls to resolve each datasource's identity and to wire them into worksheets so none is pruned
+at publish: the first (primary) is wired into the viz-extension host worksheet, and each additional
+datasource gets its own visible "wire" worksheet (one field on Rows) — a worksheet can't depend on >1
+datasource without a blend Tableau rejects, and a hidden worksheet is excluded from the "used" set, so
+multi-datasource apps show one extra tab per additional datasource. The app reaches every datasource at
+runtime via \`workbook.getAllDataSourcesAsync()\`. It does NOT embed data or write query logic — author that in
 \`src/app.js\` (use \`get-datasource-metadata\` / \`query-datasource\` to introspect first), then
 \`validate-workbook-package\` and \`create-and-publish-workbook\`. Review the live app in Tableau
 after publishing (a live query cannot run outside the Tableau host).

@@ -238,7 +238,7 @@ describe('buildTwbx', () => {
       expect(twb).not.toContain('<viewpoint ');
     });
 
-    it('references every datasource from the single host worksheet (multi-datasource)', () => {
+    it('attaches every datasource to a worksheet: primary on the viz-ext host, extras on visible wire sheets (multi-datasource)', () => {
       const second: DataAppDatasource = {
         sqlproxyName: 'sqlproxy.zzz999',
         contentUrl: 'SuperstoreDatasource',
@@ -248,13 +248,29 @@ describe('buildTwbx', () => {
         field: { fieldName: 'category', caption: 'Category', dataType: 'STRING' },
       };
       const twb = twbOf([wcsDatasource, second]);
-      expect(twb).toContain("name='sqlproxy.abc123def456'");
-      expect(twb).toContain("name='sqlproxy.zzz999'");
-      // Both datasources are referenced by the single host sheet's view.
-      expect(twb).toContain("<datasource caption='Superstore' name='sqlproxy.zzz999' />");
-      // Both survive pruning via a datasource-dependency (one placed field each).
-      expect(twb).toContain("<datasource-dependencies datasource='sqlproxy.zzz999'>");
+      // BOTH datasources are emitted at the workbook level (top-level <datasource inline='true'>).
+      expect(twb).toContain(
+        "<datasource caption='World Cup Songs' inline='true' name='sqlproxy.abc123def456'",
+      );
+      expect(twb).toContain(
+        "<datasource caption='Superstore' inline='true' name='sqlproxy.zzz999'",
+      );
+      // The primary is wired into the viz-extension host worksheet via the encoding shelf.
       expect(twb).toContain("<datasource-dependencies datasource='sqlproxy.abc123def456'>");
+      expect(twb).toContain(
+        "column='[sqlproxy.abc123def456].[none:song_title:nk]' custom-type-name='field'",
+      );
+      // Each ADDITIONAL datasource must ALSO be attached to a worksheet — getAllDataSourcesAsync only
+      // returns datasources used by a worksheet — so it gets its own wire worksheet with a field on Rows.
+      // The window MUST be visible: a hidden worksheet is excluded from the "used by a worksheet" set,
+      // which makes the datasource disappear from getAllDataSourcesAsync() at runtime (verified live).
+      expect(twb).toContain("<worksheet name='Superstore'>");
+      expect(twb).toContain("<datasource-dependencies datasource='sqlproxy.zzz999'>");
+      expect(twb).toContain('<rows>[sqlproxy.zzz999].[none:category:nk]</rows>');
+      expect(twb).toContain("<window class='worksheet' name='Superstore'>");
+      expect(twb).not.toContain("<window class='worksheet' hidden='true' name='Superstore'>");
+      // The wire sheet is a plain native sheet, not a second viz extension (exactly one add-in in the twb).
+      expect((twb.match(/<add-in /g) ?? []).length).toBe(1);
     });
 
     it('maps non-string field types to the right discrete pill suffix', () => {

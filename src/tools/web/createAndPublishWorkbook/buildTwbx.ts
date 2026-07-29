@@ -12,10 +12,15 @@
 // builder emits a single host worksheet that (a) sets its pane's <mark class='VizExtension'/> — the
 // signal that makes Tableau MOUNT the extension as the sheet's viz (without it the server treats the
 // sheet as an ordinary, empty worksheet and never loads the extension iframe), (b) carries the
-// viz-extension add-in in that pane, and (c) references every bound datasource by placing one field
-// per datasource on the extension's <encodings> shelf (NOT on <rows>/<cols>, which stay empty) so
-// none is pruned at publish. The exact shape mirrors a Tableau-authored viz-extension workbook
-// (verified against a real Sankey-extension .twb). No dashboard and no separate "zombie" sheet.
+// viz-extension add-in in that pane, and (c) wires in the PRIMARY datasource by placing one field on
+// the extension's <encodings> shelf (NOT on <rows>/<cols>, which stay empty) so the pane has a valid
+// host viz. Each ADDITIONAL datasource gets its own HIDDEN anchor worksheet (renderAnchorWorksheet):
+// a worksheet can attach only one datasource without a blend (multi-DS-per-sheet is what Tableau REST
+// rejects with HTTP 400 on publish), AND getAllDataSourcesAsync() only returns datasources ATTACHED to
+// some worksheet (a datasource merely carried in the workbook is invisible to the extension at runtime,
+// verified empirically) — so every datasource needs exactly one attaching worksheet, and the anchors'
+// tabs are hidden so they don't clutter the app. The shape mirrors a Tableau-authored viz-extension
+// workbook (verified against a real Sankey-extension .twb). No dashboard needed.
 //
 // Keep this function pure: identical input -> byte-identical output (the determinism tests rely on
 // it). All non-deterministic inputs (the sqlproxy connection name, the datasource identity) are
@@ -24,6 +29,10 @@
 import { strToU8, zipSync } from 'fflate';
 
 import { BuildTwbxError } from '../../../errors/mcpToolError.js';
+
+// Fixed archive entry timestamp so zip output is byte-stable across runs (fflate defaults to Date.now()).
+// Mid-range UTC instant: safe from any local-timezone shift out of fflate's 1980–2099 range.
+const FIXED_MTIME = new Date(Date.UTC(2020, 0, 1, 12, 0, 0));
 import { getTableauExtensionsLibBytes } from '../dataApps/assets/tableauExtensionsLib.js';
 
 /** The content-relative path the injected Extensions API library is packaged at. index.html in the
@@ -106,9 +115,11 @@ export function buildTwbx(input: BuildTwbxInput): BuildTwbxResult {
     ),
   };
 
-  // fflate zipSync is deterministic (stable insertion order, no embedded timestamps) → byte-stable
-  // output, which the golden/determinism tests depend on.
-  return { bytes: zipSync(zip, { level: 6 }), warnings };
+  // fflate stamps each entry's mtime with Date.now() by default, which would make raw-zip bytes vary
+  // run-to-run (the golden tests unzip and compare CONTENT so they're immune, but the determinism test
+  // compares raw bytes). Pin a fixed mtime so the output is genuinely byte-stable. The value is a
+  // mid-range UTC instant so no local timezone can shift it outside fflate's supported 1980–2099 range.
+  return { bytes: zipSync(zip, { level: 6, mtime: FIXED_MTIME }), warnings };
 }
 
 // content/ files keyed by their path RELATIVE to content/. index.html is always the entrypoint the
@@ -390,13 +401,18 @@ function renderAddIn(id: string, url: string, instanceId: string): string {
 
 // The single host worksheet. It (a) sets <mark class='VizExtension'/> — the signal that makes Tableau
 // mount the add-in as the sheet's viz — (b) carries the viz-extension add-in in its pane, and (c)
-// references every bound datasource by placing one field per datasource on the extension's
-// <encodings> shelf (custom-type-name='field', matching the manifest's <encoding id='field'>). Fields
-// go on the encoding, NOT on <rows>/<cols> (which stay empty): a VizExtension pane is driven by
-// encodings, and a stray field on rows would trigger a native worksheet query (the DataServiceFailure
-// path). Placing a field per datasource is what makes each datasource genuinely "used" so it survives
-// publish pruning; the live app then reaches them via workbook.getAllDataSourcesAsync() and queries
-// each via queryAsync. This mirrors a real Tableau-authored viz-extension .twb exactly.
+// wires in ONLY the PRIMARY datasource (datasources[0]) by placing one field on the extension's
+// <encodings> shelf (custom-type-name='field', matching the manifest's <encoding id='field'>). The
+// field goes on the encoding, NOT on <rows>/<cols> (which stay empty): a VizExtension pane is driven
+// by encodings, and a stray field on rows would trigger a native worksheet query (the DataServiceFailure
+// path).
+//
+// IMPORTANT — multi-datasource: a single worksheet can reference at most ONE datasource without a
+// blend relationship; wiring 2+ datasources into one worksheet emits invalid blend XML that Tableau
+// REST rejects with a bare HTTP 400 on publish. So ADDITIONAL datasources are NOT wired into this
+// worksheet — each gets its own hidden anchor worksheet (see renderAnchorWorksheet), because
+// getAllDataSourcesAsync() only returns datasources attached to a worksheet. This host wires just the
+// primary; its single encoding is only there so the extension has a valid, mountable host viz.
 function renderHostWorksheet(
   datasources: DataAppDatasource[],
   seed: string,
@@ -430,39 +446,27 @@ ${addInXml}
     </worksheet>`;
   }
 
-  const deps = datasources
-    .map((ds) => {
-      const m = columnMeta(ds.field.dataType);
-      const fieldName = esc(ds.field.fieldName);
-      const fieldCaption = esc(ds.field.caption);
-      const sql = esc(ds.sqlproxyName);
-      return `          <datasource-dependencies datasource='${sql}'>
-            <column aggregation='Count' caption='${fieldCaption}' datatype='${m.datatype}' default-type='${m.defaultType}' layered='true' name='[${fieldName}]' role='dimension' type='${m.colType}' />
-            <column-instance column='[${fieldName}]' derivation='None' name='[none:${fieldName}:${m.instanceSuffix}]' pivot='key' type='${m.colType}' />
+  // Only the PRIMARY datasource is wired into the host worksheet (a worksheet cannot reference >1
+  // datasource without a blend). Additional datasources ride along at the workbook level, unattached.
+  const primary = datasources[0];
+  const pm = columnMeta(primary.field.dataType);
+  const pFieldName = esc(primary.field.fieldName);
+  const pFieldCaption = esc(primary.field.caption);
+  const pSql = esc(primary.sqlproxyName);
+
+  const deps = `          <datasource-dependencies datasource='${pSql}'>
+            <column aggregation='Count' caption='${pFieldCaption}' datatype='${pm.datatype}' default-type='${pm.defaultType}' layered='true' name='[${pFieldName}]' role='dimension' type='${pm.colType}' />
+            <column-instance column='[${pFieldName}]' derivation='None' name='[none:${pFieldName}:${pm.instanceSuffix}]' pivot='key' type='${pm.colType}' />
           </datasource-dependencies>`;
-    })
-    .join('\n');
 
-  const dsRefs = datasources
-    .map(
-      (ds) =>
-        `            <datasource caption='${esc(ds.caption)}' name='${esc(ds.sqlproxyName)}' />`,
-    )
-    .join('\n');
+  const dsRefs = `            <datasource caption='${esc(primary.caption)}' name='${pSql}' />`;
 
-  // One placed field per datasource on the viz-extension encoding shelf. Each <custom> references the
-  // datasource's column-instance ([<sqlproxy>].[none:<field>:<suffix>]) declared in <datasource-dependencies>
-  // above; custom-type-name='field' matches the manifest's <encoding id='field'>. This is the sole
-  // reason a datasource is retained (not pruned) — the extension itself renders via its own live queries.
-  const encodings = datasources
-    .map((ds) => {
-      const m = columnMeta(ds.field.dataType);
-      const sql = esc(ds.sqlproxyName);
-      const fieldName = esc(ds.field.fieldName);
-      const encId = uuidFor(`${seed}:enc:${ds.sqlproxyName}`);
-      return `            <custom encoding-id='{${encId}}' column='[${sql}].[none:${fieldName}:${m.instanceSuffix}]' custom-type-name='field' />`;
-    })
-    .join('\n');
+  // A single field on the viz-extension encoding shelf, referencing the primary's column-instance
+  // declared in <datasource-dependencies> above; custom-type-name='field' matches the manifest's
+  // <encoding id='field'>. The extension renders via its own live queries; this placement only gives
+  // the pane a valid host viz so the extension mounts.
+  const encId = uuidFor(`${seed}:enc:${primary.sqlproxyName}`);
+  const encodings = `            <custom encoding-id='{${encId}}' column='[${pSql}].[none:${pFieldName}:${pm.instanceSuffix}]' custom-type-name='field' />`;
 
   return `    <worksheet name='${name}'>
       <table>
@@ -493,8 +497,81 @@ ${encodings}
     </worksheet>`;
 }
 
-// The host worksheet's window (the only window — no dashboard). Maximized so the published workbook
-// opens straight onto the viz-extension sheet. Cards are standard shelf layout; boilerplate.
+// A "wire" worksheet for an ADDITIONAL (non-primary) datasource. Its only job is to make the datasource
+// "used" by a worksheet — at runtime tableau.extensions.workbook.getAllDataSourcesAsync() returns ONLY
+// datasources referenced by at least one worksheet (a datasource merely present in the workbook data
+// pane is invisible to the extension; verified empirically). A worksheet can attach exactly one
+// datasource without a blend, so each additional datasource needs its own wire sheet. The "minimum
+// shape that counts as used" is: a <datasources> block naming it, a <datasource-dependencies> block,
+// and at least one real column-instance on <rows>. The wire sheet is a plain native sheet (mark
+// Automatic, NOT a viz extension) and its tab is VISIBLE — a hidden window is excluded from the
+// "used by a worksheet" enumeration, so hiding it makes the datasource disappear from the extension.
+function renderAnchorWorksheet(ds: DataAppDatasource, seed: string): string {
+  const m = columnMeta(ds.field.dataType);
+  const name = esc(ds.caption);
+  const sql = esc(ds.sqlproxyName);
+  const fieldName = esc(ds.field.fieldName);
+  const fieldCaption = esc(ds.field.caption);
+  const rows = `[${sql}].[none:${fieldName}:${m.instanceSuffix}]`;
+  return `    <worksheet name='${name}'>
+      <table>
+        <view>
+          <datasources>
+            <datasource caption='${name}' name='${sql}' />
+          </datasources>
+          <datasource-dependencies datasource='${sql}'>
+            <column aggregation='Count' caption='${fieldCaption}' datatype='${m.datatype}' default-type='${m.defaultType}' layered='true' name='[${fieldName}]' role='dimension' type='${m.colType}' />
+            <column-instance column='[${fieldName}]' derivation='None' name='[none:${fieldName}:${m.instanceSuffix}]' pivot='key' type='${m.colType}' />
+          </datasource-dependencies>
+          <aggregation value='true' />
+        </view>
+        <style />
+        <panes>
+          <pane selection-relaxation-option='selection-relaxation-allow'>
+            <view>
+              <breakdown value='auto' />
+            </view>
+            <mark class='Automatic' />
+          </pane>
+        </panes>
+        <rows>${rows}</rows>
+        <cols />
+      </table>
+      <simple-id uuid='{${uuidFor(`${seed}:anchor:${ds.sqlproxyName}`)}}' />
+    </worksheet>`;
+}
+
+// The window for a wire worksheet. It MUST be visible (no hidden='true') — a hidden worksheet is
+// excluded from getAllDataSourcesAsync()'s "used by a worksheet" enumeration, which defeats the wire
+// sheet's whole purpose. Standard cards; not maximized (the host worksheet is the maximized/default).
+function renderAnchorWindow(ds: DataAppDatasource, seed: string): string {
+  return `    <window class='worksheet' name='${esc(ds.caption)}'>
+      <cards>
+        <edge name='left'>
+          <strip size='160'>
+            <card type='pages' />
+            <card type='filters' />
+            <card type='marks' />
+          </strip>
+        </edge>
+        <edge name='top'>
+          <strip size='31'>
+            <card type='columns' />
+          </strip>
+          <strip size='31'>
+            <card type='rows' />
+          </strip>
+          <strip size='31'>
+            <card type='title' />
+          </strip>
+        </edge>
+      </cards>
+      <simple-id uuid='{${uuidFor(`${seed}:anchorwin:${ds.sqlproxyName}`)}}' />
+    </window>`;
+}
+
+// The host worksheet's window. Maximized so the published workbook opens straight onto the
+// viz-extension sheet. Cards are standard shelf layout; boilerplate.
 function renderWorksheetWindow(seed: string, sheetName: string): string {
   return `    <window class='worksheet' maximized='true' name='${esc(sheetName)}'>
       <cards>
@@ -543,9 +620,22 @@ ${datasources.map(renderDatasource).join('\n')}
   </datasources>`
     : '  <datasources />';
 
+  // Host worksheet (viz extension on the primary datasource) + one hidden anchor worksheet per
+  // ADDITIONAL datasource so every datasource is attached to a worksheet and therefore reachable via
+  // getAllDataSourcesAsync() at runtime.
+  const anchorDatasources = datasources.slice(1);
+  const anchorWorksheets = anchorDatasources
+    .map((ds) => renderAnchorWorksheet(ds, i.packageId))
+    .join('\n');
   const worksheetsXml = `  <worksheets>
-${renderHostWorksheet(datasources, i.packageId, i.workbookName, addInXml)}
+${renderHostWorksheet(datasources, i.packageId, i.workbookName, addInXml)}${
+    anchorWorksheets ? `\n${anchorWorksheets}` : ''
+  }
   </worksheets>`;
+
+  const anchorWindows = anchorDatasources
+    .map((ds) => renderAnchorWindow(ds, i.packageId))
+    .join('\n');
 
   // The render chain that makes the published workbook a valid viz-extension app. Three parts must
   // agree on id/version/url: (1) the host worksheet's <add-in>, (2) the inline <referenced-extension>
@@ -558,7 +648,7 @@ ${renderHostWorksheet(datasources, i.packageId, i.workbookName, addInXml)}
 ${datasourcesXml}
 ${worksheetsXml}
   <windows>
-${renderWorksheetWindow(i.packageId, i.workbookName)}
+${renderWorksheetWindow(i.packageId, i.workbookName)}${anchorWindows ? `\n${anchorWindows}` : ''}
   </windows>
   <referenced-extensions>
     <referenced-extension>
