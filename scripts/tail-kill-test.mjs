@@ -31,7 +31,9 @@ const KILL_LIMIT_MS = WALL_LIMIT_MS * 2;
 const FAILURE_MODES = ['preflight', 'runtime'];
 
 // The hardcoded ASK requires these staged-workbook captions:
-// Country Code, Goals, Snapshot Time, Won, Played, Team Name, Attendance, and Stadium.
+// Country Code, Goals, Snapshot Time, Won, Played, Team Name, and Goals Against.
+// (2026-07-28: the original fourth viz asked for attendance by stadium; no dataset
+// on this machine carries those fields, so the ask names data that exists.)
 const REQUIRED_FIELDS = [
   'Country Code',
   'Goals',
@@ -39,11 +41,10 @@ const REQUIRED_FIELDS = [
   'Won',
   'Played',
   'Team Name',
-  'Attendance',
-  'Stadium',
+  'Goals Against',
 ];
 const ASK =
-  'Build me a World Cup dashboard: four vizzes — goals by country (bar), matches over time (line), win rate by team (table), attendance by stadium (bar) — on one dashboard.';
+  'Build me a World Cup dashboard: four vizzes — goals by country (bar), matches over time (line), win rate by team (table), goals against by team (bar) — on one dashboard.';
 const ONE_BEAT_LAW =
   'For multi-step authoring, author ONE ordered plan and submit it as a single execute-authoring-plan call with verify + summary readback; at most one corrective plan; then report honestly.';
 const MEASUREMENT_PROTOCOL =
@@ -1002,10 +1003,10 @@ async function runDry() {
     [slowCompletion.metrics.startup === 1_000, 'startup wall'],
     [!slowCompletion.criteria.wallUnderLimit, 'slow completion wall failure'],
     [slowCompletion.verdict === 'FAIL', 'slow completion verdict'],
-    [stage.missingFields.join(',') === 'Attendance,Stadium', 'stage missing fields'],
+    [stage.missingFields.join(',') === 'Goals Against', 'stage missing fields'],
     [
       renderSummary([stageMismatch]).includes(
-        '| run-stage | 0 | 0 | — | — | — | — | — | no | Attendance, Stadium | STAGE-MISMATCH |',
+        '| run-stage | 0 | 0 | — | — | — | — | — | no | Goals Against | STAGE-MISMATCH |',
       ),
       'stage mismatch summary row',
     ],
