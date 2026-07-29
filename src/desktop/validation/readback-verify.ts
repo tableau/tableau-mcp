@@ -159,6 +159,8 @@ function collectMarks(worksheet: XmlRecord): MarkSignature[] {
 }
 
 function normalizeFilterMode(value: string): string {
+  // Tableau omits ui-enumeration for its default inclusive categorical-filter mode.
+  if (value === '') return 'include';
   if (value === 'inclusive') return 'include';
   if (value === 'exclusive') return 'exclude';
   return value;

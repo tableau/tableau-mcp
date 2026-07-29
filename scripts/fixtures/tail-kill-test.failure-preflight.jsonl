@@ -1,0 +1,7 @@
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"preflight-baseline","name":"mcp__tableau__get-workbook-inventory","input":{"session":"preflight-session"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"preflight-baseline","content":[{"type":"text","text":"{\"title\":\"World Cup\",\"worksheets\":[{\"id\":\"ws-0\",\"name\":\"Data\"}],\"dashboards\":[],\"storyboards\":[]}"}]}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"preflight-plan","name":"mcp__tableau__execute-authoring-plan","input":{"session":"preflight-session","steps":[{"command":"tabdoc:generate-viz-from-notional-spec"},{"command":"killtest:invalid-command"}]}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"preflight-plan","content":[{"type":"text","text":"{\"message\":\"Plan refused during preflight at step 2 (killtest:invalid-command). No step ran.\",\"steps\":[]}"}]}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"preflight-final","name":"mcp__tableau__get-workbook-inventory","input":{"session":"preflight-session"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"preflight-final","content":[{"type":"text","text":"{\"title\":\"World Cup\",\"worksheets\":[{\"id\":\"ws-0\",\"name\":\"Data\"}],\"dashboards\":[],\"storyboards\":[]}"}]}]}}
+{"type":"result","result":"The plan was refused during preflight. No step ran and inventory is unchanged."}

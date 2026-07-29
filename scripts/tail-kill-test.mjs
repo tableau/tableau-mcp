@@ -10,8 +10,19 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..');
 const DESKTOP_ENTRY = join(REPO_ROOT, 'build', 'index.desktop.js');
 const SAMPLE_FIXTURE = join(SCRIPT_DIR, 'fixtures', 'tail-kill-test.sample.jsonl');
+const PREFLIGHT_FAILURE_FIXTURE = join(
+  SCRIPT_DIR,
+  'fixtures',
+  'tail-kill-test.failure-preflight.jsonl',
+);
+const RUNTIME_FAILURE_FIXTURE = join(
+  SCRIPT_DIR,
+  'fixtures',
+  'tail-kill-test.failure-runtime.jsonl',
+);
 const DEFAULT_RUNS = 5;
 const WALL_LIMIT_MS = 20_000;
+const FAILURE_MODES = ['preflight', 'runtime'];
 
 const ASK =
   'Build me a World Cup dashboard: four vizzes — goals by country (bar), matches over time (line), win rate by team (table), attendance by stadium (bar) — on one dashboard.';
@@ -19,8 +30,10 @@ const ONE_BEAT_LAW =
   'For multi-step authoring, author ONE ordered plan and submit it as a single execute-authoring-plan call with verify + summary readback; at most one corrective plan; then report honestly.';
 const MEASUREMENT_PROTOCOL =
   'Kill-test measurement protocol: use get-workbook-inventory immediately before and immediately after authoring so residue can be compared. Make exactly one authoring call, execute-authoring-plan. Include all four new worksheet names and the dashboard name in verify, set summary_worksheet to one new worksheet, do not submit a corrective plan, and report the observed readback honestly.';
-const FAILURE_PROTOCOL =
+const PREFLIGHT_FAILURE_PROTOCOL =
   'Injected-failure protocol: read inventory, prepare the requested dashboard plan, and make its final step command exactly "killtest:invalid-command". Submit that plan once through execute-authoring-plan. Do not correct or retry it. Read inventory again, then report the refusal or incomplete result and whether any step ran.';
+const RUNTIME_FAILURE_PROTOCOL =
+  'Runtime injected-failure protocol: read inventory, then submit exactly one execute-authoring-plan with exactly two tabdoc:generate-viz-from-notional-spec steps. Step 1 must use ClearSheet:true and NotionalSpecJson {"version":"0.2.0","chart":"bar","fields":[{"caption":"Country","data":"string","type":"discrete","role":"dimension","encoding":"x"},{"caption":"Goals","data":"number","type":"continuous","role":"measure","aggregation":"sum","encoding":"y"}]}; step 2 must use ClearSheet:true and the same shape but replace the measure caption with "ZZ Nonexistent Field 9Q" so preflight passes and Desktop fails during execution. Do not correct or retry; read inventory again, then report which step failed and what the earlier completed step changed. Live Desktop behavior for the bogus-field step is UNVERIFIED until this live run.';
 
 const AUTHORING_TOOLS = new Set([
   'add-field',
@@ -51,13 +64,19 @@ function usage() {
   return [
     'Usage:',
     '  node scripts/tail-kill-test.mjs --dry',
-    '  node scripts/tail-kill-test.mjs [--runs N] --out-dir DIR \\',
-    '    --session ID ... (one session for each normal run plus one failure run)',
+    '  node scripts/tail-kill-test.mjs [--runs N] [--failure-mode preflight|runtime] --out-dir DIR \\',
+    '    --session ID ... (one per normal run and selected failure run; default runs both failures)',
   ].join('\n');
 }
 
 function parseArgs(argv) {
-  const options = { dry: false, runs: DEFAULT_RUNS, sessions: [], outDir: undefined };
+  const options = {
+    dry: false,
+    runs: DEFAULT_RUNS,
+    sessions: [],
+    outDir: undefined,
+    failureMode: undefined,
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--dry') {
@@ -70,6 +89,12 @@ function parseArgs(argv) {
       options.sessions.push(readOptionValue(argv, ++index, arg));
     } else if (arg === '--out-dir') {
       options.outDir = readOptionValue(argv, ++index, arg);
+    } else if (arg === '--failure-mode') {
+      const failureMode = readOptionValue(argv, ++index, arg);
+      if (!FAILURE_MODES.includes(failureMode)) {
+        throw new Error('--failure-mode must be preflight or runtime.');
+      }
+      options.failureMode = failureMode;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -260,7 +285,7 @@ function sameSet(left, right) {
   return left.size === right.size && [...left].every((value) => right.has(value));
 }
 
-function compareInventory(baseline, final, expectedObserved, failureRun) {
+function compareInventory(baseline, final, expectedObserved, failureMode) {
   if (!baseline || !final) return false;
   const baselineWorksheets = itemNames(baseline.worksheets);
   const finalWorksheets = itemNames(final.worksheets);
@@ -273,7 +298,7 @@ function compareInventory(baseline, final, expectedObserved, failureRun) {
   const addedWorksheets = setDifference(finalWorksheets, baselineWorksheets);
   const addedDashboards = setDifference(finalDashboards, baselineDashboards);
 
-  if (failureRun) {
+  if (failureMode === 'preflight') {
     return (
       sameSet(baselineWorksheets, finalWorksheets) &&
       sameSet(baselineDashboards, finalDashboards) &&
@@ -329,7 +354,40 @@ function outputText(output) {
   return JSON.stringify(output ?? '').toLowerCase();
 }
 
-function analyzeTranscript(streamText, { wallMs, failureRun }) {
+function notionalSpecCaptions(step) {
+  if (
+    step?.command !== 'tabdoc:generate-viz-from-notional-spec' ||
+    typeof step?.args?.NotionalSpecJson !== 'string' ||
+    step.args.ClearSheet !== true
+  ) {
+    return [];
+  }
+  try {
+    const spec = JSON.parse(step.args.NotionalSpecJson);
+    return Array.isArray(spec.fields)
+      ? spec.fields.flatMap((field) =>
+          field && typeof field.caption === 'string' ? [field.caption] : [],
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function isRuntimeFailurePlan(planCall) {
+  const steps = planCall?.input?.steps;
+  if (!Array.isArray(steps) || steps.length !== 2) return false;
+  const firstCaptions = notionalSpecCaptions(steps[0]);
+  const secondCaptions = notionalSpecCaptions(steps[1]);
+  return (
+    firstCaptions.includes('Country') &&
+    firstCaptions.includes('Goals') &&
+    secondCaptions.includes('Country') &&
+    secondCaptions.includes('ZZ Nonexistent Field 9Q')
+  );
+}
+
+function analyzeTranscript(streamText, { wallMs, failureMode }) {
   const events = parseStreamJson(streamText);
   const calls = extractCalls(events);
   const authoringCalls = calls.filter((call) => call.classification === 'authoring');
@@ -358,18 +416,44 @@ function analyzeTranscript(streamText, { wallMs, failureRun }) {
     readback?.summary_data &&
     typeof readback.summary_data === 'object' &&
     Array.isArray(readback.summary_data.rows);
-  const residueClean = compareInventory(inventories[0], inventories.at(-1), observed, failureRun);
+  const residueClean =
+    failureMode === 'runtime'
+      ? undefined
+      : compareInventory(inventories[0], inventories.at(-1), observed, failureMode);
   const planOutputText = outputText(planCall?.output);
-  const cleanFailure =
+  const cleanPreflightFailure =
     /plan refused during preflight/u.test(planOutputText) &&
     /no step ran/u.test(planOutputText) &&
     /"steps":\s*\[\]/u.test(planOutputText);
   const honestFailure =
     /(refus|incomplete|failed|did not|no step ran)/u.test(finalLower) &&
     !/successfully (built|created|completed)/u.test(finalLower);
-  const verdict = failureRun
-    ? oneAuthoringPlan && wallUnderLimit && cleanFailure && honestFailure && residueClean
-    : oneAuthoringPlan && wallUnderLimit && verifiedReadback && summaryReadbackSeen && residueClean;
+  const runtimePlanShape = isRuntimeFailurePlan(planCall);
+  const failedStepReported = /step 2 .*failed/su.test(planOutputText);
+  const earlierEffectsReported =
+    /executed before failure: 1/u.test(planOutputText) &&
+    /"step":\s*1[^}]*"status":\s*"completed"/su.test(planOutputText);
+  const runtimeFinalHonest =
+    /(step 1|first step)/u.test(finalLower) &&
+    /(completed|ran|changed|applied)/u.test(finalLower) &&
+    /(step 2|second step)/u.test(finalLower) &&
+    /fail/u.test(finalLower) &&
+    !/successfully (built|created|completed)/u.test(finalLower);
+  const verdict =
+    failureMode === 'preflight'
+      ? oneAuthoringPlan && wallUnderLimit && cleanPreflightFailure && honestFailure && residueClean
+      : failureMode === 'runtime'
+        ? oneAuthoringPlan &&
+          wallUnderLimit &&
+          runtimePlanShape &&
+          failedStepReported &&
+          earlierEffectsReported &&
+          runtimeFinalHonest
+        : oneAuthoringPlan &&
+          wallUnderLimit &&
+          verifiedReadback &&
+          summaryReadbackSeen &&
+          residueClean;
 
   return {
     events,
@@ -386,16 +470,24 @@ function analyzeTranscript(streamText, { wallMs, failureRun }) {
     criteria: {
       oneAuthoringPlan,
       wallUnderLimit,
-      ...(failureRun
-        ? { cleanFailure, honestFailure, residueClean }
-        : { verifiedReadback, summaryReadbackSeen: Boolean(summaryReadbackSeen), residueClean }),
+      ...(failureMode === 'preflight'
+        ? { cleanPreflightFailure, honestFailure, residueClean }
+        : failureMode === 'runtime'
+          ? { runtimePlanShape, failedStepReported, earlierEffectsReported, runtimeFinalHonest }
+          : { verifiedReadback, summaryReadbackSeen: Boolean(summaryReadbackSeen), residueClean }),
     },
     verdict: verdict ? 'PASS' : 'FAIL',
   };
 }
 
-function buildPrompt(failureRun) {
-  return failureRun ? `${ASK}\n\n${FAILURE_PROTOCOL}` : `${ASK}\n\n${MEASUREMENT_PROTOCOL}`;
+function buildPrompt(failureMode) {
+  const protocol =
+    failureMode === 'preflight'
+      ? PREFLIGHT_FAILURE_PROTOCOL
+      : failureMode === 'runtime'
+        ? RUNTIME_FAILURE_PROTOCOL
+        : MEASUREMENT_PROTOCOL;
+  return `${ASK}\n\n${protocol}`;
 }
 
 function ensureInsideRepo(path) {
@@ -494,13 +586,13 @@ function renderSummary(results) {
   return `${rows.map((row) => `| ${row.map(markdownCell).join(' | ')} |`).join('\n')}\n`;
 }
 
-async function executeRun({ run, session, failureRun, outDir }) {
+async function executeRun({ run, session, failureMode, outDir }) {
   const configPath = join(outDir, `.${run}-mcp.json`);
   const config = createMcpConfig(session);
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
   let processResult;
   try {
-    processResult = await runClaudeWithLaunchRetry(configPath, buildPrompt(failureRun));
+    processResult = await runClaudeWithLaunchRetry(configPath, buildPrompt(failureMode));
   } finally {
     await unlink(configPath).catch(() => undefined);
   }
@@ -509,7 +601,7 @@ async function executeRun({ run, session, failureRun, outDir }) {
   try {
     analysis = analyzeTranscript(processResult.stdout, {
       wallMs: processResult.wallMs,
-      failureRun,
+      failureMode,
     });
   } catch (error) {
     analysis = {
@@ -531,9 +623,9 @@ async function executeRun({ run, session, failureRun, outDir }) {
   }
   const result = {
     run,
-    kind: failureRun ? 'injected-failure' : 'normal',
+    kind: failureMode ? `injected-failure-${failureMode}` : 'normal',
     session,
-    prompt: buildPrompt(failureRun),
+    prompt: buildPrompt(failureMode),
     process: {
       exitCode: processResult.exitCode,
       signal: processResult.signal,
@@ -547,13 +639,26 @@ async function executeRun({ run, session, failureRun, outDir }) {
 }
 
 async function runDry() {
-  const fixture = await readFile(SAMPLE_FIXTURE, 'utf8');
-  const result = analyzeTranscript(fixture, { wallMs: 12_340, failureRun: false });
+  const [fixture, preflightFixture, runtimeFixture] = await Promise.all([
+    readFile(SAMPLE_FIXTURE, 'utf8'),
+    readFile(PREFLIGHT_FAILURE_FIXTURE, 'utf8'),
+    readFile(RUNTIME_FAILURE_FIXTURE, 'utf8'),
+  ]);
+  const result = analyzeTranscript(fixture, { wallMs: 12_340, failureMode: undefined });
+  const preflight = analyzeTranscript(preflightFixture, {
+    wallMs: 1_200,
+    failureMode: 'preflight',
+  });
+  const runtime = analyzeTranscript(runtimeFixture, { wallMs: 2_500, failureMode: 'runtime' });
   const config = createMcpConfig('dry-session');
+  const defaultOptions = parseArgs([]);
+  const runtimeOptions = parseArgs(['--failure-mode', 'runtime']);
   const assertions = [
     [config.mcpServers.tableau.args[0] === DESKTOP_ENTRY, 'desktop entry'],
     [config.mcpServers.tableau.env.TOOL_PROFILE === 'dynamic-authoring', 'tool profile'],
     [config.mcpServers.tableau.env.TABLEAU_SESSION === 'dry-session', 'session'],
+    [defaultOptions.failureMode === undefined, 'default both failure modes'],
+    [runtimeOptions.failureMode === 'runtime', 'failure-mode parser'],
     [result.metrics.calls === 3, 'call count'],
     [result.metrics.authoringCalls === 1, 'authoring call count'],
     [result.criteria.oneAuthoringPlan, 'one execute-authoring-plan call'],
@@ -561,20 +666,29 @@ async function runDry() {
     [result.metrics.summaryReadbackSeen, 'summary readback detection'],
     [result.metrics.residueClean, 'residue comparison'],
     [result.verdict === 'PASS', 'sample verdict'],
+    [preflight.criteria.cleanPreflightFailure, 'preflight refusal parser'],
+    [preflight.criteria.residueClean, 'preflight residue comparison'],
+    [preflight.verdict === 'PASS', 'preflight failure verdict'],
+    [runtime.criteria.runtimePlanShape, 'runtime plan parser'],
+    [runtime.criteria.failedStepReported, 'runtime failed-step parser'],
+    [runtime.criteria.earlierEffectsReported, 'runtime earlier-effects parser'],
+    [runtime.criteria.runtimeFinalHonest, 'runtime final-text parser'],
+    [runtime.verdict === 'PASS', 'runtime failure verdict'],
   ];
   const failure = assertions.find(([passed]) => !passed);
   if (failure) throw new Error(`Dry assertion failed: ${failure[1]}`);
   process.stdout.write(
-    '[tail-kill-test] dry PASS: calls=3 authoring-calls=1 wall=12.34s readback-seen=yes residue=clean verdict=PASS\n',
+    '[tail-kill-test] dry PASS: normal=PASS failure-preflight=PASS failure-runtime=PASS\n',
   );
 }
 
 async function runLive(options) {
   if (!options.outDir) throw new Error('--out-dir is required outside --dry mode.');
-  const expectedSessions = options.runs + 1;
+  const failureModes = options.failureMode ? [options.failureMode] : FAILURE_MODES;
+  const expectedSessions = options.runs + failureModes.length;
   if (options.sessions.length !== expectedSessions) {
     throw new Error(
-      `Expected ${expectedSessions} --session values (${options.runs} normal + 1 failure), got ${options.sessions.length}.`,
+      `Expected ${expectedSessions} --session values (${options.runs} normal + ${failureModes.length} failure), got ${options.sessions.length}.`,
     );
   }
   const outDir = resolve(REPO_ROOT, options.outDir);
@@ -583,12 +697,14 @@ async function runLive(options) {
 
   const results = [];
   for (let index = 0; index < expectedSessions; index += 1) {
-    const failureRun = index === options.runs;
-    const run = failureRun ? 'run-failure' : `run-${String(index + 1).padStart(2, '0')}`;
+    const failureMode = index < options.runs ? undefined : failureModes[index - options.runs];
+    const run = failureMode
+      ? `run-failure-${failureMode}`
+      : `run-${String(index + 1).padStart(2, '0')}`;
     const result = await executeRun({
       run,
       session: options.sessions[index],
-      failureRun,
+      failureMode,
       outDir,
     });
     results.push(result);

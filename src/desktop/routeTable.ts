@@ -68,7 +68,7 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
   {
     kind: 'prose',
     id: 'bind-miss-tail',
-    text: 'Only after a bind-template attempt returns without a terminal `done` receipt or with failed postconditions, author ONE ordered command plan and submit it in a single execute-authoring-plan call with `verify` and `summary_worksheet` readback. If its receipt names a failure, submit at most ONE corrective plan; then report verified success, partial completion, or terminal failure naming the failed step. Never fall back to per-primitive tool loops or XML repair; successful Call 1 binds do not enter this tail.',
+    text: 'After bind-template returns `status:"escalate"`/`"blocked"`, or Call 2 misses `applied:true`, author ONE ordered command plan; `status:"propose"` requires Call 2 first and never enters this tail. Call execute-authoring-plan once with typed `expect` on every consequential step plus `verify` and `summary_worksheet` readback. If its result names a failure, submit at most ONE corrective plan; then report verified success, partial completion, or terminal failure naming the failed step. Never use primitive loops or XML repair.',
   },
   {
     kind: 'route',

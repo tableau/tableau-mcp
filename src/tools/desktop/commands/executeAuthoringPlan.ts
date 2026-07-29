@@ -252,6 +252,30 @@ export const getExecuteAuthoringPlanTool = (
               readbackValue,
             );
           }
+          if (readbackValue.verified && readbackValue.verified.missing.length > 0) {
+            return incompletePlan(
+              `Missing verify target(s): ${readbackValue.verified.missing.join(', ')}. The plan outcome is unverified.`,
+              stepResults,
+              'Correct missing verify targets before claiming completion',
+              readbackValue,
+            );
+          }
+          if (summary_worksheet !== undefined && !readbackValue.summary_data) {
+            return incompletePlan(
+              'Requested summary readback is absent. The plan outcome is unverified.',
+              stepResults,
+              'Correct summary readback before claiming completion',
+              readbackValue,
+            );
+          }
+          if (readbackValue.summary_data?.rows.length === 0) {
+            return incompletePlan(
+              'Summary readback returned no rows; values are unverified.',
+              stepResults,
+              'Correct summary readback before claiming completion',
+              readbackValue,
+            );
+          }
           return new Ok(
             withNextAction(
               {
@@ -365,7 +389,7 @@ function hasReadbackRequest(
   summaryWorksheet: string | undefined,
   expectations: Array<{ step: number; expect: PlanPostcondition }>,
 ): boolean {
-  return (verify?.length ?? 0) > 0 || Boolean(summaryWorksheet) || expectations.length > 0;
+  return (verify?.length ?? 0) > 0 || summaryWorksheet !== undefined || expectations.length > 0;
 }
 
 async function performReadback(

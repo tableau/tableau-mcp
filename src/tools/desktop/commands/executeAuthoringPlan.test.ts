@@ -92,6 +92,54 @@ describe('executeAuthoringPlanTool', () => {
     });
   });
 
+  it('fails closed when a requested verify target is missing', async () => {
+    const executor = makeExecutor();
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [STEPS[0]],
+        verify: ['Sales by Region', 'Missing Dashboard'],
+      },
+      makeExtra(executor),
+    );
+
+    expectIncompleteReadback(result, 'Missing verify target(s): Missing Dashboard');
+  });
+
+  it('fails closed when requested summary readback is absent', async () => {
+    const executor = makeExecutor();
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [STEPS[0]],
+        summary_worksheet: '',
+      },
+      makeExtra(executor),
+    );
+
+    expectIncompleteReadback(result, 'Requested summary readback is absent');
+  });
+
+  it('fails closed with a distinct message when summary readback has no rows', async () => {
+    const executor = makeExecutor();
+    executor.getWorksheetSummaryData.mockResolvedValue(
+      new Ok({ columns: [{ name: 'Region' }], rows: [] }),
+    );
+
+    const result = await getResult(
+      {
+        session: SESSION,
+        steps: [STEPS[0]],
+        summary_worksheet: 'Sales by Region',
+      },
+      makeExtra(executor),
+    );
+
+    expectIncompleteReadback(result, 'Summary readback returned no rows; values are unverified');
+  });
+
   it('stops after an execution failure and surfaces its step id and enriched Desktop error', async () => {
     const commandError = {
       type: 'command-failed' as const,
@@ -381,6 +429,8 @@ describe('executeAuthoringPlanTool', () => {
             },
           },
         ],
+        verify: ['Sales by Region', 'Executive Overview'],
+        summary_worksheet: 'Sales by Region',
       },
       makeExtra(executor),
     );
@@ -395,6 +445,8 @@ describe('executeAuthoringPlanTool', () => {
         ({ status }: { status: string }) => status === 'passed',
       ),
     ).toBe(true);
+    expect(payload.readback.verified.missing).toEqual([]);
+    expect(payload.readback.summary_data.rows).toHaveLength(1);
     expect(executor.getWorkbook).toHaveBeenCalledTimes(1);
     expect(executor.getWorksheetDocument).toHaveBeenCalledTimes(1);
     expect(executor.getDashboardDocument).toHaveBeenCalledTimes(1);
@@ -533,5 +585,13 @@ function expectPostconditionFailure(
   expect(payload.message).toContain(failure);
   expect(payload.message).toContain('Expected');
   expect(payload.message).toContain(failure === 'mismatch' ? 'observed' : 'observed unavailable');
+  expect(payload.message).not.toContain('Plan done');
+}
+
+function expectIncompleteReadback(result: CallToolResult, message: string): void {
+  expect(result.isError).toBe(true);
+  invariant(result.content[0].type === 'text');
+  const payload = JSON.parse(result.content[0].text);
+  expect(payload.message).toContain(message);
   expect(payload.message).not.toContain('Plan done');
 }

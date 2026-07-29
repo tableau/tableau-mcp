@@ -127,6 +127,16 @@ describe('verifyWorksheetReadback', () => {
     });
   });
 
+  it('treats an absent readback enumeration as Tableau default include mode', () => {
+    const intended = filteredWorksheet({ members: ['EMEA'], enumeration: 'inclusive' });
+    const readback = filteredWorksheet({ members: ['EMEA'], enumeration: 'inclusive' }).replace(
+      ' user:ui-enumeration="inclusive"',
+      '',
+    );
+
+    expect(verifyWorksheetReadback(intended, readback)).toEqual([]);
+  });
+
   it('accepts identical filter members in a different XML order', () => {
     const intended = filteredWorksheet({ members: ['EMEA', 'AMER'] });
     const readback = filteredWorksheet({ members: ['AMER', 'EMEA'] });
