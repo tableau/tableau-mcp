@@ -38,6 +38,19 @@ export function extractUrlObjectFromResult(result: CallToolResult): string {
 }
 
 /**
+ * Whether a delivery carries no usable payload (empty `content`, no `structuredContent`).
+ * Empty `content` is protocol-legal (MCP defaults it to `[]`), so this is not a parse failure —
+ * just nothing to render. Content that is present but unparseable is NOT empty and still surfaces
+ * PARSE_ERROR downstream.
+ */
+function isEmptyDelivery(result: CallToolResult): boolean {
+  const hasContent = Array.isArray(result.content) && result.content.length > 0;
+  const hasStructuredContent =
+    result.structuredContent != null && Object.keys(result.structuredContent).length > 0;
+  return !hasContent && !hasStructuredContent;
+}
+
+/**
  * Handles a tool result from an embed-Tableau-viz tool (get-view / get-workbook) and embeds the viz.
  * @param app - The MCP App instance
  * @param result - The tool result containing the view URL
@@ -46,6 +59,12 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
   if (!result || result.isError) {
     const cause = result ? extractToolErrorMessage(result) : undefined;
     showError('TOOL_ERROR', cause, app);
+    return;
+  }
+
+  // Empty re-delivery: the host can re-fire tool-result with no payload on a re-render/re-mount.
+  // Nothing to embed, so no-op and keep the current render instead of overwriting it with an error.
+  if (isEmptyDelivery(result)) {
     return;
   }
 

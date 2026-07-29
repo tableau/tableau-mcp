@@ -344,6 +344,61 @@ describe('handleToolResult', () => {
     expect(vi.mocked(setupOpenInTableauLink)).toHaveBeenCalledTimes(1);
   });
 
+  it('no-ops on an empty (dataless) delivery instead of showing PARSE_ERROR', async () => {
+    // The host can re-fire ui/notifications/tool-result on a re-render/re-mount with a
+    // protocol-legal but empty result (content: [], no structuredContent). There is nothing to
+    // embed, so this must be a silent no-op — NOT a PARSE_ERROR.
+    const emptyResult: CallToolResult = {
+      content: [],
+    };
+
+    await handleToolResult(mockApp, emptyResult);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const container = document.getElementById('tableauVizContainer');
+
+    // NO error UI displayed
+    expect(container?.querySelector('.mcp-app-error')).toBeNull();
+
+    // No embedding attempted and no telemetry event recorded
+    expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
+    expect(vi.mocked(recordEvent)).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite an existing render when an empty re-delivery arrives', async () => {
+    // First delivery: happy path renders a viz.
+    const validResult: CallToolResult = {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            url: 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view',
+          }),
+        },
+      ],
+    };
+
+    vi.mocked(callGetEmbedTokenTool).mockResolvedValue('test-token-123');
+    vi.mocked(embedTableauViz).mockImplementation((_url, _token) => {
+      const container = document.getElementById('tableauVizContainer');
+      container?.replaceChildren(document.createElement('tableau-viz'));
+    });
+    vi.mocked(setupOpenInTableauLink).mockImplementation(() => {});
+
+    await handleToolResult(mockApp, validResult);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const container = document.getElementById('tableauVizContainer');
+    expect(container?.querySelector('tableau-viz')).toBeTruthy();
+
+    // Second delivery: empty re-fire. Must leave the rendered viz intact and show no error.
+    await handleToolResult(mockApp, { content: [] });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(container?.querySelector('tableau-viz')).toBeTruthy();
+    expect(container?.querySelector('.mcp-app-error')).toBeNull();
+  });
+
   it('reports telemetry with the tool error message when a tool error occurs', async () => {
     const errorResult: CallToolResult = {
       isError: true,
