@@ -645,7 +645,7 @@ function ensureInsideRepo(path) {
   }
 }
 
-function runClaude(configPath, prompt) {
+function runClaude(configPath, settingsPath, prompt) {
   return new Promise((resolvePromise, rejectPromise) => {
     const startedAt = Date.now();
     const child = spawn(
@@ -655,6 +655,19 @@ function runClaude(configPath, prompt) {
         '--output-format',
         'stream-json',
         '--verbose',
+        // --settings OVERRIDES user settings: no SessionStart hooks (r3 measured a
+        // 13-19s startup floor from them). --dangerously-skip-permissions because
+        // --print grants nothing (r3: every mcp call denied); --strict-mcp-config
+        // plus --disallowed-tools contain the shot to the Tableau MCP tools.
+        '--settings',
+        settingsPath,
+        '--dangerously-skip-permissions',
+        '--disallowed-tools',
+        'Bash',
+        'Task',
+        'TodoWrite',
+        'Grep',
+        'Glob',
         '--mcp-config',
         configPath,
         '--strict-mcp-config',
@@ -709,12 +722,12 @@ function runClaude(configPath, prompt) {
   });
 }
 
-async function runClaudeWithLaunchRetry(configPath, prompt) {
+async function runClaudeWithLaunchRetry(configPath, settingsPath, prompt) {
   try {
-    return await runClaude(configPath, prompt);
+    return await runClaude(configPath, settingsPath, prompt);
   } catch (firstError) {
     try {
-      return await runClaude(configPath, prompt);
+      return await runClaude(configPath, settingsPath, prompt);
     } catch (secondError) {
       throw new Error(
         `claude failed to launch twice: ${firstError.message}; retry: ${secondError.message}`,
@@ -850,13 +863,16 @@ async function writeRunResult(outDir, result) {
 
 async function executeRun({ run, session, failureMode, outDir, stage }) {
   const configPath = join(outDir, `.${run}-mcp.json`);
+  const settingsPath = join(outDir, `.${run}-settings.json`);
   const config = createMcpConfig(session);
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  await writeFile(settingsPath, '{}\n', 'utf8');
   let processResult;
   try {
-    processResult = await runClaudeWithLaunchRetry(configPath, buildPrompt(failureMode));
+    processResult = await runClaudeWithLaunchRetry(configPath, settingsPath, buildPrompt(failureMode));
   } finally {
     await unlink(configPath).catch(() => undefined);
+    await unlink(settingsPath).catch(() => undefined);
   }
 
   let analysis;
