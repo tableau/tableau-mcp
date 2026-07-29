@@ -5250,7 +5250,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
     expect(applied.guidance).toContain('Done — no further tool calls needed');
   });
 
-  it('a dropped node is reported and the bind is no longer terminal', async () => {
+  it('a readback mismatch is reported and the bind is no longer terminal', async () => {
     const mocks = setupAutoApplyMocks({ inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML } });
     // Tableau accepted the document but rendered a different mark than the one we wrote.
     let read = 0;
@@ -5275,7 +5275,7 @@ describe('bindTemplateTool host verification on the bind hot path', () => {
 
     expect(applied.applied).toBe(true);
     expect(applied.guidance).toContain('HOST VERIFICATION — failed');
-    expect(applied.guidance).toContain('readback FAILED (nodes dropped)');
+    expect(applied.guidance).toContain('readback did not match the intended nodes (listed above)');
     expect(applied.guidance).not.toContain('Done — no further tool calls needed');
     expect(
       (result.structuredContent as { nextAction?: { kind: string } } | undefined)?.nextAction?.kind,

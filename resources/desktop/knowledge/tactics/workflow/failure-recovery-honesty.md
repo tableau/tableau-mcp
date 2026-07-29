@@ -40,7 +40,7 @@ What does **NOT** work:
 
 - **Declaring "Tableau is unreachable" or "that datasource is gone" on the first `not_found`** without a session refresh. The far more common cause is a stale cache from before the user's change.
 - **Re-reading the same stale cache repeatedly** — calling `resolve-field` again against an un-refreshed `workbookFile` and expecting a different answer. `resolve-field` reads the file as-is; nothing changes until you refresh the file.
-- **Narrating success over a failed/unverified receipt** — e.g. answering "Done — sorted descending and filtered to Top 10" when the line reads `HOST VERIFICATION — failed: … readback FAILED (nodes dropped).` The nodes were dropped; the claim is false.
+- **Narrating success over a failed/unverified receipt** — e.g. answering "Done — sorted descending and filtered to Top 10" when the line reads `HOST VERIFICATION — failed: … readback did not match the intended nodes (listed above).` The readback does not support the claim.
 - **Treating a whole-workbook or dashboard `unverified` receipt as confirmation.** `unverified` means "not re-verified," not "verified." A `compose-dashboard` receipt is verified only after workbook XML confirms its zone tree and dashboard-window viewpoints.
 - **Inventing problems that nothing measured** when the receipt is `verified` — the guard text explicitly says not to report unlisted issues.
 
@@ -69,12 +69,12 @@ Equivalent refresh via a fresh snapshot: `get-workbook-xml({ session: "inst-1" }
 apply-worksheet({ ... }) →
   "Applied worksheet 'Sales by Region'.
 
-   HOST VERIFICATION — failed: preflight clean · apply completed · readback FAILED (nodes dropped).
+   HOST VERIFICATION — failed: preflight clean · apply completed · readback did not match the intended nodes (listed above).
    Do not claim the change is confirmed; report only the evidence above."
 ```
 
 - **Wrong:** "Done — I sorted by Sales descending and filtered to Top 10." (contradicts `failed`)
-- **Right:** the receipt says nodes were dropped, so re-read and correct before reporting:
+- **Right:** the receipt says the intended nodes did not match readback, so re-read and correct before reporting:
 
 ```
 1. get-worksheet-xml({ session, worksheet: "Sales by Region", mode: "file" })   # inspect what actually survived
