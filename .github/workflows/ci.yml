@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/desktop
+      - 'claude/**'
 
 jobs:
   build:
