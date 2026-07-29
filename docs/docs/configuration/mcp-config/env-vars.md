@@ -688,7 +688,7 @@ MCP_IMAGE_PREFIX=tableau/
 
 <hr />
 
-## `IMAGE_PRESIGN_TTL`
+## `FILE_TTL`
 
 The lifetime of the presigned GET URL that is returned to the client. The value is in seconds. The link
 should be fetched promptly rather than stored.
@@ -700,5 +700,5 @@ should be fetched promptly rather than stored.
 **Example:**
 
 ```bash
-IMAGE_PRESIGN_TTL=30
+FILE_TTL=30
 ```
