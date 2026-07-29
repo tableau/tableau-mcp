@@ -10,7 +10,7 @@ function mimeTypeFor(format: 'PNG' | 'SVG'): string {
  * Returns a single `resource_link` content block carrying a short-lived
  * presigned URL. The client fetches the image bytes directly from S3, so the
  * MCP server never streams the image back to the client and no base64 payload
- * is inlined. The link is short-lived (see IMAGE_PRESIGN_TTL) and
+ * is inlined. The link is short-lived (see FILE_TTL) and
  * should be fetched promptly rather than stored.
  *
  * For raster (PNG) images the result also carries `_meta.slack.blocks` with a
