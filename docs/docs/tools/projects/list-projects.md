@@ -118,7 +118,4 @@ The response fields are:
 
 - `data`: the projects on the requested page (at most 1000, or fewer when `limit` or a server
   cap applies).
-- `totalAvailable`: the number of projects the client should paginate up to. This is
-  `min(rawTotal, MAX_RESULT_LIMIT)` — equal to Tableau's raw total for the query when no
-  server-side cap is configured, and capped to [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
-  when one is in force. Your own `limit` argument does not affect this value.
+- `totalAvailable`: the number of projects available for pagination (Your own `limit` argument does not affect this value).
