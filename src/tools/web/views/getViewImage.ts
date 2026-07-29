@@ -119,6 +119,7 @@ export const getGetViewImageTool = (
               resourceId: viewId,
               config: extra.config,
               toolName: getViewImageTool.name,
+              keyPrefixSegment: 'view-images/',
             }),
           );
         },

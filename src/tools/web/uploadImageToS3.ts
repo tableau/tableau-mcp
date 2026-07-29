@@ -34,7 +34,7 @@ export interface ImageS3Config {
  * The `@aws-sdk/*` packages are imported dynamically (rather than at the top of
  * the module) so their module bodies are only evaluated — and the client only
  * constructed — the first time an image is actually uploaded. Deployments that
- * don't set IMAGE_S3_BUCKET never reach this code path, so the SDK is never
+ * don't set MCP_S3_BUCKET never reach this code path, so the SDK is never
  * initialized or loaded into memory there. (Note: in the bundled production
  * build the SDK bytes are still inlined into the output; the dynamic import
  * defers runtime initialization, not the packaged size.)
@@ -94,6 +94,21 @@ function contentTypeFor(format: 'PNG' | 'SVG'): string {
 
 function extensionFor(format: 'PNG' | 'SVG'): string {
   return format === 'SVG' ? 'svg' : 'png';
+}
+
+/**
+ * Joins the shared base key prefix (MCP_IMAGE_PREFIX) with a per-tool segment,
+ * inserting exactly one slash between the parts and stripping any leading slash.
+ * Either part may be empty: an empty base yields just the tool segment, so the
+ * per-tool default applies when no base is configured. The result always ends
+ * with a trailing slash so it reads as a folder path.
+ */
+export function joinImageS3Prefix(base: string, segment: string): string {
+  const joined = [base, segment]
+    .map((part) => part.replace(/^\/+/, '').replace(/\/+$/, ''))
+    .filter(Boolean)
+    .join('/');
+  return joined ? `${joined}/` : '';
 }
 
 /**

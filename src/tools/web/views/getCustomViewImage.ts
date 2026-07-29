@@ -120,6 +120,7 @@ export const getGetCustomViewImageTool = (
               resourceId: customViewId,
               config: extra.config,
               toolName: getCustomViewImageTool.name,
+              keyPrefixSegment: 'custom-view-images/',
             }),
           );
         },

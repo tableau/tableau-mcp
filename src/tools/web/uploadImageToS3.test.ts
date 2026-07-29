@@ -5,6 +5,7 @@ import {
   buildImageS3Key,
   exportedForTesting,
   ImageS3Config,
+  joinImageS3Prefix,
   uploadImageToS3,
 } from './uploadImageToS3.js';
 
@@ -182,5 +183,28 @@ describe('buildImageS3Key', () => {
     const a = buildImageS3Key('p/', 'r', 'PNG');
     const b = buildImageS3Key('p/', 'r', 'PNG');
     expect(a).not.toBe(b);
+  });
+});
+
+describe('joinImageS3Prefix', () => {
+  it('joins a base and a per-tool segment with a single slash and a trailing slash', () => {
+    expect(joinImageS3Prefix('tableau/', 'view-images/')).toBe('tableau/view-images/');
+  });
+
+  it('falls back to just the segment when the base is empty', () => {
+    expect(joinImageS3Prefix('', 'view-images/')).toBe('view-images/');
+  });
+
+  it('returns just the base when the segment is empty', () => {
+    expect(joinImageS3Prefix('tableau/', '')).toBe('tableau/');
+  });
+
+  it('returns an empty string when both parts are empty', () => {
+    expect(joinImageS3Prefix('', '')).toBe('');
+  });
+
+  it('normalizes leading, trailing, and interior slashes', () => {
+    expect(joinImageS3Prefix('/tableau', 'view-images')).toBe('tableau/view-images/');
+    expect(joinImageS3Prefix('tableau//', '//view-images//')).toBe('tableau/view-images/');
   });
 });
