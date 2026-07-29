@@ -5,11 +5,13 @@ import { z } from 'zod';
 import { knownLiveFailureFixFor } from '../../../desktop/commandPolicy.js';
 import { guardCommand } from '../../../desktop/commands/externalApiCommandGuard.js';
 import type { WorkbookDocument } from '../../../desktop/externalApi/externalApiClient.js';
+import type { ExternalApiToolExecutor } from '../../../desktop/externalApi/externalApiToolExecutor.js';
 import {
   DashboardItem,
   WorkbookInventory,
   WorksheetItem,
 } from '../../../desktop/externalApi/types.js';
+import { resolveField } from '../../../desktop/metadata/field-resolver.js';
 import { normalizeArray, parseXML } from '../../../desktop/metadata/parser.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import {
@@ -64,7 +66,7 @@ const postconditionSchema = z.discriminatedUnion('kind', [
 ]);
 
 const stepSchema = z.object({
-  command: z.string().describe("'namespace:command' ID."),
+  command: z.string().describe('Command ID.'),
   args: z.record(z.unknown()).optional(),
   expect: postconditionSchema.optional(),
 });
@@ -72,20 +74,14 @@ const stepSchema = z.object({
 type PlanPostcondition = z.infer<typeof postconditionSchema>;
 
 const paramsSchema = {
-  session: z.string().optional().describe('Session ID if not pinned.'),
-  mode: z
-    .enum(['compile', 'execute'])
-    .default('execute')
-    .describe('Compile validates only; execute dispatches.'),
-  steps: z.array(stepSchema).min(1).max(24).describe('1-24 ordered steps.'),
-  verify: z
-    .array(z.string())
-    .optional()
-    .describe('Sheet/dashboard names to verify after the plan.'),
+  session: z.string().optional().describe('Session ID.'),
+  mode: z.enum(['compile', 'execute']).default('execute').describe('Validate or execute.'),
+  steps: z.array(stepSchema).min(1).max(24).describe('1-24 steps.'),
+  verify: z.array(z.string()).optional().describe('Post-plan targets.'),
   summary_worksheet: z
     .union([z.string(), z.array(z.string()).min(2)])
     .optional()
-    .describe('Worksheet to read; multiple names are refused.'),
+    .describe('Summary worksheet.'),
 };
 
 type PreparedStep = {
@@ -163,7 +159,7 @@ export const getExecuteAuthoringPlanTool = (
     name: 'execute-authoring-plan',
     title,
     description:
-      'Runs an ordered plan of guarded Tableau commands in one call; stops at first failure; optional readback and typed per-step postconditions after the last step.',
+      'Submitting the plan is the capability and field check: preflight validates every step and field reference before any run and refuses safely with "No step ran." Do not pre-verify fields with resolve-field or scan search-commands; submit the plan and read the refusal.',
     paramsSchema,
     annotations: {
       readOnlyHint: false,
@@ -184,7 +180,23 @@ export const getExecuteAuthoringPlanTool = (
             return preparedResult;
           }
           const normalizedSummaryWorksheet = normalizeSummaryWorksheet(summary_worksheet);
+          const fieldReferences = collectPlannedFieldReferences(preparedResult.value.steps);
           if (mode === 'compile') {
+            if (fieldReferences.length > 0) {
+              const sessionResult = resolveSession(session);
+              if (sessionResult.isErr()) {
+                return sessionResult.error.toErr();
+              }
+              const executor = await extra.getExecutor(sessionResult.value);
+              const fieldPreflight = await preflightFieldReferences(
+                fieldReferences,
+                executor,
+                extra.signal,
+              );
+              if (fieldPreflight.isErr()) {
+                return fieldPreflight;
+              }
+            }
             return new Ok(
               withNextAction(
                 {
@@ -213,6 +225,14 @@ export const getExecuteAuthoringPlanTool = (
           }
           const resolvedSession = sessionResult.value;
           const executor = await extra.getExecutor(resolvedSession);
+          const fieldPreflight = await preflightFieldReferences(
+            fieldReferences,
+            executor,
+            extra.signal,
+          );
+          if (fieldPreflight.isErr()) {
+            return fieldPreflight;
+          }
           const stepResults: PlanStepResult[] = [];
 
           for (const step of preparedResult.value.steps) {
@@ -421,6 +441,117 @@ function prepareSteps(
     });
   }
   return new Ok({ steps: prepared, capabilitiesUsed: census.capabilitiesUsed });
+}
+
+type PlannedFieldReference = {
+  step: number;
+  command: string;
+  field: string;
+};
+
+function collectPlannedFieldReferences(steps: PreparedStep[]): PlannedFieldReference[] {
+  const references = new Map<string, PlannedFieldReference>();
+
+  for (const step of steps) {
+    if (step.command !== 'tabdoc:generate-viz-from-notional-spec') continue;
+    const rawSpec = step.dispatchArgs.NotionalSpecJson;
+    if (typeof rawSpec !== 'string') continue;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawSpec);
+    } catch {
+      continue;
+    }
+    if (!isRecord(parsed)) continue;
+
+    const add = (value: unknown): void => {
+      if (typeof value !== 'string' || value.trim().length === 0) return;
+      const field = value.trim();
+      if (!references.has(field)) {
+        references.set(field, { step: step.step, command: step.command, field });
+      }
+    };
+
+    if (Array.isArray(parsed.fields)) {
+      for (const field of parsed.fields) {
+        if (!isRecord(field)) continue;
+        add(typeof field.fieldIdentifier === 'string' ? field.fieldIdentifier : field.caption);
+      }
+    }
+    if (isRecord(parsed.sort)) {
+      add(parsed.sort.field);
+      add(parsed.sort.by);
+    }
+    for (const key of [
+      'rangeFilters',
+      'dateRangeFilters',
+      'relativeDateFilters',
+      'categoricalFilters',
+    ]) {
+      const filters = parsed[key];
+      if (!Array.isArray(filters)) continue;
+      for (const filter of filters) {
+        if (isRecord(filter)) add(filter.field);
+      }
+    }
+  }
+
+  return [...references.values()];
+}
+
+async function preflightFieldReferences(
+  references: PlannedFieldReference[],
+  executor: ExternalApiToolExecutor,
+  signal: AbortSignal,
+): Promise<Result<void, McpToolError>> {
+  if (references.length === 0) {
+    return new Ok(undefined);
+  }
+
+  const documentResult = await executor.getWorkbookDocument(signal);
+  const first = references[0];
+  if (documentResult.isErr()) {
+    const error = new DesktopCommandExecutionError(documentResult.error);
+    return refusedPlan(
+      first.step,
+      first.command,
+      `Could not validate field references: ${error.getErrorText()}`,
+    );
+  }
+
+  let unresolved: PlannedFieldReference[];
+  try {
+    unresolved = references.filter(({ field }) => {
+      const resolution = resolveField(documentResult.value.xml, field);
+      return resolution.kind !== 'exact' && resolution.kind !== 'rewritten';
+    });
+  } catch (error) {
+    return refusedPlan(
+      first.step,
+      first.command,
+      `Could not validate field references from the workbook document: ${
+        error instanceof Error ? error.message : String(error)
+      }.`,
+    );
+  }
+
+  if (unresolved.length > 0) {
+    const refused = unresolved[0];
+    return refusedPlan(
+      refused.step,
+      refused.command,
+      `Unresolved field reference(s): ${unresolved
+        .map(({ field }) => JSON.stringify(field))
+        .join(', ')}.`,
+    );
+  }
+
+  return new Ok(undefined);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function refusedPlan(

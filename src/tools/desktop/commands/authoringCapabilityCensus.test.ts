@@ -58,4 +58,15 @@ describe('checkAuthoringCapabilityCensus', () => {
     expect(result.missing).toBeUndefined();
     expect(result.capabilitiesUsed).toEqual([]);
   });
+
+  it('defaults to denial when a command is absent from the command census', () => {
+    const result = checkAuthoringCapabilityCensus({
+      steps: [{ command: 'tabdoc:add-binned-axis' }],
+    });
+
+    expect(result.missing).toMatchObject({
+      name: 'tabdoc:add-binned-axis',
+      reason: expect.stringContaining('absent from the bundled Tableau command census'),
+    });
+  });
 });
