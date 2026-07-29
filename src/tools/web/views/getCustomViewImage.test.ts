@@ -37,6 +37,7 @@ const mocks = vi.hoisted(() => ({
   mockGetCustomViewImage: vi.fn(),
   mockUploadImageToS3: vi.fn(),
   mockLog: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -52,8 +53,13 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../uploadImageToS3.js', () => ({
+vi.mock('../uploadImageToS3.js', async (importActual) => ({
+  ...(await importActual<typeof import('../uploadImageToS3.js')>()),
   uploadImageToS3: mocks.mockUploadImageToS3,
+}));
+
+vi.mock('../../../features/init.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../logging/logger.js', async (importActual) => ({
@@ -295,8 +301,13 @@ describe('getCustomViewImageTool', () => {
   });
 
   describe('S3 image offload', () => {
-    it('should return a resource_link (no base64) when IMAGE_S3_BUCKET is configured', async () => {
-      vi.stubEnv('IMAGE_S3_BUCKET', 'tableau-images');
+    beforeEach(() => {
+      // The S3-offload path is gated behind the `view-file-mode` feature flag.
+      mocks.mockIsFeatureEnabled.mockResolvedValue(true);
+    });
+
+    it('should return a resource_link (no base64) when MCP_S3_BUCKET is configured', async () => {
+      vi.stubEnv('MCP_S3_BUCKET', 'tableau-images');
       mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
       mocks.mockUploadImageToS3.mockResolvedValue('https://s3.example.com/signed-url');
 
@@ -315,11 +326,30 @@ describe('getCustomViewImageTool', () => {
       expect(mocks.mockUploadImageToS3).toHaveBeenCalledWith(mockPngData, {
         format: 'PNG',
         resourceId: mockCustomView.id,
-        config: expect.objectContaining({ bucket: 'tableau-images' }),
+        config: expect.objectContaining({
+          bucket: 'tableau-images',
+          keyPrefix: 'custom-view-images/',
+        }),
       });
     });
 
-    it('should return inline base64 when IMAGE_S3_BUCKET is not configured', async () => {
+    it('prefixes the S3 key with the base prefix followed by the custom-view-images segment', async () => {
+      vi.stubEnv('MCP_S3_BUCKET', 'tableau-images');
+      vi.stubEnv('MCP_IMAGE_PREFIX', 'tableau/');
+      mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
+      mocks.mockUploadImageToS3.mockResolvedValue('https://s3.example.com/signed-url');
+
+      await getToolResult({ customViewId: mockCustomView.id });
+
+      expect(mocks.mockUploadImageToS3).toHaveBeenCalledWith(
+        mockPngData,
+        expect.objectContaining({
+          config: expect.objectContaining({ keyPrefix: 'tableau/custom-view-images/' }),
+        }),
+      );
+    });
+
+    it('should return inline base64 when MCP_S3_BUCKET is not configured', async () => {
       mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
 
       const result = await getToolResult({ customViewId: mockCustomView.id });
@@ -334,7 +364,7 @@ describe('getCustomViewImageTool', () => {
     });
 
     it('should fall back to inline base64 and warn when the S3 upload fails', async () => {
-      vi.stubEnv('IMAGE_S3_BUCKET', 'tableau-images');
+      vi.stubEnv('MCP_S3_BUCKET', 'tableau-images');
       mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
       mocks.mockUploadImageToS3.mockRejectedValue(new Error('access denied'));
 
@@ -352,6 +382,22 @@ describe('getCustomViewImageTool', () => {
           message: expect.stringContaining('access denied'),
         }),
       );
+    });
+
+    it('should return inline base64 (no S3 upload) when view-file-mode is disabled even if MCP_S3_BUCKET is configured', async () => {
+      mocks.mockIsFeatureEnabled.mockResolvedValue(false);
+      vi.stubEnv('MCP_S3_BUCKET', 'tableau-images');
+      mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
+
+      const result = await getToolResult({ customViewId: mockCustomView.id });
+
+      expect(result.isError).toBe(false);
+      expect(result.content[0]).toMatchObject({
+        type: 'image',
+        data: base64PngData,
+        mimeType: 'image/png',
+      });
+      expect(mocks.mockUploadImageToS3).not.toHaveBeenCalled();
     });
   });
 });

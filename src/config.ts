@@ -152,11 +152,10 @@ export class Config extends BaseConfig {
       FLOW_TOOLS_ENABLED: flowToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
-      IMAGE_S3_BUCKET: imageS3Bucket,
-      IMAGE_S3_REGION: imageS3Region,
-      IMAGE_S3_KEY_PREFIX: imageS3KeyPrefix,
-      IMAGE_S3_PRESIGN_TTL_SECONDS: imageS3PresignTtlSeconds,
-      AWS_REGION: awsRegion,
+      MCP_S3_BUCKET: imageS3Bucket,
+      AWS_DEFAULT_REGION: awsDefaultRegion,
+      MCP_IMAGE_PREFIX: imageS3KeyPrefix,
+      IMAGE_PRESIGN_TTL: imageS3PresignTtlSeconds,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -323,21 +322,25 @@ export class Config extends BaseConfig {
     // like Slackbot stable); set INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
 
-    // Image S3 offload: when IMAGE_S3_BUCKET is set, view-image tools upload the
+    // Image S3 offload: when MCP_S3_BUCKET is set, view-image tools upload the
     // rendered image to S3 and return a short-lived presigned URL instead of
     // inlining base64. AWS credentials are resolved via the default AWS SDK
     // credential chain (IAM role / instance profile / standard AWS_* env vars),
     // so no credentials are read here. When unset, the tools fall back to
     // returning inline base64 (unchanged behavior).
+    //
+    // `keyPrefix` (MCP_IMAGE_PREFIX) is the shared base folder; each view-image
+    // tool appends its own segment (e.g. `view-images/`), so an unset base falls
+    // back to the per-tool default rather than a global one.
     const imageS3BucketValue = imageS3Bucket?.trim() ?? '';
     this.imageS3 = {
       enabled: !!imageS3BucketValue,
       bucket: imageS3BucketValue,
-      region: imageS3Region?.trim() || awsRegion?.trim() || '',
-      keyPrefix: imageS3KeyPrefix?.trim() || 'view-images/',
+      region: awsDefaultRegion?.trim() || '',
+      keyPrefix: imageS3KeyPrefix?.trim() || '',
       presignTtlSeconds: parseNumber(imageS3PresignTtlSeconds, {
-        defaultValue: 300,
-        minValue: 60,
+        defaultValue: 30,
+        minValue: 5,
         maxValue: 900,
       }),
     };

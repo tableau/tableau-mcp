@@ -1,13 +1,14 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Config } from '../../../config.js';
+import { getFeatureGate } from '../../../features/init.js';
 import { log } from '../../../logging/logger.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import {
   convertViewImageToToolResult,
   convertViewImageUrlToToolResult,
 } from '../convertViewImageToToolResult.js';
-import { uploadImageToS3 } from '../uploadImageToS3.js';
+import { joinImageS3Prefix, uploadImageToS3 } from '../uploadImageToS3.js';
 
 /**
  * Discriminated result carried from an image tool's `callback` to its
@@ -24,10 +25,23 @@ export type ImageToolResult =
 
 /**
  * Given rendered image bytes, either upload them to S3 and return a presigned
- * URL (when IMAGE_S3_BUCKET is configured), or carry the raw bytes for inline
- * base64. On any S3 failure this falls back to inline bytes so image retrieval
- * never hard-fails; the failure is logged as a warning so a persistently broken
- * S3 configuration is observable.
+ * URL (when the `view-file-mode` feature is enabled and MCP_S3_BUCKET is
+ * configured), or carry the raw bytes for inline base64. On any S3 failure this
+ * falls back to inline bytes so image retrieval never hard-fails; the failure is
+ * logged as a warning so a persistently broken S3 configuration is observable.
+ *
+ * The `view-file-mode` feature gate governs the entire S3-offload path: the
+ * presigned-URL result and the Slack `_meta` block it carries (emitted in
+ * `convertViewImageUrlToToolResult`) only exist on the `kind: 'url'` branch, so
+ * disabling the flag keeps both behind the gate and preserves the original
+ * inline-base64 behavior. The `imageS3.enabled` check still guards against a
+ * missing bucket so an enabled flag without config doesn't attempt a doomed
+ * upload on every request.
+ *
+ * `keyPrefixSegment` is the caller's per-tool folder (e.g. `view-images/`); it
+ * is appended to the shared base prefix (MCP_IMAGE_PREFIX) so each tool
+ * namespaces its objects distinctly while still honoring an operator-configured
+ * base.
  */
 export async function buildImageToolResult({
   imageData,
@@ -35,14 +49,16 @@ export async function buildImageToolResult({
   resourceId,
   config,
   toolName,
+  keyPrefixSegment,
 }: {
   imageData: Buffer | string;
   format: 'PNG' | 'SVG' | undefined;
   resourceId: string;
   config: Config;
   toolName: string;
+  keyPrefixSegment: string;
 }): Promise<ImageToolResult> {
-  if (!config.imageS3.enabled) {
+  if (!config.imageS3.enabled || !(await getFeatureGate().isFeatureEnabled('view-file-mode'))) {
     return { kind: 'inline', imageData, format };
   }
 
@@ -50,7 +66,10 @@ export async function buildImageToolResult({
     const url = await uploadImageToS3(imageData, {
       format: format ?? 'PNG',
       resourceId,
-      config: config.imageS3,
+      config: {
+        ...config.imageS3,
+        keyPrefix: joinImageS3Prefix(config.imageS3.keyPrefix, keyPrefixSegment),
+      },
     });
     return { kind: 'url', url, format };
   } catch (error) {
