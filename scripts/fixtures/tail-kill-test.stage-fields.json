@@ -1,9 +1,76 @@
 {
-  "content": [
-    {
-      "type": "text",
-      "text": "{\"count\":6,\"datasources\":[{\"datasource\":\"World Cup\",\"fields\":[{\"caption\":\"Country Code\"},{\"caption\":\"Goals\"},{\"caption\":\"Snapshot Time\"},{\"caption\":\"Won\"},{\"caption\":\"Played\"},{\"caption\":\"Team Name\"}]}]}"
+  "responses": {
+    "Country Code": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"resolution\":{\"kind\":\"exact\",\"query\":\"Country Code\",\"column_ref\":\"[federated.x].[none:country_code:nk]\",\"datasource\":\"federated.x\"},\"status\":\"resolved\"}"
+        }
+      ],
+      "isError": false
+    },
+    "Goals": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"resolution\":{\"kind\":\"exact\",\"query\":\"Goals\",\"column_ref\":\"[federated.x].[sum:goals:qk]\",\"datasource\":\"federated.x\"},\"status\":\"resolved\"}"
+        }
+      ],
+      "isError": false
+    },
+    "Snapshot Time": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"resolution\":{\"kind\":\"exact\",\"query\":\"Snapshot Time\",\"column_ref\":\"[federated.x].[none:snapshot_time:ok]\",\"datasource\":\"federated.x\"},\"status\":\"resolved\"}"
+        }
+      ],
+      "isError": false
+    },
+    "Won": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"resolution\":{\"kind\":\"exact\",\"query\":\"Won\",\"column_ref\":\"[federated.x].[sum:won:qk]\",\"datasource\":\"federated.x\"},\"status\":\"resolved\"}"
+        }
+      ],
+      "isError": false
+    },
+    "Played": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"resolution\":{\"kind\":\"exact\",\"query\":\"Played\",\"column_ref\":\"[federated.x].[sum:played:qk]\",\"datasource\":\"federated.x\"},\"status\":\"resolved\"}"
+        }
+      ],
+      "isError": false
+    },
+    "Team Name": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"resolution\":{\"kind\":\"exact\",\"query\":\"Team Name\",\"column_ref\":\"[federated.x].[none:team_name:nk]\",\"datasource\":\"federated.x\"},\"status\":\"resolved\"}"
+        }
+      ],
+      "isError": false
+    },
+    "Goals Against": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"resolution\":{\"kind\":\"not_found\",\"query\":\"Goals Against\",\"candidates\":[],\"reason\":\"no match for \\\"Goals Against\\\".\"},\"status\":\"not_found\"}"
+        }
+      ],
+      "isError": false
     }
-  ],
-  "isError": false
+  },
+  "gatedNudge": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Bind first: call bind-template with the user's verbatim ask (it reads the schema itself), or start with author-parameter/author-set for parameter/set asks. This tool unlocks after the first attempt, for repair and edits."
+      }
+    ],
+    "isError": false
+  }
 }

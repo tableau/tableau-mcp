@@ -156,7 +156,11 @@ function createMcpConfig(session) {
   };
 }
 
-function extractStageFieldNames(result) {
+// list-available-fields is GATED on a fresh server (returns a bind-first nudge with
+// isError:false), so the probe resolves each required caption via the ungated
+// resolve-field tool instead. Live-verified 2026-07-28: resolved for a present
+// field, not_found for an absent one, on a freshly-spawned server.
+function parseResolveFieldPresence(result, query) {
   const textParts = Array.isArray(result?.content)
     ? result.content.flatMap((item) =>
         item?.type === 'text' && typeof item.text === 'string' ? [item.text] : [],
@@ -164,28 +168,36 @@ function extractStageFieldNames(result) {
     : [];
   if (result?.isError || textParts.length === 0) {
     throw new Error(
-      `list-available-fields failed: ${textParts.join(' ') || 'no text response received'}`,
+      `resolve-field(${query}) failed: ${textParts.join(' ') || 'no text response received'}`,
     );
   }
-
-  const fields = new Set();
+  let status;
   for (const text of textParts) {
-    const decoded = decodeJsonStrings(text);
-    walk(decoded, (candidate) => {
-      if (candidate && typeof candidate === 'object' && typeof candidate.caption === 'string') {
-        fields.add(candidate.caption.trim());
+    walk(decodeJsonStrings(text), (candidate) => {
+      if (
+        status === undefined &&
+        candidate &&
+        typeof candidate === 'object' &&
+        typeof candidate.status === 'string'
+      ) {
+        status = candidate.status;
       }
     });
   }
-  return [...fields].sort((left, right) => left.localeCompare(right));
+  if (status === 'resolved') return true;
+  if (status === 'not_found') return false;
+  throw new Error(
+    `resolve-field(${query}) returned neither resolved nor not_found: ${textParts
+      .join(' ')
+      .slice(0, 200)}`,
+  );
 }
 
-function assessStageFields(availableFields, requiredFields = REQUIRED_FIELDS) {
-  const normalized = new Set(availableFields.map((field) => field.trim().toLowerCase()));
+function assessStageResolutions(resolutions, requiredFields = REQUIRED_FIELDS) {
   return {
     requiredFields,
-    availableFields,
-    missingFields: requiredFields.filter((field) => !normalized.has(field.toLowerCase())),
+    availableFields: resolutions.filter(({ present }) => present).map(({ query }) => query),
+    missingFields: resolutions.filter(({ present }) => !present).map(({ query }) => query),
   };
 }
 
@@ -201,11 +213,15 @@ async function probeStageFitness(session) {
   const client = new Client({ name: 'tail-kill-test-preflight', version: '1.0.0' });
   try {
     await client.connect(transport);
-    const result = await client.callTool({
-      name: 'list-available-fields',
-      arguments: { session, verbosity: 'slim' },
-    });
-    return assessStageFields(extractStageFieldNames(result));
+    const resolutions = [];
+    for (const query of REQUIRED_FIELDS) {
+      const result = await client.callTool({
+        name: 'resolve-field',
+        arguments: { session, query },
+      });
+      resolutions.push({ query, present: parseResolveFieldPresence(result, query) });
+    }
+    return assessStageResolutions(resolutions);
   } finally {
     await client.close().catch(() => undefined);
     await transport.close().catch(() => undefined);
@@ -943,7 +959,19 @@ async function runDry() {
     eventTimes: syntheticEventTimes(runtimeFixture),
     failureMode: 'runtime',
   });
-  const stage = assessStageFields(extractStageFieldNames(JSON.parse(stageFieldsText)));
+  const stageFixture = JSON.parse(stageFieldsText);
+  const stage = assessStageResolutions(
+    Object.entries(stageFixture.responses).map(([query, response]) => ({
+      query,
+      present: parseResolveFieldPresence(response, query),
+    })),
+  );
+  let gatedNudgeThrew = false;
+  try {
+    parseResolveFieldPresence(stageFixture.gatedNudge, 'Gated Example');
+  } catch {
+    gatedNudgeThrew = true;
+  }
   const stageMismatch = createStageMismatchResult({
     run: 'run-stage',
     session: 'stage-session',
@@ -1004,6 +1032,8 @@ async function runDry() {
     [!slowCompletion.criteria.wallUnderLimit, 'slow completion wall failure'],
     [slowCompletion.verdict === 'FAIL', 'slow completion verdict'],
     [stage.missingFields.join(',') === 'Goals Against', 'stage missing fields'],
+    [stage.availableFields.length === 6, 'stage resolved fields'],
+    [gatedNudgeThrew, 'gated nudge throws instead of reading as missing'],
     [
       renderSummary([stageMismatch]).includes(
         '| run-stage | 0 | 0 | — | — | — | — | — | no | Goals Against | STAGE-MISMATCH |',
