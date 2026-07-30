@@ -31,6 +31,8 @@ const TOOLS_WITHOUT_API_SCOPES_REVIEWED_FOR_PASSTHROUGH: ReadonlyArray<WebToolNa
   // single-user stdio) caller may scaffold/author/inspect their own workspace under any auth type.
   'scaffold-data-app',
   'upsert-data-app-files',
+  'patch-data-app-file',
+  'search-data-app-file',
   'read-data-app-file',
   'list-data-app-files',
 ];

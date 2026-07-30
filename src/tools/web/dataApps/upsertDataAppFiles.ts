@@ -48,7 +48,12 @@ export const getUpsertDataAppFilesTool = (server: WebMcpServer): WebTool<typeof 
     name: 'upsert-data-app-files',
     description: `
 Writes one or more UTF-8 files into an existing data-app workspace (created by
-\`scaffold-data-app\`) in a single atomic batch. Every path/content item is validated — path
+\`scaffold-data-app\`) in a single atomic batch. Use this tool to **create a new file or fully
+rewrite an existing one**. To change *part* of an existing file, prefer \`patch-data-app-file\`: it
+sends only the changed span, so a small edit to a large file costs tokens proportional to the edit
+rather than resending the whole file — do not re-send an entire file just to change a few lines.
+
+Every path/content item is validated — path
 containment, per-file size, file count, and total workspace size — before anything is written; if
 any item fails, the whole batch is rejected and nothing changes. This tool makes no Tableau REST
 API call.

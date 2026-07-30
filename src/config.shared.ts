@@ -21,6 +21,7 @@ export type DataAppsConfig = {
   maxFileCount: number;
   maxFileBytes: number;
   maxWorkspaceBytes: number;
+  regexTimeoutMs: number;
   exposeLocalPath: boolean;
 };
 
@@ -52,6 +53,7 @@ export class BaseConfig {
       DATA_APP_MAX_FILE_COUNT: dataAppMaxFileCount,
       DATA_APP_MAX_FILE_BYTES: dataAppMaxFileBytes,
       DATA_APP_MAX_WORKSPACE_BYTES: dataAppMaxWorkspaceBytes,
+      DATA_APP_REGEX_TIMEOUT_MS: dataAppRegexTimeoutMs,
       DATA_APP_EXPOSE_LOCAL_PATH: dataAppExposeLocalPath,
     } = cleansedVars;
 
@@ -98,6 +100,15 @@ export class BaseConfig {
         defaultValue: 32 * 1024 * 1024, // 32 MiB, comfortably under the 64 MiB publish limit
         minValue: 1,
         maxValue: 64 * 1024 * 1024,
+      }),
+      // Wall-clock ceiling for a single regex search (search-data-app-file). The match runs in a
+      // worker thread and is force-terminated past this budget, so a hostile pattern that slips
+      // past the static backtracking screen cannot stall the shared event loop. Benign matching is
+      // linear in file size (~40ms for a 64 MiB max-size file), so a flat second is generous.
+      regexTimeoutMs: parseNumber(dataAppRegexTimeoutMs, {
+        defaultValue: 1000,
+        minValue: 50,
+        maxValue: milliseconds.fromSeconds(30),
       }),
       // Narrowed to stdio in Config; only meaningful for a single-user local server.
       exposeLocalPath: dataAppExposeLocalPath === 'true',

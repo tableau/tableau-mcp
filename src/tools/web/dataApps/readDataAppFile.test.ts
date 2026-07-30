@@ -53,6 +53,7 @@ describe('readDataAppFileTool', () => {
     expect(data.path).toBe('src/app.js');
     expect(data.content).toBe('console.log("hi");');
     expect(data.bytes).toBe(Buffer.byteLength('console.log("hi");', 'utf8'));
+    expect(data.digest).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it('never exposes a filesystem path in the result', async () => {

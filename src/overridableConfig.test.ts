@@ -97,6 +97,8 @@ describe('OverridableConfig', () => {
         [
           'scaffold-data-app',
           'upsert-data-app-files',
+          'patch-data-app-file',
+          'search-data-app-file',
           'read-data-app-file',
           'list-data-app-files',
           'validate-workbook-package',
@@ -113,6 +115,8 @@ describe('OverridableConfig', () => {
         [
           'scaffold-data-app',
           'upsert-data-app-files',
+          'patch-data-app-file',
+          'search-data-app-file',
           'read-data-app-file',
           'list-data-app-files',
           'validate-workbook-package',

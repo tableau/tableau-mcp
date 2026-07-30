@@ -334,3 +334,61 @@ export class DataAppWorkspaceLimitExceededError extends McpToolError {
     super({ type: 'data-app-workspace-limit-exceeded', message, statusCode: 413 });
   }
 }
+
+// patch-data-app-file: the target file is not present in the workspace. Distinct from
+// data-app-workspace-not-found (a missing/expired/wrong-scope `appId`): here the workspace resolved
+// fine but has no such file. statusCode 404. The caller should create the file with
+// upsert-data-app-files instead of patching it.
+export class DataAppFileNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-file-not-found', message, statusCode: 404 });
+  }
+}
+
+// patch-data-app-file: the edit's `oldString` anchor was not found in the current file content.
+// statusCode 422: the request is well-formed but cannot be applied against the current content. The
+// message may include a near-miss hint (e.g. the anchor matches except for line endings).
+export class DataAppPatchAnchorNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-patch-anchor-not-found', message, statusCode: 422 });
+  }
+}
+
+// patch-data-app-file: the `oldString` anchor matched more than one location and `replaceAll` was
+// not set. statusCode 422. The message includes the match count so the caller can widen the anchor
+// with surrounding context or set `replaceAll: true`.
+export class DataAppPatchAmbiguousMatchError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-patch-ambiguous-match', message, statusCode: 422 });
+  }
+}
+
+// patch-data-app-file: an edit supplied an `expectedDigest` that does not match the file's current
+// per-file digest — the file changed since the caller last read it. statusCode 409: a concurrency
+// conflict. The caller should re-read the file, recompute the edit, and retry.
+export class DataAppPatchStaleError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-patch-stale', message, statusCode: 409 });
+  }
+}
+
+// patch-data-app-file: the target file's bytes are not valid UTF-8 text (e.g. a binary asset), so an
+// anchor-based text edit cannot be applied without risking corruption. statusCode 422. The caller
+// should rewrite the file whole with upsert-data-app-files instead.
+export class DataAppPatchNotTextError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-patch-not-text', message, statusCode: 422 });
+  }
+}
+
+// search-data-app-file: a regular-expression search exceeded its time budget and was force-aborted.
+// This backstops the static backtracking pre-screen (hasCatastrophicBacktracking), which cannot catch
+// every super-linear pattern (e.g. overlapping alternations like "(a|aa)+$"): the match runs in a
+// worker thread that is terminated on timeout, so one pathological pattern cannot stall the shared
+// event loop for other users. statusCode 400: the caller should simplify the pattern or search with a
+// literal substring instead.
+export class DataAppRegexTimeoutError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'data-app-regex-timeout', message, statusCode: 400 });
+  }
+}

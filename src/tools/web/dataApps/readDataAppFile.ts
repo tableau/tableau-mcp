@@ -7,6 +7,7 @@ import { appIdSchema } from '../../../dataApps/opaqueId.js';
 import { McpToolError } from '../../../errors/mcpToolError.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../tool.js';
+import { fileDigest } from './fileDigest.js';
 import { resolveScopeFromExtra } from './scopeFromExtra.js';
 
 const paramsSchema = {
@@ -18,6 +19,7 @@ export type ReadDataAppFileResult = {
   path: string;
   content: string;
   bytes: number;
+  digest: string;
 };
 
 /**
@@ -43,7 +45,9 @@ no Tableau REST API call and never returns a filesystem path.
 **Parameters:** \`appId\` (required) — the workspace handle. \`path\` (required) — the
 workspace-relative file path, e.g. \`"src/app.js"\`.
 
-**Result:** \`{ path, content, bytes }\`. \`content\` is the file's UTF-8 text; \`bytes\` is its size.
+**Result:** \`{ path, content, bytes, digest }\`. \`content\` is the file's UTF-8 text; \`bytes\` is its
+size; \`digest\` is a per-file content digest you can pass back as a \`patch-data-app-file\`
+\`expectedDigest\` to detect concurrent changes.
 `.trim(),
     paramsSchema,
     annotations: {
@@ -73,6 +77,7 @@ workspace-relative file path, e.g. \`"src/app.js"\`.
               path: args.path,
               content: Buffer.from(bytes).toString('utf8'),
               bytes: bytes.byteLength,
+              digest: fileDigest(bytes),
             });
           } catch (error) {
             if (error instanceof McpToolError) {

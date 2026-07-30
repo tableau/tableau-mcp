@@ -322,6 +322,14 @@ const toolScopeMap: Record<
     mcp: [],
     api: new Set<TableauApiScope>(),
   },
+  'patch-data-app-file': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  'search-data-app-file': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
   'read-data-app-file': {
     mcp: [],
     api: new Set<TableauApiScope>(),

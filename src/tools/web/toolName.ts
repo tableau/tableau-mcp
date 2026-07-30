@@ -38,6 +38,8 @@ export const webToolNames = [
   'get-stale-content-report',
   'scaffold-data-app',
   'upsert-data-app-files',
+  'patch-data-app-file',
+  'search-data-app-file',
   'read-data-app-file',
   'list-data-app-files',
 ] as const;
@@ -115,6 +117,8 @@ export const webToolGroups = {
   'data-app': [
     'scaffold-data-app',
     'upsert-data-app-files',
+    'patch-data-app-file',
+    'search-data-app-file',
     'read-data-app-file',
     'list-data-app-files',
     'validate-workbook-package',

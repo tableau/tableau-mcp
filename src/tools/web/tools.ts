@@ -5,8 +5,10 @@ import { getQueryAdminInsightsTsEventsTool } from './adminInsights/queryTsEvents
 import { getSearchContentTool } from './contentExploration/searchContent.js';
 import { getCreateAndPublishWorkbookTool } from './createAndPublishWorkbook/createAndPublishWorkbook.js';
 import { getListDataAppFilesTool } from './dataApps/listDataAppFiles.js';
+import { getPatchDataAppFileTool } from './dataApps/patchDataAppFile.js';
 import { getReadDataAppFileTool } from './dataApps/readDataAppFile.js';
 import { getScaffoldDataAppTool } from './dataApps/scaffoldDataApp.js';
+import { getSearchDataAppFileTool } from './dataApps/searchDataAppFile.js';
 import { getUpsertDataAppFilesTool } from './dataApps/upsertDataAppFiles.js';
 import { getDeleteDatasourceTool } from './datasources/deleteDatasource.js';
 import { getListDatasourcesTool } from './datasources/listDatasources.js';
@@ -80,6 +82,8 @@ export const webToolFactories = [
   getGetStaleContentReportTool,
   getScaffoldDataAppTool,
   getUpsertDataAppFilesTool,
+  getPatchDataAppFileTool,
+  getSearchDataAppFileTool,
   getReadDataAppFileTool,
   getListDataAppFilesTool,
 ];
