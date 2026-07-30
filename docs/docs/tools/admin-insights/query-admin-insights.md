@@ -18,10 +18,11 @@ report through a single entry point. Dispatches on `kind` to one of four backend
   ([`STALE_CONTENT_MAX_ROWS`](../../configuration/mcp-config/env-vars.md#stale_content_max_rows),
   default `100`) — see [Row cap](#row-cap-stale-content).
 
-The tool is admin-only — it is registered only when `ADMIN_TOOLS_ENABLED=true`, and at request
-time it verifies the caller's site role and rejects anything below
-`SiteAdministratorCreator` / `SiteAdministratorExplorer` / `ServerAdministrator`. Admin Insights
-datasource LUIDs are resolved automatically; callers do not pass `datasourceLuid`.
+:::warning[Admin Only]
+This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable to be enabled.
+:::
+
+Admin Insights datasource LUIDs are resolved automatically; callers do not pass `datasourceLuid`.
 
 
 ## APIs called
