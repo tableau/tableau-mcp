@@ -386,7 +386,7 @@ The feature gate provider to use for feature flag management.
   - `server` - File-based feature gate using `features.json` (default, for on-premise Tableau Server)
   - `custom` - Load a custom feature gate provider from a user-specified module
 
-:::tip Custom Provider
+:::tip[Custom Provider]
 
 To use a custom feature gate provider, set `FEATURE_GATE_PROVIDER=custom` and provide the module path via `FEATURE_GATE_PROVIDER_CONFIG`:
 

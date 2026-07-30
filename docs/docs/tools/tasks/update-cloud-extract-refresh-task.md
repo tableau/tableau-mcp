@@ -10,7 +10,7 @@ Updates the schedule of an extract refresh task on Tableau Cloud. Use this to ch
 This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable to be enabled.
 :::
 
-:::info Tableau Cloud Only
+:::info[Tableau Cloud Only]
 This tool calls the **Cloud variant** of the update endpoint and is not appropriate for Tableau Server. The Server variant has a different payload shape and is tracked separately.
 :::
 
