@@ -403,6 +403,19 @@ export class DashboardXmlLoadFailedError extends McpToolError {
   }
 }
 
+// A storyboard serializes as a `<dashboard type='storyboard'>`, so it shares the dashboard load
+// path and its error shape; only the error `type` differs so the agent sees a storyboard-scoped
+// failure rather than a misleading dashboard one.
+export class StoryboardXmlLoadFailedError extends McpToolError {
+  constructor(error: LoadDashboardXmlError) {
+    super({
+      type: 'load-storyboard-xml-error',
+      message: xmlLoadErrorMessage(error),
+      statusCode: 500,
+    });
+  }
+}
+
 export class FileReadError extends McpToolError {
   constructor(error: unknown) {
     super({

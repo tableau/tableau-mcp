@@ -1,6 +1,7 @@
 import { Err, Ok } from 'ts-results-es';
 
 import * as loggerModule from '../../../logging/logger.js';
+import invariant from '../../../utils/invariant.js';
 import { normalizeArray, parseXML } from '../../metadata/parser.js';
 import type { ParsedWindow } from '../../metadata/types.js';
 import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
@@ -82,9 +83,22 @@ describe('loadDashboardXml (External Client API transport)', () => {
         executeCommand,
         getWorkbookDocument,
         applyWorkbookDocument,
-        listDashboards: vi
-          .fn()
-          .mockResolvedValue(Ok({ dashboards: [{ id: 'dashboard-1', name: dashboardName }] })),
+        // This double implements the whole-workbook transport (getWorkbookDocument +
+        // applyWorkbookDocument) that flag-off callers (dashboard build/auto-apply,
+        // apply-dashboard-with-viewpoints) use directly — they never attempt the per-sheet route. Its
+        // list route returns `not-found` so the flag-on route-missing tests below (apply-dashboard /
+        // apply-storyboard, which DO attempt the per-sheet route) see `route-missing`. The per-sheet
+        // 'applied' path is covered in perSheetDocumentApply.test.ts.
+        listDashboards: vi.fn().mockResolvedValue(
+          Err({
+            type: 'command-failed',
+            error: {
+              code: 'not-found',
+              message: 'No route matches GET /v0/workbook/dashboards',
+              recoverable: false,
+            },
+          }),
+        ),
       } as unknown as ToolExecutor,
       calls,
     };
@@ -238,6 +252,137 @@ describe('loadDashboardXml (External Client API transport)', () => {
     expect(applyCall?.xml).toContain('name="Some Other DB"');
   });
 
+  // An executor whose per-sheet list route works but does NOT contain the target dashboard, so a
+  // flag-on apply-dashboard's tryApplyViaPerSheetRoute resolves `sheet-absent`. It still implements the
+  // whole-workbook transport that flag-off callers use directly (they never attempt the per-sheet
+  // route, so the list route stays untouched for them).
+  function absentDashboardExecutor(liveDashboardNames: string[]): {
+    executor: ToolExecutor;
+    calls: Array<{ kind: 'command' | 'apply'; xml?: string }>;
+  } {
+    const { executor, calls } = dispatchingExecutor(liveWorkbook(liveDashboardNames));
+    (executor as unknown as { listDashboards: unknown }).listDashboards = vi.fn().mockResolvedValue(
+      Ok({
+        dashboards: liveDashboardNames.map((name, i) => ({ id: `id-${i}`, name, hidden: false })),
+      }),
+    );
+    return { executor, calls };
+  }
+
+  it('surfaces sheet-absent (no whole-workbook fallback) when requireExistingSheet is set', async () => {
+    const { executor, calls } = absentDashboardExecutor(['Some Other DB']);
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-dashboard-xml-error');
+      expect(result.error.error.type).toBe('sheet-absent');
+      invariant(result.error.error.type === 'sheet-absent');
+      expect(result.error.error.message).toContain('dashboard');
+      expect(result.error.error.message).toContain('Sales Dashboard');
+    }
+    expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
+  });
+
+  it('surfaces a storyboard-scoped sheet-absent message when requireExistingSheet is set', async () => {
+    const { executor, calls } = absentDashboardExecutor([]);
+    (executor as unknown as { listStoryboards: unknown }).listStoryboards = vi
+      .fn()
+      .mockResolvedValue(Ok({ storyboards: [] }));
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      kind: 'storyboard',
+      requireExistingSheet: true,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-dashboard-xml-error');
+      invariant(result.error.error.type === 'sheet-absent');
+      expect(result.error.error.message).toContain('storyboard');
+      // The storyboard recovery text must not steer to off-profile apply/list tools.
+      expect(result.error.error.message).not.toContain('apply-');
+      expect(result.error.error.message).not.toContain('list-');
+    }
+    expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
+  });
+
+  it('goes straight to the whole-workbook apply for an absent dashboard when requireExistingSheet is off', async () => {
+    const { executor, calls } = absentDashboardExecutor(['Some Other DB']);
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+    });
+
+    expect(result.isOk()).toBe(true);
+    const applyCall = calls.find((c) => c.kind === 'apply');
+    expect(applyCall?.xml).toContain('name="Sales Dashboard"');
+    expect(applyCall?.xml).toContain('name="Some Other DB"');
+  });
+
+  // apply-dashboard/apply-storyboard are pure per-sheet applies: any non-`applied` outcome errors and
+  // never falls back to the whole-workbook re-post. When the per-sheet route is unavailable
+  // (dispatchingExecutor's list route returns `not-found` → route-missing) it must NOT quietly
+  // whole-workbook apply — even for an existing sheet.
+  it('errors and never whole-workbook applies when requireExistingSheet is set and the route is missing (absent name)', async () => {
+    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Some Other DB']));
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-dashboard-xml-error');
+      expect(result.error.error.type).toBe('sheet-absent');
+    }
+    expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
+  });
+
+  it('errors and never whole-workbook applies when requireExistingSheet is set and the route is missing (existing dashboard)', async () => {
+    const { executor, calls } = dispatchingExecutor(liveWorkbook(['Sales Dashboard', 'Other DB']));
+
+    const result = await loadDashboardXml({
+      dashboardName,
+      xml: validXml,
+      executor,
+      signal: mockSignal,
+      focus: NO_FOCUS,
+      requireExistingSheet: true,
+    });
+
+    // Even though the dashboard exists live, apply-dashboard requires the per-sheet route — it does not
+    // silently re-post the whole workbook instead.
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      invariant(result.error.type === 'load-dashboard-xml-error');
+      expect(result.error.error.type).toBe('sheet-absent');
+    }
+    expect(calls.find((c) => c.kind === 'apply')).toBeUndefined();
+  });
+
   it('should return invalid-xml error when xml is empty', async () => {
     const mockExecutor = { executeCommand: vi.fn() } as unknown as ToolExecutor;
 
@@ -286,6 +431,17 @@ describe('loadDashboardXml (External Client API transport)', () => {
       error: { code: 'ERROR', message: 'Failed', recoverable: false },
     };
     const mockExecutor = {
+      // Route-missing list defers to the whole-workbook path, where the fetch below fails.
+      listDashboards: vi.fn().mockResolvedValue(
+        Err({
+          type: 'command-failed',
+          error: {
+            code: 'not-found',
+            message: 'No route matches GET /v0/workbook/dashboards',
+            recoverable: false,
+          },
+        }),
+      ),
       getWorkbookDocument: vi.fn().mockResolvedValue(Err(error)),
     } as unknown as ToolExecutor;
 

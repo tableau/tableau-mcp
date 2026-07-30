@@ -46,6 +46,7 @@ export const desktopToolNames = [
   'get-worksheet-info',
   'list-storyboards',
   'get-storyboard-xml',
+  'apply-storyboard',
   'get-api-root',
   'get-site-info',
   'get-dashboard-info',
