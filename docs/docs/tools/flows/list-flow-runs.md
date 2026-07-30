@@ -33,9 +33,9 @@ See [OAuth configuration](../../configuration/mcp-config/oauth.md) for how scope
 ## Caller-role visibility
 
 - **Non-admin callers** — Tableau returns runs only for flows the caller can **run** (the Execute /
-  "Run Flow Now" capability), _not_ flows they can only view. This is stricter than the Tableau web UI
-  run-history page (which needs only view permission), so a user may see a flow's runs in the browser
-  yet get nothing for that flow here.
+  "Run Flow Now" capability), _not_ flows they can only view. This is stricter than the Tableau web
+  UI run-history page (which needs only view permission), so a user may see a flow's runs in the
+  browser yet get nothing for that flow here.
 - **Server / site-admin callers** — Tableau returns runs for **every** flow on the site, so
   [`mcp.resultInfo.truncated`](#response-shape) is more likely to be `true` on a broad call.
 
@@ -46,14 +46,14 @@ See [OAuth configuration](../../configuration/mcp-config/oauth.md) for how scope
 A filter expression in the format `field:operator:value`. Multiple expressions are combined with a
 comma using a logical AND.
 
-| Field         | Operators              | Notes                                                                       |
-| ------------- | ---------------------- | --------------------------------------------------------------------------- |
-| `flowId`      | `eq, in`               | Flow LUID (UUID). The most common filter — scope runs to one or more flows. |
-| `userId`      | `eq, in`               | LUID of the user who initiated the run.                                     |
-| `progress`    | `eq, gt, gte, lt, lte` | Percent complete (0–100).                                                   |
-| `startedAt`   | `eq, gt, gte, lt, lte` | ISO 8601 `YYYY-MM-DDTHH:MM:SSZ` or date-only `YYYY-MM-DD` (midnight UTC).   |
-| `completedAt` | `eq, gt, gte, lt, lte` | ISO 8601 `YYYY-MM-DDTHH:MM:SSZ` or date-only `YYYY-MM-DD` (midnight UTC).   |
-| `status`      | `eq, in`               | One of `Pending, InProgress, Success, Failed, Cancelled`. **Client-side.**  |
+| Field         | Operators              | Notes                                                                                                                        |
+| ------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `flowId`      | `eq, in`               | Flow LUID (UUID). The most common filter — scope runs to one or more flows.                                                  |
+| `userId`      | `eq, in`               | LUID of the user who initiated the run.                                                                                      |
+| `progress`    | `eq, gt, gte, lt, lte` | Percent complete (0–100).                                                                                                    |
+| `startedAt`   | `eq, gt, gte, lt, lte` | ISO 8601 `YYYY-MM-DDTHH:MM:SSZ` or date-only `YYYY-MM-DD` (midnight UTC).                                                    |
+| `completedAt` | `eq, gt, gte, lt, lte` | ISO 8601 `YYYY-MM-DDTHH:MM:SSZ` or date-only `YYYY-MM-DD` (midnight UTC).                                                    |
+| `status`      | `eq, in`               | One of `Pending, InProgress, Success, Failed, Cancelled`. Server-side on REST API 3.30+; client-side fallback on older APIs. |
 
 Examples:
 
@@ -61,21 +61,26 @@ Examples:
 - `status:eq:Failed,startedAt:gt:2025-01-01`
 - `status:in:[Failed,Cancelled]`
 
-#### `status` is applied client-side
+#### `status` API-version behavior
 
-The Tableau "Get Flow Runs" endpoint does **not** support filtering runs by `status` server-side
-(verified live against REST 3.30). This tool therefore fetches runs using the rest of the filter and
-applies `status` in-process. Pair `status` with a `flowId` and/or a `startedAt` window so the
-client-side match operates on a bounded set of runs. Unknown `status` values are rejected with the
-allowed list, and the value is case-sensitive.
+REST API 3.30 and later support filtering and sorting flow runs by `status`; this tool passes those
+expressions through unchanged. A multi-value `status:in` filter on those versions may contain only
+terminal statuses (`Success`, `Failed`, and/or `Cancelled`). A mixed list such as
+`status:in:[Pending,Success]` is rejected because the underlying query builder cannot represent the
+required OR predicate without risking incorrect results.
+
+On older REST API versions, the tool removes `status` from the server request and applies filtering
+and sorting in-process. Pair `status` with a `flowId` and/or a `startedAt` window so the fallback
+operates on a bounded set of runs. Unknown `status` values are rejected with the allowed list, and
+the value is case-sensitive.
 
 #### `flowId` must be a UUID
 
-`flowId` matches the flow's LUID (canonical 8-4-4-4-12 hex form). The Get Flow Runs endpoint responds
-`404` for a `flowId` that does not resolve to a real, visible flow (a flow _name_, or a valid-format
-but nonexistent UUID); the tool converts that `404` into an empty result rather than surfacing a raw
-HTTP error. When the result is empty and `flowId` is not a UUID, the tool also returns a recovery hint
-suggesting a [List Flows](list-flows.md) lookup by name.
+`flowId` matches the flow's LUID (canonical 8-4-4-4-12 hex form). The Get Flow Runs endpoint
+responds `404` for a `flowId` that does not resolve to a real, visible flow (a flow _name_, or a
+valid-format but nonexistent UUID); the tool converts that `404` into an empty result rather than
+surfacing a raw HTTP error. When the result is empty and `flowId` is not a UUID, the tool also
+returns a recovery hint suggesting a [List Flows](list-flows.md) lookup by name.
 
 #### `in:` — bracket-and-comma form
 
@@ -164,11 +169,11 @@ user. Translate it into one plain sentence — "These are all 12 matching runs" 
 
 A flow run carries no project or tag, so when the server is restricted to a
 [`INCLUDE_PROJECT_IDS`](../../configuration/mcp-config/tool-scoping.md#include_project_ids) or
-[`INCLUDE_TAGS`](../../configuration/mcp-config/tool-scoping.md#include_tags) bounded context this tool **cannot** prove
-a run belongs to the allowed set. Rather than risk leaking runs for flows outside the allow-list, it
-returns no runs and explains why. To inspect a specific allowed flow's run history under a bounded
-context, use [Get Flow](get-flow.md) with the flow id (it enforces the bounded context on the flow
-itself).
+[`INCLUDE_TAGS`](../../configuration/mcp-config/tool-scoping.md#include_tags) bounded context this
+tool **cannot** prove a run belongs to the allowed set. Rather than risk leaking runs for flows
+outside the allow-list, it returns no runs and explains why. To inspect a specific allowed flow's
+run history under a bounded context, use [Get Flow](get-flow.md) with the flow id (it enforces the
+bounded context on the flow itself).
 
 ## Limitations
 

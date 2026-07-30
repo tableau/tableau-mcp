@@ -13,7 +13,7 @@ import { mockFlowRuns } from './mockFlowRuns.js';
 const mocks = vi.hoisted(() => ({
   mockGetFlowRuns: vi.fn(),
   mockQueryFlow: vi.fn(),
-  mockVersionIsAtLeast: vi.fn((_version: `${number}.${number}`): boolean => true),
+  mockVersionIsAtLeast: vi.fn((version: `${number}.${number}`): boolean => version === '3.10'),
   rejectFlowsRead: false,
 }));
 
@@ -82,7 +82,9 @@ const FLOW_WEBPAGE_URL = 'https://my.tableau.example.com/#/site/mysite/flows/961
 describe('listFlowRunsTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.mockVersionIsAtLeast.mockReturnValue(true);
+    mocks.mockVersionIsAtLeast.mockImplementation(
+      (version: `${number}.${number}`) => version === '3.10',
+    );
     mocks.rejectFlowsRead = false;
     // Default: the failure-insight resolver finds a flow with a webpageUrl.
     mocks.mockQueryFlow.mockResolvedValue({
@@ -243,6 +245,41 @@ describe('listFlowRunsTool', () => {
     expect(mocks.mockGetFlowRuns).toHaveBeenCalledWith(
       expect.objectContaining({ filter: `flowId:eq:${FLOW_ID}` }),
     );
+  });
+
+  it('passes status filtering to REST API 3.30+', async () => {
+    mocks.mockVersionIsAtLeast.mockReturnValue(true);
+    mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
+    const result = await getToolResult({ filter: `flowId:eq:${FLOW_ID},status:eq:Failed` });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetFlowRuns).toHaveBeenCalledWith(
+      expect.objectContaining({ filter: `flowId:eq:${FLOW_ID},status:eq:Failed` }),
+    );
+  });
+
+  it('falls back to client-side status filtering before REST API 3.30', async () => {
+    mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
+    const result = await getToolResult({ filter: `flowId:eq:${FLOW_ID},status:eq:Failed` });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetFlowRuns).toHaveBeenCalledWith(
+      expect.objectContaining({ filter: `flowId:eq:${FLOW_ID}` }),
+    );
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).flowRuns).toHaveLength(1);
+  });
+
+  it('uses client-side status sort before REST API 3.30', async () => {
+    mocks.mockGetFlowRuns.mockResolvedValue([
+      { ...mockFlowRuns[0], status: 'Failed' },
+      { ...mockFlowRuns[0], id: 'pending', status: 'Pending' },
+    ]);
+    const result = await getToolResult({ sort: 'status:asc', limit: 1 });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetFlowRuns).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: 'completedAt:desc' }),
+    );
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text).flowRuns[0].status).toBe('Pending');
   });
 
   it('supports status:in:[...] client-side', async () => {

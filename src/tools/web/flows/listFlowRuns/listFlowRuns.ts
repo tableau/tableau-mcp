@@ -34,6 +34,7 @@ const UNBOUNDED = Number.MAX_SAFE_INTEGER;
 // The Get Flow Runs endpoint was introduced in REST API 3.10 (Tableau Server
 // 2020.4). Older servers return 404, so gate the call to give a clear message.
 const MIN_REST_VERSION = '3.10';
+const STATUS_FILTER_SORT_MIN_REST_VERSION = '3.30';
 
 // Safety backstop for an otherwise-unbounded call (no caller `limit` AND no admin
 // MAX_RESULT_LIMIT). Flow runs accumulate quickly on active sites, so default to
@@ -153,11 +154,11 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
   | progress    | eq, gt, gte, lt, lte | Percent complete (0–100). |
   | startedAt   | eq, gt, gte, lt, lte | ISO 8601 \`YYYY-MM-DDTHH:MM:SSZ\`, OR date-only \`YYYY-MM-DD\` (auto-promoted to midnight UTC). |
   | completedAt | eq, gt, gte, lt, lte | ISO 8601 \`YYYY-MM-DDTHH:MM:SSZ\`, OR date-only \`YYYY-MM-DD\` (auto-promoted to midnight UTC). |
-  | status      | eq, in               | One of Pending, InProgress, Success, Failed, Cancelled. **Applied client-side** (the Tableau API does not filter runs by status server-side), so it is matched against the runs fetched for the rest of the filter — pair it with \`flowId\` and/or a \`startedAt\` window for precise results. |
+   | status      | eq, in               | One of Pending, InProgress, Success, Failed, Cancelled. Applied server-side on REST API 3.30+; older servers use a client-side fallback. |
 
   **Filter value contracts** (mismatches return 0 runs):
   - \`flowId\` must be the flow UUID; a flow name (or any id that doesn't resolve to a visible flow) returns no runs and the tool hints toward list-flows.
-  - \`status\` values are case-sensitive and must be one of the five exact values above; an unknown value is rejected with the allowed list.
+   - \`status\` values are case-sensitive and must be one of the five exact values above; an unknown value is rejected with the allowed list. On REST API 3.30+, a multi-value \`in\` may contain only terminal statuses (Success, Failed, Cancelled), matching the REST API contract.
   - \`in:\` lists use bracket/comma form, e.g. \`flowId:in:[uuid1,uuid2]\` or \`status:in:[Failed,Cancelled]\` (unquoted; commas inside items unsupported).
 
   ${genericFilterDescription}
@@ -180,7 +181,10 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
     },
     callback: async ({ filter, sort, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
-      const validated = filter ? parseAndValidateFlowRunsFilterString(filter) : undefined;
+      const statusSupported = RestApi.versionIsAtLeast(STATUS_FILTER_SORT_MIN_REST_VERSION);
+      const validated = filter
+        ? parseAndValidateFlowRunsFilterString(filter, { statusSupported })
+        : undefined;
       const serverFilter = validated?.serverFilter ?? '';
       const matchesStatus = validated?.matchesStatus ?? ((): boolean => true);
 
@@ -211,10 +215,15 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
                     : limit
                   : (maxResultLimit ?? DEFAULT_FLOW_RUNS_LIMIT);
 
+                const statusSort = getStatusSort(sort);
+                const clientSort = statusSort !== undefined && !statusSupported;
+                const sortForApi = clientSort ? 'completedAt:desc' : (sort ?? 'completedAt:desc');
                 let collected: { items: FlowRun[]; truncatedByLimit: boolean };
                 try {
                   collected = await collectFlowRuns({
-                    effectiveLimit,
+                    // A client-side status sort must see the complete matching set before
+                    // applying the caller's limit. Native REST sorting can use the +1 probe.
+                    effectiveLimit: clientSort ? UNBOUNDED : effectiveLimit,
                     matchesStatus,
                     // With no caller `sort`, return the newest runs by recency.
                     // The Get Flow Runs endpoint floats rows whose sort key is
@@ -228,12 +237,14 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
                     // `completedAt ?? startedAt` (see collectFlowRuns). An explicit
                     // caller `sort` is passed through and honored as-is.
                     sortByRecency: sort === undefined,
+                    clientSort,
+                    statusSort,
                     pageSize: FLOW_RUNS_PAGE_SIZE,
                     getPage: (pageNumber) =>
                       restApi.flowsMethods.getFlowRuns({
                         siteId: restApi.siteId,
                         filter: serverFilter,
-                        sort: sort ?? 'completedAt:desc',
+                        sort: sortForApi,
                         pageSize: FLOW_RUNS_PAGE_SIZE,
                         pageNumber,
                       }),
@@ -261,7 +272,12 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
                   throw error;
                 }
 
-                const { items: flowRuns, truncatedByLimit } = collected;
+                const { items: collectedFlowRuns, truncatedByLimit } = collected;
+                const flowRuns = clientSort
+                  ? collectedFlowRuns
+                      .sort((a, b) => compareByStatus(a, b, statusSort!))
+                      .slice(0, effectiveLimit)
+                  : collectedFlowRuns;
 
                 const { truncated, truncationReason } = buildTruncationInfo({
                   truncatedByLimit,
@@ -272,8 +288,19 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
                 // The shared helper only knows 'admin-cap' / 'requested-limit'. When
                 // our backstop (not a caller limit or admin cap) was the binding
                 // constraint, label it 'default-cap' so the distinction is clear.
-                const finalTruncationReason: ListFlowRunsTruncationReason | undefined =
-                  truncated && usedDefaultBackstop ? 'default-cap' : truncationReason;
+                const finalTruncationReason: ListFlowRunsTruncationReason | undefined = clientSort
+                  ? collectedFlowRuns.length > effectiveLimit
+                    ? usedDefaultBackstop
+                      ? 'default-cap'
+                      : maxResultLimit && limit === undefined
+                        ? 'admin-cap'
+                        : limit !== undefined
+                          ? 'requested-limit'
+                          : undefined
+                    : undefined
+                  : truncated && usedDefaultBackstop
+                    ? 'default-cap'
+                    : truncationReason;
 
                 // If the window holds any Failed runs, resolve a UI run-history
                 // link for one of them (the API can't tell the caller WHY a run
@@ -424,12 +451,16 @@ async function collectFlowRuns({
   effectiveLimit,
   pageSize,
   sortByRecency,
+  clientSort,
+  statusSort,
 }: {
   getPage: (pageNumber: number) => Promise<FlowRun[]>;
   matchesStatus: (run: FlowRun) => boolean;
   effectiveLimit: number;
   pageSize: number;
   sortByRecency: boolean;
+  clientSort: boolean;
+  statusSort?: 'asc' | 'desc';
 }): Promise<{ items: FlowRun[]; truncatedByLimit: boolean }> {
   const probeTarget = effectiveLimit === UNBOUNDED ? UNBOUNDED : effectiveLimit + 1;
   const matched: FlowRun[] = [];
@@ -462,7 +493,11 @@ async function collectFlowRuns({
     // collected (incl. the +1 probe); or a full page yielded NO new runs at all,
     // which means the server is only re-returning rows we've already seen (a
     // degenerate unstable-pagination loop) and further pages cannot make progress.
-    if (page.length < pageSize || matched.length >= probeTarget || newThisPage === 0) {
+    if (
+      page.length < pageSize ||
+      (!clientSort && matched.length >= probeTarget) ||
+      newThisPage === 0
+    ) {
       break;
     }
     pageNumber++;
@@ -470,13 +505,33 @@ async function collectFlowRuns({
 
   // Re-order the fetched window newest-first before slicing so the limit keeps
   // the most-recent runs (not whichever empty-key rows the server floated up).
-  if (sortByRecency) {
+  if (sortByRecency && !clientSort) {
     matched.sort(compareByRecencyDesc);
   }
 
   const truncatedByLimit = matched.length > effectiveLimit;
   const items = effectiveLimit === UNBOUNDED ? matched : matched.slice(0, effectiveLimit);
   return { items, truncatedByLimit };
+}
+
+function getStatusSort(sort: string | undefined): 'asc' | 'desc' | undefined {
+  const match = sort?.match(/^status:(asc|desc)$/);
+  return match?.[1] as 'asc' | 'desc' | undefined;
+}
+
+const STATUS_SORT_ORDER: Record<NonNullable<FlowRun['status']>, number> = {
+  Pending: 0,
+  InProgress: 1,
+  Success: 2,
+  Failed: 3,
+  Cancelled: 4,
+};
+
+function compareByStatus(a: FlowRun, b: FlowRun, direction: 'asc' | 'desc'): number {
+  const aOrder = a.status === undefined ? Number.POSITIVE_INFINITY : STATUS_SORT_ORDER[a.status];
+  const bOrder = b.status === undefined ? Number.POSITIVE_INFINITY : STATUS_SORT_ORDER[b.status];
+  const comparison = aOrder - bOrder;
+  return direction === 'asc' ? comparison : -comparison;
 }
 
 export function constrainFlowRuns({
