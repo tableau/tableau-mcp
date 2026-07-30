@@ -1,0 +1,112 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<bookmark version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user' source-platform='mac'>
+<window class='worksheet' name='pareto-chart'>
+  <cards>
+        <edge name='left'>
+          <strip size='160'>
+            <card type='pages' />
+            <card type='filters' />
+            <card type='marks' />
+          </strip>
+        </edge>
+        <edge name='top'>
+          <strip size='2147483647'>
+            <card type='columns' />
+          </strip>
+          <strip size='2147483647'>
+            <card type='rows' />
+          </strip>
+          <strip size='31'>
+            <card type='title' />
+          </strip>
+        </edge>
+      </cards>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='{00000000-0000-0000-0000-000000000002}' />
+</window>
+<table>
+    <view>
+      <datasources>
+        <datasource name='Sample - Superstore' />
+        <datasource name='Parameters' />
+      </datasources>
+      <datasource-dependencies datasource='Parameters'>
+        <column caption='80%' datatype='real' name='[Parameter 3]' param-domain-type='any' role='measure' type='quantitative' value='0.80000000000000004'>
+          <calculation class='tableau' formula='0.80000000000000004' />
+        </column>
+      </datasource-dependencies>
+      <datasource-dependencies datasource='Sample - Superstore'>
+        <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Customer Name]' role='dimension' type='nominal' />
+        <column-instance column='[Customer Name]' derivation='None' name='[none:Customer Name:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Profit]' derivation='Sum' name='[pcto:cum:sum:Profit:qk]' pivot='key' type='quantitative'>
+          <table-calc aggregation='Sum' ordering-type='Rows' type='CumTotal' />
+          <table-calc ordering-type='Rows' type='PctTotal' />
+        </column-instance>
+        <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <computed-sort column='[Sample - Superstore].[none:Customer Name:nk]' direction='DESC' using='[Sample - Superstore].[sum:Profit:qk]' />
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='axis'>
+        <encoding attr='space' class='0' field='[Sample - Superstore].[pcto:cum:sum:Profit:qk]' field-type='quantitative' fold='true' scope='rows' type='space' />
+        <format attr='title' class='0' field='[Sample - Superstore].[pcto:cum:sum:Profit:qk]' scope='rows' value='' />
+        <format attr='subtitle' class='0' field='[Sample - Superstore].[pcto:cum:sum:Profit:qk]' scope='rows' value='' />
+        <format attr='auto-subtitle' class='0' field='[Sample - Superstore].[pcto:cum:sum:Profit:qk]' scope='rows' value='true' />
+        <format attr='width' field='[Sample - Superstore].[sum:Profit:qk]' value='51' />
+        <format attr='width' field='[Sample - Superstore].[pcto:cum:sum:Profit:qk]' value='51' />
+      </style-rule>
+      <style-rule element='worksheet'>
+        <format attr='display-field-labels' scope='cols' value='false' />
+      </style-rule>
+      <style-rule element='refline'>
+        <format attr='fill-above' id='refline0' value='#00000000' />
+        <format attr='fill-below' id='refline0' value='#00000000' />
+        <format attr='fill-above' id='refline1' value='#00000000' />
+        <format attr='fill-below' id='refline1' value='#00000000' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane id='2' selection-relaxation-option='selection-relaxation-disallow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Bar' />
+        <encodings>
+          <color column='[Sample - Superstore].[:Measure Names]' />
+        </encodings>
+        <reference-line axis-column='[Sample - Superstore].[sum:Profit:qk]' enable-instant-analytics='true' formula='average' id='refline0' label-type='none' probability='95' scope='per-table' value-column='[Parameters].[Parameter 3]' z-order='1' />
+        <reference-line axis-column='[Sample - Superstore].[pcto:cum:sum:Profit:qk]' enable-instant-analytics='true' formula='average' id='refline1' label-type='automatic' probability='95' scope='per-table' value-column='[Parameters].[Parameter 3]' z-order='2' />
+      </pane>
+      <pane id='3' selection-relaxation-option='selection-relaxation-disallow' y-axis-name='[Sample - Superstore].[sum:Profit:qk]'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Bar' />
+        <encodings>
+          <color column='[Sample - Superstore].[:Measure Names]' />
+        </encodings>
+      </pane>
+      <pane id='4' selection-relaxation-option='selection-relaxation-disallow' y-axis-name='[Sample - Superstore].[pcto:cum:sum:Profit:qk]'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Line' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[Sample - Superstore].[:Measure Names]' />
+        </encodings>
+        <style>
+          <style-rule element='mark'>
+            <format attr='size' value='1.8790607452392578' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>([Sample - Superstore].[sum:Profit:qk] + [Sample - Superstore].[pcto:cum:sum:Profit:qk])</rows>
+    <cols>[Sample - Superstore].[none:Customer Name:nk]</cols>
+  </table>
+</bookmark>

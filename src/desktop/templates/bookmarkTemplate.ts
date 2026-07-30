@@ -21,8 +21,30 @@ import { DOMParser } from '@xmldom/xmldom';
 
 import type { Derivation, SlotKind } from '../binder/manifest-types.js';
 
-/** Where a donor field reference appears in the bookmark's encodings. */
-export type Shelf = 'rows' | 'cols' | 'mark';
+/**
+ * Where a donor field reference appears in the sheet. `rows`/`cols`/`mark` are the axis/mark
+ * shelves (refs in element TEXT content). The rest are MARK-ENCODING shelves — children of
+ * `<encodings>` whose ref lives in a `column=` attribute; the child's TAG NAME is the shelf.
+ * An encoding-only chart (treemap, pie, symbol map) places every field here and nothing on
+ * rows/cols, so a walk restricted to rows/cols/mark inferred ZERO slots for it. The tag name
+ * is read structurally — identical code for every chart, never keyed on chart family.
+ */
+export type Shelf =
+  | 'rows'
+  | 'cols'
+  | 'mark'
+  | 'color'
+  | 'size'
+  | 'text'
+  | 'label'
+  | 'detail'
+  | 'lod'
+  | 'tooltip'
+  | 'shape'
+  | 'path'
+  | 'geometry'
+  | 'angle'
+  | 'wedge-size';
 
 /** One `<column>` dictionary entry from the bookmark's donor datasource(s). */
 export interface ColumnDef {
@@ -46,6 +68,13 @@ export interface ColumnDef {
 export interface InferredSlot {
   slot_id: string;
   sourceField: string;
+  /**
+   * The `{{field_base_N}}` token this slot's base field tokenizes to. Assigned per
+   * DISTINCT base field (not per slot), so a base placed at several date parts
+   * (YEAR + MONTH of one date) — which is several slots — shares ONE token. The
+   * manifest and the tokenized XML both read this field, so they agree by construction.
+   */
+  templateField: string;
   caption: string;
   shelves: Shelf[];
   kind: SlotKind;
@@ -230,11 +259,15 @@ export function bookmarkToTemplateWorkbook(
   // Tokenize base names inside column-instance refs. Longest-first so a name that is a
   // prefix of another ("Sales" vs "Sales Forecast") can't be partially rewritten. The
   // lookbehind/lookahead pins the match to a bracketed `:base:` or `[base]` segment.
-  const ordered = [...inf.slots].sort((a, b) => b.sourceField.length - a.sourceField.length);
-  const tokenOf = new Map(inf.slots.map((s, i) => [s.sourceField, `{{field_base_${i + 1}}}`]));
-  for (const s of ordered) {
-    const tok = tokenOf.get(s.sourceField)!;
-    const esc = s.sourceField.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // The token comes from the slot's own `templateField` — assigned per DISTINCT base in
+  // inference — so a field placed at multiple date parts (several slots) shares one token
+  // and every occurrence rewrites to it. Dedup by base: replacing all occurrences once
+  // per distinct base is enough (a second pass for another derivation would be a no-op).
+  const tokenOf = new Map(inf.slots.map((s) => [s.sourceField, s.templateField]));
+  const ordered = [...tokenOf.keys()].sort((a, b) => b.length - a.length);
+  for (const sourceField of ordered) {
+    const tok = tokenOf.get(sourceField)!;
+    const esc = sourceField.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const re = new RegExp(`(?<=[:\\[])${esc}(?=[:\\]])`, 'g');
     body = body.replace(re, tok);
     win = win.replace(re, tok);

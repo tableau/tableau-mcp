@@ -12,6 +12,7 @@ function slot(sourceField: string, extra: Partial<InferredSlot> = {}): InferredS
   return {
     slot_id: sourceField.toLowerCase(),
     sourceField,
+    templateField: '',
     caption: sourceField,
     shelves: ['cols'],
     kind: 'quantitative',
@@ -23,9 +24,24 @@ function slot(sourceField: string, extra: Partial<InferredSlot> = {}): InferredS
   };
 }
 
+// Backfill each slot's {{field_base_N}} token per DISTINCT base (encoding order),
+// mirroring inferFromBookmark — so a base placed at several derivations shares one token.
+function withTokens(slots: InferredSlot[]): InferredSlot[] {
+  const tokenByBase = new Map<string, string>();
+  return slots.map((s) => {
+    if (s.templateField) return s;
+    let token = tokenByBase.get(s.sourceField);
+    if (!token) {
+      token = `{{field_base_${tokenByBase.size + 1}}}`;
+      tokenByBase.set(s.sourceField, token);
+    }
+    return { ...s, templateField: token };
+  });
+}
+
 function inference(slots: InferredSlot[], donorDatasourceNames: string[]): Inference {
   return {
-    slots,
+    slots: withTokens(slots),
     unknownCount: 0,
     donorCaptions: [],
     donorDatasources: [],

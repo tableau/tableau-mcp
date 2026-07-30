@@ -77,10 +77,19 @@ function overlaySpec(inferred: SlotSpec | undefined, curated: SlotSpec | undefin
   };
 }
 
+/** The token grammar inference emits — a curated slot must speak it to align with a .tbm. */
+const FIELD_BASE_TOKEN = /^\{\{field_base_\d+\}\}$/;
+
 /**
  * Union the inferred and curated slot lists by template_field, preserving encoding
- * order for the shared slots and appending curated-only slots (calc/generated/pseudo
- * that inference skips) at the end.
+ * order for the shared slots and appending genuine curated-only slots at the end.
+ *
+ * A curated-only slot is appended ONLY when its token is a {{field_base_N}} (a real
+ * additive slot inference skipped, e.g. an optional calc). A LEGACY curated slot whose
+ * token is a bare donor name (`'Category'`, `'Sales'` — authored against the retired
+ * `.xml`) can never align with the `.tbm`'s inferred tokens, so appending it would
+ * DUPLICATE an already-inferred slot under a stale id (the "6-slots-for-a-3-field-chart"
+ * doubling). Those are dropped: the `.tbm` is canonical, so inference owns the slot set.
  */
 function mergeSlots(inferred: SlotSpec[], curated: SlotSpec[]): SlotSpec[] {
   const curatedByField = new Map(curated.map((s) => [s.template_field, s]));
@@ -89,7 +98,9 @@ function mergeSlots(inferred: SlotSpec[], curated: SlotSpec[]): SlotSpec[] {
   );
   const inferredFields = new Set(inferred.map((s) => s.template_field));
   for (const s of curated) {
-    if (!inferredFields.has(s.template_field)) merged.push(s);
+    if (inferredFields.has(s.template_field)) continue;
+    if (!FIELD_BASE_TOKEN.test(s.template_field)) continue;
+    merged.push(s);
   }
   return merged;
 }

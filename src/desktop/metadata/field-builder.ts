@@ -406,6 +406,10 @@ export function listAvailableFields(
 
       let isAggregated = false;
       let formula: string | undefined;
+      // A user-defined GROUP is a top-level <column> whose calculation bins concrete
+      // values of a base column (class='categorical-bin'). Flag it so generic template
+      // slots never auto-bind to this non-portable derivation (see takeCompatibleSource).
+      let isGroup = false;
 
       if (source === 'top-level') {
         role = column['@_role'];
@@ -413,6 +417,10 @@ export function listAvailableFields(
         datatype = column['@_datatype'];
         caption = column['@_caption'];
         semanticRole = column['@_semantic-role'];
+
+        if (column.calculation && column.calculation['@_class'] === 'categorical-bin') {
+          isGroup = true;
+        }
 
         if (column.calculation && column.calculation['@_formula']) {
           formula = column.calculation['@_formula'];
@@ -487,6 +495,7 @@ export function listAvailableFields(
         isAggregated: isAggregated,
         formula: formula,
         folder: folder,
+        isGroup: isGroup,
       };
 
       results.push({

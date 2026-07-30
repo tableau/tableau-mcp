@@ -20,6 +20,7 @@ export interface AvailableFieldLike {
   datatype?: string;
   caption?: string;
   isAggregated?: boolean;
+  isGroup?: boolean;
   column_ref: string;
 }
 
@@ -83,6 +84,7 @@ export function schemaSummaryFromAvailableFields(fields: AvailableFieldLike[]): 
       datatype: f.datatype ?? '',
       datasource: f.datasource,
       isAggregated: !!f.isAggregated,
+      ...(f.isGroup ? { isGroup: true } : {}),
       column_ref: f.column_ref,
     };
   });
@@ -316,6 +318,12 @@ function takeCompatibleSource(
   let bestScore = -Infinity;
   for (const source of sources) {
     if (used.has(source.field)) continue;
+    // Never AUTO-BIND a generic slot to a user-defined group (categorical-bin): a group
+    // enumerates one dataset's concrete values and is non-portable, and it cannot be
+    // referenced through the ordinary column-instance form the injector emits, so it
+    // would break the workbook. An explicit caller mapping to a group is still honored
+    // (that path resolves before this auto-fill loop); only unsolicited selection is blocked.
+    if (source.field.isGroup) continue;
     if (!kindCompatible(slot.kind, source.field, needsGeocodableGeo)) continue;
     const score = slotAffinity(slot, source.field);
     if (score > bestScore) {

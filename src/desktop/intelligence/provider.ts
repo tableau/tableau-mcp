@@ -28,6 +28,8 @@
 import { readDataAsset } from '../assets.js';
 import { CONTENT_MANIFEST_PATH, loadManifests } from '../binder/manifest.js';
 import type { TemplateManifest } from '../binder/manifest-types.js';
+import { inferFromBookmark, synthesizeManifest } from '../templates/inferSlots.js';
+import { listBookmarkNames, readBookmark } from '../templates/templatePath.js';
 
 /**
  * How this provider serves content. `'bundled'` = the in-package snapshot;
@@ -133,6 +135,19 @@ interface RawContentManifest extends ContentManifest {
   _generated?: boolean;
 }
 
+/**
+ * Synthesize a TemplateManifest from a template's `.tbm` bookmark, or null when the
+ * template has no bookmark. Inference is pure, so this agrees byte-for-byte with the
+ * tokenized XML readTemplate() produces from the same `.tbm` (both run one inference
+ * pass over the same bytes), which is what lets a metadata-free template both list and
+ * bind. Kept a free function so listTemplateManifests and getTemplateManifest share it.
+ */
+function synthesizeBookmarkManifest(name: string): TemplateManifest | null {
+  const tbm = readBookmark(name);
+  if (tbm === null) return null;
+  return synthesizeManifest(name, inferFromBookmark(tbm));
+}
+
 const FRESHNESS_NOTE =
   'Bundled in-package snapshot of authoring content. Does NOT satisfy the executive ' +
   'freshness requirement — there is no remote content-pack fetch yet (milestone 2). ' +
@@ -188,11 +203,25 @@ export class BundledIntelligenceProvider implements AuthoringIntelligenceProvide
   }
 
   listTemplateManifests(): TemplateManifest[] {
-    return [...loadManifests().values()];
+    const curated = loadManifests();
+    const out = [...curated.values()];
+    // Union in a synthesized manifest for every `.tbm` template that has NO curated
+    // manifest — a metadata-free drop-in bookmark. Inference is the authority for these
+    // (generic slots, YELLOW readiness); a template that also ships a curated manifest is
+    // served from `curated` above and skipped here, so the existing corpus is untouched.
+    for (const name of listBookmarkNames()) {
+      if (curated.has(name)) continue;
+      const manifest = synthesizeBookmarkManifest(name);
+      if (manifest) out.push(manifest);
+    }
+    return out;
   }
 
   getTemplateManifest(name: string): TemplateManifest | undefined {
-    return loadManifests().get(name);
+    // Curated manifest wins when present (render-verified/human tier); otherwise
+    // synthesize one from the dropped-in `.tbm` so a metadata-free template is still
+    // fully described. Returns undefined only when neither source exists.
+    return loadManifests().get(name) ?? synthesizeBookmarkManifest(name) ?? undefined;
   }
 
   getTemplateXmlFragment(name: string): string | null {

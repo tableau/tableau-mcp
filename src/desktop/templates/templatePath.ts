@@ -2,6 +2,8 @@ import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join, resolve, sep } from 'path';
 
 import { DATA_ROOT, listDataAssetNames, readDataAsset } from '../assets.js';
+import { bookmarkToTemplateWorkbook } from './bookmarkTemplate.js';
+import { inferFromBookmark } from './inferSlots.js';
 
 const MANIFEST_SUFFIX = '.manifest.json';
 
@@ -33,6 +35,12 @@ export function getTemplatePath(templateName: string): string {
 
 // SEA-aware template listing/reading. When TEMPLATES_DIR is set (or running from
 // a normal build), reads from disk; otherwise reads from the embedded SEA assets.
+//
+// A template is listable when it is BACKED — it has a `.tbm` bookmark (the canonical
+// drop-in format, fully usable via inference) OR a curated manifest for its `.xml`. A
+// bare `.xml` with neither is a raw orphan whose donor fields fail silently, and stays
+// hidden (the gate added in 19b8cc94). Dropping a `.tbm` in the folder is all it takes
+// to surface a template — no metadata required.
 export function listTemplateNames(): string[] {
   const manifestBackedNames = new Set(
     listDataAssetNames('template-manifests')
@@ -42,28 +50,63 @@ export function listTemplateNames(): string[] {
   if (process.env['TEMPLATES_DIR']) {
     const dir = getTemplatesDir();
     if (!existsSync(dir)) return [];
+    // On disk, a `.tbm` OR a `.xml` makes a name listable (the disk store is the
+    // author's working tree — orphan-hiding is a package concern, handled below).
+    const names = new Set<string>();
+    for (const f of readdirSync(dir)) {
+      if (f.endsWith('.xml')) names.add(f.slice(0, -4));
+      else if (f.endsWith('.tbm')) names.add(f.slice(0, -4));
+    }
+    return [...names].sort();
+  }
+  const bookmarkNames = listBookmarkNames();
+  const bookmarkSet = new Set(bookmarkNames);
+  const xmlNames = listDataAssetNames('templates')
+    .filter((f) => f.endsWith('.xml'))
+    .map((f) => f.replace(/\.xml$/, ''))
+    .filter((name) => manifestBackedNames.has(name) || bookmarkSet.has(name));
+  return [...new Set([...xmlNames, ...bookmarkNames])].sort();
+}
+
+/** Names of every `.tbm` bookmark in the store (disk or SEA), without extension. */
+export function listBookmarkNames(): string[] {
+  if (process.env['TEMPLATES_DIR']) {
+    const dir = getTemplatesDir();
+    if (!existsSync(dir)) return [];
     return readdirSync(dir)
-      .filter((f) => f.endsWith('.xml'))
-      .map((f) => f.replace(/\.xml$/, ''))
+      .filter((f) => f.endsWith('.tbm'))
+      .map((f) => f.replace(/\.tbm$/, ''))
       .sort();
   }
   return listDataAssetNames('templates')
-    .filter((f) => f.endsWith('.xml'))
-    .map((f) => f.replace(/\.xml$/, ''))
-    .filter((name) => manifestBackedNames.has(name))
+    .filter((f) => f.endsWith('.tbm'))
+    .map((f) => f.replace(/\.tbm$/, ''))
     .sort();
 }
 
 export function readTemplate(templateName: string): string | null {
   validateTemplateName(templateName);
-  if (process.env['TEMPLATES_DIR']) {
-    try {
-      return readFileSync(getTemplatePath(templateName), 'utf-8');
-    } catch {
-      return null;
-    }
+  const xml = process.env['TEMPLATES_DIR']
+    ? readXmlFromDisk(templateName)
+    : readDataAsset(`templates/${templateName}.xml`);
+  if (xml !== null) return xml;
+  // Drop-in `.tbm` with no tokenized `.xml`: the bookmark IS the canonical source, so
+  // produce the tokenized worksheet-workbook on the fly — the SAME shape the inject core
+  // consumes (bookmarkToTemplateWorkbook), from the SAME inference pass a synthesized
+  // manifest uses, so slot tokens agree. A template a user simply dropped in is thus
+  // fully injectable with zero metadata. Templates that ship a `.xml` are unaffected.
+  const tbm = readBookmark(templateName);
+  if (tbm === null) return null;
+  return bookmarkToTemplateWorkbook(tbm, inferFromBookmark(tbm)).xml;
+}
+
+/** Read a template's tokenized `.xml` from the working-tree store, or null if absent. */
+function readXmlFromDisk(templateName: string): string | null {
+  try {
+    return readFileSync(getTemplatePath(templateName), 'utf-8');
+  } catch {
+    return null;
   }
-  return readDataAsset(`templates/${templateName}.xml`);
 }
 
 /**

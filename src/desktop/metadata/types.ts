@@ -52,6 +52,15 @@ export interface FieldReference {
   isAggregated?: boolean;
   formula?: string;
   folder?: string;
+  /**
+   * True when this column is a user-defined GROUP — a `<column>` whose calculation
+   * has `class='categorical-bin'`, which bins concrete data values of a base column
+   * into user-named members. Groups are inherently NON-portable (they enumerate the
+   * specific values of one dataset) and cannot be referenced through the ordinary
+   * `[none:field:nk]` column-instance form, so generic template slots must never
+   * auto-bind to one. See field-builder.ts and takeCompatibleSource.
+   */
+  isGroup?: boolean;
 }
 
 export interface ParsedWorkbook {
@@ -111,7 +120,11 @@ export interface ParsedColumn {
   '@_caption'?: string;
   calculation?: {
     '@_class': string;
-    '@_formula': string;
+    // A formula calc carries `@_formula`; a GROUP (class='categorical-bin') instead
+    // names its base column on `@_column` and has no formula — so both are optional.
+    '@_formula'?: string;
+    '@_column'?: string;
+    [key: string]: any;
   };
   [key: string]: any;
 }

@@ -33,6 +33,12 @@ export interface SchemaField {
   approxCount?: number;
   datasource: string;
   isAggregated: boolean;
+  /**
+   * True for a user-defined GROUP (categorical-bin column). Non-portable and not
+   * referenceable through the ordinary column-instance form, so generic slots must
+   * not auto-bind to it. See field-builder.ts and explicit-bind.takeCompatibleSource.
+   */
+  isGroup?: boolean;
   column_ref: string; // straight from listAvailableFields, e.g. "[Superstore].[sum:Sales:qk]"
 }
 
@@ -70,6 +76,7 @@ export function summarizeSchema(workbookXml: string): SchemaSummary {
       ...(f.approxCount !== undefined ? { approxCount: f.approxCount } : {}),
       datasource: f.datasource,
       isAggregated: !!f.isAggregated,
+      ...(f.isGroup ? { isGroup: true } : {}),
       column_ref: f.column_ref,
     };
   });
