@@ -221,7 +221,7 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
                   : (maxResultLimit ?? DEFAULT_FLOW_RUNS_LIMIT);
 
                 const statusSort = getStatusSort(sort);
-        const clientSort = statusSort !== undefined && !statusFilterSupported;
+                const clientSort = statusSort !== undefined && !statusFilterSupported;
                 const sortForApi = clientSort ? 'completedAt:desc' : (sort ?? 'completedAt:desc');
                 let collected: { items: FlowRun[]; truncatedByLimit: boolean };
                 try {
@@ -243,7 +243,6 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
                     // caller `sort` is passed through and honored as-is.
                     sortByRecency: sort === undefined,
                     clientSort,
-                    statusSort,
                     pageSize: FLOW_RUNS_PAGE_SIZE,
                     getPage: (pageNumber) =>
                       restApi.flowsMethods.getFlowRuns({
@@ -457,7 +456,6 @@ async function collectFlowRuns({
   pageSize,
   sortByRecency,
   clientSort,
-  statusSort,
 }: {
   getPage: (pageNumber: number) => Promise<FlowRun[]>;
   matchesStatus: (run: FlowRun) => boolean;
@@ -465,7 +463,6 @@ async function collectFlowRuns({
   pageSize: number;
   sortByRecency: boolean;
   clientSort: boolean;
-  statusSort?: 'asc' | 'desc';
 }): Promise<{ items: FlowRun[]; truncatedByLimit: boolean }> {
   const probeTarget = effectiveLimit === UNBOUNDED ? UNBOUNDED : effectiveLimit + 1;
   const matched: FlowRun[] = [];
