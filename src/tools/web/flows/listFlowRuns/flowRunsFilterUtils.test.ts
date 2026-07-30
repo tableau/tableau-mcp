@@ -29,7 +29,7 @@ describe('parseAndValidateFlowRunsFilterString', () => {
     const { serverFilter, matchesStatus, hasStatusFilter } = parseAndValidateFlowRunsFilterString(
       'flowId:eq:x,status:eq:Failed',
       {
-        statusSupported: true,
+        statusFilterSupported: true,
       },
     );
     expect(serverFilter).toBe('flowId:eq:x,status:eq:Failed');
@@ -39,7 +39,9 @@ describe('parseAndValidateFlowRunsFilterString', () => {
 
   it('rejects mixed terminal and non-terminal status values when supported server-side', () => {
     expect(() =>
-      parseAndValidateFlowRunsFilterString('status:in:[Failed,Pending]', { statusSupported: true }),
+      parseAndValidateFlowRunsFilterString('status:in:[Failed,Pending]', {
+        statusFilterSupported: true,
+      }),
     ).toThrow(/terminal statuses/);
   });
 

@@ -67,7 +67,7 @@ export type ValidatedFlowRunsFilter = {
  */
 export function parseAndValidateFlowRunsFilterString(
   filterString: string,
-  { statusSupported = false }: { statusSupported?: boolean } = {},
+  { statusFilterSupported = false }: { statusFilterSupported?: boolean } = {},
 ): ValidatedFlowRunsFilter {
   // Validates fields/operators, normalizes date-only values for
   // startedAt/completedAt, and dedupes repeated fields (last one wins).
@@ -94,7 +94,7 @@ export function parseAndValidateFlowRunsFilterString(
     }
   }
 
-  if (statusSupported && statusClause) {
+  if (statusFilterSupported && statusClause) {
     assertSupportedStatusIn(statusClause);
     const statusClauses = splitTopLevel(normalizedFilter, ',')
       .map((c) => c.trim())
@@ -104,7 +104,7 @@ export function parseAndValidateFlowRunsFilterString(
 
   return {
     serverFilter: serverClauses.join(','),
-    matchesStatus: statusSupported ? () => true : buildStatusMatcher(statusClause),
+    matchesStatus: statusFilterSupported ? () => true : buildStatusMatcher(statusClause),
     normalizedFilter,
     hasStatusFilter: statusClause !== undefined,
   };

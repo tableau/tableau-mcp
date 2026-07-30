@@ -181,9 +181,9 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
     },
     callback: async ({ filter, sort, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
-      const statusSupported = RestApi.versionIsAtLeast(STATUS_FILTER_SORT_MIN_REST_VERSION);
+      const statusFilterSupported = RestApi.versionIsAtLeast(STATUS_FILTER_SORT_MIN_REST_VERSION);
       const validated = filter
-        ? parseAndValidateFlowRunsFilterString(filter, { statusSupported })
+        ? parseAndValidateFlowRunsFilterString(filter, { statusFilterSupported })
         : undefined;
       const serverFilter = validated?.serverFilter ?? '';
       const matchesStatus = validated?.matchesStatus ?? ((): boolean => true);
@@ -216,7 +216,7 @@ export const getListFlowRunsTool = (server: WebMcpServer): WebTool<typeof params
                   : (maxResultLimit ?? DEFAULT_FLOW_RUNS_LIMIT);
 
                 const statusSort = getStatusSort(sort);
-                const clientSort = statusSort !== undefined && !statusSupported;
+        const clientSort = statusSort !== undefined && !statusFilterSupported;
                 const sortForApi = clientSort ? 'completedAt:desc' : (sort ?? 'completedAt:desc');
                 let collected: { items: FlowRun[]; truncatedByLimit: boolean };
                 try {
