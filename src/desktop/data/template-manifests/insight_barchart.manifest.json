@@ -1,0 +1,88 @@
+{
+  "template": "insight_barchart",
+  "family": "magnitude",
+  "readiness": "GREEN",
+  "fast_path_eligible": true,
+  "fast_path_blockers": [],
+  "portability_evidence": {
+    "fixture_bind": true,
+    "render_verified": "live-2026-07-30",
+    "render_evidence": {
+      "basis": "templatized from a hand-authored live bar-chart worksheet (pulse templates/BarChartTest, sheet 'Sheet 2'); datasource/dimension/measure placeholdered, DESC shelf-sort + color-by-dimension preserved verbatim.",
+      "lane": "insight-template (Pulse: Bar Chart)",
+      "structural": null,
+      "critical_pass": "not recorded (authored-from-live; earned by human review)",
+      "high_pass": "not recorded (authored-from-live; earned by human review)",
+      "pixel_oracle": "none",
+      "gate_composite": null
+    }
+  },
+  "datasource_placeholder": true,
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE",
+    "field_base_1",
+    "field_base_2"
+  ],
+  "intent_keywords": [
+    "top-contributors",
+    "bottom-contributors",
+    "top-drivers",
+    "top-detractors"
+  ],
+  "description": "INSIGHT template (Pulse: Bar Chart) \u2014 horizontal bars of an aggregated measure across the members of a categorical dimension, sorted DESC by the measure (biggest bar first). Templatized from the hand-authored 'Sheet 2' bar worksheet.",
+  "avoid_when": [
+    "The x-axis should be a CONTINUOUS TIME field (a trend over time) \u2014 use insight-unusual-change / trend-line-chart instead. This template compares a measure across DISCRETE categorical members, not across time."
+  ],
+  "slots": [
+    {
+      "slot_id": "category",
+      "template_field": "{{field_base_1}}",
+      "derivation": "none",
+      "role": [
+        "rows"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "purpose": "Categorical dimension whose members become the bars (on rows) and the color legend. The bars are sorted DESC by the measure.",
+      "examples": [
+        "Impact",
+        "Priority",
+        "Team"
+      ],
+      "notes": "Bound to TWO references that must stay in sync: the rows pill [none:{{field_base_1}}:nk] and the <shelf-sort-v2 dimension-to-sort=...>. Rebinding must update both."
+    },
+    {
+      "slot_id": "measure",
+      "template_field": "{{field_base_2}}",
+      "derivation": "sum",
+      "role": [
+        "cols"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true,
+      "purpose": "Aggregated measure that gives each bar its length (on cols = horizontal bars) and the DESC sort key.",
+      "examples": [
+        "Story Points",
+        "Revenue",
+        "Open Count"
+      ],
+      "notes": "On cols so bars run horizontally. Also referenced by <shelf-sort-v2 measure-to-sort-by=...>; rebinding must update both."
+    }
+  ],
+  "calcs": [],
+  "hazards": [
+    {
+      "code": "desc-sort-is-the-shape",
+      "detail": "The <shelf-sort-v2 direction='DESC' ...> ranks bars biggest-first \u2014 the defining feature of this insight ('top contributors'). Preserve the shelf-sort block; rebinding category/measure must update BOTH its dimension-to-sort and measure-to-sort-by, or the sort silently reverts to alphabetical.",
+      "xml": "insight_barchart.xml:15"
+    },
+    {
+      "code": "measure-on-cols-means-horizontal",
+      "detail": "Measure on <cols> and dimension on <rows> produces HORIZONTAL bars. Do not swap them; a vertical column chart is a different shape. Color is bound to the same dimension as rows (one color per bar).",
+      "xml": "insight_barchart.xml:29"
+    }
+  ]
+}

@@ -2,11 +2,11 @@
   "_generated": true,
   "_generator": "src/scripts/buildTemplateManifests.ts",
   "_warning": "GENERATED FILE — do not hand-edit. Re-run `npx tsx src/scripts/buildTemplateManifests.ts`.",
-  "content_version": "2.59.1+content.2026-07-27",
+  "content_version": "2.60.3+content.2026-07-31",
   "schema_version": "2",
-  "generated": "2026-07-27",
+  "generated": "2026-07-31",
   "engine_compat": {
-    "server_min": "2.59.1",
+    "server_min": "2.60.3",
     "node": ">=22.7.5"
   },
   "resources": [
@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "9a72ff66a3a4b9720cf2309c2a7793129d8b6bee120ad202316a8b1d214f5255",
-      "bytes": 283278
+      "sha256": "03bde655ff89182d17b9d936c9e3c349193ec95d00407e10937e4f32da788d78",
+      "bytes": 291412
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -359,6 +359,16 @@
       "path": "template-manifests/gantt-timeline-chart.manifest.json",
       "sha256": "0be38bca7218b140c3412d0b7a61752340a392efc6ba7b328b0697a8f1d1a6f3",
       "bytes": 4719
+    },
+    {
+      "path": "template-manifests/insight_barchart.manifest.json",
+      "sha256": "43d52827518e042121042b1681662189012f6507103fcee333b95a2b4c5c42e7",
+      "bytes": 3554
+    },
+    {
+      "path": "template-manifests/insight_unusualchange.manifest.json",
+      "sha256": "aa01d84f7d10b9595389a31494667b2ee6af3df2ebc0199a7adc9d937528f661",
+      "bytes": 3837
     },
     {
       "path": "template-manifests/kpi-text.manifest.json",
