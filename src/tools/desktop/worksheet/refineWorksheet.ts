@@ -17,6 +17,11 @@ import { z } from 'zod';
 import { getWorksheetFragment } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import { loadWorksheetXml } from '../../../desktop/commands/workbook/loadWorksheetXml.js';
 import {
+  pollReadback,
+  READBACK_POLL_INTERVAL_MS,
+  READBACK_POLL_MAX_ATTEMPTS,
+} from '../../../desktop/commands/workbook/pollReadback.js';
+import {
   appliedSortByFieldDirection,
   confirmSortByFieldApplied,
   confirmSortDirectionApplied,
@@ -47,41 +52,6 @@ type RefineOperation = 'top_n' | 'sort_direction' | 'sort_by_field';
 type RefineWorksheetToolResult =
   | { refined: true; operation: RefineOperation; worksheetName: string; message: string }
   | { refined: false; operation: RefineOperation; worksheetName: string; reason: string };
-
-// Commands apply asynchronously after SUCCEEDED (see
-// resources/desktop/knowledge/tactics/data/notional-spec-authoring.md) — the apply-once
-// call above returning does not mean the patch has landed in Desktop's live document yet.
-// A single readback immediately after apply can race that settle and see the PRE-apply
-// XML, which would misreport a durable apply as `refined: false`. Poll instead of reading
-// once; 250ms intervals are the interval documented to work for this same class of race
-// elsewhere (list-worksheets/list-dashboards polling after new-worksheet/new-dashboard).
-const READBACK_POLL_MAX_ATTEMPTS = 8;
-const READBACK_POLL_INTERVAL_MS = 250;
-
-/**
- * The readback poll sleep, on the GLOBAL timer. This used to be `timers/promises`, which vitest's
- * fake timers do not fake — so the four tests that call `vi.useFakeTimers()` and advance the clock
- * over this poll were sleeping for real and proving nothing about the timing they claim to drive
- * (measured: `timers/promises` 804ms under fake timers, global `setTimeout` 1ms). Abort semantics
- * are kept: an aborted signal rejects, before or during the wait.
- */
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason as Error);
-      return;
-    }
-    const onAbort = (): void => {
-      clearTimeout(timer);
-      reject(signal?.reason as Error);
-    };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
-}
 
 /** A hand-back-to-the-standard-path refusal — not an error, so isError stays false. */
 function refusal(
@@ -334,39 +304,38 @@ export const getRefineWorksheetTool = (
           // 6. Read back and confirm the expected node landed durably. The apply is async
           // after SUCCEEDED, so poll rather than trusting one immediate readback — the
           // first read can race the settle and still show pre-apply XML.
-          let lastReadback = '';
-          for (let attempt = 1; attempt <= READBACK_POLL_MAX_ATTEMPTS; attempt++) {
-            const readback = await getWorksheetFragment({
-              worksheetName: canonicalWorksheetName,
-              executor,
-              signal: extra.signal,
-            });
-            if (readback.isErr()) {
-              const { type, error } = readback.error;
-              switch (type) {
-                case 'get-worksheet-xml-error':
-                  return new GetWorksheetXmlFailedError(error).toErr();
-                case 'execute-command-error':
-                  return new DesktopCommandExecutionError(error).toErr();
-                default: {
-                  const _: never = type;
-                  return new UnknownError(error).toErr();
-                }
+          const readback = await pollReadback({
+            read: () =>
+              getWorksheetFragment({
+                worksheetName: canonicalWorksheetName,
+                executor,
+                signal: extra.signal,
+              }),
+            settled: (fragment) => confirm(fragment),
+            signal: extra.signal,
+          });
+          if (!readback.ok) {
+            const { type, error } = readback.error;
+            switch (type) {
+              case 'get-worksheet-xml-error':
+                return new GetWorksheetXmlFailedError(error).toErr();
+              case 'execute-command-error':
+                return new DesktopCommandExecutionError(error).toErr();
+              default: {
+                const _: never = type;
+                return new UnknownError(error).toErr();
               }
             }
-            lastReadback = readback.value;
-            if (confirm(readback.value)) {
-              return new Ok({
-                refined: true,
-                operation,
-                worksheetName: canonicalWorksheetName,
-                message: `Applied ${operation} to worksheet "${canonicalWorksheetName}" and confirmed the ${nodeLabel} on readback.`,
-              });
-            }
-            if (attempt < READBACK_POLL_MAX_ATTEMPTS) {
-              await sleep(READBACK_POLL_INTERVAL_MS, extra.signal);
-            }
           }
+          if (readback.settled) {
+            return new Ok({
+              refined: true,
+              operation,
+              worksheetName: canonicalWorksheetName,
+              message: `Applied ${operation} to worksheet "${canonicalWorksheetName}" and confirmed the ${nodeLabel} on readback.`,
+            });
+          }
+          const lastReadback = readback.value;
 
           // The confirm never matched across the full poll budget. If the sort node DID land
           // but with a direction other than requested (Desktop reverted DESC to ASC), report
