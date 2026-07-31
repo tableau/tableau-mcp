@@ -3867,7 +3867,7 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('target_worksheet "No Such Sheet" not found');
-    expect(result.content[0].text).toContain('list-worksheets');
+    expect(result.content[0].text).toContain('desktop-read');
     expect(vi.mocked(binderModule.bindTemplate)).not.toHaveBeenCalled();
     expect(vi.mocked(buildInjectedWorkbookXml)).not.toHaveBeenCalled();
     expect(executeCommand).not.toHaveBeenCalled();

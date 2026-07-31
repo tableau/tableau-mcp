@@ -330,7 +330,7 @@ describe('removeFieldTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('list-worksheets');
+    expect(result.content[0].text).toContain('desktop-read');
     expect(result.content[0].text).toContain('retry');
     expect(result.content[0].text).not.toContain('get-app-info');
     expect(writeFileSync).not.toHaveBeenCalled();

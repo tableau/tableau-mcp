@@ -2127,7 +2127,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             const target = classifyWorksheetReplaceTarget(workbookXml, target_worksheet);
             if (target === 'not-found') {
               return new ArgsValidationError(
-                `target_worksheet "${target_worksheet}" not found in the workbook — check list-worksheets, or omit target_worksheet to create a new sheet`,
+                `target_worksheet "${target_worksheet}" not found in the workbook — check desktop-read (method: worksheets), or omit target_worksheet to create a new sheet`,
               ).toErr();
             }
             if (target === 'in-dashboard') {

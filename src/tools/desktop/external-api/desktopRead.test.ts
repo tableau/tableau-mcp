@@ -9,7 +9,7 @@ describe('getDesktopReadTool', () => {
     expect(tool.annotations).toMatchObject({ readOnlyHint: true, openWorldHint: false });
   });
 
-  it('exposes every shipped environment/inspection read as a method', () => {
+  it('exposes every shipped read as a method', () => {
     const tool = getDesktopReadTool(new DesktopMcpServer());
     const method = (tool.paramsSchema as { method: { options: string[] } }).method;
 
@@ -21,6 +21,11 @@ describe('getDesktopReadTool', () => {
         'site',
         'site-workbooks',
         'storyboards',
+        'worksheets',
+        'dashboards',
+        'inventory',
+        'workbook-datasources',
+        'site-datasources',
         'worksheet-info',
         'dashboard-info',
         'storyboard-info',
