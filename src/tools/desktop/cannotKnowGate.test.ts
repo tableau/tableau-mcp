@@ -53,13 +53,6 @@ const BOOLEAN_FLAG_ALLOWLIST: Readonly<Record<string, string>> = {
     spliced.warnings.length > 0 ||
     promiseOutcome === 'failed'`,
   )]: 'Presence is affirmative evidence of an incomplete bind, never evidence of completion.',
-  // WHY safe: this is checked only after getWorkbookXml succeeds; true additionally requires
-  // the read-back worksheet to contain the requested mark-label setting.
-  [booleanExemptionKey(
-    'src/tools/desktop/data-source/formatLabels.ts',
-    `applied =
-            worksheetXml !== undefined && hasMarkLabelsSetting(worksheetXml, showLabels)`,
-  )]: 'The optional worksheet is host readback, and true requires its requested setting.',
 };
 
 const CLAIM_EVIDENCE = [
