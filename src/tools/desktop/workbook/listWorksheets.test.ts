@@ -3,6 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import * as listWorksheetsModule from '../../../desktop/commands/workbook/listWorksheets.js';
+import * as sessionResolution from '../../../desktop/sessionResolution.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -12,6 +13,7 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getListWorksheetsTool } from './listWorksheets.js';
 
 vi.mock('../../../desktop/commands/workbook/listWorksheets.js');
+vi.mock('../../../desktop/sessionResolution.js');
 
 describe('listWorksheetsTool', () => {
   const resultSchema = z.object({
@@ -21,6 +23,7 @@ describe('listWorksheetsTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -112,6 +115,26 @@ describe('listWorksheetsTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(new DesktopCommandExecutionError(error).message);
+  });
+
+  it('maps a route-missing error to an honest endpoint-not-in-this-build 404', async () => {
+    vi.spyOn(listWorksheetsModule, 'listWorksheets').mockResolvedValue(
+      Err({
+        type: 'command-failed',
+        error: {
+          code: 'not-found',
+          message: 'No route matches GET /v0/workbook/worksheets',
+          recoverable: false,
+        },
+      }),
+    );
+
+    const result = await getToolResult({ session: '12345', mockExecutor: vi.fn() });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('worksheet list endpoint');
+    expect(result.content[0].text).toContain('Do not retry');
   });
 
   it('should pass the abort signal to listWorksheets command', async () => {

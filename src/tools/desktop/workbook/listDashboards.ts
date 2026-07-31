@@ -2,9 +2,8 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { listDashboards } from '../../../desktop/commands/workbook/listDashboards.js';
-import { resolveSession } from '../../../desktop/sessionResolution.js';
-import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { runExternalApiReadTool } from '../externalApiReadHarness.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
@@ -31,21 +30,13 @@ export const getListDashboardsTool = (
       return await listDashboardsTool.logAndExecute({
         extra,
         args: { session },
-        callback: async () => {
-          const sessionResult = resolveSession(session);
-          if (sessionResult.isErr()) {
-            return sessionResult.error.toErr();
-          }
-          const resolvedSession = sessionResult.value;
-          const executor = await extra.getExecutor(resolvedSession);
-          const result = await listDashboards({ executor, signal: extra.signal });
-
-          if (result.isErr()) {
-            return new DesktopCommandExecutionError(result.error).toErr();
-          }
-
-          return result;
-        },
+        callback: async () =>
+          await runExternalApiReadTool({
+            session,
+            extra,
+            callback: async (executor, signal, read) =>
+              await read('dashboard list', async () => await listDashboards({ executor, signal })),
+          }),
       });
     },
   });

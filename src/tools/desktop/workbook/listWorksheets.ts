@@ -2,9 +2,8 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { listWorksheets } from '../../../desktop/commands/workbook/listWorksheets.js';
-import { resolveSession } from '../../../desktop/sessionResolution.js';
-import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
+import { runExternalApiReadTool } from '../externalApiReadHarness.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
@@ -31,21 +30,13 @@ export const getListWorksheetsTool = (
       return await listWorksheetsTool.logAndExecute({
         extra,
         args: { session },
-        callback: async () => {
-          const sessionResult = resolveSession(session);
-          if (sessionResult.isErr()) {
-            return sessionResult.error.toErr();
-          }
-          const resolvedSession = sessionResult.value;
-          const executor = await extra.getExecutor(resolvedSession);
-          const result = await listWorksheets({ executor, signal: extra.signal });
-
-          if (result.isErr()) {
-            return new DesktopCommandExecutionError(result.error).toErr();
-          }
-
-          return result;
-        },
+        callback: async () =>
+          await runExternalApiReadTool({
+            session,
+            extra,
+            callback: async (executor, signal, read) =>
+              await read('worksheet list', async () => await listWorksheets({ executor, signal })),
+          }),
       });
     },
   });
