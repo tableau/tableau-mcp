@@ -51,3 +51,8 @@ export type RefreshTokenData = UserAndTokens & {
   expiresAt: number;
   tableauClientId: string;
 };
+
+export type ClientRegistration = {
+  redirectUris: string[];
+  tokenEndpointAuthMethod: string;
+};
