@@ -38,6 +38,12 @@ export const getTableauServerInfo = async (server?: string): Promise<ServerInfo>
 
   try {
     const serverInfo = await restApi.serverMethods.getServerInfo();
+    if (!serverInfo?.restApiVersion) {
+      throw new Error(
+        `Received an unexpected response from ${server}/serverinfo: missing restApiVersion`,
+      );
+    }
+
     RestApi.version = serverInfo.restApiVersion;
     tableauServerInfoCache.set(server, serverInfo);
     return serverInfo;

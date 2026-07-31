@@ -330,6 +330,10 @@ export class RestApi {
   private _addInterceptors = (baseUrl: string, interceptors: AxiosInterceptor): void => {
     interceptors.request.use(
       (config) => {
+        // Tableau's REST API defaults to XML for some endpoints (e.g. /serverinfo)
+        // unless the client explicitly asks for JSON. Force it here so every
+        // request gets the JSON shape our Zod schemas expect.
+        config.headers.set('Accept', 'application/json');
         this._requestInterceptor?.[0]({
           baseUrl,
           ...getRequestInterceptorConfig(config),
