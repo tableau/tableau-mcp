@@ -71,6 +71,54 @@ describe('desktop-read dispatcher', () => {
       },
     },
     {
+      method: 'worksheets',
+      args: {},
+      expectedPath: '/v0/workbook/worksheets',
+      expectBody: (body: unknown) => {
+        const parsed = z.object({ count: z.number(), worksheets: z.array(z.string()) }).parse(body);
+        expect(parsed.worksheets).toContain('Sales by Region');
+      },
+    },
+    {
+      method: 'dashboards',
+      args: {},
+      expectedPath: '/v0/workbook/dashboards',
+      expectBody: (body: unknown) => {
+        const parsed = z.object({ count: z.number(), dashboards: z.array(z.string()) }).parse(body);
+        expect(parsed.dashboards).toContain('Executive Dashboard');
+      },
+    },
+    {
+      method: 'inventory',
+      args: {},
+      expectedPath: '/v0/workbook',
+      expectBody: (body: unknown) => {
+        expect(z.object({ title: z.string() }).parse(body).title).toBeTruthy();
+      },
+    },
+    {
+      method: 'workbook-datasources',
+      args: {},
+      expectedPath: '/v0/workbook/datasources',
+      expectBody: (body: unknown) => {
+        const parsed = z
+          .object({ datasources: z.array(z.object({ id: z.string().optional() })) })
+          .parse(body);
+        expect(parsed.datasources[0].id).toBe('wb-ds-superstore');
+      },
+    },
+    {
+      method: 'site-datasources',
+      args: {},
+      expectedPath: '/v0/site/datasources',
+      expectBody: (body: unknown) => {
+        const parsed = z
+          .object({ datasources: z.array(z.object({ luid: z.string().optional() })) })
+          .parse(body);
+        expect(parsed.datasources[0].luid).toBe('luid-superstore');
+      },
+    },
+    {
       method: 'site-workbooks',
       args: {},
       expectedPath: '/v0/site/workbooks',

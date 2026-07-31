@@ -325,7 +325,7 @@ describe('deleteWorksheetTool', () => {
     expect(result.content[0].text).toBe(
       new WorksheetNotFoundError(
         'Worksheet "Nope" was not found in the workbook. Existing worksheets: "Alpha", "Beta". ' +
-          'Use list-worksheets to see the current sheet names.',
+          'Use desktop-read (method: worksheets) to see the current sheet names.',
       ).message,
     );
   });

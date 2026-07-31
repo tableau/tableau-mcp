@@ -40,17 +40,17 @@ const serverVersion = pkg.version;
  * preamble-hunt measured as the single biggest per-turn latency win (−4.5 to −5.5s/chart)
  * and a per-turn token/cost reduction. Reconciled from BOTH source lists: the spike's
  * fast-path/coordination tools (bind-template, list-instances, list-available-fields,
- * list-worksheets, apply-workbook, batch-create-and-cache-sheets, build-and-apply-dashboard)
+ * desktop-read, apply-workbook, batch-create-and-cache-sheets, build-and-apply-dashboard)
  * UNION the preamble-hunt's escalation-fallback chain it insists must stay
- * (get-workbook-xml, inject-template, apply-worksheet — apply-workbook/list-instances/
- * list-worksheets already overlap). Without the fallback chain the propose/escalate paths
+ * (get-workbook-xml, inject-template, apply-worksheet — apply-workbook/list-instances
+ * already overlap). Without the fallback chain the propose/escalate paths
  * (per DESKTOP_INSTRUCTIONS) would have no tools to route to.
  */
 export const DEMO_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<DesktopToolName>([
   'bind-template',
   'dashboard-auto-apply',
   'list-instances',
-  'list-worksheets',
+  'desktop-read',
   'list-available-fields',
   'get-worksheet-xml',
   'apply-workbook',
@@ -81,8 +81,7 @@ export const SPEC_LOOP_TOOL_PROFILE: ReadonlySet<DesktopToolName> = new Set<Desk
   'list-instances',
   'list-available-fields',
   'get-worksheet-xml',
-  'list-worksheets',
-  'list-dashboards',
+  'desktop-read',
 ]);
 
 /**
@@ -141,12 +140,8 @@ export const DYNAMIC_AUTHORING_TOOL_PROFILE: ReadonlySet<DesktopToolName> =
     'ask-user',
     'list-instances',
     'list-available-fields',
-    'list-worksheets',
-    'list-dashboards',
+    'desktop-read',
     'get-summary-data',
-    'get-workbook-inventory',
-    'list-workbook-datasources',
-    'list-site-datasources',
     'author-calc',
     'author-set',
     'author-parameter',

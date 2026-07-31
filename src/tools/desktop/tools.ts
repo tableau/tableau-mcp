@@ -24,9 +24,6 @@ import { getAuthorSetTool } from './data-source/authorSet.js';
 import { getFormatLabelsTool } from './data-source/formatLabels.js';
 import { getAppInfoTool } from './data-source/getAppInfo.js';
 import { getSummaryDataTool } from './data-source/getSummaryData.js';
-import { getWorkbookInventoryTool } from './data-source/getWorkbookInventory.js';
-import { getListSiteDatasourcesTool } from './data-source/listSiteDatasources.js';
-import { getListWorkbookDatasourcesTool } from './data-source/listWorkbookDatasources.js';
 import { getDesktopReadTool } from './external-api/desktopRead.js';
 import { exportDashboardImageTool } from './external-api/exportDashboardImage.js';
 import { exportWorksheetImageTool } from './external-api/exportWorksheetImage.js';
@@ -50,8 +47,6 @@ import { getInjectTemplateTool } from './template/injectTemplate.js';
 import { getActivateSheetTool } from './workbook/activateSheet.js';
 import { getApplyWorkbookTool } from './workbook/applyWorkbook.js';
 import { getGetWorkbookXmlTool } from './workbook/getWorkbookXml.js';
-import { getListDashboardsTool } from './workbook/listDashboards.js';
-import { getListWorksheetsTool } from './workbook/listWorksheets.js';
 import { getApplyWorksheetTool } from './worksheet/applyWorksheet.js';
 import { getDeleteWorksheetTool } from './worksheet/deleteWorksheet.js';
 import { getGetWorksheetXmlTool } from './worksheet/getWorksheetXml.js';
@@ -62,8 +57,6 @@ export const desktopToolFactories = [
   getGetWorkbookXmlTool,
   getApplyWorkbookTool,
   getActivateSheetTool,
-  getListWorksheetsTool,
-  getListDashboardsTool,
   getGetWorksheetXmlTool,
   getApplyWorksheetTool,
   getDeleteWorksheetTool,
@@ -102,9 +95,6 @@ export const desktopToolFactories = [
   getSummaryDataTool,
   exportWorksheetImageTool,
   exportDashboardImageTool,
-  getWorkbookInventoryTool,
-  getListWorkbookDatasourcesTool,
-  getListSiteDatasourcesTool,
   getAppInfoTool,
   getValidateWorksheetXmlTool,
   getValidateWorkbookXmlTool,

@@ -214,7 +214,7 @@ export const getDeleteWorksheetTool = (
                 removal.worksheets.length > 0
                   ? `Existing worksheets: ${removal.worksheets.map((n) => `"${n}"`).join(', ')}.`
                   : 'The workbook has no worksheets.',
-                'Use list-worksheets to see the current sheet names.',
+                'Use desktop-read (method: worksheets) to see the current sheet names.',
               ].join(' '),
             ).toErr();
           }

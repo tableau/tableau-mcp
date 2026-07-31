@@ -44,7 +44,7 @@ class ActivateSheetNotFoundError extends McpToolError {
       availableSheets.length > 0
         ? `Available sheets: ${availableSheets.map((name) => `"${name}"`).join(', ')}.`
         : 'The workbook has no activatable worksheets or dashboards.',
-      'Use list-worksheets or list-dashboards to confirm the current names.',
+      'Use desktop-read (method: worksheets or dashboards) to confirm the current names.',
     ].join(' ');
     super({
       type: 'sheet-not-found',

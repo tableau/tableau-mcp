@@ -144,10 +144,9 @@ export const DESKTOP_ROUTE_TABLE: readonly DesktopInstructionEntry[] = [
     id: 'edit-in-place',
     trigger: 'current/existing sheet/chart/view/dashboard',
     action:
-      'edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort ONLY, add-field + apply-worksheet for a color/size/detail or rows/cols field, or an author-* tool; a NEW chart here = bind-template with target_worksheet. Never create new sheets unless asked.',
+      'edit in place: resolve target (exact name else desktop-read method:worksheets/dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort ONLY, add-field + apply-worksheet for a color/size/detail or rows/cols field, or an author-* tool; a NEW chart here = bind-template with target_worksheet. Never create new sheets unless asked.',
     toolSequence: [
-      'list-worksheets',
-      'list-dashboards',
+      'desktop-read',
       'ask-user',
       'refine-worksheet',
       'add-field',

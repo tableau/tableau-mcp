@@ -56,8 +56,7 @@ describe('DESKTOP_ROUTE_TABLE', () => {
     expect(editInPlace?.action).toContain('apply-worksheet');
     expect(editInPlace?.action).toContain('color');
     expect(editInPlace?.toolSequence).toEqual([
-      'list-worksheets',
-      'list-dashboards',
+      'desktop-read',
       'ask-user',
       'refine-worksheet',
       'add-field',
