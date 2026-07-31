@@ -29,6 +29,30 @@ export const publishedWorkbookSchema = z
       })
       .passthrough()
       .optional(),
+    // The views the server materialized for the freshly published workbook. A successful
+    // single-request publish returns them inline (see the REST publish_workbook reference's
+    // `<views>` block). The first view's `contentUrl` is
+    // what toPublishResult turns into the canonical `url` (the workbook's opening sheet).
+    views: z
+      .object({
+        // `.optional()` on the inner array too — not just the outer object — so a present-but-empty
+        // `<views/>` element (view key absent) still parses. Honors this schema's leniency contract
+        // ("publishing never fails validation over a view attribute we don't read"); the consumer
+        // reads it as `published.views?.view?.find(...)` and falls back to the workbook URL.
+        view: z
+          .array(
+            z
+              .object({
+                id: z.string().optional(),
+                name: z.string().optional(),
+                contentUrl: z.string().optional(),
+              })
+              .passthrough(),
+          )
+          .optional(),
+      })
+      .passthrough()
+      .optional(),
   })
   .passthrough();
 

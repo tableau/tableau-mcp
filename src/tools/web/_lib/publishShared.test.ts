@@ -75,6 +75,74 @@ describe('toPublishResult', () => {
     expect(result.webpageUrl).toBe('https://test.tableau.com/#/workbooks/wb-123');
   });
 
+  it('links `url` to the first view (opening sheet) when the publish response carries views', () => {
+    const result = toPublishResult(
+      published({
+        views: {
+          view: [
+            { id: 'v1', name: 'Overview', contentUrl: 'MyViz/sheets/Overview' },
+            { id: 'v2', name: 'Detail', contentUrl: 'MyViz/sheets/Detail' },
+          ],
+        },
+      } as Partial<PublishedWorkbook>),
+      { location: 'project', id: 'proj-1', name: 'Default' },
+      'https://test.tableau.com',
+      'tc25',
+    );
+    // /sheets/ is stripped and the named-site route is used; NOT the workbook Views-tab URL.
+    expect(result.url).toBe('https://test.tableau.com/#/site/tc25/views/MyViz/Overview');
+    expect(result.webpageUrl).toBe('https://test.tableau.com/#/workbooks/wb-123');
+  });
+
+  it('uses the default-site view route when siteName is empty/Default', () => {
+    const result = toPublishResult(
+      published({
+        views: { view: [{ id: 'v1', name: 'Overview', contentUrl: 'MyViz/sheets/Overview' }] },
+      } as Partial<PublishedWorkbook>),
+      { location: 'project', id: 'proj-1', name: 'Default' },
+      'https://test.tableau.com',
+      '',
+    );
+    expect(result.url).toBe('https://test.tableau.com/#/views/MyViz/Overview');
+  });
+
+  it('skips views with no contentUrl and picks the first usable one', () => {
+    const result = toPublishResult(
+      published({
+        views: {
+          view: [
+            { id: 'v0', name: 'Empty' },
+            { id: 'v1', name: 'Overview', contentUrl: 'MyViz/sheets/Overview' },
+          ],
+        },
+      } as Partial<PublishedWorkbook>),
+      { location: 'project', id: 'proj-1' },
+      'https://test.tableau.com',
+      'tc25',
+    );
+    expect(result.url).toBe('https://test.tableau.com/#/site/tc25/views/MyViz/Overview');
+  });
+
+  it('falls back to the workbook Views tab when views are present but lack a contentUrl', () => {
+    const result = toPublishResult(
+      published({ views: { view: [{ id: 'v0', name: 'Empty' }] } } as Partial<PublishedWorkbook>),
+      { location: 'project', id: 'proj-1' },
+      'https://test.tableau.com',
+      'tc25',
+    );
+    expect(result.url).toBe('https://test.tableau.com/#/workbooks/wb-123/views');
+  });
+
+  it('falls back to the workbook Views tab when no serverOrigin is available to build a view URL', () => {
+    const result = toPublishResult(
+      published({
+        views: { view: [{ id: 'v1', name: 'Overview', contentUrl: 'MyViz/sheets/Overview' }] },
+      } as Partial<PublishedWorkbook>),
+      { location: 'project', id: 'proj-1' },
+    );
+    expect(result.url).toBe('https://test.tableau.com/#/workbooks/wb-123/views');
+  });
+
   it('leaves `url` undefined when the server returned no webpageUrl', () => {
     const result = toPublishResult(published({ webpageUrl: undefined }), {
       location: 'project',

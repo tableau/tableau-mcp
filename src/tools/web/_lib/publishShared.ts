@@ -7,6 +7,7 @@ import { PublishedWorkbook } from '../../../sdks/tableau/methods/publishingMetho
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { isAxiosError } from '../../../utils/axios.js';
 import { TableauWebRequestHandlerExtra } from '../toolContext.js';
+import { constructViewWebUrl } from '../utils/viewUrlUtils.js';
 
 // The single-request publish endpoint accepts files up to 64 MB. Larger files require the File
 // Upload session flow, which is not implemented yet — we fail fast with a clear message instead of
@@ -24,10 +25,11 @@ export type ResolvedProject = { id: string; name?: string };
 type PublishResultBase = {
   id: string;
   name: string;
-  // The canonical clickable workbook URL — bind links (prose or a UI card's href) to this. It is
-  // the server's webpageUrl with the `/views` segment appended so it lands on the workbook's Views
-  // tab (the bare .../#/workbooks/{id} page is not a reliable landing route); omitted when the
-  // server returned no webpageUrl. See toPublishResult. The raw server value stays on `webpageUrl`.
+  // The canonical clickable URL — bind links (prose or a UI card's href) to this. Prefers a direct
+  // link to the workbook's first materialized view (its opening sheet); falls back to the workbook's
+  // Views tab (webpageUrl + `/views`) when the publish response carried no usable view contentUrl.
+  // Omitted (never fabricated) when neither is available. See toPublishResult. The raw server value
+  // stays on `webpageUrl`.
   url?: string;
   contentUrl?: string;
   webpageUrl?: string;
@@ -176,8 +178,9 @@ export function emitPublishAudit(
 // The server's workbook webpageUrl (e.g. .../#/workbooks/19) points at the workbook page; the bare
 // route is not a reliable landing target, so we append the `/views` segment to open the workbook's
 // Views tab instead. This is a deterministic, site-path-agnostic transform — we only append a fixed
-// segment, never fabricate an id or a per-sheet /views/{sheet} path (which we genuinely cannot build
-// post-publish: the publish response carries no views). Idempotent and tolerant of a trailing slash.
+// segment, never fabricate an id. Used as the FALLBACK in toPublishResult when the publish response
+// carried no usable view contentUrl to build a direct per-view URL from. Idempotent and tolerant of
+// a trailing slash.
 export function toWorkbookViewsUrl(webpageUrl: string): string {
   const trimmed = webpageUrl.replace(/\/+$/, '');
   return trimmed.endsWith('/views') ? trimmed : `${trimmed}/views`;
@@ -203,18 +206,31 @@ export function rebaseUrlOrigin(rawUrl: string, serverOrigin: string | undefined
   }
 }
 
-// Map the SDK's PublishedWorkbook onto the tool result for the resolved `target`. `url` is the raw
-// webpageUrl rebased onto the configured SERVER origin and pointed at the Views tab; `webpageUrl`
-// keeps the raw value. Both are omitted (never fabricated) when the server returned no webpageUrl.
+// Map the SDK's PublishedWorkbook onto the tool result for the resolved `target`. `url` is the
+// canonical clickable link: we prefer a direct link to the workbook's first materialized view (its
+// opening sheet), built from that view's contentUrl against the configured SERVER origin + site —
+// this lands the user on rendered content instead of the workbook's Views-tab index. When the
+// publish response carries no usable view contentUrl (or we have no origin to build against) we fall
+// back to the workbook Views tab (webpageUrl rebased onto the SERVER origin). `webpageUrl` always
+// keeps the raw server value. `url` is omitted (never fabricated) when neither source is available.
+// A view URL needs a concrete origin, so `serverOrigin` gates it; `siteName` selects the site path
+// ('' / 'Default' → the default-site route).
 export function toPublishResult(
   published: PublishedWorkbook,
   target: PublishTarget,
   serverOrigin?: string,
+  siteName?: string,
 ): PublishResult {
-  const url =
+  const firstView = published.views?.view?.find((view) => view.contentUrl);
+  const viewUrl =
+    serverOrigin && firstView?.contentUrl
+      ? constructViewWebUrl(serverOrigin, siteName ?? '', firstView.contentUrl)
+      : undefined;
+  const workbookUrl =
     published.webpageUrl !== undefined
       ? toWorkbookViewsUrl(rebaseUrlOrigin(published.webpageUrl, serverOrigin))
       : undefined;
+  const url = viewUrl ?? workbookUrl;
   const base: PublishResultBase = {
     id: published.id,
     name: published.name,

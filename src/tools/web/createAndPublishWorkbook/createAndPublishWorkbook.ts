@@ -112,8 +112,9 @@ preflight actually ran; it does not replace human consent.
 - \`overwrite\` (optional) – Overwrite an existing workbook of the same name. Defaults to false.
 
 **Result:** on success the result includes a \`url\` field — the canonical link to the published
-workbook — plus the package \`digest\` for traceability. When you surface a link to the user, copy
-\`url\` **verbatim**: do not rewrite or shorten it, never substitute the host (e.g. a placeholder
+workbook's first view (its opening sheet), falling back to the workbook's Views tab if the server
+returned no view — plus the package \`digest\` for traceability. When you surface a link to the user,
+copy \`url\` **verbatim**: do not rewrite or shorten it, never substitute the host (e.g. a placeholder
 like \`your-tableau-server\`), and preserve the \`#/\` routing. If \`url\` is absent, do not invent one —
 report the workbook \`name\` and \`id\` instead.
 `.trim(),
@@ -280,7 +281,8 @@ report the workbook \`name\` and \`id\` instead.
                 return new Ok({
                   // Rebase the returned link onto the configured SERVER origin: some servers
                   // advertise an internal gateway host/IP in webpageUrl that the caller can't reach.
-                  ...toPublishResult(published, target, getConfig().server),
+                  // Pass the site name so `url` can resolve to the first view's per-sheet route.
+                  ...toPublishResult(published, target, getConfig().server, extra.getSiteName()),
                   warnings,
                   validationId: args.validationId,
                   digest,
