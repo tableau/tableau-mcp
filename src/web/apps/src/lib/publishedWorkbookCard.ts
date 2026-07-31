@@ -2,7 +2,7 @@ import type { App } from '@modelcontextprotocol/ext-apps';
 import { z } from 'zod';
 
 import OPEN_ARROW_SVG from '../assets/open-arrow.svg?raw';
-import SPARKLE_SVG from '../assets/tableau-sparkle.svg?raw';
+import TABLEAU_LOGO_SVG from '../assets/tableau-logo-color.svg?raw';
 import { TABLEAU_VIZ_CONTAINER_ID } from './embedTableauViz.js';
 
 // A small inline checkmark for the "Published" badge. Static, build-time constant — never user
@@ -49,8 +49,8 @@ export function isPublishedWorkbookResult(value: unknown): value is PublishedWor
  * `href` navigation is the fallback. When `url` is absent (a successful publish with no
  * `webpageUrl`), the card renders as a plain, non-interactive container — still naming the workbook
  * and, if known, its id — rather than a link that would 404. All user-derived text (workbook name)
- * is set with `textContent`; the only innerHTML is the static sparkle/arrow/check SVG constants —
- * never user input.
+ * is set with `textContent`; the only raw-HTML insertions are the static Tableau-logo/arrow/check
+ * SVG constants — never user input.
  *
  * @param app - The MCP App instance (for host-mediated link opening)
  * @param data - The validated published-workbook result
@@ -92,11 +92,11 @@ export function renderPublishedWorkbookCard(app: App, data: PublishedWorkbookRes
     card.setAttribute('aria-label', `Published workbook ${data.name}`);
   }
 
-  // Left: sparkle tile (static SVG, safe innerHTML).
+  // Left: Tableau color-logo tile (static SVG constant).
   const logo = document.createElement('div');
   logo.className = 'pub-card-logo';
   logo.setAttribute('aria-hidden', 'true');
-  logo.innerHTML = SPARKLE_SVG;
+  logo.insertAdjacentHTML('afterbegin', TABLEAU_LOGO_SVG);
 
   // Middle: workbook name + a "✓ Published · <project>" meta row.
   const body = document.createElement('div');
@@ -133,15 +133,15 @@ export function renderPublishedWorkbookCard(app: App, data: PublishedWorkbookRes
   meta.append(badge, dot, project);
   body.append(title, meta);
 
-  // Right: "Open ↗" affordance (static arrow SVG) when there is a link to open. When there is no
-  // `url`, show the workbook id instead (if known) so the card still gives the user something
-  // useful to reference — never a broken/dead "Open" affordance.
+  // Right: "Open in Tableau ↗" affordance (static arrow SVG) when there is a link to open. When
+  // there is no `url`, show the workbook id instead (if known) so the card still gives the user
+  // something useful to reference — never a broken/dead "Open" affordance.
   let trailing: HTMLElement | undefined;
   if (hasUrl) {
     trailing = document.createElement('span');
     trailing.className = 'pub-card-open';
     const openText = document.createElement('span');
-    openText.textContent = 'Open';
+    openText.textContent = 'Open in Tableau';
     const arrow = document.createElement('span');
     arrow.className = 'pub-card-arrow';
     arrow.setAttribute('aria-hidden', 'true');

@@ -106,10 +106,6 @@ tableau-viz {
   color: #5a6b7b;
 }
 
-/* Published-workbook result card (create-and-publish-workbook). When the result has a `url` the
-   whole card is one clickable link (an <a>): sparkle tile · name + "✓ Published · <project>" ·
-   "Open ↗". When the publish succeeded without a `url`, the card renders as a plain <div> (no
-   hover/focus affordance) showing the same name/project plus the workbook id in place of "Open". */
 .pub-card {
   display: flex;
   align-items: center;
@@ -155,8 +151,8 @@ a.pub-card:focus-visible {
 }
 
 .pub-card-logo svg {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
 }
 
 .pub-card-body {
@@ -224,6 +220,7 @@ a.pub-card:focus-visible {
   font-size: 13px;
   font-weight: 600;
   color: #1f6feb;
+  white-space: nowrap;
 }
 
 .pub-card-arrow svg {
