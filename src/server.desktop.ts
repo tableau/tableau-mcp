@@ -25,7 +25,6 @@ import { buildDesktopInstructions } from './desktop/routeTable.js';
 import { SessionManager } from './desktop/sessionManager.js';
 import { log } from './logging/logger.js';
 import { ClientInfo, Server } from './server.js';
-import { getCheckForUserChangesTool } from './tools/desktop/session/checkForUserChanges.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { DesktopToolName } from './tools/desktop/toolName.js';
@@ -296,16 +295,10 @@ export class DesktopMcpServer extends Server {
 
   protected _getToolsToRegister = async (): Promise<Array<DesktopTool<any>>> => {
     const config = getDesktopConfig();
-    const excluded = new Set<(server: DesktopMcpServer) => DesktopTool<any>>();
-
-    // check-for-user-changes needs the legacy events endpoint, which the External Client API does
-    // not expose; don't advertise a tool that can only return an error.
-    excluded.add(getCheckForUserChangesTool);
-
     const factories = [
       ...desktopToolFactories,
       ...(config.episodeEventsEnabled ? episodeToolFactories : []),
-    ].filter((factory) => !excluded.has(factory));
+    ];
     const allTools = factories.map((toolFactory) => toolFactory(this));
     return selectToolsForProfile(allTools, config.toolProfile);
   };

@@ -5,7 +5,7 @@ import {
   ExecuteCommandResponseError,
   GetCommandStatusResponse,
   GetEventsResponse,
-} from '../../sdks/desktop/agentApi/types.js';
+} from '../externalApi/executorResponseTypes.js';
 
 type WithAbortSignal = {
   signal: AbortSignal;
