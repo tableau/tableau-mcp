@@ -35,9 +35,16 @@ export const EXTERNAL_API_ROUTES = {
   siteDatasources: '/v0/site/datasources',
   siteWorkbooks: '/v0/site/workbooks',
   invokeCommand: '/v0/app:invokeCommand',
+  operations: '/v0/operations',
+  operationById: '/v0/operations/{id}',
   openapi: '/openapi.json',
   oauthProtectedResource: '/.well-known/oauth-protected-resource',
 } as const;
+
+/** Builds the concrete poll URL for one operation id. */
+export function buildOperationByIdRoute(operationId: string): string {
+  return `${EXTERNAL_API_ROUTES.operations}/${encodeURIComponent(operationId)}`;
+}
 
 /** Response headers on `GET /v0/workbook/document`. Matched case-insensitively. */
 export const HEADER_APPLICATION_VERSION = 'x-tableau-application-version';
@@ -168,11 +175,11 @@ export const operationWarningSchema = z
 export type OperationWarning = z.infer<typeof operationWarningSchema>;
 
 /**
- * Operation envelope returned by `POST /v0/workbook/document` and
- * `POST /v0/app:invokeCommand`. `id`/`kind`/`state` are required per the spec.
+ * Operation envelope returned by `POST /v0/workbook/document`, `POST /v0/app:invokeCommand`,
+ * and the `GET /v0/operations/{id}` poll route. `id`/`kind`/`state` are required per the spec.
  * `result` is present only on SUCCEEDED envelopes with non-null command output as of
- * External Client API apiVersion 0.1.1; 0.1.0 instances legitimately
- * omit it on success.
+ * External Client API apiVersion 0.1.1; 0.1.0 instances legitimately omit it on success.
+ * `updatedAt` is required as of apiVersion 0.2.0.
  */
 export const operationEnvelopeSchema = z
   .object({
@@ -183,10 +190,19 @@ export const operationEnvelopeSchema = z
     error: operationErrorSchema.optional(),
     warnings: z.array(operationWarningSchema).optional(),
     createdAt: z.string().optional(),
+    updatedAt: z.string().optional(),
     completedAt: z.string().optional(),
   })
   .passthrough();
 export type OperationEnvelope = z.infer<typeof operationEnvelopeSchema>;
+
+/** Operation list returned by `GET /v0/operations`, most-recent-first. */
+export const operationListSchema = z
+  .object({
+    operations: z.array(operationEnvelopeSchema).optional(),
+  })
+  .passthrough();
+export type OperationList = z.infer<typeof operationListSchema>;
 
 /** Worksheet item returned by `GET /v0/workbook/worksheets`. */
 export const worksheetItemSchema = z
@@ -405,4 +421,12 @@ export type ExternalApiError =
   | { type: 'unauthorized'; status: number }
   | { type: 'problem'; status: number; code?: string; title?: string; detail?: string }
   | { type: 'invalid-response'; error: unknown }
-  | { type: 'network'; error: unknown; aborted?: boolean };
+  | { type: 'network'; error: unknown; aborted?: boolean }
+  // A typed read overflowed the sync window; the poll body carries no payload for reads, so retrieval fails.
+  | { type: 'read-overflowed'; operationId?: string }
+  // 503: retry the whole request (there is no operation to poll).
+  | { type: 'operation-pending'; retryAfterSeconds?: number }
+  // Blocked on a human; a poll can never clear it.
+  | { type: 'awaiting-user'; operationId?: string }
+  | { type: 'operation-expired'; operationId?: string }
+  | { type: 'poll-timeout'; operationId?: string };

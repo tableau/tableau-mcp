@@ -27,6 +27,15 @@ export type MockOverride = {
   contentType?: string;
   body?: string;
   hang?: boolean;
+  /** Extra response headers (e.g. `Location`, `Retry-After`) — the async-dispatch 202 carries these. */
+  headers?: Record<string, string>;
+};
+
+/** Successive `GET /v0/operations/{id}` responses; each poll advances one entry, the last repeats. */
+export type MockOperation = {
+  poll: Array<Record<string, unknown>>;
+  /** `Retry-After` (seconds) stamped on every poll response; omit for none. */
+  retryAfterSeconds?: number;
 };
 
 export type MockExternalApiServer = {
@@ -37,6 +46,12 @@ export type MockExternalApiServer = {
   setToken: (token: string) => void;
   /** Force a canned response for a `${METHOD} ${path}` key; pass undefined to clear. */
   setOverride: (key: string, override: MockOverride | undefined) => void;
+  /**
+   * Register an operation the `/v0/operations/{id}` poll route will serve. Pass undefined to
+   * make it a 404 `operation-not-found`. Combine with a 202 override on the dispatching route
+   * (Location → `/v0/operations/{id}`) to exercise the full 202 → poll → terminal path.
+   */
+  setOperation: (id: string, operation: MockOperation | undefined) => void;
   close: () => Promise<void>;
 };
 
@@ -237,6 +252,8 @@ export async function startMockExternalApiServer(
   const workbookXml = options.workbookXml ?? DEFAULT_WORKBOOK_XML;
   const requests: Array<RecordedRequest> = [];
   const overrides = new Map<string, MockOverride>();
+  const operations = new Map<string, MockOperation>();
+  const operationCursors = new Map<string, number>();
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const method = req.method ?? 'GET';
@@ -262,8 +279,37 @@ export async function startMockExternalApiServer(
       }
       res.writeHead(override.status, {
         'content-type': override.contentType ?? 'application/problem+json',
+        ...override.headers,
       });
       res.end(override.body ?? '');
+      return;
+    }
+
+    const operationByIdMatch = path.match(/^\/v0\/operations\/([^/]+)$/);
+    if (method === 'GET' && operationByIdMatch) {
+      const operationId = decodeURIComponent(operationByIdMatch[1]);
+      const operation = operations.get(operationId);
+      if (!operation || operation.poll.length === 0) {
+        sendProblem(res, 404, 'operation-not-found', `Operation not found: ${operationId}`);
+        return;
+      }
+      const cursor = operationCursors.get(operationId) ?? 0;
+      const state = operation.poll[Math.min(cursor, operation.poll.length - 1)];
+      operationCursors.set(operationId, cursor + 1);
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      if (operation.retryAfterSeconds !== undefined) {
+        headers['retry-after'] = String(operation.retryAfterSeconds);
+      }
+      res.writeHead(200, headers);
+      res.end(JSON.stringify(state));
+      return;
+    }
+
+    if (method === 'GET' && path === '/v0/operations') {
+      const all = [...operations.values()].flatMap((op) =>
+        op.poll.length > 0 ? [op.poll[op.poll.length - 1]] : [],
+      );
+      sendJson(res, 200, { operations: all });
       return;
     }
 
@@ -570,6 +616,14 @@ export async function startMockExternalApiServer(
         overrides.set(key, override);
       } else {
         overrides.delete(key);
+      }
+    },
+    setOperation: (id: string, operation: MockOperation | undefined): void => {
+      operationCursors.delete(id);
+      if (operation) {
+        operations.set(id, operation);
+      } else {
+        operations.delete(id);
       }
     },
     close: (): Promise<void> =>

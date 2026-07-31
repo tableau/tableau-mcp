@@ -517,8 +517,8 @@ function buildCommandStatus(
   outcome: RawOutcome,
   { namespace, command }: { namespace: string; command: string },
 ): Result<GetCommandStatusResponse, ExecuteCommandError> {
-  const state = outcome.state?.toLowerCase();
-  const failed = state === 'failed' || state === 'error' || outcome.envelopeError !== undefined;
+  const state = outcome.state?.toUpperCase();
+  const failed = state === 'FAILED' || state === 'CANCELLED' || outcome.envelopeError !== undefined;
 
   if (failed) {
     const tableauErrorCode = getTableauErrorCode(outcome.envelopeError);
@@ -530,6 +530,16 @@ function buildCommandStatus(
         recoverable: false,
         ...(tableauErrorCode ? { 'tableau-error-code': tableauErrorCode } : {}),
       },
+    });
+  }
+
+  // A non-terminal state reaching here means the client's poll did not resolve it — report it as
+  // still running, never as completed (the guard against the old false-success-on-202 bug).
+  if (state !== 'SUCCEEDED') {
+    return Ok({
+      command_id: outcome.operationId ?? `ext_${namespace}:${command}_${Date.now()}`,
+      status: state === 'QUEUED' ? 'queued' : 'running',
+      submitted_at: outcome.createdAt ?? new Date().toISOString(),
     });
   }
 
@@ -586,6 +596,50 @@ function mapClientError(
       return { type: 'invalid-response', error: error.error };
     case 'network':
       return mapNetworkFailure(error.error, pinnedPid, error.aborted);
+    case 'read-overflowed':
+      return {
+        type: 'command-failed',
+        error: {
+          code: 'read-overflowed',
+          message:
+            'The read exceeded the Desktop sync window and returned an async operation. ' +
+            'Retrieval of overflowed reads is not yet supported by this Desktop build — retry, ' +
+            'or narrow the read (fewer rows / a single sheet).',
+          recoverable: true,
+        },
+      };
+    case 'operation-pending':
+      return {
+        type: 'command-failed',
+        error: {
+          code: 'operation-pending',
+          message:
+            'Desktop is still preparing this read (a prerequisite lookup is in flight). Retry the request.',
+          recoverable: true,
+        },
+      };
+    case 'awaiting-user':
+      return {
+        type: 'command-failed',
+        error: {
+          code: 'awaiting-user',
+          message:
+            'The operation is blocked on a Tableau Desktop dialog and cannot complete over the API ' +
+            'until a person dismisses it.',
+          recoverable: false,
+        },
+      };
+    case 'operation-expired':
+      return {
+        type: 'command-timed-out',
+        error:
+          'The async operation expired before it completed (polled past the Desktop retention window).',
+      };
+    case 'poll-timeout':
+      return {
+        type: 'command-timed-out',
+        error: 'The async operation did not reach a terminal state within the poll deadline.',
+      };
     case 'no-instance':
       return {
         type: 'unknown',

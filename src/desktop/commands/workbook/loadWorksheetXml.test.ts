@@ -6,7 +6,7 @@ import { normalizeArray, parseXML } from '../../metadata/parser.js';
 import type { ParsedWindow } from '../../metadata/types.js';
 import { ToolExecutor } from '../../toolExecutor/toolExecutor.js';
 import * as validationRegistry from '../../validation/registry.js';
-import { loadWorksheetXml } from './loadWorksheetXml.js';
+import { loadWorksheetXml, verifyPostApplyWorksheetReadback } from './loadWorksheetXml.js';
 
 // Focus is a required argument at every write seam. Suites that are not about
 // navigation pass the disposition that dispatches nothing.
@@ -381,5 +381,66 @@ describe('loadWorksheetXml (External Client API transport)', () => {
       invariant(result.error.type === 'execute-command-error');
       expect(result.error.error).toEqual(error);
     }
+  });
+});
+
+describe('verifyPostApplyWorksheetReadback (async-settle poll)', () => {
+  const signal = new AbortController().signal;
+  const GEO = '[DS].[none:State:nk]';
+  const PROFIT = '[DS].[sum:Profit:qk]';
+
+  const worksheet = (withLod: boolean): string =>
+    '<worksheet name="Blank Map"><table>' +
+    '<panes><pane><mark class="Shape"/><encodings>' +
+    (withLod ? `<lod column="${GEO}"/>` : '') +
+    `<color column="${PROFIT}"/>` +
+    '</encodings></pane></panes>' +
+    `<rows>${GEO}</rows><cols>${PROFIT}</cols>` +
+    '</table></worksheet>';
+
+  const workbookDoc = (withLod: boolean): { xml: string } => ({
+    xml: `<workbook><worksheets>${worksheet(withLod)}</worksheets></workbook>`,
+  });
+
+  const listOk = (): ReturnType<typeof Ok> =>
+    Ok({ worksheets: [{ id: 'sheet-1', name: 'Blank Map' }] });
+
+  it('retries past a racing pre-apply read and passes once the apply settles', async () => {
+    const getWorksheetDocument = vi
+      .fn()
+      .mockResolvedValueOnce(Ok(workbookDoc(false)))
+      .mockResolvedValueOnce(Ok(workbookDoc(false)))
+      .mockResolvedValue(Ok(workbookDoc(true)));
+    const executor = {
+      listWorksheets: vi.fn().mockResolvedValue(listOk()),
+      getWorksheetDocument,
+    } as unknown as ToolExecutor;
+
+    const verification = await verifyPostApplyWorksheetReadback(
+      'Blank Map',
+      worksheet(true),
+      executor,
+      signal,
+    );
+
+    expect(verification.status).toBe('passed');
+    expect(getWorksheetDocument.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('reports a durable drop as failed after exhausting the poll budget', async () => {
+    const executor = {
+      listWorksheets: vi.fn().mockResolvedValue(listOk()),
+      getWorksheetDocument: vi.fn().mockResolvedValue(Ok(workbookDoc(false))),
+    } as unknown as ToolExecutor;
+
+    const verification = await verifyPostApplyWorksheetReadback(
+      'Blank Map',
+      worksheet(true),
+      executor,
+      signal,
+    );
+
+    expect(verification.status).toBe('failed');
+    expect(verification.findings.some((f) => f.severity === 'error')).toBe(true);
   });
 });

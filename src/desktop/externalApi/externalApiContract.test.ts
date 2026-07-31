@@ -80,12 +80,17 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(missing).toEqual([]);
     });
 
-    it('documents `result` as expected from apiVersion 0.1.1 even if the captured 0.1.0 spec omits it', () => {
+    it('documents `result` (0.1.1) and `updatedAt` (0.2.0) even if the captured 0.1.0 spec omits them', () => {
       const extras = declaredKeys(operationEnvelopeSchema).filter(
         (key) => !(key in (operation.properties ?? {})),
       );
-      const expectedExtras = operation.properties?.result ? [] : ['result'];
-      expect(extras).toEqual(expectedExtras);
+      // Both are declared ahead of the 0.1.0 fixture; each drops off this list once the spec
+      // (re-captured at 0.2.0) carries it. `result` lands at 0.1.1, `updatedAt` at 0.2.0.
+      const expectedExtras = [
+        ...(operation.properties?.result ? [] : ['result']),
+        ...(operation.properties?.updatedAt ? [] : ['updatedAt']),
+      ].sort();
+      expect(extras.sort()).toEqual(expectedExtras);
     });
 
     it('matches the spec required set exactly', () => {
@@ -204,6 +209,16 @@ describe('external client API contract (captured openapi fixture)', () => {
     // delete this assertion.
     it.each([EXTERNAL_API_ROUTES.worksheetImage, EXTERNAL_API_ROUTES.dashboardImage])(
       'image route %s is absent from the captured 0.1.0 fixture (dead-but-tested until re-capture)',
+      (route) => {
+        expect(Object.keys(spec.paths)).not.toContain(route);
+      },
+    );
+
+    // The async-dispatch poll routes ship at 0.2.0 (monolith #60234); the route-parity check is
+    // ours⊆spec, so a new spec path is never auto-covered. On re-capture at 0.2.0, MOVE these into
+    // the documented-routes it.each above and delete this assertion.
+    it.each([EXTERNAL_API_ROUTES.operations, EXTERNAL_API_ROUTES.operationById])(
+      'operations route %s is absent from the captured 0.1.0 fixture (0.2.0, wired ahead of re-capture)',
       (route) => {
         expect(Object.keys(spec.paths)).not.toContain(route);
       },
