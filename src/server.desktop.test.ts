@@ -485,16 +485,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'validate-worksheet-xml',
       'inject-template',
       'list-templates',
-      'list-site-workbooks',
+      // The grouped environment/inspection read dispatcher is a full-surface tool: the
+      // lean authoring profile keeps only the named reads the authoring hot path needs.
+      'desktop-read',
       'get-app-info',
-      'get-health',
-      'get-worksheet-info',
-      'list-storyboards',
-      'get-storyboard-xml',
-      'get-api-root',
-      'get-site-info',
-      'get-dashboard-info',
-      'get-storyboard-info',
       'list-knowledge-resources',
     ]) {
       expect(selected.map((t) => t.name)).not.toContain(banished);

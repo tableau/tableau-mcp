@@ -26,19 +26,12 @@ import { getAppInfoTool } from './data-source/getAppInfo.js';
 import { getSummaryDataTool } from './data-source/getSummaryData.js';
 import { getWorkbookInventoryTool } from './data-source/getWorkbookInventory.js';
 import { getListSiteDatasourcesTool } from './data-source/listSiteDatasources.js';
-import { getListSiteWorkbooksTool } from './data-source/listSiteWorkbooks.js';
 import { getListWorkbookDatasourcesTool } from './data-source/listWorkbookDatasources.js';
 import { getApplyStoryboardTool } from './external-api/applyStoryboard.js';
+import { getDesktopReadTool } from './external-api/desktopRead.js';
 import { exportDashboardImageTool } from './external-api/exportDashboardImage.js';
 import { exportWorksheetImageTool } from './external-api/exportWorksheetImage.js';
-import { getApiRootTool } from './external-api/getApiRoot.js';
-import { getDashboardInfoTool } from './external-api/getDashboardInfo.js';
-import { getHealthTool } from './external-api/getHealth.js';
-import { getSiteInfoTool } from './external-api/getSiteInfo.js';
-import { getStoryboardInfoTool } from './external-api/getStoryboardInfo.js';
 import { getStoryboardXmlTool } from './external-api/getStoryboardXml.js';
-import { getWorksheetInfoTool } from './external-api/getWorksheetInfo.js';
-import { getListStoryboardsTool } from './external-api/listStoryboards.js';
 import { getAddFieldTool } from './fields/addField.js';
 import { getListAvailableFieldsTool } from './fields/listAvailableFields.js';
 import { getListFieldsTool } from './fields/listFields.js';
@@ -107,22 +100,15 @@ export const desktopToolFactories = [
   getAuthorActionTool,
   getFormatLabelsTool,
   getAuthorParameterTool,
-  getHealthTool,
-  getWorksheetInfoTool,
-  getListStoryboardsTool,
+  getDesktopReadTool,
   getStoryboardXmlTool,
   getApplyStoryboardTool,
-  getApiRootTool,
-  getSiteInfoTool,
-  getDashboardInfoTool,
-  getStoryboardInfoTool,
   getSummaryDataTool,
   exportWorksheetImageTool,
   exportDashboardImageTool,
   getWorkbookInventoryTool,
   getListWorkbookDatasourcesTool,
   getListSiteDatasourcesTool,
-  getListSiteWorkbooksTool,
   getAppInfoTool,
   getValidateWorksheetXmlTool,
   getValidateWorkbookXmlTool,
