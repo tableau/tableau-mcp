@@ -274,7 +274,6 @@ describe('authorCalcTool', () => {
         }),
       ),
       applyWorkbookDocument,
-      getEvents: vi.fn(),
     };
 
     const result = await authorCalculationsInWorkbook({
@@ -324,7 +323,6 @@ describe('authorCalcTool', () => {
           }),
         ),
         applyWorkbookDocument,
-        getEvents: vi.fn(),
       };
 
       const result = await authorCalculationsInWorkbook({

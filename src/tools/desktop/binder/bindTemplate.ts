@@ -1473,7 +1473,6 @@ async function performAutoApply({
   executor,
   signal,
   bindMs,
-  eventsAnchor,
   schemaSummary,
   manifest,
   appliedDefault,
@@ -1487,7 +1486,6 @@ async function performAutoApply({
   executor: ExternalApiToolExecutor;
   signal: AbortSignal;
   bindMs: number;
-  eventsAnchor?: number;
   schemaSummary: SchemaSummary;
   manifest: TemplateManifest;
   appliedDefault?: AppliedDefault;
@@ -1500,38 +1498,6 @@ async function performAutoApply({
   incomplete?: boolean;
 }> {
   const { args } = res;
-
-  // ── Events-clean gate (W60 blind-spot #1) ────────────────────────
-  // Refuse to auto-apply over a workbook the USER touched after our read: the
-  // apply is whole-document last-writer-wins, so proceeding would silently
-  // revert their edits. Fallback keeps the bind (args intact) so the agent can
-  // re-get and re-apply deliberately. Gate is best-effort: no anchor (executor
-  // without event support) proceeds — noted for the Athena transport, whose
-  // events endpoint does not exist yet.
-  if (eventsAnchor !== undefined) {
-    const events = await executor.getEvents({ signal, sinceSequence: eventsAnchor });
-    if (events.isOk() && events.value.count > 0) {
-      return {
-        result: applyFallback(
-          base,
-          `user changed the workbook during the bind (${events.value.count} event(s) since read) — ` +
-            're-run bind-template for a fresh read',
-          // Events-dirty guidance DROPS the manual-apply alternative (P1-5): the bound args
-          // were computed against the pre-edit workbook, so re-applying them would revert
-          // the user's changes — the only safe recovery is a fresh read via bind-template.
-          appendWaterfallDiscoveryGuidance(
-            'Server-side auto-apply was refused: the user changed the workbook after it was read ' +
-              `(${events.value.count} event(s) since read). Re-run bind-template so it reads the ` +
-              'current workbook — do NOT re-apply the returned args, they were computed against ' +
-              'the pre-edit workbook and would revert their changes.',
-            res,
-            schemaSummary,
-          ),
-        ),
-        failureDisposition: 'pre-dispatch',
-      };
-    }
-  }
 
   // ── Inject leg (shared core) ─────────────────────────────────────
   const injectStart = Date.now();
@@ -2091,28 +2057,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
           // subsumes the live workbook read since server-side they are one step.
           const bindStart = Date.now();
 
-          // Events-clean anchor (W60 blind-spot #1 / adversary P1-4) — captured BEFORE
-          // the read. The apply is whole-document last-writer-wins, so a user edit made
-          // in Desktop between the read and the auto-apply would be silently reverted.
-          // Anchoring AFTER the read (the original bug) left any edit landing in the
-          // (read, anchor] window with sequence <= anchor, excluded by the strict `since`
-          // filter → count 0 → silently overwritten. Anchoring before the read makes that
-          // window checkable; worst case is now an over-cautious refusal (safe fallback),
-          // never a silent overwrite.
-          //
-          // Caveat verified (offline, no live Desktop): getWorkbookXml is a document
-          // serialization/read that emits no counted document event. Counted events are user `doc:*`
-          // mutations (see checkForUserChanges tests), so a pre-read anchor does not
-          // false-trip the gate. Best-effort: an executor without event support proceeds
-          // rather than disabling auto_apply (Athena residual).
-          let eventsAnchor: number | undefined;
-          if (auto_apply === true) {
-            const anchor = await executor.getEvents({ signal: extra.signal });
-            if (anchor.isOk()) {
-              eventsAnchor = anchor.value.latest_sequence;
-            }
-          }
-
           const xmlResult = await getWorkbookXml({ executor, signal: extra.signal });
           if (xmlResult.isErr()) {
             return new DesktopCommandExecutionError(xmlResult.error).toErr();
@@ -2408,14 +2352,7 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
               signature: sheetSignature,
               workbookXml,
             });
-            const changedSinceBuild =
-              remembered?.eventSequence !== undefined &&
-              eventsAnchor !== undefined &&
-              eventsAnchor > remembered.eventSequence;
-            if (changedSinceBuild) {
-              sessionRouteState.forgetAppliedSheet(resolvedSession, sheetSignature);
-            }
-            if (remembered !== undefined && !changedSinceBuild) {
+            if (remembered !== undefined) {
               return new Ok(reusedSheetResult(remembered, authoredCalcCaptions));
             }
           }
@@ -2430,7 +2367,6 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             executor,
             signal: extra.signal,
             bindMs,
-            eventsAnchor,
             schemaSummary,
             manifest,
             appliedDefault,
@@ -2446,21 +2382,10 @@ export const getBindTemplateTool = (server: DesktopMcpServer): DesktopTool<typeo
             appliedResult.applied === true &&
             typeof appliedResult.sheet_name === 'string'
           ) {
-            try {
-              const postApplyEvents = await executor.getEvents({ signal: extra.signal });
-              const postApplyEventSequence = postApplyEvents.isOk()
-                ? postApplyEvents.value.latest_sequence
-                : undefined;
-              sessionRouteState.recordAppliedSheet(resolvedSession, sheetSignature, {
-                sheetName: appliedResult.sheet_name,
-                template: res.args.template_name,
-                ...(postApplyEventSequence !== undefined
-                  ? { eventSequence: postApplyEventSequence }
-                  : {}),
-              });
-            } catch {
-              /* fail-open */
-            }
+            sessionRouteState.recordAppliedSheet(resolvedSession, sheetSignature, {
+              sheetName: appliedResult.sheet_name,
+              template: res.args.template_name,
+            });
           }
           recordBoundRecoveryAfterFinalResult({
             session: resolvedSession,

@@ -4,7 +4,6 @@ import { z } from 'zod';
 import {
   ExecuteCommandResponseError,
   GetCommandStatusResponse,
-  GetEventsResponse,
 } from '../externalApi/executorResponseTypes.js';
 
 type WithAbortSignal = {
@@ -22,10 +21,6 @@ export type ExecuteCommandArgs<Z extends z.ZodTypeAny | undefined = undefined> =
   namespace: 'tabui' | 'tabdoc';
   args?: Record<string, any>;
   schema?: Z;
-} & WithAbortSignal;
-
-export type GetEventsArgs = {
-  sinceSequence?: number;
 } & WithAbortSignal;
 
 export type ExecuteCommandError =
@@ -64,5 +59,4 @@ export abstract class ToolExecutor {
     xml: string,
     signal: AbortSignal,
   ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>>;
-  abstract getEvents(args: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>>;
 }

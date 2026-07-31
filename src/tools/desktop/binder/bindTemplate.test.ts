@@ -1838,10 +1838,6 @@ function setupAutoApplyMocks({
   dispatch = Ok({ command_id: 'cmd-1', status: 'completed', submitted_at: '', result: {} }),
   activationDispatch,
   workbookReads = [XML],
-  // Events-clean gate (W60): 0 = clean workbook (gate passes); N>0 = the user touched
-  // the workbook between read and apply; 'unsupported' = executor without events
-  // (gate is best-effort and must NOT block auto_apply).
-  userEventsDuringBind = 0,
 }: {
   bind?: BinderResult;
   fastPathEligible?: boolean;
@@ -1850,11 +1846,9 @@ function setupAutoApplyMocks({
   dispatch?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
   activationDispatch?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
   workbookReads?: string[];
-  userEventsDuringBind?: number | 'unsupported';
 } = {}): {
   executeCommand: ReturnType<typeof vi.fn>;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
-  getEvents: ReturnType<typeof vi.fn>;
   getExecutor: ReturnType<typeof vi.fn>;
 } {
   let liveXml = workbookReads[0] ?? XML;
@@ -1892,26 +1886,11 @@ function setupAutoApplyMocks({
     }
     return dispatch;
   });
-  const getEvents =
-    userEventsDuringBind === 'unsupported'
-      ? vi.fn().mockResolvedValue(Err('events unsupported on this transport'))
-      : vi
-          .fn()
-          // 1st: pre-bind anchor. 2nd: pre-apply cleanliness. 3rd: post-apply reuse anchor.
-          .mockResolvedValueOnce(Ok({ events: [], latest_sequence: 41, count: 0 }))
-          .mockResolvedValue(
-            Ok({
-              events: Array.from({ length: userEventsDuringBind }, (_, i) => ({ id: i })),
-              latest_sequence: 41 + userEventsDuringBind,
-              count: userEventsDuringBind,
-            }),
-          );
   const getExecutor = vi.fn().mockResolvedValue({
     executeCommand,
     applyWorkbookDocument,
-    getEvents,
   });
-  return { executeCommand, applyWorkbookDocument, getEvents, getExecutor };
+  return { executeCommand, applyWorkbookDocument, getExecutor };
 }
 
 // Route per-sheet readback through the whole-workbook fallback used by older Desktop hosts.
@@ -1924,12 +1903,10 @@ const routeMissing = (): ReturnType<typeof Err> =>
 function readbackExecutor(base: {
   executeCommand: ReturnType<typeof vi.fn>;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
-  getEvents: ReturnType<typeof vi.fn>;
 }): TableauDesktopToolContext['getExecutor'] {
   return vi.fn().mockResolvedValue({
     executeCommand: base.executeCommand,
     applyWorkbookDocument: base.applyWorkbookDocument,
-    getEvents: base.getEvents,
     listWorksheets: vi.fn(routeMissing),
   });
 }
@@ -1938,7 +1915,6 @@ function summaryRowsExecutor(
   base: {
     executeCommand: ReturnType<typeof vi.fn>;
     applyWorkbookDocument: ReturnType<typeof vi.fn>;
-    getEvents: ReturnType<typeof vi.fn>;
   },
   summary:
     | { columns: Array<Record<string, unknown>>; rows: unknown[][] }
@@ -1958,7 +1934,6 @@ function summaryRowsExecutor(
   return vi.fn().mockResolvedValue({
     executeCommand: base.executeCommand,
     applyWorkbookDocument: base.applyWorkbookDocument,
-    getEvents: base.getEvents,
     listWorksheets: vi.fn().mockResolvedValue(
       Ok({
         worksheets: [
@@ -2626,8 +2601,8 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect((body.guidance as string).length).toBeLessThan(400);
   });
 
-  it('auto_apply=true applies a validated Call-2 proposal bind with the events anchor', async () => {
-    const { applyWorkbookDocument, getEvents, getExecutor } = setupAutoApplyMocks({
+  it('auto_apply=true applies a validated Call-2 proposal bind', async () => {
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       bind: boundViaProposalResult,
     });
 
@@ -2646,14 +2621,6 @@ describe('bindTemplateTool auto_apply gate', () => {
     expect(body.used_llm).toBeUndefined();
     expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(1);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-    expect(getEvents).toHaveBeenCalledTimes(3);
-    expect(getEvents).toHaveBeenNthCalledWith(2, {
-      signal: expect.any(AbortSignal),
-      sinceSequence: 41,
-    });
-    expect(getEvents).toHaveBeenNthCalledWith(3, {
-      signal: expect.any(AbortSignal),
-    });
   });
 
   it('completes the P&L propose to valid Call 2 to applied sequence', async () => {
@@ -3230,7 +3197,7 @@ describe('bindTemplateTool auto_apply gate', () => {
 
   it('authors inline calcs before binding and auto-applies against the readback workbook', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
-    const { applyWorkbookDocument, getEvents, getExecutor } = setupAutoApplyMocks({
+    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
       workbookReads: [CALC_BASE_XML, CALC_READBACK_XML],
     });
 
@@ -3255,14 +3222,6 @@ describe('bindTemplateTool auto_apply gate', () => {
       expect.objectContaining({ workbookXml: CALC_READBACK_XML }),
     );
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
-    expect(getEvents).toHaveBeenCalledTimes(3);
-    expect(getEvents).toHaveBeenNthCalledWith(2, {
-      signal: expect.any(AbortSignal),
-      sinceSequence: 41,
-    });
-    expect(getEvents).toHaveBeenNthCalledWith(3, {
-      signal: expect.any(AbortSignal),
-    });
   });
 
   it('resolves loose calc references and percent-formats a ratio in the same bind call', async () => {
@@ -3971,101 +3930,6 @@ describe('bindTemplateTool auto_apply target_worksheet (e1/s7 stray-sheet class)
   });
 });
 
-describe('bindTemplateTool auto_apply — events-clean gate (W60 blind-spot #1)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(externalDiscovery.discoverInstances).mockReturnValue([]);
-  });
-
-  it('refuses to auto-apply over a workbook the user touched mid-bind (falls back, bind intact)', async () => {
-    const { executeCommand, getExecutor } = setupAutoApplyMocks({ userEventsDuringBind: 3 });
-    const result = await getToolResult({
-      session: '1',
-      ask: 'bar chart of Sales by Region',
-      auto_apply: true,
-      getExecutor,
-    });
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
-    expect(body.applied).toBe(false);
-    expect(String(body.apply_error)).toMatch(/user changed the workbook.*3 event/);
-    expect(body.args).toBeDefined(); // the bind survives — agent can re-get and retry
-    expect(executeCommand).not.toHaveBeenCalled(); // the apply dispatch was suppressed
-  });
-
-  it('anchors the events sequence BEFORE reading the workbook (P1 race fix)', async () => {
-    // The self-review / adversary P1-4 finding: with the anchor captured AFTER the read,
-    // a user edit landing in the (read, anchor] window gets sequence <= anchor and is
-    // excluded by the strict `since` filter → silently reverted by the whole-document
-    // apply. Pin the real call order (not independent mocks): the anchor getEvents must
-    // fire before getWorkbookXml.
-    const { getEvents, getExecutor } = setupAutoApplyMocks({ userEventsDuringBind: 0 });
-    await getToolResult({
-      session: '1',
-      ask: 'bar chart of Sales by Region',
-      auto_apply: true,
-      getExecutor,
-    });
-
-    const anchorOrder = getEvents.mock.invocationCallOrder[0];
-    const readOrder = vi.mocked(getWorkbookXmlModule.getWorkbookXml).mock.invocationCallOrder[0];
-    expect(anchorOrder).toBeLessThan(readOrder);
-  });
-
-  it('refuses without inviting a manual re-apply of the stale pre-edit args (P1-5)', async () => {
-    // events-dirty branch: the returned args were computed against the pre-edit
-    // workbook. Guidance must NOT offer "apply the returned args manually" — that would
-    // reopen the exact race the gate just avoided. Re-running bind-template (fresh read)
-    // is the only safe option here.
-    const { getExecutor } = setupAutoApplyMocks({ userEventsDuringBind: 2 });
-    const result = await getToolResult({
-      session: '1',
-      ask: 'bar chart of Sales by Region',
-      auto_apply: true,
-      getExecutor,
-    });
-    invariant(result.content[0].type === 'text');
-    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
-    expect(body.applied).toBe(false);
-    expect(String(body.apply_error)).not.toMatch(/apply the returned args manually/i);
-    expect(String(body.guidance)).not.toMatch(/using the returned args/i);
-    expect(String(body.guidance)).toMatch(/re-run bind-template/i);
-    // The bind still survives so the agent can re-get and retry deliberately.
-    expect(body.args).toBeDefined();
-  });
-
-  it('applies when the workbook is events-clean (0 user events since the read)', async () => {
-    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({ userEventsDuringBind: 0 });
-    const result = await getToolResult({
-      session: '1',
-      ask: 'bar chart of Sales by Region',
-      auto_apply: true,
-      getExecutor,
-    });
-    invariant(result.content[0].type === 'text');
-    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
-    expect(body.applied).toBe(true);
-    expect(applyWorkbookDocument).toHaveBeenCalled();
-  });
-
-  it('gate is best-effort: an executor without event support still auto-applies (Athena residual)', async () => {
-    const { applyWorkbookDocument, getExecutor } = setupAutoApplyMocks({
-      userEventsDuringBind: 'unsupported',
-    });
-    const result = await getToolResult({
-      session: '1',
-      ask: 'bar chart of Sales by Region',
-      auto_apply: true,
-      getExecutor,
-    });
-    invariant(result.content[0].type === 'text');
-    const body = JSON.parse(result.content[0].text) as Record<string, unknown>;
-    expect(body.applied).toBe(true);
-    expect(applyWorkbookDocument).toHaveBeenCalled();
-  });
-});
-
 describe('bindTemplateTool route-state recording', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -4267,82 +4131,6 @@ describe('bindTemplateTool duplicate-sheet reuse', () => {
     expect(buildInjectedWorkbookXml).toHaveBeenCalledTimes(2);
     expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
     expect(sessionRouteState.getBindRecovery('1', normalizeAskForMatch(ask))).toBeUndefined();
-  });
-
-  it('reuses when Desktop advances the event sequence during the remembered apply', async () => {
-    const { applyWorkbookDocument, getEvents, getExecutor } = setupAutoApplyMocks({
-      inject: { ok: true, xml: INJECTED_WORKBOOK_WITH_NEW_SHEET_WINDOW },
-    });
-    getEvents.mockImplementation(({ sinceSequence }: { sinceSequence?: number }) => {
-      const latestSequence = applyWorkbookDocument.mock.calls.length === 0 ? 41 : 42;
-      return Promise.resolve(
-        Ok({
-          events: [],
-          latest_sequence: latestSequence,
-          count: 0,
-          ...(sinceSequence === undefined ? {} : { since_sequence: sinceSequence }),
-        }),
-      );
-    });
-    const ask = 'bar chart of Sales by Region';
-
-    await getToolResult({ session: '1', ask, auto_apply: true, getExecutor });
-    const second = body(await getToolResult({ session: '1', ask, auto_apply: true, getExecutor }));
-
-    expect(second.reused).toBe(true);
-    expect(second.applied).toBe(false);
-    expect(applyWorkbookDocument).toHaveBeenCalledTimes(1);
-    expect(getEvents).toHaveBeenNthCalledWith(3, { signal: expect.any(AbortSignal) });
-  });
-
-  it('rebuilds when the events anchor advanced after the remembered sheet was built', async () => {
-    const userEditedWorkbook = INJECTED_RANKING_WORKBOOK_XML.replace(
-      '<rows>[Superstore].[none:Region:nk]</rows>',
-      '<rows>[Superstore].[none:Category:nk]</rows>',
-    );
-    const { applyWorkbookDocument, getEvents, getExecutor } = setupAutoApplyMocks({
-      inject: { ok: true, xml: INJECTED_RANKING_WORKBOOK_XML },
-      workbookReads: [XML, userEditedWorkbook],
-    });
-
-    await getToolResult({
-      session: '1',
-      ask: REWORDED_TITLES[0],
-      auto_apply: true,
-      getExecutor,
-    });
-    expect(getEvents).toHaveBeenCalledTimes(3);
-
-    getEvents.mockImplementation(({ sinceSequence }: { sinceSequence?: number }) =>
-      sinceSequence === undefined
-        ? Promise.resolve(
-            Ok({
-              events: [
-                {
-                  sequence: 42,
-                  type: 'doc:field-added-event',
-                  timestamp: '2026-07-25T12:00:00Z',
-                },
-              ],
-              latest_sequence: 42,
-              count: 1,
-            }),
-          )
-        : Promise.resolve(Ok({ events: [], latest_sequence: 42, count: 0 })),
-    );
-    bindReturning(retitled(REWORDED_TITLES[1]));
-    const second = body(
-      await getToolResult({
-        session: '1',
-        ask: REWORDED_TITLES[1],
-        auto_apply: true,
-        getExecutor,
-      }),
-    );
-
-    expect(second.reused).toBeUndefined();
-    expect(second.applied).toBe(true);
-    expect(applyWorkbookDocument).toHaveBeenCalledTimes(2);
   });
 
   it('eventually blocks repeated bare same-ask calls after a reuse hit', async () => {
