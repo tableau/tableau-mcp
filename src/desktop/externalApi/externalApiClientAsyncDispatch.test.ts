@@ -184,5 +184,22 @@ describe('ExternalApiClient async dispatch (0.2.0)', () => {
         expect(error.retryAfterSeconds).toBe(2);
       }
     });
+
+    it('surfaces a genuine service-unavailable 503 as its real Problem, not operation-pending', async () => {
+      server.setOverride('GET /v0/workbook/worksheets', {
+        status: 503,
+        contentType: 'application/problem+json',
+        body: JSON.stringify({ code: 'api-disabled', status: 503, title: 'API disabled' }),
+      });
+
+      const result = await client.listWorksheets();
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('problem');
+      if (error.type === 'problem') {
+        expect(error.status).toBe(503);
+        expect(error.code).toBe('api-disabled');
+      }
+    });
   });
 });
