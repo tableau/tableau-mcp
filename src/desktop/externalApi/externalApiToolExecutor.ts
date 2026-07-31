@@ -2,7 +2,6 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { log } from '../../logging/logger.js';
-import { GetCommandStatusResponse, GetEventsResponse } from '../../sdks/desktop/agentApi/types.js';
 import { desktopCallTimeoutMessage, isDesktopCallTimeout } from '../callDeadline.js';
 import {
   ExecuteCommandArgs,
@@ -16,6 +15,7 @@ import {
   unknownInstanceUnreachableMessage,
   unreachableInstanceMessage,
 } from '../unreachableInstance.js';
+import { GetCommandStatusResponse, GetEventsResponse } from './executorResponseTypes.js';
 import {
   ExternalApiClient,
   ExternalApiClientOptions,

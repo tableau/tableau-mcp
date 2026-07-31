@@ -1,6 +1,5 @@
 export const desktopToolNames = [
   'list-instances',
-  'check-for-user-changes',
   'get-workbook-xml',
   'apply-workbook',
   'activate-sheet',

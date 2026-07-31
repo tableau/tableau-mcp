@@ -53,7 +53,6 @@ import { getLookupWorkbookSchemaTool } from './search/lookupWorkbookSchema.js';
 import { getSearchCommandsTool } from './search/searchCommands.js';
 import { getSearchExamplesTool } from './search/searchExamples.js';
 import { getSearchWorkbookExamplesTool } from './search/searchWorkbookExamples.js';
-import { getCheckForUserChangesTool } from './session/checkForUserChanges.js';
 import { getListInstancesTool } from './session/listInstances.js';
 import { getInjectTemplateTool } from './template/injectTemplate.js';
 import { getActivateSheetTool } from './workbook/activateSheet.js';
@@ -68,7 +67,6 @@ import { getRefineWorksheetTool } from './worksheet/refineWorksheet.js';
 
 export const desktopToolFactories = [
   getListInstancesTool,
-  getCheckForUserChangesTool,
   getGetWorkbookXmlTool,
   getApplyWorkbookTool,
   getActivateSheetTool,
