@@ -573,6 +573,7 @@ describe('ExternalApiToolExecutor', () => {
       expect(discover).toHaveBeenCalledTimes(2);
     });
   });
+
   describe('async dispatch (202) terminal handling', () => {
     const accepted202 = (operationId: string): MockOverride => ({
       status: 202,
