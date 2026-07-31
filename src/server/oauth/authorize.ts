@@ -138,16 +138,18 @@ export function authorize(
           ? await getSupportedScopes({ includeApiScopes: advertiseApiScopes })
           : [];
 
-    // Redirect URI security enforcement (runs after baseline param validation, before storing pending auth)
-    const redirectError = checkRedirectUriAllowed({
-      clientIdUrl,
-      clientId: client_id,
-      redirectUri: redirect_uri,
-      clientRegistrations,
-    });
-    if (redirectError) {
-      res.status(400).json(redirectError);
-      return;
+    // Redirect URI security enforcement for opaque client_ids (runs after baseline param
+    // validation, before storing pending auth). The CIMD path enforces its own allowlist above.
+    if (!clientIdUrl) {
+      const redirectError = checkRedirectUriAllowed({
+        clientId: client_id,
+        redirectUri: redirect_uri,
+        clientRegistrations,
+      });
+      if (redirectError) {
+        res.status(400).json(redirectError);
+        return;
+      }
     }
 
     // Generate Tableau state and store pending authorization
