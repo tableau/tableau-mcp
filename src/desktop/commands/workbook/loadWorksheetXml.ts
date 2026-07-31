@@ -56,6 +56,30 @@ export interface PostApplyWorksheetReadbackVerification extends ReadbackVerifica
   findings: ReadbackFinding[];
 }
 
+// The apply settles asynchronously after it reports terminal, so a single readback can race that
+// settle and re-read PRE-apply XML — mis-flagging a durable apply as a dropped node. Poll instead of
+// reading once; 250ms is the interval documented to clear this same class of race elsewhere.
+const READBACK_POLL_MAX_ATTEMPTS = 8;
+const READBACK_POLL_INTERVAL_MS = 250;
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason as Error);
+      return;
+    }
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(signal?.reason as Error);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 type LoadWorksheetXmlResult = Result<
   LoadWorksheetXmlOk,
   | { type: 'execute-command-error'; error: ExecuteCommandError }
@@ -89,28 +113,39 @@ export async function verifyPostApplyWorksheetReadback(
   signal: WithExecutorAndAbortSignal['signal'],
 ): Promise<PostApplyWorksheetReadbackVerification> {
   try {
-    const reread = await getWorksheetFragment({ worksheetName, executor, signal });
-    if (reread.isErr()) {
-      const message =
-        reread.error.type === 'get-worksheet-xml-error'
-          ? reread.error.error.message
-          : 'could not re-read worksheet after apply';
-      log({
-        level: 'warning',
-        message: 'Post-apply worksheet readback verification skipped — could not re-read worksheet',
-        logger: 'worksheetCommands',
-        data: { worksheetName, status: 'skipped', error: reread.error },
-      });
-      return { ok: true, status: 'skipped', findings: [], message };
+    let lastVerification: PostApplyWorksheetReadbackVerification | undefined;
+    for (let attempt = 1; attempt <= READBACK_POLL_MAX_ATTEMPTS; attempt++) {
+      const reread = await getWorksheetFragment({ worksheetName, executor, signal });
+      if (reread.isErr()) {
+        const message =
+          reread.error.type === 'get-worksheet-xml-error'
+            ? reread.error.error.message
+            : 'could not re-read worksheet after apply';
+        log({
+          level: 'warning',
+          message:
+            'Post-apply worksheet readback verification skipped — could not re-read worksheet',
+          logger: 'worksheetCommands',
+          data: { worksheetName, status: 'skipped', error: reread.error },
+        });
+        return { ok: true, status: 'skipped', findings: [], message };
+      }
+      const findings = verifyWorksheetReadback(intendedXml, reread.value);
+      if (findings.some((f) => f.severity === 'error')) {
+        // An error verdict may be a pre-apply read, not a real drop — only the final attempt is durable.
+        lastVerification = { ok: false, status: 'failed', findings };
+        if (attempt < READBACK_POLL_MAX_ATTEMPTS) {
+          await sleep(READBACK_POLL_INTERVAL_MS, signal);
+          continue;
+        }
+        return lastVerification;
+      }
+      if (findings.some((f) => f.severity === 'warning')) {
+        return { ok: true, status: 'warning', findings };
+      }
+      return { ok: true, status: 'passed', findings: [] };
     }
-    const findings = verifyWorksheetReadback(intendedXml, reread.value);
-    if (findings.some((f) => f.severity === 'error')) {
-      return { ok: false, status: 'failed', findings };
-    }
-    if (findings.some((f) => f.severity === 'warning')) {
-      return { ok: true, status: 'warning', findings };
-    }
-    return { ok: true, status: 'passed', findings: [] };
+    return lastVerification ?? { ok: true, status: 'passed', findings: [] };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     log({

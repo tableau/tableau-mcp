@@ -49,6 +49,8 @@ export type ExternalApiClientOptions = {
   fetchFn?: typeof fetch;
   /** Global ceiling for each request; health remains capped at its shorter route budget. */
   timeoutMs?: number;
+  /** Overall wall-clock ceiling for a 202→poll loop, separate from the per-fetch timeout. */
+  pollDeadlineMs?: number;
 };
 
 export type WorkbookDocument = {
@@ -78,6 +80,24 @@ export type ImageExportQuery = {
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_HEALTH_TIMEOUT_MS = 10_000;
 
+// Bounds the whole 202→poll loop. Deliberately larger than the per-fetch timeout so async dispatch
+// does not regress the max operation length it exists to enable.
+const DEFAULT_POLL_DEADLINE_MS = 300_000;
+const DEFAULT_RETRY_AFTER_SECONDS = 1;
+const HTTP_ACCEPTED = 202;
+const HTTP_SERVICE_UNAVAILABLE = 503;
+
+// Wire states are UPPER_SNAKE_CASE; unknown values count as non-terminal per the spec.
+const TERMINAL_STATES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
+
+function isTerminalState(state: string | undefined): boolean {
+  return state !== undefined && TERMINAL_STATES.has(state.toUpperCase());
+}
+
+const HEADER_LOCATION = 'location';
+const HEADER_RETRY_AFTER = 'retry-after';
+const HEADER_OPERATION_ID = 'x-tableau-operation-id';
+
 /**
  * Typed client for a single Tableau Desktop External Client API instance.
  *
@@ -89,11 +109,13 @@ export class ExternalApiClient {
   private readonly instance: ExternalApiInstance;
   private readonly fetchFn: typeof fetch;
   private readonly timeoutMs: number | undefined;
+  private readonly pollDeadlineMs: number;
 
   constructor(instance: ExternalApiInstance, options: ExternalApiClientOptions = {}) {
     this.instance = instance;
     this.fetchFn = options.fetchFn ?? fetch;
     this.timeoutMs = options.timeoutMs;
+    this.pollDeadlineMs = options.pollDeadlineMs ?? DEFAULT_POLL_DEADLINE_MS;
   }
 
   get baseUrl(): string {
@@ -135,7 +157,7 @@ export class ExternalApiClient {
       contentType: 'application/xml',
       body: xml,
     });
-    return this.parseEnvelope(response);
+    return this.parseEnvelope(response, signal);
   }
 
   async applyWorksheetDocument(
@@ -198,10 +220,9 @@ export class ExternalApiClient {
     const response = await this.request('POST', EXTERNAL_API_ROUTES.invokeCommand, {
       signal,
       contentType: 'application/json',
-      // Field name `parameters` is a best-guess from the PR contract — see report.
       body: JSON.stringify({ namespace, command, parameters: params }),
     });
-    return this.parseEnvelope(response);
+    return this.parseEnvelope(response, signal);
   }
 
   async fetchOpenApi(signal?: AbortSignal): Promise<Result<unknown, ExternalApiError>> {
@@ -340,12 +361,69 @@ export class ExternalApiClient {
 
   private async parseEnvelope(
     response: Result<Response, ExternalApiError>,
+    signal?: AbortSignal,
   ): Promise<Result<OperationEnvelope, ExternalApiError>> {
     if (response.isErr()) {
       return Err(response.error);
     }
 
+    if (response.value.status === HTTP_ACCEPTED) {
+      return this.pollOperation(response.value, signal);
+    }
+
     return this.parseJson(response, operationEnvelopeSchema);
+  }
+
+  /** Blocks on the 202's `Location` until a terminal Operation; AWAITING_USER returns `awaiting-user`. */
+  private async pollOperation(
+    accepted: Response,
+    signal?: AbortSignal,
+  ): Promise<Result<OperationEnvelope, ExternalApiError>> {
+    const location = accepted.headers.get(HEADER_LOCATION);
+    const operationId = accepted.headers.get(HEADER_OPERATION_ID) ?? undefined;
+    if (!location) {
+      return Err({ type: 'invalid-response', error: 'A 202 response carried no Location header.' });
+    }
+
+    let retryAfterMs = parseRetryAfterMs(accepted.headers.get(HEADER_RETRY_AFTER));
+    const deadline = Date.now() + this.pollDeadlineMs;
+
+    for (;;) {
+      if (Date.now() >= deadline) {
+        return Err({ type: 'poll-timeout', operationId });
+      }
+
+      await delay(retryAfterMs, signal);
+
+      const polled = await this.request('GET', location, { signal });
+      if (polled.isErr()) {
+        return Err(polled.error);
+      }
+
+      const res = polled.value;
+      if (res.status === 404) {
+        return Err({ type: 'operation-expired', operationId });
+      }
+      if (!res.ok) {
+        return Err(await mapErrorResponse(res));
+      }
+
+      const parsed = await parseOperationBody(res);
+      if (parsed.isErr()) {
+        return Err(parsed.error);
+      }
+
+      const envelope = parsed.value;
+      const state = envelope.state?.toUpperCase();
+      if (state === 'AWAITING_USER') {
+        return Err({ type: 'awaiting-user', operationId: envelope.id ?? operationId });
+      }
+      if (isTerminalState(envelope.state)) {
+        return Ok(envelope);
+      }
+
+      retryAfterMs = parseRetryAfterMs(res.headers.get(HEADER_RETRY_AFTER));
+    }
   }
 
   private async getJson<T extends z.ZodTypeAny>(
@@ -366,6 +444,10 @@ export class ExternalApiClient {
     }
 
     const res = response.value;
+    const overflow = readOverflowError(res);
+    if (overflow) {
+      return Err(overflow);
+    }
     if (!res.ok) {
       return Err(await mapErrorResponse(res));
     }
@@ -394,6 +476,10 @@ export class ExternalApiClient {
     }
 
     const res = response.value;
+    const overflow = readOverflowError(res);
+    if (overflow) {
+      return Err(overflow);
+    }
     if (!res.ok) {
       return Err(await mapErrorResponse(res));
     }
@@ -447,6 +533,65 @@ export class ExternalApiClient {
 function composeWithTimeout(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
   const timeout = AbortSignal.timeout(timeoutMs);
   return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
+// `Retry-After` is an integer number of seconds (RFC 9110 §10.2.3); the HTTP-date form is not emitted here.
+function parseRetryAfterMs(headerValue: string | null): number {
+  const seconds = Number.parseInt(headerValue ?? '', 10);
+  return (Number.isFinite(seconds) && seconds >= 0 ? seconds : DEFAULT_RETRY_AFTER_SECONDS) * 1000;
+}
+
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+async function parseOperationBody(
+  res: Response,
+): Promise<Result<OperationEnvelope, ExternalApiError>> {
+  let json: unknown;
+  try {
+    json = await res.json();
+  } catch (error) {
+    return Err({ type: 'invalid-response', error });
+  }
+  const parsed = operationEnvelopeSchema.safeParse(json);
+  if (!parsed.success) {
+    return Err({ type: 'invalid-response', error: parsed.error });
+  }
+  return Ok(parsed.data);
+}
+
+// A typed read's payload is unreachable by polling, so an overflow (202) is a terminal error here,
+// not a poll trigger like it is on the write path.
+function readOverflowError(res: Response): ExternalApiError | undefined {
+  if (res.status === HTTP_ACCEPTED) {
+    return {
+      type: 'read-overflowed',
+      operationId: res.headers.get(HEADER_OPERATION_ID) ?? undefined,
+    };
+  }
+  if (res.status === HTTP_SERVICE_UNAVAILABLE) {
+    const seconds = Number.parseInt(res.headers.get(HEADER_RETRY_AFTER) ?? '', 10);
+    return {
+      type: 'operation-pending',
+      retryAfterSeconds: Number.isFinite(seconds) ? seconds : undefined,
+    };
+  }
+  return undefined;
 }
 
 function timeoutMsForRoute(route: string, configuredTimeoutMs: number | undefined): number {

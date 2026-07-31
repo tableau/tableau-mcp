@@ -1,6 +1,10 @@
 import * as logger from '../../logging/logger.js';
 import { ExternalApiToolExecutor } from './externalApiToolExecutor.js';
-import { MockExternalApiServer, startMockExternalApiServer } from './mockExternalApiServer.js';
+import {
+  MockExternalApiServer,
+  MockOverride,
+  startMockExternalApiServer,
+} from './mockExternalApiServer.js';
 import { ExternalApiInstance } from './types.js';
 
 vi.mock('../../logging/logger.js');
@@ -577,6 +581,97 @@ describe('ExternalApiToolExecutor', () => {
 
       const result = await executor.getEvents({ signal });
       expect(result.isErr()).toBe(true);
+    });
+  });
+
+  describe('async dispatch (202) terminal handling', () => {
+    const accepted202 = (operationId: string): MockOverride => ({
+      status: 202,
+      contentType: 'application/json',
+      headers: {
+        location: `/v0/operations/${operationId}`,
+        'retry-after': '0',
+        'x-tableau-operation-id': operationId,
+      },
+      body: JSON.stringify({ id: operationId, kind: 'command.invoke', state: 'RUNNING' }),
+    });
+
+    it('polls a 202 invokeCommand to completed and parses the polled result', async () => {
+      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-x'));
+      server.setOperation('op-x', {
+        retryAfterSeconds: 0,
+        poll: [
+          { id: 'op-x', kind: 'tabdoc:sort', state: 'RUNNING' },
+          { id: 'op-x', kind: 'tabdoc:sort', state: 'SUCCEEDED', result: { sorted: true } },
+        ],
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'sort',
+        signal,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().status).toBe('completed');
+      expect(result.unwrap().result).toEqual({ sorted: true });
+    });
+
+    it('reports a still-running operation as running, never completed', async () => {
+      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-run'));
+      server.setOperation('op-run', {
+        poll: [{ id: 'op-run', kind: 'tabdoc:sort', state: 'RUNNING' }],
+      });
+      const executor = new ExternalApiToolExecutor({
+        discover: () => [instanceFor(server)],
+        clientOptions: { pollDeadlineMs: 50 },
+      });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'sort',
+        signal,
+      });
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('command-timed-out');
+    });
+
+    it('maps a CANCELLED terminal operation to a command-failed error', async () => {
+      server.setOverride('POST /v0/app:invokeCommand', accepted202('op-cancel'));
+      server.setOperation('op-cancel', {
+        poll: [{ id: 'op-cancel', kind: 'tabdoc:sort', state: 'CANCELLED' }],
+      });
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.executeCommand({
+        namespace: 'tabdoc',
+        command: 'sort',
+        signal,
+      });
+
+      expect(result.isErr()).toBe(true);
+      expect(result.unwrapErr().type).toBe('command-failed');
+    });
+
+    it('surfaces read-overflowed as a recoverable command-failed rather than empty data', async () => {
+      server.setOverride('GET /v0/workbook/worksheets', accepted202('op-read'));
+      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
+      await executor.start();
+
+      const result = await executor.listWorksheets(signal);
+
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('command-failed');
+      if (error.type === 'command-failed') {
+        expect(error.error?.code).toBe('read-overflowed');
+        expect(error.error?.recoverable).toBe(true);
+      }
     });
   });
 });
