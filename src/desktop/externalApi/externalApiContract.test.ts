@@ -38,12 +38,9 @@ import {
  * fixture with it and rerun — every drift (new field, changed requiredness, enum
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
  *
- * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.1.0,
- * captured 2026-07-20 — PLUS one hand-applied edit: `DatasourceItem.luid`
- * (["string","null"]) added ahead of the next capture, since the deployed spec
- * had not yet surfaced the field when this shipped. Re-capture will replace it;
- * if a future 0.1.x ever marks workbook `luid` required, this hand-edit would
- * mask that until the next capture.
+ * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.0,
+ * captured 2026-07-30 (a build serving monolith #60234 + #61714). No hand-edits —
+ * `DatasourceItem.luid` (["string","null"]) is now surfaced by the deployed spec.
  */
 
 type SpecSchema = {
@@ -80,23 +77,21 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(missing).toEqual([]);
     });
 
-    it('documents `result` (0.1.1) and `updatedAt` (0.2.0) even if the captured 0.1.0 spec omits them', () => {
+    it('declares no property the spec does not', () => {
       const extras = declaredKeys(operationEnvelopeSchema).filter(
         (key) => !(key in (operation.properties ?? {})),
       );
-      // Both are declared ahead of the 0.1.0 fixture; each drops off this list once the spec
-      // (re-captured at 0.2.0) carries it. `result` lands at 0.1.1, `updatedAt` at 0.2.0.
-      const expectedExtras = [
-        ...(operation.properties?.result ? [] : ['result']),
-        ...(operation.properties?.updatedAt ? [] : ['updatedAt']),
-      ].sort();
-      expect(extras.sort()).toEqual(expectedExtras);
+      expect(extras).toEqual([]);
     });
 
-    it('matches the spec required set exactly', () => {
-      expect(requiredKeys(operationEnvelopeSchema).sort()).toEqual(
-        [...(operation.required ?? [])].sort(),
+    // The envelope schema is deliberately looser than the spec's required set (it parses fail-open —
+    // see operationEnvelopeSchema), so require only that it never demands a field the spec does not.
+    it('requires no field the spec does not mark required', () => {
+      const specRequired = new Set(operation.required ?? []);
+      const strayRequired = requiredKeys(operationEnvelopeSchema).filter(
+        (key) => !specRequired.has(key),
       );
+      expect(strayRequired).toEqual([]);
     });
   });
 
@@ -188,7 +183,11 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.storyboardDocument,
       EXTERNAL_API_ROUTES.worksheetById,
       EXTERNAL_API_ROUTES.worksheetDocument,
+      EXTERNAL_API_ROUTES.worksheetImage,
       EXTERNAL_API_ROUTES.worksheetSummaryData,
+      EXTERNAL_API_ROUTES.dashboardImage,
+      EXTERNAL_API_ROUTES.operations,
+      EXTERNAL_API_ROUTES.operationById,
       EXTERNAL_API_ROUTES.site,
       EXTERNAL_API_ROUTES.siteDatasources,
       EXTERNAL_API_ROUTES.siteWorkbooks,
@@ -201,28 +200,6 @@ describe('external client API contract (captured openapi fixture)', () => {
     it('invokeCommand stays deliberately undocumented (hidden route, owned separately)', () => {
       expect(Object.keys(spec.paths)).not.toContain(EXTERNAL_API_ROUTES.invokeCommand);
     });
-
-    // The image export routes ship in a Desktop build newer than this captured 0.1.0 fixture,
-    // so the export-image tools are wired and tested against the mock but "dead" against a real
-    // 0.1.0 Desktop — they surface an honest too-new-endpoint 404. Once the fixture is re-captured
-    // from a build that serves these, MOVE these two into the documented-routes it.each above and
-    // delete this assertion.
-    it.each([EXTERNAL_API_ROUTES.worksheetImage, EXTERNAL_API_ROUTES.dashboardImage])(
-      'image route %s is absent from the captured 0.1.0 fixture (dead-but-tested until re-capture)',
-      (route) => {
-        expect(Object.keys(spec.paths)).not.toContain(route);
-      },
-    );
-
-    // The async-dispatch poll routes ship at 0.2.0 (monolith #60234); the route-parity check is
-    // ours⊆spec, so a new spec path is never auto-covered. On re-capture at 0.2.0, MOVE these into
-    // the documented-routes it.each above and delete this assertion.
-    it.each([EXTERNAL_API_ROUTES.operations, EXTERNAL_API_ROUTES.operationById])(
-      'operations route %s is absent from the captured 0.1.0 fixture (0.2.0, wired ahead of re-capture)',
-      (route) => {
-        expect(Object.keys(spec.paths)).not.toContain(route);
-      },
-    );
   });
 
   describe('envelope wire acceptance', () => {
@@ -232,6 +209,7 @@ describe('external client API contract (captured openapi fixture)', () => {
         kind: 'workbook.document.apply',
         state: 'FAILED',
         createdAt: '2026-07-20T10:00:00Z',
+        updatedAt: '2026-07-20T10:00:01Z',
         completedAt: '2026-07-20T10:00:01Z',
         error: { code: 'operation-failed', message: 'nope' },
         warnings: [{ code: 'partial', message: 'one sheet skipped' }],
@@ -239,11 +217,13 @@ describe('external client API contract (captured openapi fixture)', () => {
       expect(parsed.success).toBe(true);
     });
 
-    it('parses a 0.1.1 SUCCEEDED Operation result object and serialize-degradation warning', () => {
+    it('parses a SUCCEEDED Operation result object and serialize-degradation warning', () => {
       const parsed = operationEnvelopeSchema.safeParse({
         id: 'op-1',
         kind: 'command.invoke',
         state: 'SUCCEEDED',
+        createdAt: '2026-07-20T10:00:00Z',
+        updatedAt: '2026-07-20T10:00:02Z',
         result: { outputParam: 'value' },
         warnings: [
           {
