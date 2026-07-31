@@ -23,6 +23,7 @@ import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { getWorksheetFragment } from './getWorksheetXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
+import { pollReadback } from './pollReadback.js';
 
 export type LoadWorksheetXmlError =
   | { type: 'invalid-xml' }
@@ -85,21 +86,30 @@ export async function verifyPostApplyWorksheetReadback(
   signal: WithExecutorAndAbortSignal['signal'],
 ): Promise<PostApplyWorksheetReadbackVerification> {
   try {
-    const reread = await getWorksheetFragment({ worksheetName, executor, signal });
-    if (reread.isErr()) {
+    // The apply lands asynchronously, so a re-read that looks like it dropped a node might just be
+    // the pre-apply worksheet — poll rather than trust the first read.
+    const polled = await pollReadback({
+      read: () => getWorksheetFragment({ worksheetName, executor, signal }),
+      settled: (fragment) =>
+        !verifyWorksheetReadback(intendedXml, fragment).some((f) => f.severity === 'error'),
+      signal,
+    });
+
+    if (!polled.ok) {
       const message =
-        reread.error.type === 'get-worksheet-xml-error'
-          ? reread.error.error.message
+        polled.error.type === 'get-worksheet-xml-error'
+          ? polled.error.error.message
           : 'could not re-read worksheet after apply';
       log({
         level: 'warning',
         message: 'Post-apply worksheet readback verification skipped — could not re-read worksheet',
         logger: 'worksheetCommands',
-        data: { worksheetName, status: 'skipped', error: reread.error },
+        data: { worksheetName, status: 'skipped', error: polled.error },
       });
       return { ok: true, status: 'skipped', findings: [], message };
     }
-    const findings = verifyWorksheetReadback(intendedXml, reread.value);
+
+    const findings = verifyWorksheetReadback(intendedXml, polled.value);
     if (findings.some((f) => f.severity === 'error')) {
       return { ok: false, status: 'failed', findings };
     }

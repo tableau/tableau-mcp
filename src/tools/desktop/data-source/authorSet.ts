@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXml.js';
 import { applyWorkbookText } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
+import { pollReadback } from '../../../desktop/commands/workbook/pollReadback.js';
 import { resolveSession } from '../../../desktop/sessionResolution.js';
 import { validateWorkbookDocumentApply } from '../../../desktop/workbookDocumentGuard.js';
 import {
@@ -151,25 +152,30 @@ export const getAuthorSetTool = (server: DesktopMcpServer): DesktopTool<typeof p
             return new DesktopCommandExecutionError(loadResult.error).toErr();
           }
 
-          const readbackResult = await getWorkbookXml({ executor, signal: extra.signal });
-          if (readbackResult.isErr()) {
-            return new DesktopCommandExecutionError(readbackResult.error).toErr();
-          }
-          const readbackTarget = findDatasourceElements(readbackResult.value).find(
-            (datasource) => datasource.name === target.name,
-          );
-          const readbackGroup =
-            readbackTarget === undefined
+          const findReadbackGroup = (xml: string): string | undefined => {
+            const readbackTarget = findDatasourceElements(xml).find(
+              (datasource) => datasource.name === target.name,
+            );
+            return readbackTarget === undefined
               ? undefined
               : findGroupByNameAndCaption(readbackTarget.xml, setName, caption);
-          if (readbackGroup === undefined) {
-            return new XmlModificationError(
-              'load completed but did not apply: readback did not contain the new set name and caption',
-            ).toErr();
+          };
+          const readback = await pollReadback({
+            read: () => getWorkbookXml({ executor, signal: extra.signal }),
+            settled: (xml) => {
+              const group = findReadbackGroup(xml);
+              return group !== undefined && getAttr(group, 'user:ui-builder') === 'filter-group';
+            },
+            signal: extra.signal,
+          });
+          if (!readback.ok) {
+            return new DesktopCommandExecutionError(readback.error).toErr();
           }
-          if (getAttr(readbackGroup, 'user:ui-builder') !== 'filter-group') {
+          if (!readback.settled) {
             return new XmlModificationError(
-              "load completed and the set name and caption survived readback, but the user:ui-builder='filter-group' marker did not survive readback",
+              findReadbackGroup(readback.value) === undefined
+                ? 'load completed but did not apply: readback did not contain the new set name and caption'
+                : "load completed and the set name and caption survived readback, but the user:ui-builder='filter-group' marker did not survive readback",
             ).toErr();
           }
 
