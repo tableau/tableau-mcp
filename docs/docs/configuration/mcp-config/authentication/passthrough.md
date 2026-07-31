@@ -13,9 +13,12 @@ When a request is made to the MCP server, the `X-Tableau-Auth` header is read.
 
 - When the header is present, the value will be "passed through" and re-used during MCP tool calls
   when they authenticate to the Tableau REST APIs.
-- When absent, normal authentication will resume as defined by the [`AUTH`](../env-vars.md#auth)
-  environment variable. This allows clients that do not provide the `X-Tableau-Auth` header to still
-  authenticate to the MCP server.
+- When absent, behavior depends on how passthrough was enabled:
+  - With [`ENABLE_PASSTHROUGH_AUTH`](#enable_passthrough_auth) set to `true`, normal authentication
+    resumes as defined by the [`AUTH`](../env-vars.md#auth) environment variable. This allows clients
+    that do not provide the `X-Tableau-Auth` header to still authenticate to the MCP server.
+  - With [`AUTH`](../env-vars.md#auth) set to `passthrough`, there is no fallback: the request is
+    rejected with `401 invalid_token`.
 
 ## Warnings
 
@@ -72,10 +75,22 @@ for more details.
 
 ## Environment Variables
 
+### AUTH
+
+- Setting [`AUTH`](../env-vars.md#auth) to `passthrough` enables passthrough authentication and makes
+  it the only accepted method: every request must carry an `X-Tableau-Auth` token, and requests
+  without one are rejected with `401 invalid_token`.
+- Implies [`ENABLE_PASSTHROUGH_AUTH`](#enable_passthrough_auth) is `true`; you do not need to set both.
+- Unlike `ENABLE_PASSTHROUGH_AUTH`, there is no fallback to another `AUTH` method when the header is
+  absent.
+
+<hr />
+
 ### ENABLE_PASSTHROUGH_AUTH
 
 - Default: `false`
-- When `true`, passthrough authentication is enabled.
+- When `true`, passthrough authentication is enabled, falling back to the [`AUTH`](../env-vars.md#auth)
+  method when the `X-Tableau-Auth` header is absent.
 - Only applies when [`TRANSPORT`](../env-vars.md#transport) is `http`.
 
 <hr />

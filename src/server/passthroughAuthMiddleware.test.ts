@@ -1,5 +1,9 @@
+import { Request, Response } from 'express';
+
+import { stubDefaultEnvVars } from '../testShared.js';
 import { WebToolName, webToolNames } from '../tools/web/toolName.js';
 import { getRequiredApiScopesForTool } from './oauth/scopes.js';
+import { X_TABLEAU_AUTH_HEADER } from './passthroughAuthMiddleware.js';
 
 /**
  * Tools that intentionally have no Tableau REST API scopes, but have been reviewed and verified
@@ -42,5 +46,94 @@ describe('passthroughAuthMiddleware', () => {
         'See: https://github.com/tableau/tableau-mcp/pull/241/changes#r2942474421',
       ].join('\n'),
     ).toHaveLength(0);
+  });
+
+  describe('middleware behavior with AUTH=passthrough', () => {
+    beforeEach(() => {
+      vi.resetModules();
+      vi.unstubAllEnvs();
+      stubDefaultEnvVars();
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('should return 401 when config.auth is passthrough and no token present', async () => {
+      vi.stubEnv('AUTH', 'passthrough');
+      vi.stubEnv('PAT_NAME', undefined);
+      vi.stubEnv('PAT_VALUE', undefined);
+      vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+
+      await import('../config.js');
+
+      const { passthroughAuthMiddleware: middleware } =
+        await import('./passthroughAuthMiddleware.js');
+      const handler = middleware();
+
+      const req = { headers: {} } as Request;
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as unknown as Response;
+      const next = vi.fn();
+
+      await handler(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'invalid_token',
+        error_description: 'Missing X-Tableau-Auth token',
+      });
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('should call next() when config.auth is pat and no token present', async () => {
+      vi.stubEnv('AUTH', 'pat');
+      vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+
+      await import('../config.js');
+
+      const { passthroughAuthMiddleware: middleware } =
+        await import('./passthroughAuthMiddleware.js');
+      const handler = middleware();
+
+      const req = { headers: {} } as Request;
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as unknown as Response;
+      const next = vi.fn();
+
+      await handler(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+      expect(res.json).not.toHaveBeenCalled();
+    });
+
+    it('should proceed when token is present regardless of auth type', async () => {
+      vi.stubEnv('AUTH', 'passthrough');
+      vi.stubEnv('PAT_NAME', undefined);
+      vi.stubEnv('PAT_VALUE', undefined);
+      vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+
+      await import('../config.js');
+
+      const { passthroughAuthMiddleware: middleware } =
+        await import('./passthroughAuthMiddleware.js');
+      const handler = middleware();
+
+      const req = { headers: { [X_TABLEAU_AUTH_HEADER]: 'mock-token' } } as unknown as Request;
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as unknown as Response;
+      const next = vi.fn();
+
+      await handler(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+    });
   });
 });

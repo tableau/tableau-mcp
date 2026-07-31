@@ -67,8 +67,9 @@ export function buildAuthConfig({
       };
 
     case 'oauth':
-      // oauth has no server-side signing material — Bearer tokens are passed
-      // through separately by the caller.
+      return null;
+
+    case 'passthrough':
       return null;
   }
 }

@@ -947,4 +947,48 @@ describe('Config', () => {
       expect(config.featureGate.provider).toBe('server');
     });
   });
+
+  describe('Passthrough auth', () => {
+    beforeEach(() => {
+      vi.stubEnv('AUTH', 'passthrough');
+      vi.stubEnv('PAT_NAME', undefined);
+      vi.stubEnv('PAT_VALUE', undefined);
+    });
+
+    it('should accept AUTH=passthrough with only SERVER configured', () => {
+      const config = new Config();
+      expect(config.auth).toBe('passthrough');
+      expect(config.server).toBe('https://my-tableau-server.com');
+    });
+
+    it('should imply enablePassthroughAuth=true when AUTH=passthrough', () => {
+      vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', undefined);
+
+      const config = new Config();
+      expect(config.auth).toBe('passthrough');
+      expect(config.enablePassthroughAuth).toBe(true);
+    });
+
+    it('should not require PAT_NAME when AUTH=passthrough', () => {
+      expect(() => new Config()).not.toThrow('The environment variable PAT_NAME is not set');
+    });
+
+    it('should not require PAT_VALUE when AUTH=passthrough', () => {
+      expect(() => new Config()).not.toThrow('The environment variable PAT_VALUE is not set');
+    });
+
+    it('should work with stdio transport (no OAuth conflict)', () => {
+      vi.stubEnv('TRANSPORT', 'stdio');
+
+      const config = new Config();
+      expect(config.auth).toBe('passthrough');
+      expect(config.transport).toBe('stdio');
+    });
+
+    it('should still require SERVER when AUTH=passthrough', () => {
+      vi.stubEnv('SERVER', undefined);
+
+      expect(() => new Config()).toThrow('The environment variable SERVER is not set');
+    });
+  });
 });
