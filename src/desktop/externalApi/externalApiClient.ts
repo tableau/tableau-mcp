@@ -444,7 +444,7 @@ export class ExternalApiClient {
     }
 
     const res = response.value;
-    const overflow = readOverflowError(res);
+    const overflow = await readOverflowError(res);
     if (overflow) {
       return Err(overflow);
     }
@@ -476,7 +476,7 @@ export class ExternalApiClient {
     }
 
     const res = response.value;
-    const overflow = readOverflowError(res);
+    const overflow = await readOverflowError(res);
     if (overflow) {
       return Err(overflow);
     }
@@ -576,15 +576,17 @@ async function parseOperationBody(
 }
 
 // A typed read's payload is unreachable by polling, so an overflow (202) is a terminal error here,
-// not a poll trigger like it is on the write path.
-function readOverflowError(res: Response): ExternalApiError | undefined {
+// not a poll trigger like it is on the write path. A 503 is only an `operation-pending` precursor
+// overflow when its Problem code says so — a genuine api-disabled/shutting-down 503 must fall
+// through to mapErrorResponse and keep its real code.
+async function readOverflowError(res: Response): Promise<ExternalApiError | undefined> {
   if (res.status === HTTP_ACCEPTED) {
     return {
       type: 'read-overflowed',
       operationId: res.headers.get(HEADER_OPERATION_ID) ?? undefined,
     };
   }
-  if (res.status === HTTP_SERVICE_UNAVAILABLE) {
+  if (res.status === HTTP_SERVICE_UNAVAILABLE && (await problemCode(res)) === 'operation-pending') {
     const seconds = Number.parseInt(res.headers.get(HEADER_RETRY_AFTER) ?? '', 10);
     return {
       type: 'operation-pending',
@@ -592,6 +594,16 @@ function readOverflowError(res: Response): ExternalApiError | undefined {
     };
   }
   return undefined;
+}
+
+// Reads a clone so the body stays available for mapErrorResponse on the fall-through path.
+async function problemCode(res: Response): Promise<string | undefined> {
+  try {
+    const problem = problemResponseSchema.safeParse(JSON.parse(await res.clone().text()));
+    return problem.success ? problem.data.code : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function timeoutMsForRoute(route: string, configuredTimeoutMs: number | undefined): number {
