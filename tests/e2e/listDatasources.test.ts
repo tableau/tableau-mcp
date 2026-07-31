@@ -23,8 +23,8 @@ describe('list-datasources', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreDatasource(env);
 
-    const datasources = await client.callTool('list-datasources', {
-      schema: z.array(dataSourceSchema),
+    const { data: datasources } = await client.callTool('list-datasources', {
+      schema: z.object({ data: z.array(dataSourceSchema), totalAvailable: z.number() }),
     });
 
     expect(datasources.length).greaterThan(0);
@@ -42,8 +42,8 @@ describe('list-datasources', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreDatasource(env);
 
-    const datasources = await client.callTool('list-datasources', {
-      schema: z.array(dataSourceSchema),
+    const { data: datasources } = await client.callTool('list-datasources', {
+      schema: z.object({ data: z.array(dataSourceSchema), totalAvailable: z.number() }),
       toolArgs: { filter: 'name:eq:Super*' },
     });
 

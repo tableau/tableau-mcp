@@ -6,7 +6,7 @@ sidebar_position: 1
 
 Retrieves a list of extract refresh tasks for the Tableau site. Each task describes a scheduled refresh for a data source or workbook extract and includes schedule information (e.g. frequency, next run time, schedule name on Server).
 
-:::warning Admin Only
+:::warning[Admin Only]
 This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable to be enabled.
 :::
 
@@ -45,7 +45,7 @@ See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)
 
 This tool takes no arguments.
 
-:::note API Limitation
+:::note[API Limitation]
 The Tableau REST API does not support filtering or pagination parameters for extract refresh tasks. All tasks are returned in a single request. For sites with many extract refresh tasks, consider using client-side filtering based on the returned data.
 :::
 

@@ -33,7 +33,7 @@ type PaginateArgs<T> = {
   filterFn?: (item: T) => boolean;
 };
 
-const MAX_PAGE_SIZE = 1000;
+export const MAX_PAGE_SIZE = 1000;
 
 /**
  * Result of {@link paginateWithMetadata}: the items plus enough server-side
@@ -167,6 +167,140 @@ export async function paginateWithMetadata<T>({
 export async function paginate<T>(args: PaginateArgs<T>): Promise<Array<T>> {
   const { items } = await paginateWithMetadata(args);
   return items;
+}
+
+/**
+ * Validation for {@link getPage} inputs. Both `pageNumber` and `limit`
+ * must be positive when provided; `limit` additionally may not exceed
+ * {@link MAX_PAGE_SIZE} since a single page can never return more than a full
+ * server page. Mirrors the `.gt(0)` style used by {@link pageConfigSchema}.
+ */
+const getPageConfigSchema = z
+  .object({
+    pageNumber: z.coerce.number().gt(0),
+    limit: z.coerce.number().gt(0).lte(MAX_PAGE_SIZE),
+  })
+  .partial();
+
+type GetPageArgs<T> = {
+  /** 1-based page number to fetch. Defaults to `1`. */
+  pageNumber?: number;
+  /** Per-page trim applied on top of the server cap. Must be `<= MAX_PAGE_SIZE`. */
+  limit?: number;
+  /**
+   * Global offset ceiling across all pages (e.g. an admin `maxResultLimit`).
+   * `null`/omitted means "no cap". Items whose absolute (0-based) offset is
+   * `>= maxResultLimit` are trimmed off, so later pages can return fewer items
+   * — or none at all — even though Tableau reports more `totalAvailable`.
+   */
+  maxResultLimit?: number | null;
+  getDataFn: (page: {
+    pageSize: number;
+    pageNumber: number;
+  }) => Promise<{ pagination: Pagination; data: Array<T> }>;
+};
+
+/**
+ * Result of {@link getPage}: a single page's items plus the total the caller
+ * should present.
+ *
+ * - `data` — the (possibly trimmed) items for the requested page.
+ * - `totalAvailable` — `min(rawTotal, maxResultLimit)`; equal to the raw total
+ *   Tableau reported when there is no cap. When a server-side `maxResultLimit`
+ *   offset ceiling is in force, this is capped to it so the caller presents the
+ *   number of items actually reachable rather than the uncapped server total.
+ */
+export type GetPageResult<T> = {
+  data: Array<T>;
+  totalAvailable: number;
+};
+
+/**
+ * Fetch a SINGLE page (no looping). Unlike {@link paginate}, this issues
+ * exactly one {@link getDataFn} call and returns just that page, applying an
+ * optional global `maxResultLimit` offset ceiling and an optional per-page
+ * `limit` trim.
+ *
+ * A full page (`MAX_PAGE_SIZE`) is always requested so absolute offsets stay
+ * stable across pages regardless of the caller's `limit`. The absolute
+ * (0-based) offset of the first item on the page is `(pageNumber - 1) *
+ * MAX_PAGE_SIZE`; anything at or beyond `maxResultLimit` is dropped so the
+ * cumulative number of items across all pages never exceeds the cap.
+ */
+export async function getPage<T>(args: GetPageArgs<T>): Promise<GetPageResult<T>> {
+  // Validate caller-facing knobs (pageNumber/limit) up front, consistent with
+  // the file's zod-based validation style. maxResultLimit is a server-provided
+  // cap, not user input, so it is not validated here.
+  getPageConfigSchema.parse({ pageNumber: args.pageNumber, limit: args.limit });
+
+  // paging variables
+  const pageNumber = args.pageNumber ?? 1;
+  const pageSize = MAX_PAGE_SIZE; // always request full page for stable offsets
+
+  // fetching page data
+  const { pagination, data } = await args.getDataFn({ pageSize, pageNumber });
+  const totalAvailable = pagination.totalAvailable;
+  const totalItemsInPage = data.length;
+  const maxResultLimit = args.maxResultLimit ?? null;
+  const pageStartOffset = (pageNumber - 1) * pageSize; // 0-based abs index of first item on page
+  // checks if the total items paged goes beyond the max result limits
+  // and truncates results to fit the overall cap or evalutates to 0 for page numbers that go beyond cap.
+  const serverAllowed =
+    maxResultLimit == null
+      ? totalItemsInPage
+      : Math.max(0, Math.min(totalItemsInPage, maxResultLimit - pageStartOffset));
+  // applies limit requested for this page
+  const callerCap = args.limit != null ? Math.min(args.limit, serverAllowed) : serverAllowed;
+  const trimmed = data.slice(0, callerCap);
+  // Cap the reported total to the server-side offset ceiling so the caller
+  // presents the number of items actually reachable, not the uncapped total.
+  const cappedTotalAvailable =
+    maxResultLimit == null ? totalAvailable : Math.min(totalAvailable, maxResultLimit);
+  return { data: trimmed, totalAvailable: cappedTotalAvailable };
+}
+
+/**
+ * Determine whether a 1-based `pageNumber` is reachable given an optional
+ * `maxResultLimit` offset ceiling. A page is reachable iff the absolute
+ * (0-based) offset of its first item — `(pageNumber - 1) * MAX_PAGE_SIZE` — is
+ * below `maxResultLimit`. When there is no cap (`null`/omitted), every page is
+ * reachable.
+ *
+ * This exists because {@link getPage} would otherwise fetch a full server page
+ * for an out-of-range request and then trim every item off (its `serverAllowed`
+ * collapses to `0`), surfacing a misleading "no results were found" message
+ * even though `totalAvailable` is non-zero. Callers should run this check
+ * first and short-circuit with a clear "page exceeds the limit" response.
+ *
+ * Example: with `maxResultLimit: 2700`, pages 1–3 are reachable (page 3 starts
+ * at offset 2000 and returns 700 items), but page 4 (offset 3000) is not.
+ *
+ * @returns `null` when the page is reachable, or a human-readable message
+ *   explaining the valid page range when it is not.
+ */
+export function getPageExceedsLimitMessage({
+  pageNumber,
+  maxResultLimit,
+}: {
+  pageNumber?: number;
+  maxResultLimit?: number | null;
+}): string | null {
+  if (maxResultLimit == null) {
+    return null;
+  }
+
+  const page = pageNumber ?? 1;
+  const pageStartOffset = (page - 1) * MAX_PAGE_SIZE;
+  if (pageStartOffset < maxResultLimit) {
+    return null;
+  }
+
+  const maxReachablePage = Math.ceil(maxResultLimit / MAX_PAGE_SIZE);
+  return (
+    `The requested page (${page}) exceeds the response limit configured for this tool. ` +
+    `A maximum of ${maxResultLimit} results can be paged through (in pages of ${MAX_PAGE_SIZE}), ` +
+    `so the highest page you can request is ${maxReachablePage}.`
+  );
 }
 
 const pulsePaginateConfigSchema = z
