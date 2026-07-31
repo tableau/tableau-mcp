@@ -271,21 +271,6 @@ export class NoDesktopInstancesFoundError extends McpToolError {
   }
 }
 
-export class GetEventsFailedError extends McpToolError {
-  constructor(error: unknown) {
-    super({
-      type: 'get-events-failed',
-      message: [
-        `Failed to get events: ${getExceptionMessage(error)}.`,
-        'Make sure:',
-        '  1. Tableau Desktop is running',
-        '  2. The Desktop events endpoint is available',
-      ].join('\n'),
-      statusCode: 500,
-    });
-  }
-}
-
 export class AdminOnlyError extends McpToolError {
   constructor(message: string) {
     super({ type: 'admin-only', message, statusCode: 403 });

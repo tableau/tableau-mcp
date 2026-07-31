@@ -168,7 +168,6 @@ function setupMocks({
   inject = { ok: true as const, xml: XML },
   validationValid = true,
   dispatch = Ok({ command_id: 'cmd-1', status: 'completed', submitted_at: '', result: {} }),
-  userEventsDuringBatch = 0,
   existingDashboards = [] as string[],
 }: {
   binds?: BinderResult[];
@@ -176,12 +175,10 @@ function setupMocks({
   inject?: { ok: true; xml: string } | { ok: false; issues: string[] };
   validationValid?: boolean;
   dispatch?: ReturnType<typeof Ok> | ReturnType<typeof Err>;
-  userEventsDuringBatch?: number | 'unsupported';
   existingDashboards?: string[];
 } = {}): {
   executeCommand: ReturnType<typeof vi.fn>;
   applyWorkbookDocument: ReturnType<typeof vi.fn>;
-  getEvents: ReturnType<typeof vi.fn>;
   getExecutor: ReturnType<typeof vi.fn>;
   bindSpy: ReturnType<typeof vi.fn>;
 } {
@@ -231,27 +228,11 @@ function setupMocks({
     }
     return dispatch;
   });
-  const getEvents =
-    userEventsDuringBatch === 'unsupported'
-      ? vi.fn().mockResolvedValue(Err('events unsupported on this transport'))
-      : vi
-          .fn()
-          .mockResolvedValueOnce(Ok({ events: [], latest_sequence: 41, count: 0 }))
-          .mockResolvedValue(
-            Ok({
-              events: Array.from({ length: userEventsDuringBatch as number }, (_, i) => ({
-                id: i,
-              })),
-              latest_sequence: 41 + (userEventsDuringBatch as number),
-              count: userEventsDuringBatch,
-            }),
-          );
   const getExecutor = vi.fn().mockResolvedValue({
     executeCommand,
     applyWorkbookDocument,
-    getEvents,
   });
-  return { executeCommand, applyWorkbookDocument, getEvents, getExecutor, bindSpy };
+  return { executeCommand, applyWorkbookDocument, getExecutor, bindSpy };
 }
 
 async function getToolResult({
@@ -557,46 +538,6 @@ describe('dashboardAutoApplyTool all-or-nothing gate matrix', () => {
     const body = JSON.parse(result.content[0].text);
     expect(body.applied).toBe(false);
     expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it('events-dirty pre-dispatch refuses the whole batch with P1-5 guidance, zero dispatches', async () => {
-    const { applyWorkbookDocument, getExecutor } = setupMocks({ userEventsDuringBatch: 3 });
-
-    const result = await getToolResult({
-      session: '1',
-      asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
-      getExecutor,
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe(false);
-    expect(String(body.apply_error)).toMatch(/user changed the workbook.*3 event/);
-    expect(String(body.guidance)).toMatch(/re-run dashboard-auto-apply/i);
-    expect(result.structuredContent).toEqual({
-      ...body,
-      nextAction: { label: 'Re-run dashboard-auto-apply', kind: 'prefill' },
-    });
-    expect(applyWorkbookDocument).not.toHaveBeenCalled();
-  });
-
-  it('gate is best-effort: an executor without event support still applies', async () => {
-    const { applyWorkbookDocument, getExecutor } = setupMocks({
-      userEventsDuringBatch: 'unsupported',
-    });
-
-    const result = await getToolResult({
-      session: '1',
-      asks: [{ ask: 'bar chart of Sales by Region' }, { ask: 'line chart of Profit by Month' }],
-      getExecutor,
-    });
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    const body = JSON.parse(result.content[0].text);
-    expect(body.applied).toBe(true);
-    expect(applyWorkbookDocument).toHaveBeenCalled();
   });
 
   it('inject failure on ask 2 of 2 refuses the whole batch — zero dispatches, diagnostics intact', async () => {

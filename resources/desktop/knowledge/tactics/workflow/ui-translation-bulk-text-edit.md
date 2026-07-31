@@ -97,11 +97,10 @@ Translate matched runs/captions with **exact-tag replacement** (not loose text s
 2. replace matched <run>/<customized-*> text (exact literal, umlauts, loanwords kept)
 3. apply-worksheet or apply-dashboard        → apply THIS object only
 4. worksheet/dashboard list readback         → confirm the sheet and dashboard set is intact
-5. check-for-user-changes                    → confirm nothing else moved/broke
-6. only then advance to the next worksheet/dashboard
+5. only then advance to the next worksheet/dashboard
 ```
 
-If `check-for-user-changes` shows an unexpected change, stop and reconcile before the next object — do not batch forward through a dirty state.
+If the readback shows an unexpected change, stop and reconcile before the next object — do not batch forward through a dirty state.
 
 ## Related Knowledge
 
