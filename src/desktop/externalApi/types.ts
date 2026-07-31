@@ -129,10 +129,12 @@ export const PROBLEM_CODES = [
   'payload-version-unsupported',
   'not-found',
   'sheet-not-found',
+  'operation-pending',
   'method-not-allowed',
   'not-implemented',
   'command-not-found',
   'invalid-command-parameter',
+  'invalid-query-parameter',
   'operation-failed',
 ] as const;
 export type ProblemCode = (typeof PROBLEM_CODES)[number];
@@ -176,10 +178,11 @@ export type OperationWarning = z.infer<typeof operationWarningSchema>;
 
 /**
  * Operation envelope returned by `POST /v0/workbook/document`, `POST /v0/app:invokeCommand`,
- * and the `GET /v0/operations/{id}` poll route. `id`/`kind`/`state` are required per the spec.
- * `result` is present only on SUCCEEDED envelopes with non-null command output as of
- * External Client API apiVersion 0.1.1; 0.1.0 instances legitimately omit it on success.
- * `updatedAt` is required as of apiVersion 0.2.0.
+ * and the `GET /v0/operations/{id}` poll route. Only `id`/`kind`/`state` are required here even
+ * though the 0.2.0 spec also lists `createdAt`/`updatedAt`/`warnings`: the executor reads those
+ * fail-open (`createdAt ?? now`, `warnings` only when present), so a partial or slightly-older
+ * envelope must still parse rather than error. `result` rides only a SUCCEEDED envelope with
+ * non-null command output.
  */
 export const operationEnvelopeSchema = z
   .object({

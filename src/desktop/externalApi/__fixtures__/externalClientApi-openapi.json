@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tableau External Client API",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Loopback HTTP interface for reading and authoring the open Tableau Desktop document. Clients authenticate with the bearer token published in the per-user discovery file."
   },
   "servers": [
@@ -136,6 +136,130 @@
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/operations": {
+      "get": {
+        "summary": "List operations",
+        "description": "Lists in-flight and recently-completed async operations.",
+        "operationId": "listOperations",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "description": "Return only operations in this state (an OperationState value); an unrecognized value matches nothing.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Return only operations of this command kind.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lists in-flight and recently-completed async operations.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/operations/{id}": {
+      "get": {
+        "summary": "Get an operation",
+        "description": "Polls a single async operation by id until it reaches a terminal state.",
+        "operationId": "getOperation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Polls a single async operation by id until it reaches a terminal state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -196,6 +320,9 @@
               }
             }
           },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
@@ -236,6 +363,9 @@
               }
             }
           },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
@@ -263,11 +393,11 @@
     "/v0/workbook": {
       "get": {
         "summary": "Get the open workbook",
-        "description": "Returns metadata and the sheet inventory of the open workbook, or 404 when none is open.",
+        "description": "Returns metadata and the sheet inventory of the open workbook.",
         "operationId": "getWorkbook",
         "responses": {
           "200": {
-            "description": "Returns metadata and the sheet inventory of the open workbook, or 404 when none is open.",
+            "description": "Returns metadata and the sheet inventory of the open workbook.",
             "content": {
               "application/json": {
                 "schema": {
@@ -275,6 +405,9 @@
                 }
               }
             }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -284,9 +417,6 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
           },
           "421": {
             "$ref": "#/components/responses/MisdirectedRequest"
@@ -316,6 +446,9 @@
               }
             }
           },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
@@ -324,9 +457,6 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
           },
           "421": {
             "$ref": "#/components/responses/MisdirectedRequest"
@@ -365,6 +495,9 @@
                 }
               }
             }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -439,6 +572,156 @@
               }
             }
           },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "summary": "Apply a dashboard document",
+        "description": "Replaces a single dashboard with the submitted Tableau XML, leaving the workbook's other sheets intact. The payload is checked for well-formed XML only and is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. A concurrent rename of the target sheet is rejected as a failed operation (Tableau error 0xC655862E).",
+        "operationId": "applyDashboardDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Tableau payload (file-format) version the client authored the document against.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The workbook document as Tableau XML.",
+          "content": {
+            "application/xml": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replaces a single dashboard with the submitted Tableau XML, leaving the workbook's other sheets intact. The payload is checked for well-formed XML only and is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. A concurrent rename of the target sheet is rejected as a failed operation (Tableau error 0xC655862E).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/dashboards/{id}/image": {
+      "get": {
+        "summary": "Export a dashboard image",
+        "description": "Renders a single dashboard (resolved by id) as an image, returned inline as base64 or written to a caller-supplied file path.",
+        "operationId": "exportDashboardImage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Renders a single dashboard (resolved by id) as an image, returned inline as base64 or written to a caller-supplied file path.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
@@ -482,6 +765,9 @@
               }
             }
           },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
@@ -490,9 +776,6 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
           },
           "421": {
             "$ref": "#/components/responses/MisdirectedRequest"
@@ -547,6 +830,9 @@
               }
             }
           },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
@@ -555,9 +841,6 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
@@ -575,7 +858,7 @@
       },
       "post": {
         "summary": "Apply a workbook document",
-        "description": "Replaces the open workbook with the submitted Tableau XML.",
+        "description": "Replaces the open workbook with the submitted Tableau XML. The payload is checked for well-formed XML only and is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check; it overwrites concurrent edits and (Overwrite policy) deletes sheets the payload omits.",
         "operationId": "applyWorkbookDocument",
         "parameters": [
           {
@@ -601,14 +884,31 @@
         },
         "responses": {
           "200": {
-            "description": "Replaces the open workbook with the submitted Tableau XML.",
+            "description": "Replaces the open workbook with the submitted Tableau XML. The payload is checked for well-formed XML only and is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check; it overwrites concurrent edits and (Overwrite policy) deletes sheets the payload omits.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Operation"
                 }
               }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              }
             }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -675,6 +975,9 @@
               }
             }
           },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
@@ -718,6 +1021,9 @@
               }
             }
           },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
@@ -726,9 +1032,6 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
           },
           "421": {
             "$ref": "#/components/responses/MisdirectedRequest"
@@ -767,6 +1070,9 @@
                 }
               }
             }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -841,6 +1147,9 @@
               }
             }
           },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
@@ -855,6 +1164,97 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "summary": "Apply a storyboard document",
+        "description": "Replaces a single storyboard with the submitted Tableau XML, leaving the workbook's other sheets intact. The payload is checked for well-formed XML only and is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. A concurrent rename of the target sheet is rejected as a failed operation (Tableau error 0xC655862E).",
+        "operationId": "applyStoryboardDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Tableau payload (file-format) version the client authored the document against.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The workbook document as Tableau XML.",
+          "content": {
+            "application/xml": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replaces a single storyboard with the submitted Tableau XML, leaving the workbook's other sheets intact. The payload is checked for well-formed XML only and is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. A concurrent rename of the target sheet is rejected as a failed operation (Tableau error 0xC655862E).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "421": {
             "$ref": "#/components/responses/MisdirectedRequest"
@@ -884,6 +1284,9 @@
               }
             }
           },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
@@ -892,9 +1295,6 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
           },
           "421": {
             "$ref": "#/components/responses/MisdirectedRequest"
@@ -933,6 +1333,9 @@
                 }
               }
             }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -1006,6 +1409,156 @@
                 }
               }
             }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "summary": "Apply a worksheet document",
+        "description": "Replaces a single worksheet with the submitted Tableau XML, leaving the workbook's other sheets intact. The payload is checked for well-formed XML only and is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. A concurrent rename of the target sheet is rejected as a failed operation (Tableau error 0xC655862E).",
+        "operationId": "applyWorksheetDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tableau-Effective-Payload-Version",
+            "in": "header",
+            "required": false,
+            "description": "Tableau payload (file-format) version the client authored the document against.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The workbook document as Tableau XML.",
+          "content": {
+            "application/xml": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replaces a single worksheet with the submitted Tableau XML, leaving the workbook's other sheets intact. The payload is checked for well-formed XML only and is NOT validated against the schema; use POST /v0/workbook/document:validate for XSD validation. This apply is unconditional last-writer-wins: it performs no precondition/If-Match check and will overwrite a concurrent edit to the same sheet. A concurrent rename of the target sheet is rejected as a failed operation (Tableau error 0xC655862E).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            },
+            "headers": {
+              "X-Tableau-Operation-Id": {
+                "description": "Id of the operation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tableau-Application-Version": {
+                "description": "Running Tableau Desktop build.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "421": {
+            "$ref": "#/components/responses/MisdirectedRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v0/workbook/worksheets/{id}/image": {
+      "get": {
+        "summary": "Export a worksheet image",
+        "description": "Renders a single worksheet (resolved by id) as an image, returned inline as base64 or written to a caller-supplied file path.",
+        "operationId": "exportWorksheetImage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Renders a single worksheet (resolved by id) as an image, returned inline as base64 or written to a caller-supplied file path.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -1096,6 +1649,9 @@
               }
             }
           },
+          "202": {
+            "$ref": "#/components/responses/Accepted"
+          },
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
@@ -1153,10 +1709,12 @@
               "payload-version-unsupported",
               "not-found",
               "sheet-not-found",
+              "operation-pending",
               "method-not-allowed",
               "not-implemented",
               "command-not-found",
               "invalid-command-parameter",
+              "invalid-query-parameter",
               "operation-failed"
             ]
           },
@@ -1178,7 +1736,10 @@
         "required": [
           "id",
           "kind",
-          "state"
+          "state",
+          "createdAt",
+          "updatedAt",
+          "warnings"
         ],
         "properties": {
           "id": {
@@ -1188,9 +1749,20 @@
             "type": "string"
           },
           "state": {
-            "type": "string"
+            "type": "string",
+            "x-extensible-enum": [
+              "QUEUED",
+              "RUNNING",
+              "AWAITING_USER",
+              "SUCCEEDED",
+              "FAILED",
+              "CANCELLED"
+            ]
           },
           "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
             "type": "string"
           },
           "completedAt": {
@@ -1198,6 +1770,9 @@
           },
           "error": {
             "$ref": "#/components/schemas/OperationError"
+          },
+          "result": {
+            "type": "object"
           },
           "warnings": {
             "type": "array",
@@ -1357,8 +1932,10 @@
             "type": "string"
           },
           "location": {
-            "type": "string",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "unsavedChanges": {
             "type": "boolean"
@@ -1416,6 +1993,17 @@
           }
         }
       },
+      "OperationList": {
+        "type": "object",
+        "properties": {
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Operation"
+            }
+          }
+        }
+      },
       "DatasourceItem": {
         "type": "object",
         "description": "A datasource used by the open workbook.",
@@ -1424,7 +2012,10 @@
             "type": "string"
           },
           "luid": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -1732,6 +2323,42 @@
           "application/problem+json": {
             "schema": {
               "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "Accepted": {
+        "description": "The command did not settle within the synchronous window. The body is the pending operation; poll the Location URL until it reaches a terminal state.",
+        "headers": {
+          "Location": {
+            "description": "Relative URL of the operation to poll.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "Retry-After": {
+            "description": "Seconds to wait before polling.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Tableau-Operation-Id": {
+            "description": "Id of the created operation.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Tableau-Application-Version": {
+            "description": "Running Tableau Desktop build.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Operation"
             }
           }
         }
