@@ -6,9 +6,9 @@
   "fast_path_blockers": [],
   "portability_evidence": {
     "fixture_bind": true,
-    "render_verified": "live-2026-07-30",
+    "render_verified": "live-2026-07-31",
     "render_evidence": {
-      "basis": "templatized from a hand-authored live 'Unusual Change' worksheet (pulse templates/UnusualChangeTest); datasource/date/measure placeholdered, trendline + relative-date window preserved verbatim.",
+      "basis": "templatized from a hand-authored live 'Unusual Change' worksheet (pulse templates/UnusualChangeTest (2), refreshed 2026-07-31); datasource/date/measure placeholdered, trendline + relative-date window (last ~100 days, first-period='-99') preserved verbatim.",
       "lane": "insight-template (Pulse: Unusual Change)",
       "structural": null,
       "critical_pass": "not recorded (authored-from-live; earned by human review)",
@@ -28,7 +28,7 @@
     "unusualchange",
     "unusual change"
   ],
-  "description": "INSIGHT template (Pulse: Unusual Change) — a daily (Day-Trunc) line of an aggregated measure over the last ~300 days with a linear trendline + confidence bands; the anomaly is the point(s) falling outside the band. Templatized from the hand-authored 'Unusual Change' worksheet.",
+  "description": "INSIGHT template (Pulse: Unusual Change) — a daily (Day-Trunc) line of an aggregated measure over the last ~100 days with a linear trendline + confidence bands; the anomaly is the point(s) falling outside the band. Templatized from the hand-authored 'Unusual Change' worksheet.",
   "avoid_when": [
     "The x-axis is a set of DISCRETE, non-temporal CATEGORIES instead of a continuous time axis. A line implies continuity between adjacent points; a cross-category breakdown with no time axis belongs on a bar chart. Bind only a continuous time field to field_base_1."
   ],
@@ -44,13 +44,13 @@
       "bindable": true,
       "required": true,
       "temporal_from_string": true,
-      "purpose": "Temporal dimension that defines the continuous Day-Trunc x-axis; also carries the relative-date filter (last ~300 days).",
+      "purpose": "Temporal dimension that defines the continuous Day-Trunc x-axis; also carries the relative-date filter (last ~100 days).",
       "examples": [
         "Created Date",
         "Event Date",
         "Snapshot Time"
       ],
-      "notes": "XML instances: the x-axis pill is [tdy:{{field_base_1}}:qk] derivation='Day-Trunc'; the relative-date filter + <slices> reference [none:{{field_base_1}}:qk] (derivation='None'). Both instances must reference the SAME bound date field. The relative-date filter (first-period='-299' last-period='0' period-type-v2='day') scopes the view to the last ~300 days — adjust first-period to change the window."
+      "notes": "XML instances: the x-axis pill is [tdy:{{field_base_1}}:qk] derivation='Day-Trunc'; the relative-date filter + <slices> reference [none:{{field_base_1}}:qk] (derivation='None'). Both instances must reference the SAME bound date field. The relative-date filter (first-period='-99' last-period='0' period-type-v2='day') scopes the view to the last ~100 days — adjust first-period to change the window."
     },
     {
       "slot_id": "measure",

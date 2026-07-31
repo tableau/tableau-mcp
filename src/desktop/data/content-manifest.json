@@ -252,8 +252,8 @@
     },
     {
       "path": "template-manifests.index.json",
-      "sha256": "03bde655ff89182d17b9d936c9e3c349193ec95d00407e10937e4f32da788d78",
-      "bytes": 291412
+      "sha256": "87d12282fb10db7c70431e7053882664696ac9bd26bf8392bfca005fb2ef5c6e",
+      "bytes": 292699
     },
     {
       "path": "template-manifests/box-plot-chart.manifest.json",
@@ -362,13 +362,13 @@
     },
     {
       "path": "template-manifests/insight_barchart.manifest.json",
-      "sha256": "43d52827518e042121042b1681662189012f6507103fcee333b95a2b4c5c42e7",
-      "bytes": 3554
+      "sha256": "aa7f90a6147aa2af5177f290fca876b5b4ff7f29dff721bb0c98a62ff1892362",
+      "bytes": 4765
     },
     {
       "path": "template-manifests/insight_unusualchange.manifest.json",
-      "sha256": "aa01d84f7d10b9595389a31494667b2ee6af3df2ebc0199a7adc9d937528f661",
-      "bytes": 3837
+      "sha256": "93ac82e137c0d5b9966182b6d8137819f545d0161cd9ab90fb80e485bbede100",
+      "bytes": 3899
     },
     {
       "path": "template-manifests/kpi-text.manifest.json",

@@ -13,7 +13,7 @@
         <column-instance column='[{{field_base_2}}]' derivation='Sum' name='[sum:{{field_base_2}}:qk]' pivot='key' type='quantitative' />
         <column-instance column='[{{field_base_1}}]' derivation='Day-Trunc' name='[tdy:{{field_base_1}}:qk]' pivot='key' type='quantitative' />
       </datasource-dependencies>
-      <filter class='relative-date' column='[{{DATASOURCE}}].[none:{{field_base_1}}:qk]' first-period='-299' include-future='true' include-null='false' last-period='0' period-type-v2='day' />
+      <filter class='relative-date' column='[{{DATASOURCE}}].[none:{{field_base_1}}:qk]' first-period='-99' include-future='true' include-null='false' last-period='0' period-type-v2='day' />
       <slices>
         <column>[{{DATASOURCE}}].[none:{{field_base_1}}:qk]</column>
       </slices>

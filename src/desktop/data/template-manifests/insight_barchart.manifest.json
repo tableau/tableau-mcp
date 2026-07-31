@@ -6,9 +6,9 @@
   "fast_path_blockers": [],
   "portability_evidence": {
     "fixture_bind": true,
-    "render_verified": "live-2026-07-30",
+    "render_verified": "live-2026-07-31",
     "render_evidence": {
-      "basis": "templatized from a hand-authored live bar-chart worksheet (pulse templates/BarChartTest, sheet 'Sheet 2'); datasource/dimension/measure placeholdered, DESC shelf-sort + color-by-dimension preserved verbatim.",
+      "basis": "templatized from a hand-authored live bar-chart worksheet (pulse templates/BarChartTest (1), sheet 'Sheet 2', refreshed 2026-07-31); datasource/dimension/measure placeholdered, DESC shelf-sort + a categorical Top-50 groupfilter (count='50' end='top', ordered by SUM(measure) DESC) preserved verbatim. No color encoding (a mark colored by the same dimension already on rows is rejected by the redundant-color-encoding preflight rule).",
       "lane": "insight-template (Pulse: Bar Chart)",
       "structural": null,
       "critical_pass": "not recorded (authored-from-live; earned by human review)",
@@ -30,7 +30,7 @@
     "top-drivers",
     "top-detractors"
   ],
-  "description": "INSIGHT template (Pulse: Bar Chart) \u2014 horizontal bars of an aggregated measure across the members of a categorical dimension, sorted DESC by the measure (biggest bar first). Templatized from the hand-authored 'Sheet 2' bar worksheet.",
+  "description": "INSIGHT template (Pulse: Bar Chart) \u2014 horizontal bars of an aggregated measure across the members of a categorical dimension, limited to the Top 50 members by the measure and sorted DESC (biggest bar first). No color encoding. Templatized from the hand-authored 'Sheet 2' bar worksheet.",
   "avoid_when": [
     "The x-axis should be a CONTINUOUS TIME field (a trend over time) \u2014 use insight-unusual-change / trend-line-chart instead. This template compares a measure across DISCRETE categorical members, not across time."
   ],
@@ -45,7 +45,7 @@
       "kind": "categorical",
       "bindable": true,
       "required": true,
-      "purpose": "Categorical dimension whose members become the bars (on rows) and the color legend. The bars are sorted DESC by the measure.",
+      "purpose": "Categorical dimension whose members become the bars (on rows). The bars are sorted DESC by the measure.",
       "examples": [
         "Impact",
         "Priority",
@@ -77,12 +77,17 @@
     {
       "code": "desc-sort-is-the-shape",
       "detail": "The <shelf-sort-v2 direction='DESC' ...> ranks bars biggest-first \u2014 the defining feature of this insight ('top contributors'). Preserve the shelf-sort block; rebinding category/measure must update BOTH its dimension-to-sort and measure-to-sort-by, or the sort silently reverts to alphabetical.",
-      "xml": "insight_barchart.xml:15"
+      "xml": "insight_barchart.xml:23"
     },
     {
       "code": "measure-on-cols-means-horizontal",
-      "detail": "Measure on <cols> and dimension on <rows> produces HORIZONTAL bars. Do not swap them; a vertical column chart is a different shape. Color is bound to the same dimension as rows (one color per bar).",
-      "xml": "insight_barchart.xml:29"
+      "detail": "Measure on <cols> and dimension on <rows> produces HORIZONTAL bars. Do not swap them; a vertical column chart is a different shape. Do NOT add a color encoding on the same dimension already on rows — the redundant-color-encoding preflight rule rejects it.",
+      "xml": "insight_barchart.xml:38"
+    },
+    {
+      "code": "top50-groupfilter-references-measure-by-name",
+      "detail": "The categorical Top-50 filter (<groupfilter count='50' end='top' ...> ordered by SUM([{{field_base_2}}]) DESC) limits the view to the 50 biggest members. Its inner expression references the measure by BASE NAME (SUM([{{field_base_2}}])), NOT a datasource-qualified id \u2014 so rebinding the measure must also rewrite that expression. Two known failure modes: (1) if the measure is not rebound in the expression the Top-N silently drops on apply and ALL members render; (2) on the whole-workbook apply path a published (sqlproxy) datasource gets cloned to '(copy)', and the filter's base ref no longer matches the bound (copy) datasource, so Desktop drops the filter \u2014 the same symptom that made an earlier Top-20 vanish. Verify member count after apply.",
+      "xml": "insight_barchart.xml:15"
     }
   ]
 }
