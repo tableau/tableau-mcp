@@ -538,6 +538,21 @@ export async function startMockExternalApiServer(
       return;
     }
 
+    if (
+      method === 'POST' &&
+      (path === EXTERNAL_API_ROUTES.workbookUndo || path === EXTERNAL_API_ROUTES.workbookRedo)
+    ) {
+      const isUndo = path === EXTERNAL_API_ROUTES.workbookUndo;
+      sendJson(res, 200, {
+        id: isUndo ? 'op-undo-1' : 'op-redo-1',
+        kind: isUndo ? 'workbook.undo' : 'workbook.redo',
+        state: 'succeeded',
+        createdAt: '2026-07-07T10:00:00Z',
+        completedAt: '2026-07-07T10:00:01Z',
+      });
+      return;
+    }
+
     if (method === 'POST' && path === EXTERNAL_API_ROUTES.invokeCommand) {
       let parsed: { namespace?: string; command?: string; parameters?: unknown };
       try {

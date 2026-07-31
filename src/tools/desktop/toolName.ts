@@ -42,6 +42,7 @@ export const desktopToolNames = [
   'author-action',
   'format-labels',
   'author-parameter',
+  'desktop-command',
   'get-health',
   'get-worksheet-info',
   'list-storyboards',

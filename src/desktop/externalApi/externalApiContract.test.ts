@@ -38,9 +38,9 @@ import {
  * fixture with it and rerun — every drift (new field, changed requiredness, enum
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
  *
- * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.0,
- * captured 2026-07-30 (a build serving monolith #60234 + #61714). No hand-edits —
- * `DatasourceItem.luid` (["string","null"]) is now surfaced by the deployed spec.
+ * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.1,
+ * captured 2026-07-31 (a build serving the workbook:undo / workbook:redo command
+ * routes). No hand-edits.
  */
 
 type SpecSchema = {
@@ -175,6 +175,8 @@ describe('external client API contract (captured openapi fixture)', () => {
       EXTERNAL_API_ROUTES.workbookDatasources,
       EXTERNAL_API_ROUTES.workbookDocument,
       EXTERNAL_API_ROUTES.workbookDocumentValidate,
+      EXTERNAL_API_ROUTES.workbookUndo,
+      EXTERNAL_API_ROUTES.workbookRedo,
       EXTERNAL_API_ROUTES.workbookStoryboards,
       EXTERNAL_API_ROUTES.workbookWorksheets,
       EXTERNAL_API_ROUTES.dashboardById,

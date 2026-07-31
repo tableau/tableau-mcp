@@ -56,6 +56,24 @@ describe('ExternalApiClient', () => {
     expect(posted?.body).toBe(xml);
   });
 
+  it('undoes the last change via POST /v0/workbook:undo, returning the operation envelope', async () => {
+    const result = await client.undo();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().state).toBe('succeeded');
+    const posted = server.requests.at(-1);
+    expect(posted?.method).toBe('POST');
+    expect(posted?.path).toBe('/v0/workbook:undo');
+  });
+
+  it('redoes the last undone change via POST /v0/workbook:redo', async () => {
+    const result = await client.redo();
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().state).toBe('succeeded');
+    expect(server.requests.at(-1)?.path).toBe('/v0/workbook:redo');
+  });
+
   it('maps a 400 invalid-request-body problem when applying an empty document', async () => {
     const result = await client.applyWorkbookDocument('');
     expect(result.isErr()).toBe(true);

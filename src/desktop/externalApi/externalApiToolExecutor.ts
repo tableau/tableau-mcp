@@ -247,6 +247,44 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     return statusResult;
   }
 
+  async undo(
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.runWorkbookCommand('undo', (client) => client.undo(signal));
+  }
+
+  async redo(
+    signal: AbortSignal,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    return this.runWorkbookCommand('redo', (client) => client.redo(signal));
+  }
+
+  private async runWorkbookCommand(
+    command: string,
+    op: (client: ExternalApiClient) => Promise<Result<OperationEnvelope, ExternalApiError>>,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>> {
+    const outcomeResult = await this.withRescan(async (client) => {
+      const result = await op(client);
+      if (result.isErr()) {
+        return Err(result.error);
+      }
+      return Ok(normalizeEnvelope(result.value, client.apiVersion));
+    });
+
+    if (outcomeResult.isErr()) {
+      const mapped = mapClientError(outcomeResult.error, this.deps.pid);
+      log({
+        message: `Failed to run workbook command ${command} via External Client API`,
+        level: 'error',
+        logger: LOGGER,
+        data: mapped,
+      });
+      return Err(mapped);
+    }
+
+    return buildCommandStatus(outcomeResult.value, { namespace: 'external-api', command });
+  }
+
   async health(signal: AbortSignal): Promise<Result<{ healthy: boolean }, ExecuteCommandError>> {
     return this.readExternalApi((client) => client.health(signal));
   }

@@ -20,6 +20,8 @@ export const EXTERNAL_API_ROUTES = {
   workbookDatasources: '/v0/workbook/datasources',
   workbookDocument: '/v0/workbook/document',
   workbookDocumentValidate: '/v0/workbook/document:validate',
+  workbookUndo: '/v0/workbook:undo',
+  workbookRedo: '/v0/workbook:redo',
   workbookStoryboards: '/v0/workbook/storyboards',
   workbookWorksheets: '/v0/workbook/worksheets',
   dashboardById: '/v0/workbook/dashboards/{id}',

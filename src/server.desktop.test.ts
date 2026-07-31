@@ -210,11 +210,11 @@ describe('desktop tools/list serialized surface', () => {
     // guards that invariant). The full desktop surface is opt-in (TOOL_PROFILE=full), not
     // what clients see by default; its looser cap only catches runaway growth without
     // forcing valuable full-profile tools to be trimmed.
-    // Honest wire measurements are 29,463 bytes dynamic and 46,377 bytes full: the full
-    // surface rose by the two full-profile-only export-image tools.
+    // Honest wire measurements are 29,928 bytes dynamic and 46,842 bytes full: both rose by
+    // the desktop-command dispatcher (undo/redo), added to the served profile.
     // Keep only a few bytes of ratchet headroom on each cap.
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_479);
-    expect(fullSurfaceTotal).toBeLessThanOrEqual(46_393);
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_935);
+    expect(fullSurfaceTotal).toBeLessThanOrEqual(46_849);
   });
 });
 
@@ -446,10 +446,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 33-tool data-first singable surface — native authoring + workbook reads + atomic sheet activation + the manual path read/edit legs, no workbook round-trip/validation XML tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 34-tool data-first singable surface — native authoring + workbook reads + undo/redo + atomic sheet activation + the manual path read/edit legs, no workbook round-trip/validation XML tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(33);
+    expect(selected).toHaveLength(34);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -459,6 +459,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'author-parameter',
       'author-action',
       'format-labels',
+      'desktop-command',
       'ask-user',
       'search-commands',
       'bind-template',
@@ -525,8 +526,8 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     }
     // A lean surface must have generous headroom — this is a structural win, not a
     // describe-stub squeeze. If this ever approaches 46k something is very wrong.
-    // Raised with the signed-off bind-template describes (2026-07-27, #643 review fold).
-    expect(total).toBeLessThanOrEqual(29_480);
+    // Raised for the desktop-command dispatcher (undo/redo) added to the served profile.
+    expect(total).toBeLessThanOrEqual(29_935);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {

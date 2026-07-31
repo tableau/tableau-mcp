@@ -172,6 +172,16 @@ export class ExternalApiClient {
     return this.parseJson(response, validationResultSchema);
   }
 
+  async undo(signal?: AbortSignal): Promise<Result<OperationEnvelope, ExternalApiError>> {
+    const response = await this.request('POST', EXTERNAL_API_ROUTES.workbookUndo, { signal });
+    return this.parseEnvelope(response, signal);
+  }
+
+  async redo(signal?: AbortSignal): Promise<Result<OperationEnvelope, ExternalApiError>> {
+    const response = await this.request('POST', EXTERNAL_API_ROUTES.workbookRedo, { signal });
+    return this.parseEnvelope(response, signal);
+  }
+
   async invokeCommand(
     namespace: string,
     command: string,
