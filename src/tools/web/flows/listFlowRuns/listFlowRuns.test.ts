@@ -268,18 +268,22 @@ describe('listFlowRunsTool', () => {
     expect(JSON.parse(result.content[0].text).flowRuns).toHaveLength(1);
   });
 
-  it('uses client-side status sort before REST API 3.30', async () => {
-    mocks.mockGetFlowRuns.mockResolvedValue([
-      { ...mockFlowRuns[0], status: 'Failed' },
-      { ...mockFlowRuns[0], id: 'pending', status: 'Pending' },
-    ]);
+  it('rejects status sorting before REST API 3.30', async () => {
+    const result = await getToolResult({ sort: 'status:asc', limit: 1 });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('requires Tableau REST API version 3.30');
+    expect(mocks.mockGetFlowRuns).not.toHaveBeenCalled();
+  });
+
+  it('passes status sorting to REST API 3.30+', async () => {
+    mocks.mockVersionIsAtLeast.mockReturnValue(true);
+    mocks.mockGetFlowRuns.mockResolvedValue(mockFlowRuns);
     const result = await getToolResult({ sort: 'status:asc', limit: 1 });
     expect(result.isError).toBe(false);
     expect(mocks.mockGetFlowRuns).toHaveBeenCalledWith(
-      expect.objectContaining({ sort: 'completedAt:desc' }),
+      expect.objectContaining({ sort: 'status:asc' }),
     );
-    invariant(result.content[0].type === 'text');
-    expect(JSON.parse(result.content[0].text).flowRuns[0].status).toBe('Pending');
   });
 
   it('supports status:in:[...] client-side', async () => {

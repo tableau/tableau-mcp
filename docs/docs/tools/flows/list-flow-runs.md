@@ -70,9 +70,10 @@ terminal statuses (`Success`, `Failed`, and/or `Cancelled`). A mixed list such a
 required OR predicate without risking incorrect results.
 
 On older REST API versions, the tool removes `status` from the server request and applies filtering
-and sorting in-process. Pair `status` with a `flowId` and/or a `startedAt` window so the fallback
-operates on a bounded set of runs. Unknown `status` values are rejected with the allowed list, and
-the value is case-sensitive.
+in-process. Pair `status` with a `flowId` and/or a `startedAt` window so the fallback operates on a
+bounded set of runs. Status sorting is not available on older REST API versions; use `startedAt`,
+`completedAt`, or `progress` sorting instead. Unknown `status` values are rejected with the allowed
+list, and the value is case-sensitive.
 
 #### `flowId` must be a UUID
 
