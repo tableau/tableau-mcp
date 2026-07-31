@@ -54,6 +54,8 @@ export type ValidatedFlowRunsFilter = {
   matchesStatus: (run: FlowRun) => boolean;
   /** The full normalized filter (server + status) — used for empty-result hints. */
   normalizedFilter: string;
+  /** Whether the filter contains a status clause. */
+  hasStatusFilter: boolean;
 };
 
 /**
@@ -65,6 +67,7 @@ export type ValidatedFlowRunsFilter = {
  */
 export function parseAndValidateFlowRunsFilterString(
   filterString: string,
+  { statusFilterSupported = false }: { statusFilterSupported?: boolean } = {},
 ): ValidatedFlowRunsFilter {
   // Validates fields/operators, normalizes date-only values for
   // startedAt/completedAt, and dedupes repeated fields (last one wins).
@@ -91,11 +94,35 @@ export function parseAndValidateFlowRunsFilterString(
     }
   }
 
+  if (statusFilterSupported && statusClause) {
+    assertSupportedStatusIn(statusClause);
+    const statusClauses = splitTopLevel(normalizedFilter, ',')
+      .map((c) => c.trim())
+      .filter((c) => c.startsWith('status:'));
+    serverClauses.push(...statusClauses);
+  }
+
   return {
     serverFilter: serverClauses.join(','),
-    matchesStatus: buildStatusMatcher(statusClause),
+    matchesStatus: statusFilterSupported ? () => true : buildStatusMatcher(statusClause),
     normalizedFilter,
+    hasStatusFilter: statusClause !== undefined,
   };
+}
+
+function assertSupportedStatusIn(statusClause: {
+  operator: FilterOperator;
+  values: string[];
+}): void {
+  if (statusClause.operator !== 'in' || statusClause.values.length <= 1) {
+    return;
+  }
+  const nonTerminalStatuses = new Set(['Pending', 'InProgress']);
+  if (statusClause.values.some((value) => nonTerminalStatuses.has(value))) {
+    throw new Error(
+      'A multi-value status:in filter is supported on REST API 3.30+ only when all values are terminal statuses: Success, Failed, or Cancelled.',
+    );
+  }
 }
 
 /**

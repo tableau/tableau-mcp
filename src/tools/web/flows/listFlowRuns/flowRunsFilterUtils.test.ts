@@ -25,6 +25,26 @@ describe('parseAndValidateFlowRunsFilterString', () => {
     expect(matchesStatus(run('Success'))).toBe(false);
   });
 
+  it('keeps status server-side when the REST API supports it', () => {
+    const { serverFilter, matchesStatus, hasStatusFilter } = parseAndValidateFlowRunsFilterString(
+      'flowId:eq:x,status:eq:Failed',
+      {
+        statusFilterSupported: true,
+      },
+    );
+    expect(serverFilter).toBe('flowId:eq:x,status:eq:Failed');
+    expect(matchesStatus(run('Success'))).toBe(true);
+    expect(hasStatusFilter).toBe(true);
+  });
+
+  it('rejects mixed terminal and non-terminal status values when supported server-side', () => {
+    expect(() =>
+      parseAndValidateFlowRunsFilterString('status:in:[Failed,Pending]', {
+        statusFilterSupported: true,
+      }),
+    ).toThrow(/terminal statuses/);
+  });
+
   it('strips status into a client-side predicate (in:[...])', () => {
     const { serverFilter, matchesStatus } = parseAndValidateFlowRunsFilterString(
       `flowId:eq:${FLOW_ID},status:in:[Failed,Cancelled]`,
