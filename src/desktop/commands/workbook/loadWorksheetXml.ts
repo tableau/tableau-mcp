@@ -23,6 +23,7 @@ import { withApplyLock } from './applyMutex.js';
 import { getWorkbookXml } from './getWorkbookXml.js';
 import { getWorksheetFragment } from './getWorksheetXml.js';
 import { applyWorkbookText } from './loadWorkbookXml.js';
+import { pollReadback } from './pollReadback.js';
 
 export type LoadWorksheetXmlError =
   | { type: 'invalid-xml' }
@@ -50,30 +51,6 @@ export interface LoadWorksheetXmlOk {
 
 export interface PostApplyWorksheetReadbackVerification extends ReadbackVerificationResult {
   findings: ReadbackFinding[];
-}
-
-// The apply settles asynchronously after it reports terminal, so a single readback can race that
-// settle and re-read PRE-apply XML — mis-flagging a durable apply as a dropped node. Poll instead of
-// reading once; 250ms is the interval documented to clear this same class of race elsewhere.
-const READBACK_POLL_MAX_ATTEMPTS = 8;
-const READBACK_POLL_INTERVAL_MS = 250;
-
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason as Error);
-      return;
-    }
-    const onAbort = (): void => {
-      clearTimeout(timer);
-      reject(signal?.reason as Error);
-    };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
 }
 
 type LoadWorksheetXmlResult = Result<
@@ -109,39 +86,37 @@ export async function verifyPostApplyWorksheetReadback(
   signal: WithExecutorAndAbortSignal['signal'],
 ): Promise<PostApplyWorksheetReadbackVerification> {
   try {
-    let lastVerification: PostApplyWorksheetReadbackVerification | undefined;
-    for (let attempt = 1; attempt <= READBACK_POLL_MAX_ATTEMPTS; attempt++) {
-      const reread = await getWorksheetFragment({ worksheetName, executor, signal });
-      if (reread.isErr()) {
-        const message =
-          reread.error.type === 'get-worksheet-xml-error'
-            ? reread.error.error.message
-            : 'could not re-read worksheet after apply';
-        log({
-          level: 'warning',
-          message:
-            'Post-apply worksheet readback verification skipped — could not re-read worksheet',
-          logger: 'worksheetCommands',
-          data: { worksheetName, status: 'skipped', error: reread.error },
-        });
-        return { ok: true, status: 'skipped', findings: [], message };
-      }
-      const findings = verifyWorksheetReadback(intendedXml, reread.value);
-      if (findings.some((f) => f.severity === 'error')) {
-        // An error verdict may be a pre-apply read, not a real drop — only the final attempt is durable.
-        lastVerification = { ok: false, status: 'failed', findings };
-        if (attempt < READBACK_POLL_MAX_ATTEMPTS) {
-          await sleep(READBACK_POLL_INTERVAL_MS, signal);
-          continue;
-        }
-        return lastVerification;
-      }
-      if (findings.some((f) => f.severity === 'warning')) {
-        return { ok: true, status: 'warning', findings };
-      }
-      return { ok: true, status: 'passed', findings: [] };
+    // The apply lands asynchronously, so a re-read that looks like it dropped a node might just be
+    // the pre-apply worksheet — poll rather than trust the first read.
+    const polled = await pollReadback({
+      read: () => getWorksheetFragment({ worksheetName, executor, signal }),
+      settled: (fragment) =>
+        !verifyWorksheetReadback(intendedXml, fragment).some((f) => f.severity === 'error'),
+      signal,
+    });
+
+    if (!polled.ok) {
+      const message =
+        polled.error.type === 'get-worksheet-xml-error'
+          ? polled.error.error.message
+          : 'could not re-read worksheet after apply';
+      log({
+        level: 'warning',
+        message: 'Post-apply worksheet readback verification skipped — could not re-read worksheet',
+        logger: 'worksheetCommands',
+        data: { worksheetName, status: 'skipped', error: polled.error },
+      });
+      return { ok: true, status: 'skipped', findings: [], message };
     }
-    return lastVerification ?? { ok: true, status: 'passed', findings: [] };
+
+    const findings = verifyWorksheetReadback(intendedXml, polled.value);
+    if (findings.some((f) => f.severity === 'error')) {
+      return { ok: false, status: 'failed', findings };
+    }
+    if (findings.some((f) => f.severity === 'warning')) {
+      return { ok: true, status: 'warning', findings };
+    }
+    return { ok: true, status: 'passed', findings: [] };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     log({
