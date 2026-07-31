@@ -37,9 +37,7 @@ describe('DesktopMcpServer', () => {
 
     const allTools = desktopToolFactories.map((toolFactory) => toolFactory(server));
     const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
-    const tools = allTools.filter(
-      (tool, i) => !disabledFlags[i] && tool.name !== 'check-for-user-changes',
-    );
+    const tools = allTools.filter((tool, i) => !disabledFlags[i]);
     expect(server.mcpServer.registerTool).toHaveBeenCalledTimes(tools.length);
     for (const tool of tools) {
       expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
@@ -53,17 +51,6 @@ describe('DesktopMcpServer', () => {
         expect.any(Function),
       );
     }
-  });
-
-  it('does not register check-for-user-changes on the External Client API transport', async () => {
-    const server = getServer();
-    await server.registerTools();
-
-    const registeredNames = (
-      vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
-    ).map(([name]) => name);
-    expect(registeredNames).not.toContain('check-for-user-changes');
-    expect(registeredNames).toContain('list-worksheets');
   });
 
   it('registers list-instances even when a Desktop session is pinned', async () => {
@@ -80,7 +67,7 @@ describe('DesktopMcpServer', () => {
         vi.mocked(server.mcpServer.registerTool).mock.calls as Array<[string, ...unknown[]]>
       ).map(([name]) => name);
       expect(registeredNames).toContain('list-instances');
-      expect(registeredNames).toContain('list-worksheets');
+      expect(registeredNames).toContain('desktop-read');
     } finally {
       spy.mockRestore();
     }
@@ -153,7 +140,7 @@ For a dynamic ask or a calc/derived field the data lacks WITHOUT a conventional 
 
 If ambiguity changes workbook content, call ask-user with urgency=blocking; stop.
 
-For current/existing sheet/chart/view/dashboard, edit in place: resolve target (exact name else list-worksheets/list-dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort ONLY, add-field + apply-worksheet for a color/size/detail or rows/cols field, or an author-* tool; a NEW chart here = bind-template with target_worksheet. Never create new sheets unless asked.
+For current/existing sheet/chart/view/dashboard, edit in place: resolve target (exact name else desktop-read method:worksheets/dashboards; ask-user if ambiguous), then refine-worksheet for top-N/sort ONLY, add-field + apply-worksheet for a color/size/detail or rows/cols field, or an author-* tool; a NEW chart here = bind-template with target_worksheet. Never create new sheets unless asked.
 
 Command census: activate-sheet switches sheets; author-* tools author semantics; refine-worksheet edits top-N/sort; add-field + apply-worksheet change encodings. Use search-commands ONLY for unlisted commands.
 
@@ -210,11 +197,13 @@ describe('desktop tools/list serialized surface', () => {
     // guards that invariant). The full desktop surface is opt-in (TOOL_PROFILE=full), not
     // what clients see by default; its looser cap only catches runaway growth without
     // forcing valuable full-profile tools to be trimmed.
-    // Honest wire measurements are 29,463 bytes dynamic and 46,377 bytes full: the full
-    // surface rose by the two full-profile-only export-image tools.
+    // Honest wire measurements are 28,186 bytes dynamic and 41,059 bytes full: both dropped
+    // when the environment reads AND the five thin workbook/datasource reads folded into the
+    // one desktop-read dispatcher (served on the dynamic profile). The dynamic cap ratchets
+    // BELOW its long-standing 29,479 as a result.
     // Keep only a few bytes of ratchet headroom on each cap.
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_479);
-    expect(fullSurfaceTotal).toBeLessThanOrEqual(46_393);
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(28_193);
+    expect(fullSurfaceTotal).toBeLessThanOrEqual(41_066);
   });
 });
 
@@ -446,10 +435,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     expect(selected.map((t) => t.name)).toContain('execute-tableau-command');
   });
 
-  it('TOOL_PROFILE=dynamic-authoring registers exactly the 33-tool data-first singable surface — native authoring + workbook reads + atomic sheet activation + the manual path read/edit legs, no workbook round-trip/validation XML tools', () => {
+  it('TOOL_PROFILE=dynamic-authoring registers exactly the 29-tool data-first singable surface — native authoring + the grouped desktop-read + atomic sheet activation + the manual path read/edit legs, no workbook round-trip/validation XML tools', () => {
     const selected = selectToolsForProfile(allTools(), 'dynamic-authoring');
     expect(new Set(selected.map((t) => t.name))).toEqual(DYNAMIC_AUTHORING_TOOL_PROFILE);
-    expect(selected).toHaveLength(33);
+    expect(selected).toHaveLength(29);
     // The full dynamic dialect, semantically named — every author-* verb present,
     // plus the ask-for-help, command-discovery, deterministic fast-path, and the two
     // knowledge doors the system prompt's "consult the expertise library" law routes to.
@@ -475,9 +464,9 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'read-knowledge-resource',
       'search-knowledge',
       'get-summary-data',
-      'get-workbook-inventory',
-      'list-workbook-datasources',
-      'list-site-datasources',
+      // The grouped read: worksheets/dashboards lists, workbook inventory, workbook/site
+      // datasources, and the environment reads all reach the agent through this one tool.
+      'desktop-read',
       'activate-sheet',
       // The manual field-edit path's read leg — mints the worksheetFile add-field/
       // remove-field/apply-worksheet consume.
@@ -490,6 +479,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     // only the dedicated atomic activate-sheet fallback. The per-sheet lane is in:
     // get-worksheet-xml reads, read-cached-xml/write-cached-xml edit the cached slice, and
     // apply-worksheet applies the file — apply-* takes no document, so this lane is the route.
+    // The thin read tools folded into desktop-read no longer exist as standalone tools.
     for (const banished of [
       'get-workbook-xml',
       'apply-workbook',
@@ -497,16 +487,7 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'validate-worksheet-xml',
       'inject-template',
       'list-templates',
-      'list-site-workbooks',
       'get-app-info',
-      'get-health',
-      'get-worksheet-info',
-      'list-storyboards',
-      'get-storyboard-xml',
-      'get-api-root',
-      'get-site-info',
-      'get-dashboard-info',
-      'get-storyboard-info',
       'list-knowledge-resources',
     ]) {
       expect(selected.map((t) => t.name)).not.toContain(banished);
@@ -525,8 +506,8 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     }
     // A lean surface must have generous headroom — this is a structural win, not a
     // describe-stub squeeze. If this ever approaches 46k something is very wrong.
-    // Raised with the signed-off bind-template describes (2026-07-27, #643 review fold).
-    expect(total).toBeLessThanOrEqual(29_480);
+    // Ratcheted down when the thin reads folded into desktop-read.
+    expect(total).toBeLessThanOrEqual(28_193);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {
@@ -589,8 +570,7 @@ describe('DesktopMcpServer TOOL_PROFILE env wiring', () => {
     const registeredNames = vi
       .mocked(server.mcpServer.registerTool)
       .mock.calls.map((call) => call[0]);
-    expect(registeredNames.length).toBe(desktopToolFactories.length - 1);
-    expect(registeredNames).not.toContain('check-for-user-changes');
+    expect(registeredNames.length).toBe(desktopToolFactories.length);
   });
 });
 

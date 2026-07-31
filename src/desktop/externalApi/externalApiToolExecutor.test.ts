@@ -569,14 +569,4 @@ describe('ExternalApiToolExecutor', () => {
       expect(discover).toHaveBeenCalledTimes(2);
     });
   });
-
-  describe('getEvents', () => {
-    it('reports that events are not supported by the External Client API', async () => {
-      const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
-      await executor.start();
-
-      const result = await executor.getEvents({ signal });
-      expect(result.isErr()).toBe(true);
-    });
-  });
 });

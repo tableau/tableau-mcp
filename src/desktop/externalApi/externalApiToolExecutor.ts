@@ -2,13 +2,11 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { log } from '../../logging/logger.js';
-import { GetCommandStatusResponse, GetEventsResponse } from '../../sdks/desktop/agentApi/types.js';
 import { desktopCallTimeoutMessage, isDesktopCallTimeout } from '../callDeadline.js';
 import {
   ExecuteCommandArgs,
   ExecuteCommandError,
   ExecuteCommandResult,
-  GetEventsArgs,
   ToolExecutor,
 } from '../toolExecutor/toolExecutor.js';
 import {
@@ -16,6 +14,7 @@ import {
   unknownInstanceUnreachableMessage,
   unreachableInstanceMessage,
 } from '../unreachableInstance.js';
+import { GetCommandStatusResponse } from './executorResponseTypes.js';
 import {
   ExternalApiClient,
   ExternalApiClientOptions,
@@ -370,17 +369,6 @@ export class ExternalApiToolExecutor extends ToolExecutor {
     signal: AbortSignal,
   ): Promise<Result<SiteDatasourceList, ExecuteCommandError>> {
     return this.readExternalApi((client) => client.listSiteDatasources(signal));
-  }
-
-  async getEvents({ signal: _signal }: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>> {
-    // The External Client API contract (this PR revision) exposes no events endpoint.
-    // See residual risk in the deliverable report.
-    log({
-      message: 'getEvents is not supported by the External Client API transport',
-      level: 'warning',
-      logger: LOGGER,
-    });
-    return Err(new Error('getEvents is not supported by the External Client API transport.'));
   }
 
   private createClient(instance: ExternalApiInstance): ExternalApiClient {

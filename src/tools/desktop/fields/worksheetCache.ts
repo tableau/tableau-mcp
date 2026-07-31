@@ -44,7 +44,7 @@ export async function fetchAndCacheWorksheet({
               type: 'endpoint-not-in-this-build',
               message:
                 'This Tableau Desktop build does not serve the worksheet document endpoint yet. ' +
-                'Use list-worksheets to confirm the target sheet is visible, then retry on a Desktop build that serves worksheet documents.',
+                'Use desktop-read (method: worksheets) to confirm the target sheet is visible, then retry on a Desktop build that serves worksheet documents.',
               statusCode: 404,
             }),
           );

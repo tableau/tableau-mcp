@@ -24,20 +24,9 @@ import { getAuthorSetTool } from './data-source/authorSet.js';
 import { getFormatLabelsTool } from './data-source/formatLabels.js';
 import { getAppInfoTool } from './data-source/getAppInfo.js';
 import { getSummaryDataTool } from './data-source/getSummaryData.js';
-import { getWorkbookInventoryTool } from './data-source/getWorkbookInventory.js';
-import { getListSiteDatasourcesTool } from './data-source/listSiteDatasources.js';
-import { getListSiteWorkbooksTool } from './data-source/listSiteWorkbooks.js';
-import { getListWorkbookDatasourcesTool } from './data-source/listWorkbookDatasources.js';
+import { getDesktopReadTool } from './external-api/desktopRead.js';
 import { exportDashboardImageTool } from './external-api/exportDashboardImage.js';
 import { exportWorksheetImageTool } from './external-api/exportWorksheetImage.js';
-import { getApiRootTool } from './external-api/getApiRoot.js';
-import { getDashboardInfoTool } from './external-api/getDashboardInfo.js';
-import { getHealthTool } from './external-api/getHealth.js';
-import { getSiteInfoTool } from './external-api/getSiteInfo.js';
-import { getStoryboardInfoTool } from './external-api/getStoryboardInfo.js';
-import { getStoryboardXmlTool } from './external-api/getStoryboardXml.js';
-import { getWorksheetInfoTool } from './external-api/getWorksheetInfo.js';
-import { getListStoryboardsTool } from './external-api/listStoryboards.js';
 import { getAddFieldTool } from './fields/addField.js';
 import { getListAvailableFieldsTool } from './fields/listAvailableFields.js';
 import { getListFieldsTool } from './fields/listFields.js';
@@ -53,14 +42,11 @@ import { getLookupWorkbookSchemaTool } from './search/lookupWorkbookSchema.js';
 import { getSearchCommandsTool } from './search/searchCommands.js';
 import { getSearchExamplesTool } from './search/searchExamples.js';
 import { getSearchWorkbookExamplesTool } from './search/searchWorkbookExamples.js';
-import { getCheckForUserChangesTool } from './session/checkForUserChanges.js';
 import { getListInstancesTool } from './session/listInstances.js';
 import { getInjectTemplateTool } from './template/injectTemplate.js';
 import { getActivateSheetTool } from './workbook/activateSheet.js';
 import { getApplyWorkbookTool } from './workbook/applyWorkbook.js';
 import { getGetWorkbookXmlTool } from './workbook/getWorkbookXml.js';
-import { getListDashboardsTool } from './workbook/listDashboards.js';
-import { getListWorksheetsTool } from './workbook/listWorksheets.js';
 import { getApplyWorksheetTool } from './worksheet/applyWorksheet.js';
 import { getDeleteWorksheetTool } from './worksheet/deleteWorksheet.js';
 import { getGetWorksheetXmlTool } from './worksheet/getWorksheetXml.js';
@@ -68,12 +54,9 @@ import { getRefineWorksheetTool } from './worksheet/refineWorksheet.js';
 
 export const desktopToolFactories = [
   getListInstancesTool,
-  getCheckForUserChangesTool,
   getGetWorkbookXmlTool,
   getApplyWorkbookTool,
   getActivateSheetTool,
-  getListWorksheetsTool,
-  getListDashboardsTool,
   getGetWorksheetXmlTool,
   getApplyWorksheetTool,
   getDeleteWorksheetTool,
@@ -108,21 +91,10 @@ export const desktopToolFactories = [
   getAuthorActionTool,
   getFormatLabelsTool,
   getAuthorParameterTool,
-  getHealthTool,
-  getWorksheetInfoTool,
-  getListStoryboardsTool,
-  getStoryboardXmlTool,
-  getApiRootTool,
-  getSiteInfoTool,
-  getDashboardInfoTool,
-  getStoryboardInfoTool,
+  getDesktopReadTool,
   getSummaryDataTool,
   exportWorksheetImageTool,
   exportDashboardImageTool,
-  getWorkbookInventoryTool,
-  getListWorkbookDatasourcesTool,
-  getListSiteDatasourcesTool,
-  getListSiteWorkbooksTool,
   getAppInfoTool,
   getValidateWorksheetXmlTool,
   getValidateWorkbookXmlTool,

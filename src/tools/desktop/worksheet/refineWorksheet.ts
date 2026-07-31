@@ -53,8 +53,7 @@ type RefineWorksheetToolResult =
 // call above returning does not mean the patch has landed in Desktop's live document yet.
 // A single readback immediately after apply can race that settle and see the PRE-apply
 // XML, which would misreport a durable apply as `refined: false`. Poll instead of reading
-// once; 250ms intervals are the interval documented to work for this same class of race
-// elsewhere (list-worksheets/list-dashboards polling after new-worksheet/new-dashboard).
+// once; 250ms is the interval documented to clear this class of post-apply settle race.
 const READBACK_POLL_MAX_ATTEMPTS = 8;
 const READBACK_POLL_INTERVAL_MS = 250;
 
