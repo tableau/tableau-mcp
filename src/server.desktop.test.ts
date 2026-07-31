@@ -197,11 +197,11 @@ describe('desktop tools/list serialized surface', () => {
     // guards that invariant). The full desktop surface is opt-in (TOOL_PROFILE=full), not
     // what clients see by default; its looser cap only catches runaway growth without
     // forcing valuable full-profile tools to be trimmed.
-    // Honest wire measurements are 29,463 bytes dynamic and 46,377 bytes full: the full
-    // surface rose by the two full-profile-only export-image tools.
+    // Honest wire measurements are 29,463 bytes dynamic and 43,254 bytes full: the full
+    // surface dropped when nine environment/inspection reads folded into desktop-read.
     // Keep only a few bytes of ratchet headroom on each cap.
     expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_479);
-    expect(fullSurfaceTotal).toBeLessThanOrEqual(46_393);
+    expect(fullSurfaceTotal).toBeLessThanOrEqual(43_270);
   });
 });
 
@@ -484,16 +484,10 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
       'validate-worksheet-xml',
       'inject-template',
       'list-templates',
-      'list-site-workbooks',
+      // The grouped environment/inspection read dispatcher is a full-surface tool: the
+      // lean authoring profile keeps only the named reads the authoring hot path needs.
+      'desktop-read',
       'get-app-info',
-      'get-health',
-      'get-worksheet-info',
-      'list-storyboards',
-      'get-storyboard-xml',
-      'get-api-root',
-      'get-site-info',
-      'get-dashboard-info',
-      'get-storyboard-info',
       'list-knowledge-resources',
     ]) {
       expect(selected.map((t) => t.name)).not.toContain(banished);

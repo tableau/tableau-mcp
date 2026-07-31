@@ -12,20 +12,12 @@ import * as sessionResolution from '../../../desktop/sessionResolution.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { DesktopTool } from '../tool.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getApiRootTool } from './getApiRoot.js';
-import { getDashboardInfoTool } from './getDashboardInfo.js';
-import { getHealthTool } from './getHealth.js';
-import { getSiteInfoTool } from './getSiteInfo.js';
-import { getStoryboardInfoTool } from './getStoryboardInfo.js';
-import { getStoryboardXmlTool } from './getStoryboardXml.js';
-import { getWorksheetInfoTool } from './getWorksheetInfo.js';
-import { getListStoryboardsTool } from './listStoryboards.js';
+import { getDesktopReadTool } from './desktopRead.js';
 
 vi.mock('../../../desktop/sessionResolution.js');
 
-describe('External API coverage tools', () => {
+describe('desktop-read dispatcher', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sessionResolution.resolveSession).mockReturnValue(Ok('999'));
@@ -33,7 +25,7 @@ describe('External API coverage tools', () => {
 
   it.each([
     {
-      makeTool: getHealthTool,
+      method: 'health',
       args: {},
       expectedPath: '/v0/health',
       expectBody: (body: unknown) => {
@@ -41,7 +33,7 @@ describe('External API coverage tools', () => {
       },
     },
     {
-      makeTool: getApiRootTool,
+      method: 'api-root',
       args: {},
       expectedPath: '/v0/',
       expectBody: (body: unknown) => {
@@ -57,7 +49,7 @@ describe('External API coverage tools', () => {
       },
     },
     {
-      makeTool: getSiteInfoTool,
+      method: 'site',
       args: {},
       expectedPath: '/v0/site',
       expectBody: (body: unknown) => {
@@ -70,7 +62,7 @@ describe('External API coverage tools', () => {
       },
     },
     {
-      makeTool: getListStoryboardsTool,
+      method: 'storyboards',
       args: {},
       expectedPath: '/v0/workbook/storyboards',
       expectBody: (body: unknown) => {
@@ -78,12 +70,23 @@ describe('External API coverage tools', () => {
         expect(parsed.storyboards[0].id).toBe('story-qbr');
       },
     },
+    {
+      method: 'site-workbooks',
+      args: {},
+      expectedPath: '/v0/site/workbooks',
+      expectBody: (body: unknown) => {
+        const parsed = z
+          .object({ workbooks: z.array(z.object({ id: z.string(), luid: z.string().optional() })) })
+          .parse(body);
+        expect(parsed.workbooks[0].id).toBe('wb-regional-sales');
+      },
+    },
   ])(
-    '$toolName returns the mock server payload',
-    async ({ makeTool, args, expectedPath, expectBody }) => {
-      const harness = await startHarness(makeTool);
+    '$method returns the mock server payload',
+    async ({ method, args, expectedPath, expectBody }) => {
+      const harness = await startHarness();
       try {
-        const result = await harness.callTool(args);
+        const result = await harness.callTool({ method, ...args });
 
         expect(result.isError).toBe(false);
         expectBody(parseResult(result));
@@ -95,9 +98,9 @@ describe('External API coverage tools', () => {
   );
 
   it('gets worksheet metadata by id after resolving it through the worksheet list', async () => {
-    const harness = await startHarness(getWorksheetInfoTool);
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ worksheet: 'sheet-sales' });
+      const result = await harness.callTool({ method: 'worksheet-info', target: 'sheet-sales' });
 
       expect(result.isError).toBe(false);
       expect(
@@ -116,9 +119,12 @@ describe('External API coverage tools', () => {
   });
 
   it('gets worksheet metadata by name after resolving it to an id', async () => {
-    const harness = await startHarness(getWorksheetInfoTool);
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ worksheet: 'Sales by Region' });
+      const result = await harness.callTool({
+        method: 'worksheet-info',
+        target: 'Sales by Region',
+      });
 
       expect(result.isError).toBe(false);
       expect(
@@ -137,9 +143,9 @@ describe('External API coverage tools', () => {
   });
 
   it('reports available worksheets when the worksheet selector does not resolve', async () => {
-    const harness = await startHarness(getWorksheetInfoTool);
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ worksheet: 'Missing Sheet' });
+      const result = await harness.callTool({ method: 'worksheet-info', target: 'Missing Sheet' });
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
@@ -155,10 +161,27 @@ describe('External API coverage tools', () => {
     }
   });
 
-  it('gets dashboard metadata by name after resolving it to an id', async () => {
-    const harness = await startHarness(getDashboardInfoTool);
+  it('requires a target for an item-scoped read before hitting the server', async () => {
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ dashboard: 'Executive Dashboard' });
+      const result = await harness.callTool({ method: 'worksheet-info' });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('requires a target');
+      expect(harness.server.requests).toHaveLength(0);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('gets dashboard metadata by name after resolving it to an id', async () => {
+    const harness = await startHarness();
+    try {
+      const result = await harness.callTool({
+        method: 'dashboard-info',
+        target: 'Executive Dashboard',
+      });
 
       expect(result.isError).toBe(false);
       expect(
@@ -176,9 +199,9 @@ describe('External API coverage tools', () => {
   });
 
   it('passes an explicit session to the session resolver', async () => {
-    const harness = await startHarness(getHealthTool);
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ session: 'desktop-2' });
+      const result = await harness.callTool({ method: 'health', session: 'desktop-2' });
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
@@ -190,7 +213,7 @@ describe('External API coverage tools', () => {
   });
 
   it('resolves XML-escaped dashboard names', async () => {
-    const harness = await startHarness(getDashboardInfoTool, (server) => {
+    const harness = await startHarness((server) => {
       server.setOverride('GET /v0/workbook/dashboards', {
         status: 200,
         contentType: 'application/json',
@@ -205,7 +228,10 @@ describe('External API coverage tools', () => {
       });
     });
     try {
-      const result = await harness.callTool({ dashboard: 'Sales &amp; Data' });
+      const result = await harness.callTool({
+        method: 'dashboard-info',
+        target: 'Sales &amp; Data',
+      });
 
       expect(result.isError).toBe(false);
       expect(z.object({ id: z.string() }).parse(parseResult(result)).id).toBe('dash-amp');
@@ -219,9 +245,9 @@ describe('External API coverage tools', () => {
   });
 
   it('gets storyboard metadata by name after resolving it to an id', async () => {
-    const harness = await startHarness(getStoryboardInfoTool);
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ storyboard: 'QBR Story' });
+      const result = await harness.callTool({ method: 'storyboard-info', target: 'QBR Story' });
 
       expect(result.isError).toBe(false);
       expect(
@@ -240,14 +266,14 @@ describe('External API coverage tools', () => {
   });
 
   it('gets a storyboard document by name after resolving it to an id', async () => {
-    const harness = await startHarness(getStoryboardXmlTool);
+    const harness = await startHarness();
     try {
-      const result = await harness.callTool({ storyboard: 'QBR Story' });
+      const result = await harness.callTool({ method: 'storyboard-document', target: 'QBR Story' });
 
       expect(result.isError).toBe(false);
-      expect(
-        z.object({ storyboardXml: z.string() }).parse(parseResult(result)).storyboardXml,
-      ).toContain('<storyboard name="QBR Story"');
+      expect(z.object({ xml: z.string() }).parse(parseResult(result)).xml).toContain(
+        '<storyboard name="QBR Story"',
+      );
       expect(harness.server.requests.map((request) => request.path)).toEqual([
         '/v0/workbook/storyboards',
         '/v0/workbook/storyboards/story-qbr/document',
@@ -259,45 +285,45 @@ describe('External API coverage tools', () => {
 
   it.each([
     {
-      makeTool: getApiRootTool,
+      method: 'api-root',
       args: {},
       overrideKey: 'GET /v0/',
       expectedMessage: 'does not serve the API root endpoint',
     },
     {
-      makeTool: getSiteInfoTool,
+      method: 'site',
       args: {},
       overrideKey: 'GET /v0/site',
       expectedMessage: 'does not serve the site endpoint',
     },
     {
-      makeTool: getListStoryboardsTool,
+      method: 'storyboards',
       args: {},
       overrideKey: 'GET /v0/workbook/storyboards',
       expectedMessage: 'does not serve the storyboard list endpoint',
     },
     {
-      makeTool: getDashboardInfoTool,
-      args: { dashboard: 'dash-exec' },
+      method: 'dashboard-info',
+      args: { target: 'dash-exec' },
       overrideKey: 'GET /v0/workbook/dashboards/dash-exec',
       expectedMessage: 'does not serve the dashboard metadata endpoint',
     },
     {
-      makeTool: getStoryboardInfoTool,
-      args: { storyboard: 'story-qbr' },
+      method: 'storyboard-info',
+      args: { target: 'story-qbr' },
       overrideKey: 'GET /v0/workbook/storyboards/story-qbr',
       expectedMessage: 'does not serve the storyboard metadata endpoint',
     },
     {
-      makeTool: getStoryboardXmlTool,
-      args: { storyboard: 'story-qbr' },
+      method: 'storyboard-document',
+      args: { target: 'story-qbr' },
       overrideKey: 'GET /v0/workbook/storyboards/story-qbr/document',
       expectedMessage: 'does not serve the storyboard document endpoint',
     },
   ])(
-    '$toolName reports an honest too-new endpoint 404',
-    async ({ makeTool, args, overrideKey, expectedMessage }) => {
-      const harness = await startHarness(makeTool, (server) => {
+    '$method reports an honest too-new endpoint 404',
+    async ({ method, args, overrideKey, expectedMessage }) => {
+      const harness = await startHarness((server) => {
         server.setOverride(overrideKey, {
           status: 404,
           body: JSON.stringify({
@@ -310,7 +336,7 @@ describe('External API coverage tools', () => {
         });
       });
       try {
-        const result = await harness.callTool(args);
+        const result = await harness.callTool({ method, ...args });
 
         expect(result.isError).toBe(true);
         invariant(result.content[0].type === 'text');
@@ -323,10 +349,7 @@ describe('External API coverage tools', () => {
   );
 });
 
-async function startHarness(
-  makeTool: (server: DesktopMcpServer) => DesktopTool<any>,
-  configure?: (server: MockExternalApiServer) => void,
-): Promise<{
+async function startHarness(configure?: (server: MockExternalApiServer) => void): Promise<{
   server: MockExternalApiServer;
   callTool: (args: Record<string, unknown>) => Promise<CallToolResult>;
   close: () => Promise<void>;
@@ -335,7 +358,7 @@ async function startHarness(
   configure?.(server);
   const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
   await executor.start();
-  const tool = makeTool(new DesktopMcpServer());
+  const tool = getDesktopReadTool(new DesktopMcpServer());
   const callback = (await Provider.from(tool.callback)) as (
     args: Record<string, unknown>,
     extra: ReturnType<typeof getMockRequestHandlerExtra>,
