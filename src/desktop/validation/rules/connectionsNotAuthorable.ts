@@ -88,9 +88,13 @@ export const connectionsNotAuthorableRule: ValidationRule = {
     //
     // 1. A bare/legacy top-level connection that is NOT the modern federated wrapper —
     // exactly the hand-authored-from-.tds shape (known-bad).
+    //
+    // EXCEPTION: `class='sqlproxy'` is a published-datasource proxy — the shape Desktop
+    // serializes for a server/Cloud datasource. It round-trips on a live readback and the
+    // federated+named-connection minting scheme doesn't apply to it, so it is exempt.
     const bareConnections = xpath.select(
-      "/workbook/datasources/datasource/connection[not(@class='federated')] | " +
-        "/datasource/connection[not(@class='federated')]",
+      "/workbook/datasources/datasource/connection[not(@class='federated') and not(@class='sqlproxy')] | " +
+        "/datasource/connection[not(@class='federated') and not(@class='sqlproxy')]",
       doc as unknown as Node,
     ) as Element[];
     for (const conn of bareConnections) {
