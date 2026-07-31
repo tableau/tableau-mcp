@@ -210,11 +210,11 @@ describe('desktop tools/list serialized surface', () => {
     // guards that invariant). The full desktop surface is opt-in (TOOL_PROFILE=full), not
     // what clients see by default; its looser cap only catches runaway growth without
     // forcing valuable full-profile tools to be trimmed.
-    // Honest wire measurements are 29,463 bytes dynamic and 46,377 bytes full: the full
-    // surface rose by the two full-profile-only export-image tools.
+    // Honest wire measurements are 29,693 bytes dynamic and 46,607 bytes full after replacing
+    // list-available-fields' old slim schema with compact insight candidate tuples.
     // Keep only a few bytes of ratchet headroom on each cap.
-    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_479);
-    expect(fullSurfaceTotal).toBeLessThanOrEqual(46_393);
+    expect(dynamicAuthoringTotal).toBeLessThanOrEqual(29_709);
+    expect(fullSurfaceTotal).toBeLessThanOrEqual(46_623);
   });
 });
 
@@ -525,8 +525,8 @@ describe('selectToolsForProfile (TOOL_PROFILE, W60 spike lever 1 / preamble P1)'
     }
     // A lean surface must have generous headroom — this is a structural win, not a
     // describe-stub squeeze. If this ever approaches 46k something is very wrong.
-    // Raised with the signed-off bind-template describes (2026-07-27, #643 review fold).
-    expect(total).toBeLessThanOrEqual(29_480);
+    // list-available-fields serves both full exploration and slim headless field selection.
+    expect(total).toBeLessThanOrEqual(29_710);
   });
 
   it('unset ("") profile returns the lean dynamic-authoring native surface — the singer sings native by default', () => {
