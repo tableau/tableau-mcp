@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { recordActivityLogEvent } from '../../../activityLog/index.js';
 import { PageExceedsLimitError } from '../../../errors/mcpToolError.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -80,7 +81,7 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
       const validatedFilter = filter ? parseAndValidateProjectsFilterString(filter) : undefined;
       const maxResultLimit = configWithOverrides.getMaxResultLimit(listProjectsTool.name);
 
-      return await listProjectsTool.logAndExecute({
+      const result = await listProjectsTool.logAndExecute({
         extra,
         args: {},
         callback: async () => {
@@ -136,6 +137,16 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
           };
         },
       });
+
+      // Example ActivityLog wiring — the copyable pattern for instrumenting a tool.
+      // Placed AFTER logAndExecute because a real event reads the identity LUIDs, which
+      // sign-in (inside logAndExecute) populates — matching how product telemetry reads
+      // them (tool.ts finally); reading earlier yields empty LUIDs for PAT/UAT/direct-trust
+      // auth. Fire-and-forget (voided): no-ops unless ACTIVITY_LOG_ENABLED=true and the
+      // CEPP SDK is installed, and never throws/rejects. See src/activityLog/.
+      void recordActivityLogEvent(extra.config);
+
+      return result;
     },
   });
 

@@ -302,6 +302,25 @@ describe('Config', () => {
     expect(config.insightsToolsEnabled).toBe(true);
   });
 
+  it('should default activityLogEnabled to false', () => {
+    const config = new Config();
+    expect(config.activityLogEnabled).toBe(false);
+  });
+
+  it('should set activityLogEnabled to true when ACTIVITY_LOG_ENABLED is "true"', () => {
+    vi.stubEnv('ACTIVITY_LOG_ENABLED', 'true');
+
+    const config = new Config();
+    expect(config.activityLogEnabled).toBe(true);
+  });
+
+  it('should keep activityLogEnabled false for values other than "true"', () => {
+    vi.stubEnv('ACTIVITY_LOG_ENABLED', 'yes');
+
+    const config = new Config();
+    expect(config.activityLogEnabled).toBe(false);
+  });
+
   describe('HTTP server config parsing', () => {
     it('should set sslKey to default when SSL_KEY is not set', () => {
       const config = new Config();

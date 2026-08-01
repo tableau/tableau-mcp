@@ -36,6 +36,16 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     format: 'cjs',
     minify: !dev,
     packages: dev ? 'external' : 'bundle',
+    // The CEPP ActivityLog SDK is an internal Nexus-only package, NOT a dependency of this
+    // public repo. src/activityLog loads it via a runtime dynamic import() with a non-literal
+    // specifier, so esbuild already leaves it as a runtime require rather than a bundle input.
+    // Listing it external is belt-and-suspenders: even if the specifier is ever inlined to a
+    // literal, the public production build still won't try to resolve (and fail on) the
+    // missing package. Mirrors the specifiers in src/activityLog/{recorder,eventBuilder}.ts.
+    external: [
+      '@tableau/activitylog-logging-client-ts',
+      '@tableau/activitylog-logging-client-ts/events',
+    ],
     sourcemap: true,
     logLevel: dev ? 'debug' : 'info',
     logOverride: {

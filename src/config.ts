@@ -77,6 +77,7 @@ export class Config extends BaseConfig {
   adminToolsEnabled: boolean;
   flowToolsEnabled: boolean;
   insightsToolsEnabled: boolean;
+  activityLogEnabled: boolean;
   cspAllowedDomains: string[];
   bucketS3: {
     enabled: boolean;
@@ -151,6 +152,7 @@ export class Config extends BaseConfig {
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
       FLOW_TOOLS_ENABLED: flowToolsEnabled,
       INSIGHTS_TOOLS_ENABLED: insightsToolsEnabled,
+      ACTIVITY_LOG_ENABLED: activityLogEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
       MCP_S3_BUCKET: bucketS3Bucket,
       AWS_DEFAULT_REGION: awsDefaultRegion,
@@ -321,6 +323,10 @@ export class Config extends BaseConfig {
     // gated off by default while the insights rollout is staged (keeps hosts
     // like Slackbot stable); set INSIGHTS_TOOLS_ENABLED=true to register them.
     this.insightsToolsEnabled = insightsToolsEnabled === 'true';
+    // ActivityLog / CEPP event recording is scaffolding, gated off by default.
+    // When enabled, instrumented tools build and record ActivityLog events (today
+    // via a stub sink that logs them at debug level); set ACTIVITY_LOG_ENABLED=true.
+    this.activityLogEnabled = activityLogEnabled === 'true';
 
     // S3 offload: when MCP_S3_BUCKET is set, view-image and view-data tools
     // upload the payload (rendered image or CSV) to S3 and return a short-lived
