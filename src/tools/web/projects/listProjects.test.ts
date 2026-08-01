@@ -203,19 +203,12 @@ describe('listProjectsTool', () => {
     expect(result.content[0].text).toContain(errorMessage);
   });
 
-  it('records an ActivityLog event with the tool-call context', async () => {
+  it('records an ActivityLog event, passing the config', async () => {
     mocks.mockQueryProjects.mockResolvedValue(mockProjectsResponse);
     await getToolResult({ filter: 'name:eq:Samples' });
 
     expect(mocks.mockRecordActivityLogEvent).toHaveBeenCalledTimes(1);
-    expect(mocks.mockRecordActivityLogEvent).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        siteLuid: 'test-site-luid',
-        userLuid: 'test-user-luid',
-        toolName: 'list-projects',
-      }),
-    );
+    expect(mocks.mockRecordActivityLogEvent).toHaveBeenCalledWith(expect.anything());
   });
 
   it('records the ActivityLog event after REST execution so identity LUIDs are resolved', async () => {

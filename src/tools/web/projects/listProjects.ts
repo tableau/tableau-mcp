@@ -139,16 +139,12 @@ export const getListProjectsTool = (server: WebMcpServer): WebTool<typeof params
       });
 
       // Example ActivityLog wiring — the copyable pattern for instrumenting a tool.
-      // Placed AFTER logAndExecute so the identity LUIDs are populated: sign-in runs
-      // inside it and sets them (see restApiInstance setSiteLuid/setUserLuid), matching
-      // how product telemetry reads them (tool.ts finally). Reading earlier yields empty
-      // LUIDs for PAT/UAT/direct-trust auth. No-ops unless ACTIVITY_LOG_ENABLED=true;
-      // never throws. See src/activityLog/.
-      recordActivityLogEvent(extra.config, {
-        siteLuid: extra.getSiteLuid(),
-        userLuid: extra.getUserLuid(),
-        toolName: listProjectsTool.name,
-      });
+      // Placed AFTER logAndExecute because a real event reads the identity LUIDs, which
+      // sign-in (inside logAndExecute) populates — matching how product telemetry reads
+      // them (tool.ts finally); reading earlier yields empty LUIDs for PAT/UAT/direct-trust
+      // auth. Fire-and-forget (voided): no-ops unless ACTIVITY_LOG_ENABLED=true and the
+      // CEPP SDK is installed, and never throws/rejects. See src/activityLog/.
+      void recordActivityLogEvent(extra.config);
 
       return result;
     },

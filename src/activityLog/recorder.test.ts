@@ -2,42 +2,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Config } from '../config.js';
 import { stubDefaultEnvVars } from '../testShared.js';
+import { CeppEventLoggingRecorderOptions, ICeppEvent } from './sdkTypes.js';
 
 vi.mock('../logging/logger.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../logging/logger.js')>();
   return { ...actual, log: vi.fn() };
 });
 
+// The CEPP SDK is an internal Nexus-only package, absent here. Mock its root export with a
+// fake `CeppEventLoggingRecorder` that just captures the options it was constructed with,
+// so we can assert TMCP wires config + loggers correctly. Recording behavior itself is the
+// SDK's concern; the genuinely-absent-SDK path is covered in sdkAbsent.test.ts.
+vi.mock('@tableau/activitylog-logging-client-ts', () => {
+  class FakeCeppEventLoggingRecorder {
+    options: CeppEventLoggingRecorderOptions;
+    constructor(options: CeppEventLoggingRecorderOptions) {
+      this.options = options;
+    }
+    record(_event: ICeppEvent): void {}
+  }
+  return { CeppEventLoggingRecorder: FakeCeppEventLoggingRecorder };
+});
+
 import { log } from '../logging/logger.js';
-import {
-  ACTIVITY_LOG_LOGGER,
-  createActivityLogRecorder,
-  LoggingActivityLogRecorder,
-} from './recorder.js';
-import { CeppEventRecord, ICeppEvent } from './sdk/index.js';
+import { ACTIVITY_LOG_LOGGER, createActivityLogRecorder } from './recorder.js';
 
 const mockedLog = vi.mocked(log);
-
-function makeSiteEvent(overrides: Partial<Record<string, unknown>> = {}): ICeppEvent {
-  return {
-    getEventMetadata: () => ({
-      sdkName: 'test',
-      sdkVersion: '0.0.0',
-      eventType: 'TEST',
-      eventVersion: '0.1',
-      eventCategory: 'test',
-      applicableToOnline: true,
-      applicableToServer: true,
-      customerAccessible: false,
-      internalAccessible: true,
-      comment: '',
-    }),
-    getEventTime: () => '2024-06-16T18:03:47.203309Z',
-    isSiteEvent: () => true,
-    isTenantEvent: () => false,
-    toJSON: () => ({ eventType: 'TEST', ...overrides }),
-  };
-}
 
 function configWith(activityLogEnabled: boolean): Config {
   if (activityLogEnabled) {
@@ -46,7 +36,11 @@ function configWith(activityLogEnabled: boolean): Config {
   return new Config();
 }
 
-describe('LoggingActivityLogRecorder', () => {
+function optionsOf(recorder: unknown): CeppEventLoggingRecorderOptions {
+  return (recorder as { options: CeppEventLoggingRecorderOptions }).options;
+}
+
+describe('createActivityLogRecorder', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.unstubAllEnvs();
@@ -58,58 +52,52 @@ describe('LoggingActivityLogRecorder', () => {
     vi.unstubAllEnvs();
   });
 
-  it('records the event through the TMCP logger at debug level with the event JSON', () => {
-    const recorder = createActivityLogRecorder(configWith(true));
-    const event = makeSiteEvent({ toolName: 'list-projects' });
+  it('builds the SDK recorder with recordingEnabled on and the TMCP loggers wired', async () => {
+    const recorder = await createActivityLogRecorder(configWith(true));
 
-    recorder.record(event);
+    expect(recorder).not.toBeNull();
+    const options = optionsOf(recorder);
+    expect(options.config).toEqual({
+      recordingEnabled: true,
+      tableauOnline: true,
+      ioErrorSuppressionEnabled: true,
+    });
+    // TMCP routes all three sinks to the same logger bridge.
+    expect(options.logger).toBeDefined();
+    expect(options.siteLogger).toBe(options.logger);
+    expect(options.tenantLogger).toBe(options.logger);
+  });
 
-    expect(mockedLog).toHaveBeenCalledTimes(1);
+  it('sets recordingEnabled=false when ACTIVITY_LOG_ENABLED is off', async () => {
+    const recorder = await createActivityLogRecorder(configWith(false));
+
+    expect(recorder).not.toBeNull();
+    expect(optionsOf(recorder).config.recordingEnabled).toBe(false);
+  });
+
+  it('bridges the SDK logger to the TMCP logger: info→debug, warn→warning, error→error', async () => {
+    const recorder = await createActivityLogRecorder(configWith(true));
+    const { logger } = optionsOf(recorder);
+
+    logger?.info('recorded');
     expect(mockedLog).toHaveBeenCalledWith({
-      message: 'ActivityLog event recorded',
+      message: 'recorded',
       level: 'debug',
       logger: ACTIVITY_LOG_LOGGER,
-      data: expect.objectContaining({
-        traceUuid: expect.any(String),
-        event: expect.objectContaining({ toolName: 'list-projects' }),
-      }),
     });
-  });
 
-  it('does not record when ACTIVITY_LOG_ENABLED is off (recordingEnabled=false)', () => {
-    const recorder = createActivityLogRecorder(configWith(false));
+    logger?.warn('suppressed io');
+    expect(mockedLog).toHaveBeenCalledWith({
+      message: 'suppressed io',
+      level: 'warning',
+      logger: ACTIVITY_LOG_LOGGER,
+    });
 
-    recorder.record(makeSiteEvent());
-
-    expect(mockedLog).not.toHaveBeenCalled();
-  });
-
-  it('records each event of a batch', () => {
-    const recorder = createActivityLogRecorder(configWith(true));
-
-    recorder.recordBatch([makeSiteEvent(), makeSiteEvent()]);
-
-    expect(mockedLog).toHaveBeenCalledTimes(2);
-  });
-
-  it('suppresses I/O errors from the sink instead of throwing', () => {
-    class ThrowingRecorder extends LoggingActivityLogRecorder {
-      protected emitRecord(_record: CeppEventRecord): void {
-        throw new Error('network down');
-      }
-    }
-    const recorder = new ThrowingRecorder(
-      { recordingEnabled: true, tableauOnline: true, ioErrorSuppressionEnabled: true },
-      {
-        info: (message) => log({ message, level: 'debug', logger: ACTIVITY_LOG_LOGGER }),
-        warn: (message) => log({ message, level: 'warning', logger: ACTIVITY_LOG_LOGGER }),
-        error: (message) => log({ message, level: 'error', logger: ACTIVITY_LOG_LOGGER }),
-      },
-    );
-
-    expect(() => recorder.record(makeSiteEvent())).not.toThrow();
-    expect(mockedLog).toHaveBeenCalledWith(
-      expect.objectContaining({ level: 'error', logger: ACTIVITY_LOG_LOGGER }),
-    );
+    logger?.error('boom');
+    expect(mockedLog).toHaveBeenCalledWith({
+      message: 'boom',
+      level: 'error',
+      logger: ACTIVITY_LOG_LOGGER,
+    });
   });
 });
