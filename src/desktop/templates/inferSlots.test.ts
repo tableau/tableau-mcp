@@ -48,11 +48,45 @@ describe('inferFromBookmark — placement facts', () => {
     expect(byId.get('category')?.derivation).toBe('none');
   });
 
-  it('marks rows/cols slots required and mark-only slots optional', () => {
+  it('marks rows/cols slots required and mark-only slots optional (axis chart)', () => {
     expect(byId.get('category')?.required).toBe(true); // rows
     expect(byId.get('sales')?.required).toBe(true); // cols
-    expect(byId.get('state')?.required).toBe(false); // mark only
+    expect(byId.get('state')?.required).toBe(false); // mark only, and an axis exists
   });
+});
+
+// An encoding-only chart (pie, treemap, symbol map, choropleth, kpi-text) places every
+// field on a mark-encoding shelf and NOTHING on rows/cols. Its defining encodings are the
+// chart, so they must be required; only a purely incidental shelf (tooltip) stays optional.
+describe('inferFromBookmark — encoding-only charts require their defining encodings', () => {
+  const ENCODING_ONLY =
+    "<?xml version='1.0'?><bookmark version='10.1'>" +
+    "<datasources><datasource name='ds1'>" +
+    "<column name='[Sales]' datatype='real' role='measure' type='quantitative'/>" +
+    "<column name='[Category]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Notes]' datatype='string' role='dimension' type='nominal'/>" +
+    '</datasource></datasources>' +
+    '<table><panes><pane><encodings>' +
+    "<color column='[ds1].[none:Category:nk]'/>" +
+    "<size column='[ds1].[sum:Sales:qk]'/>" +
+    "<tooltip column='[ds1].[none:Notes:nk]'/>" +
+    '</encodings></pane></panes></table>' +
+    '</bookmark>';
+  const inf = inferFromBookmark(ENCODING_ONLY);
+  const byId = new Map(inf.slots.map((s) => [s.slot_id, s]));
+
+  it('makes color and size required when there is no rows/cols axis', () => {
+    expect(byId.get('category')?.required).toBe(true); // color
+    expect(byId.get('sales')?.required).toBe(true); // size
+  });
+
+  it('keeps a purely incidental (tooltip-only) encoding optional', () => {
+    expect(byId.get('notes')?.required).toBe(false);
+  });
+});
+
+describe('inferFromBookmark — pseudo-fields and donor datasource extraction', () => {
+  const inf = inferFromBookmark(MODERN_BOOKMARK);
 
   it('skips Tableau pseudo-fields ([:Measure Names])', () => {
     expect(inf.slots.some((s) => s.sourceField.startsWith(':'))).toBe(false);
@@ -149,5 +183,24 @@ describe('synthesizeManifest', () => {
 
   it('marks every synthesized slot bindable', () => {
     expect(manifest.slots.every((s) => s.bindable)).toBe(true);
+  });
+
+  it('carries a suggestion hint (donor base name when no caption) on each slot', () => {
+    const bySlot = new Map(manifest.slots.map((s) => [s.slot_id, s]));
+    // MODERN_BOOKMARK columns have no caption, so the hint falls back to the base name.
+    expect(bySlot.get('sales')?.hint).toBe('Sales');
+    expect(bySlot.get('category')?.hint).toBe('Category');
+  });
+
+  it('prefers the donor caption over the base name for the hint when present', () => {
+    const captioned =
+      "<?xml version='1.0'?><bookmark version='10.1'>" +
+      "<datasources><datasource name='ds1'>" +
+      "<column name='[Sales]' caption='Total Sales' datatype='real' role='measure' type='quantitative'/>" +
+      '</datasource></datasources>' +
+      '<table><cols>[ds1].[sum:Sales:qk]</cols></table>' +
+      '</bookmark>';
+    const m = synthesizeManifest('captioned', inferFromBookmark(captioned));
+    expect(m.slots.find((s) => s.slot_id === 'sales')?.hint).toBe('Total Sales');
   });
 });

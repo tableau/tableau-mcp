@@ -577,3 +577,69 @@ describe('rewriteFieldReferences — calc SOURCE-FIELD attribute (<calculation c
     );
   });
 });
+
+describe('rewriteFieldReferences — synthesize undeclared encoding-shelf instances (task #30)', () => {
+  // A symbol-map bookmark declares <column-instance> nodes for its rows/cols/lod
+  // pills but places aggregations directly on the mark ENCODINGS (color/size) that
+  // it never declares. The External-API apply path validates dependencies, cannot
+  // resolve the undeclared instance, and rejects the sheet with a blocking modal.
+  // The rewriter must complete the declaration so the injected sheet is self-consistent.
+  const symbolMap =
+    "<worksheet name='m'><table><view>" +
+    "<datasource-dependencies datasource='{{DATASOURCE}}'>" +
+    "<column datatype='real' name='[Sales]' role='measure' type='quantitative' />" +
+    "<column datatype='real' name='[Quantity]' role='measure' type='quantitative' />" +
+    "<column datatype='string' name='[Category]' role='dimension' type='nominal' />" +
+    "<column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />" +
+    '</datasource-dependencies>' +
+    '<panes><pane><encodings>' +
+    "<size column='[{{DATASOURCE}}].[sum:Sales:qk]' />" +
+    "<color column='[{{DATASOURCE}}].[sum:Quantity:qk]' />" +
+    "<lod column='[{{DATASOURCE}}].[none:Category:nk]' />" +
+    '</encodings></pane></panes>' +
+    '</view></table></worksheet>';
+
+  it('synthesizes a declaration for each referenced-but-undeclared instance', () => {
+    const out = rewriteFieldReferences(symbolMap, {}, 'Sample - Superstore');
+    expect(out).toContain(
+      '<column-instance column="[Sales]" derivation="Sum" name="[sum:Sales:qk]" pivot="key" type="quantitative"/>',
+    );
+    expect(out).toContain(
+      '<column-instance column="[Quantity]" derivation="Sum" name="[sum:Quantity:qk]" pivot="key" type="quantitative"/>',
+    );
+  });
+
+  it('does not duplicate an instance that is already declared', () => {
+    const out = rewriteFieldReferences(symbolMap, {}, 'Sample - Superstore');
+    const matches = out.match(/name="\[none:Category:nk\]"/g) ?? [];
+    expect(matches).toHaveLength(1);
+  });
+
+  it('does not fabricate a declaration when the base column is absent from the block', () => {
+    const noColumn =
+      "<worksheet name='m'><table><view>" +
+      "<datasource-dependencies datasource='{{DATASOURCE}}'>" +
+      "<column datatype='real' name='[Sales]' role='measure' type='quantitative' />" +
+      '</datasource-dependencies>' +
+      '<panes><pane><encodings>' +
+      "<color column='[{{DATASOURCE}}].[sum:Latitude (generated):qk]' />" +
+      '</encodings></pane></panes>' +
+      '</view></table></worksheet>';
+    const out = rewriteFieldReferences(noColumn, {}, 'DS');
+    expect(out).not.toContain('name="[sum:Latitude (generated):qk]"');
+  });
+
+  it('carries the synthesized instance through a rename, matching the renamed base column', () => {
+    // color references [sum:Quantity:qk]; Quantity is remapped to Profit → the
+    // synthesized declaration must name the RENAMED base column, not the donor's.
+    const out = rewriteFieldReferences(
+      symbolMap,
+      { Quantity: '[DS].[sum:Profit:qk]' },
+      'Sample - Superstore',
+    );
+    expect(out).toContain(
+      '<column-instance column="[Profit]" derivation="Sum" name="[sum:Profit:qk]" pivot="key" type="quantitative"/>',
+    );
+    expect(out).not.toContain('name="[sum:Quantity:qk]"');
+  });
+});

@@ -37,7 +37,11 @@ export interface ResolvedTemplateSlots {
   fromBookmark: boolean;
 }
 
-/** SlotSpec → the leaner discovery/guard shape. Donor field names never appear here. */
+/**
+ * SlotSpec → the leaner discovery/guard shape. A donor field name never appears as slot
+ * IDENTITY (slot_id/template_field); it is carried only in the clearly-labeled `hint`
+ * suggestion field, and only when the spec actually has one.
+ */
 function toReference(spec: SlotSpec): TemplateSlotReference {
   return {
     slot_id: spec.slot_id,
@@ -47,6 +51,7 @@ function toReference(spec: SlotSpec): TemplateSlotReference {
     kind: spec.kind,
     role: spec.role,
     purpose: spec.purpose,
+    ...(spec.hint ? { hint: spec.hint } : {}),
   };
 }
 
@@ -74,6 +79,7 @@ function overlaySpec(inferred: SlotSpec | undefined, curated: SlotSpec | undefin
     slot_id: curated.slot_id || inferred.slot_id,
     purpose: curated.purpose ?? inferred.purpose,
     examples: curated.examples ?? inferred.examples,
+    hint: curated.hint ?? inferred.hint,
   };
 }
 

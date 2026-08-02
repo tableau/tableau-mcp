@@ -64,11 +64,26 @@ describe('resolveTemplateSlots — inferred only (.tbm, no manifest)', () => {
       '{{field_base_1}}',
       '{{field_base_2}}',
     ]);
-    // A discovery reference must never carry a concrete donor field name.
+    // A discovery reference must never carry a concrete donor field name as slot IDENTITY
+    // (slot_id/template_field). The `hint` field is exempt — it is labeled suggestion
+    // metadata whose whole point is to name the original donor field (asserted below).
     for (const slot of resolved.slots) {
-      expect(JSON.stringify(slot)).not.toContain('Sales');
-      expect(JSON.stringify(slot)).not.toContain('Category');
+      expect(slot.slot_id).not.toContain('Sales');
+      expect(slot.slot_id).not.toContain('Category');
+      expect(slot.template_field).not.toContain('Sales');
+      expect(slot.template_field).not.toContain('Category');
     }
+  });
+
+  it('carries the donor field name as a suggestion hint (not as identity)', () => {
+    readBookmarkMock.mockReturnValue(MODERN_BOOKMARK);
+    getManifestMock.mockReturnValue(undefined);
+
+    const resolved = resolveTemplateSlots('my-template');
+    // These bookmarks carry no <column caption>, so the hint falls back to the base name.
+    const hints = resolved.slots.map((s) => s.hint);
+    expect(hints).toContain('Sales');
+    expect(hints).toContain('Category');
   });
 });
 
@@ -140,6 +155,32 @@ describe('resolveTemplateSlots — both (curated overlays inferred, keyed by tem
     expect(byField.get('{{field_base_2}}')?.purpose).toBe('CURATED PURPOSE');
     // The un-overlaid field keeps its inferred purpose.
     expect(byField.get('{{field_base_1}}')).toBeDefined();
+    // The curated slot declared no hint, so the inferred donor hint survives the overlay.
+    expect(byField.get('{{field_base_2}}')?.hint).toBe('Sales');
+  });
+
+  it('lets a curated hint win over the inferred one', () => {
+    readBookmarkMock.mockReturnValue(MODERN_BOOKMARK);
+    getManifestMock.mockReturnValue(
+      curatedManifest({
+        slots: [
+          {
+            slot_id: 'primary-measure',
+            template_field: '{{field_base_2}}',
+            derivation: 'sum',
+            role: ['cols'],
+            kind: 'quantitative',
+            bindable: true,
+            required: true,
+            hint: 'Revenue',
+          },
+        ],
+      }),
+    );
+
+    const resolved = resolveTemplateSlots('my-template');
+    const byField = new Map(resolved.slots.map((s) => [s.template_field, s]));
+    expect(byField.get('{{field_base_2}}')?.hint).toBe('Revenue');
   });
 
   it('appends a curated-only slot with no inferred equivalent', () => {

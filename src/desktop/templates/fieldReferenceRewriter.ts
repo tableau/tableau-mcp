@@ -115,6 +115,13 @@ export interface TemplateSlotReference {
   kind?: string;
   role?: readonly string[];
   purpose?: string;
+  /**
+   * SUGGESTION metadata only: the original donor field name/caption this slot was inferred
+   * from, carried through to help an agent pick an analogous field and to enrich unresolved-
+   * slot error text. Never a slot IDENTITY (that is `slot_id`/`template_field`) and never
+   * consumed by the rewrite/bind logic.
+   */
+  hint?: string;
 }
 
 /**
@@ -561,6 +568,17 @@ export function rewriteFieldReferences(
     }
   }
 
+  // 6. Synthesize any <column-instance> DECLARATION a shelf/encoding references
+  //    but that the donor never declared. A bookmark commonly declares instances
+  //    only for its rows/cols/lod pills and leaves an aggregation placed on a mark
+  //    ENCODING (color/size/tooltip) undeclared — native Desktop lazily materializes
+  //    such an instance against the live base column, but the External-API apply
+  //    path validates dependencies, cannot resolve the undeclared instance, and
+  //    rejects the sheet with "no field named '<base>'" plus a blocking modal (the
+  //    base column IS present; only its instance declaration is missing). Runs after
+  //    the rename + {{DATASOURCE}} passes so every reference carries its final name.
+  synthesizeReferencedColumnInstances(doc, datasourceName);
+
   // Defense in depth after every substitution pass: a required template field
   // that was not successfully mapped must never reach Desktop as a literal
   // sample-data column. Optional cleanup is verified here for the same reason.
@@ -798,20 +816,25 @@ function documentReferencesTemplateField(doc: Document, templateField: string): 
 }
 
 function userFacingFieldDescription(slot: TemplateSlotReference): string {
-  switch (slot.kind) {
-    case 'quantitative':
-      return 'a quantitative value field';
-    case 'categorical':
-      return 'a categorical field';
-    case 'quantitative-or-categorical':
-      return 'a quantitative or categorical field';
-    case 'temporal':
-      return 'a date field';
-    case 'geo':
-      return 'a geographic field';
-    default:
-      return 'a field';
-  }
+  const base = ((): string => {
+    switch (slot.kind) {
+      case 'quantitative':
+        return 'a quantitative value field';
+      case 'categorical':
+        return 'a categorical field';
+      case 'quantitative-or-categorical':
+        return 'a quantitative or categorical field';
+      case 'temporal':
+        return 'a date field';
+      case 'geo':
+        return 'a geographic field';
+      default:
+        return 'a field';
+    }
+  })();
+  // The hint is suggestion metadata (the original donor field), so surface it as
+  // "like <hint>" to orient the agent toward an analogous field on the new dataset.
+  return slot.hint ? `${base} (like ${JSON.stringify(slot.hint)})` : base;
 }
 
 function assertNoUnresolvedTemplateSlots(
@@ -898,6 +921,96 @@ function parseInstanceName(
   const trailing = parts.slice(roleIdx).join(':');
   if (!deriv || !field) return null;
   return { deriv, field, trailing };
+}
+
+/** Instance `type` attribute implied by a simple role marker. */
+function instanceTypeFromRole(role: string): string {
+  switch (role) {
+    case 'nk':
+      return 'nominal';
+    case 'ok':
+      return 'ordinal';
+    case 'qk':
+    default:
+      return 'quantitative';
+  }
+}
+
+/**
+ * Collect every datasource-qualified column-instance REFERENCE in the document,
+ * keyed by the datasource it is qualified against. A reference is any
+ * `[<datasource>].[<deriv>:<field>:<role>]` (2+ colons inside the second bracket)
+ * appearing in an attribute value or text node — i.e. a shelf/encoding/filter
+ * pill. The unqualified `<column-instance name='[...]'>` DECLARATIONS carry a
+ * single bracket and are therefore not matched, so declarations never masquerade
+ * as references.
+ */
+function collectQualifiedInstanceRefs(doc: Document): Map<string, Set<string>> {
+  const byDatasource = new Map<string, Set<string>>();
+  const pattern = /\[([^\[\]]+)\]\.\[([^\[\]]+:[^\[\]]+:[^\[\]]+)\]/g;
+  const record = (value: string): void => {
+    for (const m of value.matchAll(pattern)) {
+      const set = byDatasource.get(m[1]) ?? new Set<string>();
+      set.add(`[${m[2]}]`);
+      byDatasource.set(m[1], set);
+    }
+  };
+  for (const element of selectElements('//*[@*]', doc)) {
+    for (const attribute of Array.from(element.attributes) as Attr[]) record(attribute.value);
+  }
+  for (const text of selectTexts('//text()', doc)) record(text.data);
+  return byDatasource;
+}
+
+/**
+ * Synthesize a `<column-instance>` declaration inside each
+ * `<datasource-dependencies>` block for every instance the sheet REFERENCES but
+ * does not DECLARE — the encoding-shelf dangling-instance defect (task #30). A
+ * declaration is added only when the referenced instance's BASE `<column>` is
+ * already declared in the same block: the diagnosed case is an undeclared
+ * aggregation over a present base column, and gating on the column keeps this
+ * from fabricating declarations for generated/special fields whose columns the
+ * block never carries. Compound (table-calc) instances are left alone — they
+ * declare differently and were never the dangling case.
+ */
+function synthesizeReferencedColumnInstances(doc: Document, datasourceName: string): void {
+  const depsBlocks = selectElements('//datasource-dependencies', doc);
+  if (depsBlocks.length === 0) return;
+  const referencedByDatasource = collectQualifiedInstanceRefs(doc);
+
+  for (const deps of depsBlocks) {
+    const dsName = deps.getAttribute('datasource') || datasourceName;
+    const referenced = referencedByDatasource.get(dsName);
+    if (!referenced || referenced.size === 0) continue;
+
+    const declaredInstances = new Set<string>();
+    for (const ci of Array.from(deps.getElementsByTagName('column-instance'))) {
+      const n = ci.getAttribute('name');
+      if (n) declaredInstances.add(n);
+    }
+    const declaredColumns = new Set<string>();
+    for (const col of Array.from(deps.getElementsByTagName('column'))) {
+      const n = col.getAttribute('name');
+      if (n) declaredColumns.add(n);
+    }
+
+    for (const instName of referenced) {
+      if (declaredInstances.has(instName)) continue;
+      const parsed = parseInstanceName(instName);
+      if (!parsed) continue;
+      const { deriv, field, trailing } = parsed;
+      if (deriv.includes(':')) continue; // compound table-calc — out of scope
+      if (!declaredColumns.has(`[${field}]`)) continue; // base column absent — don't fabricate
+      const decl = doc.createElement('column-instance');
+      decl.setAttribute('column', `[${field}]`);
+      decl.setAttribute('derivation', DERIVATION_SHORT_TO_LONG[deriv.toLowerCase()] ?? deriv);
+      decl.setAttribute('name', instName);
+      decl.setAttribute('pivot', 'key');
+      decl.setAttribute('type', instanceTypeFromRole(trailing));
+      deps.appendChild(decl);
+      declaredInstances.add(instName);
+    }
+  }
 }
 
 /**

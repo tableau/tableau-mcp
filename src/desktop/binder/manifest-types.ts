@@ -150,6 +150,15 @@ export interface SlotSpec {
    * as matching hints alongside `purpose`; not used by deterministic binding.
    */
   examples?: string[];
+  /**
+   * Agent-facing SUGGESTION metadata: the original donor field's caption (or its base
+   * name when the donor carried no caption) that this slot was inferred from. It is a
+   * HINT for picking an analogous field on a new dataset — never the slot's identity
+   * (that is `slot_id`/`template_field`, which must stay donor-free) and never used by
+   * deterministic binding. Populated by inference (`synthesizeManifest`); a curated
+   * manifest may override it.
+   */
+  hint?: string;
   /** true when template_field is reused at >1 derivation ⇒ binder MUST emit `template_field@derivation`. */
   qualified_key_required?: boolean;
   /**

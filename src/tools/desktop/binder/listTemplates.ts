@@ -34,6 +34,13 @@ interface SlotSummary {
   purpose?: string;
   examples?: string[];
   /**
+   * SUGGESTION metadata: the original donor field caption/name this slot was inferred
+   * from. Unlike `template_field`/`notes` (excluded below because a donor name as slot
+   * IDENTITY both leaks and anchors), a labeled hint is sanctioned matching metadata —
+   * it tells the agent "originally this was <hint>; pick an analogous field."
+   */
+  hint?: string;
+  /**
    * Structural, donor-free additions (see the projection note above `summarizeTemplate`):
    * WHERE the field lands in the chart and at WHAT derivation, plus the advisory
    * cardinality band that position implies.
@@ -121,6 +128,7 @@ function summarizeTemplate(m: TemplateManifest): TemplateSummary {
         bindable: s.bindable,
         ...(s.purpose ? { purpose: s.purpose } : {}),
         ...(s.purpose && s.examples && s.examples.length > 0 ? { examples: s.examples } : {}),
+        ...(s.hint ? { hint: s.hint } : {}),
         ...(s.role.length > 0 ? { role: s.role } : {}),
         derivation: s.derivation,
         ...(band ? { ideal_cardinality: band } : {}),
