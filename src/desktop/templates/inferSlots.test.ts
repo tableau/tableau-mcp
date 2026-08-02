@@ -48,10 +48,13 @@ describe('inferFromBookmark — placement facts', () => {
     expect(byId.get('category')?.derivation).toBe('none');
   });
 
-  it('marks rows/cols slots required and mark-only slots optional (axis chart)', () => {
-    expect(byId.get('category')?.required).toBe(true); // rows
-    expect(byId.get('sales')?.required).toBe(true); // cols
-    expect(byId.get('state')?.required).toBe(false); // mark only, and an axis exists
+  it('requires rows/cols slots AND a disaggregated dimension on the marks card (two-prong rule)', () => {
+    expect(byId.get('category')?.required).toBe(true); // rows — partitions
+    expect(byId.get('sales')?.required).toBe(true); // cols — axis
+    // State is a `none` (disaggregated) dimension on the marks/detail shelf: it adds a mark
+    // per state, so it changes the level of detail and is load-bearing — required, even
+    // though it is not on an axis. This is the LOD prong superseding the old shelf heuristic.
+    expect(byId.get('state')?.required).toBe(true);
   });
 });
 
@@ -195,6 +198,52 @@ describe('inferFromBookmark — walks all reference sites (filter / title / labe
         expect(s.purpose).not.toContain(name);
       }
     }
+  });
+});
+
+// The LOD + display two-prong rule: a field is optional only if removing it changes NEITHER
+// the level of detail NOR the display. Modelled on the real box-plot worksheet — a measure on
+// rows, a categorical on cols, an AGGREGATED (attr) dimension decorating text/lod/tooltip, and
+// a DISAGGREGATED (none) dimension on the detail (lod) shelf. The attr-decoration is optional
+// (LOD-neutral + only on decorative encodings of an axis chart); the none-on-detail dimension
+// is required (it adds a mark per member → changes the grain), even though it is not on an axis.
+describe('inferFromBookmark — LOD + display two-prong optionality', () => {
+  const TWO_PRONG =
+    "<?xml version='1.0'?><bookmark version='10.1'>" +
+    "<datasources><datasource name='ds'>" +
+    "<column name='[Amount]' datatype='real' role='measure' type='quantitative'/>" +
+    "<column name='[Segment]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Company]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Detail]' datatype='string' role='dimension' type='nominal'/>" +
+    '</datasource></datasources>' +
+    '<table>' +
+    '<rows>[ds].[sum:Amount:qk]</rows>' +
+    '<cols>[ds].[none:Segment:nk]</cols>' +
+    '<panes><pane><encodings>' +
+    "<text column='[ds].[attr:Company:nk]'/>" +
+    "<lod column='[ds].[attr:Company:nk]'/>" +
+    "<lod column='[ds].[none:Detail:nk]'/>" +
+    "<tooltip column='[ds].[attr:Company:nk]'/>" +
+    '</encodings></pane></panes>' +
+    '</table></bookmark>';
+  const inf = inferFromBookmark(TWO_PRONG);
+  const byId = new Map(inf.slots.map((s) => [s.slot_id, s]));
+
+  it('requires the axis measure and the axis dimension', () => {
+    expect(byId.get('amount')?.required).toBe(true); // rows
+    expect(byId.get('segment')?.required).toBe(true); // cols
+  });
+
+  it('makes an AGGREGATED (attr) dimension on decorative encodings of an axis chart optional', () => {
+    // attr is LOD-neutral and text/lod/tooltip do not define an axis chart → both prongs clear.
+    expect(byId.get('company')?.derivation).toBe('attr');
+    expect(byId.get('company')?.required).toBe(false);
+  });
+
+  it('requires a DISAGGREGATED (none) dimension on the detail shelf (LOD prong)', () => {
+    // none on lod/detail adds a mark per member → changes the grain, so it is load-bearing.
+    expect(byId.get('detail')?.derivation).toBe('none');
+    expect(byId.get('detail')?.required).toBe(true);
   });
 });
 

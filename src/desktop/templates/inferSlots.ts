@@ -105,20 +105,36 @@ function isPseudo(base: string): boolean {
 const REFINEMENT_SHELVES = new Set<Shelf>(['filter', 'title', 'reference-line']);
 
 /**
- * Shelves that DECORATE or REFINE a mark rather than define it. A field placed only on
- * one of these is genuinely optional even on an encoding-only chart — dropping a tooltip
- * field, a filter pill, a title run, or a reference line never changes what the chart IS.
- * Every other encoding shelf (color / size / text / detail / lod / shape / angle …) is a
- * DEFINING encoding on a chart with no rows/cols axis, so it must be required (a pie with
- * no wedge-size or a treemap with no size/color is not that chart at all). Kept as a tiny
- * closed set, read structurally — no branch on chart family. `label` and `path` are treated
- * as defining (a line/label chart needs them).
- *
- * NOTE: this is the interim optionality heuristic; the LOD+display two-prong rule (Track 1
- * chunk 2) supersedes it. Keep the refinement sites here so the interim `required` stays
- * correct — a field seen only in a filter/title/reference-line is not what the chart is.
+ * Shelves that NEVER add to the view's level of detail. A pill here does not partition the
+ * marks: a `tooltip` only annotates an existing mark, a `filter`/`slices` pill scopes which
+ * data shows without creating marks, a `title` run is display text, and a `reference-line`
+ * positions an analytical line. Every OTHER shelf — rows / cols and the mark encodings
+ * (color / size / text / label / detail / lod / shape / path / geometry / angle / wedge-size)
+ * — is PARTITIONING: a discrete pill there adds marks and so changes the grain. This is the
+ * LOD prong of the two-prong optionality rule below; read structurally, never keyed on chart
+ * family.
  */
-const INCIDENTAL_SHELVES = new Set<Shelf>(['tooltip', 'filter', 'title', 'reference-line']);
+const NON_PARTITIONING_SHELVES = new Set<Shelf>(['tooltip', 'filter', 'title', 'reference-line']);
+
+/**
+ * Derivations that AGGREGATE — they collapse rows rather than partition them, so a field
+ * carrying one is LOD-neutral no matter which shelf it sits on. The measure aggregates
+ * (sum/avg/cnt/cntd/median/min/max), `attr` (ATTR() — an aggregated dimension), and `usr`
+ * (a table calc, computed post-aggregation) all clear the LOD prong for free. The complement
+ * — `none` and the date-part truncations (yr/qr/mn/…) — are DISAGGREGATED dimension pills:
+ * placed on a partitioning shelf they change the view's grain and so are load-bearing.
+ */
+const AGGREGATE_DERIVATIONS = new Set<Derivation>([
+  'sum',
+  'avg',
+  'cnt',
+  'cntd',
+  'median',
+  'min',
+  'max',
+  'attr',
+  'usr',
+]);
 
 /**
  * Derive the bindable slots (and the donor facts a caller needs to tokenize + audit)
@@ -322,12 +338,23 @@ export function inferFromBookmark(rawXml: string): Inference {
     const shelf = [...e.shelves];
     const baseId = e.base.replace(/[^a-zA-Z0-9]+/g, '_').toLowerCase();
     const multiDeriv = (derivsByBase.get(e.base)?.size ?? 0) > 1;
-    // Required when the field sits on an axis, OR — on an encoding-only chart (no
-    // rows/cols anywhere) — when it defines a mark encoding (any shelf that is not purely
-    // incidental like tooltip). Otherwise it is an optional refinement.
+    // OPTIONALITY — the LOD + display two-prong rule (Track 1 chunk 2). A field is optional
+    // only if removing it would change NEITHER the view's level of detail NOR its display;
+    // it is REQUIRED if it fails either prong. The real test is aggregation/LOD impact, NOT
+    // shelf name — an aggregated dimension (attr/min/max) is LOD-neutral anywhere, while a
+    // disaggregated partitioning dimension is load-bearing wherever it partitions.
+    const partitioning = shelf.some((s) => !NON_PARTITIONING_SHELVES.has(s));
+    // LOD prong: a DISAGGREGATED pill on a partitioning shelf adds marks → changes the grain.
+    // An aggregate derivation clears this prong for free; a filter/title/tooltip-only pill
+    // never partitions, so it clears it too.
+    const affectsLod = !AGGREGATE_DERIVATIONS.has(e.derivation) && partitioning;
+    // Display prong: a rows/cols placement always defines the chart. On an encoding-ONLY
+    // chart (no bindable axis anywhere) a defining mark encoding IS the chart, so a
+    // partitioning placement there defines display too. Purely non-partitioning shelves
+    // (tooltip/filter/title/reference-line) never define display.
     const onAxis = shelf.includes('rows') || shelf.includes('cols');
-    const required =
-      onAxis || (!hasAxisPlacement && !shelf.every((s) => INCIDENTAL_SHELVES.has(s)));
+    const definesDisplay = onAxis || (!hasAxisPlacement && partitioning);
+    const required = affectsLod || definesDisplay;
     slots.push({
       slot_id: multiDeriv ? `${baseId}_${e.derivation}` : baseId,
       sourceField: e.base,
