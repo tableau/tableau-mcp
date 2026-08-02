@@ -247,6 +247,59 @@ describe('inferFromBookmark — LOD + display two-prong optionality', () => {
   });
 });
 
+// Each slot carries a single communicative role — what it DOES in the chart — derived from
+// kind + derivation + placement, distinct from the structural shelf list and the prose purpose.
+describe('inferFromBookmark — communicative role', () => {
+  const ALL_ROLES =
+    "<?xml version='1.0'?><bookmark version='10.1'>" +
+    "<datasources><datasource name='ds'>" +
+    "<column name='[Amount]' datatype='real' role='measure' type='quantitative'/>" +
+    "<column name='[Segment]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Detail]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Label]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Region]' datatype='string' role='dimension' type='nominal'/>" +
+    '</datasource></datasources>' +
+    '<table>' +
+    '<rows>[ds].[sum:Amount:qk]</rows>' +
+    '<cols>[ds].[none:Segment:nk]</cols>' +
+    "<filter class='categorical' column='[ds].[none:Region:nk]'>" +
+    "<groupfilter function='level-members' level='[none:Region:nk]'/></filter>" +
+    '<panes><pane><encodings>' +
+    "<lod column='[ds].[none:Detail:nk]'/>" +
+    "<tooltip column='[ds].[attr:Label:nk]'/>" +
+    '</encodings></pane></panes>' +
+    '</table></bookmark>';
+  const inf = inferFromBookmark(ALL_ROLES);
+  const byId = new Map(inf.slots.map((s) => [s.slot_id, s]));
+
+  it('labels a measure on an axis as measure-value', () => {
+    expect(byId.get('amount')?.role).toBe('measure-value');
+  });
+
+  it('labels a dimension on an axis as axis-partition', () => {
+    expect(byId.get('segment')?.role).toBe('axis-partition');
+  });
+
+  it('labels a disaggregated dimension on a mark encoding as distribution-breakout', () => {
+    expect(byId.get('detail')?.role).toBe('distribution-breakout');
+  });
+
+  it('labels an aggregated (attr) dimension on a decorative encoding as decoration', () => {
+    expect(byId.get('label')?.role).toBe('decoration');
+  });
+
+  it('labels a filter/slices pill as filter-scope', () => {
+    expect(byId.get('region')?.role).toBe('filter-scope');
+  });
+
+  it('carries the communicative role onto each synthesized SlotSpec', () => {
+    const m = synthesizeManifest('all-roles', inf);
+    const bySlot = new Map(m.slots.map((s) => [s.slot_id, s]));
+    expect(bySlot.get('amount')?.communicative_role).toBe('measure-value');
+    expect(bySlot.get('region')?.communicative_role).toBe('filter-scope');
+  });
+});
+
 describe('the zero-donor-name-leakage invariant', () => {
   it('never names a concrete donor field in any inferred purpose', () => {
     const inf = inferFromBookmark(MODERN_BOOKMARK);

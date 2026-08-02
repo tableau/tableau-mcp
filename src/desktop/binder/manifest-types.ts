@@ -98,6 +98,21 @@ export type SlotKind =
   | 'parameter'; // Parameters datasource member
 
 /**
+ * What a slot COMMUNICATES in the chart — a single semantic descriptor, distinct from the
+ * structural `role[]` (which lists the shelves it sits on) and the prose `purpose`. Inferred
+ * from kind + derivation + placement so an agent can reason about a slot's job without reading
+ * shelf names or chart family. Exactly one applies per slot.
+ */
+export type CommunicativeRole =
+  | 'measure-value' // a measure whose aggregated value drives a visual quantity (bar length, position, size)
+  | 'axis-partition' // a dimension on a rows/cols axis — the chart's primary categorical/temporal breakout
+  | 'distribution-breakout' // a disaggregated dimension on a mark encoding that adds to the grain (marks/detail)
+  | 'decoration' // an LOD-neutral field that annotates marks (label/tooltip/title) without changing the chart
+  | 'filter-scope' // a field that scopes which data the sheet shows (filter/slices)
+  | 'tablecalc-addressing' // a dimension a table calc runs ALONG (absolute addressing) — reserved for Track 1 chunk 4
+  | 'tablecalc-partition'; // a dimension a table calc RESETS on (partitioning) — reserved for Track 1 chunk 4
+
+/**
  * Canonical derivation short-forms (written verbatim into column-instance names).
  * Each MUST be a key of the derivationMap in src/server/tools/templates.ts.
  * Month-Trunc is 'tmn' (the real short-form live Tableau writes); 'tmo' is only a
@@ -137,6 +152,12 @@ export interface SlotSpec {
   template_field: string;
   derivation: Derivation; // template's derivation for THIS instance → drives field_mapping key + value
   role: string[]; // structural roles this instance fills: ["rows","sort-dimension"]
+  /**
+   * What this slot COMMUNICATES (a single semantic descriptor) — complements the structural
+   * `role[]` and the prose `purpose`. Populated by inference; a curated manifest may override.
+   * Optional at runtime; not used by deterministic binding.
+   */
+  communicative_role?: CommunicativeRole;
   kind: SlotKind;
   bindable: boolean; // false ⇒ binder must NOT fill it (calc/generated/pseudo/parameter)
   required: boolean;

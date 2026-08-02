@@ -19,7 +19,7 @@
 
 import { DOMParser } from '@xmldom/xmldom';
 
-import type { Derivation, SlotKind } from '../binder/manifest-types.js';
+import type { CommunicativeRole, Derivation, SlotKind } from '../binder/manifest-types.js';
 
 /**
  * Where a donor field reference appears in the sheet. `rows`/`cols`/`mark` are the axis/mark
@@ -89,6 +89,8 @@ export interface InferredSlot {
   kind: SlotKind;
   derivation: Derivation;
   required: boolean;
+  /** What the slot COMMUNICATES — a single semantic descriptor derived from kind + derivation + placement. */
+  role: CommunicativeRole;
   purpose: string;
   tier: 'primary' | 'advanced';
 }

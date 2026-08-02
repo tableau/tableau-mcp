@@ -11,7 +11,13 @@
 // modern-format bookmarks bound on two unrelated datasources with IDENTICAL slot
 // structure per base (the dataset-independence proof) and ZERO donor-name leakage.
 
-import type { Derivation, SlotKind, SlotSpec, TemplateManifest } from '../binder/manifest-types.js';
+import type {
+  CommunicativeRole,
+  Derivation,
+  SlotKind,
+  SlotSpec,
+  TemplateManifest,
+} from '../binder/manifest-types.js';
 import {
   type ColumnDef,
   type Inference,
@@ -135,6 +141,37 @@ const AGGREGATE_DERIVATIONS = new Set<Derivation>([
   'attr',
   'usr',
 ]);
+
+/**
+ * The single communicative role a slot plays — what it COMMUNICATES, not where it sits. Derived
+ * from kind + derivation + placement using the SAME two-prong vocabulary as `required`:
+ *   • on a rows/cols axis → `measure-value` (a measure) or `axis-partition` (a dimension);
+ *   • off the axis, on ONLY non-partitioning sites → `filter-scope` (a filter/slices pill) or
+ *     `decoration` (title / tooltip / reference-line — annotation only);
+ *   • off the axis, on a partitioning mark encoding → `distribution-breakout` (a disaggregated
+ *     dimension that adds marks / sets the grain — e.g. a pie's colour, a box-plot's detail),
+ *     or, for an LOD-neutral field, `measure-value` (an aggregated measure on a defining size/
+ *     angle encoding) / `decoration` (an aggregated dimension label, the box-plot attr case).
+ * Table-calc addressing/partition roles are assigned by the table-calc pass (Track 1 chunk 4).
+ */
+function communicativeRole(
+  kind: SlotKind,
+  derivation: Derivation,
+  shelf: Shelf[],
+): CommunicativeRole {
+  if (shelf.includes('rows') || shelf.includes('cols')) {
+    return kind === 'quantitative' ? 'measure-value' : 'axis-partition';
+  }
+  const partitioning = shelf.some((s) => !NON_PARTITIONING_SHELVES.has(s));
+  if (!partitioning) {
+    // Only non-partitioning sites remain: a filter/slices pill scopes the data; a title,
+    // tooltip, or reference-line merely annotates the existing marks.
+    return shelf.includes('filter') ? 'filter-scope' : 'decoration';
+  }
+  // A partitioning mark encoding, but this field is not on a rows/cols axis of its own.
+  if (!AGGREGATE_DERIVATIONS.has(derivation)) return 'distribution-breakout';
+  return kind === 'quantitative' ? 'measure-value' : 'decoration';
+}
 
 /**
  * Derive the bindable slots (and the donor facts a caller needs to tokenize + audit)
@@ -364,6 +401,7 @@ export function inferFromBookmark(rawXml: string): Inference {
       kind: k,
       derivation: e.derivation,
       required,
+      role: communicativeRole(k, e.derivation, shelf),
       purpose: autoPurpose(k, shelf),
       tier: e.tier,
     });
@@ -427,6 +465,7 @@ export function synthesizeManifest(name: string, inf: Inference): TemplateManife
       template_field: s.templateField,
       derivation: s.derivation,
       role: s.shelves.slice(),
+      communicative_role: s.role,
       kind: s.kind,
       bindable: true,
       required: s.required,

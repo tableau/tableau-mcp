@@ -18,6 +18,7 @@ function slot(sourceField: string, extra: Partial<InferredSlot> = {}): InferredS
     kind: 'quantitative',
     derivation: 'sum',
     required: true,
+    role: 'measure-value',
     purpose: 'generic',
     tier: 'primary',
     ...extra,
