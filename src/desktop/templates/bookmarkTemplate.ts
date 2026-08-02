@@ -28,6 +28,12 @@ import type { Derivation, SlotKind } from '../binder/manifest-types.js';
  * An encoding-only chart (treemap, pie, symbol map) places every field here and nothing on
  * rows/cols, so a walk restricted to rows/cols/mark inferred ZERO slots for it. The tag name
  * is read structurally — identical code for every chart, never keyed on chart family.
+ *
+ * The last three are REFINEMENT sites, not axis/mark shelves: `filter` (a filter/slices pill
+ * scoping the data), `title` (a field-reference run surfaced in the sheet title text), and
+ * `reference-line` (a measure positioning an analytical line). A field can appear ONLY at one
+ * of these and nowhere else; without walking them such a field is dropped from inference
+ * entirely. They are read structurally by site, still never keyed on chart family.
  */
 export type Shelf =
   | 'rows'
@@ -44,7 +50,10 @@ export type Shelf =
   | 'path'
   | 'geometry'
   | 'angle'
-  | 'wedge-size';
+  | 'wedge-size'
+  | 'filter'
+  | 'title'
+  | 'reference-line';
 
 /** One `<column>` dictionary entry from the bookmark's donor datasource(s). */
 export interface ColumnDef {

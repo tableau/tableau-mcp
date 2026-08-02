@@ -54,6 +54,20 @@ function baseInputsOf(formula: string): string[] {
  */
 export function autoPurpose(kind: SlotKind | 'unknown', shelf: Shelf[]): string {
   const onAxis = shelf.includes('cols') || shelf.includes('rows');
+  // A field that appears ONLY at a refinement site — never on an axis or a mark encoding —
+  // is described by that site, not as a mark encoding. Checked first so a filter/title/
+  // reference-line-only field isn't mislabelled "encoded on a mark property".
+  if (shelf.length > 0 && shelf.every((s) => REFINEMENT_SHELVES.has(s))) {
+    if (shelf.includes('reference-line')) {
+      return 'Measure that positions an analytical reference line.';
+    }
+    if (shelf.includes('filter')) {
+      return 'Dimension that scopes which data the sheet shows (filter).';
+    }
+    if (shelf.includes('title')) {
+      return 'Field surfaced in the sheet title text (display only).';
+    }
+  }
   switch (kind) {
     case 'quantitative':
       return onAxis
@@ -83,15 +97,28 @@ function isPseudo(base: string): boolean {
 }
 
 /**
- * Encoding shelves that DECORATE a mark rather than define it. A field placed only on
- * one of these is genuinely optional even on an encoding-only chart — dropping a tooltip
- * field never changes what the chart IS. Every other encoding shelf (color / size / text
- * / detail / lod / shape / angle …) is a DEFINING encoding on a chart with no rows/cols
- * axis, so it must be required (a pie with no wedge-size or a treemap with no size/color
- * is not that chart at all). Kept as a tiny closed set, read structurally — no branch on
- * chart family. `label` and `path` are treated as defining (a line/label chart needs them).
+ * Non-encoding REFINEMENT sites. A field seen only here (a filter/slices pill, a title run,
+ * or a reference line) is described by the site, never as a mark encoding — `autoPurpose`
+ * consults this to phrase the purpose accurately. `tooltip` is deliberately absent: it is a
+ * mark-encoding shelf whose existing "encoded on a mark property" purpose still fits.
  */
-const INCIDENTAL_SHELVES = new Set<Shelf>(['tooltip']);
+const REFINEMENT_SHELVES = new Set<Shelf>(['filter', 'title', 'reference-line']);
+
+/**
+ * Shelves that DECORATE or REFINE a mark rather than define it. A field placed only on
+ * one of these is genuinely optional even on an encoding-only chart — dropping a tooltip
+ * field, a filter pill, a title run, or a reference line never changes what the chart IS.
+ * Every other encoding shelf (color / size / text / detail / lod / shape / angle …) is a
+ * DEFINING encoding on a chart with no rows/cols axis, so it must be required (a pie with
+ * no wedge-size or a treemap with no size/color is not that chart at all). Kept as a tiny
+ * closed set, read structurally — no branch on chart family. `label` and `path` are treated
+ * as defining (a line/label chart needs them).
+ *
+ * NOTE: this is the interim optionality heuristic; the LOD+display two-prong rule (Track 1
+ * chunk 2) supersedes it. Keep the refinement sites here so the interim `required` stays
+ * correct — a field seen only in a filter/title/reference-line is not what the chart is.
+ */
+const INCIDENTAL_SHELVES = new Set<Shelf>(['tooltip', 'filter', 'title', 'reference-line']);
 
 /**
  * Derive the bindable slots (and the donor facts a caller needs to tokenize + audit)
@@ -139,59 +166,78 @@ export function inferFromBookmark(rawXml: string): Inference {
   const byPair = new Map<string, Placement>();
   const placed: Placement[] = [];
   const placedCalcs: Placement[] = [];
-  for (const tag of ['rows', 'cols', 'mark'] as Shelf[]) {
-    for (const el of all(tag)) {
-      const text = (el.textContent ?? '').trim();
-      for (const m of text.matchAll(/\[[^\]]*\](?:\.\[[^\]]*\])*/g)) {
-        const { base, derivation } = parseInstanceRef(m[0]);
-        if (isPseudo(base)) continue;
-        const key = pairKey(base, derivation);
-        const cur = byPair.get(key);
-        if (cur) {
-          cur.shelves.add(tag);
-          continue;
-        }
-        const p: Placement = {
-          base,
-          derivation,
-          shelves: new Set([tag]),
-          isCalc: !!cols.get(base)?.isCalc,
-        };
-        byPair.set(key, p);
-        (p.isCalc ? placedCalcs : placed).push(p);
-      }
+  // Register one donor field reference found at `shelf`. Dedup is by (base, DERIVATION): the
+  // same field placed at two sites merges its shelves onto one placement; a field placed at
+  // two date parts (YEAR + MONTH of one date) stays two placements, each with its own
+  // derivation. Pseudo-fields ([:Measure Names], [Multiple Values]) are never bindable.
+  const addRef = (refText: string, shelf: Shelf): void => {
+    const { base, derivation } = parseInstanceRef(refText);
+    if (isPseudo(base)) return;
+    const key = pairKey(base, derivation);
+    const cur = byPair.get(key);
+    if (cur) {
+      cur.shelves.add(shelf);
+      return;
     }
+    const p: Placement = {
+      base,
+      derivation,
+      shelves: new Set([shelf]),
+      isCalc: !!cols.get(base)?.isCalc,
+    };
+    byPair.set(key, p);
+    (p.isCalc ? placedCalcs : placed).push(p);
+  };
+  // Extract every bracketed column-instance ref from an element's TEXT content (the axis/mark
+  // and title/label form, e.g. `[ds].[sum:Sales:qk]` — also inside a `<...>` title run).
+  const addFromText = (el: Element | undefined, shelf: Shelf): void => {
+    for (const m of (el?.textContent ?? '').matchAll(/\[[^\]]*\](?:\.\[[^\]]*\])*/g)) {
+      addRef(m[0], shelf);
+    }
+  };
+
+  // 1. AXIS + MARK shelves: refs live in element TEXT content.
+  for (const tag of ['rows', 'cols', 'mark'] as Shelf[]) {
+    for (const el of all(tag)) addFromText(el, tag);
   }
 
-  // Mark-encoding shelves (color/size/text/lod/detail/tooltip/shape/…) carry their ref in a
-  // `column` attribute on a child of `<encodings>`, and the child's TAG NAME is the shelf. An
+  // 2. MARK-ENCODING shelves (color/size/text/lod/detail/tooltip/shape/…): ref in a `column`
+  // attribute on a child of `<encodings>`, and the child's TAG NAME is the shelf. An
   // encoding-only chart (treemap, pie, symbol map) places EVERY field here and nothing on
-  // rows/cols, so without this walk it inferred ZERO slots — nothing for an agent to map. The
-  // tag name is read structurally; no branch on chart family. Walked AFTER the axis shelves so
+  // rows/cols, so without this walk it inferred ZERO slots. Walked AFTER the axis shelves so
   // token numbering stays stable for the axis-first common case.
   for (const enc of all('encodings')) {
     for (const child of Array.from(enc.getElementsByTagName('*')) as unknown as Element[]) {
       const ref = attr(child, 'column');
-      if (!ref) continue;
-      const { base, derivation } = parseInstanceRef(ref);
-      if (isPseudo(base)) continue;
-      const tag = (child.tagName || 'mark') as Shelf;
-      const key = pairKey(base, derivation);
-      const cur = byPair.get(key);
-      if (cur) {
-        cur.shelves.add(tag);
-        continue;
-      }
-      const p: Placement = {
-        base,
-        derivation,
-        shelves: new Set([tag]),
-        isCalc: !!cols.get(base)?.isCalc,
-      };
-      byPair.set(key, p);
-      (p.isCalc ? placedCalcs : placed).push(p);
+      if (ref) addRef(ref, (child.tagName || 'mark') as Shelf);
     }
   }
+
+  // 3. REFINEMENT sites — a field can appear ONLY here (never on an axis or a mark encoding)
+  // and still be part of the sheet: a categorical FILTER / slices pill, a field-reference run
+  // surfaced in the TITLE or a customized mark LABEL, or a measure positioning a REFERENCE
+  // LINE. Omitting these dropped such a field from inference entirely (no slot for an agent to
+  // map — the box-plot's title/filter/reference-line fields were invisible). Read structurally
+  // by site; never keyed on chart family. Walked LAST so axis/encoding fields keep their token
+  // numbers. `<caption>` is deliberately NOT a ref site: it is auto-generated PROSE that names
+  // fields in English, not machine refs (the display-prong optionality rule reads it, not this).
+  for (const f of all('filter')) {
+    const ref = attr(f, 'column');
+    if (ref) addRef(ref, 'filter');
+  }
+  for (const sl of all('slices')) {
+    for (const c of Array.from(sl.getElementsByTagName('column')) as unknown as Element[]) {
+      addFromText(c, 'filter');
+    }
+  }
+  for (const rl of all('reference-line')) {
+    for (const a of ['axis-column', 'value-column']) {
+      const ref = attr(rl, a);
+      if (ref) addRef(ref, 'reference-line');
+    }
+  }
+  for (const t of all('title')) addFromText(t, 'title');
+  for (const cl of all('customized-label')) addFromText(cl, 'label');
 
   // Expand placements to the (base, derivation) pairs actually emitted: direct
   // placements first (encoding order), then each calc's base-input leaves — preserving

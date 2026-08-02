@@ -134,6 +134,70 @@ describe('inferFromBookmark — placed calc decomposes to its base leaves', () =
   });
 });
 
+// A field can appear ONLY at a refinement site — a categorical filter/slices pill, a
+// field-reference run in the sheet title, a customized mark label, or a measure positioning a
+// reference line — and never on an axis or a mark encoding. Modelled on the real box-plot
+// worksheet: measure on rows, one dimension on cols, a categorical filter+slices on a THIRD
+// field, a title field-ref, and a reference line on the measure. Each such field must still
+// surface as a slot (optional), or an agent would never see it to map it.
+describe('inferFromBookmark — walks all reference sites (filter / title / label / reference-line)', () => {
+  const REFINEMENT_SITES =
+    "<?xml version='1.0'?><bookmark version='10.1'>" +
+    "<datasources><datasource name='ds'>" +
+    "<column name='[Amount]' datatype='real' role='measure' type='quantitative'/>" +
+    "<column name='[Segment]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Company]' datatype='string' role='dimension' type='nominal'/>" +
+    "<column name='[Region]' datatype='string' role='dimension' type='nominal'/>" +
+    '</datasource></datasources>' +
+    '<layout-options><title><formatted-text>' +
+    '<run>&lt;Sheet Name&gt;</run>' +
+    '<run>&lt;[ds].[attr:Company:nk]&gt;</run>' +
+    '</formatted-text></title></layout-options>' +
+    '<table>' +
+    '<rows>[ds].[sum:Amount:qk]</rows>' +
+    '<cols>[ds].[none:Segment:nk]</cols>' +
+    "<filter class='categorical' column='[ds].[none:Region:nk]'>" +
+    "<groupfilter function='level-members' level='[none:Region:nk]'/></filter>" +
+    '<slices><column>[ds].[none:Region:nk]</column></slices>' +
+    '<panes><pane>' +
+    "<reference-line axis-column='[ds].[sum:Amount:qk]' value-column='[ds].[sum:Amount:qk]'/>" +
+    '</pane></panes>' +
+    '</table></bookmark>';
+  const inf = inferFromBookmark(REFINEMENT_SITES);
+  const byId = new Map(inf.slots.map((s) => [s.slot_id, s]));
+
+  it('surfaces a filter/slices-only field as an optional slot on the filter shelf', () => {
+    expect(byId.get('region')?.shelves).toContain('filter');
+    expect(byId.get('region')?.required).toBe(false);
+    expect(byId.get('region')?.kind).toBe('categorical');
+  });
+
+  it('surfaces a title field-reference run as an optional slot carrying its derivation', () => {
+    expect(byId.get('company')?.shelves).toContain('title');
+    expect(byId.get('company')?.derivation).toBe('attr');
+    expect(byId.get('company')?.required).toBe(false);
+  });
+
+  it('merges a reference-line ref onto the same field placed on an axis (no duplicate slot)', () => {
+    // Amount is on rows AND positions the reference line: one slot, both shelves, still required.
+    expect(byId.get('amount')?.shelves).toEqual(expect.arrayContaining(['rows', 'reference-line']));
+    expect(byId.get('amount')?.required).toBe(true);
+    expect(inf.slots.filter((s) => s.sourceField === 'Amount')).toHaveLength(1);
+  });
+
+  it('gives refinement-only fields accurate, donor-free purposes', () => {
+    expect(autoPurpose('categorical', ['filter'])).toContain('filter');
+    expect(autoPurpose('categorical', ['title'])).toContain('title');
+    expect(autoPurpose('quantitative', ['reference-line'])).toContain('reference line');
+    // Still never names a donor field.
+    for (const s of inf.slots) {
+      for (const name of ['Amount', 'Segment', 'Company', 'Region']) {
+        expect(s.purpose).not.toContain(name);
+      }
+    }
+  });
+});
+
 describe('the zero-donor-name-leakage invariant', () => {
   it('never names a concrete donor field in any inferred purpose', () => {
     const inf = inferFromBookmark(MODERN_BOOKMARK);
