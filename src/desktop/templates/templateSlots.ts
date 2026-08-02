@@ -19,7 +19,7 @@ import type { SlotSpec, TemplateManifest } from '../binder/manifest-types.js';
 import { bundledIntelligenceProvider } from '../intelligence/provider.js';
 import type { TemplateSlotReference } from './fieldReferenceRewriter.js';
 import { inferFromBookmark, synthesizeManifest } from './inferSlots.js';
-import { readBookmark } from './templatePath.js';
+import { listTemplateNames, readBookmark } from './templatePath.js';
 
 /**
  * Where a resolved slot set's authority comes from:
@@ -142,4 +142,65 @@ export function resolveTemplateSlots(templateName: string): ResolvedTemplateSlot
     };
   }
   return { slots: [], source: 'inferred', fromBookmark: false };
+}
+
+/**
+ * The full-manifest analog of {@link ResolvedTemplateSlots}: the merged
+ * `TemplateManifest` plus the same authority tier. The Show Me matcher and the
+ * worksheet constructor need the WHOLE manifest (family, calcs, hazards, placeholders,
+ * portability evidence), not just the discovery-shaped slot references.
+ */
+export interface ResolvedTemplateManifest {
+  manifest: TemplateManifest;
+  source: SlotSource;
+  /** True when a `.tbm` bookmark backed the inference (vs. a manifest-only template). */
+  fromBookmark: boolean;
+}
+
+/**
+ * Resolve a template's FULL manifest by name, applying the same infer-first /
+ * overlay-curated semantics as {@link resolveTemplateSlots}: inference is the base, a
+ * curated manifest wins field-by-field, and the slot lists are unioned by template_field
+ * via {@link mergeSlots}. Curated top-level metadata (family, intent_keywords, avoid_when,
+ * calcs, fast_path_*, portability_evidence, description) overrides the inferred defaults;
+ * any field the curated manifest omits keeps the inferred value.
+ *
+ * Returns `null` (never throws) when the name resolves to neither a bookmark nor a curated
+ * manifest, so callers iterating the catalog can skip gracefully.
+ */
+export function resolveTemplateManifest(templateName: string): ResolvedTemplateManifest | null {
+  const bookmarkXml = readBookmark(templateName);
+  const inferred = bookmarkXml
+    ? synthesizeManifest(templateName, inferFromBookmark(bookmarkXml))
+    : null;
+  const curated = bundledIntelligenceProvider.getTemplateManifest(templateName) ?? null;
+
+  if (inferred && curated) {
+    // Spread curated over inferred so curated wins every top-level field it defines
+    // (an omitted optional field is simply an absent key, so it can't clobber inference),
+    // then replace `slots` with the token-keyed union — the same shape overlaySpec uses.
+    return {
+      manifest: { ...inferred, ...curated, slots: mergeSlots(inferred.slots, curated.slots) },
+      source: curatedSource(curated),
+      fromBookmark: true,
+    };
+  }
+  if (inferred) return { manifest: inferred, source: 'inferred', fromBookmark: true };
+  if (curated) return { manifest: curated, source: curatedSource(curated), fromBookmark: false };
+  return null;
+}
+
+/**
+ * Resolve EVERY template's merged manifest, keyed by name — the metadata-optional
+ * replacement for `bundledIntelligenceProvider.listTemplateManifests()`, which is blind to
+ * `.tbm`-only templates. Iterates {@link listTemplateNames} (lists both `.tbm` and `.xml`)
+ * and drops any name that resolves to nothing.
+ */
+export function resolveAllTemplateManifests(): Map<string, TemplateManifest> {
+  const manifests = new Map<string, TemplateManifest>();
+  for (const name of listTemplateNames()) {
+    const resolved = resolveTemplateManifest(name);
+    if (resolved) manifests.set(name, resolved.manifest);
+  }
+  return manifests;
 }

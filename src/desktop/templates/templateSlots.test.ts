@@ -5,16 +5,21 @@ import type { TemplateManifest } from '../binder/manifest-types.js';
 // resolveTemplateSlots joins two sources — the inferred `.tbm` and an optional curated
 // manifest — so both are mocked. Inference itself (inferFromBookmark/synthesizeManifest)
 // runs for real against the fixture, so the merge is exercised end-to-end.
-vi.mock('./templatePath.js', () => ({ readBookmark: vi.fn() }));
+vi.mock('./templatePath.js', () => ({ readBookmark: vi.fn(), listTemplateNames: vi.fn() }));
 vi.mock('../intelligence/provider.js', () => ({
   bundledIntelligenceProvider: { getTemplateManifest: vi.fn() },
 }));
 
 import { bundledIntelligenceProvider } from '../intelligence/provider.js';
-import { readBookmark } from './templatePath.js';
-import { resolveTemplateSlots } from './templateSlots.js';
+import { listTemplateNames, readBookmark } from './templatePath.js';
+import {
+  resolveAllTemplateManifests,
+  resolveTemplateManifest,
+  resolveTemplateSlots,
+} from './templateSlots.js';
 
 const readBookmarkMock = vi.mocked(readBookmark);
+const listTemplateNamesMock = vi.mocked(listTemplateNames);
 const getManifestMock = vi.mocked(bundledIntelligenceProvider.getTemplateManifest);
 
 const MODERN_BOOKMARK =
@@ -49,6 +54,7 @@ function curatedManifest(overrides: Partial<TemplateManifest> = {}): TemplateMan
 
 beforeEach(() => {
   readBookmarkMock.mockReset();
+  listTemplateNamesMock.mockReset();
   getManifestMock.mockReset();
 });
 
@@ -216,5 +222,85 @@ describe('resolveTemplateSlots — neither', () => {
     const resolved = resolveTemplateSlots('nonexistent');
     expect(resolved.slots).toEqual([]);
     expect(resolved.fromBookmark).toBe(false);
+  });
+});
+
+describe('resolveTemplateManifest — full-manifest resolver', () => {
+  it('infers a whole manifest from the .tbm when no curated sidecar exists', () => {
+    readBookmarkMock.mockReturnValue(MODERN_BOOKMARK);
+    getManifestMock.mockReturnValue(undefined);
+
+    const resolved = resolveTemplateManifest('my-template');
+    expect(resolved).not.toBeNull();
+    expect(resolved!.source).toBe('inferred');
+    expect(resolved!.fromBookmark).toBe(true);
+    expect(resolved!.manifest.template).toBe('my-template');
+    expect(resolved!.manifest.slots.map((s) => s.template_field)).toEqual([
+      '{{field_base_1}}',
+      '{{field_base_2}}',
+    ]);
+  });
+
+  it('lets curated top-level metadata win while inference fills omitted fields', () => {
+    readBookmarkMock.mockReturnValue(MODERN_BOOKMARK);
+    getManifestMock.mockReturnValue(
+      curatedManifest({
+        family: 'time-series',
+        intent_keywords: ['trend', 'over time'],
+        avoid_when: ['only one date'],
+      }),
+    );
+
+    const resolved = resolveTemplateManifest('my-template');
+    expect(resolved!.source).toBe('curated');
+    expect(resolved!.fromBookmark).toBe(true);
+    // Curated metadata wins.
+    expect(resolved!.manifest.family).toBe('time-series');
+    expect(resolved!.manifest.intent_keywords).toEqual(['trend', 'over time']);
+    expect(resolved!.manifest.avoid_when).toEqual(['only one date']);
+    // The curated manifest carried an empty slots[] but the .tbm did not, so the merged
+    // slot set is the inferred one (mergeSlots union), not the empty curated list.
+    expect(resolved!.manifest.slots.map((s) => s.template_field)).toEqual([
+      '{{field_base_1}}',
+      '{{field_base_2}}',
+    ]);
+  });
+
+  it('serves the curated manifest verbatim when there is no bookmark to infer from', () => {
+    readBookmarkMock.mockReturnValue(null);
+    getManifestMock.mockReturnValue(curatedManifest({ description: 'manifest-only' }));
+
+    const resolved = resolveTemplateManifest('my-template');
+    expect(resolved!.source).toBe('curated');
+    expect(resolved!.fromBookmark).toBe(false);
+    expect(resolved!.manifest.description).toBe('manifest-only');
+  });
+
+  it('returns null when the name resolves to neither a bookmark nor a manifest', () => {
+    readBookmarkMock.mockReturnValue(null);
+    getManifestMock.mockReturnValue(undefined);
+    expect(resolveTemplateManifest('nonexistent')).toBeNull();
+  });
+});
+
+describe('resolveAllTemplateManifests — catalog resolver', () => {
+  it('maps every listed name to its merged manifest and skips names that resolve to nothing', () => {
+    listTemplateNamesMock.mockReturnValue(['from-tbm', 'from-manifest', 'ghost']);
+    // 'from-tbm' → inferred; 'from-manifest' → curated; 'ghost' → nothing.
+    readBookmarkMock.mockImplementation((name) => (name === 'from-tbm' ? MODERN_BOOKMARK : null));
+    getManifestMock.mockImplementation((name) =>
+      name === 'from-manifest' ? curatedManifest({ template: 'from-manifest' }) : undefined,
+    );
+
+    const all = resolveAllTemplateManifests();
+    expect([...all.keys()].sort()).toEqual(['from-manifest', 'from-tbm']);
+    expect(all.get('from-tbm')?.slots).toHaveLength(2);
+    expect(all.get('from-manifest')?.description).toBe('curated');
+    expect(all.has('ghost')).toBe(false);
+  });
+
+  it('returns an empty map when there are no templates', () => {
+    listTemplateNamesMock.mockReturnValue([]);
+    expect(resolveAllTemplateManifests().size).toBe(0);
   });
 });
