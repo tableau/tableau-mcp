@@ -19,7 +19,12 @@
 
 import { DOMParser } from '@xmldom/xmldom';
 
-import type { CommunicativeRole, Derivation, SlotKind } from '../binder/manifest-types.js';
+import type {
+  CommunicativeRole,
+  Derivation,
+  SlotKind,
+  TableCalcFact,
+} from '../binder/manifest-types.js';
 
 /**
  * Where a donor field reference appears in the sheet. `rows`/`cols`/`mark` are the axis/mark
@@ -93,6 +98,8 @@ export interface InferredSlot {
   role: CommunicativeRole;
   purpose: string;
   tier: 'primary' | 'advanced';
+  /** TABLE-CALC semantics when this measure carries a quick/custom table calc; absent otherwise. */
+  tableCalc?: TableCalcFact;
 }
 
 export interface Inference {
@@ -140,24 +147,69 @@ const DERIVATIONS = new Set<string>([
 ]);
 
 /**
- * Split a column-instance ref into base name AND derivation. SlotSpec.derivation is
+ * Table-calc CI-name WRAPPER prefixes. A quick table calc keeps the base measure's
+ * aggregation and PREPENDS one or more of these to the column-instance name, chaining
+ * right-to-left (`pcdf:cum:sum:Sales:qk` = SUM → cumulative → percent diff). They are NOT
+ * in the `Derivation` union (they don't drive the binder's mapping key — the underlying
+ * aggregation does), but `parseInstanceRef` must recognize them so a compound name still
+ * resolves to its base field + binding aggregation instead of mis-splitting to
+ * `base: 'sum:Sales'` and dropping the slot as `kind: unknown`. Source: the confirmed CI
+ * prefixes in resources/desktop/knowledge/tactics/data/table-calcs.md.
+ */
+const TABLECALC_PREFIXES = new Set<string>([
+  'cum', // Running Total / YTD (CumTotal)
+  'diff', // Difference
+  'pcdf', // Percent Difference / YoY (PctDiff)
+  'pcto', // Percent of Total (PctTotal)
+  'rank', // Rank
+  'pcrk', // Percentile (PctRank)
+  'win', // Moving Average / window (WindowTotal)
+]);
+
+/**
+ * Split a column-instance ref into base name AND binding derivation. SlotSpec.derivation is
  * required and load-bearing — the binder keys qualified slots on
- * `template_field@derivation` (explicit-bind.ts:291) — so both halves must come out of
- * one parse. `[federated.x].[sum:Sales:qk]` → { base: 'Sales', derivation: 'sum' };
- * a bare `[Region]` → { base: 'Region', derivation: 'none' }.
+ * `template_field@derivation` (explicit-bind.ts:291) — so both halves must come out of one
+ * parse. `[federated.x].[sum:Sales:qk]` → { base: 'Sales', derivation: 'sum' }; a bare
+ * `[Region]` → { base: 'Region', derivation: 'none' }.
+ *
+ * A COMPOUND (table-calc) name prepends wrapper prefixes to the aggregation
+ * (`[pcdf:cum:sum:Sales:qk]`); those wrappers are consumed and the BINDING derivation is the
+ * underlying aggregation (`sum`), so the measure resolves normally and is not dropped. Leading
+ * segments are consumed only while they are known derivation/table-calc short-forms AND at
+ * least one segment remains for the base — so a field literally named like a derivation
+ * (`[none:sum:qk]` → base `sum`) or containing a colon (`[sum:A:B:qk]` → base `A:B`) is
+ * preserved, and an unknown single prefix still occupies the derivation slot
+ * (`[foo:Bar:qk]` → { base: 'Bar', derivation: 'none' }).
  */
 export function parseInstanceRef(ref: string): { base: string; derivation: Derivation } {
   const seg = ref.split('].[').pop() ?? ref;
   const inner = seg.replace(/^\[|\]$/g, '');
   const parts = inner.split(':');
-  if (parts.length >= 3) {
-    const d = parts[0].toLowerCase();
-    return {
-      base: parts.slice(1, -1).join(':'),
-      derivation: (DERIVATIONS.has(d) ? d : 'none') as Derivation,
-    };
+  if (parts.length < 3) return { base: inner, derivation: 'none' };
+  // Consume leading known derivation / table-calc wrapper segments, never taking the
+  // second-to-last segment (the base must keep at least one segment before the role marker).
+  const consumed: string[] = [];
+  let i = 0;
+  while (
+    i < parts.length - 2 &&
+    (DERIVATIONS.has(parts[i].toLowerCase()) || TABLECALC_PREFIXES.has(parts[i].toLowerCase()))
+  ) {
+    consumed.push(parts[i].toLowerCase());
+    i++;
   }
-  return { base: inner, derivation: 'none' };
+  if (consumed.length > 0) {
+    // Binding derivation = the last consumed segment that is a real aggregation/date-part
+    // derivation (a table-calc wrapper like `cum`/`pcdf` is not one), else `none`.
+    const agg = [...consumed].reverse().find((d) => DERIVATIONS.has(d)) ?? 'none';
+    return { base: parts.slice(i, -1).join(':'), derivation: agg as Derivation };
+  }
+  // No known leading prefix: parts[0] still occupies the (untrusted) derivation slot.
+  const d = parts[0].toLowerCase();
+  return {
+    base: parts.slice(1, -1).join(':'),
+    derivation: (DERIVATIONS.has(d) ? d : 'none') as Derivation,
+  };
 }
 
 /**

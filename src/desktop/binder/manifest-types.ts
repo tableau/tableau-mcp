@@ -109,8 +109,8 @@ export type CommunicativeRole =
   | 'distribution-breakout' // a disaggregated dimension on a mark encoding that adds to the grain (marks/detail)
   | 'decoration' // an LOD-neutral field that annotates marks (label/tooltip/title) without changing the chart
   | 'filter-scope' // a field that scopes which data the sheet shows (filter/slices)
-  | 'tablecalc-addressing' // a dimension a table calc runs ALONG (absolute addressing) — reserved for Track 1 chunk 4
-  | 'tablecalc-partition'; // a dimension a table calc RESETS on (partitioning) — reserved for Track 1 chunk 4
+  | 'tablecalc-addressing' // a dimension an absolute-addressed table calc runs ALONG (ordering-field / level-address)
+  | 'tablecalc-partition'; // a dimension an absolute-addressed table calc RESETS on (level-break)
 
 /**
  * Canonical derivation short-forms (written verbatim into column-instance names).
@@ -141,6 +141,31 @@ export type Derivation =
   | 'tqr'
   | 'tmn'
   | 'tdy';
+
+/**
+ * A slot's TABLE-CALC semantics as a first-class fact (Track 1 chunk 4), attached to the
+ * MEASURE that carries the calc. A quick/custom table calc lives on a `<column-instance>` as
+ * one or more `<table-calc>` children; this summarizes them for an agent without reading XML:
+ *   • `types` — the calc operation(s), e.g. `['CumTotal']` or `['CumTotal','PctDiff']` (YTD
+ *     growth rate stacks two). Empty for a `derivation="User"` calc that declares no `type`.
+ *   • `addressing` — `absolute` when the computation is pinned to named dimensions
+ *     (`ordering-type="Field"` + `ordering-field` / `level-break` / `level-address`), else
+ *     `relative` (positional Compute Using — Table / Pane / Cell — that names no dimension).
+ *   • `along` — base names of the dimension(s) the calc runs ALONG (ordering-field +
+ *     level-address). Empty for relative addressing.
+ *   • `reset_on` — base names of the dimension(s) the calc RESETS on (level-break, e.g. the
+ *     YEAR a YTD accumulation restarts at). Empty for relative addressing.
+ * For absolute addressing the `along`/`reset_on` dimensions are load-bearing (drop one and the
+ * computation is undefined), so inference upgrades those dim slots to required with a
+ * tablecalc-addressing / tablecalc-partition communicative role. Populated by inference; a
+ * curated manifest may override. Not used by deterministic binding.
+ */
+export interface TableCalcFact {
+  types: string[];
+  addressing: 'relative' | 'absolute';
+  along: string[];
+  reset_on: string[];
+}
 
 export interface SlotSpec {
   slot_id: string; // stable id used by the LLM contract, e.g. "region", "order_date_month"
@@ -182,6 +207,12 @@ export interface SlotSpec {
   hint?: string;
   /** true when template_field is reused at >1 derivation ⇒ binder MUST emit `template_field@derivation`. */
   qualified_key_required?: boolean;
+  /**
+   * TABLE-CALC semantics when this slot's measure carries a quick/custom table calc (Track 1
+   * chunk 4). Absent ⇒ the slot is not a table calc. Populated by inference; a curated manifest
+   * may override. Not used by deterministic binding.
+   */
+  table_calc?: TableCalcFact;
   /**
    * Opt-in (temporal slots only): when set, a date-like STRING field is an acceptable
    * source for this temporal slot. The binder injects a DATEPARSE calc that parses the

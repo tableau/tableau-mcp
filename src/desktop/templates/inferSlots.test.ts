@@ -300,6 +300,115 @@ describe('inferFromBookmark — communicative role', () => {
   });
 });
 
+// A table calc lives on a <column-instance> as one or more <table-calc> children; the CI name
+// chains the wrapper prefixes onto the base aggregation (`cum:sum:Sales:qk`). Inference must
+// (a) still resolve the wrapped measure to its base (not drop it as kind: unknown), (b) attach
+// a table-calc fact to that measure, and (c) for ABSOLUTE addressing, upgrade the addressing
+// dimension slots to required with a tablecalc-* role — RELATIVE addressing names no dimension
+// and must leave the dims alone. Modelled on the confirmed XML in the table-calcs knowledge doc.
+describe('inferFromBookmark — table-calc semantics as a first-class slot fact', () => {
+  // Running Total, Compute Using = Table (across) → ordering-type="Rows", positional. Names no
+  // dimension, so the date axis keeps its ordinary axis-partition role.
+  const RELATIVE =
+    "<?xml version='1.0'?><bookmark version='10.1'>" +
+    "<datasources><datasource name='ds'>" +
+    "<column name='[Sales]' datatype='real' role='measure' type='quantitative'/>" +
+    "<column name='[Order Date]' datatype='date' role='dimension' type='ordinal'/>" +
+    "<column-instance column='[Sales]' derivation='Sum' name='[cum:sum:Sales:qk]' pivot='key' type='quantitative'>" +
+    "<table-calc aggregation='Sum' ordering-type='Rows' type='CumTotal'/>" +
+    '</column-instance>' +
+    '</datasource></datasources>' +
+    '<table>' +
+    '<rows>[ds].[cum:sum:Sales:qk]</rows>' +
+    '<cols>[ds].[yr:Order Date:ok]</cols>' +
+    '</table></bookmark>';
+  const rel = inferFromBookmark(RELATIVE);
+  const relById = new Map(rel.slots.map((s) => [s.slot_id, s]));
+
+  it('resolves a wrapped measure to its base slot (not dropped as unknown)', () => {
+    expect(relById.get('sales')?.kind).toBe('quantitative');
+    expect(relById.get('sales')?.derivation).toBe('sum');
+    expect(rel.unknownCount).toBe(0);
+  });
+
+  it('attaches a relative-addressing table-calc fact to the measure', () => {
+    const tc = relById.get('sales')?.tableCalc;
+    expect(tc?.types).toContain('CumTotal');
+    expect(tc?.addressing).toBe('relative');
+    expect(tc?.along).toEqual([]);
+    expect(tc?.reset_on).toEqual([]);
+  });
+
+  it('leaves the addressing dimension alone for relative addressing', () => {
+    // Positional Compute Using names no dimension → the date stays an ordinary axis partition.
+    expect(relById.get('order_date')?.role).toBe('axis-partition');
+  });
+
+  // Year over Year Growth Rate: PctDiff pinned to Order Date via ordering-type="Field" +
+  // ordering-field + level-address → ABSOLUTE. The date it runs ALONG is load-bearing.
+  const ABSOLUTE_YOY =
+    "<?xml version='1.0'?><bookmark version='10.1'>" +
+    "<datasources><datasource name='ds'>" +
+    "<column name='[Sales]' datatype='real' role='measure' type='quantitative'/>" +
+    "<column name='[Order Date]' datatype='date' role='dimension' type='ordinal'/>" +
+    "<column-instance column='[Sales]' derivation='Sum' name='[pcdf:sum:Sales:qk]' pivot='key' type='quantitative'>" +
+    "<table-calc diff-options='Relative' level-address='[ds].[yr:Order Date:ok]' " +
+    "ordering-field='[ds].[Order Date]' ordering-type='Field' type='PctDiff'>" +
+    '<address><value>-1</value></address>' +
+    '</table-calc>' +
+    '</column-instance>' +
+    '</datasource></datasources>' +
+    '<table>' +
+    '<rows>[ds].[pcdf:sum:Sales:qk]</rows>' +
+    '<cols>[ds].[yr:Order Date:ok]</cols>' +
+    '</table></bookmark>';
+  const yoy = inferFromBookmark(ABSOLUTE_YOY);
+  const yoyById = new Map(yoy.slots.map((s) => [s.slot_id, s]));
+
+  it('marks an absolute-addressed measure with the addressing mode and along dimension', () => {
+    const tc = yoyById.get('sales')?.tableCalc;
+    expect(tc?.types).toContain('PctDiff');
+    expect(tc?.addressing).toBe('absolute');
+    expect(tc?.along).toContain('Order Date');
+  });
+
+  it('upgrades the along dimension to required with a tablecalc-addressing role', () => {
+    expect(yoyById.get('order_date')?.role).toBe('tablecalc-addressing');
+    expect(yoyById.get('order_date')?.required).toBe(true);
+  });
+
+  // YTD Total: CumTotal with level-break on Order Date → the date RESETS accumulation.
+  const ABSOLUTE_YTD =
+    "<?xml version='1.0'?><bookmark version='10.1'>" +
+    "<datasources><datasource name='ds'>" +
+    "<column name='[Sales]' datatype='real' role='measure' type='quantitative'/>" +
+    "<column name='[Order Date]' datatype='date' role='dimension' type='ordinal'/>" +
+    "<column-instance column='[Sales]' derivation='Sum' name='[cum:sum:Sales:qk]' pivot='key' type='quantitative'>" +
+    "<table-calc aggregation='Sum' level-break='[ds].[qr:Order Date:ok]' " +
+    "ordering-field='[ds].[Order Date]' ordering-type='Field' type='CumTotal'/>" +
+    '</column-instance>' +
+    '</datasource></datasources>' +
+    '<table>' +
+    '<rows>[ds].[cum:sum:Sales:qk]</rows>' +
+    '<cols>[ds].[qr:Order Date:ok]</cols>' +
+    '</table></bookmark>';
+  const ytd = inferFromBookmark(ABSOLUTE_YTD);
+  const ytdById = new Map(ytd.slots.map((s) => [s.slot_id, s]));
+
+  it('upgrades a level-break (reset) dimension to a tablecalc-partition role', () => {
+    expect(ytdById.get('sales')?.tableCalc?.reset_on).toContain('Order Date');
+    expect(ytdById.get('order_date')?.role).toBe('tablecalc-partition');
+    expect(ytdById.get('order_date')?.required).toBe(true);
+  });
+
+  it('carries the table-calc fact onto the synthesized SlotSpec', () => {
+    const m = synthesizeManifest('yoy', yoy);
+    const sales = m.slots.find((s) => s.slot_id === 'sales');
+    expect(sales?.table_calc?.addressing).toBe('absolute');
+    expect(sales?.table_calc?.along).toContain('Order Date');
+  });
+});
+
 describe('the zero-donor-name-leakage invariant', () => {
   it('never names a concrete donor field in any inferred purpose', () => {
     const inf = inferFromBookmark(MODERN_BOOKMARK);

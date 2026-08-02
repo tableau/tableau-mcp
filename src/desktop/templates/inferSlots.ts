@@ -16,6 +16,7 @@ import type {
   Derivation,
   SlotKind,
   SlotSpec,
+  TableCalcFact,
   TemplateManifest,
 } from '../binder/manifest-types.js';
 import {
@@ -201,6 +202,62 @@ export function inferFromBookmark(rawXml: string): Inference {
       formula: formula || prev?.formula || '',
       baseInputs: formula ? baseInputsOf(formula) : (prev?.baseInputs ?? []),
     });
+  }
+
+  // TABLE-CALC facts (Track 1 chunk 4). A quick/custom table calc lives on a
+  // `<column-instance>` as one or more `<table-calc>` children (never on the `<column>` def for
+  // a quick calc). The CI NAME chains the calc prefixes right-to-left
+  // (`pcdf:cum:sum:Sales:qk` = SUM → cumulative → percent diff); parseInstanceRef strips those
+  // wrappers so the measure still resolves to its base + aggregation. Two facts come off the
+  // `<table-calc>` children and steer optionality:
+  //   • the addressing MODE — `absolute` when any child pins the computation to a NAMED
+  //     dimension (`ordering-type="Field"` + ordering-field / level-break / level-address),
+  //     else `relative` (positional Compute Using: Table / Pane / Cell — names no dimension);
+  //   • the dimensions it runs ALONG (ordering-field + level-address) and RESETS on
+  //     (level-break). Read structurally — never keyed on chart family or field name.
+  // The BARE ordering-field ref (`[ds].[Order Date]`, no deriv:field:role) is shielded from
+  // tokenization and its rewrite/rebind is a separately tracked pass; here we only READ it to
+  // name the addressing dimension and flag the dim slot that DOES appear on the sheet.
+  const tableCalcByBase = new Map<string, TableCalcFact>();
+  const addressingRole = new Map<string, CommunicativeRole>(); // dim base → tablecalc-* role
+  for (const ci of all('column-instance')) {
+    const tcs = Array.from(ci.getElementsByTagName('table-calc')) as unknown as Element[];
+    if (tcs.length === 0) continue;
+    const { base } = parseInstanceRef(attr(ci, 'name'));
+    if (isPseudo(base)) continue;
+    const fact: TableCalcFact = tableCalcByBase.get(base) ?? {
+      types: [],
+      addressing: 'relative',
+      along: [],
+      reset_on: [],
+    };
+    for (const tc of tcs) {
+      const type = attr(tc, 'type');
+      if (type && !fact.types.includes(type)) fact.types.push(type);
+      const orderingField = attr(tc, 'ordering-field');
+      const levelAddress = attr(tc, 'level-address');
+      const levelBreak = attr(tc, 'level-break');
+      if (attr(tc, 'ordering-type') === 'Field' || orderingField || levelAddress || levelBreak) {
+        fact.addressing = 'absolute';
+      }
+      for (const ref of [orderingField, levelAddress]) {
+        if (!ref) continue;
+        const b = parseInstanceRef(ref).base;
+        if (!isPseudo(b) && !fact.along.includes(b)) fact.along.push(b);
+      }
+      if (levelBreak) {
+        const b = parseInstanceRef(levelBreak).base;
+        if (!isPseudo(b) && !fact.reset_on.includes(b)) fact.reset_on.push(b);
+      }
+    }
+    tableCalcByBase.set(base, fact);
+  }
+  // A dim named by level-break RESETS the calc (partition); a dim named only by
+  // ordering-field/level-address is addressed ALONG it. reset_on wins when a dim is both.
+  for (const fact of tableCalcByBase.values()) {
+    for (const b of fact.along)
+      if (!addressingRole.has(b)) addressingRole.set(b, 'tablecalc-addressing');
+    for (const b of fact.reset_on) addressingRole.set(b, 'tablecalc-partition');
   }
 
   // Placements keyed by (base, DERIVATION), not base alone. A base field placed at two
@@ -391,7 +448,14 @@ export function inferFromBookmark(rawXml: string): Inference {
     // (tooltip/filter/title/reference-line) never define display.
     const onAxis = shelf.includes('rows') || shelf.includes('cols');
     const definesDisplay = onAxis || (!hasAxisPlacement && partitioning);
-    const required = affectsLod || definesDisplay;
+    // TABLE-CALC upgrade (Track 1 chunk 4): a dimension an absolute-addressed calc runs ALONG
+    // or RESETS on is load-bearing — drop it and the computation is undefined — so it is
+    // REQUIRED and carries a tablecalc-addressing / tablecalc-partition role that overrides the
+    // placement-derived one. The measure carrying the calc gets the fact attached (its
+    // required/role are unchanged — placement already governs them).
+    const tcRole = addressingRole.get(e.base);
+    const tableCalc = tableCalcByBase.get(e.base);
+    const required = affectsLod || definesDisplay || !!tcRole;
     slots.push({
       slot_id: multiDeriv ? `${baseId}_${e.derivation}` : baseId,
       sourceField: e.base,
@@ -401,9 +465,10 @@ export function inferFromBookmark(rawXml: string): Inference {
       kind: k,
       derivation: e.derivation,
       required,
-      role: communicativeRole(k, e.derivation, shelf),
+      role: tcRole ?? communicativeRole(k, e.derivation, shelf),
       purpose: autoPurpose(k, shelf),
       tier: e.tier,
+      ...(tableCalc ? { tableCalc } : {}),
     });
   };
 
@@ -472,6 +537,7 @@ export function synthesizeManifest(name: string, inf: Inference): TemplateManife
       purpose: s.purpose,
       ...(hint ? { hint } : {}),
       ...((tokenCount.get(s.templateField) ?? 0) > 1 ? { qualified_key_required: true } : {}),
+      ...(s.tableCalc ? { table_calc: s.tableCalc } : {}),
     };
   });
   return {

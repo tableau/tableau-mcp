@@ -83,6 +83,25 @@ describe('parseInstanceRef', () => {
   it('preserves a colon inside the base name', () => {
     expect(parseInstanceRef('[ds].[sum:A:B:qk]')).toEqual({ base: 'A:B', derivation: 'sum' });
   });
+
+  it('resolves a compound table-calc name to its base + binding aggregation (not kind: unknown)', () => {
+    // [cum:sum:Sales:qk] = SUM base with a Running Total wrapper. The wrapper is consumed and
+    // the BINDING derivation is the underlying aggregation, so the measure is not dropped.
+    expect(parseInstanceRef('[ds].[cum:sum:Sales:qk]')).toEqual({
+      base: 'Sales',
+      derivation: 'sum',
+    });
+    // YTD Growth Rate stacks two wrappers (PctDiff over CumTotal) — both are consumed.
+    expect(parseInstanceRef('[ds].[pcdf:cum:sum:Sales:qk]')).toEqual({
+      base: 'Sales',
+      derivation: 'sum',
+    });
+  });
+
+  it('does not over-consume a field literally named like a derivation', () => {
+    // [none:sum:qk] is a dimension whose base field is named "sum"; the base must survive.
+    expect(parseInstanceRef('[ds].[none:sum:qk]')).toEqual({ base: 'sum', derivation: 'none' });
+  });
 });
 
 describe('normalizeBookmarkXml', () => {
