@@ -191,18 +191,30 @@ describe('ExternalApiClient', () => {
     expect(server.requests.some((r) => r.path === '/v0/operations/op-ws')).toBe(true);
   });
 
-  it('returns read-overflowed for an overflowed (202) XML document read (scoped out of poll projection)', async () => {
+  it('polls an overflowed (202) XML document read and unwraps result.document', async () => {
     server.setOverride('GET /v0/workbook/document', {
       status: 202,
       contentType: 'application/json',
       headers: { location: '/v0/operations/op-doc', 'x-tableau-operation-id': 'op-doc' },
       body: JSON.stringify({ id: 'op-doc', kind: 'workbook.getDocument', state: 'RUNNING' }),
     });
+    server.setOperation('op-doc', {
+      retryAfterSeconds: 0,
+      poll: [
+        {
+          id: 'op-doc',
+          kind: 'workbook.getDocument',
+          state: 'SUCCEEDED',
+          result: { document: '<workbook version="18.1"><worksheets /></workbook>' },
+        },
+      ],
+    });
 
     const result = await client.getWorkbookDocument();
 
-    expect(result.isErr()).toBe(true);
-    expect(result.unwrapErr().type).toBe('read-overflowed');
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap().xml).toBe('<workbook version="18.1"><worksheets /></workbook>');
+    expect(server.requests.some((r) => r.path === '/v0/operations/op-doc')).toBe(true);
   });
 
   it('lists dashboards from GET /v0/workbook/dashboards', async () => {

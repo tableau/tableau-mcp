@@ -98,6 +98,10 @@ const HEADER_LOCATION = 'location';
 const HEADER_RETRY_AFTER = 'retry-after';
 const HEADER_OPERATION_ID = 'x-tableau-operation-id';
 
+// A document read polled to terminal carries its XML under `result.document` (a JSON string),
+// since the poll endpoint always returns the JSON Operation envelope, never a raw-XML body.
+const documentResultSchema = z.object({ document: z.string() }).passthrough();
+
 /**
  * Typed client for a single Tableau Desktop External Client API instance.
  *
@@ -483,9 +487,25 @@ export class ExternalApiClient {
     }
 
     const res = response.value;
-    const overflow = await readOverflowError(res);
-    if (overflow) {
-      return Err(overflow);
+    if (res.status === HTTP_ACCEPTED) {
+      const operation = await this.pollOperation(res, signal);
+      if (operation.isErr()) {
+        return Err(operation.error);
+      }
+      const parsed = documentResultSchema.safeParse(operation.value.result);
+      if (!parsed.success) {
+        return Err({ type: 'invalid-response', error: parsed.error });
+      }
+      return Ok({
+        xml: parsed.data.document,
+        applicationVersion: res.headers.get(HEADER_APPLICATION_VERSION) ?? undefined,
+        // The XSD-payload-version header is sync-only; the poll response does not carry it.
+        xsdPayloadVersion: undefined,
+      });
+    }
+    const pending = await pendingOverflowError(res);
+    if (pending) {
+      return Err(pending);
     }
     if (!res.ok) {
       return Err(await mapErrorResponse(res));
@@ -582,23 +602,9 @@ async function parseOperationBody(
   return Ok(parsed.data);
 }
 
-// XML document reads are scoped out of the poll-payload projection (a raw-XML body can't ride in a
-// JSON Operation envelope), so an overflow (202) stays a terminal error for them, unlike JSON reads
-// which poll. A 503 is only an `operation-pending` precursor overflow when its Problem code says so
-// — a genuine api-disabled/shutting-down 503 must fall through to mapErrorResponse and keep its code.
-async function readOverflowError(res: Response): Promise<ExternalApiError | undefined> {
-  if (res.status === HTTP_ACCEPTED) {
-    return {
-      type: 'read-overflowed',
-      operationId: res.headers.get(HEADER_OPERATION_ID) ?? undefined,
-    };
-  }
-  return pendingOverflowError(res);
-}
-
-// The precursor-overflow signal shared by JSON and XML reads: a 503 whose Problem code is
-// `operation-pending` means an internal precursor (e.g. summaryData's {id} resolution) overflowed
-// and there is no operation to poll — retry the whole request. Any other 503 is left to the caller.
+// A 503 whose Problem code is `operation-pending` means an internal precursor (e.g. summaryData's
+// {id} resolution) overflowed and there is no operation to poll — retry the whole request. Any
+// other 503 (api-disabled, shutting-down) is left to mapErrorResponse to keep its real code.
 async function pendingOverflowError(res: Response): Promise<ExternalApiError | undefined> {
   if (res.status === HTTP_SERVICE_UNAVAILABLE && (await problemCode(res)) === 'operation-pending') {
     const seconds = Number.parseInt(res.headers.get(HEADER_RETRY_AFTER) ?? '', 10);

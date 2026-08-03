@@ -681,20 +681,27 @@ describe('ExternalApiToolExecutor', () => {
       expect(result.unwrap().worksheets?.[0]?.name).toBe('Sales');
     });
 
-    it('surfaces read-overflowed for an XML document read (scoped out of poll projection)', async () => {
+    it('polls an overflowed XML document read to its terminal result.document', async () => {
       server.setOverride('GET /v0/workbook/document', accepted202('op-doc'));
+      server.setOperation('op-doc', {
+        retryAfterSeconds: 0,
+        poll: [
+          { id: 'op-doc', kind: 'workbook.getDocument', state: 'RUNNING' },
+          {
+            id: 'op-doc',
+            kind: 'workbook.getDocument',
+            state: 'SUCCEEDED',
+            result: { document: '<workbook version="18.1"><worksheets /></workbook>' },
+          },
+        ],
+      });
       const executor = new ExternalApiToolExecutor({ discover: () => [instanceFor(server)] });
       await executor.start();
 
       const result = await executor.getWorkbookDocument(signal);
 
-      expect(result.isErr()).toBe(true);
-      const error = result.unwrapErr();
-      expect(error.type).toBe('command-failed');
-      if (error.type === 'command-failed') {
-        expect(error.error?.code).toBe('read-overflowed');
-        expect(error.error?.recoverable).toBe(true);
-      }
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().xml).toBe('<workbook version="18.1"><worksheets /></workbook>');
     });
   });
 });

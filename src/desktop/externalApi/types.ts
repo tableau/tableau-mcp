@@ -425,9 +425,6 @@ export type ExternalApiError =
   | { type: 'problem'; status: number; code?: string; title?: string; detail?: string }
   | { type: 'invalid-response'; error: unknown }
   | { type: 'network'; error: unknown; aborted?: boolean }
-  // An XML document read overflowed the sync window; XML bodies are scoped out of the poll-payload
-  // projection (JSON reads poll instead), so there is no operation to retrieve the document from.
-  | { type: 'read-overflowed'; operationId?: string }
   // 503: retry the whole request (there is no operation to poll).
   | { type: 'operation-pending'; retryAfterSeconds?: number }
   // Blocked on a human; a poll can never clear it.

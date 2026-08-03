@@ -645,18 +645,6 @@ function mapClientError(
       return { type: 'invalid-response', error: error.error };
     case 'network':
       return mapNetworkFailure(error.error, pinnedPid, error.aborted);
-    case 'read-overflowed':
-      return {
-        type: 'command-failed',
-        error: {
-          code: 'read-overflowed',
-          message:
-            'The document read exceeded the Desktop sync window and returned an async operation, ' +
-            'but XML document reads cannot be retrieved from that operation — retry, or narrow the ' +
-            'read (a single sheet rather than the whole workbook).',
-          recoverable: true,
-        },
-      };
     case 'operation-pending':
       return {
         type: 'command-failed',

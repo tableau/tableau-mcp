@@ -38,9 +38,9 @@ import {
  * fixture with it and rerun — every drift (new field, changed requiredness, enum
  * growth, route add/remove) surfaces as a red/green diff instead of a manual reread.
  *
- * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.0,
- * captured 2026-07-30 (a build serving monolith #60234 + #61714). No hand-edits —
- * `DatasourceItem.luid` (["string","null"]) is now surfaced by the deployed spec.
+ * Fixture provenance: live Desktop `/openapi.json`, `info.version` 0.2.3,
+ * captured 2026-08-03 (a build whose poll payload carries typed-read results, including
+ * document reads under `result.document`). No hand-edits.
  */
 
 type SpecSchema = {

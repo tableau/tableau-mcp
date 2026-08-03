@@ -148,17 +148,26 @@ describe('ExternalApiClient async dispatch (0.2.0)', () => {
   });
 
   describe('typed read path', () => {
-    // XML document reads are scoped out of the poll-payload projection, so a 202 stays terminal.
-    it('returns read-overflowed (never JSON-as-XML) when a workbook-document read 202s', async () => {
+    // A document read polled to terminal carries its XML under result.document (a JSON string).
+    it('polls a workbook-document read to its terminal result.document (never JSON-as-XML)', async () => {
       server.setOverride('GET /v0/workbook/document', accepted202('op-read-1'));
+      server.setOperation('op-read-1', {
+        retryAfterSeconds: 0,
+        poll: [
+          { id: 'op-read-1', kind: 'workbook.getDocument', state: 'RUNNING' },
+          {
+            id: 'op-read-1',
+            kind: 'workbook.getDocument',
+            state: 'SUCCEEDED',
+            result: { document: '<workbook version="18.1"><worksheets /></workbook>' },
+          },
+        ],
+      });
 
       const result = await client.getWorkbookDocument();
-      expect(result.isErr()).toBe(true);
-      const error = result.unwrapErr();
-      expect(error.type).toBe('read-overflowed');
-      if (error.type === 'read-overflowed') {
-        expect(error.operationId).toBe('op-read-1');
-      }
+      expect(result.isOk()).toBe(true);
+      expect(result.unwrap().xml).toBe('<workbook version="18.1"><worksheets /></workbook>');
+      expect(server.requests.some((r) => r.path === '/v0/operations/op-read-1')).toBe(true);
     });
 
     // JSON reads DO poll: the terminal operation's `result` carries the body the 200 would have.
