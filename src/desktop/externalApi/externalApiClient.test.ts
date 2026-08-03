@@ -342,7 +342,8 @@ describe('ExternalApiClient', () => {
     const result = await client.getStoryboardDocument('story-qbr');
 
     expect(result.isOk()).toBe(true);
-    expect(result.unwrap().xml).toContain('<storyboard name="QBR Story"');
+    // A storyboard serializes as a `<dashboard type="storyboard">` inside a whole <workbook>.
+    expect(result.unwrap().xml).toContain('<dashboard name="QBR Story" type="storyboard"');
 
     const last = server.requests.at(-1);
     expect(last?.method).toBe('GET');

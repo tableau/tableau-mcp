@@ -73,6 +73,19 @@ describe('connections-not-authorable rule', () => {
     expect(connectionsNotAuthorableRule.validate(xml)).toEqual([]);
   });
 
+  it('a bare published-datasource (sqlproxy) connection is NOT rejected — it is a genuine Desktop shape', () => {
+    const xml = `<?xml version="1.0"?>
+<workbook>
+  <datasources>
+    <datasource caption="GUS-Work" name="sqlproxy.1bzmspu1v78e5817xecku1rmnq6s">
+      <connection channel="https" class="sqlproxy" composed-connection-name="sqlproxy.1bzmspu1v78e5817xecku1rmnq6s"
+        dbname="GUS-Work" port="443" server="10ax.online.tableau.com" username="user" />
+    </datasource>
+  </datasources>
+</workbook>`;
+    expect(connectionsNotAuthorableRule.validate(xml)).toEqual([]);
+  });
+
   it('a fragment with no <connection> element at all is never flagged', () => {
     const xml = `<?xml version="1.0"?>
 <worksheet name="Sheet 1">

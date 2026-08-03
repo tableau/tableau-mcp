@@ -54,7 +54,14 @@ const DEFAULT_DASHBOARD_DOCUMENT_XML =
   '<?xml version="1.0"?><workbook><dashboards>' +
   '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>' +
   '</dashboards></workbook>';
-const DEFAULT_STORYBOARD_XML = '<storyboard name="QBR Story"><story-points /></storyboard>';
+// A storyboard serializes as a `<dashboard type='storyboard'>` under `<dashboards>` within a whole
+// `<workbook>` document — the same envelope shape as a dashboard, not a bare `<storyboard>` element.
+// The document carries a sibling dashboard the slice must exclude by name.
+const DEFAULT_STORYBOARD_DOCUMENT_XML =
+  '<?xml version="1.0"?><workbook><dashboards>' +
+  '<dashboard name="Executive Dashboard"><zones><zone name="Sales by Region" /></zones></dashboard>' +
+  '<dashboard name="QBR Story" type="storyboard"><zones><zone name="Sales by Region" /></zones></dashboard>' +
+  '</dashboards></workbook>';
 const DEFAULT_WORKSHEETS = [
   {
     id: 'sheet-sales',
@@ -192,6 +199,40 @@ const sendProblem = (res: ServerResponse, status: number, code: string, detail: 
   res.end(
     JSON.stringify({ type: 'problem', title: detail, status, instance: '/v0/mock', detail, code }),
   );
+};
+
+// The per-sheet `/document` POST routes share the whole-workbook POST contract: reject a non-XML
+// content type (415), an empty body (400), or an unknown sheet id (404 — the route resolves by id
+// and cannot create), and otherwise return a succeeded operation envelope. `known` guards the id.
+const sendDocumentApply = (
+  res: ServerResponse,
+  contentType: string | undefined,
+  body: string,
+  id: string,
+  known: boolean,
+  kind: string,
+): void => {
+  if (!known) {
+    sendProblem(res, 404, 'sheet-not-found', `${kind} not found: ${id}`);
+    return;
+  }
+  const ct = (contentType ?? '').split(';')[0].trim();
+  if (ct !== 'application/xml' && ct !== 'text/xml') {
+    sendProblem(res, 415, 'unsupported-content-type', `Unsupported content type: ${ct}`);
+    return;
+  }
+  if (body.trim().length === 0) {
+    sendProblem(res, 400, 'invalid-request-body', 'Empty document body.');
+    return;
+  }
+  sendJson(res, 200, {
+    id: 'op-doc-1',
+    kind: `${kind.toLowerCase()}.document.apply`,
+    state: 'succeeded',
+    createdAt: '2026-07-07T10:00:00Z',
+    completedAt: '2026-07-07T10:00:01Z',
+    result: { bytesApplied: body.length },
+  });
 };
 
 // A 1x1 PNG, base64-encoded — enough to exercise the inline-image decode path.
@@ -362,36 +403,57 @@ export async function startMockExternalApiServer(
     }
 
     const worksheetDocumentMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)\/document$/);
-    if (method === 'GET' && worksheetDocumentMatch) {
+    if (worksheetDocumentMatch) {
       const worksheetId = decodeURIComponent(worksheetDocumentMatch[1]);
-      if (!DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId)) {
-        sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+      const known = DEFAULT_WORKSHEETS.some((worksheet) => worksheet.id === worksheetId);
+      if (method === 'GET') {
+        if (!known) {
+          sendProblem(res, 404, 'sheet-not-found', `Worksheet not found: ${worksheetId}`);
+          return;
+        }
+        sendXml(res, 200, DEFAULT_WORKSHEET_DOCUMENT_XML);
         return;
       }
-      sendXml(res, 200, DEFAULT_WORKSHEET_DOCUMENT_XML);
-      return;
+      if (method === 'POST') {
+        sendDocumentApply(res, contentType, body, worksheetId, known, 'Worksheet');
+        return;
+      }
     }
 
     const dashboardDocumentMatch = path.match(/^\/v0\/workbook\/dashboards\/([^/]+)\/document$/);
-    if (method === 'GET' && dashboardDocumentMatch) {
+    if (dashboardDocumentMatch) {
       const dashboardId = decodeURIComponent(dashboardDocumentMatch[1]);
-      if (!DEFAULT_DASHBOARDS.some((dashboard) => dashboard.id === dashboardId)) {
-        sendProblem(res, 404, 'sheet-not-found', `Dashboard not found: ${dashboardId}`);
+      const known = DEFAULT_DASHBOARDS.some((dashboard) => dashboard.id === dashboardId);
+      if (method === 'GET') {
+        if (!known) {
+          sendProblem(res, 404, 'sheet-not-found', `Dashboard not found: ${dashboardId}`);
+          return;
+        }
+        sendXml(res, 200, DEFAULT_DASHBOARD_DOCUMENT_XML);
         return;
       }
-      sendXml(res, 200, DEFAULT_DASHBOARD_DOCUMENT_XML);
-      return;
+      if (method === 'POST') {
+        sendDocumentApply(res, contentType, body, dashboardId, known, 'Dashboard');
+        return;
+      }
     }
 
     const storyboardDocumentMatch = path.match(/^\/v0\/workbook\/storyboards\/([^/]+)\/document$/);
-    if (method === 'GET' && storyboardDocumentMatch) {
+    if (storyboardDocumentMatch) {
       const storyboardId = decodeURIComponent(storyboardDocumentMatch[1]);
-      if (!DEFAULT_STORYBOARDS.some((storyboard) => storyboard.id === storyboardId)) {
-        sendProblem(res, 404, 'sheet-not-found', `Storyboard not found: ${storyboardId}`);
+      const known = DEFAULT_STORYBOARDS.some((storyboard) => storyboard.id === storyboardId);
+      if (method === 'GET') {
+        if (!known) {
+          sendProblem(res, 404, 'sheet-not-found', `Storyboard not found: ${storyboardId}`);
+          return;
+        }
+        sendXml(res, 200, DEFAULT_STORYBOARD_DOCUMENT_XML);
         return;
       }
-      sendXml(res, 200, DEFAULT_STORYBOARD_XML);
-      return;
+      if (method === 'POST') {
+        sendDocumentApply(res, contentType, body, storyboardId, known, 'Storyboard');
+        return;
+      }
     }
 
     const worksheetMatch = path.match(/^\/v0\/workbook\/worksheets\/([^/]+)$/);

@@ -102,6 +102,10 @@ export const getApplyWorksheetTool = (
             focus: { navigate: 'artifact', sheetName: worksheetName },
             executor,
             signal: extra.signal,
+            // apply-worksheet updates an existing worksheet in place via the per-sheet `/document`
+            // route; a name that does not resolve surfaces as an error rather than creating a sheet
+            // through the whole-workbook path (build-and-apply-worksheet owns net-new creation).
+            requireExistingSheet: true,
           });
 
           if (result.isErr()) {

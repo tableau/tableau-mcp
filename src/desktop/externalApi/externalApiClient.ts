@@ -138,6 +138,45 @@ export class ExternalApiClient {
     return this.parseEnvelope(response);
   }
 
+  async applyWorksheetDocument(
+    worksheetId: string,
+    xml: string,
+    signal?: AbortSignal,
+  ): Promise<Result<OperationEnvelope, ExternalApiError>> {
+    const response = await this.request('POST', buildWorksheetDocumentRoute(worksheetId), {
+      signal,
+      contentType: 'application/xml',
+      body: xml,
+    });
+    return this.parseEnvelope(response);
+  }
+
+  async applyDashboardDocument(
+    dashboardId: string,
+    xml: string,
+    signal?: AbortSignal,
+  ): Promise<Result<OperationEnvelope, ExternalApiError>> {
+    const response = await this.request('POST', buildDashboardDocumentRoute(dashboardId), {
+      signal,
+      contentType: 'application/xml',
+      body: xml,
+    });
+    return this.parseEnvelope(response);
+  }
+
+  async applyStoryboardDocument(
+    storyboardId: string,
+    xml: string,
+    signal?: AbortSignal,
+  ): Promise<Result<OperationEnvelope, ExternalApiError>> {
+    const response = await this.request('POST', buildStoryboardDocumentRoute(storyboardId), {
+      signal,
+      contentType: 'application/xml',
+      body: xml,
+    });
+    return this.parseEnvelope(response);
+  }
+
   async validateWorkbookDocument(
     xml: string,
     signal?: AbortSignal,
