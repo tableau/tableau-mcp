@@ -102,6 +102,23 @@ const HEADER_OPERATION_ID = 'x-tableau-operation-id';
 // since the poll endpoint always returns the JSON Operation envelope, never a raw-XML body.
 const documentResultSchema = z.object({ document: z.string() }).passthrough();
 
+// A polled read can settle FAILED (e.g. a Desktop-side serialization error), which carries no
+// `result`. Surface the operation's own error so callers see Desktop's message instead of a
+// schema-parse failure on the absent payload. On success the `result` object is returned.
+function terminalReadResult(
+  envelope: OperationEnvelope,
+): Result<Record<string, unknown>, ExternalApiError> {
+  if (envelope.error !== undefined || envelope.state?.toUpperCase() !== 'SUCCEEDED') {
+    return Err({
+      type: 'problem',
+      status: 500,
+      code: envelope.error?.code ?? 'operation-failed',
+      detail: envelope.error?.message ?? `Read operation ${envelope.kind} did not succeed.`,
+    });
+  }
+  return Ok(envelope.result ?? {});
+}
+
 /**
  * Typed client for a single Tableau Desktop External Client API instance.
  *
@@ -457,7 +474,11 @@ export class ExternalApiClient {
       if (operation.isErr()) {
         return Err(operation.error);
       }
-      return parseAgainstSchema(operation.value.result ?? {}, schema);
+      const settled = terminalReadResult(operation.value);
+      if (settled.isErr()) {
+        return Err(settled.error);
+      }
+      return parseAgainstSchema(settled.value, schema);
     }
     const pending = await pendingOverflowError(res);
     if (pending) {
@@ -492,7 +513,11 @@ export class ExternalApiClient {
       if (operation.isErr()) {
         return Err(operation.error);
       }
-      const parsed = documentResultSchema.safeParse(operation.value.result);
+      const settled = terminalReadResult(operation.value);
+      if (settled.isErr()) {
+        return Err(settled.error);
+      }
+      const parsed = documentResultSchema.safeParse(settled.value);
       if (!parsed.success) {
         return Err({ type: 'invalid-response', error: parsed.error });
       }

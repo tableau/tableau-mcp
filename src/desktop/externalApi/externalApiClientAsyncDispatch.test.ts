@@ -194,6 +194,55 @@ describe('ExternalApiClient async dispatch (0.2.0)', () => {
       expect(server.requests.some((r) => r.path === '/v0/operations/op-read-2')).toBe(true);
     });
 
+    // A polled document read can settle FAILED (e.g. Desktop's own content-model serialization
+    // error) with no result — surface Desktop's message, not a schema-parse error on the absent body.
+    it('surfaces the operation error when an overflowed document read polls to FAILED', async () => {
+      server.setOverride('GET /v0/workbook/document', accepted202('op-read-fail'));
+      server.setOperation('op-read-fail', {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: 'op-read-fail',
+            kind: 'workbook.getDocument',
+            state: 'FAILED',
+            error: { code: 'operation-failed', message: 'Error(240,12): missing elements' },
+          },
+        ],
+      });
+
+      const result = await client.getWorkbookDocument();
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('problem');
+      if (error.type === 'problem') {
+        expect(error.code).toBe('operation-failed');
+        expect(error.detail).toContain('missing elements');
+      }
+    });
+
+    it('surfaces the operation error when an overflowed JSON read polls to FAILED', async () => {
+      server.setOverride('GET /v0/workbook/worksheets', accepted202('op-json-fail'));
+      server.setOperation('op-json-fail', {
+        retryAfterSeconds: 0,
+        poll: [
+          {
+            id: 'op-json-fail',
+            kind: 'workbook.listWorksheets',
+            state: 'FAILED',
+            error: { code: 'operation-failed', message: 'inventory serialization failed' },
+          },
+        ],
+      });
+
+      const result = await client.listWorksheets();
+      expect(result.isErr()).toBe(true);
+      const error = result.unwrapErr();
+      expect(error.type).toBe('problem');
+      if (error.type === 'problem') {
+        expect(error.detail).toContain('serialization failed');
+      }
+    });
+
     it('returns operation-pending on a 503 (precursor read overflow)', async () => {
       server.setOverride('GET /v0/workbook/worksheets/sheet-sales/summaryData', {
         status: 503,
