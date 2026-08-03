@@ -53,6 +53,8 @@ describe('passthroughAuthMiddleware', () => {
       vi.resetModules();
       vi.unstubAllEnvs();
       stubDefaultEnvVars();
+      vi.stubEnv('TRANSPORT', 'http');
+      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
     });
 
     afterEach(() => {
@@ -83,7 +85,8 @@ describe('passthroughAuthMiddleware', () => {
       expect(res.status).toHaveBeenCalledWith(401);
       expect(res.json).toHaveBeenCalledWith({
         error: 'invalid_token',
-        error_description: 'Missing X-Tableau-Auth token',
+        error_description:
+          'Missing token: provide an X-Tableau-Auth header or workgroup_session_id cookie',
       });
       expect(next).not.toHaveBeenCalled();
     });

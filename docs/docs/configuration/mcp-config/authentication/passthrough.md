@@ -9,16 +9,18 @@ Tableau REST APIs. The same
 [`X-Tableau-Auth` header](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_auth.htm#using_auth_token)
 used to authenticate to the Tableau REST APIs can also be used to authenticate to the MCP server.
 
-When a request is made to the MCP server, the `X-Tableau-Auth` header is read.
+When a request is made to the MCP server, the token is read from the `X-Tableau-Auth` header, or,
+when that header is absent, from the `workgroup_session_id` cookie.
 
-- When the header is present, the value will be "passed through" and re-used during MCP tool calls
-  when they authenticate to the Tableau REST APIs.
-- When absent, behavior depends on how passthrough was enabled:
+- When a token is present in either place, the value will be "passed through" and re-used during MCP
+  tool calls when they authenticate to the Tableau REST APIs.
+- When neither is present, behavior depends on how passthrough was enabled:
   - With [`ENABLE_PASSTHROUGH_AUTH`](#enable_passthrough_auth) set to `true`, normal authentication
     resumes as defined by the [`AUTH`](../env-vars.md#auth) environment variable. This allows clients
-    that do not provide the `X-Tableau-Auth` header to still authenticate to the MCP server.
-  - With [`AUTH`](../env-vars.md#auth) set to `passthrough`, there is no fallback: the request is
-    rejected with `401 invalid_token`.
+    that provide neither the `X-Tableau-Auth` header nor the `workgroup_session_id` cookie to still
+    authenticate to the MCP server.
+  - With [`AUTH`](../env-vars.md#auth) set to `passthrough`, there is no fallback to another `AUTH`
+    method: the request is rejected with `401 invalid_token`.
 
 ## Warnings
 
@@ -78,10 +80,10 @@ for more details.
 ### AUTH
 
 - Setting [`AUTH`](../env-vars.md#auth) to `passthrough` enables passthrough authentication and makes
-  it the only accepted method: every request must carry an `X-Tableau-Auth` token, and requests
-  without one are rejected with `401 invalid_token`.
+  it the only accepted method: every request must carry a token in the `X-Tableau-Auth` header or the
+  `workgroup_session_id` cookie, and requests without one are rejected with `401 invalid_token`.
 - Implies [`ENABLE_PASSTHROUGH_AUTH`](#enable_passthrough_auth) is `true`; you do not need to set both.
-- Unlike `ENABLE_PASSTHROUGH_AUTH`, there is no fallback to another `AUTH` method when the header is
+- Unlike `ENABLE_PASSTHROUGH_AUTH`, there is no fallback to another `AUTH` method when the token is
   absent.
 
 <hr />

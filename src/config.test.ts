@@ -951,6 +951,8 @@ describe('Config', () => {
   describe('Passthrough auth', () => {
     beforeEach(() => {
       vi.stubEnv('AUTH', 'passthrough');
+      vi.stubEnv('TRANSPORT', 'http');
+      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
       vi.stubEnv('PAT_NAME', undefined);
       vi.stubEnv('PAT_VALUE', undefined);
     });
@@ -977,12 +979,10 @@ describe('Config', () => {
       expect(() => new Config()).not.toThrow('The environment variable PAT_VALUE is not set');
     });
 
-    it('should work with stdio transport (no OAuth conflict)', () => {
+    it('should reject AUTH=passthrough with TRANSPORT=stdio', () => {
       vi.stubEnv('TRANSPORT', 'stdio');
 
-      const config = new Config();
-      expect(config.auth).toBe('passthrough');
-      expect(config.transport).toBe('stdio');
+      expect(() => new Config()).toThrow('TRANSPORT must be "http" when AUTH is "passthrough"');
     });
 
     it('should still require SERVER when AUTH=passthrough', () => {

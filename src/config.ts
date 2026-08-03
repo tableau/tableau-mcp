@@ -320,6 +320,10 @@ export class Config extends BaseConfig {
       );
     }
 
+    if (this.auth === 'passthrough' && this.transport === 'stdio') {
+      throw new Error('TRANSPORT must be "http" when AUTH is "passthrough"');
+    }
+
     if (this.auth === 'oauth') {
       if (disableOauthOverride) {
         throw new Error('When AUTH is "oauth", DANGEROUSLY_DISABLE_OAUTH cannot be "true"');

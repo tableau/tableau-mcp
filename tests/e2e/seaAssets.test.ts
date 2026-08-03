@@ -1,6 +1,11 @@
 import { readFileSync, rmSync } from 'fs';
 
-import { buildAssetsMap, DESKTOP_ASSET_DIRS, MANIFEST_KEY } from '../../src/scripts/seaAssets.js';
+import {
+  ALWAYS_EMBEDDED_FILES,
+  buildAssetsMap,
+  DESKTOP_ASSET_DIRS,
+  MANIFEST_KEY,
+} from '../../src/scripts/seaAssets.js';
 import { buildVariant } from './build.js';
 
 type SeaAssetMap = Record<string, string>;
@@ -14,12 +19,14 @@ function toSeaAssetStore(assets: Record<string, string>, manifestPath: string): 
   return store;
 }
 
-async function importWithSeaAssets(
-  assets: SeaAssetMap,
-): Promise<typeof import('../../src/desktop/assets.js')> {
+async function importWithSeaAssets(assets: SeaAssetMap): Promise<{
+  assets: typeof import('../../src/desktop/assets.js');
+  sea: typeof import('../../src/utils/sea.js');
+}> {
   vi.resetModules();
-  const module = await import('../../src/desktop/assets.js');
-  module._setSeaApiForTest({
+  const assetsModule = await import('../../src/desktop/assets.js');
+  const seaModule = await import('../../src/utils/sea.js');
+  assetsModule._setSeaApiForTest({
     isSea: () => true,
     getAsset: (key: string, encoding?: string) => {
       const value = assets[key];
@@ -29,7 +36,7 @@ async function importWithSeaAssets(
       return encoding === 'utf8' ? value : new TextEncoder().encode(value).buffer;
     },
   });
-  return module;
+  return { assets: assetsModule, sea: seaModule };
 }
 
 describe('every embedded desktop SEA asset is readable under SEA', () => {
@@ -61,7 +68,10 @@ describe('every embedded desktop SEA asset is readable under SEA', () => {
 
   it('reads every embedded asset back through the verified seam', async () => {
     const store = toSeaAssetStore(assets, manifestPath);
-    const { readDataAsset, readResourceAsset } = await importWithSeaAssets(store);
+    const {
+      assets: { readDataAsset, readResourceAsset },
+      sea: { readSeaAssetText },
+    } = await importWithSeaAssets(store);
 
     for (const key of Object.keys(assets)) {
       if (key === MANIFEST_KEY) {
@@ -76,6 +86,8 @@ describe('every embedded desktop SEA asset is readable under SEA', () => {
         const rel = key.slice('resources/desktop/'.length);
         expect(() => readResourceAsset(rel), key).not.toThrow();
         expect(readResourceAsset(rel), key).toBe(expected);
+      } else if (ALWAYS_EMBEDDED_FILES.includes(key)) {
+        expect(readSeaAssetText(key), key).toBe(expected);
       } else {
         throw new Error(`embedded asset key under no known root: ${key}`);
       }
