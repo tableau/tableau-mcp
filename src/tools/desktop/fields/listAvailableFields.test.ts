@@ -89,6 +89,8 @@ describe('listAvailableFieldsTool', () => {
       session: expect.any(Object),
       workbookFile: expect.any(Object),
       verbosity: expect.any(Object),
+      hasLuid: expect.any(Object),
+      luids: expect.any(Object),
     });
     expect(paramsSchema.verbosity.description).toContain('full (default)');
     expect(paramsSchema.verbosity.description).toContain('slim');
@@ -280,29 +282,23 @@ describe('listAvailableFieldsTool', () => {
   });
 
   const slimBodySchema = z.object({
-    count: z.number(),
     datasources: z.array(
       z.object({
-        datasource: z.string().nullable(),
-        contentUrl: z.string().optional(),
-        fields: z.array(
-          z.object({
-            caption: z.string(),
-            localName: z.string(),
-            columnInstanceName: z.string(),
-            derivation: z.string(),
-            type: z.string(),
-            typePivot: z.string(),
-            role: z.string(),
-            datatype: z.string().optional(),
-            isAggregated: z.boolean().optional(),
-          }),
+        datasource: z.string(),
+        name: z.string().optional(),
+        luid: z.string().optional(),
+        measures: z.array(
+          z.tuple([z.string(), z.string(), z.string(), z.enum(['base', 'aggregatedCalc'])]),
+        ),
+        timeDimensions: z.array(z.tuple([z.string(), z.string(), z.enum(['date', 'datetime'])])),
+        breakdownDimensions: z.array(
+          z.tuple([z.string(), z.string(), z.enum(['nominal', 'ordinal'])]),
         ),
       }),
     ),
   });
 
-  it('verbosity=slim returns compact grouped fields with no ASCII table', async () => {
+  it('verbosity=slim returns compact candidate tuples with no ASCII table', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<workbook/>');
     vi.mocked(metadataModule.listAvailableFields).mockReturnValue(mockFields as any);
@@ -313,49 +309,22 @@ describe('listAvailableFieldsTool', () => {
     invariant(result.content[0].type === 'text');
     const body = slimBodySchema.parse(JSON.parse(result.content[0].text));
 
-    // No human-readable table; a single datasource is still the grouped shape
-    // (one group) so callers always parse the same structure.
     expect('message' in body).toBe(false);
     expect('fields' in body).toBe(false);
-    expect(body.count).toBe(2);
+    expect('count' in body).toBe(false);
     expect(body.datasources).toHaveLength(1);
-    expect(body.datasources[0].datasource).toBe('Sample - Superstore');
-    // Published datasource → contentUrl surfaced once on the group (the input
-    // resolve-datasource-luid needs), not repeated per field.
-    expect(body.datasources[0].contentUrl).toBe('SuperstoreDS');
-    const groupFields = body.datasources[0].fields;
-    expect(groupFields).toHaveLength(2);
-    // caption falls back to the bracket-stripped columnName when caption is absent.
-    expect(groupFields[0]).toMatchObject({
-      caption: 'Profit',
-      localName: 'Profit',
-      columnInstanceName: '[sum:Profit:qk]',
-      derivation: 'Sum',
-      type: 'quantitative',
-      typePivot: 'qk',
-      role: 'measure',
-      datatype: 'real',
+    expect(body.datasources[0]).toEqual({
+      datasource: 'Sample - Superstore',
+      measures: [['Profit', 'Profit', 'Sum', 'base']],
+      timeDimensions: [],
+      breakdownDimensions: [['Category', 'Category', 'nominal']],
     });
-    expect(groupFields[1]).toMatchObject({
-      caption: 'Category',
-      localName: 'Category',
-      columnInstanceName: '[none:Category:nk]',
-      derivation: 'None',
-      type: 'nominal',
-      typePivot: 'nk',
-      role: 'dimension',
-      datatype: 'string',
-    });
-    // Slim keeps enough metadata to construct [datasource].[derivation:LocalName:typePivot],
-    // while omitting the full column_ref and less common verbose metadata.
-    const first = groupFields[0] as Record<string, unknown>;
-    expect(first.column_ref).toBeUndefined();
-    expect(first.name).toBeUndefined();
-    expect(first.datasource).toBeUndefined();
-    expect(first.semanticRole).toBeUndefined();
+    expect(JSON.stringify(body)).not.toContain('contentUrl');
+    expect(JSON.stringify(body)).not.toContain('columnInstanceName');
+    expect(JSON.stringify(body)).not.toContain('column_ref');
   });
 
-  it('verbosity=slim carries usr derivation metadata for already-aggregated calc fields', async () => {
+  it('verbosity=slim marks already-aggregated calculation measures', async () => {
     const aggregatedCalcFields = [
       {
         ...mockFields[0],
@@ -377,23 +346,12 @@ describe('listAvailableFieldsTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const body = slimBodySchema.parse(JSON.parse(result.content[0].text));
-    const calc = body.datasources[0].fields[0] as Record<string, unknown>;
-    expect(calc).toMatchObject({
-      caption: 'Profit Ratio',
-      localName: 'Calculation_123',
-      columnInstanceName: '[usr:Calculation_123:qk]',
-      derivation: 'User',
-      type: 'quantitative',
-      typePivot: 'qk',
-      role: 'measure',
-      datatype: 'real',
-      isAggregated: true,
-    });
-    expect(calc.column_ref).toBeUndefined();
-    expect(calc.formula).toBeUndefined();
+    expect(body.datasources[0].measures).toEqual([
+      ['Profit Ratio', 'Calculation_123', 'User', 'aggregatedCalc'],
+    ]);
   });
 
-  it('verbosity=slim on an empty workbook returns count 0 and no datasource groups', async () => {
+  it('verbosity=slim on an empty workbook returns no datasource groups', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue('<workbook/>');
     vi.mocked(metadataModule.listAvailableFields).mockReturnValue([]);
@@ -403,17 +361,10 @@ describe('listAvailableFieldsTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const body = slimBodySchema.parse(JSON.parse(result.content[0].text));
-    expect(body.count).toBe(0);
     expect(body.datasources).toHaveLength(0);
   });
 
-  it('verbosity=slim groups fields by datasource across multiple datasources', async () => {
-    // Two datasources, including a SAME caption ('Profit') in each — the case
-    // where hoisting fields[0].datasource would misattribute the second and
-    // erase the only disambiguator. Grouping carries the datasource once per
-    // group rather than repeating it on every field.
-    // Two datasources: 'Sample - Superstore' is PUBLISHED (has a contentUrl),
-    // 'Finance Extract' is EMBEDDED (contentUrl undefined). Both have a 'Profit'.
+  it('verbosity=slim groups candidate tuples across multiple datasources', async () => {
     const multiDatasourceFields = [
       {
         ...mockFields[0],
@@ -440,28 +391,17 @@ describe('listAvailableFieldsTool', () => {
     invariant(result.content[0].type === 'text');
     const body = slimBodySchema.parse(JSON.parse(result.content[0].text));
 
-    // Grouped shape (no top-level `datasource`, no flat `fields`) when >1 datasource.
-    expect('datasource' in body).toBe(false);
-    expect('fields' in body).toBe(false);
-    expect(body.count).toBe(4);
     expect(body.datasources.map((g) => g.datasource)).toEqual([
       'Sample - Superstore',
       'Finance Extract',
     ]);
-    // contentUrl per group: present for the published one, omitted for the embedded one.
-    expect(body.datasources[0].contentUrl).toBe('SuperstoreDS');
-    expect(body.datasources[1].contentUrl).toBeUndefined();
-    // The two same-caption 'Profit' fields stay distinct — one per group.
-    expect(body.datasources[0].fields.map((f) => f.caption)).toEqual(['Profit', 'Category']);
-    expect(body.datasources[1].fields.map((f) => f.caption)).toEqual(['Profit', 'Region']);
-    // The datasource string is NOT repeated on individual fields.
-    expect((body.datasources[0].fields[0] as Record<string, unknown>).datasource).toBeUndefined();
+    expect(body.datasources[0].measures).toEqual([['Profit', 'Profit', 'Sum', 'base']]);
+    expect(body.datasources[0].breakdownDimensions).toEqual([['Category', 'Category', 'nominal']]);
+    expect(body.datasources[1].measures).toEqual([['Profit', 'Profit', 'Sum', 'base']]);
+    expect(body.datasources[1].breakdownDimensions).toEqual([['Region', 'Category', 'nominal']]);
   });
 
-  it('verbosity=slim without workbookFile groups fields from the live session workbook', async () => {
-    // Slim over the live-session path (session, no workbookFile): reads the
-    // resolved live workbook, never the file cache, and still returns the
-    // grouped slim shape. 'Fresh DS' is embedded (no contentUrl).
+  it('verbosity=slim without workbookFile projects the live session workbook', async () => {
     vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(LIVE_XML));
     vi.mocked(metadataModule.listAvailableFields).mockReturnValue(mockLiveFields as any);
     const mockExecutor = {} as any;
@@ -476,28 +416,15 @@ describe('listAvailableFieldsTool', () => {
     invariant(result.content[0].type === 'text');
     const body = slimBodySchema.parse(JSON.parse(result.content[0].text));
 
-    // Grouped slim shape, not the ASCII-table shape.
-    expect('message' in body).toBe(false);
-    expect('fields' in body).toBe(false);
-    expect(body.count).toBe(1);
-    expect(body.datasources).toHaveLength(1);
-    expect(body.datasources[0].datasource).toBe('Fresh DS');
-    // Embedded datasource → no contentUrl on the group.
-    expect(body.datasources[0].contentUrl).toBeUndefined();
-    expect(body.datasources[0].fields).toEqual([
+    expect(body.datasources).toEqual([
       {
-        caption: 'Sales',
-        localName: 'Sales',
-        columnInstanceName: '[sum:Sales:qk]',
-        derivation: 'Sum',
-        type: 'quantitative',
-        typePivot: 'qk',
-        role: 'measure',
-        datatype: 'real',
+        datasource: 'Fresh DS',
+        measures: [['Sales', 'Sales', 'Sum', 'base']],
+        timeDimensions: [],
+        breakdownDimensions: [],
       },
     ]);
 
-    // Live-session path: read from the executor's workbook, never the file cache.
     expect(existsSync).not.toHaveBeenCalled();
     expect(readFileSync).not.toHaveBeenCalled();
     expect(extra.getExecutor).toHaveBeenCalledWith(SESSION);
@@ -507,23 +434,214 @@ describe('listAvailableFieldsTool', () => {
     });
     expect(metadataModule.listAvailableFields).toHaveBeenCalledWith(LIVE_XML);
   });
+
+  it('rejects LUID filtering unless slim output is requested', async () => {
+    const result = await getResult({ hasLuid: true });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('require verbosity: slim');
+  });
+
+  it('rejects luids unless hasLuid is true', async () => {
+    const result = await getResult({ verbosity: 'slim', luids: ['luid-superstore'] });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('luids requires hasLuid: true');
+  });
+
+  it.each([{ hasLuid: true }, { hasLuid: true, luids: [] }])(
+    'returns every LUID-backed datasource for slim output',
+    async ({ hasLuid, luids }) => {
+      const { extra, listWorkbookDatasources } = mockLiveWorkbookDatasourceMetadata([
+        { luid: 'luid-superstore', name: 'Sample - Superstore' },
+        { luid: null, name: 'Embedded' },
+      ]);
+
+      const result = await getResult({
+        session: SESSION,
+        verbosity: 'slim',
+        hasLuid,
+        luids,
+        extra,
+      });
+
+      const body = slimBodySchema.parse(parseBody(result));
+      expect(body.datasources).toEqual([
+        expect.objectContaining({
+          datasource: 'Sample - Superstore',
+          name: 'Sample - Superstore',
+          luid: 'luid-superstore',
+        }),
+      ]);
+      expect(listWorkbookDatasources).toHaveBeenCalledWith(extra.signal);
+    },
+  );
+
+  it('filters slim output by a requested LUID', async () => {
+    const workbookFields = [
+      ...mockFields,
+      { ...mockFields[0], datasource: 'Finance', caption: 'Revenue' },
+    ];
+    const { extra } = mockLiveWorkbookDatasourceMetadata(
+      [
+        { luid: 'luid-superstore', name: 'Sample - Superstore' },
+        { luid: 'luid-finance', name: 'Finance' },
+      ],
+      workbookFields,
+    );
+
+    const result = await getResult({
+      session: SESSION,
+      verbosity: 'slim',
+      hasLuid: true,
+      luids: ['luid-finance'],
+      extra,
+    });
+
+    expect(slimBodySchema.parse(parseBody(result)).datasources).toEqual([
+      expect.objectContaining({ datasource: 'Finance', luid: 'luid-finance' }),
+    ]);
+  });
+
+  it('rejects a published and embedded datasource sharing the same identity', async () => {
+    const { extra } = mockLiveWorkbookDatasourceMetadata([
+      { luid: null, name: 'Sample - Superstore' },
+      { luid: 'luid-published', caption: 'Sample - Superstore' },
+    ]);
+
+    const result = await getResult({
+      session: SESSION,
+      verbosity: 'slim',
+      hasLuid: true,
+      extra,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('matched multiple workbook datasources');
+    expect(result.content[0].text).toContain('<no LUID>, luid-published');
+  });
+
+  it('ignores unrelated ambiguity for a targeted LUID', async () => {
+    const workbookFields = [
+      ...mockFields,
+      { ...mockFields[0], datasource: 'Finance', caption: 'Revenue' },
+    ];
+    const { extra } = mockLiveWorkbookDatasourceMetadata(
+      [
+        { luid: 'luid-one', name: 'Sample - Superstore' },
+        { luid: 'luid-two', caption: 'Sample - Superstore' },
+        { luid: 'luid-finance', name: 'Finance' },
+      ],
+      workbookFields,
+    );
+
+    const result = await getResult({
+      session: SESSION,
+      verbosity: 'slim',
+      hasLuid: true,
+      luids: ['luid-finance'],
+      extra,
+    });
+
+    expect(slimBodySchema.parse(parseBody(result)).datasources).toEqual([
+      expect.objectContaining({ datasource: 'Finance', luid: 'luid-finance' }),
+    ]);
+  });
+
+  it.each([undefined, '', 'default'])(
+    'rejects cached-workbook LUID filtering without an explicit session (%s)',
+    async (session) => {
+      const result = await getResult({
+        workbookFile: WORKBOOK_FILE,
+        session,
+        verbosity: 'slim',
+        hasLuid: true,
+      });
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'LUID filtering with workbookFile requires an explicit live session',
+      );
+    },
+  );
+
+  it('identifies a Desktop build without workbook datasource metadata', async () => {
+    vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(LIVE_XML));
+    vi.mocked(metadataModule.listAvailableFields).mockReturnValue(mockFields as any);
+    const listWorkbookDatasources = vi.fn().mockResolvedValue(
+      new Err({
+        type: 'command-failed',
+        error: { code: 'not-found', message: 'No route matches GET /v0/workbook/datasources' },
+      }),
+    );
+    const extra = {
+      ...getMockRequestHandlerExtra(),
+      getExecutor: vi.fn().mockResolvedValue({ listWorkbookDatasources } as any),
+    };
+
+    const result = await getResult({
+      session: SESSION,
+      verbosity: 'slim',
+      hasLuid: true,
+      extra,
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'does not serve the workbook datasources endpoint yet',
+    );
+  });
 });
+
+function mockLiveWorkbookDatasourceMetadata(
+  workbookDatasources: any[],
+  workbookFields: any[] = mockFields,
+): {
+  extra: ReturnType<typeof getMockRequestHandlerExtra>;
+  listWorkbookDatasources: ReturnType<typeof vi.fn>;
+} {
+  vi.mocked(getWorkbookXmlModule.getWorkbookXml).mockResolvedValue(Ok(LIVE_XML));
+  vi.mocked(metadataModule.listAvailableFields).mockReturnValue(workbookFields as any);
+  const listWorkbookDatasources = vi
+    .fn()
+    .mockResolvedValue(Ok({ datasources: workbookDatasources }));
+  const extra = {
+    ...getMockRequestHandlerExtra(),
+    getExecutor: vi.fn().mockResolvedValue({ listWorkbookDatasources } as any),
+  };
+  return { extra, listWorkbookDatasources };
+}
+
+function parseBody(result: CallToolResult): any {
+  expect(result.isError).toBe(false);
+  invariant(result.content[0].type === 'text');
+  return JSON.parse(result.content[0].text);
+}
 
 async function getResult({
   workbookFile,
   session,
   verbosity,
+  hasLuid,
+  luids,
   extra,
 }: {
   workbookFile?: string;
   session?: string;
   verbosity?: 'slim' | 'full';
+  hasLuid?: boolean;
+  luids?: string[];
   extra?: ReturnType<typeof getMockRequestHandlerExtra>;
 }): Promise<CallToolResult> {
   const tool = getListAvailableFieldsTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
-    { session, workbookFile, verbosity },
+    { session, workbookFile, verbosity, hasLuid, luids },
     extra ?? getMockRequestHandlerExtra(),
   );
 }
